@@ -36,7 +36,7 @@ import {
 } from '../utils/decisionLabels';
 import { formatDisplayLabel } from '../utils/displayLabels';
 import { getRunDefinitionContent } from '../utils/runDefinitionContent';
-import { getTranscriptDecisionDisplayMode } from '../utils/transcriptDecisionModel';
+import { requireRenderableTranscriptDecisionModelV2 } from '../utils/transcriptDecisionModel';
 import { summarizeReportTranscriptDecisions } from '../utils/reportDecisionDisplay';
 import {
   ANALYSIS_BASE_PATH,
@@ -631,24 +631,20 @@ export function AnalysisTranscripts() {
     run?.id,
   ]);
 
-  const listDisplayMode = getTranscriptDecisionDisplayMode(filteredTranscripts);
-  const decisionSummary = useMemo(
-    () => summarizeReportTranscriptDecisions(filteredTranscripts),
+  const reportTranscripts = useMemo(
+    () => filteredTranscripts.map((transcript) => (
+      requireRenderableTranscriptDecisionModelV2(transcript, 'AnalysisTranscripts page')
+    )),
     [filteredTranscripts],
   );
-  const viewerDisplayMode = selectedTranscript
-    ? getTranscriptDecisionDisplayMode([selectedTranscript])
-    : listDisplayMode;
-  const decisionColumnLabel = listDisplayMode === 'audit'
-    ? 'Decision summary'
-    : normalizedDecisionTranscriptIds.size > 0
-      ? 'Decision summary'
-      : 'Decision';
-  const decisionColumnTooltip = listDisplayMode === 'audit'
-    ? 'Shows the decision headline and summary from the backend transcript data.'
-    : normalizedDecisionTranscriptIds.size > 0
-      ? 'Shows the canonical decision headline and summary from the backend transcript data.'
-      : undefined;
+  const decisionSummary = useMemo(
+    () => summarizeReportTranscriptDecisions(reportTranscripts),
+    [reportTranscripts],
+  );
+  const listDisplayMode = 'audit' as const;
+  const viewerDisplayMode = 'audit' as const;
+  const decisionColumnLabel = 'Decision summary';
+  const decisionColumnTooltip = 'Shows the canonical decision headline and summary from the backend transcript data.';
   useEffect(() => {
     if (!hasDirectTranscriptParam) {
       return;
@@ -926,13 +922,13 @@ export function AnalysisTranscripts() {
         <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
           Missing filter parameters. Return to the pivot table and click a cell to view transcripts.
         </div>
-      ) : filteredTranscripts.length === 0 ? (
+      ) : reportTranscripts.length === 0 ? (
         <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
           {hasRepeatPatternParams ? 'No transcripts found for these conditions.' : 'No transcripts found for this condition.'}
         </div>
       ) : (
         <TranscriptList
-          transcripts={filteredTranscripts}
+          transcripts={reportTranscripts}
           onSelect={setSelectedTranscript}
           groupByModel={false}
           scenarioDimensions={mergedScenarioDimensions}

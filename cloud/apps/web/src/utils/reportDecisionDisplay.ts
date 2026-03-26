@@ -1,5 +1,8 @@
 import type { Transcript } from '../api/operations/runs';
-import { formatCanonicalDecisionHeadline, hasRenderableTranscriptDecisionModelV2 } from './transcriptDecisionModel';
+import {
+  formatCanonicalDecisionHeadline,
+  requireRenderableTranscriptDecisionModelV2,
+} from './transcriptDecisionModel';
 
 export const REPORT_DECISION_BUCKET_ORDER = ['strong', 'lean', 'neutral', 'unknown'] as const;
 
@@ -10,6 +13,7 @@ export type ReportTranscriptDecision = {
   headline: string;
   kind: ReportDecisionBucketKind;
   renderable: boolean;
+  strength: 'strong' | 'lean' | 'neutral' | 'unknown';
 };
 
 export type ReportDecisionBucket = {
@@ -26,16 +30,17 @@ export type ReportDecisionSummary = {
   buckets: ReportDecisionBucket[];
 };
 
-function getBucketKind(headline: string, renderable: boolean): ReportDecisionBucketKind {
-  if (!renderable || headline === 'Unknown') {
-    return 'unknown';
+function getBucketKind(strength: ReportTranscriptDecision['strength']): ReportDecisionBucketKind {
+  switch (strength) {
+    case 'strong':
+      return 'strong';
+    case 'lean':
+      return 'lean';
+    case 'neutral':
+      return 'neutral';
+    default:
+      return 'unknown';
   }
-
-  if (headline === 'Neutral') {
-    return 'neutral';
-  }
-
-  return headline.startsWith('Strongly favors ') ? 'strong' : 'lean';
 }
 
 function getBucketOrder(kind: ReportDecisionBucketKind): number {
@@ -43,21 +48,17 @@ function getBucketOrder(kind: ReportDecisionBucketKind): number {
 }
 
 export function normalizeReportTranscriptDecision(transcript: Transcript): ReportTranscriptDecision {
-  if (!hasRenderableTranscriptDecisionModelV2(transcript)) {
-    return {
-      transcriptId: transcript.id,
-      headline: 'Unknown',
-      kind: 'unknown',
-      renderable: false,
-    };
-  }
-
-  const headline = formatCanonicalDecisionHeadline(transcript);
+  const renderableTranscript = requireRenderableTranscriptDecisionModelV2(transcript);
+  const strength = renderableTranscript.decisionModelV2.canonical?.strength;
+  const headline = formatCanonicalDecisionHeadline(renderableTranscript);
   return {
-    transcriptId: transcript.id,
+    transcriptId: renderableTranscript.id,
     headline,
-    kind: getBucketKind(headline, true),
+    kind: getBucketKind(
+      strength === 'strong' || strength === 'lean' || strength === 'neutral' ? strength : 'unknown',
+    ),
     renderable: true,
+    strength: strength === 'strong' || strength === 'lean' || strength === 'neutral' ? strength : 'unknown',
   };
 }
 
@@ -76,14 +77,9 @@ export function summarizeReportTranscriptDecisions(transcripts: Transcript[]): R
   const bucketMap = new Map<string, ReportDecisionBucket>();
 
   let renderableCount = 0;
-  let unknownCount = 0;
 
   normalized.forEach((decision) => {
-    if (decision.renderable) {
-      renderableCount += 1;
-    } else {
-      unknownCount += 1;
-    }
+    renderableCount += 1;
 
     const bucketKey = `${decision.kind}::${decision.headline}`;
     const bucket = bucketMap.get(bucketKey);
@@ -144,7 +140,7 @@ export function summarizeReportTranscriptDecisions(transcripts: Transcript[]): R
     headline,
     totalCount: normalized.length,
     renderableCount,
-    unknownCount,
+    unknownCount: 0,
     buckets,
   };
 }

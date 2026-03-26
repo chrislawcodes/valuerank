@@ -1,0 +1,57 @@
+{
+  "session_id": "5012e060-a6a4-4f62-bd03-0a045a2f9b89",
+  "response": "## Findings\n\n### 1. **High Risk**: Brittle String-Based Logic for Decision Bucketing\n\nThe new `reportDecisionDisplay.ts` utility determines a decision's category by parsing a human-readable string.\n\n```typescript\n// cloud/apps/web/src/utils/reportDecisionDisplay.ts\nfunction getBucketKind(headline: string, renderable: boolean): ReportDecisionBucketKind {\n  // ...\n  return headline.startsWith('Strongly favors ') ? 'strong' : 'lean';\n}\n```\n\nThis creates a high-risk, implicit dependency on the output format of `formatCanonicalDecisionHeadline`. If the wording, spacing, or capitalization of that function's output changes in the future (e.g., \"Strongly Favors\" or \"Favors (Strongly)\"), this bucketing logic will fail silently, misclassifying `strong` decisions as `lean`.\n\n**Recommendation**: The bucketing logic should be based on the raw `strength` property (`'strong'`, `'lean'`) from the `transcript.decisionModelV2.canonical` object, not on the formatted display string.\n\n### 2. **Medium Risk**: Ambiguous UI in Condition Detail Table\n\nOn the `AnalysisConditionDetail` page, the \"Mean\" column was removed and replaced with a count of unresolved transcripts. However, the new column header is simply \"Unknown\".\n\n```diff\n- <th ...>Mean</th>\n+ <th ...>Unknown</th>\n...\n- {formatMean(row.summary.mean)}\n+ {row.summary.unresolvedCount}\n```\n\nThis is ambiguous. A user is likely to interpret \"Unknown\" as the *value* in the column being unknown, not as the column representing a *count of unknown items*. This could easily lead to misinterpretation of the data quality summary.\n\n**Recommendation**: Change the column header to be explicit, such as \"Unresolved\" or \"Unknown Count\", to accurately describe its content.\n\n### 3. **Medium Risk**: Oversimplification in Summary Headline Risks Misinterpretation\n\nThe new \"Decision summary\" headline shown on the `AnalysisTranscripts` page is calculated using a strict majority rule (`> 50%`). If a single decision type has more than 50% of the renderable transcripts, it becomes the headline.\n\nThis creates two risks:\n*   **Hiding Significant Dissent**: A dataset with a 51% / 49% split will be presented with a headline representing only the 51% portion, completely hiding the nearly-equal dissent. A user may incorrectly assume a strong consensus where there is none.\n*   **Vague \"Mixed\" Category**: If no strict majority exists, the headline becomes \"Mixed\". This term is vague and applies equally to a 50/50 tie and a more complex 40/30/30 split, obscuring the underlying distribution.\n\n**Recommendation**: Consider making the headline more descriptive of the distribution, such as \"Majority for X (51%)\" or \"Plurality for X (40%)\", or supplementing the headline with a visible distribution chart.\n\n### 4. **Low Risk**: Unsafe Assumption in Default Case Logic\n\nThe `getBucketKind` function assumes that any renderable decision that isn't `strong` or `neutral` must be `lean`.\n\n```typescript\n// cloud/apps/web/src/utils/reportDecisionDisplay.ts\nfunction getBucketKind(headline: string, renderable: boolean): ReportDecisionBucketKind {\n  // ...\n  if (headline === 'Neutral') {\n    return 'neutral';\n  }\n\n  return headline.startsWith('Strongly favors ') ? 'strong' : 'lean';\n}\n```\n\nThis logic is not future-proof. If a new `strength` category were added to the system (e.g., \"Slightly Favors\"), it would be incorrectly bucketed as `lean`.\n\n**Recommendation**: The logic should be more explicit, either by checking for \"Somewhat favors\" or by using a `switch` statement on the underlying `strength` property (as recommended in Finding #1) that includes a `default` case to throw an error for unexpected values.\n\n## Residual Risks\n\n1.  **Incomplete Test Coverage**: The new test suite for `reportDecisionDisplay.test.ts` does not explicitly test the case where all renderable transcripts are `Neutral`. While the logic would likely work, this represents a gap in test coverage for a primary decision category.\n\n2.  **Potential Performance Bottleneck**: The `summarizeReportTranscriptDecisions` function performs multiple iterations over the transcript list within a `useMemo` hook. For pages displaying a very large number of transcripts (e.g., thousands), the computation time for this summary could become noticeable and impact UI responsiveness. The current implementation is not optimized for single-pass processing.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 49171
+        },
+        "tokens": {
+          "input": 5712,
+          "prompt": 17899,
+          "candidates": 1035,
+          "total": 21986,
+          "cached": 12187,
+          "thoughts": 3052,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 49171,
+            "tokens": {
+              "input": 5712,
+              "prompt": 17899,
+              "candidates": 1035,
+              "total": 21986,
+              "cached": 12187,
+              "thoughts": 3052,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

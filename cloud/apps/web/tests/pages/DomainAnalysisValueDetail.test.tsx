@@ -173,7 +173,7 @@ describe('DomainAnalysisValueDetail', () => {
             },
             legacy: {
               rawScore: 5,
-              canonicalScore: 1,
+              canonicalScore: null,
             },
           },
         });
@@ -362,7 +362,7 @@ describe('DomainAnalysisValueDetail', () => {
     ]);
   });
 
-  it('keeps the report surface in legacy mode when mixed V1/V2 transcripts are present', async () => {
+  it('throws when legacy-only transcripts reach the report surface', () => {
     useQueryMock.mockReset();
     useQueryMock.mockImplementation((args: { query: unknown; variables?: Record<string, unknown> }) => {
       if (args.query === DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY || args.query === DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY_LEGACY) {
@@ -451,7 +451,7 @@ describe('DomainAnalysisValueDetail', () => {
                   },
                   legacy: {
                     rawScore: 5,
-                    canonicalScore: 1,
+                    canonicalScore: null,
                   },
                 },
               }),
@@ -469,38 +469,12 @@ describe('DomainAnalysisValueDetail', () => {
       return [{ data: undefined, fetching: false, error: undefined }];
     });
 
-    render(
-      <MemoryRouter initialEntries={['/domains/analysis/value-detail?domainId=domain-a&modelId=gpt-4&valueKey=Achievement']}>
-        <DomainAnalysisValueDetail />
-      </MemoryRouter>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText('Value Score Detail')).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByTitle('Condition A'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('transcript-list')).toBeInTheDocument();
-    });
-
-    expect(lastTranscriptListProps?.decisionColumnLabel).toBe('Decision');
-    expect(lastTranscriptListProps?.decisionDisplayMode).toBe('legacy');
-    expect(lastTranscriptListProps?.groupByModel).toBe(false);
-    expect(lastTranscriptListProps?.transcripts).toHaveLength(2);
-
-    fireEvent.click(screen.getByRole('button', { name: 'transcript-v2' }));
-
-    const viewer = await screen.findByTestId('transcript-viewer');
-    expect(within(viewer).getByText('transcript-v2')).toBeInTheDocument();
-    expect(within(viewer).getByText('legacy')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'transcript-legacy' }));
-
-    const legacyViewer = await screen.findByTestId('transcript-viewer');
-    expect(within(legacyViewer).getByText('transcript-legacy')).toBeInTheDocument();
-    expect(within(legacyViewer).getByText('legacy')).toBeInTheDocument();
-    expect(screen.queryByText('Tokens')).not.toBeInTheDocument();
+    expect(() =>
+      render(
+        <MemoryRouter initialEntries={['/domains/analysis/value-detail?domainId=domain-a&modelId=gpt-4&valueKey=Achievement']}>
+          <DomainAnalysisValueDetail />
+        </MemoryRouter>,
+      )
+    ).toThrow(/DomainAnalysisValueDetail page requires canonical decision-model-v2 data for transcript transcript-legacy/);
   });
 });

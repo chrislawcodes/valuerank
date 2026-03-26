@@ -20,6 +20,11 @@ import { useRunMutations } from '../hooks/useRunMutations';
 import { SCENARIOS_QUERY, type ScenariosQueryResult } from '../api/operations/scenarios';
 import type { Transcript } from '../api/operations/runs';
 import { SURVEYS_QUERY, type SurveysQueryResult } from '../api/operations/surveys';
+import {
+  summarizeReportTranscriptDecisions,
+  type ReportDecisionSummary,
+} from '../utils/reportDecisionDisplay';
+import { requireRenderableTranscriptDecisionModelV2 } from '../utils/transcriptDecisionModel';
 
 const defaultFilters: AnalysisFilterState = {
   analysisStatus: '',
@@ -64,31 +69,56 @@ function extractTranscriptText(content: unknown): string {
   return responses.join('\n\n');
 }
 
-function getDecisionCodeOptions(analysisPlan: unknown): string[] {
+type DecisionCodeOption = {
+  value: string;
+  label: string;
+};
+
+function getDecisionCodeOptions(analysisPlan: unknown): DecisionCodeOption[] {
   if (!analysisPlan || typeof analysisPlan !== 'object') {
-    return ['1', '2', '3', '4', '5'];
+    return ['1', '2', '3', '4', '5'].map((value) => ({ value, label: value }));
   }
 
   const plan = analysisPlan as {
-    responseOptions?: Array<{ value?: unknown; order?: unknown }>;
-    responseScale?: { min?: unknown; max?: unknown };
+    responseOptions?: Array<{ value?: unknown; label?: unknown; order?: unknown }>;
+    responseScale?: { min?: unknown; max?: unknown; minLabel?: unknown; maxLabel?: unknown };
   };
 
   if (Array.isArray(plan.responseOptions) && plan.responseOptions.length > 0) {
     const values = plan.responseOptions
       .map((option, index) => {
-        if (typeof option.value === 'number' && Number.isInteger(option.value) && option.value > 0) {
-          return option.value;
+        const numericValue = typeof option.value === 'number' && Number.isInteger(option.value) && option.value > 0
+          ? option.value
+          : typeof option.value === 'string' && option.value.trim() !== '' && Number.isInteger(Number(option.value))
+            ? Number(option.value)
+            : NaN;
+        if (Number.isInteger(numericValue) && numericValue > 0) {
+          return {
+            value: String(numericValue),
+            label: typeof option.label === 'string' && option.label.trim() !== ''
+              ? option.label.trim()
+              : String(numericValue),
+          };
         }
         if (typeof option.order === 'number' && Number.isInteger(option.order) && option.order > 0) {
-          return option.order;
+          return {
+            value: String(option.order),
+            label: typeof option.label === 'string' && option.label.trim() !== ''
+              ? option.label.trim()
+              : String(option.order),
+          };
         }
-        return index + 1;
+        return {
+          value: String(index + 1),
+          label: typeof option.label === 'string' && option.label.trim() !== ''
+            ? option.label.trim()
+            : String(index + 1),
+        };
       })
-      .filter((value, index, arr) => value > 0 && arr.indexOf(value) === index)
-      .sort((left, right) => left - right);
+      .filter((option, index, arr) => Number(option.value) > 0 && arr.findIndex((candidate) => candidate.value === option.value) === index)
+      .sort((left, right) => Number(left.value) - Number(right.value));
     if (values.length > 0) {
-      return values.map(String);
+      return values;
     }
   }
 
@@ -102,14 +132,24 @@ function getDecisionCodeOptions(analysisPlan: unknown): string[] {
     min > 0 &&
     max >= min
   ) {
-    const values: string[] = [];
+    const values: DecisionCodeOption[] = [];
     for (let i = min; i <= max; i += 1) {
-      values.push(String(i));
+      let label = String(i);
+      if (i === min && typeof plan.responseScale?.minLabel === 'string' && plan.responseScale.minLabel.trim() !== '') {
+        label = plan.responseScale.minLabel.trim();
+      } else if (i === max && typeof plan.responseScale?.maxLabel === 'string' && plan.responseScale.maxLabel.trim() !== '') {
+        label = plan.responseScale.maxLabel.trim();
+      }
+      values.push({ value: String(i), label });
     }
     return values;
   }
 
-  return ['1', '2', '3', '4', '5'];
+  return ['1', '2', '3', '4', '5'].map((value) => ({ value, label: value }));
+}
+
+function formatDecisionSummaryDetails(summary: ReportDecisionSummary): string {
+  return summary.buckets.map((bucket) => `${bucket.label} (${bucket.count})`).join(', ');
 }
 
 export function SurveyResults() {
@@ -217,29 +257,20 @@ export function SurveyResults() {
     }
 
     const models = [...new Set(latestRun.config.models)];
+    const canonicalTranscripts = latestRun.transcripts.map((transcript) => (
+      requireRenderableTranscriptDecisionModelV2(transcript, 'SurveyResults page')
+    ));
 
     const responses = new Map<string, string>();
-    const numericBuckets = new Map<string, number[]>();
-    for (const transcript of latestRun.transcripts) {
+    for (const transcript of canonicalTranscripts) {
       if (!transcript.scenarioId || !models.includes(transcript.modelId) || !transcript.decisionCode) {
         continue;
       }
       const key = `${transcript.scenarioId}::${transcript.modelId}`;
       const decisionRaw = transcript.decisionCode.trim();
-      const decisionNum = Number(decisionRaw);
-      if (!Number.isNaN(decisionNum) && Number.isFinite(decisionNum)) {
-        const bucket = numericBuckets.get(key) ?? [];
-        bucket.push(decisionNum);
-        numericBuckets.set(key, bucket);
-      } else if (!responses.has(key)) {
+      if (!responses.has(key)) {
         responses.set(key, decisionRaw);
       }
-    }
-
-    for (const [key, values] of numericBuckets) {
-      const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
-      const formatted = Number.isInteger(avg) ? String(avg) : avg.toFixed(2);
-      responses.set(key, formatted);
     }
 
     const rows = (scenariosData.scenarios ?? [])
@@ -262,7 +293,7 @@ export function SurveyResults() {
       .sort((left, right) => left.order - right.order || left.questionText.localeCompare(right.questionText));
 
     const transcriptsByCell = new Map<string, Transcript[]>();
-    for (const transcript of latestRun.transcripts) {
+    for (const transcript of canonicalTranscripts) {
       if (!transcript.scenarioId || !models.includes(transcript.modelId)) {
         continue;
       }
@@ -271,6 +302,7 @@ export function SurveyResults() {
       existing.push(transcript);
       transcriptsByCell.set(key, existing);
     }
+    const cellSummaries = new Map<string, ReportDecisionSummary>();
     for (const [key, items] of transcriptsByCell) {
       items.sort((left, right) => {
         const leftTime = new Date(left.createdAt).getTime();
@@ -278,9 +310,10 @@ export function SurveyResults() {
         return rightTime - leftTime;
       });
       transcriptsByCell.set(key, items);
+      cellSummaries.set(key, summarizeReportTranscriptDecisions(items));
     }
 
-    return { models, responses, rows, transcriptsByCell };
+    return { models, responses, rows, transcriptsByCell, cellSummaries };
   }, [latestRun, scenariosData]);
 
   const handleAnalysisClick = (runId: string) => {
@@ -438,11 +471,12 @@ function SurveyMatrix({
     responses: Map<string, string>;
     rows: Array<{ scenarioId: string; order: number; questionText: string }>;
     transcriptsByCell: Map<string, Transcript[]>;
+    cellSummaries: Map<string, ReportDecisionSummary>;
   } | null;
   runName: string | null;
   runStatus?: string;
   summarizeProgress?: { completed: number; total: number } | null;
-  decisionCodeOptions: string[];
+  decisionCodeOptions: DecisionCodeOption[];
   onDecisionOverride: (transcriptId: string, decisionCode: string) => Promise<void>;
   exportLabel: string;
 }) {
@@ -514,7 +548,7 @@ function SurveyMatrix({
         <div>
           <h2 className="text-lg font-medium text-gray-900">Question x AI Matrix</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Showing latest run {runName ? `"${runName}"` : ''}. `*` indicates an LLM-classified decision code.
+            Showing latest run {runName ? `"${runName}"` : ''}. `*` indicates an LLM-classified response.
           </p>
         </div>
         <Button variant="ghost" size="sm" onClick={handleExportCsv}>
@@ -543,9 +577,12 @@ function SurveyMatrix({
                   const value = matrixData.responses.get(key) ?? '—';
                   const transcripts = matrixData.transcriptsByCell.get(key) ?? [];
                   const transcriptCount = transcripts.length;
-                  const isOther = value.trim().toLowerCase() === 'other';
                   const targetTranscript = transcripts[0] ?? null;
-                  const valueDisplay = targetTranscript?.decisionCodeSource === 'llm' ? `${value}*` : value;
+                  const summary = matrixData.cellSummaries.get(key) ?? null;
+                  const isOther = value.trim().toLowerCase() === 'other';
+                  const summaryValue = summary?.headline ?? '—';
+                  const valueDisplay = transcriptCount > 0 && targetTranscript?.decisionCodeSource === 'llm' ? `${summaryValue}*` : summaryValue;
+                  const cellDetails = summary ? formatDecisionSummaryDetails(summary) : '';
                   return (
                     <td key={`${row.scenarioId}-${modelId}`} className="border border-gray-200 px-3 py-2 text-gray-700">
                       {transcriptCount > 0 && isOther && targetTranscript ? (
@@ -562,19 +599,19 @@ function SurveyMatrix({
                                 await onDecisionOverride(targetTranscript.id, nextDecision);
                               } catch (error) {
                                 // eslint-disable-next-line no-alert
-                                alert(error instanceof Error ? error.message : 'Failed to update decision code');
+                                alert(error instanceof Error ? error.message : 'Failed to update response');
                               } finally {
                                 setEditingCellKey(null);
                               }
                             }}
                             disabled={editingCellKey === key}
                             className="h-8 rounded border border-gray-300 bg-white px-2 text-sm"
-                            aria-label={`Set decision code for ${row.questionText} / ${modelId}`}
+                            aria-label={`Set response for ${row.questionText} / ${modelId}`}
                           >
                             <option value="other">other</option>
                             {decisionCodeOptions.map((option) => (
-                              <option key={option} value={option}>
-                                {option}
+                              <option key={option.value} value={option.value}>
+                                {option.label}
                               </option>
                             ))}
                           </select>
@@ -595,7 +632,16 @@ function SurveyMatrix({
                           size="sm"
                           className="h-auto p-0 text-left text-teal-700 hover:text-teal-800 hover:underline"
                           onClick={() => setSelectedTranscript(transcripts[0] ?? null)}
-                          title={targetTranscript?.decisionCodeSource === 'llm' ? 'View transcript (LLM-classified decision)' : 'View transcript'}
+                          title={
+                            summary
+                              ? `View transcript: ${summary.headline}${cellDetails ? `. ${cellDetails}` : ''}`
+                              : 'View transcript'
+                          }
+                          aria-label={
+                            summary
+                              ? `View transcript for ${row.questionText} / ${modelId}: ${summary.headline}${cellDetails ? `. ${cellDetails}` : ''}`
+                              : `View transcript for ${row.questionText} / ${modelId}`
+                          }
                         >
                           {valueDisplay}
                           {transcriptCount > 1 ? ` (n=${transcriptCount})` : ''}
