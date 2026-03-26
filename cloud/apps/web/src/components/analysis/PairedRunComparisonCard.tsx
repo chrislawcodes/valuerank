@@ -294,9 +294,9 @@ function SensitivityHeader({
       <Tooltip
         content={(
           <div className="space-y-1 text-left">
-            <p>Each vignette uses this value at one of five strength levels, from weakest (1) to strongest (5).</p>
-            <p>The model then gives a decision score from 1 to 5: 1 means it strongly prefers the other value, 3 means neutral, and 5 means it strongly prefers this value.</p>
-            <p>Sensitivity shows how much that decision score changes when this value goes up by one level, while the other value stays the same.</p>
+            <p>Each vignette uses this value across five strength levels, from weakest to strongest.</p>
+            <p>The model then assigns one of the canonical decision buckets, from strongest preference for the other value to strongest preference for this value.</p>
+            <p>Sensitivity shows how much the model shifts toward this value when this value goes up by one level, while the other value stays the same.</p>
             <p>For example, if sensitivity is 0.5, then raising {valueLabel} from level 1 to level 5 would be expected to move the model about 2 points toward {valueLabel} on average.</p>
           </div>
         )}
