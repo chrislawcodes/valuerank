@@ -503,7 +503,7 @@ export function AnalysisConditionDetail() {
                   {row.summary.knownCount}
                 </td>
                 <td className="px-3 py-3 text-center text-sm text-gray-700">
-                  {row.summary.unresolvedCount}
+                  {row.summary.unknownCount}
                 </td>
               </tr>
             ))}
