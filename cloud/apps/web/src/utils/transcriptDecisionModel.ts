@@ -3,6 +3,13 @@ import { formatDisplayLabel } from './displayLabels';
 
 export type TranscriptDecisionDisplayMode = 'legacy' | 'audit';
 
+export class CanonicalTranscriptRenderError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CanonicalTranscriptRenderError';
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -49,15 +56,15 @@ export function hasTranscriptDecisionModelV2(
 
 export function requireRenderableTranscriptDecisionModelV2(
   transcript: Transcript,
-  context = 'report helper',
+  context = 'Transcript report surface',
 ): Transcript & { decisionModelV2: NonNullable<Transcript['decisionModelV2']> } {
-  if (!hasRenderableTranscriptDecisionModelV2(transcript)) {
-    throw new Error(
-      `${context} requires canonical decision-model-v2 data for transcript ${transcript.id}; legacy decision scores are not allowed.`,
-    );
+  if (hasRenderableTranscriptDecisionModelV2(transcript)) {
+    return transcript;
   }
 
-  return transcript;
+  throw new CanonicalTranscriptRenderError(
+    `${context}: transcript ${transcript.id} is missing renderable canonical decisionModelV2 data.`,
+  );
 }
 
 function hasReportRenderableTranscriptDecisionModelV2(
@@ -124,15 +131,23 @@ function getCanonicalTranscriptDecisionSortValue(transcript: Transcript): string
   }
 
   if (canonical.direction === 'neutral') {
+    return 2;
+  }
+
+  if (canonical.direction === 'favor_first' && canonical.strength === 'strong') {
+    return 0;
+  }
+
+  if (canonical.direction === 'favor_first' && canonical.strength === 'lean') {
+    return 1;
+  }
+
+  if (canonical.direction === 'favor_second' && canonical.strength === 'lean') {
     return 3;
   }
 
-  if (canonical.direction === 'favor_first') {
-    return canonical.strength === 'strong' ? 5 : 4;
-  }
-
-  if (canonical.direction === 'favor_second') {
-    return canonical.strength === 'strong' ? 1 : 2;
+  if (canonical.direction === 'favor_second' && canonical.strength === 'strong') {
+    return 4;
   }
 
   return '';

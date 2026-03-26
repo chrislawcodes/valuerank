@@ -149,55 +149,6 @@ export const DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY = gql`
           opponentSomewhat
           opponentStrongly
           unknownCount
-          meanPreferenceScore
-          opponentMeanPreferenceScore
-        }
-      }
-    }
-  }
-`;
-
-export const DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY_LEGACY = gql`
-  query DomainAnalysisValueDetailLegacy($domainId: ID!, $modelId: String!, $valueKey: String!) {
-    domainAnalysisValueDetail(domainId: $domainId, modelId: $modelId, valueKey: $valueKey) {
-      domainId
-      domainName
-      modelId
-      modelLabel
-      valueKey
-      score
-      prioritized
-      deprioritized
-      neutral
-      totalTrials
-      generatedAt
-      vignettes {
-        definitionId
-        definitionName
-        definitionVersion
-        aggregateRunId
-        otherValueKey
-        prioritized
-        deprioritized
-        neutral
-        totalTrials
-        selectedValueWinRate
-        conditions {
-          scenarioId
-          conditionName
-          dimensions
-          prioritized
-          deprioritized
-          neutral
-          totalTrials
-          selectedValueWinRate
-          strongly
-          somewhat
-          opponentSomewhat
-          opponentStrongly
-          unknownCount
-          meanPreferenceScore
-          opponentMeanPreferenceScore
         }
       }
     }
@@ -421,8 +372,6 @@ export type DomainAnalysisValueDetailCondition = {
   opponentSomewhat: number;
   opponentStrongly: number;
   unknownCount: number;
-  meanPreferenceScore: number | null;
-  opponentMeanPreferenceScore: number | null;
 };
 
 export type DomainAnalysisValueDetailVignette = {
