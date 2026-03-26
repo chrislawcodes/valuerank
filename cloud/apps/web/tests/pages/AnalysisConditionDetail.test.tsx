@@ -163,7 +163,7 @@ describe('AnalysisConditionDetail', () => {
     });
   });
 
-  it('renders pooled and ordered paired rows with score labels', () => {
+  it('renders pooled and ordered paired rows with canonical labels', () => {
     renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
 
     expect(screen.getByText('Condition Detail')).toBeInTheDocument();
@@ -174,7 +174,9 @@ describe('AnalysisConditionDetail', () => {
     expect(screen.getByText('Harmony -> Freedom')).toBeInTheDocument();
     expect(screen.getByText('Strongly Support Harmony')).toBeInTheDocument();
     expect(screen.getByText('Strongly Support Freedom')).toBeInTheDocument();
-    expect(screen.getByText('Raw transcript counts by canonical decision summary. Click any non-zero count to open the matching transcripts.')).toBeInTheDocument();
+    expect(screen.getByText('Unknown')).toBeInTheDocument();
+    expect(screen.queryByText('Mean')).not.toBeInTheDocument();
+    expect(screen.getByText('Canonical transcript counts by decision label. Click any non-zero count to open the matching transcripts.')).toBeInTheDocument();
   });
 
   it('routes a paired row count click to the matching transcript slice', () => {

@@ -21,6 +21,7 @@ import {
   getTranscriptDecisionDisplayMode,
   type TranscriptDecisionDisplayMode,
 } from '../utils/transcriptDecisionModel';
+import { compareConditionLevels } from '../utils/conditionOrdering';
 
 const VALUE_DETAIL_COPY = {
   decisionColumnLabel: 'Decision summary',
@@ -84,10 +85,10 @@ function ConditionMatrix({ vignetteId, conditions, selectedConditionKey, onSelec
   const colDim = dimensions[1]!;
   const rows = Array.from(
     new Set(conditions.map((condition) => String(condition.dimensions?.[rowDim] ?? 'N/A'))),
-  ).sort();
+  ).sort(compareConditionLevels);
   const cols = Array.from(
     new Set(conditions.map((condition) => String(condition.dimensions?.[colDim] ?? 'N/A'))),
-  ).sort();
+  ).sort(compareConditionLevels);
 
   const cellByKey = new Map<string, MatrixCondition>();
   for (const condition of conditions) {

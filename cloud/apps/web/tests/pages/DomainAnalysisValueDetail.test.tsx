@@ -229,6 +229,139 @@ describe('DomainAnalysisValueDetail', () => {
     expect(screen.queryByText('Tokens')).not.toBeInTheDocument();
   });
 
+  it('orders the value-detail condition matrix from negligible to full', async () => {
+    useQueryMock.mockReset();
+    useQueryMock.mockImplementation((args: { query: unknown; variables?: Record<string, unknown> }) => {
+      if (args.query === DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY || args.query === DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY_LEGACY) {
+        return [{
+          data: {
+            domainAnalysisValueDetail: {
+              domainId: 'domain-a',
+              domainName: 'Domain A',
+              modelId: 'gpt-4',
+              modelLabel: 'GPT-4',
+              valueKey: 'Achievement',
+              score: 1.25,
+              prioritized: 8,
+              deprioritized: 3,
+              neutral: 2,
+              totalTrials: 13,
+              targetedDefinitions: 1,
+              coveredDefinitions: 1,
+              missingDefinitionIds: [],
+              generatedAt: '2026-03-15T12:00:00.000Z',
+              vignettes: [
+                {
+                  definitionId: 'def-1',
+                  definitionName: 'One vignette',
+                  definitionVersion: 1,
+                  aggregateRunId: 'run-1',
+                  otherValueKey: 'Benevolence_Dependability',
+                  prioritized: 8,
+                  deprioritized: 3,
+                  neutral: 2,
+                  totalTrials: 13,
+                  selectedValueWinRate: 0.61,
+                  conditions: [
+                    {
+                      scenarioId: 'scenario-1',
+                      conditionName: 'Condition A',
+                      dimensions: { A: 'full', B: 'same' },
+                      prioritized: 2,
+                      deprioritized: 1,
+                      neutral: 0,
+                      totalTrials: 3,
+                      selectedValueWinRate: 0.67,
+                      meanDecisionScore: 4.2,
+                    },
+                    {
+                      scenarioId: 'scenario-2',
+                      conditionName: 'Condition B',
+                      dimensions: { A: 'minimal', B: 'same' },
+                      prioritized: 2,
+                      deprioritized: 1,
+                      neutral: 0,
+                      totalTrials: 3,
+                      selectedValueWinRate: 0.67,
+                      meanDecisionScore: 4.2,
+                    },
+                    {
+                      scenarioId: 'scenario-3',
+                      conditionName: 'Condition C',
+                      dimensions: { A: 'moderate', B: 'same' },
+                      prioritized: 2,
+                      deprioritized: 1,
+                      neutral: 0,
+                      totalTrials: 3,
+                      selectedValueWinRate: 0.67,
+                      meanDecisionScore: 4.2,
+                    },
+                    {
+                      scenarioId: 'scenario-4',
+                      conditionName: 'Condition D',
+                      dimensions: { A: 'negligible', B: 'same' },
+                      prioritized: 2,
+                      deprioritized: 1,
+                      neutral: 0,
+                      totalTrials: 3,
+                      selectedValueWinRate: 0.67,
+                      meanDecisionScore: 4.2,
+                    },
+                    {
+                      scenarioId: 'scenario-5',
+                      conditionName: 'Condition E',
+                      dimensions: { A: 'substantial', B: 'same' },
+                      prioritized: 2,
+                      deprioritized: 1,
+                      neutral: 0,
+                      totalTrials: 3,
+                      selectedValueWinRate: 0.67,
+                      meanDecisionScore: 4.2,
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          fetching: false,
+          error: undefined,
+        }];
+      }
+
+      if (args.query === DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY) {
+        return [{ data: undefined, fetching: false, error: undefined }];
+      }
+
+      return [{ data: undefined, fetching: false, error: undefined }];
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/domains/analysis/value-detail?domainId=domain-a&modelId=gpt-4&valueKey=Achievement']}>
+        <DomainAnalysisValueDetail />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Value Score Detail')).toBeInTheDocument();
+    });
+
+    const matrixTable = screen.getByTitle('Condition A').closest('table');
+    expect(matrixTable).not.toBeNull();
+
+    const rowLabels = within(matrixTable as HTMLTableElement)
+      .getAllByRole('row')
+      .slice(2)
+      .map((row) => within(row).getAllByRole('cell')[0].textContent?.trim());
+
+    expect(rowLabels).toEqual([
+      'negligible',
+      'minimal',
+      'moderate',
+      'substantial',
+      'full',
+    ]);
+  });
+
   it('keeps the report surface in legacy mode when mixed V1/V2 transcripts are present', async () => {
     useQueryMock.mockReset();
     useQueryMock.mockImplementation((args: { query: unknown; variables?: Record<string, unknown> }) => {
