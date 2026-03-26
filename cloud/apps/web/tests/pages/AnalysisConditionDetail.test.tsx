@@ -25,12 +25,97 @@ vi.mock('../../src/hooks/useRuns', () => ({
 }));
 
 vi.mock('../../src/hooks/useAnalysis', () => ({
-  useAnalysis: (args?: { runId?: string }) => mockUseAnalysis(args),
+  useAnalysis: (args?: { runId?: string; pause?: boolean }) => mockUseAnalysis(args),
 }));
 
-function createRun(id: string, presentationOrder: 'A_first' | 'B_first', transcripts: Array<{ id: string; scenarioId: string; decisionCode: string }>) {
-  const first = presentationOrder === 'A_first' ? 'freedom' : 'harmony';
-  const second = presentationOrder === 'A_first' ? 'harmony' : 'freedom';
+function createTranscript(
+  id: string,
+  scenarioId: string,
+  presentationOrder: 'A_first' | 'B_first',
+  decisionCode: string | null,
+) {
+  const firstValueKey = presentationOrder === 'A_first' ? 'Freedom' : 'Harmony';
+  const secondValueKey = presentationOrder === 'A_first' ? 'Harmony' : 'Freedom';
+
+  const decisionModelV2 = decisionCode === '5'
+    ? {
+        raw: {
+          matchedText: firstValueKey,
+          matchedLabel: firstValueKey,
+          parseClass: 'exact',
+          parsePath: 'exact.favor_first.strong',
+          parserVersion: 'v1',
+          responseExcerpt: firstValueKey,
+          manualOverride: null,
+        },
+        canonical: {
+          favoredValueKey: firstValueKey,
+          opposedValueKey: secondValueKey,
+          direction: 'favor_first',
+          strength: 'strong',
+          normalizationApplied: false,
+          normalizationReason: null,
+          source: 'deterministic',
+        },
+        legacy: {
+          rawScore: 5,
+          canonicalScore: 5,
+        },
+      }
+    : decisionCode === '1'
+      ? {
+          raw: {
+            matchedText: secondValueKey,
+            matchedLabel: secondValueKey,
+            parseClass: 'exact',
+            parsePath: 'exact.favor_second.strong',
+            parserVersion: 'v1',
+            responseExcerpt: secondValueKey,
+            manualOverride: null,
+          },
+          canonical: {
+            favoredValueKey: secondValueKey,
+            opposedValueKey: firstValueKey,
+            direction: 'favor_second',
+            strength: 'strong',
+            normalizationApplied: false,
+            normalizationReason: null,
+            source: 'deterministic',
+          },
+          legacy: {
+            rawScore: 1,
+            canonicalScore: 1,
+          },
+        }
+      : null;
+
+  return {
+    id,
+    runId: id.startsWith('tx-') ? 'run-1' : id,
+    scenarioId,
+    modelId: 'model1',
+    modelVersion: 'test-model',
+    content: { turns: [] },
+    decisionCode,
+    decisionCodeSource: 'llm',
+    decisionMetadata: null,
+    turnCount: 1,
+    tokenCount: 42,
+    durationMs: 1000,
+    estimatedCost: null,
+    createdAt: '2026-03-10T10:00:00Z',
+    lastAccessedAt: null,
+    decisionModelV2,
+  };
+}
+
+function createRun(
+  id: string,
+  presentationOrder: 'A_first' | 'B_first',
+  transcripts: Array<ReturnType<typeof createTranscript>>,
+) {
+  const first = presentationOrder === 'A_first' ? 'Freedom' : 'Harmony';
+  const second = presentationOrder === 'A_first' ? 'Harmony' : 'Freedom';
   const name = presentationOrder === 'A_first' ? 'Freedom -> Harmony' : 'Harmony -> Freedom';
 
   return {
@@ -65,12 +150,11 @@ function createRun(id: string, presentationOrder: 'A_first' | 'B_first', transcr
     transcripts: transcripts.map((transcript) => ({
       ...transcript,
       runId: id,
-      modelId: 'model1',
     })),
   };
 }
 
-function createAnalysis(runId: string, scenarioId: string, score: number) {
+function createAnalysis(runId: string, scenarioId: string) {
   return {
     runId,
     analysisType: 'basic',
@@ -78,7 +162,7 @@ function createAnalysis(runId: string, scenarioId: string, score: number) {
       decisionDistribution: {},
       modelScenarioMatrix: {
         model1: {
-          [scenarioId]: score,
+          [scenarioId]: 5,
         },
       },
       scenarioDimensions: {
@@ -109,108 +193,17 @@ describe('AnalysisConditionDetail', () => {
     mockUseAnalysis.mockReset();
 
     const currentRun = createRun('run-1', 'A_first', [
-      { id: 'tx-1', scenarioId: 's1', decisionCode: '5' },
+      createTranscript('tx-1', 's1', 'A_first', '5'),
+      createTranscript('tx-unknown', 's1', 'A_first', null),
     ]);
     const companionRun = createRun('run-2', 'B_first', [
-      { id: 'tx-2', scenarioId: 's2', decisionCode: '1' },
+      createTranscript('tx-2', 's2', 'B_first', '1'),
     ]);
 
     mockUseRun.mockImplementation((args?: { id?: string }) => {
       if (args?.id === 'run-2') {
         return {
           run: companionRun,
-          loading: false,
-          error: null,
-          refetch: vi.fn(),
-        };
-      }
-
-      return {
-        run: currentRun,
-        loading: false,
-        error: null,
-        refetch: vi.fn(),
-      };
-    });
-
-    mockUseRuns.mockReturnValue({
-      runs: [companionRun],
-      loading: false,
-      error: null,
-      refetch: vi.fn(),
-    });
-
-    mockUseAnalysis.mockImplementation((args?: { runId?: string }) => {
-      if (args?.runId === 'run-2') {
-        return {
-          analysis: createAnalysis('run-2', 's2', 1),
-          loading: false,
-          error: null,
-          refetch: vi.fn(),
-          recompute: vi.fn(),
-          recomputing: false,
-        };
-      }
-
-      return {
-        analysis: createAnalysis('run-1', 's1', 5),
-        loading: false,
-        error: null,
-        refetch: vi.fn(),
-        recompute: vi.fn(),
-        recomputing: false,
-      };
-    });
-  });
-
-  it('renders pooled and ordered paired rows with canonical labels', () => {
-    renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
-
-    expect(screen.getByText('Condition Detail')).toBeInTheDocument();
-    expect(screen.getByText('Freedom = High, Harmony = Low')).toBeInTheDocument();
-    expect(screen.getByText('model1')).toBeInTheDocument();
-    expect(screen.getByText('Pooled')).toBeInTheDocument();
-    expect(screen.getByText('Freedom -> Harmony')).toBeInTheDocument();
-    expect(screen.getByText('Harmony -> Freedom')).toBeInTheDocument();
-    expect(screen.getByText('Strongly Support Harmony')).toBeInTheDocument();
-    expect(screen.getByText('Strongly Support Freedom')).toBeInTheDocument();
-    expect(screen.getByText('Unknown')).toBeInTheDocument();
-    expect(screen.queryByText('Mean')).not.toBeInTheDocument();
-    expect(screen.getByText('Canonical transcript counts by decision label. Click any non-zero count to open the matching transcripts.')).toBeInTheDocument();
-  });
-
-  it('routes a paired row count click to the matching transcript slice', () => {
-    renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
-
-    const row = screen.getByText('Freedom -> Harmony').closest('tr');
-    expect(row).not.toBeNull();
-
-    const buttons = within(row as HTMLElement).getAllByRole('button');
-    fireEvent.click(buttons[0]);
-
-    expect(mockNavigate).toHaveBeenCalledWith(
-      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=High&col=Low&modelId=model1&mode=paired&companionRunId=run-2&pairView=condition-split&orientationBucket=canonical&decisionCode=5'
-    );
-  });
-
-  it('still loads split rows when the companion run list item lacks analysisStatus', () => {
-    const currentRun = createRun('run-1', 'A_first', [
-      { id: 'tx-1', scenarioId: 's1', decisionCode: '5' },
-    ]);
-    const companionRun = {
-      ...createRun('run-2', 'B_first', [
-        { id: 'tx-2', scenarioId: 's2', decisionCode: '1' },
-      ]),
-      analysisStatus: null,
-    };
-
-    mockUseRun.mockImplementation((args?: { id?: string }) => {
-      if (args?.id === 'run-2') {
-        return {
-          run: {
-            ...companionRun,
-            analysisStatus: 'completed',
-          },
           loading: false,
           error: null,
           refetch: vi.fn(),
@@ -246,7 +239,7 @@ describe('AnalysisConditionDetail', () => {
 
       if (args?.runId === 'run-2') {
         return {
-          analysis: createAnalysis('run-2', 's2', 1),
+          analysis: createAnalysis('run-2', 's2'),
           loading: false,
           error: null,
           refetch: vi.fn(),
@@ -256,7 +249,7 @@ describe('AnalysisConditionDetail', () => {
       }
 
       return {
-        analysis: createAnalysis('run-1', 's1', 5),
+        analysis: createAnalysis('run-1', 's1'),
         loading: false,
         error: null,
         refetch: vi.fn(),
@@ -264,54 +257,112 @@ describe('AnalysisConditionDetail', () => {
         recomputing: false,
       };
     });
-
-    renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
-
-    expect(screen.getByText('Freedom -> Harmony')).toBeInTheDocument();
-    expect(screen.getByText('Harmony -> Freedom')).toBeInTheDocument();
   });
 
-  it('uses the full companion run transcripts instead of the run list summary', () => {
-    const currentRun = createRun('run-1', 'A_first', [
-      { id: 'tx-1', scenarioId: 's1', decisionCode: '5' },
+  it('renders paired canonical buckets with explicit unknown handling', () => {
+    renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
+
+    expect(screen.getByText('Condition Detail')).toBeInTheDocument();
+    expect(screen.getByText('Freedom = High, Harmony = Low')).toBeInTheDocument();
+    expect(screen.getByText('Pooled')).toBeInTheDocument();
+    expect(screen.getByText('Freedom -> Harmony')).toBeInTheDocument();
+    expect(screen.getByText('Harmony -> Freedom')).toBeInTheDocument();
+    expect(screen.getByText('Strongly favors Freedom')).toBeInTheDocument();
+    expect(screen.getByText('Somewhat favors Freedom')).toBeInTheDocument();
+    expect(screen.getByText('Neutral')).toBeInTheDocument();
+    expect(screen.getByText('Somewhat favors Harmony')).toBeInTheDocument();
+    expect(screen.getByText('Strongly favors Harmony')).toBeInTheDocument();
+
+    const pooledRow = screen.getByText('Pooled').closest('tr');
+    const canonicalRow = screen.getByText('Freedom -> Harmony').closest('tr');
+    const flippedRow = screen.getByText('Harmony -> Freedom').closest('tr');
+
+    expect(pooledRow).not.toBeNull();
+    expect(canonicalRow).not.toBeNull();
+    expect(flippedRow).not.toBeNull();
+
+    expect(within(pooledRow as HTMLElement).getAllByRole('cell').map((cell) => cell.textContent?.trim())).toEqual([
+      'Pooled',
+      '1',
+      '0',
+      '0',
+      '0',
+      '1',
+      '1',
+      '2',
+      '1',
     ]);
-    const companionRun = createRun('run-2', 'B_first', [
-      { id: 'tx-2', scenarioId: 's2', decisionCode: '1' },
+    expect(within(canonicalRow as HTMLElement).getAllByRole('cell').map((cell) => cell.textContent?.trim())).toEqual([
+      'Freedom -> Harmony',
+      '1',
+      '0',
+      '0',
+      '0',
+      '0',
+      '1',
+      '1',
+      '1',
     ]);
-    const companionSummary = {
-      ...companionRun,
-      transcripts: [],
-    };
+    expect(within(flippedRow as HTMLElement).getAllByRole('cell').map((cell) => cell.textContent?.trim())).toEqual([
+      'Harmony -> Freedom',
+      '0',
+      '0',
+      '0',
+      '0',
+      '1',
+      '0',
+      '1',
+      '0',
+    ]);
+  });
 
-    mockUseRun.mockImplementation((args?: { id?: string }) => {
-      if (args?.id === 'run-2') {
-        return {
-          run: companionRun,
-          loading: false,
-          error: null,
-          refetch: vi.fn(),
-        };
-      }
+  it('routes a canonical bucket click to the matching transcript slice', () => {
+    renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
 
-      return {
-        run: currentRun,
-        loading: false,
-        error: null,
-        refetch: vi.fn(),
-      };
-    });
+    const row = screen.getByText('Freedom -> Harmony').closest('tr');
+    expect(row).not.toBeNull();
 
+    const button = within(row as HTMLElement).getAllByRole('button', { name: '1' })[0];
+    fireEvent.click(button);
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=High&col=Low&modelId=model1&mode=paired&companionRunId=run-2&pairView=condition-split&orientationBucket=canonical&decisionCode=5'
+    );
+  });
+
+  it('renders the same canonical summary in single mode', () => {
     mockUseRuns.mockReturnValue({
-      runs: [companionSummary],
+      runs: [],
       loading: false,
       error: null,
       refetch: vi.fn(),
     });
 
-    mockUseAnalysis.mockImplementation((args?: { runId?: string }) => {
-      if (args?.runId === 'run-2') {
+    mockUseRun.mockImplementation((args?: { id?: string }) => {
+      if (args?.id === 'run-1') {
         return {
-          analysis: createAnalysis('run-2', 's2', 1),
+          run: createRun('run-1', 'A_first', [
+            createTranscript('tx-1', 's1', 'A_first', '5'),
+            createTranscript('tx-unknown', 's1', 'A_first', null),
+          ]),
+          loading: false,
+          error: null,
+          refetch: vi.fn(),
+        };
+      }
+
+      return {
+        run: null,
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+      };
+    });
+
+    mockUseAnalysis.mockImplementation((args?: { runId?: string; pause?: boolean }) => {
+      if (args?.pause) {
+        return {
+          analysis: null,
           loading: false,
           error: null,
           refetch: vi.fn(),
@@ -321,7 +372,7 @@ describe('AnalysisConditionDetail', () => {
       }
 
       return {
-        analysis: createAnalysis('run-1', 's1', 5),
+        analysis: createAnalysis('run-1', 's1'),
         loading: false,
         error: null,
         refetch: vi.fn(),
@@ -330,15 +381,23 @@ describe('AnalysisConditionDetail', () => {
       };
     });
 
-    renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
+    renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=single');
 
-    const pooledRow = screen.getByText('Pooled').closest('tr');
-    expect(pooledRow).not.toBeNull();
-    expect(within(pooledRow as HTMLElement).getAllByRole('button', { name: '1' })).toHaveLength(2);
-    expect(within(pooledRow as HTMLElement).getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('Freedom -> Harmony')).toBeInTheDocument();
+    expect(screen.getByText('Strongly favors Freedom')).toBeInTheDocument();
 
-    const flippedRow = screen.getByText('Harmony -> Freedom').closest('tr');
-    expect(flippedRow).not.toBeNull();
-    expect(within(flippedRow as HTMLElement).getByRole('button', { name: '1' })).toBeInTheDocument();
+    const row = screen.getByText('Freedom -> Harmony').closest('tr');
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getAllByRole('cell').map((cell) => cell.textContent?.trim())).toEqual([
+      'Freedom -> Harmony',
+      '1',
+      '0',
+      '0',
+      '0',
+      '0',
+      '1',
+      '1',
+      '1',
+    ]);
   });
 });

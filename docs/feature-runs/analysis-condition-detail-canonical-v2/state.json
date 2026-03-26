@@ -1,0 +1,39 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "The condition detail page can reuse transcript decisionModelV2 from the existing run query without API changes.",
+      "Pivot analysis and value-detail matrix surfaces stay unchanged in this wave."
+    ],
+    "summary": "Update the AnalysisConditionDetail condition table to canonical decision-model-v2 buckets and labels, preserve row/column ordering and click-through behavior, and leave other analysis report surfaces unchanged.",
+    "updated_at": 1774535155,
+    "answers": {},
+    "non_goals": [],
+    "acceptance_criteria": [],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "checkpoint_fallback": {}
+}
