@@ -267,6 +267,8 @@ describe('AnalysisTranscripts', () => {
     expect(headerMeta).toHaveTextContent('Repeat Pattern: Stable');
     expect(headerMeta).toHaveTextContent('Model: model1');
     expect(headerMeta).toHaveTextContent('Conditions: 1');
+    expect(headerMeta).toHaveTextContent('Decision summary: Unknown');
+    expect(screen.queryByText('Decision: 1')).not.toBeInTheDocument();
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 2');
   });
 
