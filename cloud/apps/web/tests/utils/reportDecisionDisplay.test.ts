@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Transcript } from '../../src/api/operations/runs';
 import {
   assertRenderableReportTranscriptSummary,
+  summarizeCanonicalReportTranscriptDecisions,
   summarizeReportTranscriptDecisions,
 } from '../../src/utils/reportDecisionDisplay';
 
@@ -12,17 +13,7 @@ function createTranscript(overrides: Partial<Transcript> = {}): Transcript {
     scenarioId: 'scenario-1',
     modelId: 'gpt-4',
     modelVersion: 'gpt-4-0125-preview',
-    content: {
-      turns: [],
-      decisionCode: overrides.decisionCode ?? '3',
-      decision: overrides.decisionCode ?? '3',
-      score: overrides.decisionCode ?? '3',
-      summary: {
-        decisionCode: overrides.decisionCode ?? '3',
-        decision: overrides.decisionCode ?? '3',
-        score: overrides.decisionCode ?? '3',
-      },
-    },
+    content: { turns: [] },
     decisionCode: '3',
     decisionCodeSource: 'llm',
     decisionMetadata: null,
@@ -65,7 +56,7 @@ function createRenderableTranscript(
       },
       legacy: {
         rawScore: null,
-        canonicalScore: null,
+        canonicalScore: 1,
         ...overrides.legacy,
       },
     },
@@ -83,6 +74,24 @@ describe('reportDecisionDisplay', () => {
       unknownCount: 0,
       buckets: [],
     });
+  });
+
+  it('returns unknown for transcript arrays with no renderable canonical decisions', () => {
+    const summary = summarizeReportTranscriptDecisions([
+      createTranscript({ id: 'legacy-1', decisionModelV2: null }),
+      createTranscript({ id: 'legacy-2', decisionModelV2: null }),
+    ]);
+
+    expect(summary.headline).toBe('Unknown');
+    expect(summary.renderableCount).toBe(0);
+    expect(summary.unknownCount).toBe(2);
+    expect(summary.buckets).toEqual([
+      {
+        kind: 'unknown',
+        label: 'Unknown',
+        count: 2,
+      },
+    ]);
   });
 
   it('selects a strict-majority canonical headline from renderable transcripts only', () => {
@@ -110,7 +119,7 @@ describe('reportDecisionDisplay', () => {
         },
         legacy: {
           rawScore: null,
-          canonicalScore: null,
+          canonicalScore: 4,
         },
       }),
     ]);
@@ -148,7 +157,7 @@ describe('reportDecisionDisplay', () => {
         },
         legacy: {
           rawScore: null,
-          canonicalScore: null,
+          canonicalScore: 4,
         },
       }),
     ]);
@@ -157,24 +166,6 @@ describe('reportDecisionDisplay', () => {
     expect(summary.buckets.map((bucket) => bucket.label)).toEqual([
       'Strongly favors Benevolence Dependability',
       'Somewhat favors Achievement',
-    ]);
-  });
-
-  it('returns unknown for transcript arrays with no renderable canonical decisions', () => {
-    const summary = summarizeReportTranscriptDecisions([
-      createTranscript({ id: 'legacy-1', decisionModelV2: null }),
-      createTranscript({ id: 'legacy-2', decisionModelV2: null }),
-    ]);
-
-    expect(summary.headline).toBe('Unknown');
-    expect(summary.renderableCount).toBe(0);
-    expect(summary.unknownCount).toBe(2);
-    expect(summary.buckets).toEqual([
-      {
-        kind: 'unknown',
-        label: 'Unknown',
-        count: 2,
-      },
     ]);
   });
 
@@ -192,17 +183,6 @@ describe('reportDecisionDisplay', () => {
       'Strongly favors Benevolence Dependability',
       'Unknown',
     ]);
-  });
-
-  it('throws before the report can fall back when unresolved transcripts are present', () => {
-    const summary = summarizeReportTranscriptDecisions([
-      createRenderableTranscript('renderable-1'),
-      createTranscript({ id: 'unknown-1', decisionModelV2: null }),
-    ]);
-
-    expect(() => assertRenderableReportTranscriptSummary(summary)).toThrow(
-      /canonical decisionModelV2 data for every visible transcript/i,
-    );
   });
 
   it('treats malformed canonical envelopes as unknown', () => {
@@ -246,5 +226,81 @@ describe('reportDecisionDisplay', () => {
         count: 2,
       },
     ]);
+  });
+
+  it('summarizes explicit unknown canonical envelopes as unknown instead of throwing', () => {
+    const summary = summarizeCanonicalReportTranscriptDecisions([
+      createRenderableTranscript('unknown-1', {
+        canonical: {
+          favoredValueKey: null,
+          opposedValueKey: null,
+          direction: 'unknown',
+          strength: 'unknown',
+          normalizationApplied: false,
+          normalizationReason: null,
+          source: 'unknown',
+        },
+        raw: {
+          matchedText: null,
+          matchedLabel: null,
+          parseClass: 'unparseable',
+          parsePath: null,
+          parserVersion: null,
+          responseExcerpt: null,
+          manualOverride: null,
+        },
+      }),
+    ]);
+
+    expect(summary.headline).toBe('Unknown');
+    expect(summary.buckets).toEqual([
+      {
+        kind: 'unknown',
+        label: 'Unknown',
+        count: 1,
+      },
+    ]);
+  });
+
+  it('throws before the report can fall back when unresolved transcripts are present', () => {
+    const summary = summarizeReportTranscriptDecisions([
+      createRenderableTranscript('renderable-1'),
+      createTranscript({ id: 'unknown-1', decisionModelV2: null }),
+    ]);
+
+    expect(() => assertRenderableReportTranscriptSummary(summary)).toThrow(
+      /canonical decisionModelV2 data for every visible transcript/i,
+    );
+  });
+
+  it('throws when canonical v2 envelopes are missing or partial in strict report mode', () => {
+    expect(() =>
+      summarizeCanonicalReportTranscriptDecisions([
+        createTranscript({ id: 'missing-1', decisionModelV2: null }),
+      ]),
+    ).toThrow(/Survey results require canonical decision-model-v2 data/);
+
+    expect(() =>
+      summarizeCanonicalReportTranscriptDecisions([
+        createTranscript({
+          id: 'partial-1',
+          decisionModelV2: {
+            raw: {
+              parseClass: 'exact',
+            } as NonNullable<Transcript['decisionModelV2']>['raw'],
+            canonical: {
+              favoredValueKey: null,
+              opposedValueKey: null,
+              direction: 'favor_first',
+              strength: 'strong',
+              normalizationApplied: false,
+              normalizationReason: null,
+              source: 'deterministic',
+            } as NonNullable<Transcript['decisionModelV2']>['canonical'],
+            legacy: null,
+          } as NonNullable<Transcript['decisionModelV2']>,
+        }),
+      ]),
+    ).toThrow(/Survey results require canonical decision-model-v2 data/);
   });
 });

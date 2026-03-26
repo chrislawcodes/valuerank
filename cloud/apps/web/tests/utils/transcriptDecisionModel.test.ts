@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { Transcript } from '../../src/api/operations/runs';
 import {
+  assertReportTranscriptDecisionModelV2,
   formatCanonicalDecisionHeadline,
   getTranscriptDecisionAuditBadge,
   getTranscriptDecisionSortValue,
   getTranscriptDecisionDisplayMode,
   requireRenderableTranscriptDecisionModelV2,
   hasTranscriptDecisionModelV2,
+  hasReportTranscriptDecisionModelV2,
 } from '../../src/utils/transcriptDecisionModel';
 
 function createTranscript(overrides: Partial<Transcript> = {}): Transcript {
@@ -87,6 +89,59 @@ describe('transcriptDecisionModel', () => {
     expect(hasTranscriptDecisionModelV2(renderable)).toBe(true);
     expect(getTranscriptDecisionDisplayMode([renderable])).toBe('audit');
     expect(getTranscriptDecisionDisplayMode([renderable, legacy])).toBe('legacy');
+  });
+
+  it('treats an explicit unknown canonical envelope as report-renderable', () => {
+    const transcript = createTranscript({
+      decisionModelV2: createRenderableV2Transcript({
+        canonical: {
+          favoredValueKey: null,
+          opposedValueKey: null,
+          direction: 'unknown',
+          strength: 'unknown',
+          normalizationApplied: false,
+          normalizationReason: null,
+          source: 'unknown',
+        },
+        raw: {
+          matchedText: null,
+          matchedLabel: null,
+          parseClass: 'unparseable',
+          parsePath: null,
+          parserVersion: null,
+          responseExcerpt: null,
+          manualOverride: null,
+        },
+      }),
+    });
+
+    expect(hasReportTranscriptDecisionModelV2(transcript)).toBe(true);
+    expect(() => assertReportTranscriptDecisionModelV2(transcript)).not.toThrow();
+  });
+
+  it('rejects partial canonical envelopes that are missing required fields', () => {
+    const transcript = createTranscript({
+      decisionModelV2: {
+        raw: {
+          parseClass: 'exact',
+        } as NonNullable<Transcript['decisionModelV2']>['raw'],
+        canonical: {
+          favoredValueKey: null,
+          opposedValueKey: null,
+          direction: 'favor_first',
+          strength: 'strong',
+          normalizationApplied: false,
+          normalizationReason: null,
+          source: 'deterministic',
+        } as NonNullable<Transcript['decisionModelV2']>['canonical'],
+        legacy: null,
+      } as NonNullable<Transcript['decisionModelV2']>,
+    });
+
+    expect(hasReportTranscriptDecisionModelV2(transcript)).toBe(false);
+    expect(() => assertReportTranscriptDecisionModelV2(transcript)).toThrow(
+      /Survey results require canonical decision-model-v2 data/,
+    );
   });
 
   it('prefers the manual badge over fallback metadata', () => {

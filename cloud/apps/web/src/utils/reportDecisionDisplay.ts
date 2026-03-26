@@ -1,5 +1,6 @@
 import type { Transcript } from '../api/operations/runs';
 import {
+  assertReportTranscriptDecisionModelV2,
   formatCanonicalDecisionHeadline,
   hasRenderableTranscriptDecisionModelV2,
 } from './transcriptDecisionModel';
@@ -13,6 +14,7 @@ export type ReportTranscriptDecision = {
   headline: string;
   kind: ReportDecisionBucketKind;
   renderable: boolean;
+  strength: 'strong' | 'lean' | 'neutral' | 'unknown';
 };
 
 export type ReportDecisionBucket = {
@@ -42,20 +44,25 @@ export function assertRenderableReportTranscriptSummary(summary: ReportDecisionS
     `AnalysisTranscripts requires canonical decisionModelV2 data for every visible transcript. `
     + `${summary.unknownCount} transcript${summary.unknownCount === 1 ? '' : 's'} `
     + `${summary.unknownCount === 1 ? 'is' : 'are'} unresolved, `
-    + 'so the legacy decision-score fallback is disabled.'
+    + 'so the legacy decision-score fallback is disabled.',
   );
 }
 
-function getBucketKind(headline: string, renderable: boolean): ReportDecisionBucketKind {
-  if (!renderable || headline === 'Unknown') {
+function getBucketKind(strength: ReportTranscriptDecision['strength'], renderable: boolean): ReportDecisionBucketKind {
+  if (!renderable || strength === 'unknown') {
     return 'unknown';
   }
 
-  if (headline === 'Neutral') {
-    return 'neutral';
+  switch (strength) {
+    case 'strong':
+      return 'strong';
+    case 'lean':
+      return 'lean';
+    case 'neutral':
+      return 'neutral';
+    default:
+      return 'unknown';
   }
-
-  return headline.startsWith('Strongly favors ') ? 'strong' : 'lean';
 }
 
 function getBucketOrder(kind: ReportDecisionBucketKind): number {
@@ -69,15 +76,21 @@ export function normalizeReportTranscriptDecision(transcript: Transcript): Repor
       headline: 'Unknown',
       kind: 'unknown',
       renderable: false,
+      strength: 'unknown',
     };
   }
 
+  const strength = transcript.decisionModelV2.canonical?.strength;
   const headline = formatCanonicalDecisionHeadline(transcript);
   return {
     transcriptId: transcript.id,
     headline,
-    kind: getBucketKind(headline, true),
+    kind: getBucketKind(
+      strength === 'strong' || strength === 'lean' || strength === 'neutral' ? strength : 'unknown',
+      true,
+    ),
     renderable: true,
+    strength: strength === 'strong' || strength === 'lean' || strength === 'neutral' ? strength : 'unknown',
   };
 }
 
@@ -167,4 +180,9 @@ export function summarizeReportTranscriptDecisions(transcripts: Transcript[]): R
     unknownCount,
     buckets,
   };
+}
+
+export function summarizeCanonicalReportTranscriptDecisions(transcripts: Transcript[]): ReportDecisionSummary {
+  transcripts.forEach(assertReportTranscriptDecisionModelV2);
+  return summarizeReportTranscriptDecisions(transcripts);
 }
