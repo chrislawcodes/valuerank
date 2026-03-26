@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Transcript } from '../../src/api/operations/runs';
-import { summarizeReportTranscriptDecisions } from '../../src/utils/reportDecisionDisplay';
+import {
+  assertRenderableReportTranscriptSummary,
+  summarizeReportTranscriptDecisions,
+} from '../../src/utils/reportDecisionDisplay';
 
 function createTranscript(overrides: Partial<Transcript> = {}): Transcript {
   return {
@@ -157,46 +160,91 @@ describe('reportDecisionDisplay', () => {
     ]);
   });
 
-  it('throws when canonical decision-model-v2 data is missing', () => {
-    expect(() =>
-      summarizeReportTranscriptDecisions([
-        createRenderableTranscript('renderable-1'),
-        createTranscript({ id: 'legacy-1', decisionModelV2: null }),
-      ])
-    ).toThrow(/reportDecisionDisplay helper requires canonical decision-model-v2 data for transcript legacy-1/);
+  it('returns unknown for transcript arrays with no renderable canonical decisions', () => {
+    const summary = summarizeReportTranscriptDecisions([
+      createTranscript({ id: 'legacy-1', decisionModelV2: null }),
+      createTranscript({ id: 'legacy-2', decisionModelV2: null }),
+    ]);
+
+    expect(summary.headline).toBe('Unknown');
+    expect(summary.renderableCount).toBe(0);
+    expect(summary.unknownCount).toBe(2);
+    expect(summary.buckets).toEqual([
+      {
+        kind: 'unknown',
+        label: 'Unknown',
+        count: 2,
+      },
+    ]);
   });
 
-  it('throws when canonical decision-model-v2 data is not renderable', () => {
-    expect(() =>
-      summarizeReportTranscriptDecisions([
-        createTranscript({
-          id: 'malformed-1',
-          decisionModelV2: {
-            raw: {
-              matchedText: null,
-              matchedLabel: null,
-              parseClass: 'unparseable',
-              parsePath: null,
-              parserVersion: null,
-              responseExcerpt: null,
-              manualOverride: null,
-            },
-            canonical: {
-              favoredValueKey: null,
-              opposedValueKey: null,
-              direction: 'unknown',
-              strength: 'unknown',
-              normalizationApplied: false,
-              normalizationReason: null,
-              source: 'unknown',
-            },
-            legacy: {
-              rawScore: null,
-              canonicalScore: null,
-            },
+  it('ignores unknown transcripts when calculating the majority headline', () => {
+    const summary = summarizeReportTranscriptDecisions([
+      createRenderableTranscript('renderable-1'),
+      createRenderableTranscript('renderable-2'),
+      createTranscript({ id: 'unknown-1', decisionModelV2: null }),
+    ]);
+
+    expect(summary.headline).toBe('Strongly favors Benevolence Dependability');
+    expect(summary.renderableCount).toBe(2);
+    expect(summary.unknownCount).toBe(1);
+    expect(summary.buckets.map((bucket) => bucket.label)).toEqual([
+      'Strongly favors Benevolence Dependability',
+      'Unknown',
+    ]);
+  });
+
+  it('throws before the report can fall back when unresolved transcripts are present', () => {
+    const summary = summarizeReportTranscriptDecisions([
+      createRenderableTranscript('renderable-1'),
+      createTranscript({ id: 'unknown-1', decisionModelV2: null }),
+    ]);
+
+    expect(() => assertRenderableReportTranscriptSummary(summary)).toThrow(
+      /canonical decisionModelV2 data for every visible transcript/i,
+    );
+  });
+
+  it('treats malformed canonical envelopes as unknown', () => {
+    const summary = summarizeReportTranscriptDecisions([
+      createTranscript({
+        id: 'malformed-1',
+        decisionModelV2: {
+          raw: {
+            matchedText: null,
+            matchedLabel: null,
+            parseClass: 'unparseable',
+            parsePath: null,
+            parserVersion: null,
+            responseExcerpt: null,
+            manualOverride: null,
           },
-        }),
-      ])
-    ).toThrow(/reportDecisionDisplay helper requires canonical decision-model-v2 data for transcript malformed-1/);
+          canonical: {
+            favoredValueKey: null,
+            opposedValueKey: null,
+            direction: 'unknown',
+            strength: 'unknown',
+            normalizationApplied: false,
+            normalizationReason: null,
+            source: 'unknown',
+          },
+          legacy: {
+            rawScore: null,
+            canonicalScore: null,
+          },
+        },
+      }),
+      createTranscript({ id: 'malformed-2', decisionModelV2: null }),
+    ]);
+
+    expect(summary.headline).toBe('Unknown');
+    expect(summary.unknownCount).toBe(2);
+    expect(summary.buckets).toEqual([
+      {
+        kind: 'unknown',
+        label: 'Unknown',
+        count: 2,
+      },
+    ]);
   });
 });

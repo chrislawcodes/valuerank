@@ -67,14 +67,13 @@ vi.mock('../../src/components/runs/TranscriptViewer', () => ({
 }));
 
 function createRun(id: string, definitionVersion: number, overrides: Record<string, unknown> = {}) {
-  const inputTranscripts = Array.isArray(overrides.transcripts)
+  const transcripts = Array.isArray(overrides.transcripts)
     ? overrides.transcripts
     : [
-        { id: 'tx-1', modelId: 'model1', scenarioId: 's1', decisionCode: 'A' },
-        { id: 'tx-2', modelId: 'model1', scenarioId: 's2', decisionCode: 'A' },
-        { id: 'tx-3', modelId: 'model2', scenarioId: 's3', decisionCode: 'B' },
+        createRenderableTranscript('tx-1', 's1', 'A', { runId: id }),
+        createRenderableTranscript('tx-2', 's2', 'A', { runId: id }),
+        createRenderableTranscript('tx-3', 's3', 'B', { runId: id, modelId: 'model2' }),
       ];
-  const transcripts = inputTranscripts.map((transcript) => ensureRenderableDecisionModel(transcript as Record<string, unknown>));
 
   return {
     id,
@@ -117,41 +116,42 @@ function createAggregateRun(id: string, definitionVersion: number) {
   });
 }
 
-function createRenderableDecisionModelV2() {
+function createRenderableTranscript(
+  id: string,
+  scenarioId: string,
+  decisionCode: string,
+  overrides: Partial<{ runId: string; modelId: string }> = {},
+) {
   return {
-    raw: {
-      matchedText: 'Achievement',
-      matchedLabel: 'Achievement',
-      parseClass: 'exact',
-      parsePath: 'exact.favor_second.strong',
-      parserVersion: 'v1',
-      responseExcerpt: 'Achievement',
-      manualOverride: null,
+    id,
+    runId: overrides.runId ?? 'run-1',
+    modelId: overrides.modelId ?? 'model1',
+    scenarioId,
+    decisionCode,
+    decisionModelV2: {
+      raw: {
+        matchedText: 'Benevolence',
+        matchedLabel: 'Benevolence',
+        parseClass: 'exact',
+        parsePath: 'exact.favor_second.strong',
+        parserVersion: 'v1',
+        responseExcerpt: 'Benevolence',
+        manualOverride: null,
+      },
+      canonical: {
+        favoredValueKey: 'Benevolence_Dependability',
+        opposedValueKey: 'Achievement',
+        direction: 'favor_second',
+        strength: 'strong',
+        normalizationApplied: true,
+        normalizationReason: 'orientation_flipped',
+        source: 'deterministic',
+      },
+      legacy: {
+        rawScore: null,
+        canonicalScore: 1,
+      },
     },
-    canonical: {
-      favoredValueKey: 'Benevolence_Dependability',
-      opposedValueKey: 'Achievement',
-      direction: 'favor_second',
-      strength: 'strong',
-      normalizationApplied: true,
-      normalizationReason: 'orientation_flipped',
-      source: 'deterministic',
-    },
-    legacy: {
-      rawScore: null,
-      canonicalScore: null,
-    },
-  };
-}
-
-function ensureRenderableDecisionModel(transcript: Record<string, unknown>) {
-  if (Object.prototype.hasOwnProperty.call(transcript, 'decisionModelV2')) {
-    return transcript;
-  }
-
-  return {
-    ...transcript,
-    decisionModelV2: createRenderableDecisionModelV2(),
   };
 }
 
@@ -361,8 +361,8 @@ describe('AnalysisTranscripts', () => {
               },
             },
             transcripts: [
-              { id: 'tx-4', modelId: 'model1', scenarioId: 's4', decisionCode: 'A' },
-              { id: 'tx-5', modelId: 'model1', scenarioId: 's5', decisionCode: 'A' },
+              createRenderableTranscript('tx-4', 's4', 'A', { runId: 'run-2' }),
+              createRenderableTranscript('tx-5', 's5', 'A', { runId: 'run-2' }),
             ],
           }),
           loading: false,
@@ -374,8 +374,8 @@ describe('AnalysisTranscripts', () => {
       return {
         run: createRun('run-1', 1, {
           transcripts: [
-            { id: 'tx-1', modelId: 'model1', scenarioId: 's1', decisionCode: 'A' },
-            { id: 'tx-2', modelId: 'model1', scenarioId: 's2', decisionCode: 'A' },
+            createRenderableTranscript('tx-1', 's1', 'A'),
+            createRenderableTranscript('tx-2', 's2', 'A'),
           ],
         }),
         loading: false,
@@ -441,7 +441,7 @@ describe('AnalysisTranscripts', () => {
               },
             },
             transcripts: [
-              { id: 'tx-4', modelId: 'model1', scenarioId: 's4', decisionCode: 'A' },
+              createRenderableTranscript('tx-4', 's4', 'A', { runId: 'run-2' }),
             ],
           }),
           loading: false,
@@ -453,7 +453,7 @@ describe('AnalysisTranscripts', () => {
       return {
         run: createRun('run-1', 1, {
           transcripts: [
-            { id: 'tx-1', modelId: 'model1', scenarioId: 's1', decisionCode: 'A' },
+            createRenderableTranscript('tx-1', 's1', 'A'),
           ],
         }),
         loading: false,
@@ -518,7 +518,7 @@ describe('AnalysisTranscripts', () => {
               },
             },
             transcripts: [
-              { id: 'tx-4', modelId: 'model1', scenarioId: 's4', decisionCode: '1' },
+              createRenderableTranscript('tx-4', 's4', '1', { runId: 'run-2' }),
             ],
           }),
           loading: false,
@@ -530,8 +530,8 @@ describe('AnalysisTranscripts', () => {
       return {
         run: createRun('run-1', 1, {
           transcripts: [
-            { id: 'tx-1', modelId: 'model1', scenarioId: 's1', decisionCode: '5' },
-            { id: 'tx-2', modelId: 'model1', scenarioId: 's1', decisionCode: '1' },
+            createRenderableTranscript('tx-1', 's1', '5'),
+            createRenderableTranscript('tx-2', 's1', '1'),
           ],
         }),
         loading: false,
@@ -596,8 +596,8 @@ describe('AnalysisTranscripts', () => {
               },
             },
             transcripts: [
-              { id: 'tx-4', modelId: 'model1', scenarioId: 's4', decisionCode: 'A' },
-              { id: 'tx-5', modelId: 'model1', scenarioId: 's5', decisionCode: 'A' },
+              createRenderableTranscript('tx-4', 's4', 'A', { runId: 'run-2' }),
+              createRenderableTranscript('tx-5', 's5', 'A', { runId: 'run-2' }),
             ],
           }),
           loading: false,
@@ -609,8 +609,8 @@ describe('AnalysisTranscripts', () => {
       return {
         run: createRun('run-1', 1, {
           transcripts: [
-            { id: 'tx-1', modelId: 'model1', scenarioId: 's1', decisionCode: 'A' },
-            { id: 'tx-2', modelId: 'model1', scenarioId: 's2', decisionCode: 'A' },
+            createRenderableTranscript('tx-1', 's1', 'A'),
+            createRenderableTranscript('tx-2', 's2', 'A'),
           ],
         }),
         loading: false,
@@ -675,8 +675,8 @@ describe('AnalysisTranscripts', () => {
           },
         },
         transcripts: [
-          { id: 'tx-4', runId: 'run-2', modelId: 'model1', scenarioId: 's4', decisionCode: 'A' },
-          { id: 'tx-5', runId: 'run-2', modelId: 'model1', scenarioId: 's5', decisionCode: 'A' },
+          createRenderableTranscript('tx-4', 's4', 'A', { runId: 'run-2' }),
+          createRenderableTranscript('tx-5', 's5', 'A', { runId: 'run-2' }),
         ],
       }),
       loading: false,
@@ -701,7 +701,7 @@ describe('AnalysisTranscripts', () => {
     expect(screen.getByText(/Split inspection is active/i)).toBeInTheDocument();
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 1');
     expect(lastTranscriptListProps?.decisionColumnLabel).toBe('Decision summary');
-    expect(lastTranscriptListProps?.normalizedDecisionTranscriptIds).toEqual(new Set());
+    expect(lastTranscriptListProps?.decisionDisplayMode).toBe('audit');
   });
 
   it('switches transcript audit surfaces to canonical decision mode when V2 data is present', async () => {
@@ -764,7 +764,7 @@ describe('AnalysisTranscripts', () => {
     });
   });
 
-  it('throws when a mixed legacy and canonical transcript set reaches the report surface', () => {
+  it('blocks the report path when unresolved transcripts would otherwise require legacy fallback', () => {
     mockUseRun.mockReturnValue({
       run: createRun('run-4', 1, {
         transcripts: [
@@ -826,9 +826,12 @@ describe('AnalysisTranscripts', () => {
       recomputing: false,
     });
 
-    expect(() => renderPage('/analysis/run-4/transcripts?modelId=model1&repeatPattern=stable&rowDim=Freedom&colDim=Harmony&conditionIds=High%7C%7CLow')).toThrow(
-      /AnalysisTranscripts page requires canonical decision-model-v2 data for transcript tx-12/,
-    );
+    renderPage('/analysis/run-4/transcripts?modelId=model1&repeatPattern=stable&rowDim=Freedom&colDim=Harmony&conditionIds=High%7C%7CLow');
+
+    expect(screen.getByText('Strongly favors Benevolence Dependability')).toBeInTheDocument();
+    expect(screen.getByText(/requires canonical decisionModelV2 data for every visible transcript/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('transcript-list')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('transcript-viewer')).not.toBeInTheDocument();
   });
 
   it('keeps repeat-pattern query params when aggregate signature switching changes runs', () => {
