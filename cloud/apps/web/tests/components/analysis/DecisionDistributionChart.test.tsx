@@ -1,16 +1,18 @@
-/**
- * DecisionDistributionChart Component Tests
- */
-
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import {
   DecisionDistributionChart,
+  CustomLegend,
   CustomTooltip,
   buildDecisionDistributionChartData,
   formatDecisionDistributionScopeNote,
 } from '../../../src/components/analysis/DecisionDistributionChart';
 import type { VisualizationData } from '../../../src/api/operations/analysis';
+import {
+  buildDecisionDistributionBuckets,
+  getDecisionDistributionEmptyState,
+  getDecisionDistributionHelperText,
+} from '../../../src/utils/decisionDistributionDisplay';
 
 function createMockVisualizationData(): VisualizationData {
   return {
@@ -29,8 +31,8 @@ describe('DecisionDistributionChart', () => {
     render(<DecisionDistributionChart visualizationData={visualizationData} />);
 
     expect(screen.getByText('Decision Distribution by Model')).toBeInTheDocument();
-    expect(screen.queryByText(/Shows how each model distributes its decisions.*percentages/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Total decisions in scope:/)).not.toBeInTheDocument();
+    expect(screen.getByText(getDecisionDistributionHelperText())).toBeInTheDocument();
+    expect(screen.queryByText(/Decision 1/i)).not.toBeInTheDocument();
   });
 
   it('renders empty state when no decision distribution data', () => {
@@ -40,7 +42,7 @@ describe('DecisionDistributionChart', () => {
     };
     render(<DecisionDistributionChart visualizationData={visualizationData} />);
 
-    expect(screen.getByText('No decision distribution data available')).toBeInTheDocument();
+    expect(screen.getByText(getDecisionDistributionEmptyState())).toBeInTheDocument();
   });
 
   it('renders empty state when decisionDistribution is undefined', () => {
@@ -50,15 +52,7 @@ describe('DecisionDistributionChart', () => {
     };
     render(<DecisionDistributionChart visualizationData={visualizationData} />);
 
-    expect(screen.getByText('No decision distribution data available')).toBeInTheDocument();
-  });
-
-  it('does not render the old scale explainer footer', () => {
-    const visualizationData = createMockVisualizationData();
-    render(<DecisionDistributionChart visualizationData={visualizationData} />);
-
-    expect(screen.queryByText(/1 = strongly agree with option A/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/5 = strongly agree with option B/i)).not.toBeInTheDocument();
+    expect(screen.getByText(getDecisionDistributionEmptyState())).toBeInTheDocument();
   });
 
   it('handles single model data', () => {
@@ -73,16 +67,27 @@ describe('DecisionDistributionChart', () => {
     expect(screen.getByText('Decision Distribution by Model')).toBeInTheDocument();
   });
 
-  it('handles models with missing decision counts', () => {
-    const visualizationData: VisualizationData = {
-      decisionDistribution: {
-        'model-with-gaps': { '1': 5, '3': 10, '5': 3 }, // Missing '2' and '4'
-      },
-      modelScenarioMatrix: {},
-    };
-    render(<DecisionDistributionChart visualizationData={visualizationData} />);
+  it('renders the legend in canonical bucket order', () => {
+    const buckets = buildDecisionDistributionBuckets({
+      '1': 'Strongly support the other value',
+      '2': 'Somewhat support the other value',
+      '3': 'Neutral',
+      '4': 'Somewhat support this value',
+      '5': 'Strongly support this value',
+    });
 
-    expect(screen.getByText('Decision Distribution by Model')).toBeInTheDocument();
+    const { container } = render(<CustomLegend buckets={buckets} />);
+    const labels = Array.from(container.querySelectorAll('span.text-gray-600')).map(
+      (node) => node.textContent,
+    );
+
+    expect(labels).toEqual([
+      'Strongly support the other value',
+      'Somewhat support the other value',
+      'Neutral',
+      'Somewhat support this value',
+      'Strongly support this value',
+    ]);
   });
 
   it('formats the scope note when model totals vary', () => {
@@ -95,22 +100,30 @@ describe('DecisionDistributionChart', () => {
       'Total decisions in scope varies by model: n=18-20. Hover bars for raw counts.'
     );
   });
+
   it('shows percentages and raw counts in the tooltip', () => {
     const chartData = buildDecisionDistributionChartData({
       'gpt-4': { '1': 10, '2': 15, '3': 20, '4': 8, '5': 7 },
+    });
+    const buckets = buildDecisionDistributionBuckets({
+      '1': 'Strongly support the other value',
+      '2': 'Somewhat support the other value',
+      '3': 'Neutral',
+      '4': 'Somewhat support this value',
+      '5': 'Strongly support this value',
     });
 
     render(
       <CustomTooltip
         active
         payload={[{ payload: chartData[0] }]}
-        dimensionLabels={{ '1': 'Strongly support A' }}
-      />
+        buckets={buckets}
+      />,
     );
 
     expect(screen.getByText('gpt-4')).toBeInTheDocument();
     expect(screen.getByText('Total decisions: n=60')).toBeInTheDocument();
-    expect(screen.getByText('Strongly support A:')).toBeInTheDocument();
+    expect(screen.getByText('Strongly support the other value:')).toBeInTheDocument();
     expect(screen.getByText('17% (10)')).toBeInTheDocument();
     expect(screen.getByText('33% (20)')).toBeInTheDocument();
   });

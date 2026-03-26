@@ -4,6 +4,7 @@
  * Tests the full export flow with mocked data.
  */
 
+import AdmZip from 'adm-zip';
 import { describe, it, expect } from 'vitest';
 import ExcelJS from 'exceljs';
 
@@ -241,6 +242,83 @@ describe('generateExcelExport', () => {
     expect(workbook.getWorksheet('Dimension Impact')).toBeDefined();
   });
 
+  it('writes a hidden pivot source sheet with canonical bucket labels', async () => {
+    const resolvedStrong = createMockTranscript('anthropic:claude-3-5-sonnet-20241022', '5', 0);
+    resolvedStrong.decisionMetadata = {
+      parseClass: 'exact',
+      parsePath: 'exact.favor_first.strong',
+      matchedLabel: 'Achievement',
+    };
+    resolvedStrong.definitionSnapshot = {
+      dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
+      methodology: { presentation_order: 'A_first' },
+    };
+    resolvedStrong.scenario = {
+      ...(resolvedStrong.scenario as Record<string, unknown>),
+      orientationFlipped: false,
+    } as TranscriptWithScenario['scenario'];
+
+    const neutral = createMockTranscript('openai:gpt-4o-20241120', '3', 1);
+    neutral.decisionMetadata = {
+      parseClass: 'exact',
+      parsePath: 'exact.neutral',
+      matchedLabel: 'Achievement',
+    };
+    neutral.definitionSnapshot = {
+      dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
+      methodology: { presentation_order: 'A_first' },
+    };
+    neutral.scenario = {
+      ...(neutral.scenario as Record<string, unknown>),
+      orientationFlipped: false,
+    } as TranscriptWithScenario['scenario'];
+
+    const unknown = createMockTranscript('google:gemini-pro', '1', 2);
+    unknown.decisionCode = null;
+    unknown.decisionText = null;
+    unknown.decisionMetadata = null;
+    unknown.definitionSnapshot = null;
+
+    const data: RunExportData = {
+      run: createMockRun(),
+      transcripts: [resolvedStrong, neutral, unknown],
+    };
+
+    const result = await generateExcelExport(data, {
+      runId: data.run.id,
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(result.buffer);
+
+    const pivotSource = workbook.getWorksheet('Pivot Source');
+    expect(pivotSource).toBeDefined();
+    expect(pivotSource!.state).toBe('veryHidden');
+    expect(pivotSource!.getRow(1).values.slice(1)).toEqual(['AI Model Name', 'Decision Bucket']);
+    expect(pivotSource!.getCell(2, 2).value).toBe('First side strong');
+    expect(pivotSource!.getCell(3, 2).value).toBe('Neutral');
+    expect(pivotSource!.getCell(4, 2).value).toBe('Unknown');
+
+    const zip = new AdmZip(result.buffer);
+    const workbookXml = zip.getEntry('xl/workbook.xml')?.getData().toString('utf-8') ?? '';
+    expect(workbookXml).toContain('Pivot Source');
+    expect(workbookXml).toContain('veryHidden');
+
+    const pivotCacheXml = zip.getEntry('xl/pivotCache/pivotCacheDefinition1.xml')?.getData().toString('utf-8') ?? '';
+    expect(pivotCacheXml).toContain('Decision Bucket');
+    expect(pivotCacheXml).toContain('First side strong');
+    expect(pivotCacheXml).toContain('First side lean');
+    expect(pivotCacheXml).toContain('Neutral');
+    expect(pivotCacheXml).toContain('Second side lean');
+    expect(pivotCacheXml).toContain('Second side strong');
+    expect(pivotCacheXml).toContain('Unknown');
+    expect(pivotCacheXml.indexOf('First side strong')).toBeLessThan(pivotCacheXml.indexOf('First side lean'));
+    expect(pivotCacheXml.indexOf('First side lean')).toBeLessThan(pivotCacheXml.indexOf('Neutral'));
+    expect(pivotCacheXml.indexOf('Neutral')).toBeLessThan(pivotCacheXml.indexOf('Second side lean'));
+    expect(pivotCacheXml.indexOf('Second side lean')).toBeLessThan(pivotCacheXml.indexOf('Second side strong'));
+    expect(pivotCacheXml.indexOf('Second side strong')).toBeLessThan(pivotCacheXml.indexOf('Unknown'));
+  });
+
   it('excludes analysis worksheets when disabled', async () => {
     const data = createMockExportData(10, 2, true);
     const result = await generateExcelExport(data, {
@@ -404,9 +482,11 @@ describe('generateExcelExport edge cases', () => {
     expect(workbook.worksheets.length).toBeGreaterThan(0);
   });
 
-  it('handles missing decision codes', async () => {
+  it('handles unresolved transcripts', async () => {
     const transcript = createMockTranscript('model-a', '3');
     transcript.decisionCode = null;
+    transcript.decisionMetadata = null;
+    transcript.definitionSnapshot = null;
 
     const data: RunExportData = {
       run: createMockRun(),

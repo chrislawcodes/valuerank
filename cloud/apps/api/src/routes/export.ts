@@ -195,7 +195,12 @@ exportRouter.get(
       // Get transcripts for the run with scenario relation
       const transcripts = await db.transcript.findMany({
         where: transcriptWhere,
-        include: { scenario: true },
+        include: {
+          scenario: true,
+          run: {
+            select: { name: true, config: true, definition: { select: { version: true } } },
+          },
+        },
         orderBy: [{ modelId: 'asc' }, { scenarioId: 'asc' }],
       });
 

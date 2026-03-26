@@ -17,16 +17,19 @@ import {
   buildAnalysisTranscriptsPath,
   parseConditionKey,
 } from '../utils/analysisRouting';
-import { deriveDecisionDimensionLabels } from '../utils/decisionLabels';
 import { formatDisplayLabel } from '../utils/displayLabels';
 import { summarizeCanonicalConditionTranscripts } from '../utils/canonicalConditionSummary';
 import { getPairedOrientationLabels } from '../utils/methodology';
 import { requireRenderableTranscriptDecisionModelV2 } from '../utils/transcriptDecisionModel';
 import { filterTranscriptsForPivotCell } from '../utils/scenarioUtils';
+import {
+  CONDITION_DECISION_BUCKET_ORDER,
+  summarizeConditionDecisionBuckets,
+  type ConditionDecisionBucketKey,
+} from '../utils/conditionDecisionSummary';
 
 type AnalysisDetailMode = 'single' | 'paired';
 type JobChoicePresentationOrder = 'A_first' | 'B_first';
-type DecisionCode = '1' | '2' | '3' | '4' | '5';
 type OrientationBucket = 'canonical' | 'flipped';
 
 type DecisionSummary = {
@@ -38,7 +41,7 @@ type DecisionSummary = {
 type DetailRow = {
   id: string;
   label: string;
-  summary: DecisionSummary;
+  summary: ReturnType<typeof summarizeConditionDecisionBuckets>;
   baseSearchParams: URLSearchParams;
 };
 
@@ -46,8 +49,6 @@ const CONDITION_COPY = {
   countSummary: 'Canonical transcript counts by decision label. Click any non-zero count to open the matching transcripts.',
   unresolvedSummary: 'Unknown transcripts are shown in the final column. Known counts use only transcripts with canonical decision data.',
 } as const;
-
-const DECISION_CODES: DecisionCode[] = ['1', '2', '3', '4', '5'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -127,7 +128,7 @@ function buildDetailRow(
   return {
     id,
     label,
-    summary: summarizeDecisionCounts(transcripts),
+    summary: summarizeConditionDecisionBuckets(transcripts),
     baseSearchParams,
   };
 }
@@ -234,6 +235,10 @@ export function AnalysisConditionDetail() {
     : companionOrder === 'B_first'
       ? companionAnalysis
       : null;
+  const currentRunName = run?.definition?.name;
+  const companionRunId = companionRun?.id;
+  const aFirstRunName = aFirstRun?.definition?.name;
+  const bFirstRunName = bFirstRun?.definition?.name;
 
   const orientationLabels = useMemo(
     () => getPairedOrientationLabels(
@@ -241,17 +246,6 @@ export function AnalysisConditionDetail() {
     ),
     [aFirstRun?.definition?.content, bFirstRun?.definition?.content, run?.definition?.content],
   );
-
-  const decisionSummaryLabels = useMemo(() => {
-    const labels = deriveDecisionDimensionLabels(
-      aFirstRun?.definition?.content ?? run?.definition?.content ?? null,
-    );
-
-    return DECISION_CODES.map((code) => ({
-      code,
-      label: labels?.[code] ?? `Decision ${code}`,
-    }));
-  }, [aFirstRun?.definition?.content, run?.definition?.content]);
 
   const detailRows = useMemo(() => {
     if (!parsedCondition || !rowDim || !colDim || !selectedModel || !run || !analysis) {
@@ -293,7 +287,7 @@ export function AnalysisConditionDetail() {
         'Pooled',
         pooledTranscripts,
         makeBaseSearch({
-          companionRunId: companionRun.id,
+          companionRunId,
           pairView: 'condition-blended',
         }),
       ));
@@ -301,10 +295,10 @@ export function AnalysisConditionDetail() {
       if (aFirstRun && aFirstAnalysis) {
         rows.push(buildDetailRow(
           'canonical',
-          aFirstRun.definition?.name ?? orientationLabels.canonical,
+          aFirstRunName ?? orientationLabels.canonical,
           filterConditionTranscripts(aFirstRun, aFirstAnalysis, rowDim, colDim, row, col, selectedModel),
           makeBaseSearch({
-            companionRunId: companionRun.id,
+            companionRunId,
             pairView: 'condition-split',
             orientationBucket: 'canonical',
           }),
@@ -314,10 +308,10 @@ export function AnalysisConditionDetail() {
       if (bFirstRun && bFirstAnalysis) {
         rows.push(buildDetailRow(
           'flipped',
-          bFirstRun.definition?.name ?? orientationLabels.flipped,
+          bFirstRunName ?? orientationLabels.flipped,
           filterConditionTranscripts(bFirstRun, bFirstAnalysis, rowDim, colDim, row, col, selectedModel),
           makeBaseSearch({
-            companionRunId: companionRun.id,
+            companionRunId,
             pairView: 'condition-split',
             orientationBucket: 'flipped',
           }),
@@ -329,7 +323,7 @@ export function AnalysisConditionDetail() {
 
     rows.push(buildDetailRow(
       'single',
-      run.definition?.name ?? orientationLabels.current,
+      currentRunName ?? orientationLabels.current,
       filterConditionTranscripts(run, analysis, rowDim, colDim, parsedCondition.row, parsedCondition.col, selectedModel),
       makeBaseSearch(),
     ));
@@ -342,21 +336,45 @@ export function AnalysisConditionDetail() {
     analysisMode,
     bFirstAnalysis,
     bFirstRun,
-    bFirstRun?.definition?.name,
+    bFirstRunName,
     colDim,
     companionAnalysis,
     companionRun,
-    companionRun?.id,
-    aFirstRun?.definition?.name,
+    companionRunId,
+    aFirstRunName,
     orientationLabels,
     parsedCondition,
     rowDim,
     run,
-    run?.definition?.name,
+    currentRunName,
     selectedModel,
   ]);
 
-  const hasUnresolvedTranscripts = detailRows.some((row) => row.summary.unresolvedCount > 0);
+  const decisionSummaryLabelPair = useMemo(
+    () => detailRows.find((row) => row.summary.labelPair != null)?.summary.labelPair ?? null,
+    [detailRows],
+  );
+
+  const decisionSummaryLabels = useMemo(() => {
+    const firstValueLabel = decisionSummaryLabelPair?.firstValueLabel ?? 'canonical first value';
+    const secondValueLabel = decisionSummaryLabelPair?.secondValueLabel ?? 'canonical second value';
+
+    const labels: Record<ConditionDecisionBucketKey, string> = {
+      strong_first: `Strongly favors ${firstValueLabel}`,
+      lean_first: `Somewhat favors ${firstValueLabel}`,
+      neutral: 'Neutral',
+      lean_second: `Somewhat favors ${secondValueLabel}`,
+      strong_second: `Strongly favors ${secondValueLabel}`,
+      unknown: 'Unknown',
+    };
+
+    return CONDITION_DECISION_BUCKET_ORDER.map((key) => ({
+      key,
+      label: labels[key],
+    }));
+  }, [decisionSummaryLabelPair]);
+
+  const hasUnresolvedTranscripts = detailRows.some((row) => row.summary.unknownCount > 0);
 
   if (loading && !run) {
     return <Loading size="lg" text="Loading condition detail..." />;
@@ -389,12 +407,26 @@ export function AnalysisConditionDetail() {
     );
   }
 
-  const handleBucketClick = (row: DetailRow, decisionCode: DecisionCode) => {
-    if (row.summary.counts[decisionCode] === 0) {
+  const handleBucketClick = (row: DetailRow, bucketKey: ConditionDecisionBucketKey) => {
+    const count = row.summary.buckets.find((bucket) => bucket.key === bucketKey)?.count ?? 0;
+    if (count === 0) {
+      return;
+    }
+
+    if (bucketKey === 'unknown') {
       return;
     }
 
     const params = new URLSearchParams(row.baseSearchParams);
+    const bucketDecisionCodeMap: Record<Exclude<ConditionDecisionBucketKey, 'unknown'>, string> = {
+      strong_first: '5',
+      lean_first: '4',
+      neutral: '3',
+      lean_second: '2',
+      strong_second: '1',
+    };
+    const decisionCode = bucketDecisionCodeMap[bucketKey];
+
     params.set('decisionCode', decisionCode);
     navigate(buildAnalysisTranscriptsPath(ANALYSIS_BASE_PATH, run.id, params));
   };
@@ -444,9 +476,9 @@ export function AnalysisConditionDetail() {
               <th className="border-b border-gray-200 bg-gray-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                 Vignette Order
               </th>
-              {decisionSummaryLabels.map(({ code, label }) => (
+              {decisionSummaryLabels.map(({ key, label }) => (
                 <th
-                  key={code}
+                  key={key}
                   className="border-b border-gray-200 bg-gray-50 px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-600"
                 >
                   <div className="mx-auto flex max-w-[8rem] flex-col items-center gap-1 whitespace-normal leading-tight">
@@ -468,16 +500,17 @@ export function AnalysisConditionDetail() {
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">
                   {row.label}
                 </td>
-                {DECISION_CODES.map((code) => {
-                  const count = row.summary.counts[code];
+                {CONDITION_DECISION_BUCKET_ORDER.map((bucketKey) => {
+                  const bucket = row.summary.buckets.find((entry) => entry.key === bucketKey);
+                  const count = bucket?.count ?? 0;
                   return (
-                    <td key={`${row.id}-${code}`} className="px-3 py-3 text-center text-sm text-gray-700">
+                    <td key={`${row.id}-${bucketKey}`} className="px-3 py-3 text-center text-sm text-gray-700">
                       {count > 0 ? (
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleBucketClick(row, code)}
+                          onClick={() => handleBucketClick(row, bucketKey)}
                           className="h-auto min-h-0 px-1 py-0 font-medium text-teal-700 hover:bg-transparent hover:text-teal-800"
                         >
                           {count}
@@ -489,7 +522,7 @@ export function AnalysisConditionDetail() {
                   );
                 })}
                 <td className="px-3 py-3 text-center text-sm text-gray-700">
-                  {row.summary.resolvedCount}
+                  {row.summary.knownCount}
                 </td>
                 <td className="px-3 py-3 text-center text-sm text-gray-700">
                   {row.summary.unresolvedCount}

@@ -148,6 +148,7 @@ describe('CSV Export Endpoint', () => {
       .set('Authorization', getAuthHeader());
 
     expect(response.status).toBe(200);
+    expect(response.text.endsWith('\n')).toBe(true);
 
     const lines = response.text.split('\n').filter((l) => l.trim());
     // Header + 2 data rows
@@ -261,8 +262,8 @@ describe('CSV Export Endpoint', () => {
 
       expect(response.status).toBe(200);
 
-      // Decision Text is no longer in CSV output - verify the transcript was included
-      // and the response has valid CSV format with the expected number of data lines
+      // The transcript is still included even though the visible decision score
+      // fields were replaced by the canonical display contract.
       const lines = response.text.split('\n').filter((l) => l.trim());
       // Header + 3 data rows (2 from beforeEach + 1 special)
       expect(lines.length).toBe(4);
