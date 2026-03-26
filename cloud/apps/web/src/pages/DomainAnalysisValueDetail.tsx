@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from 'urql';
 import { Button } from '../components/ui/Button';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
+import { TranscriptList } from '../components/runs/TranscriptList';
 import { TranscriptViewer } from '../components/runs/TranscriptViewer';
 import type { Transcript } from '../api/operations/runs';
 import {
@@ -17,7 +18,6 @@ import {
 } from '../api/operations/domainAnalysis';
 import { VALUE_LABELS, type ValueKey } from '../data/domainAnalysisData';
 import {
-  formatCanonicalDecisionHeadline,
   getTranscriptDecisionDisplayMode,
   type TranscriptDecisionDisplayMode,
 } from '../utils/transcriptDecisionModel';
@@ -247,6 +247,30 @@ export function DomainAnalysisValueDetail() {
     requestPolicy: 'cache-and-network',
   });
 
+  const detail = data?.domainAnalysisValueDetail ?? null;
+  const selectedConditionDimensions = useMemo(() => {
+    if (detail === null || selectedCondition === null || selectedCondition.scenarioId === null) {
+      return undefined;
+    }
+
+    for (const vignette of detail.vignettes) {
+      if (vignette.definitionId !== selectedCondition.definitionId) {
+        continue;
+      }
+
+      const condition = vignette.conditions.find((entry) => entry.scenarioId === selectedCondition.scenarioId);
+      if (!condition?.dimensions) {
+        return undefined;
+      }
+
+      return {
+        [selectedCondition.scenarioId]: condition.dimensions,
+      };
+    }
+
+    return undefined;
+  }, [detail, selectedCondition]);
+
   if (domainId === '' || modelId === '' || valueKey === '') {
     return (
       <div className="space-y-4">
@@ -259,7 +283,7 @@ export function DomainAnalysisValueDetail() {
   }
 
   if (fetching) return <Loading size="lg" text="Loading value detail..." />;
-  if (error || !data?.domainAnalysisValueDetail) {
+  if (error || !detail) {
     return (
       <div className="space-y-4">
         <ErrorMessage message={`Failed to load value detail: ${error?.message ?? 'Unknown error'}`} />
@@ -270,7 +294,6 @@ export function DomainAnalysisValueDetail() {
     );
   }
 
-  const detail = data.domainAnalysisValueDetail;
   const label = VALUE_LABELS[detail.valueKey as ValueKey] ?? detail.valueKey;
   const mathNumerator = detail.prioritized + 1;
   const mathDenominator = detail.deprioritized + 1;
@@ -432,7 +455,7 @@ export function DomainAnalysisValueDetail() {
                   />
                 </div>
               )}
-              {selectedCondition !== null && selectedCondition.definitionId === vignette.definitionId && (
+                  {selectedCondition !== null && selectedCondition.definitionId === vignette.definitionId && (
                 <div className="border-t border-gray-200 bg-gray-50 px-3 py-3">
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <p className="text-xs font-medium text-gray-800">
@@ -448,57 +471,14 @@ export function DomainAnalysisValueDetail() {
                     <p className="text-xs text-gray-500">No transcripts found for this condition and model.</p>
                   )}
                   {!transcriptsFetching && !transcriptsError && normalizedTranscripts.length > 0 && (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full text-xs">
-                        <thead>
-                          <tr className="border-b border-gray-200 text-gray-600">
-                            <th className="px-2 py-2 text-left font-medium">Transcript</th>
-                            <th className="px-2 py-2 text-right font-medium">{decisionColumnLabel}</th>
-                            <th className="px-2 py-2 text-right font-medium">Turns</th>
-                            <th className="px-2 py-2 text-right font-medium">Duration</th>
-                            <th className="px-2 py-2 text-right font-medium">Created</th>
-                            <th className="px-2 py-2 text-right font-medium">Run</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {normalizedTranscripts.map((transcript) => (
-                            <tr key={transcript.id} className="border-b border-gray-100 hover:bg-white">
-                              <td className="px-2 py-2">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-auto min-h-0 !p-0 text-xs font-medium text-sky-700 hover:text-sky-900 hover:underline"
-                                  onClick={() => setSelectedTranscript(transcript)}
-                                >
-                                  {transcript.id.slice(0, 10)}...
-                                </Button>
-                              </td>
-                              <td className="px-2 py-2 text-right text-gray-800">
-                                {reportDecisionDisplayMode === 'audit'
-                                  ? formatCanonicalDecisionHeadline(transcript)
-                                  : (transcript.decisionCode ?? '-')}
-                              </td>
-                              <td className="px-2 py-2 text-right text-gray-800">{transcript.turnCount}</td>
-                              <td className="px-2 py-2 text-right text-gray-800">{Math.round(transcript.durationMs / 100) / 10}s</td>
-                              <td className="px-2 py-2 text-right text-gray-800">
-                                {new Date(transcript.createdAt).toLocaleString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })}
-                              </td>
-                              <td className="px-2 py-2 text-right">
-                                <Link className="text-sky-700 hover:text-sky-900 hover:underline" to={`/runs/${transcript.runId}`}>
-                                  Open
-                                </Link>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <TranscriptList
+                      transcripts={normalizedTranscripts}
+                      onSelect={setSelectedTranscript}
+                      groupByModel={false}
+                      scenarioDimensions={selectedConditionDimensions}
+                      decisionColumnLabel={decisionColumnLabel}
+                      decisionDisplayMode={reportDecisionDisplayMode}
+                    />
                   )}
                 </div>
               )}

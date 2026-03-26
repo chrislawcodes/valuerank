@@ -10,6 +10,14 @@ import {
 import type { Transcript } from '../../src/api/operations/runs';
 
 const useQueryMock = vi.fn();
+let lastTranscriptListProps: {
+  transcripts: Transcript[];
+  decisionColumnLabel?: string;
+  decisionDisplayMode?: string;
+  groupByModel?: boolean;
+  scenarioDimensions?: Record<string, Record<string, string | number>>;
+  onSelect: (transcript: Transcript) => void;
+} | null = null;
 
 vi.mock('urql', async () => {
   const actual = await vi.importActual<typeof import('urql')>('urql');
@@ -26,6 +34,32 @@ vi.mock('../../src/components/runs/TranscriptViewer', () => ({
       <span>{decisionDisplayMode ?? 'unset'}</span>
     </div>
   ),
+}));
+
+vi.mock('../../src/components/runs/TranscriptList', () => ({
+  TranscriptList: (props: {
+    transcripts: Transcript[];
+    decisionColumnLabel?: string;
+    decisionDisplayMode?: string;
+    groupByModel?: boolean;
+    scenarioDimensions?: Record<string, Record<string, string | number>>;
+    onSelect: (transcript: Transcript) => void;
+  }) => {
+    lastTranscriptListProps = props;
+    return (
+      <div data-testid="transcript-list">
+        <span>{props.decisionColumnLabel ?? 'unset'}</span>
+        <span>{props.decisionDisplayMode ?? 'unset'}</span>
+        <span>{props.groupByModel ? 'grouped' : 'flat'}</span>
+        <span>{props.transcripts.length}</span>
+        {props.transcripts.map((transcript) => (
+          <button key={transcript.id} type="button" onClick={() => props.onSelect(transcript)}>
+            {transcript.id}
+          </button>
+        ))}
+      </div>
+    );
+  },
 }));
 
 function createTranscript(overrides: Partial<Transcript> = {}): Transcript {
@@ -49,6 +83,7 @@ function createTranscript(overrides: Partial<Transcript> = {}): Transcript {
 describe('DomainAnalysisValueDetail', () => {
   beforeEach(() => {
     useQueryMock.mockReset();
+    lastTranscriptListProps = null;
     useQueryMock.mockImplementation((args: { query: unknown; variables?: Record<string, unknown> }) => {
       if (args.query === DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY || args.query === DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY_LEGACY) {
         return [{
@@ -170,12 +205,17 @@ describe('DomainAnalysisValueDetail', () => {
     fireEvent.click(screen.getByTitle('Condition A'));
 
     await waitFor(() => {
-      expect(screen.getByText('Decision summary')).toBeInTheDocument();
+      expect(screen.getByTestId('transcript-list')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Strongly favors Benevolence Dependability')).toBeInTheDocument();
+    expect(lastTranscriptListProps?.decisionColumnLabel).toBe('Decision summary');
+    expect(lastTranscriptListProps?.decisionDisplayMode).toBe('audit');
+    expect(lastTranscriptListProps?.groupByModel).toBe(false);
+    expect(lastTranscriptListProps?.scenarioDimensions).toEqual({
+      'scenario-1': { Row: 'High', Col: 'Low' },
+    });
 
-    fireEvent.click(screen.getAllByRole('button', { name: /transcript/i })[0]!);
+    fireEvent.click(screen.getByRole('button', { name: 'transcript-v2' }));
 
     const viewer = await screen.findByTestId('transcript-viewer');
     expect(within(viewer).getByText('transcript-v2')).toBeInTheDocument();
@@ -297,16 +337,21 @@ describe('DomainAnalysisValueDetail', () => {
     fireEvent.click(screen.getByTitle('Condition A'));
 
     await waitFor(() => {
-      expect(screen.getByText('Decision')).toBeInTheDocument();
+      expect(screen.getByTestId('transcript-list')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getAllByRole('button', { name: /transcript/i })[0]!);
+    expect(lastTranscriptListProps?.decisionColumnLabel).toBe('Decision');
+    expect(lastTranscriptListProps?.decisionDisplayMode).toBe('legacy');
+    expect(lastTranscriptListProps?.groupByModel).toBe(false);
+    expect(lastTranscriptListProps?.transcripts).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole('button', { name: 'transcript-v2' }));
 
     const viewer = await screen.findByTestId('transcript-viewer');
     expect(within(viewer).getByText('transcript-v2')).toBeInTheDocument();
     expect(within(viewer).getByText('legacy')).toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByRole('button', { name: /transcript/i })[1]!);
+    fireEvent.click(screen.getByRole('button', { name: 'transcript-legacy' }));
 
     const legacyViewer = await screen.findByTestId('transcript-viewer');
     expect(within(legacyViewer).getByText('transcript-legacy')).toBeInTheDocument();
