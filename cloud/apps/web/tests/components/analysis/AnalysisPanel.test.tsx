@@ -5,10 +5,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { useState } from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { AnalysisPanel } from '../../../src/components/analysis/AnalysisPanel';
+import type { AnalysisTab } from '../../../src/components/analysis/tabs';
+import type { ComponentProps } from 'react';
 import type { AnalysisResult } from '../../../src/api/operations/analysis';
 import type { Transcript } from '../../../src/api/operations/runs';
 
@@ -19,6 +22,23 @@ vi.mock('../../../src/hooks/useAnalysis', () => ({
 
 import { useAnalysis } from '../../../src/hooks/useAnalysis';
 const mockUseAnalysis = vi.mocked(useAnalysis);
+
+function AnalysisPanelHarness({
+  initialTab = 'overview',
+  ...props
+}: {
+  initialTab?: AnalysisTab;
+} & Omit<ComponentProps<typeof AnalysisPanel>, 'activeTab' | 'onTabChange'>) {
+  const [activeTab, setActiveTab] = useState<AnalysisTab>(initialTab);
+
+  return (
+    <AnalysisPanel
+      {...props}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+    />
+  );
+}
 
 function createMockAnalysis(overrides: Partial<AnalysisResult> = {}): AnalysisResult {
   return {
@@ -158,7 +178,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -177,7 +197,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -196,7 +216,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" analysisStatus="pending" />
+        <AnalysisPanelHarness runId="run-1" analysisStatus="pending" />
       </MemoryRouter>
     );
 
@@ -215,7 +235,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" analysisStatus="computing" />
+        <AnalysisPanelHarness runId="run-1" analysisStatus="computing" />
       </MemoryRouter>
     );
 
@@ -234,7 +254,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -255,7 +275,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -276,7 +296,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -301,7 +321,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel
+        <AnalysisPanelHarness
           runId="run-1"
           analysisMode="single"
           onAnalysisModeChange={onModeChange}
@@ -334,7 +354,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel
+        <AnalysisPanelHarness
           runId="run-1"
           analysisMode="single"
           onAnalysisModeChange={vi.fn()}
@@ -610,7 +630,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel
+        <AnalysisPanelHarness
           runId="run-1"
           analysisMode="paired"
           companionAnalysis={companionAnalysis}
@@ -668,7 +688,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel
+        <AnalysisPanelHarness
           runId="run-1"
           analysisMode="paired"
           companionAnalysis={companionAnalysis}
@@ -696,7 +716,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" analysisMode="paired" />
+        <AnalysisPanelHarness runId="run-1" analysisMode="paired" />
       </MemoryRouter>
     );
 
@@ -726,7 +746,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel
+        <AnalysisPanelHarness
           runId="run-1"
           analysisMode="paired"
           transcripts={[
@@ -802,7 +822,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" analysisMode="paired" initialTab="scenarios" />
+        <AnalysisPanelHarness runId="run-1" analysisMode="paired" initialTab="scenarios" />
       </MemoryRouter>
     );
 
@@ -839,7 +859,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" isAggregate />
+        <AnalysisPanelHarness runId="run-1" isAggregate />
       </MemoryRouter>
     );
 
@@ -871,7 +891,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" analysisMode="paired" />
+        <AnalysisPanelHarness runId="run-1" analysisMode="paired" />
       </MemoryRouter>
     );
 
@@ -930,7 +950,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" isAggregate />
+        <AnalysisPanelHarness runId="run-1" isAggregate />
       </MemoryRouter>
     );
 
@@ -965,7 +985,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -999,7 +1019,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -1022,7 +1042,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -1052,7 +1072,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -1078,7 +1098,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -1099,7 +1119,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -1119,7 +1139,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
