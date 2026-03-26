@@ -5,11 +5,15 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DecisionsViz } from '../../../../src/components/compare/visualizations/DecisionsViz';
 import type { RunWithAnalysis, ComparisonFilters } from '../../../../src/components/compare/types';
 import type { ComparisonRun } from '../../../../src/api/operations/comparison';
+import {
+  getDecisionDistributionEmptyState,
+  getDecisionDistributionHelperText,
+} from '../../../../src/utils/decisionDistributionDisplay';
 
 function createMockRun(overrides: Partial<ComparisonRun & { aggregateStats?: RunWithAnalysis['aggregateStats'] }> = {}): RunWithAnalysis {
   return {
@@ -73,6 +77,23 @@ function createMockRun(overrides: Partial<ComparisonRun & { aggregateStats?: Run
       parentId: null,
       tags: [],
     },
+    definitionContent: {
+      preamble: 'Test preamble',
+      template: 'Test template',
+      dimensions: [
+        {
+          name: 'decision',
+          levels: [
+            { score: 1, label: 'Strongly support the other value' },
+            { score: 2, label: 'Somewhat support the other value' },
+            { score: 3, label: 'Neutral' },
+            { score: 4, label: 'Somewhat support this value' },
+            { score: 5, label: 'Strongly support this value' },
+          ],
+        },
+      ],
+      matchingRules: '',
+    },
     aggregateStats: {
       overallMean: 3.25,
       overallStdDev: 0.85,
@@ -103,6 +124,12 @@ describe('DecisionsViz', () => {
       );
 
       expect(screen.getByText('Decision Distribution Comparison')).toBeInTheDocument();
+      expect(screen.getByText(getDecisionDistributionHelperText())).toBeInTheDocument();
+      expect(
+        screen.getByLabelText(
+          /Decision distribution chart showing buckets ordered from Strongly support the other value/i,
+        ),
+      ).toBeInTheDocument();
     });
 
     it('shows empty state when no visualization data', () => {
@@ -124,7 +151,7 @@ describe('DecisionsViz', () => {
         />
       );
 
-      expect(screen.getByText('No decision data available')).toBeInTheDocument();
+      expect(screen.getByText(getDecisionDistributionEmptyState())).toBeInTheDocument();
     });
 
     it('shows empty state when analysis is null', () => {
@@ -143,7 +170,7 @@ describe('DecisionsViz', () => {
         />
       );
 
-      expect(screen.getByText('No decision data available')).toBeInTheDocument();
+      expect(screen.getByText(getDecisionDistributionEmptyState())).toBeInTheDocument();
     });
   });
 
@@ -211,8 +238,11 @@ describe('DecisionsViz', () => {
         />
       );
 
-      // Recharts should render (we can check for the container)
-      expect(screen.getByText('Decision Distribution Comparison')).toBeInTheDocument();
+      expect(
+        screen.getByLabelText(
+          /Decision distribution chart showing buckets ordered from Strongly support the other value/i,
+        ),
+      ).toBeInTheDocument();
     });
   });
 
