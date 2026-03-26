@@ -110,7 +110,7 @@ describe('CSV Export Endpoint', () => {
     }
   });
 
-  it('returns CSV with the legacy header layout by default', async () => {
+  it('returns CSV with the canonical header layout by default', async () => {
     const response = await request(app)
       .get(`/api/export/runs/${testRunId}/csv`)
       .set('Authorization', getAuthHeader());
@@ -122,9 +122,9 @@ describe('CSV Export Endpoint', () => {
     // First line after BOM is header
     const headerLine = lines[0]?.replace('\uFEFF', '');
     // Headers: Model, Trial Signature, Batch, Sample Index, Variables (alphabetical),
-    // then the legacy decision/transcript columns.
+    // then the canonical decision/transcript columns.
     expect(headerLine).toBe(
-      'AI Model Name,Trial Signature,Batch,Sample Index,Certainty,Stakes,Decision Code,Transcript ID,Probe Prompt,Target Response'
+      'AI Model Name,Trial Signature,Batch,Sample Index,Certainty,Stakes,Decision Direction,Decision Strength,Decision Reason,Transcript ID,Probe Prompt,Target Response'
     );
   });
 
@@ -138,7 +138,7 @@ describe('CSV Export Endpoint', () => {
     const lines = response.text.split('\n');
     const headerLine = lines[0]?.replace('\uFEFF', '');
     expect(headerLine).toBe(
-      'AI Model Name,Trial Signature,Batch,Sample Index,Certainty,Stakes,Decision Code,Decision Source,Decision Parse Class,Decision Parse Path,Matched Label,Transcript ID,Probe Prompt,Target Response'
+      'AI Model Name,Trial Signature,Batch,Sample Index,Certainty,Stakes,Decision Direction,Decision Strength,Decision Reason,Decision Source,Decision Parse Class,Decision Parse Path,Matched Label,Transcript ID,Probe Prompt,Target Response'
     );
   });
 
@@ -157,9 +157,9 @@ describe('CSV Export Endpoint', () => {
     const dataLines = lines.slice(1);
     expect(dataLines.some((l) => l.includes('gpt-4o'))).toBe(true);
     expect(dataLines.some((l) => l.includes('claude-3-5-sonnet'))).toBe(true);
-    // Check for decision codes
-    expect(dataLines.some((l) => l.includes(',1,'))).toBe(true);
-    expect(dataLines.some((l) => l.includes(',2,'))).toBe(true);
+    // The canonical export now shows unknown direction/strength for these bare transcripts,
+    // but the rows still preserve identity and dimensions.
+    expect(dataLines.some((l) => l.includes(',unknown,unknown,'))).toBe(true);
     // Model name should be first column followed by Trial Signature (v?td) then Batch (empty) then sample index
     expect(dataLines.some((l) => l.startsWith('gpt-4o,v1td,,0,'))).toBe(true);
     expect(dataLines.some((l) => l.startsWith('claude-3-5-sonnet,v1td,,0,'))).toBe(true);
@@ -319,8 +319,8 @@ describe('CSV Serialization Helper', () => {
     // Scores read directly from content.dimensions
     expect(row.variables).toEqual({ Stakes: 1, Certainty: 2 });
     // Format: Model, TrialSignature, Batch, SampleIndex, Certainty, Stakes,
-    // DecisionCode, TranscriptId, ...
-    expect(formatted).toContain('gpt-4o,v1t0.5,,0,2,1,1,test-id');
+    // DecisionDirection, DecisionStrength, DecisionReason, TranscriptId, ...
+    expect(formatted).toContain('gpt-4o,v1t0.5,,0,2,1,unknown,unknown,missing_metadata,test-id,,I choose option A');
     expect(row.targetResponse).toBe('I choose option A');
   });
 
@@ -394,7 +394,7 @@ describe('CSV Serialization Helper', () => {
 
     const row = transcriptToCSVRow(mockTranscript as Parameters<typeof transcriptToCSVRow>[0]);
 
-    expect(row.decisionCode).toBe('pending');
+    expect(row.decisionDirection).toBe('unknown');
   });
 
   it('generates correct filename', async () => {
@@ -521,8 +521,8 @@ describe('CSV Serialization Helper', () => {
     expect(row.probePrompt).toBe('What should I do?\n\n---\n\nAre you sure?');
 
     const formatted = formatCSVRow(row, []);
-    // Post-variable columns default to the legacy export shape.
-    expect(formatted).toContain(',1,transcript-id,');
+    // Post-variable columns now use canonical decision display fields.
+    expect(formatted).toContain(',unknown,unknown,missing_metadata,transcript-id,');
     expect(formatted).toContain('What should I do?');
     expect(formatted).toContain('Are you sure?');
   });
@@ -545,8 +545,8 @@ describe('CSV Serialization Helper', () => {
     const formatted = formatCSVRow(row, ['Stakes']);
 
     expect(row.sampleIndex).toBe(3);
-    // Format: Model,TrialSignature,Batch,SampleIndex,Stakes,DecisionCode,...
-    expect(formatted).toContain('gpt-4o,v?td,,3,2,1');
+    // Format: Model,TrialSignature,Batch,SampleIndex,Stakes,DecisionDirection,...
+    expect(formatted).toContain('gpt-4o,v?td,,3,2,unknown,unknown,missing_metadata');
   });
 });
 
@@ -672,18 +672,20 @@ describe('Domain Transcript CSV Export Endpoint', () => {
     expect(response.text.charCodeAt(0)).toBe(0xfeff);
     const headerLine = response.text.split('\n')[0]?.replace('\uFEFF', '');
     expect(headerLine).toContain('AI Model Name');
-    expect(headerLine).toContain('Decision Code');
+    expect(headerLine).toContain('Decision Direction');
+    expect(headerLine).toContain('Decision Strength');
+    expect(headerLine).toContain('Decision Reason');
   });
 
-  it('excludes transcripts with decisionCode outside 1-5', async () => {
+  it('keeps unresolved transcripts in the export', async () => {
     const response = await request(app)
       .get(`/api/export/domains/${testDomainId}/transcripts.csv`)
       .set('Authorization', getAuthHeader());
 
     expect(response.status).toBe(200);
     const lines = response.text.split('\n').filter((l) => l.trim());
-    // header + 2 rows (codes 1 and 3); code 0 excluded
-    expect(lines.length).toBe(3);
+    // header + 3 rows, including the transcript that previously was excluded.
+    expect(lines.length).toBe(4);
   });
 
   it('returns header-only CSV when domain has no runs', async () => {
@@ -766,9 +768,9 @@ describe('Domain Transcript CSV Export Endpoint', () => {
 
       expect(response.status).toBe(200);
       const lines = response.text.split('\n').filter((l) => l.trim());
-      // beforeEach creates 2 analyzable transcripts (codes 1 and 3) in the temperature=0 run.
+      // beforeEach creates 3 transcripts in the temperature=0 run.
       // The temperature=1 run transcript should NOT be included.
-      expect(lines.length).toBe(3); // header + 2 rows
+      expect(lines.length).toBe(4); // header + 3 rows
     } finally {
       await db.transcript.deleteMany({ where: { runId: runT1.id } });
       await db.run.delete({ where: { id: runT1.id } });
