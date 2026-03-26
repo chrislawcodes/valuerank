@@ -1,0 +1,45 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "current_phase": "",
+    "open_decisions": [],
+    "deferred_items": [],
+    "context_summary": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "The scenarios tab can derive canonical bucket counts from the transcripts already loaded on AnalysisDetail.",
+      "Cells without renderable canonical transcript data should show as unknown instead of inventing a legacy numeric fallback.",
+      "The pivot grid remains legacy and should keep its existing 1-5 mean-score behavior for this wave."
+    ],
+    "summary": "The analysis scenarios tab should update only the condition-scoring matrix to use the canonical five-bucket logic and winner-score display already shipped on the value-detail page, while leaving the top pivot grid on legacy counts for now. I am carrying in the assumption that this is a UI-only follow-up to the replace wave and that the existing shipped value-detail logic is the source of truth for bucket definitions, tie handling, and unknown handling.",
+    "updated_at": 1774485286,
+    "answers": {},
+    "non_goals": [],
+    "acceptance_criteria": [],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "diff_slice_override": {},
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "checkpoint_fallback": {}
+}

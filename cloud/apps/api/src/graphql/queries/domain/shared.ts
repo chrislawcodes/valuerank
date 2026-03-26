@@ -91,7 +91,13 @@ export type DomainAnalysisConditionDetail = {
   neutral: number;
   totalTrials: number;
   selectedValueWinRate: number | null;
-  meanDecisionScore: number | null;
+  strongly: number;
+  somewhat: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+  unknownCount: number;
+  meanPreferenceScore: number | null;
+  opponentMeanPreferenceScore: number | null;
 };
 
 export type DomainAnalysisVignetteDetail = {
@@ -521,14 +527,7 @@ export async function resolveValuePairsInChunks(
   return valuePairByDefinition;
 }
 
-export function classifyDecisionForSelectedValue(
-  decision: number,
-  selectedIsValueA: boolean,
-): 'prioritized' | 'deprioritized' | 'neutral' {
-  if (decision >= 4) return selectedIsValueA ? 'prioritized' : 'deprioritized';
-  if (decision <= 2) return selectedIsValueA ? 'deprioritized' : 'prioritized';
-  return 'neutral';
-}
+
 
 export function aggregateValueCountsFromTranscripts(
   transcripts: Array<{ runId: string; modelId: string; decisionCode: string | null }>,

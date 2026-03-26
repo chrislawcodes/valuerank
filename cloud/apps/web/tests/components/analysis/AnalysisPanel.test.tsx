@@ -5,11 +5,15 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { useState } from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { AnalysisPanel } from '../../../src/components/analysis/AnalysisPanel';
+import type { AnalysisTab } from '../../../src/components/analysis/tabs';
+import type { ComponentProps } from 'react';
 import type { AnalysisResult } from '../../../src/api/operations/analysis';
+import type { Transcript } from '../../../src/api/operations/runs';
 
 // Mock the useAnalysis hook
 vi.mock('../../../src/hooks/useAnalysis', () => ({
@@ -18,6 +22,23 @@ vi.mock('../../../src/hooks/useAnalysis', () => ({
 
 import { useAnalysis } from '../../../src/hooks/useAnalysis';
 const mockUseAnalysis = vi.mocked(useAnalysis);
+
+function AnalysisPanelHarness({
+  initialTab = 'overview',
+  ...props
+}: {
+  initialTab?: AnalysisTab;
+} & Omit<ComponentProps<typeof AnalysisPanel>, 'activeTab' | 'onTabChange'>) {
+  const [activeTab, setActiveTab] = useState<AnalysisTab>(initialTab);
+
+  return (
+    <AnalysisPanel
+      {...props}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+    />
+  );
+}
 
 function createMockAnalysis(overrides: Partial<AnalysisResult> = {}): AnalysisResult {
   return {
@@ -83,6 +104,63 @@ function createMockAnalysis(overrides: Partial<AnalysisResult> = {}): AnalysisRe
   };
 }
 
+function createCanonicalTranscript({
+  id,
+  scenarioId,
+  direction,
+  strength,
+}: {
+  id: string;
+  scenarioId: string;
+  direction: 'favor_first' | 'favor_second' | 'neutral' | 'unknown';
+  strength: 'strong' | 'lean' | 'neutral' | 'unknown';
+}): Transcript {
+  return {
+    id,
+    runId: 'run-1',
+    scenarioId,
+    modelId: 'gpt-4',
+    modelVersion: null,
+    content: {},
+    decisionCode: direction === 'favor_second' ? '1' : direction === 'neutral' ? '3' : '5',
+    decisionCodeSource: 'deterministic',
+    decisionMetadata: null,
+    turnCount: 4,
+    tokenCount: 100,
+    durationMs: 800,
+    estimatedCost: null,
+    createdAt: '2024-01-01T00:00:00Z',
+    lastAccessedAt: null,
+    dimensionValues: null,
+    decisionModelV2: direction === 'unknown'
+      ? null
+      : {
+          raw: {
+            matchedText: 'test',
+            matchedLabel: 'test',
+            parseClass: 'exact',
+            parsePath: 'exact',
+            parserVersion: 'job-choice-v2',
+            responseExcerpt: null,
+            manualOverride: null,
+          },
+          canonical: {
+            favoredValueKey: direction === 'neutral' ? null : 'value-a',
+            opposedValueKey: direction === 'neutral' ? null : 'value-b',
+            direction,
+            strength,
+            normalizationApplied: false,
+            normalizationReason: null,
+            source: 'deterministic',
+          },
+          legacy: {
+            rawScore: direction === 'favor_second' ? 1 : direction === 'neutral' ? 3 : 5,
+            canonicalScore: direction === 'favor_second' ? 1 : direction === 'neutral' ? 3 : 5,
+          },
+        },
+  } as Transcript;
+}
+
 describe('AnalysisPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -100,7 +178,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -119,7 +197,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -138,7 +216,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" analysisStatus="pending" />
+        <AnalysisPanelHarness runId="run-1" analysisStatus="pending" />
       </MemoryRouter>
     );
 
@@ -157,7 +235,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" analysisStatus="computing" />
+        <AnalysisPanelHarness runId="run-1" analysisStatus="computing" />
       </MemoryRouter>
     );
 
@@ -176,7 +254,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -197,7 +275,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -218,7 +296,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -243,7 +321,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel
+        <AnalysisPanelHarness
           runId="run-1"
           analysisMode="single"
           onAnalysisModeChange={onModeChange}
@@ -276,7 +354,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel
+        <AnalysisPanelHarness
           runId="run-1"
           analysisMode="single"
           onAnalysisModeChange={vi.fn()}
@@ -297,6 +375,60 @@ describe('AnalysisPanel', () => {
 
     await userEvent.selectOptions(screen.getByLabelText('Vignette'), 'run-2');
     expect(onSingleVignetteChange).toHaveBeenCalledWith('run-2');
+  });
+
+  it('threads transcripts into the scenarios tab and renders canonical scores there', async () => {
+    const analysis = createMockAnalysis({
+      perModel: {
+        'gpt-4': {
+          sampleSize: 2,
+          values: {},
+          overall: { mean: 3, stdDev: 0, min: 3, max: 3 },
+        },
+      },
+      visualizationData: {
+        decisionDistribution: {},
+        scenarioDimensions: {
+          'scenario-1': { Achievement: 'high', Care: 'high' },
+          'scenario-2': { Achievement: 'high', Care: 'high' },
+        },
+        modelScenarioMatrix: {
+          'gpt-4': {
+            'scenario-1': 3,
+            'scenario-2': 3,
+          },
+        },
+      } as any,
+    });
+
+    const transcripts: Transcript[] = [
+      createCanonicalTranscript({ id: 't1', scenarioId: 'scenario-1', direction: 'favor_first', strength: 'strong' }),
+      createCanonicalTranscript({ id: 't2', scenarioId: 'scenario-2', direction: 'favor_first', strength: 'lean' }),
+    ];
+
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanelHarness runId="run-1" transcripts={transcripts} />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Analysis')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /^Conditions$/i }));
+
+    expect(screen.getAllByText('3.00').length).toBeGreaterThan(0);
+    const canonicalScore = screen.getByText('1.5');
+    expect(canonicalScore.parentElement).toHaveClass('text-blue-700');
+    expect(screen.getByText('Unknown canonical trials are excluded from condition scores.')).toBeInTheDocument();
   });
 
   it('pools overview summary semantics across the companion run in paired mode', () => {
@@ -498,7 +630,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel
+        <AnalysisPanelHarness
           runId="run-1"
           analysisMode="paired"
           companionAnalysis={companionAnalysis}
@@ -556,7 +688,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel
+        <AnalysisPanelHarness
           runId="run-1"
           analysisMode="paired"
           companionAnalysis={companionAnalysis}
@@ -584,7 +716,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" analysisMode="paired" />
+        <AnalysisPanelHarness runId="run-1" analysisMode="paired" />
       </MemoryRouter>
     );
 
@@ -614,7 +746,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel
+        <AnalysisPanelHarness
           runId="run-1"
           analysisMode="paired"
           transcripts={[
@@ -690,7 +822,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" analysisMode="paired" initialTab="scenarios" />
+        <AnalysisPanelHarness runId="run-1" analysisMode="paired" initialTab="scenarios" />
       </MemoryRouter>
     );
 
@@ -727,7 +859,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" isAggregate />
+        <AnalysisPanelHarness runId="run-1" isAggregate />
       </MemoryRouter>
     );
 
@@ -759,7 +891,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" analysisMode="paired" />
+        <AnalysisPanelHarness runId="run-1" analysisMode="paired" />
       </MemoryRouter>
     );
 
@@ -818,7 +950,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" isAggregate />
+        <AnalysisPanelHarness runId="run-1" isAggregate />
       </MemoryRouter>
     );
 
@@ -853,7 +985,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -887,7 +1019,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -910,7 +1042,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -940,7 +1072,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -966,7 +1098,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -987,7 +1119,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
@@ -1007,7 +1139,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
+        <AnalysisPanelHarness runId="run-1" />
       </MemoryRouter>
     );
 
