@@ -81,10 +81,15 @@ export function DecisionsTab({
   return (
     <div className="space-y-8">
       {showDistribution && (
-        <DecisionDistributionChart
-          visualizationData={visualizationData}
-          dimensionLabels={dimensionLabels}
-        />
+        <div className="space-y-3">
+          <p className="text-xs text-gray-500">
+            This report uses canonical decision buckets ordered from strongest support for the other value to strongest support for this value.
+          </p>
+          <DecisionDistributionChart
+            visualizationData={visualizationData}
+            dimensionLabels={dimensionLabels}
+          />
+        </div>
       )}
 
       <div className={showDistribution ? 'border-t border-gray-200 pt-6' : ''}>

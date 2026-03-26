@@ -185,7 +185,7 @@ export type VisualizationRegistration = {
 export type DecisionDistribution = {
   runId: string;
   modelId?: string;
-  /** Counts for each decision value (1-5) */
+  /** Counts for each decision bucket */
   counts: Record<number, number>;
   /** Total samples */
   total: number;
