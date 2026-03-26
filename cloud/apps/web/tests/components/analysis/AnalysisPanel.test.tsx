@@ -417,7 +417,7 @@ describe('AnalysisPanel', () => {
 
     render(
       <MemoryRouter>
-        <AnalysisPanel runId="run-1" transcripts={transcripts} />
+        <AnalysisPanelHarness runId="run-1" transcripts={transcripts} />
       </MemoryRouter>
     );
 
