@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { PerModelStats, VarianceAnalysis, VisualizationData } from '../../api/operations/analysis';
+import type { Transcript } from '../../api/operations/runs';
 import { resolveScenarioAttributes } from '../../utils/decisionLabels';
 import {
   ANALYSIS_BASE_PATH,
@@ -16,10 +17,14 @@ import { formatDisplayLabel } from '../../utils/displayLabels';
 import type { PairedOrientationLabels } from '../../utils/methodology';
 import { Button } from '../ui/Button';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
-
-type ConditionStats = {
-  mean: number;
-};
+import {
+  buildCanonicalTranscriptIndex,
+  collectCanonicalConditionTranscripts,
+  getCanonicalConditionBackground,
+  getCanonicalConditionTextColor,
+  summarizeCanonicalConditionTranscripts,
+  type CanonicalConditionSummary,
+} from '../../utils/canonicalConditionSummary';
 
 type ModelHeader = {
   familyKey: string;
@@ -36,6 +41,7 @@ type ConditionDecisionsTableProps = {
   orientationLabels: PairedOrientationLabels;
   analysisMode?: 'single' | 'paired';
   perModel: Record<string, PerModelStats>;
+  transcripts?: Transcript[];
   visualizationData: VisualizationData | null | undefined;
   varianceAnalysis?: VarianceAnalysis | null;
   expectedAttributes?: string[];
@@ -226,51 +232,6 @@ function buildModelHeaders(modelIds: string[]): ModelHeader[] {
   });
 }
 
-function getHeatmapColor(value: number): string {
-  if (value < 1 || value > 5) return 'rgba(243, 244, 246, 0.4)';
-  if (value <= 2.5) {
-    const intensity = Math.max(0.1, (3 - value) / 2);
-    return `rgba(59, 130, 246, ${intensity * 0.3})`;
-  }
-  if (value >= 3.5) {
-    const intensity = Math.max(0.1, (value - 3) / 2);
-    return `rgba(249, 115, 22, ${intensity * 0.3})`;
-  }
-  return 'rgba(156, 163, 175, 0.15)';
-}
-
-function getScoreTextColor(value: number): string {
-  if (value <= 2.5) return 'text-blue-700';
-  if (value >= 3.5) return 'text-orange-700';
-  return 'text-gray-700';
-}
-
-function calculateConditionStatsFromVariance(
-  modelId: string,
-  scenarioIds: string[],
-  varianceAnalysis?: VarianceAnalysis | null,
-): ConditionStats | null {
-  if (!varianceAnalysis) return null;
-
-  const modelStats = varianceAnalysis.perModel[modelId];
-  if (!modelStats?.perScenario) return null;
-
-  let weightedMeanSum = 0;
-  let totalCount = 0;
-
-  scenarioIds.forEach((scenarioId) => {
-    const scenarioStats = modelStats.perScenario[scenarioId];
-    if (!scenarioStats || scenarioStats.sampleCount < 1) return;
-
-    weightedMeanSum += scenarioStats.mean * scenarioStats.sampleCount;
-    totalCount += scenarioStats.sampleCount;
-  });
-
-  if (totalCount === 0) return null;
-
-  return { mean: weightedMeanSum / totalCount };
-}
-
 export function ConditionDecisionsTable({
   runId,
   analysisBasePath = ANALYSIS_BASE_PATH,
@@ -279,6 +240,7 @@ export function ConditionDecisionsTable({
   orientationLabels,
   analysisMode,
   perModel,
+  transcripts = [],
   visualizationData,
   varianceAnalysis,
   expectedAttributes = [],
@@ -289,6 +251,7 @@ export function ConditionDecisionsTable({
   const navigate = useNavigate();
   const scenarioDimensions = visualizationData?.scenarioDimensions;
   const modelScenarioMatrix = visualizationData?.modelScenarioMatrix;
+  const transcriptIndex = useMemo(() => buildCanonicalTranscriptIndex(transcripts), [transcripts]);
   const models = useMemo(() => {
     const modelIds = new Set<string>(Object.keys(perModel));
     Object.keys(modelScenarioMatrix ?? {}).forEach((modelId) => modelIds.add(modelId));
@@ -378,25 +341,6 @@ export function ConditionDecisionsTable({
     );
   }, [attributeA, attributeB, canSplitOrientations, inspectionMode, scenarioDimensions, varianceAnalysis]);
 
-  const getMeanDecision = (modelId: string, scenarioIds: string[]): ConditionStats | null => {
-    const varianceStats = calculateConditionStatsFromVariance(modelId, scenarioIds, varianceAnalysis);
-    if (varianceStats) return varianceStats;
-
-    const byScenario = modelScenarioMatrix?.[modelId];
-    if (!byScenario) return null;
-
-    const values: number[] = [];
-    scenarioIds.forEach((scenarioId) => {
-      const score = byScenario[scenarioId];
-      if (typeof score === 'number' && Number.isFinite(score)) {
-        values.push(score);
-      }
-    });
-
-    if (values.length === 0) return null;
-    return { mean: values.reduce((sum, v) => sum + v, 0) / values.length };
-  };
-
   const sortedConditionRows = useMemo(() => {
     const nextRows = [...conditionRows];
     nextRows.sort((left, right) => {
@@ -407,6 +351,21 @@ export function ConditionDecisionsTable({
     });
     return nextRows;
   }, [conditionRows]);
+
+  const canonicalCellSummaries = useMemo(() => {
+    const summaryMap = new Map<string, Map<string, CanonicalConditionSummary>>();
+
+    sortedConditionRows.forEach((row) => {
+      const rowSummaries = new Map<string, CanonicalConditionSummary>();
+      visibleModels.forEach((modelId) => {
+        const cellTranscripts = collectCanonicalConditionTranscripts(transcriptIndex, modelId, row.scenarioIds);
+        rowSummaries.set(modelId, summarizeCanonicalConditionTranscripts(cellTranscripts));
+      });
+      summaryMap.set(row.id, rowSummaries);
+    });
+
+    return summaryMap;
+  }, [sortedConditionRows, transcriptIndex, visibleModels]);
 
   const handleCellClick = (modelId: string, row: OrientedConditionRow, options?: { decisionCode?: string }) => {
     const params = new URLSearchParams({
@@ -628,29 +587,32 @@ export function ConditionDecisionsTable({
                   </div>
                 </td>
                 {visibleModels.map((modelId) => {
-                  const stats = getMeanDecision(modelId, row.scenarioIds);
-                  const isOtherCell = stats === null;
+                  const stats = canonicalCellSummaries.get(row.id)?.get(modelId)
+                    ?? summarizeCanonicalConditionTranscripts([]);
+                  const hasResolvedCanonicalEvidence = stats.totalTrials > 0;
+                  const isOtherCell = !hasResolvedCanonicalEvidence;
+                  const title = `View transcripts for ${modelId} | ${formatDisplayLabel(attributeA)}: ${formatDisplayLabel(row.attributeALevel)}, ${formatDisplayLabel(attributeB)}: ${formatDisplayLabel(row.attributeBLevel)}${canSplitOrientations && inspectionMode === 'split' ? ` | ${getOrientationBucketLabel(row.orientationBucket, orientationLabels)}` : ''}${isOtherCell ? ' | Decision: other' : ''}${stats.unknownCount > 0 ? ` | Unknown: ${stats.unknownCount}` : ''}`;
 
                   return (
                     <td
                       key={`${row.id}-${modelId}`}
                       className="border border-gray-200 px-3 py-2 text-center text-sm transition-colors"
-                      style={{ backgroundColor: stats === null ? undefined : getHeatmapColor(stats.mean) }}
+                      style={{ backgroundColor: hasResolvedCanonicalEvidence ? getCanonicalConditionBackground(stats.displayScore ?? 0, stats.isOpponent) : undefined }}
                     >
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
                         className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
-                        title={`View transcripts for ${modelId} | ${formatDisplayLabel(attributeA)}: ${formatDisplayLabel(row.attributeALevel)}, ${formatDisplayLabel(attributeB)}: ${formatDisplayLabel(row.attributeBLevel)}${canSplitOrientations && inspectionMode === 'split' ? ` | ${getOrientationBucketLabel(row.orientationBucket, orientationLabels)}` : ''}${isOtherCell ? ' | Decision: other' : ''}`}
+                        title={title}
                         onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionCode: 'other' } : undefined)}
                       >
-                        {stats === null ? (
-                          <span className="text-gray-500">-</span>
-                        ) : (
-                          <span className={`inline-flex flex-col items-center ${getScoreTextColor(stats.mean)}`}>
-                            <span className="font-semibold">{stats.mean.toFixed(2)}</span>
+                        {hasResolvedCanonicalEvidence ? (
+                          <span className={`inline-flex flex-col items-center ${getCanonicalConditionTextColor(stats.isOpponent)}`}>
+                            <span className="font-semibold">{stats.displayScore?.toFixed(1) ?? '-'}</span>
                           </span>
+                        ) : (
+                          <span className="text-gray-500">-</span>
                         )}
                       </Button>
                     </td>
@@ -663,6 +625,9 @@ export function ConditionDecisionsTable({
         {visibleModels.length === 0 && (
           <div className="mt-2 text-xs text-amber-700">Select at least one AI column to display data.</div>
         )}
+        <div className="mt-2 text-xs text-gray-500">
+          Unknown canonical trials are excluded from condition scores.
+        </div>
       </div>
     </div>
   );

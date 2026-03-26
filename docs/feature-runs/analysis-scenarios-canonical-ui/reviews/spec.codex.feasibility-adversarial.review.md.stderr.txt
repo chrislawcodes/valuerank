@@ -1,0 +1,233 @@
+2026-03-26T00:45:14.327053Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.327068Z  WARN codex_core::state_db: failed to initialize state runtime at /Users/chrislaw/.codex: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.328953Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d279a-42d6-71f0-91c7-6f4f830f31ae
+--------
+user
+Review this spec artifact using a feasibility-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: spec.md
+# Spec: Canonical Scenarios Matrix in Analysis Detail
+
+**Feature run:** `analysis-scenarios-canonical-ui`
+**Status:** spec
+**Last updated:** 2026-03-25
+
+---
+
+## What This Does
+
+Updates the `scenarios` tab on `AnalysisDetail` so the condition-scoring matrix uses the same canonical five-bucket logic and winner-score display that the value-detail page already ships.
+
+The pivot grid at the top of the tab stays on the current legacy mean-score path for this wave.
+
+This is a UI-only follow-up to the replace wave. It does not change analysis backend math, query contracts, or top-level domain analysis scoring.
+
+---
+
+## Canonical Display Model
+
+The scenarios tab matrix should present each condition cell using the same five outcome buckets as the value-detail wave:
+
+| Bucket | Meaning |
+|---|---|
+| `strongly` | First-side transcript evidence strongly favors the first side |
+| `somewhat` | First-side transcript evidence leans to the first side |
+| `neutral` | No preference |
+| `opponentSomewhat` | Second-side transcript evidence leans to the second side |
+| `opponentStrongly` | Second-side transcript evidence strongly favors the second side |
+
+Plus:
+
+- `unknownCount` for transcripts that cannot be resolved canonically
+- `totalTrials` for the five resolved buckets only
+
+### Derived display values
+
+- `selectedValueWinRate = (strongly + somewhat) / totalTrials`
+- `meanPreferenceScore = (2 × strongly + 1 × somewhat) / totalTrials`
+- `opponentMeanPreferenceScore = (2 × opponentStrongly + 1 × opponentSomewhat) / totalTrials`
+- `displayScore` is the winner's score for the cell
+- `isOpponent = opponentMeanPreferenceScore > meanPreferenceScore`
+- ties keep the first-side score, matching the value-detail page
+
+### Unknown handling
+
+- If a transcript cannot be resolved canonically, it counts toward `unknownCount`
+- Unknown transcripts are excluded from the denominator
+- Cells with no resolved canonical trials show `–`
+- The tab should expose the unknown handling in a small footnote so users can see that the cell scores are not mixing in unresolved data
+
+### Visual language
+
+- Winner score display is `0.0` to `2.0`
+- Blue tint means the first side wins
+- Orange tint means the second side wins
+- Tint opacity scales with the score, matching the value-detail matrix
+- Text color uses the same blue/orange split as the value-detail matrix
+
+---
+
+## Problem
+
+The current scenarios tab still renders its condition matrix from legacy averaged 1-5 scores. That keeps the pivot grid and the condition matrix on different semantics inside the same tab.
+
+The user-facing result is inconsistent:
+
+- one matrix in the analysis shell speaks legacy score language
+- the value-detail page already speaks canonical winner-score language
+- unknown canonical data is not surfaced in the scenarios tab the same way it is on the value-detail page
+
+We need the scenarios tab to mirror the value-detail wave while leaving the top pivot grid untouched.
+
+---
+
+## What We Are Building
+
+The implementation should:
+
+1. Keep `PivotAnalysisTable` unchanged so the top grid stays legacy.
+2. Pass the full `run.transcripts` array from `AnalysisPanel` into the scenarios tab.
+3. Rebuild `ConditionDecisionsTable` cells from canonical transcript evidence instead of raw averaged score display.
+4. Render the winner score with the same 0-2 blue/orange visual language used on the value-detail page.
+5. Surface unknown handling clearly without changing the drill-down navigation path.
+6. Keep row and column ordering, model headers, and click-through behavior exactly as they are today.
+
+---
+
+## Phase Boundary
+
+This phase stops at the scenarios-tab UI surface.
+
+### In scope
+
+- `cloud/apps/web/src/components/analysis/AnalysisPanel.tsx`
+- `cloud/apps/web/src/components/analysis/tabs/ScenariosTab.tsx`
+- `cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx`
+- a small web helper for canonical condition-score summarization, if needed
+- `cloud/apps/web/tests/components/analysis/AnalysisPanel.test.tsx`
+- `cloud/apps/web/tests/components/analysis/ConditionDecisionsTable.test.tsx`
+
+### Out of scope
+
+- backend query or GraphQL schema changes
+- domain-analysis value-detail behavior
+- the top pivot grid in the scenarios tab
+- analysis route URL/state wiring
+- transcript viewer or transcript list presentation changes
+- any new aggregation for the top-level domain analysis table
+
+---
+
+## Acceptance Criteria
+
+- The scenarios tab still renders the pivot grid at the top, with the existing legacy numbers.
+- The condition matrix below the pivot grid renders canonical 0-2 winner scores instead of raw 1-5 averages.
+- Blue/orange tinting and score text follow the same winner-side rule as the value-detail page.
+- `unknownCount` is excluded from the score denominator and surfaced in the UI.
+- Cells with no canonical evidence show `–`.
+- The row/column structure, tab navigation, and transcript drill-down behavior stay the same.
+- The feature does not alter backend responses or the top-level domain analysis score surfaces.
+
+---
+
+## Notes
+
+- The scenarios-tab matrix uses the full transcript array already loaded on the analysis shell. `ConditionDecisionsTable` is responsible for filtering that array down to the current model and condition cell.
+- The canonical summary helper must be the single source of truth for the bucket math, tie rule, and color selection within this wave.
+- If a cell has only unresolved transcript evidence, it should be treated as unknown rather than borrowing legacy numeric averages.
+- If a cell has no resolved canonical evidence, `selectedValueWinRate`, `meanPreferenceScore`, and `opponentMeanPreferenceScore` should all be `null`, and the cell should render `–` with no tint.
+- Keep the implementation small and local to the scenarios tab so the replace wave remains intact.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+2026-03-26T00:45:14.350440Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.352527Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.376524Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.377302Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.384025Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d279a-42d6-71f0-91c7-6f4f830f31ae.tmp-1774485914327272000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-03-26T00:45:14.406099Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.406865Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.436468Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.437055Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.466570Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.467083Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.496578Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.497017Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.526488Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.526971Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.556443Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.556818Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.586276Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.586694Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.616179Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.616568Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.646110Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.647540Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.671400Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.673175Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.697748Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.701863Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.727555Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.729941Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.755922Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.758081Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.785224Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.786514Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.814393Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.815758Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.842950Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.844472Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.870111Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.871932Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.897768Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.899707Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.926811Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.929020Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.956805Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.958586Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:14.983344Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:14.985686Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:15.011657Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:15.012556Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:15.042316Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T00:45:15.042938Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T00:45:15.072472Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+codex
+## Findings
+1. **High: The spec can leak canonical logic into the wrong surface.** `ConditionDecisionsTable` is treated as the implementation point for this wave, but the spec does not define a hard isolation boundary from the value-detail page or any other caller. If that component is shared, the new canonical scoring path can accidentally change value-detail behavior, which directly violates the stated out-of-scope constraint.
+
+2. **High: The cell scoring contract is not precise enough to implement safely.** `displayScore` is described only as “the winner’s score,” but the spec does not fully pin down the formatting and edge behavior for partial evidence, ties, or nulls. In particular, it does not say whether the displayed number is always rounded the same way as the value-detail page, or how the UI should behave when one side has resolved evidence and the other side has only unknowns. That leaves room for inconsistent rendering and brittle tests.
+
+3. **Medium: The required data path is likely to be expensive at scale.** The spec says `ConditionDecisionsTable` should filter the full `run.transcripts` array for each model-condition cell, but it does not require an index, cache, or memoized summary map. On larger runs, that creates an obvious `cells × transcripts` render cost and can make the scenarios tab sluggish.
+
+4. **Medium: The unresolved-data UX is underspecified.** The spec asks for a footnote and `unknownCount`, but it does not define where the count appears, whether it is per-cell or global, or how it behaves when all cells are resolved. As written, an implementation could technically satisfy the math while still hiding the unresolved-data issue from users.
+
+## Residual Risks
+- Even with the canonical math fixed, the tab will still present two different scoring systems side by side because the pivot grid stays legacy. That is a deliberate product compromise, but it will remain a source of user confusion.
+- If transcript schema details differ from the assumptions behind “canonical resolution,” the helper may silently classify some evidence as unknown and understate the cell signal.
+- Large analysis runs may still feel slow unless the implementation explicitly avoids repeated full-array scans per cell.
+- The spec does not spell out accessibility requirements for the new footnote or the blue/orange tinting, so screen-reader and contrast regressions remain possible.
+tokens used
+7,272
