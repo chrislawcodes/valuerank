@@ -328,14 +328,10 @@ export function AnalysisConditionDetail() {
     selectedModel,
   ]);
 
-  const decisionSummaryLabelPair = useMemo(
-    () => detailRows.find((row) => row.summary.labelPair != null)?.summary.labelPair ?? null,
-    [detailRows],
-  );
-
   const decisionSummaryLabels = useMemo(() => {
-    const firstValueLabel = decisionSummaryLabelPair?.firstValueLabel ?? 'canonical first value';
-    const secondValueLabel = decisionSummaryLabelPair?.secondValueLabel ?? 'canonical second value';
+    const [firstCanonicalValue, secondCanonicalValue] = orientationLabels.canonicalValues ?? [];
+    const firstValueLabel = firstCanonicalValue ?? 'canonical first value';
+    const secondValueLabel = secondCanonicalValue ?? 'canonical second value';
 
     const labels: Record<ConditionDecisionBucketKey, string> = {
       strong_first: `Strongly favors ${firstValueLabel}`,
@@ -350,7 +346,7 @@ export function AnalysisConditionDetail() {
       key,
       label: labels[key],
     }));
-  }, [decisionSummaryLabelPair]);
+  }, [orientationLabels.canonicalValues]);
 
   const hasUnresolvedTranscripts = detailRows.some((row) => row.summary.unknownCount > 0);
 

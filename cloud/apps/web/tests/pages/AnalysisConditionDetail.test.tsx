@@ -95,7 +95,17 @@ function createTranscript(
     scenarioId,
     modelId: 'model1',
     modelVersion: 'test-model',
-    content: { turns: [] },
+    content: {
+      turns: [],
+      decisionCode: decisionCode ?? '5',
+      decision: decisionCode ?? '5',
+      score: decisionCode ?? '5',
+      summary: {
+        decisionCode: decisionCode ?? '5',
+        decision: decisionCode ?? '5',
+        score: decisionCode ?? '5',
+      },
+    },
     decisionCode,
     decisionCodeSource: 'llm',
     decisionMetadata: null,
@@ -415,7 +425,7 @@ describe('AnalysisConditionDetail', () => {
     );
   });
 
-  it('renders the same canonical summary in single mode', () => {
+  it('renders the same canonical summary in single mode and ignores legacy score fields', () => {
     mockUseRuns.mockReturnValue({
       runs: [],
       loading: false,

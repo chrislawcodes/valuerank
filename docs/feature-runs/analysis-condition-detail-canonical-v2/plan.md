@@ -26,6 +26,14 @@ Add a small web helper that:
 - preserves zero-count buckets so the table keeps a stable layout
 - keeps the summary logic separate from the pivot analysis helper used by
   `ConditionDecisionsTable`
+- ignores legacy score fields entirely when canonical `decisionModelV2`
+  data is missing or malformed
+- defines Unknown as any transcript without a renderable canonical envelope,
+  or with unknown canonical direction/strength, or with unresolved canonical
+  value labels
+- defines Neutral as canonical direction and strength both set to `neutral`
+- uses the same generic fallback labels as the spec when a row has no
+  renderable canonical transcript
 
 The helper should be narrow and presentation-focused. It should not change any
 backend contract or alter the existing transcript data model.
@@ -40,6 +48,16 @@ Update `AnalysisConditionDetail.tsx` to:
   a single row in single mode
 - keep the existing transcript drilldown behavior for non-zero known buckets
 - keep unknown / unresolved transcripts visible in their own explicit bucket
+- keep legacy score fields out of the count path even when they are still
+  present on transcripts for compatibility elsewhere
+  - derive bucket labels from the condition definition's canonical value order
+    and fall back to generic canonical labels only when the definition cannot
+    supply canonical values
+- keep the existing compatibility drilldown route shape; the visible canonical
+  bucket remains the source of truth for the slice selection
+- treat the Unknown bucket as informational only, with no drilldown target
+- summarize each row independently so pooled and orientation-specific rows do
+  not deduplicate against one another
 
 The page can keep using the existing transcript drilldown route. The important
 change in this wave is the summary source of truth, not the route shape.
@@ -48,12 +66,15 @@ change in this wave is the summary source of truth, not the route shape.
 
 - Prefer a dedicated helper module under `cloud/apps/web/src/utils/` rather
   than extending the pivot-analysis helper, so the pivot table stays untouched.
-- Derive canonical labels from the first renderable transcript in the relevant
-  row, with a safe fallback for all-unknown rows.
+- Derive canonical labels from the condition definition's canonical value
+  order, with a safe fallback for all-unknown rows.
 - Preserve stable bucket ordering so the visible table remains easy to scan and
   test.
 - Keep the summary count logic total over known versus unknown transcripts so
   unresolved rows cannot distort the known counts.
+- Add regression coverage that populates legacy score fields alongside missing
+  canonical data and asserts the page still reports those transcripts as
+  unknown.
 
 ## Slice Plan
 
@@ -71,6 +92,6 @@ change in this wave is the summary source of truth, not the route shape.
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Label derivation falls back incorrectly for sparse data | Confusing table headers | Derive labels from renderable transcript data and keep a generic fallback for all-unknown rows |
+| Label derivation falls back incorrectly for sparse data | Confusing table headers | Derive labels from the condition definition and keep a generic fallback for all-unknown rows |
 | Click-through paths drift while changing the table | Drilldown regressions | Keep the existing navigation target and only swap the summary source |
 | Helper logic leaks into the pivot table helper | Unintended UI changes | Use a dedicated helper file for this page only |

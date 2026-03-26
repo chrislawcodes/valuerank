@@ -143,7 +143,17 @@ function createTranscript(
     scenarioId: 'scenario-1',
     modelId: 'gpt-4',
     modelVersion: 'gpt-4-0125-preview',
-    content: { turns: [] },
+    content: {
+      turns: [],
+      decisionCode: decisionCode ?? '5',
+      decision: decisionCode ?? '5',
+      score: decisionCode ?? '5',
+      summary: {
+        decisionCode: decisionCode ?? '5',
+        decision: decisionCode ?? '5',
+        score: decisionCode ?? '5',
+      },
+    },
     decisionCode,
     decisionCodeSource: 'llm',
     decisionMetadata: null,
@@ -185,7 +195,7 @@ describe('conditionDecisionSummary', () => {
     ]);
   });
 
-  it('keeps explicit unknown handling when no renderable transcripts are available', () => {
+  it('keeps explicit unknown handling when no renderable transcripts are available, even with legacy score fields present', () => {
     const summary = summarizeConditionDecisionBuckets([
       createTranscript('t-1', null),
       createTranscript('t-2', null),
