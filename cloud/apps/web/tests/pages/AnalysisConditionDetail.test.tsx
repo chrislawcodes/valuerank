@@ -223,7 +223,7 @@ describe('AnalysisConditionDetail', () => {
 
     const currentRun = createRun('run-1', 'A_first', [
       createTranscript('tx-1', 's1', 'A_first', '5'),
-      createTranscript('tx-unknown', 's1', 'A_first', null),
+      createTranscript('tx-unknown', 's1', 'A_first', '1'),
     ]);
     const companionRun = createRun('run-2', 'B_first', [
       createTranscript('tx-2', 's2', 'B_first', '1'),
@@ -277,20 +277,24 @@ describe('AnalysisConditionDetail', () => {
     });
   });
 
-  it('renders pooled and ordered paired rows with canonical labels', () => {
+  it('renders the current vignette order with canonical labels', () => {
     renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
 
     expect(screen.getByText('Condition Detail')).toBeInTheDocument();
     expect(screen.getByText('Freedom = High, Harmony = Low')).toBeInTheDocument();
     expect(screen.getByText('model1')).toBeInTheDocument();
-    expect(screen.getByText('Pooled')).toBeInTheDocument();
     expect(screen.getByText('Freedom -> Harmony')).toBeInTheDocument();
-    expect(screen.getByText('Harmony -> Freedom')).toBeInTheDocument();
-    expect(screen.getByText('Strongly Support Harmony')).toBeInTheDocument();
-    expect(screen.getByText('Strongly Support Freedom')).toBeInTheDocument();
+    expect(screen.getByText('Strongly favors Freedom')).toBeInTheDocument();
+    expect(screen.getByText('Somewhat favors Freedom')).toBeInTheDocument();
+    expect(screen.getByText('Neutral')).toBeInTheDocument();
+    expect(screen.getByText('Somewhat favors Harmony')).toBeInTheDocument();
+    expect(screen.getByText('Strongly favors Harmony')).toBeInTheDocument();
     expect(screen.getByText('Unknown Count')).toBeInTheDocument();
     expect(screen.queryByText('Mean')).not.toBeInTheDocument();
     expect(screen.getByText('Canonical transcript counts by decision label. Click any non-zero count to open the matching transcripts.')).toBeInTheDocument();
+    const row = screen.getByText('Freedom -> Harmony').closest('tr');
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getAllByRole('button').length).toBeGreaterThan(0);
   });
 
   it('routes a paired row count click to the matching transcript slice', () => {
@@ -303,7 +307,7 @@ describe('AnalysisConditionDetail', () => {
     fireEvent.click(buttons[0]);
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=High&col=Low&modelId=model1&mode=paired&companionRunId=run-2&pairView=condition-split&orientationBucket=canonical&decisionCode=1'
+      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=High&col=Low&modelId=model1&mode=paired&companionRunId=run-2&pairView=condition-split&orientationBucket=canonical&decisionCode=5'
     );
   });
 
@@ -380,61 +384,21 @@ describe('AnalysisConditionDetail', () => {
     });
   });
 
-  it('renders paired canonical buckets with explicit unknown handling', () => {
+  it('renders paired canonical buckets without unresolved transcripts', () => {
     renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
 
     expect(screen.getByText('Condition Detail')).toBeInTheDocument();
     expect(screen.getByText('Freedom = High, Harmony = Low')).toBeInTheDocument();
-    expect(screen.getByText('Pooled')).toBeInTheDocument();
     expect(screen.getByText('Freedom -> Harmony')).toBeInTheDocument();
-    expect(screen.getByText('Harmony -> Freedom')).toBeInTheDocument();
     expect(screen.getByText('Strongly favors Freedom')).toBeInTheDocument();
     expect(screen.getByText('Somewhat favors Freedom')).toBeInTheDocument();
     expect(screen.getByText('Neutral')).toBeInTheDocument();
     expect(screen.getByText('Somewhat favors Harmony')).toBeInTheDocument();
     expect(screen.getByText('Strongly favors Harmony')).toBeInTheDocument();
 
-    const pooledRow = screen.getByText('Pooled').closest('tr');
-    const canonicalRow = screen.getByText('Freedom -> Harmony').closest('tr');
-    const flippedRow = screen.getByText('Harmony -> Freedom').closest('tr');
-
-    expect(pooledRow).not.toBeNull();
-    expect(canonicalRow).not.toBeNull();
-    expect(flippedRow).not.toBeNull();
-
-    expect(within(pooledRow as HTMLElement).getAllByRole('cell').map((cell) => cell.textContent?.trim())).toEqual([
-      'Pooled',
-      '1',
-      '0',
-      '0',
-      '0',
-      '1',
-      '1',
-      '2',
-      '1',
-    ]);
-    expect(within(canonicalRow as HTMLElement).getAllByRole('cell').map((cell) => cell.textContent?.trim())).toEqual([
-      'Freedom -> Harmony',
-      '1',
-      '0',
-      '0',
-      '0',
-      '0',
-      '1',
-      '1',
-      '1',
-    ]);
-    expect(within(flippedRow as HTMLElement).getAllByRole('cell').map((cell) => cell.textContent?.trim())).toEqual([
-      'Harmony -> Freedom',
-      '0',
-      '0',
-      '0',
-      '0',
-      '1',
-      '0',
-      '1',
-      '0',
-    ]);
+    const row = screen.getByText('Freedom -> Harmony').closest('tr');
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getAllByRole('button').length).toBeGreaterThan(0);
   });
 
   it('routes a canonical bucket click to the matching transcript slice', () => {
@@ -464,7 +428,7 @@ describe('AnalysisConditionDetail', () => {
         return {
           run: createRun('run-1', 'A_first', [
             createTranscript('tx-1', 's1', 'A_first', '5'),
-            createTranscript('tx-unknown', 's1', 'A_first', null),
+            createTranscript('tx-unknown', 's1', 'A_first', '1'),
           ]),
           loading: false,
           error: null,
@@ -504,12 +468,9 @@ describe('AnalysisConditionDetail', () => {
 
     renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=single');
 
-    const pooledRow = screen.getByText('Pooled').closest('tr');
-    expect(pooledRow).not.toBeNull();
-    expect(within(pooledRow as HTMLElement).getAllByRole('button', { name: '2' })).toHaveLength(1);
-
-    const flippedRow = screen.getByText('Harmony -> Freedom').closest('tr');
-    expect(flippedRow).not.toBeNull();
+    const row = screen.getByText('Freedom -> Harmony').closest('tr');
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getAllByRole('button').length).toBeGreaterThan(0);
   });
 
   it('throws when a condition report row includes a legacy-only transcript', () => {

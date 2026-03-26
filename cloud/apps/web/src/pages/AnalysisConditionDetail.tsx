@@ -18,7 +18,6 @@ import {
   parseConditionKey,
 } from '../utils/analysisRouting';
 import { formatDisplayLabel } from '../utils/displayLabels';
-import { summarizeCanonicalConditionTranscripts } from '../utils/canonicalConditionSummary';
 import { getPairedOrientationLabels } from '../utils/methodology';
 import { requireRenderableTranscriptDecisionModelV2 } from '../utils/transcriptDecisionModel';
 import { filterTranscriptsForPivotCell } from '../utils/scenarioUtils';
@@ -31,12 +30,6 @@ import {
 type AnalysisDetailMode = 'single' | 'paired';
 type JobChoicePresentationOrder = 'A_first' | 'B_first';
 type OrientationBucket = 'canonical' | 'flipped';
-
-type DecisionSummary = {
-  counts: Record<DecisionCode, number>;
-  resolvedCount: number;
-  unresolvedCount: number;
-};
 
 type DetailRow = {
   id: string;
@@ -73,25 +66,6 @@ function getRunPresentationOrder(run: Run | null | undefined): JobChoicePresenta
   return value === 'A_first' || value === 'B_first' ? value : null;
 }
 
-function summarizeDecisionCounts(transcripts: Transcript[]): DecisionSummary {
-  const renderableTranscripts = transcripts.map((transcript) => (
-    requireRenderableTranscriptDecisionModelV2(transcript, 'AnalysisConditionDetail page')
-  ));
-  const summary = summarizeCanonicalConditionTranscripts(renderableTranscripts);
-
-  return {
-    counts: {
-      '1': summary.opponentStrongly,
-      '2': summary.opponentSomewhat,
-      '3': summary.neutral,
-      '4': summary.somewhat,
-      '5': summary.strongly,
-    },
-    resolvedCount: summary.totalTrials,
-    unresolvedCount: summary.unknownCount,
-  };
-}
-
 function filterConditionTranscripts(
   run: Run | null | undefined,
   analysis: AnalysisResult | null | undefined,
@@ -125,10 +99,14 @@ function buildDetailRow(
   transcripts: Transcript[],
   baseSearchParams: URLSearchParams,
 ): DetailRow {
+  const renderableTranscripts = transcripts.map((transcript) => (
+    requireRenderableTranscriptDecisionModelV2(transcript, 'AnalysisConditionDetail page')
+  ));
+
   return {
     id,
     label,
-    summary: summarizeConditionDecisionBuckets(transcripts),
+    summary: summarizeConditionDecisionBuckets(renderableTranscripts),
     baseSearchParams,
   };
 }
