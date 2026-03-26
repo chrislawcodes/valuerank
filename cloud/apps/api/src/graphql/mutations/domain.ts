@@ -55,6 +55,7 @@ type DomainEvaluationLaunchInput = {
   userId: string;
   log: {
     error: (payload: Record<string, unknown>, message: string) => void;
+    warn: (payload: Record<string, unknown>, message: string) => void;
   };
   auditOperationType: 'run-trials-for-domain' | 'start-domain-evaluation';
 };
@@ -140,6 +141,7 @@ type DefinitionRow = {
   createdAt: Date;
   updatedAt: Date;
   createdByUserId?: string | null;
+  content?: unknown;
 };
 
 function getLineageRootId(definition: DefinitionRow, definitionsById: Map<string, DefinitionRow>): string {
@@ -218,6 +220,88 @@ async function hydrateDefinitionAncestors(definitions: DefinitionRow[]): Promise
   return definitionsById;
 }
 
+type JobChoiceMethodology = {
+  family: string;
+  pair_key: string;
+  presentation_order: 'A_first' | 'B_first';
+};
+
+function extractJobChoiceMethodology(content: unknown): JobChoiceMethodology | null {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return null;
+  const m = (content as Record<string, unknown>).methodology;
+  if (!m || typeof m !== 'object' || Array.isArray(m)) return null;
+  const rec = m as Record<string, unknown>;
+  if (
+    rec.family !== 'job-choice' ||
+    typeof rec.pair_key !== 'string' ||
+    rec.pair_key === '' ||
+    (rec.presentation_order !== 'A_first' && rec.presentation_order !== 'B_first')
+  ) {
+    return null;
+  }
+  return {
+    family: 'job-choice',
+    pair_key: rec.pair_key,
+    presentation_order: rec.presentation_order as 'A_first' | 'B_first',
+  };
+}
+
+type LaunchGroup = {
+  pairKey: string | null;
+  definitions: DefinitionRow[];
+};
+
+/**
+ * Groups definitions into paired launch units and singles.
+ * Returns groups plus a list of pair_keys that had an incomplete pair (missing companion)
+ * so the caller can log warnings.
+ *
+ * A valid pair: exactly 2 definitions with the same pair_key, one A_first and one B_first.
+ * Anything else (1 member, 2 same-order, 3+ members) falls back to individual singles.
+ */
+function groupDefinitionsByPairKey(definitions: DefinitionRow[]): {
+  groups: LaunchGroup[];
+  incompletePairKeys: string[];
+} {
+  const byPairKey = new Map<string, DefinitionRow[]>();
+  const singles: DefinitionRow[] = [];
+
+  for (const def of definitions) {
+    const methodology = extractJobChoiceMethodology(def.content);
+    if (methodology) {
+      const bucket = byPairKey.get(methodology.pair_key) ?? [];
+      bucket.push(def);
+      byPairKey.set(methodology.pair_key, bucket);
+    } else {
+      singles.push(def);
+    }
+  }
+
+  const groups: LaunchGroup[] = [];
+  const incompletePairKeys: string[] = [];
+
+  for (const [pairKey, defs] of byPairKey) {
+    const orders = defs.map((d) => extractJobChoiceMethodology(d.content)?.presentation_order);
+    const hasAFirst = orders.includes('A_first');
+    const hasBFirst = orders.includes('B_first');
+    if (defs.length === 2 && hasAFirst && hasBFirst) {
+      groups.push({ pairKey, definitions: defs });
+    } else {
+      // Incomplete or malformed pair - fall back to individual runs.
+      incompletePairKeys.push(pairKey);
+      for (const def of defs) {
+        singles.push(def);
+      }
+    }
+  }
+
+  for (const def of singles) {
+    groups.push({ pairKey: null, definitions: [def] });
+  }
+
+  return { groups, incompletePairKeys };
+}
+
 async function launchDomainEvaluation(input: DomainEvaluationLaunchInput): Promise<DomainTrialRunResult> {
   const {
     domainId,
@@ -245,6 +329,7 @@ async function launchDomainEvaluation(input: DomainEvaluationLaunchInput): Promi
       version: true,
       createdAt: true,
       updatedAt: true,
+      content: true,
     },
   });
 
@@ -337,27 +422,66 @@ async function launchDomainEvaluation(input: DomainEvaluationLaunchInput): Promi
   }
   const budgetCap = maxBudgetUsd ?? null;
 
+  const { groups: launchGroups, incompletePairKeys } = groupDefinitionsByPairKey(targetedDefinitions);
+  for (const pairKey of incompletePairKeys) {
+    log.warn(
+      { domainId, pairKey },
+      'Incomplete job-choice pair: companion definition not found. Launching as individual run.'
+    );
+  }
+
   const launchableDefinitions: DefinitionRow[] = [];
+  const launchableGroups: LaunchGroup[] = [];
   const estimatedCostByDefinitionId = new Map<string, number>();
   let skippedForBudget = 0;
   let projectedCostUsd = 0;
 
-  for (const definition of targetedDefinitions) {
+  for (const group of launchGroups) {
     if (budgetCap !== null) {
-      const estimate = await estimateCostService({
-        definitionId: definition.id,
-        modelIds: selectedModels,
-        samplePercentage,
-        samplesPerScenario,
-      });
-      estimatedCostByDefinitionId.set(definition.id, estimate.total);
-      if (projectedCostUsd + estimate.total > budgetCap) {
-        skippedForBudget += 1;
+      // Estimate cost for each definition in the group, sum them.
+      // Accept or reject the whole group atomically to prevent split pairs.
+      let groupCost = 0;
+      for (const definition of group.definitions) {
+        const estimate = await estimateCostService({
+          definitionId: definition.id,
+          modelIds: selectedModels,
+          samplePercentage,
+          samplesPerScenario,
+        });
+        estimatedCostByDefinitionId.set(definition.id, estimate.total);
+        groupCost += estimate.total;
+      }
+      if (projectedCostUsd + groupCost > budgetCap) {
+        skippedForBudget += group.definitions.length;
         continue;
       }
-      projectedCostUsd += estimate.total;
+      projectedCostUsd += groupCost;
     }
-    launchableDefinitions.push(definition);
+    launchableGroups.push(group);
+    launchableDefinitions.push(...group.definitions);
+  }
+
+  // Pre-compute configExtras for each definition based on group membership.
+  // Paired groups share a batchGroupId. Singles (including demoted incomplete pairs)
+  // get no configExtras. This avoids re-deriving pairing from content in the launch loop.
+  const definitionConfigExtras = new Map<string, Record<string, unknown> | undefined>();
+  for (const group of launchableGroups) {
+    if (group.pairKey !== null) {
+      const batchGroupId = randomUUID();
+      for (const def of group.definitions) {
+        const methodology = extractJobChoiceMethodology(def.content);
+        definitionConfigExtras.set(def.id, {
+          jobChoiceLaunchMode: 'PAIRED_BATCH',
+          jobChoiceBatchGroupId: batchGroupId,
+          jobChoicePresentationOrder: methodology?.presentation_order,
+          methodologySafe: true,
+        });
+      }
+    } else {
+      for (const def of group.definitions) {
+        definitionConfigExtras.set(def.id, undefined);
+      }
+    }
   }
 
   let domainEvaluationId: string | null = null;
@@ -401,8 +525,9 @@ async function launchDomainEvaluation(input: DomainEvaluationLaunchInput): Promi
     }
 
     const runResults = await Promise.allSettled(
-      batch.map(async (definition) =>
-        startRunService({
+      batch.map(async (definition) => {
+        const configExtras = definitionConfigExtras.get(definition.id);
+        return startRunService({
           definitionId: definition.id,
           models: selectedModels,
           samplePercentage,
@@ -412,8 +537,9 @@ async function launchDomainEvaluation(input: DomainEvaluationLaunchInput): Promi
           runCategory: scopeCategory,
           userId,
           finalTrial: false,
-        })
-      )
+          ...(configExtras !== undefined ? { configExtras } : {}),
+        });
+      })
     );
 
     runResults.forEach((result, index) => {

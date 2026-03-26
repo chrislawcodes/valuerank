@@ -144,7 +144,13 @@ export const DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY = gql`
           neutral
           totalTrials
           selectedValueWinRate
-          meanDecisionScore
+          strongly
+          somewhat
+          opponentSomewhat
+          opponentStrongly
+          unknownCount
+          meanPreferenceScore
+          opponentMeanPreferenceScore
         }
       }
     }
@@ -185,7 +191,13 @@ export const DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY_LEGACY = gql`
           neutral
           totalTrials
           selectedValueWinRate
-          meanDecisionScore
+          strongly
+          somewhat
+          opponentSomewhat
+          opponentStrongly
+          unknownCount
+          meanPreferenceScore
+          opponentMeanPreferenceScore
         }
       }
     }
@@ -404,7 +416,13 @@ export type DomainAnalysisValueDetailCondition = {
   neutral: number;
   totalTrials: number;
   selectedValueWinRate: number | null;
-  meanDecisionScore: number | null;
+  strongly: number;
+  somewhat: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+  unknownCount: number;
+  meanPreferenceScore: number | null;
+  opponentMeanPreferenceScore: number | null;
 };
 
 export type DomainAnalysisValueDetailVignette = {

@@ -2,6 +2,98 @@ import { describe, expect, it } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ConditionDecisionsTable } from '../../../src/components/analysis/ConditionDecisionsTable';
+import type { Transcript } from '../../../src/api/operations/runs';
+
+function createTranscript({
+  id,
+  scenarioId,
+  modelId,
+  direction,
+  strength,
+}: {
+  id: string;
+  scenarioId: string;
+  modelId: string;
+  direction: 'favor_first' | 'favor_second' | 'neutral' | 'unknown';
+  strength: 'strong' | 'lean' | 'neutral' | 'unknown';
+}): Transcript {
+  return {
+    id,
+    runId: 'run-1',
+    scenarioId,
+    modelId,
+    modelVersion: null,
+    content: {},
+    decisionCode: direction === 'favor_first' ? '5' : direction === 'favor_second' ? '1' : '3',
+    decisionCodeSource: 'deterministic',
+    decisionMetadata: null,
+    turnCount: 4,
+    tokenCount: 120,
+    durationMs: 800,
+    estimatedCost: null,
+    createdAt: '2024-01-01T00:00:00Z',
+    lastAccessedAt: null,
+    dimensionValues: null,
+    decisionModelV2: direction === 'unknown'
+      ? null
+      : {
+          raw: {
+            matchedText: 'test',
+            matchedLabel: 'test',
+            parseClass: 'exact',
+            parsePath: 'exact',
+            parserVersion: 'job-choice-v2',
+            responseExcerpt: null,
+            manualOverride: null,
+          },
+          canonical: {
+            favoredValueKey: direction === 'neutral' ? null : 'value-a',
+            opposedValueKey: direction === 'neutral' ? null : 'value-b',
+            direction,
+            strength,
+            normalizationApplied: false,
+            normalizationReason: null,
+            source: 'deterministic',
+          },
+          legacy: {
+            rawScore: direction === 'favor_second' ? 1 : direction === 'neutral' ? 3 : 5,
+            canonicalScore: direction === 'favor_second' ? 1 : direction === 'neutral' ? 3 : 5,
+          },
+        },
+  } as Transcript;
+}
+
+function createVisualizationData() {
+  return {
+    decisionDistribution: {},
+    scenarioDimensions: {
+      'scenario-1': { Achievement: 'high', Care: 'high' },
+      'scenario-2': { Achievement: 'high', Care: 'high' },
+      'scenario-3': { Achievement: 'high', Care: 'high' },
+      'scenario-4': { Achievement: 'high', Care: 'high' },
+      'scenario-5': { Achievement: 'high', Care: 'high' },
+      'scenario-6': { Achievement: 'low', Care: 'low' },
+      'scenario-7': { Achievement: 'low', Care: 'low' },
+      'scenario-8': { Achievement: 'medium', Care: 'medium' },
+      'scenario-9': { Achievement: 'medium', Care: 'medium' },
+    },
+    modelScenarioMatrix: {
+      'gpt-4': {
+        'scenario-1': 3,
+        'scenario-2': 3,
+        'scenario-3': 3,
+        'scenario-4': 3,
+        'scenario-5': 3,
+        'scenario-6': 3,
+        'scenario-7': 3,
+      },
+      'gpt-5': {
+        'scenario-8': 3,
+        'scenario-9': 3,
+      },
+    },
+  } as const;
+}
 
 describe('ConditionDecisionsTable', () => {
   it('groups model headers by family when multiple variants share a provider', () => {
@@ -97,6 +189,65 @@ describe('ConditionDecisionsTable', () => {
     expect(screen.getByRole('columnheader', { name: /4\.1 Fast\s+Reasoning/i })).toBeInTheDocument();
   });
 
+  it('renders canonical winner scores and the unknown footer copy', () => {
+    const visualizationData = createVisualizationData();
+    const transcripts = [
+      createTranscript({ id: 't1', scenarioId: 'scenario-1', modelId: 'gpt-4', direction: 'favor_second', strength: 'strong' }),
+      createTranscript({ id: 't2', scenarioId: 'scenario-2', modelId: 'gpt-4', direction: 'favor_second', strength: 'strong' }),
+      createTranscript({ id: 't3', scenarioId: 'scenario-3', modelId: 'gpt-4', direction: 'favor_second', strength: 'strong' }),
+      createTranscript({ id: 't4', scenarioId: 'scenario-4', modelId: 'gpt-4', direction: 'favor_second', strength: 'lean' }),
+      createTranscript({ id: 't5', scenarioId: 'scenario-5', modelId: 'gpt-4', direction: 'neutral', strength: 'neutral' }),
+      createTranscript({ id: 't6', scenarioId: 'scenario-6', modelId: 'gpt-4', direction: 'unknown', strength: 'unknown' }),
+      createTranscript({ id: 't7', scenarioId: 'scenario-7', modelId: 'gpt-4', direction: 'unknown', strength: 'unknown' }),
+    ];
+
+    render(
+      <MemoryRouter>
+        <ConditionDecisionsTable
+          runId="run-1"
+          orientationLabels={{
+            canonical: 'Achievement -> Care',
+            flipped: 'Care -> Achievement',
+          }}
+          perModel={{ 'gpt-4': { sampleSize: 7, values: {}, overall: { mean: 3, stdDev: 0, min: 3, max: 3 } } as any }}
+          transcripts={transcripts}
+          visualizationData={visualizationData as any}
+        />
+      </MemoryRouter>
+    );
+
+    const winnerScore = screen.getByText('1.4');
+    expect(winnerScore.parentElement).toHaveClass('text-orange-700');
+    expect(screen.getByText('Unknown canonical trials are excluded from condition scores.')).toBeInTheDocument();
+    expect(screen.getByTitle('View transcripts for gpt-4 | Achievement: low, Care: low | Decision: other | Unknown: 2')).toBeInTheDocument();
+  });
+
+  it('keeps ties on the first-side score in blue', () => {
+    const visualizationData = createVisualizationData();
+    const transcripts = [
+      createTranscript({ id: 't8', scenarioId: 'scenario-8', modelId: 'gpt-5', direction: 'favor_first', strength: 'strong' }),
+      createTranscript({ id: 't9', scenarioId: 'scenario-9', modelId: 'gpt-5', direction: 'favor_second', strength: 'strong' }),
+    ];
+
+    render(
+      <MemoryRouter>
+        <ConditionDecisionsTable
+          runId="run-1"
+          orientationLabels={{
+            canonical: 'Achievement -> Care',
+            flipped: 'Care -> Achievement',
+          }}
+          perModel={{ 'gpt-5': { sampleSize: 2, values: {}, overall: { mean: 3, stdDev: 0, min: 3, max: 3 } } as any }}
+          transcripts={transcripts}
+          visualizationData={visualizationData as any}
+        />
+      </MemoryRouter>
+    );
+
+    const tieButton = screen.getByTitle('View transcripts for gpt-5 | Achievement: medium, Care: medium');
+    expect(within(tieButton).getByText('1.0').parentElement).toHaveClass('text-blue-700');
+  });
+
   it('orders condition rows from negligible to full', () => {
     render(
       <MemoryRouter>
@@ -145,5 +296,31 @@ describe('ConditionDecisionsTable', () => {
       'substantial',
       'full',
     ]);
+  });
+
+  it('renders unknown-only cells as dashes without canonical tinting', () => {
+    const visualizationData = createVisualizationData();
+    const transcripts = [
+      createTranscript({ id: 't10', scenarioId: 'scenario-6', modelId: 'gpt-4', direction: 'unknown', strength: 'unknown' }),
+      createTranscript({ id: 't11', scenarioId: 'scenario-7', modelId: 'gpt-4', direction: 'unknown', strength: 'unknown' }),
+    ];
+
+    render(
+      <MemoryRouter>
+        <ConditionDecisionsTable
+          runId="run-1"
+          orientationLabels={{
+            canonical: 'Achievement -> Care',
+            flipped: 'Care -> Achievement',
+          }}
+          perModel={{ 'gpt-4': { sampleSize: 2, values: {}, overall: { mean: 3, stdDev: 0, min: 3, max: 3 } } as any }}
+          transcripts={transcripts}
+          visualizationData={visualizationData as any}
+        />
+      </MemoryRouter>
+    );
+
+    const unknownButton = screen.getByTitle('View transcripts for gpt-4 | Achievement: low, Care: low | Decision: other | Unknown: 2');
+    expect(within(unknownButton).getByText('-')).toBeInTheDocument();
   });
 });
