@@ -19,7 +19,9 @@ import {
 } from '../utils/analysisRouting';
 import { deriveDecisionDimensionLabels } from '../utils/decisionLabels';
 import { formatDisplayLabel } from '../utils/displayLabels';
+import { summarizeCanonicalConditionTranscripts } from '../utils/canonicalConditionSummary';
 import { getPairedOrientationLabels } from '../utils/methodology';
+import { requireRenderableTranscriptDecisionModelV2 } from '../utils/transcriptDecisionModel';
 import { filterTranscriptsForPivotCell } from '../utils/scenarioUtils';
 
 type AnalysisDetailMode = 'single' | 'paired';
@@ -70,36 +72,22 @@ function getRunPresentationOrder(run: Run | null | undefined): JobChoicePresenta
   return value === 'A_first' || value === 'B_first' ? value : null;
 }
 
-function isDecisionCode(value: string | null | undefined): value is DecisionCode {
-  return value === '1' || value === '2' || value === '3' || value === '4' || value === '5';
-}
-
 function summarizeDecisionCounts(transcripts: Transcript[]): DecisionSummary {
-  const counts: Record<DecisionCode, number> = {
-    '1': 0,
-    '2': 0,
-    '3': 0,
-    '4': 0,
-    '5': 0,
-  };
-
-  let resolvedCount = 0;
-  let unresolvedCount = 0;
-
-  transcripts.forEach((transcript) => {
-    if (!isDecisionCode(transcript.decisionCode)) {
-      unresolvedCount += 1;
-      return;
-    }
-
-    counts[transcript.decisionCode] += 1;
-    resolvedCount += 1;
-  });
+  const renderableTranscripts = transcripts.map((transcript) => (
+    requireRenderableTranscriptDecisionModelV2(transcript, 'AnalysisConditionDetail page')
+  ));
+  const summary = summarizeCanonicalConditionTranscripts(renderableTranscripts);
 
   return {
-    counts,
-    resolvedCount,
-    unresolvedCount,
+    counts: {
+      '1': summary.opponentStrongly,
+      '2': summary.opponentSomewhat,
+      '3': summary.neutral,
+      '4': summary.somewhat,
+      '5': summary.strongly,
+    },
+    resolvedCount: summary.totalTrials,
+    unresolvedCount: summary.unknownCount,
   };
 }
 

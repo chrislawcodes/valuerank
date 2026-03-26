@@ -115,7 +115,7 @@ function createRenderableTranscript(
       },
       legacy: {
         rawScore: null,
-        canonicalScore: 1,
+        canonicalScore: null,
       },
     },
     ...overrides,
@@ -146,7 +146,7 @@ function createLeanTranscript(id: string, scenarioId: string) {
       },
       legacy: {
         rawScore: null,
-        canonicalScore: 4,
+        canonicalScore: null,
       },
     },
   });
@@ -220,13 +220,12 @@ function renderPage(initialEntry = '/survey-results?surveyId=survey-1') {
 describe('SurveyResults', () => {
   beforeEach(() => {
     const surveyTranscripts = [
-      createUnknownTranscript('tx-unknown', 's-unknown'),
       createRenderableTranscript('tx-majority-1', 's-majority'),
       createRenderableTranscript('tx-majority-2', 's-majority'),
       createLeanTranscript('tx-majority-3', 's-majority'),
       createRenderableTranscript('tx-mixed-1', 's-mixed'),
       createLeanTranscript('tx-mixed-2', 's-mixed'),
-      createUnknownTranscript('tx-other', 's-other', 'other'),
+      createRenderableTranscript('tx-other', 's-other', { decisionCode: 'other' }),
     ];
 
     mockUseQuery.mockImplementation((args: { query: unknown }) => {
@@ -296,7 +295,6 @@ describe('SurveyResults', () => {
 
     expect(screen.getByText('Question x AI Matrix')).toBeInTheDocument();
     expect(screen.getByText('Empty cell')).toBeInTheDocument();
-    expect(screen.getByText('Unknown')).toBeInTheDocument();
     expect(screen.getByText(/Strongly favors Benevolence Dependability/)).toBeInTheDocument();
     expect(screen.queryByText('4.00')).not.toBeInTheDocument();
     expect(screen.queryByText('5')).not.toBeInTheDocument();
@@ -328,5 +326,34 @@ describe('SurveyResults', () => {
     expect(within(select).getByRole('option', { name: 'Strongly disagree' })).toBeInTheDocument();
     expect(within(select).getByRole('option', { name: 'Neutral' })).toBeInTheDocument();
     expect(within(select).queryByRole('option', { name: '1' })).not.toBeInTheDocument();
+  });
+
+  it('throws when the latest survey run includes legacy-only transcripts', () => {
+    mockUseInfiniteRuns.mockReturnValue({
+      runs: [
+        createRun([
+          createUnknownTranscript('tx-legacy', 's-unknown'),
+        ]),
+      ],
+      loading: false,
+      loadingMore: false,
+      error: null,
+      hasNextPage: false,
+      totalCount: 1,
+      loadMore: vi.fn(),
+      refetch: vi.fn(),
+      softRefetch: vi.fn(),
+    });
+
+    mockUseRun.mockReturnValue({
+      run: createRun([
+        createUnknownTranscript('tx-legacy', 's-unknown'),
+      ]),
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    expect(() => renderPage()).toThrow(/SurveyResults page requires canonical decision-model-v2 data for transcript tx-legacy/);
   });
 });

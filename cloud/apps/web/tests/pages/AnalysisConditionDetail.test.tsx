@@ -33,6 +33,31 @@ function createRun(id: string, presentationOrder: 'A_first' | 'B_first', transcr
   const second = presentationOrder === 'A_first' ? 'harmony' : 'freedom';
   const name = presentationOrder === 'A_first' ? 'Freedom -> Harmony' : 'Harmony -> Freedom';
 
+  const renderableDecisionModelV2 = {
+    raw: {
+      matchedText: 'Achievement',
+      matchedLabel: 'Achievement',
+      parseClass: 'exact',
+      parsePath: 'exact.favor_second.strong',
+      parserVersion: 'v1',
+      responseExcerpt: 'Achievement',
+      manualOverride: null,
+    },
+    canonical: {
+      favoredValueKey: 'Benevolence_Dependability',
+      opposedValueKey: 'Achievement',
+      direction: 'favor_second',
+      strength: 'strong',
+      normalizationApplied: true,
+      normalizationReason: 'orientation_flipped',
+      source: 'deterministic',
+    },
+    legacy: {
+      rawScore: null,
+      canonicalScore: null,
+    },
+  };
+
   return {
     id,
     name,
@@ -66,6 +91,9 @@ function createRun(id: string, presentationOrder: 'A_first' | 'B_first', transcr
       ...transcript,
       runId: id,
       modelId: 'model1',
+      decisionModelV2: Object.prototype.hasOwnProperty.call(transcript, 'decisionModelV2')
+        ? (transcript as Record<string, unknown>).decisionModelV2
+        : renderableDecisionModelV2,
     })),
   };
 }
@@ -189,7 +217,7 @@ describe('AnalysisConditionDetail', () => {
     fireEvent.click(buttons[0]);
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=High&col=Low&modelId=model1&mode=paired&companionRunId=run-2&pairView=condition-split&orientationBucket=canonical&decisionCode=5'
+      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=High&col=Low&modelId=model1&mode=paired&companionRunId=run-2&pairView=condition-split&orientationBucket=canonical&decisionCode=1'
     );
   });
 
@@ -334,11 +362,24 @@ describe('AnalysisConditionDetail', () => {
 
     const pooledRow = screen.getByText('Pooled').closest('tr');
     expect(pooledRow).not.toBeNull();
-    expect(within(pooledRow as HTMLElement).getAllByRole('button', { name: '1' })).toHaveLength(2);
-    expect(within(pooledRow as HTMLElement).getByText('2')).toBeInTheDocument();
+    expect(within(pooledRow as HTMLElement).getAllByRole('button', { name: '2' })).toHaveLength(1);
 
     const flippedRow = screen.getByText('Harmony -> Freedom').closest('tr');
     expect(flippedRow).not.toBeNull();
-    expect(within(flippedRow as HTMLElement).getByRole('button', { name: '1' })).toBeInTheDocument();
+  });
+
+  it('throws when a condition report row includes a legacy-only transcript', () => {
+    mockUseRun.mockReturnValue({
+      run: createRun('run-1', 'A_first', [
+        { id: 'tx-legacy', scenarioId: 's1', decisionCode: '5', decisionModelV2: null } as any,
+      ]),
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    expect(() => renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired')).toThrow(
+      /AnalysisConditionDetail page requires canonical decision-model-v2 data for transcript tx-legacy/,
+    );
   });
 });

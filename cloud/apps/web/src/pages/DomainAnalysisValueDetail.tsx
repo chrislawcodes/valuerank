@@ -18,8 +18,7 @@ import {
 } from '../api/operations/domainAnalysis';
 import { VALUE_LABELS, type ValueKey } from '../data/domainAnalysisData';
 import {
-  getTranscriptDecisionDisplayMode,
-  type TranscriptDecisionDisplayMode,
+  requireRenderableTranscriptDecisionModelV2,
 } from '../utils/transcriptDecisionModel';
 import { compareConditionLevels } from '../utils/conditionOrdering';
 
@@ -317,10 +316,11 @@ export function DomainAnalysisValueDetail() {
     createdAt: transcript.createdAt,
     lastAccessedAt: null,
   }));
-  const reportDecisionDisplayMode: TranscriptDecisionDisplayMode = getTranscriptDecisionDisplayMode(normalizedTranscripts);
-  const decisionColumnLabel = reportDecisionDisplayMode === 'audit'
-    ? VALUE_DETAIL_COPY.decisionColumnLabel
-    : VALUE_DETAIL_COPY.legacyDecisionColumnLabel;
+  const reportTranscripts = normalizedTranscripts.map((transcript) => (
+    requireRenderableTranscriptDecisionModelV2(transcript, 'DomainAnalysisValueDetail page')
+  ));
+  const reportDecisionDisplayMode = 'audit' as const;
+  const decisionColumnLabel = VALUE_DETAIL_COPY.decisionColumnLabel;
 
   const handleConditionClick = (definitionId: string, conditionName: string, scenarioId: string | null) => {
     const clickedKey = `${definitionId}:${scenarioId ?? '__unknown__'}`;
@@ -470,12 +470,12 @@ export function DomainAnalysisValueDetail() {
                   {transcriptsError && (
                     <ErrorMessage message={`Failed to load transcripts: ${transcriptsError.message}`} />
                   )}
-                  {!transcriptsFetching && !transcriptsError && normalizedTranscripts.length === 0 && (
+                  {!transcriptsFetching && !transcriptsError && reportTranscripts.length === 0 && (
                     <p className="text-xs text-gray-500">No transcripts found for this condition and model.</p>
                   )}
-                  {!transcriptsFetching && !transcriptsError && normalizedTranscripts.length > 0 && (
+                  {!transcriptsFetching && !transcriptsError && reportTranscripts.length > 0 && (
                     <TranscriptList
-                      transcripts={normalizedTranscripts}
+                      transcripts={reportTranscripts}
                       onSelect={setSelectedTranscript}
                       groupByModel={false}
                       scenarioDimensions={selectedConditionDimensions}

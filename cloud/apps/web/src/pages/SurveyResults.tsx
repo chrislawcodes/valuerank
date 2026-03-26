@@ -24,6 +24,7 @@ import {
   summarizeReportTranscriptDecisions,
   type ReportDecisionSummary,
 } from '../utils/reportDecisionDisplay';
+import { requireRenderableTranscriptDecisionModelV2 } from '../utils/transcriptDecisionModel';
 
 const defaultFilters: AnalysisFilterState = {
   analysisStatus: '',
@@ -256,29 +257,20 @@ export function SurveyResults() {
     }
 
     const models = [...new Set(latestRun.config.models)];
+    const canonicalTranscripts = latestRun.transcripts.map((transcript) => (
+      requireRenderableTranscriptDecisionModelV2(transcript, 'SurveyResults page')
+    ));
 
     const responses = new Map<string, string>();
-    const numericBuckets = new Map<string, number[]>();
-    for (const transcript of latestRun.transcripts) {
+    for (const transcript of canonicalTranscripts) {
       if (!transcript.scenarioId || !models.includes(transcript.modelId) || !transcript.decisionCode) {
         continue;
       }
       const key = `${transcript.scenarioId}::${transcript.modelId}`;
       const decisionRaw = transcript.decisionCode.trim();
-      const decisionNum = Number(decisionRaw);
-      if (!Number.isNaN(decisionNum) && Number.isFinite(decisionNum)) {
-        const bucket = numericBuckets.get(key) ?? [];
-        bucket.push(decisionNum);
-        numericBuckets.set(key, bucket);
-      } else if (!responses.has(key)) {
+      if (!responses.has(key)) {
         responses.set(key, decisionRaw);
       }
-    }
-
-    for (const [key, values] of numericBuckets) {
-      const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
-      const formatted = Number.isInteger(avg) ? String(avg) : avg.toFixed(2);
-      responses.set(key, formatted);
     }
 
     const rows = (scenariosData.scenarios ?? [])
@@ -301,7 +293,7 @@ export function SurveyResults() {
       .sort((left, right) => left.order - right.order || left.questionText.localeCompare(right.questionText));
 
     const transcriptsByCell = new Map<string, Transcript[]>();
-    for (const transcript of latestRun.transcripts) {
+    for (const transcript of canonicalTranscripts) {
       if (!transcript.scenarioId || !models.includes(transcript.modelId)) {
         continue;
       }

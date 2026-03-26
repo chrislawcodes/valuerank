@@ -250,10 +250,6 @@ export function TranscriptViewer({
                 <p>
                   <span className="font-medium text-sky-800">Source:</span> {canonicalDecision?.source ?? 'unknown'}
                 </p>
-                <p>
-                  <span className="font-medium text-sky-800">Legacy compatibility:</span>{' '}
-                  raw {transcript.decisionModelV2?.legacy?.rawScore ?? 'null'} · canonical {transcript.decisionModelV2?.legacy?.canonicalScore ?? 'null'}
-                </p>
               </div>
             </div>
           )}
