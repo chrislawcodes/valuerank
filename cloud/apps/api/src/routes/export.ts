@@ -302,9 +302,9 @@ exportRouter.get(
             include: {
               scenario: true,
               run: { select: { name: true, config: true, definition: { select: { version: true } } } },
-          },
-          orderBy: [{ modelId: 'asc' }, { scenarioId: 'asc' }],
-        })
+            },
+            orderBy: [{ modelId: 'asc' }, { scenarioId: 'asc' }],
+          })
         : [];
 
       log.info(

@@ -236,10 +236,6 @@ function extractTrialSignature(
   return `v${versionToken}t${tempToken}`;
 }
 
-/**
- * Convert a transcript to a CSV row.
- * @param transcript - The transcript with scenario data
- */
 function getVariablesForTranscript(
   transcript: TranscriptWithScenario,
   dimensionColumns?: DimensionColumnMap,
@@ -256,6 +252,10 @@ function getVariablesForTranscript(
   return variables;
 }
 
+/**
+ * Convert a transcript to a CSV row.
+ * @param transcript - The transcript with scenario data
+ */
 export function transcriptToCSVRow(
   transcript: TranscriptWithScenario,
   dimensionColumns?: DimensionColumnMap,

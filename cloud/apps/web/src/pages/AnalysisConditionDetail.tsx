@@ -19,6 +19,7 @@ import {
 } from '../utils/analysisRouting';
 import { formatDisplayLabel } from '../utils/displayLabels';
 import { getPairedOrientationLabels } from '../utils/methodology';
+import { requireRenderableTranscriptDecisionModelV2 } from '../utils/transcriptDecisionModel';
 import { filterTranscriptsForPivotCell } from '../utils/scenarioUtils';
 import {
   CONDITION_DECISION_BUCKET_ORDER,
@@ -98,10 +99,14 @@ function buildDetailRow(
   transcripts: Transcript[],
   baseSearchParams: URLSearchParams,
 ): DetailRow {
+  const renderableTranscripts = transcripts.map((transcript) => (
+    requireRenderableTranscriptDecisionModelV2(transcript, 'AnalysisConditionDetail page')
+  ));
+
   return {
     id,
     label,
-    summary: summarizeConditionDecisionBuckets(transcripts),
+    summary: summarizeConditionDecisionBuckets(renderableTranscripts),
     baseSearchParams,
   };
 }
@@ -459,7 +464,7 @@ export function AnalysisConditionDetail() {
                 n
               </th>
               <th className="border-b border-gray-200 bg-gray-50 px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-600">
-                Unknown
+                Unknown Count
               </th>
             </tr>
           </thead>

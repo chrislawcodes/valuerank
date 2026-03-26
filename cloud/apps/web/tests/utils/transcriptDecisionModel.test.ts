@@ -3,7 +3,9 @@ import type { Transcript } from '../../src/api/operations/runs';
 import {
   formatCanonicalDecisionHeadline,
   getTranscriptDecisionAuditBadge,
+  getTranscriptDecisionSortValue,
   getTranscriptDecisionDisplayMode,
+  requireRenderableTranscriptDecisionModelV2,
   hasTranscriptDecisionModelV2,
 } from '../../src/utils/transcriptDecisionModel';
 
@@ -52,13 +54,13 @@ function createRenderableV2Transcript(
       source: 'deterministic',
       ...overrides.canonical,
     },
-    legacy: {
-      rawScore: null,
-      canonicalScore: 1,
-      ...overrides.legacy,
-    },
-  };
-}
+      legacy: {
+        rawScore: null,
+        canonicalScore: null,
+        ...overrides.legacy,
+      },
+    };
+  }
 
 describe('transcriptDecisionModel', () => {
   it('treats empty transcript sets as legacy', () => {
@@ -109,5 +111,38 @@ describe('transcriptDecisionModel', () => {
 
     expect(getTranscriptDecisionAuditBadge(transcript)).toBeNull();
     expect(formatCanonicalDecisionHeadline(transcript)).toBe('Strongly favors Benevolence Dependability');
+  });
+
+  it('requires renderable canonical v2 data for report helpers', () => {
+    const transcript = createTranscript({
+      id: 'transcript-guard',
+      decisionModelV2: null,
+    });
+
+    expect(() => requireRenderableTranscriptDecisionModelV2(transcript, 'TranscriptViewer page')).toThrow(
+      /TranscriptViewer page requires canonical decision-model-v2 data for transcript transcript-guard; legacy decision scores are not allowed\./,
+    );
+  });
+
+  it('sorts audit-mode transcripts from canonical v2 even without a legacy canonical score', () => {
+    const transcript = createTranscript({
+      decisionModelV2: createRenderableV2Transcript({
+        canonical: {
+          favoredValueKey: 'Achievement',
+          opposedValueKey: 'Benevolence_Dependability',
+          direction: 'favor_first',
+          strength: 'lean',
+          normalizationApplied: false,
+          normalizationReason: null,
+          source: 'deterministic',
+        },
+        legacy: {
+          rawScore: null,
+          canonicalScore: null,
+        },
+      }),
+    });
+
+    expect(getTranscriptDecisionSortValue(transcript, 'audit')).toBe(4);
   });
 });
