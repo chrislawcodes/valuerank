@@ -37,6 +37,7 @@ import {
 import { formatDisplayLabel } from '../utils/displayLabels';
 import { getRunDefinitionContent } from '../utils/runDefinitionContent';
 import { getTranscriptDecisionDisplayMode } from '../utils/transcriptDecisionModel';
+import { summarizeReportTranscriptDecisions } from '../utils/reportDecisionDisplay';
 import {
   ANALYSIS_BASE_PATH,
   buildAnalysisTranscriptsPath,
@@ -631,18 +632,22 @@ export function AnalysisTranscripts() {
   ]);
 
   const listDisplayMode = getTranscriptDecisionDisplayMode(filteredTranscripts);
+  const decisionSummary = useMemo(
+    () => summarizeReportTranscriptDecisions(filteredTranscripts),
+    [filteredTranscripts],
+  );
   const viewerDisplayMode = selectedTranscript
     ? getTranscriptDecisionDisplayMode([selectedTranscript])
     : listDisplayMode;
   const decisionColumnLabel = listDisplayMode === 'audit'
     ? 'Decision summary'
     : normalizedDecisionTranscriptIds.size > 0
-      ? 'Normalized decision score'
+      ? 'Decision summary'
       : 'Decision';
   const decisionColumnTooltip = listDisplayMode === 'audit'
     ? 'Shows the decision headline and summary from the backend transcript data.'
     : normalizedDecisionTranscriptIds.size > 0
-      ? 'In this paired view, some prompts showed the two options in a different order. We adjust those scores so they all use the same scale. That way, the same number means the same choice direction across every transcript.'
+      ? 'Shows the canonical decision headline and summary from the backend transcript data.'
       : undefined;
   useEffect(() => {
     if (!hasDirectTranscriptParam) {
@@ -797,6 +802,12 @@ export function AnalysisTranscripts() {
                   Model: <span className="font-medium text-gray-900">{selectedModel}</span>
                   <span className="mx-2">•</span>
                   Conditions: <span className="font-medium text-gray-900">{conditionIds.length}</span>
+                  {decisionSummary.headline !== '—' && (
+                    <>
+                      <span className="mx-2">•</span>
+                      Decision summary: <span className="font-medium text-gray-900">{decisionSummary.headline}</span>
+                    </>
+                  )}
                 </>
               ) : (activeRowDim && activeColDim) ? (
                 <>
@@ -831,10 +842,10 @@ export function AnalysisTranscripts() {
                   Paired Value: <span className="font-medium text-gray-900">{formatDisplayLabel(pairedValueLabel)}</span>
                 </>
               )}
-              {decisionCode && (
+              {decisionSummary.headline !== '—' && (
                 <>
                   <span className="mx-2">•</span>
-                  Decision: <span className="font-medium text-gray-900">{decisionCode}</span>
+                  Decision summary: <span className="font-medium text-gray-900">{decisionSummary.headline}</span>
                 </>
               )}
             </>
