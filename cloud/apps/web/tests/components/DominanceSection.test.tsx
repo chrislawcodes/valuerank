@@ -75,7 +75,7 @@ describe('DominanceSection', () => {
     });
 
     expect(
-      screen.getByRole('heading', { name: '2. Ranking and Cycles' }),
+      screen.getByRole('heading', { name: 'Ranking and Cycles' }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
