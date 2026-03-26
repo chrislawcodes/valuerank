@@ -12,6 +12,7 @@ import {
   getOrientationBucketLabel,
 } from '../../utils/pairedScopeAdapter';
 import type { OrientationInspectionMode, OrientedConditionRow } from '../../utils/pairedScopeAdapter';
+import { compareConditionRows } from '../../utils/conditionOrdering';
 import { formatDisplayLabel } from '../../utils/displayLabels';
 import type { PairedOrientationLabels } from '../../utils/methodology';
 import { Button } from '../ui/Button';
@@ -399,12 +400,7 @@ export function ConditionDecisionsTable({
 
   const sortedConditionRows = useMemo(() => {
     const nextRows = [...conditionRows];
-    nextRows.sort((left, right) => {
-      const conditionLeft = `${left.attributeALevel}||${left.attributeBLevel}||${left.orientationBucket}`;
-      const conditionRight = `${right.attributeALevel}||${right.attributeBLevel}||${right.orientationBucket}`;
-
-      return conditionLeft.localeCompare(conditionRight);
-    });
+    nextRows.sort(compareConditionRows);
     return nextRows;
   }, [conditionRows]);
 

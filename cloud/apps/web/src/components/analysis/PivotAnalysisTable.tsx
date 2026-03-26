@@ -16,6 +16,7 @@ import {
     buildAnalysisConditionDetailPath,
     buildConditionKey,
 } from '../../utils/analysisRouting';
+import { compareConditionLevels } from '../../utils/conditionOrdering';
 
 type PivotAnalysisTableProps = {
     runId: string;
@@ -174,8 +175,8 @@ export function PivotAnalysisTable({
 
         return {
             grid,
-            rows: Array.from(rowValues).sort(),
-            cols: Array.from(colValues).sort()
+            rows: Array.from(rowValues).sort(compareConditionLevels),
+            cols: Array.from(colValues).sort(compareConditionLevels)
         };
 
     }, [scenarioDimensions, modelScenarioMatrix, rowDim, colDim, selectedModel]);

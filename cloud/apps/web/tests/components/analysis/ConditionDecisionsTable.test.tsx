@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ConditionDecisionsTable } from '../../../src/components/analysis/ConditionDecisionsTable';
 
@@ -95,5 +95,55 @@ describe('ConditionDecisionsTable', () => {
 
     expect(screen.getByRole('columnheader', { name: 'Grok' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: /4\.1 Fast\s+Reasoning/i })).toBeInTheDocument();
+  });
+
+  it('orders condition rows from negligible to full', () => {
+    render(
+      <MemoryRouter>
+        <ConditionDecisionsTable
+          runId="run-1"
+          expectedAttributes={['Achievement', 'Care']}
+          orientationLabels={{
+            canonical: 'Achievement -> Benevolence',
+            flipped: 'Benevolence -> Achievement',
+          }}
+          perModel={{
+            model1: {
+              sampleSize: 5,
+              values: {},
+              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+            },
+          } as any}
+          visualizationData={{
+            decisionDistribution: {},
+            scenarioDimensions: {
+              'scenario-1': { Achievement: 'full', Care: 'same' },
+              'scenario-2': { Achievement: 'minimal', Care: 'same' },
+              'scenario-3': { Achievement: 'moderate', Care: 'same' },
+              'scenario-4': { Achievement: 'negligible', Care: 'same' },
+              'scenario-5': { Achievement: 'substantial', Care: 'same' },
+            },
+            modelScenarioMatrix: {
+              model1: {
+                'scenario-1': 3,
+                'scenario-2': 3,
+                'scenario-3': 3,
+                'scenario-4': 3,
+                'scenario-5': 3,
+              },
+            },
+          } as any}
+        />
+      </MemoryRouter>
+    );
+
+    const bodyRows = screen.getAllByRole('row').slice(1);
+    expect(bodyRows.map((row) => within(row).getAllByRole('cell')[0].textContent?.trim())).toEqual([
+      'negligible',
+      'minimal',
+      'moderate',
+      'substantial',
+      'full',
+    ]);
   });
 });
