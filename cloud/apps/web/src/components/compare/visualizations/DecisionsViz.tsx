@@ -1,7 +1,7 @@
 /**
  * Decision Distribution Comparison Visualization
  *
- * Compares how decision distributions (1-5 scale) differ across runs.
+ * Compares how decision bucket distributions differ across runs.
  * - Overlay mode: Grouped bars with colors per run
  * - Side-by-side mode: Small multiples for each run
  * - KS statistic display for statistical comparison
@@ -14,6 +14,12 @@ import type { ComparisonVisualizationProps, RunWithAnalysis } from '../types';
 import { ComparisonFilters } from '../ComparisonFilters';
 import { ksFromCounts, type KSResult } from '../../../lib/statistics/ks-test';
 import { formatRunNameShort } from '../../../lib/format';
+import { deriveDecisionDimensionLabels } from '../../../utils/decisionLabels';
+import {
+  buildDecisionDistributionBuckets,
+  getDecisionDistributionEmptyState,
+  getDecisionDistributionHelperText,
+} from '../../../utils/decisionDistributionDisplay';
 import {
   OverlayChart,
   SideBySideChart,
@@ -34,9 +40,6 @@ const RUN_COLORS = [
   '#06b6d4', // cyan-500
   '#a855f7', // purple-500
 ];
-
-// Decision categories (1-5)
-const DECISIONS = [1, 2, 3, 4, 5] as const;
 
 /**
  * Extract decision distribution from a run's analysis data
@@ -181,16 +184,22 @@ export function DecisionsViz({ runs, filters, onFilterChange }: ComparisonVisual
       .filter((d): d is RunDecisionDistribution => d !== null);
   }, [runs, filters.model]);
 
+  const buckets = useMemo(() => {
+    const definitionContent = runs.find((run) => run.definitionContent)?.definitionContent;
+    return buildDecisionDistributionBuckets(deriveDecisionDimensionLabels(definitionContent));
+  }, [runs]);
+
   // Build chart data for overlay mode
   const chartData = useMemo((): DecisionData[] => {
-    return DECISIONS.map((decision) => {
+    return buckets.map((bucket) => {
+      const decision = Number(bucket.code);
       const point: DecisionData = { decision };
       for (const dist of distributions) {
         point[dist.runId] = dist.counts[decision] || 0;
       }
       return point;
     });
-  }, [distributions]);
+  }, [buckets, distributions]);
 
   // Assign colors to runs
   const runColors = useMemo(() => {
@@ -211,7 +220,7 @@ export function DecisionsViz({ runs, filters, onFilterChange }: ComparisonVisual
         <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
           <BarChart2 className="w-6 h-6 text-gray-400" />
         </div>
-        <p className="text-gray-600">No decision data available</p>
+        <p className="text-gray-600">{getDecisionDistributionEmptyState()}</p>
         <p className="text-gray-500 text-sm mt-1">
           {filters.model
             ? `No data for model: ${filters.model}`
@@ -235,15 +244,17 @@ export function DecisionsViz({ runs, filters, onFilterChange }: ComparisonVisual
       {/* Chart */}
       <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Decision Distribution Comparison</h3>
+        <p className="mt-1 text-xs text-gray-500">{getDecisionDistributionHelperText()}</p>
 
         {filters.displayMode === 'overlay' ? (
           <OverlayChart
             distributions={distributions}
             chartData={chartData}
             runColors={runColors}
+            buckets={buckets}
           />
         ) : (
-          <SideBySideChart distributions={distributions} runColors={runColors} />
+          <SideBySideChart distributions={distributions} runColors={runColors} buckets={buckets} />
         )}
       </div>
 

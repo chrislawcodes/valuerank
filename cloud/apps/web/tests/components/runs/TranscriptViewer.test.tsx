@@ -45,7 +45,7 @@ function createTranscript(overrides: Partial<Transcript> = {}): Transcript {
       },
       legacy: {
         rawScore: 5,
-        canonicalScore: 1,
+        canonicalScore: null,
       },
     },
     ...overrides,

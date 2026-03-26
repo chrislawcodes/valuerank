@@ -10,6 +10,7 @@ import ExcelJS from 'exceljs';
 import { buildChartsSheet, buildSimpleChartsSheet } from '../../../../src/services/export/xlsx/charts.js';
 import type { ModelStatistics } from '../../../../src/services/export/xlsx/types.js';
 import { createWorkbook } from '../../../../src/services/export/xlsx/workbook.js';
+import { DECISION_BUCKET_LABELS } from '../../../../src/services/export/decision-display.js';
 
 // ============================================================================
 // TEST DATA
@@ -20,14 +21,17 @@ function createMockModelStats(count: number = 3): ModelStatistics[] {
   return models.slice(0, count).map((name, i) => ({
     modelName: name,
     sampleCount: 50,
-    meanScore: 2.5 + i * 0.5,
+    resolvedCount: 45,
+    unknownCount: 5,
+    meanPreferenceScore: 1.5 + i * 0.25,
     stdDev: 0.8,
     decisionDistribution: {
-      '1': 5,
-      '2': 10,
-      '3': 20,
-      '4': 10,
-      '5': 5,
+      'First side strong': 5,
+      'First side lean': 10,
+      Neutral: 20,
+      'Second side lean': 10,
+      'Second side strong': 5,
+      Unknown: 5,
     },
   }));
 }
@@ -60,7 +64,7 @@ describe('buildChartsSheet', () => {
 
     worksheet!.eachRow((row) => {
       const cellValue = row.getCell(1).value;
-      if (typeof cellValue === 'string' && cellValue.includes('Decision Distribution')) {
+      if (typeof cellValue === 'string' && cellValue.includes('Canonical Decision Distribution')) {
         foundTitle = true;
       }
     });
@@ -148,7 +152,7 @@ describe('buildSimpleChartsSheet', () => {
 
     worksheet!.eachRow((row) => {
       const cellValue = row.getCell(1).value;
-      if (typeof cellValue === 'string' && cellValue.includes('Decision Distribution')) {
+      if (typeof cellValue === 'string' && cellValue.includes('Canonical Decision Distribution')) {
         foundTitle = true;
       }
     });
@@ -174,24 +178,21 @@ describe('buildSimpleChartsSheet', () => {
     expect(foundModels).toBeGreaterThan(0);
   });
 
-  it('includes decision code headers', () => {
+  it('includes canonical bucket headers in the fixed order', () => {
     const stats = createMockModelStats();
     buildSimpleChartsSheet(workbook, stats);
 
     const worksheet = workbook.getWorksheet('Charts');
-    let foundScoreHeaders = 0;
+    const headers = [
+      worksheet!.getCell(4, 2).value,
+      worksheet!.getCell(4, 3).value,
+      worksheet!.getCell(4, 4).value,
+      worksheet!.getCell(4, 5).value,
+      worksheet!.getCell(4, 6).value,
+      worksheet!.getCell(4, 7).value,
+    ];
 
-    worksheet!.eachRow((row) => {
-      row.eachCell((cell) => {
-        const value = cell.value;
-        if (typeof value === 'string' && value.startsWith('Score ')) {
-          foundScoreHeaders++;
-        }
-      });
-    });
-
-    // Should have Score 1, Score 2, Score 3, Score 4, Score 5
-    expect(foundScoreHeaders).toBe(5);
+    expect(headers).toEqual([...DECISION_BUCKET_LABELS]);
   });
 
   it('includes total column', () => {
@@ -229,7 +230,7 @@ describe('buildSimpleChartsSheet', () => {
     expect(foundInstructions).toBe(true);
   });
 
-  it('includes mean scores section', () => {
+  it('includes mean preference scores section', () => {
     const stats = createMockModelStats();
     buildSimpleChartsSheet(workbook, stats);
 
@@ -238,7 +239,7 @@ describe('buildSimpleChartsSheet', () => {
 
     worksheet!.eachRow((row) => {
       const cellValue = row.getCell(1).value;
-      if (typeof cellValue === 'string' && cellValue.includes('Mean Scores')) {
+      if (typeof cellValue === 'string' && cellValue.includes('Mean Preference Scores')) {
         foundMeanScores = true;
       }
     });
@@ -263,16 +264,22 @@ describe('buildSimpleChartsSheet', () => {
     expect(foundNoDataMessage).toBe(true);
   });
 
-  it('handles stats with no numeric decision codes', () => {
+  it('handles unknown-only stats with a blank mean preference score', () => {
     const stats: ModelStatistics[] = [
       {
         modelName: 'test-model',
         sampleCount: 10,
-        meanScore: 0,
+        resolvedCount: 0,
+        unknownCount: 10,
+        meanPreferenceScore: null,
         stdDev: 0,
         decisionDistribution: {
-          error: 5,
-          unknown: 5,
+          'First side strong': 0,
+          'First side lean': 0,
+          Neutral: 0,
+          'Second side lean': 0,
+          'Second side strong': 0,
+          Unknown: 10,
         },
       },
     ];
@@ -284,7 +291,7 @@ describe('buildSimpleChartsSheet', () => {
 
     worksheet!.eachRow((row) => {
       const cellValue = row.getCell(1).value;
-      if (typeof cellValue === 'string' && cellValue.includes('No numeric decision codes')) {
+      if (typeof cellValue === 'string' && cellValue.includes('Only unresolved transcripts are available')) {
         foundNoCodesMessage = true;
       }
     });

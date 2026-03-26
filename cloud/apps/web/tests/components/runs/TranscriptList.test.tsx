@@ -201,7 +201,7 @@ describe('TranscriptList', () => {
         },
         legacy: {
           rawScore: null,
-          canonicalScore: 1,
+          canonicalScore: null,
         },
       },
     });
@@ -244,7 +244,7 @@ describe('TranscriptList', () => {
         },
         legacy: {
           rawScore: null,
-          canonicalScore: 1,
+          canonicalScore: null,
         },
       },
     });

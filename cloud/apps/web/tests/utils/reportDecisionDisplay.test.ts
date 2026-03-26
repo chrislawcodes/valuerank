@@ -266,7 +266,7 @@ describe('reportDecisionDisplay', () => {
       summarizeCanonicalReportTranscriptDecisions([
         createTranscript({ id: 'missing-1', decisionModelV2: null }),
       ]),
-    ).toThrow(/Survey results require canonical decisionModelV2 data/);
+    ).toThrow(/Survey results require canonical decision-model-v2 data/);
 
     expect(() =>
       summarizeCanonicalReportTranscriptDecisions([
@@ -289,6 +289,6 @@ describe('reportDecisionDisplay', () => {
           } as NonNullable<Transcript['decisionModelV2']>,
         }),
       ]),
-    ).toThrow(/Survey results require canonical decisionModelV2 data/);
+    ).toThrow(/Survey results require canonical decision-model-v2 data/);
   });
 });

@@ -220,7 +220,7 @@ export function SurveyResults() {
 
       return { models, rows, transcriptsByCell, cellSummaries };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Survey results require canonical decisionModelV2 data.';
+      const message = error instanceof Error ? error.message : 'Survey results require canonical decision-model-v2 data.';
       return { error: new Error(message) };
     }
   }, [latestRun, scenariosData]);
@@ -556,7 +556,7 @@ function SurveyMatrixError({
         </Button>
       </div>
       <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900" role="alert" aria-live="polite">
-        <p className="font-medium">Canonical decisionModelV2 data is missing or malformed.</p>
+        <p className="font-medium">Canonical decision-model-v2 data is missing or malformed.</p>
         <p className="mt-1">{error.message}</p>
         {isSummarizing && (
           <p className="mt-1 text-red-800">

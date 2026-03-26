@@ -428,8 +428,8 @@ describe('SurveyResults', () => {
 
     renderPage();
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Canonical decisionModelV2 data is missing or malformed.');
-    expect(screen.getByText(/Survey results require canonical decisionModelV2 data for transcript tx-missing/)).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Canonical decision-model-v2 data is missing or malformed.');
+    expect(screen.getByText(/Survey results require canonical decision-model-v2 data for transcript tx-missing/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Export CSV/i })).toBeDisabled();
     expect(screen.queryByRole('button', { name: /View transcript for/ })).not.toBeInTheDocument();
   });
@@ -442,8 +442,8 @@ describe('SurveyResults', () => {
 
     renderPage();
 
-    expect(screen.getByText('Canonical decisionModelV2 data is missing or malformed.')).toBeInTheDocument();
-    expect(screen.getByText(/Survey results require canonical decisionModelV2 data for transcript tx-partial/)).toBeInTheDocument();
+    expect(screen.getByText('Canonical decision-model-v2 data is missing or malformed.')).toBeInTheDocument();
+    expect(screen.getByText(/Survey results require canonical decision-model-v2 data for transcript tx-partial/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Export CSV/i })).toBeDisabled();
   });
 });

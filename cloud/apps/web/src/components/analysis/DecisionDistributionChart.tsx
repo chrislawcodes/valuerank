@@ -1,10 +1,3 @@
-/**
- * DecisionDistributionChart Component
- *
- * Shows how each model distributes its decisions across the 1-5 scale.
- * Stacked horizontal bar chart with decision codes color-coded.
- */
-
 import { useRef } from 'react';
 import {
   BarChart,
@@ -17,9 +10,17 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { VisualizationData } from '../../api/operations/analysis';
+import {
+  buildDecisionDistributionBuckets,
+  getDecisionDistributionChartAriaLabel,
+  getDecisionDistributionEmptyState,
+  getDecisionDistributionHelperText,
+  normalizeDecisionDistributionCounts,
+  type DecisionDistributionBucket,
+  type DecisionDistributionCounts,
+  DECISION_DISTRIBUTION_BUCKET_CODES,
+} from '../../utils/decisionDistributionDisplay';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
-
-type DecisionCode = '1' | '2' | '3' | '4' | '5';
 
 type DecisionDistributionChartProps = {
   visualizationData: VisualizationData;
@@ -30,15 +31,13 @@ type ChartDataPoint = {
   model: string;
   fullName: string;
   totalCount: number;
-  rawCounts: Record<DecisionCode, number>;
+  rawCounts: DecisionDistributionCounts;
   '1': number;
   '2': number;
   '3': number;
   '4': number;
   '5': number;
 };
-
-const DECISION_CODES: DecisionCode[] = ['1', '2', '3', '4', '5'];
 
 // Decision code color scheme (green to red gradient)
 const DECISION_COLORS = {
@@ -57,11 +56,11 @@ export function buildDecisionDistributionChartData(
   decisionDistribution: VisualizationData['decisionDistribution']
 ): ChartDataPoint[] {
   const chartData = Object.entries(decisionDistribution).map(([model, dist]) => {
-    const rawCounts = DECISION_CODES.reduce<Record<DecisionCode, number>>((acc, code) => {
-      acc[code] = dist[code] || 0;
-      return acc;
-    }, { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 });
-    const totalCount = DECISION_CODES.reduce((sum, code) => sum + rawCounts[code], 0);
+    const rawCounts = normalizeDecisionDistributionCounts(dist);
+    const totalCount = DECISION_DISTRIBUTION_BUCKET_CODES.reduce(
+      (sum, code) => sum + rawCounts[code],
+      0,
+    );
 
     return {
       model: model.length > 20 ? model.slice(0, 18) + '...' : model,
@@ -95,13 +94,14 @@ export function formatDecisionDistributionScopeNote(chartData: ChartDataPoint[])
 
   return `Total decisions in scope varies by model: n=${minTotal}-${maxTotal}. Hover bars for raw counts.`;
 }
+
 /**
  * Custom tooltip component.
  */
-export function CustomTooltip({ active, payload, dimensionLabels }: {
+export function CustomTooltip({ active, payload, buckets }: {
   active?: boolean;
   payload?: Array<{ payload: ChartDataPoint }>;
-  dimensionLabels?: Record<string, string>;
+  buckets: DecisionDistributionBucket[];
 }) {
   if (!active || !payload?.[0]) return null;
 
@@ -112,15 +112,15 @@ export function CustomTooltip({ active, payload, dimensionLabels }: {
       <p className="font-medium text-gray-900 mb-2">{data.fullName}</p>
       <p className="text-sm text-gray-600 mb-2">Total decisions: n={data.totalCount}</p>
       <div className="space-y-1 text-sm">
-        {DECISION_CODES.map((d) => (
-          <div key={d} className="flex items-center gap-2">
+        {buckets.map((bucket) => (
+          <div key={bucket.code} className="flex items-center gap-2" aria-label={bucket.ariaLabel}>
             <div
               className="w-3 h-3 rounded"
-              style={{ backgroundColor: DECISION_COLORS[d] }}
+              style={{ backgroundColor: DECISION_COLORS[bucket.code] }}
             />
-            <span>{dimensionLabels?.[d] || `Decision ${d}`}:</span>
+            <span>{bucket.label}:</span>
             <span className="font-medium">
-              {formatShare(data[d])} ({data.rawCounts[d]})
+              {formatShare(data[bucket.code])} ({data.rawCounts[bucket.code]})
             </span>
           </div>
         ))}
@@ -128,48 +128,33 @@ export function CustomTooltip({ active, payload, dimensionLabels }: {
     </div>
   );
 }
-export function CustomLegend({ dimensionLabels }: { dimensionLabels?: Record<string, string> }) {
-  const renderItem = (d: keyof typeof DECISION_COLORS) => (
-    <div key={d} className="flex items-center gap-2 text-sm">
+export function CustomLegend({ buckets }: { buckets: DecisionDistributionBucket[] }) {
+  const renderItem = (bucket: DecisionDistributionBucket) => (
+    <div key={bucket.code} className="flex items-center gap-2 text-sm" aria-label={bucket.ariaLabel}>
       <div
         className="w-3 h-3 rounded"
-        style={{ backgroundColor: DECISION_COLORS[d] }}
+        style={{ backgroundColor: DECISION_COLORS[bucket.code] }}
       />
-      <span className="text-gray-600">
-        {dimensionLabels?.[d] || `Decision ${d}`}
-      </span>
+      <span className="text-gray-600">{bucket.label}</span>
     </div>
   );
 
   return (
-    <div className="mt-4 grid grid-cols-3 gap-4 border-t border-gray-100 pt-4">
-      {/* Left Column: 1 (Strongly Support A) and 2 (Somewhat Support A) */}
-      <div className="flex flex-col gap-1 items-start">
-        {renderItem('1')}
-        {renderItem('2')}
-      </div>
-
-      {/* Center Column: 3 (Neutral) */}
-      <div className="flex flex-col gap-1 items-center justify-center">
-        {renderItem('3')}
-      </div>
-
-      {/* Right Column: 4 (Somewhat Support B) and 5 (Strongly Support B) */}
-      <div className="flex flex-col gap-1 items-end">
-        {renderItem('5')}
-        {renderItem('4')}
-      </div>
+    <div className="mt-4 grid grid-cols-2 gap-3 border-t border-gray-100 pt-4 md:grid-cols-5">
+      {buckets.map((bucket) => renderItem(bucket))}
     </div>
   );
 }
 export function DecisionDistributionChart({ visualizationData, dimensionLabels }: DecisionDistributionChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
+  const buckets = buildDecisionDistributionBuckets(dimensionLabels);
+  const chartAriaLabel = getDecisionDistributionChartAriaLabel(buckets);
   const { decisionDistribution } = visualizationData;
 
   if (!decisionDistribution || Object.keys(decisionDistribution).length === 0) {
     return (
       <div className="text-center py-8 text-gray-500">
-        No decision distribution data available
+        {getDecisionDistributionEmptyState()}
       </div>
     );
   }
@@ -177,10 +162,11 @@ export function DecisionDistributionChart({ visualizationData, dimensionLabels }
   const chartData = buildDecisionDistributionChartData(decisionDistribution);
   const chartHeight = Math.max(300, chartData.length * 50);
   return (
-    <div ref={chartRef} className="space-y-4">
+    <div ref={chartRef} className="space-y-4" aria-label={chartAriaLabel}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-medium text-gray-700">Decision Distribution by Model</h3>
+          <p className="mt-1 text-xs text-gray-500">{getDecisionDistributionHelperText()}</p>
         </div>
         <CopyVisualButton targetRef={chartRef} label="decision distribution chart" />
       </div>
@@ -204,15 +190,15 @@ export function DecisionDistributionChart({ visualizationData, dimensionLabels }
               width={110}
               tick={{ fontSize: 12 }}
             />
-            <Tooltip content={<CustomTooltip dimensionLabels={dimensionLabels} />} />
-            <Legend content={<CustomLegend dimensionLabels={dimensionLabels} />} />
-            {DECISION_CODES.map((d) => (
+            <Tooltip content={<CustomTooltip buckets={buckets} />} />
+            <Legend content={<CustomLegend buckets={buckets} />} />
+            {DECISION_DISTRIBUTION_BUCKET_CODES.map((d) => (
               <Bar
                 key={d}
                 dataKey={d}
                 stackId="a"
                 fill={DECISION_COLORS[d]}
-                name={dimensionLabels?.[d] || `Decision ${d}`}
+                name={buckets.find((bucket) => bucket.code === d)?.label ?? d}
               />
             ))}
           </BarChart>

@@ -67,6 +67,15 @@ vi.mock('../../src/components/runs/TranscriptViewer', () => ({
 }));
 
 function createRun(id: string, definitionVersion: number, overrides: Record<string, unknown> = {}) {
+  const inputTranscripts = Array.isArray(overrides.transcripts)
+    ? overrides.transcripts
+    : [
+        { id: 'tx-1', modelId: 'model1', scenarioId: 's1', decisionCode: 'A' },
+        { id: 'tx-2', modelId: 'model1', scenarioId: 's2', decisionCode: 'A' },
+        { id: 'tx-3', modelId: 'model2', scenarioId: 's3', decisionCode: 'B' },
+      ];
+  const transcripts = inputTranscripts.map((transcript) => ensureRenderableDecisionModel(transcript as Record<string, unknown>));
+
   return {
     id,
     tags: [],
@@ -97,27 +106,8 @@ function createRun(id: string, definitionVersion: number, overrides: Record<stri
         ],
       },
     },
-    transcripts: [
-      {
-        id: 'tx-1',
-        modelId: 'model1',
-        scenarioId: 's1',
-        decisionCode: 'A',
-      },
-      {
-        id: 'tx-2',
-        modelId: 'model1',
-        scenarioId: 's2',
-        decisionCode: 'A',
-      },
-      {
-        id: 'tx-3',
-        modelId: 'model2',
-        scenarioId: 's3',
-        decisionCode: 'B',
-      },
-    ],
     ...overrides,
+    transcripts,
   };
 }
 
@@ -125,6 +115,44 @@ function createAggregateRun(id: string, definitionVersion: number) {
   return createRun(id, definitionVersion, {
     tags: [{ name: 'Aggregate' }],
   });
+}
+
+function createRenderableDecisionModelV2() {
+  return {
+    raw: {
+      matchedText: 'Achievement',
+      matchedLabel: 'Achievement',
+      parseClass: 'exact',
+      parsePath: 'exact.favor_second.strong',
+      parserVersion: 'v1',
+      responseExcerpt: 'Achievement',
+      manualOverride: null,
+    },
+    canonical: {
+      favoredValueKey: 'Benevolence_Dependability',
+      opposedValueKey: 'Achievement',
+      direction: 'favor_second',
+      strength: 'strong',
+      normalizationApplied: true,
+      normalizationReason: 'orientation_flipped',
+      source: 'deterministic',
+    },
+    legacy: {
+      rawScore: null,
+      canonicalScore: null,
+    },
+  };
+}
+
+function ensureRenderableDecisionModel(transcript: Record<string, unknown>) {
+  if (Object.prototype.hasOwnProperty.call(transcript, 'decisionModelV2')) {
+    return transcript;
+  }
+
+  return {
+    ...transcript,
+    decisionModelV2: createRenderableDecisionModelV2(),
+  };
 }
 
 function renderPage(initialEntry: string) {
@@ -267,7 +295,7 @@ describe('AnalysisTranscripts', () => {
     expect(headerMeta).toHaveTextContent('Repeat Pattern: Stable');
     expect(headerMeta).toHaveTextContent('Model: model1');
     expect(headerMeta).toHaveTextContent('Conditions: 1');
-    expect(headerMeta).toHaveTextContent('Decision summary: Unknown');
+    expect(headerMeta).toHaveTextContent('Decision summary: Strongly favors Benevolence Dependability');
     expect(screen.queryByText('Decision: 1')).not.toBeInTheDocument();
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 2');
   });
@@ -672,7 +700,7 @@ describe('AnalysisTranscripts', () => {
 
     expect(screen.getByText(/Split inspection is active/i)).toBeInTheDocument();
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 1');
-    expect(lastTranscriptListProps?.decisionColumnLabel).toBe('Decision');
+    expect(lastTranscriptListProps?.decisionColumnLabel).toBe('Decision summary');
     expect(lastTranscriptListProps?.normalizedDecisionTranscriptIds).toEqual(new Set());
   });
 
@@ -707,7 +735,7 @@ describe('AnalysisTranscripts', () => {
               },
               legacy: {
                 rawScore: null,
-                canonicalScore: 1,
+                canonicalScore: null,
               },
             },
           },
@@ -736,7 +764,7 @@ describe('AnalysisTranscripts', () => {
     });
   });
 
-  it('keeps mixed V1 and V2 transcript sets in legacy list mode while auditing selected V2 transcripts', async () => {
+  it('throws when a mixed legacy and canonical transcript set reaches the report surface', () => {
     mockUseRun.mockReturnValue({
       run: createRun('run-4', 1, {
         transcripts: [
@@ -767,7 +795,7 @@ describe('AnalysisTranscripts', () => {
               },
               legacy: {
                 rawScore: null,
-                canonicalScore: 1,
+                canonicalScore: null,
               },
             },
           },
@@ -777,9 +805,7 @@ describe('AnalysisTranscripts', () => {
             modelId: 'model1',
             scenarioId: 's12',
             decisionCode: '4',
-            decisionMetadata: {
-              parseClass: 'exact',
-            },
+            decisionModelV2: null,
           },
         ],
       }),
@@ -800,25 +826,9 @@ describe('AnalysisTranscripts', () => {
       recomputing: false,
     });
 
-    renderPage('/analysis/run-4/transcripts?modelId=model1&repeatPattern=stable&rowDim=Freedom&colDim=Harmony&conditionIds=High%7C%7CLow');
-
-    await waitFor(() => {
-      expect(lastTranscriptListProps?.decisionColumnLabel).toBe('Decision');
-      expect(lastTranscriptListProps?.decisionDisplayMode).toBe('legacy');
-      expect(lastTranscriptListProps?.transcripts).toHaveLength(2);
-    });
-
-    const selectedTranscript = lastTranscriptListProps?.transcripts.find((transcript) => transcript.id === 'tx-11');
-    expect(selectedTranscript).toBeDefined();
-    if (!selectedTranscript || !lastTranscriptListProps) {
-      throw new Error('Expected mixed transcript test fixture to include tx-11');
-    }
-
-    lastTranscriptListProps.onSelect(selectedTranscript);
-
-    await waitFor(() => {
-      expect(lastTranscriptViewerProps?.decisionDisplayMode).toBe('audit');
-    });
+    expect(() => renderPage('/analysis/run-4/transcripts?modelId=model1&repeatPattern=stable&rowDim=Freedom&colDim=Harmony&conditionIds=High%7C%7CLow')).toThrow(
+      /AnalysisTranscripts page requires canonical decision-model-v2 data for transcript tx-12/,
+    );
   });
 
   it('keeps repeat-pattern query params when aggregate signature switching changes runs', () => {

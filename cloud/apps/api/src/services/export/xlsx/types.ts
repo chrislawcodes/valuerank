@@ -6,6 +6,7 @@
  */
 
 import type { Transcript, Scenario, Run } from '@prisma/client';
+import type { DecisionBucketLabel } from '../decision-display.js';
 
 // ============================================================================
 // TRANSCRIPT TYPES
@@ -167,9 +168,11 @@ export type RawDataRow = {
 export type ModelStatistics = {
   modelName: string;
   sampleCount: number;
-  meanScore: number;
+  resolvedCount: number;
+  unknownCount: number;
+  meanPreferenceScore: number | null;
   stdDev: number;
-  decisionDistribution: Record<string, number>;
+  decisionDistribution: Record<DecisionBucketLabel, number>;
 };
 
 /**
@@ -178,7 +181,9 @@ export type ModelStatistics = {
 export type ModelSummaryRow = {
   modelName: string;
   sampleCount: number;
-  meanScore: number;
+  resolvedCount: number;
+  unknownCount: number;
+  meanPreferenceScore: number | null;
   stdDev: number;
 };
 

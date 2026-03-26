@@ -150,7 +150,7 @@ registerVisualization({
   icon: BarChart3,
   component: DecisionsViz,
   minRuns: 2,
-  description: 'Compare decision distributions (1-5 scale) across runs with KS statistics',
+  description: 'Compare decision bucket distributions across runs with KS statistics',
 });
 
 // Register Values visualization
