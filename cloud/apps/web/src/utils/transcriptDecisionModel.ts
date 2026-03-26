@@ -47,6 +47,19 @@ export function hasTranscriptDecisionModelV2(
   return hasRenderableTranscriptDecisionModelV2(transcript);
 }
 
+export function requireRenderableTranscriptDecisionModelV2(
+  transcript: Transcript,
+  context = 'report helper',
+): Transcript & { decisionModelV2: NonNullable<Transcript['decisionModelV2']> } {
+  if (!hasRenderableTranscriptDecisionModelV2(transcript)) {
+    throw new Error(
+      `${context} requires canonical decision-model-v2 data for transcript ${transcript.id}; legacy decision scores are not allowed.`,
+    );
+  }
+
+  return transcript;
+}
+
 function hasReportRenderableTranscriptDecisionModelV2(
   value: Transcript['decisionModelV2'],
 ): value is NonNullable<Transcript['decisionModelV2']> {
@@ -88,7 +101,7 @@ export function assertReportTranscriptDecisionModelV2(
   transcript: Transcript,
 ): asserts transcript is Transcript & { decisionModelV2: NonNullable<Transcript['decisionModelV2']> } {
   if (!hasReportTranscriptDecisionModelV2(transcript)) {
-    throw new Error(`Survey results require canonical decisionModelV2 data for transcript ${transcript.id}`);
+    throw new Error(`Survey results require canonical decision-model-v2 data for transcript ${transcript.id}`);
   }
 }
 
@@ -102,6 +115,27 @@ export function getTranscriptDecisionDisplayMode(
   return transcripts.every(hasRenderableTranscriptDecisionModelV2)
     ? 'audit'
     : 'legacy';
+}
+
+function getCanonicalTranscriptDecisionSortValue(transcript: Transcript): string | number {
+  const canonical = transcript.decisionModelV2?.canonical;
+  if (!canonical) {
+    return '';
+  }
+
+  if (canonical.direction === 'neutral') {
+    return 3;
+  }
+
+  if (canonical.direction === 'favor_first') {
+    return canonical.strength === 'strong' ? 5 : 4;
+  }
+
+  if (canonical.direction === 'favor_second') {
+    return canonical.strength === 'strong' ? 1 : 2;
+  }
+
+  return '';
 }
 
 export function formatCanonicalDecisionHeadline(transcript: Transcript): string {
@@ -165,7 +199,7 @@ export function getTranscriptDecisionSortValue(
   displayMode: TranscriptDecisionDisplayMode,
 ): string | number {
   if (displayMode === 'audit') {
-    return transcript.decisionModelV2?.legacy?.canonicalScore ?? '';
+    return getCanonicalTranscriptDecisionSortValue(transcript);
   }
 
   const fallbackCandidates = [
