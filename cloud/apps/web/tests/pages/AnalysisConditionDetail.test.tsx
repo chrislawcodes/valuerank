@@ -494,7 +494,7 @@ describe('AnalysisConditionDetail', () => {
     });
 
     expect(() => renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired')).toThrow(
-      /AnalysisConditionDetail page requires canonical decision-model-v2 data for transcript tx-legacy/,
+      /AnalysisConditionDetail page: transcript tx-legacy is missing renderable canonical decisionModelV2 data\./,
     );
   });
 });
