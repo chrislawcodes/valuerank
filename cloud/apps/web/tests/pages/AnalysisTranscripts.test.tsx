@@ -336,7 +336,7 @@ describe('AnalysisTranscripts', () => {
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 1');
   });
 
-  it('filters blended paired clickthrough to matching transcripts across both orders', () => {
+  it('filters source-based paired clickthroughs across both runs', () => {
     mockUseRun.mockImplementation((args?: { id?: string }) => {
       if (args?.id === 'run-2') {
         return {
@@ -412,8 +412,12 @@ describe('AnalysisTranscripts', () => {
       };
     });
 
-    renderPage('/analysis/run-1/transcripts?mode=paired&companionRunId=run-2&modelId=model1&pairedValueKey=freedom&pairedValueLabel=Freedom&pairView=blended');
+    renderPage('/analysis/run-1/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&row=High&col=Low&companionRunId=run-2&modelId=model1&pairView=condition-blended&sourceRun=pooled');
 
+    const pooledSourceLabel = screen.getByText('Pooled');
+    expect(pooledSourceLabel).toBeInTheDocument();
+    expect(pooledSourceLabel.parentElement).toHaveTextContent('Source: Pooled');
+    expect(screen.getByText('Paired vignette scope')).toBeInTheDocument();
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 2');
   });
 

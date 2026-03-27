@@ -82,6 +82,7 @@ function normalizePairedValueKey(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, '_');
 }
 
+type PairedConditionSource = 'current' | 'companion' | 'pooled';
 type JobChoicePresentationOrder = 'A_first' | 'B_first';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -102,6 +103,27 @@ function getOrientationBucketForContent(content: unknown): OrientationBucket | n
   if (presentationOrder === 'A_first') return 'canonical';
   if (presentationOrder === 'B_first') return 'flipped';
   return null;
+}
+
+function parsePairedConditionSource(value: string | null): PairedConditionSource | null {
+  if (value === 'current' || value === 'companion' || value === 'pooled') {
+    return value;
+  }
+  return null;
+}
+
+function formatPairedConditionSourceLabel(source: PairedConditionSource | null): string | null {
+  if (!source) {
+    return null;
+  }
+
+  if (source === 'current') {
+    return 'Current vignette';
+  }
+  if (source === 'companion') {
+    return 'Companion vignette';
+  }
+  return 'Pooled';
 }
 
 function filterTranscriptsForConditionIds(
@@ -176,6 +198,7 @@ export function AnalysisTranscripts() {
   const pairedDecisionBucketParam = searchParams.get('pairedDecisionBucket') ?? '';
   const pairedValueLabel = searchParams.get('pairedValueLabel') ?? '';
   const pairView = searchParams.get('pairView') ?? '';
+  const pairedConditionSource = parsePairedConditionSource(searchParams.get('sourceRun'));
   const orientationBucketParam = searchParams.get('orientationBucket');
   const orientationBucket: OrientationBucket | null = orientationBucketParam === 'canonical' || orientationBucketParam === 'flipped'
     ? orientationBucketParam
@@ -472,6 +495,25 @@ export function AnalysisTranscripts() {
       ];
 
       return runEntries.flatMap((entry) => {
+        if (pairedConditionSource === 'current' && entry.run?.id !== run?.id) {
+          return [];
+        }
+        if (pairedConditionSource === 'companion' && entry.run?.id !== companionRun?.id) {
+          return [];
+        }
+        if (pairedConditionSource === 'current' || pairedConditionSource === 'companion' || pairedConditionSource === 'pooled') {
+          return filterTranscriptsForPivotCell({
+            transcripts: entry.run?.transcripts ?? [],
+            scenarioDimensions: entry.scenarioDims,
+            rowDim: activeRowDim,
+            colDim: activeColDim,
+            row,
+            col,
+            selectedModel,
+            decisionCode: decisionCode || undefined,
+          });
+        }
+
         const entryOrientation = getOrientationBucketForContent(entry.content);
         if (pairView === 'condition-split' && orientationBucket && entryOrientation !== orientationBucket) {
           return [];
@@ -582,6 +624,7 @@ export function AnalysisTranscripts() {
     hasBucketFilterParams,
     hasDirectTranscriptParam,
     matchesOrientationBucket,
+    pairedConditionSource,
     selectedTranscriptId,
     companionRun,
     run,
@@ -783,6 +826,12 @@ export function AnalysisTranscripts() {
                   Orientation: <span className="font-medium text-gray-900">{getOrientationBucketLabel(orientationBucket, orientationLabels)}</span>
                 </>
               )}
+              {pairedConditionSource && (
+                <>
+                  <span className="mx-2">•</span>
+                  Source: <span className="font-medium text-gray-900">{formatPairedConditionSourceLabel(pairedConditionSource)}</span>
+                </>
+              )}
               {pairedValueLabel && (
                 <>
                   <span className="mx-2">•</span>
@@ -821,7 +870,13 @@ export function AnalysisTranscripts() {
 
       {hasPairedConditionFilterParams && (
         <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">
-          {pairView === 'condition-split' && orientationBucket
+          {pairView === 'condition-split' && pairedConditionSource
+            ? (
+              <>
+                Paired source inspection is active for the <span className="font-medium">{formatPairedConditionSourceLabel(pairedConditionSource)}</span> transcripts in this condition cell.
+              </>
+            )
+            : pairView === 'condition-split' && orientationBucket
             ? (
               <>
                 Order-detail paired inspection is active for the <span className="font-medium">{getOrientationBucketLabel(orientationBucket, orientationLabels)}</span> side of this condition cell.

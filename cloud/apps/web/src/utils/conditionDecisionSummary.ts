@@ -66,6 +66,8 @@ function getConditionDecisionBucketKey(transcript: Transcript): ConditionDecisio
 }
 
 function resolveLabelPair(transcripts: Transcript[]): ConditionDecisionLabelPair | null {
+  const pairCounts = new Map<string, { count: number; firstValueLabel: string; secondValueLabel: string }>();
+
   for (const transcript of transcripts) {
     if (!hasRenderableTranscriptDecisionModelV2(transcript)) {
       continue;
@@ -76,13 +78,47 @@ function resolveLabelPair(transcripts: Transcript[]): ConditionDecisionLabelPair
       continue;
     }
 
-    return {
-      firstValueLabel: formatDisplayLabel(canonical.favoredValueKey),
-      secondValueLabel: formatDisplayLabel(canonical.opposedValueKey),
-    };
+    const firstValueLabel = formatDisplayLabel(canonical.favoredValueKey);
+    const secondValueLabel = formatDisplayLabel(canonical.opposedValueKey);
+    const key = `${firstValueLabel}||${secondValueLabel}`;
+    const current = pairCounts.get(key);
+    if (current) {
+      current.count += 1;
+    } else {
+      pairCounts.set(key, {
+        count: 1,
+        firstValueLabel,
+        secondValueLabel,
+      });
+    }
   }
 
-  return null;
+  if (pairCounts.size === 0) {
+    return null;
+  }
+
+  const bestPair = Array.from(pairCounts.values())
+    .sort((a, b) => {
+      if (b.count !== a.count) {
+        return b.count - a.count;
+      }
+
+      const firstCompare = a.firstValueLabel.localeCompare(b.firstValueLabel);
+      if (firstCompare !== 0) {
+        return firstCompare;
+      }
+
+      return a.secondValueLabel.localeCompare(b.secondValueLabel);
+    })[0] ?? null;
+
+  if (!bestPair) {
+    return null;
+  }
+
+  return {
+    firstValueLabel: bestPair.firstValueLabel,
+    secondValueLabel: bestPair.secondValueLabel,
+  };
 }
 
 function buildBucketLabels(labelPair: ConditionDecisionLabelPair | null): Record<ConditionDecisionBucketKey, string> {

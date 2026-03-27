@@ -195,6 +195,27 @@ describe('conditionDecisionSummary', () => {
     ]);
   });
 
+  it('chooses labels from the dominant transcript pair instead of the first transcript order', () => {
+    const summary = summarizeConditionDecisionBuckets([
+      createTranscript('t-1', '5', 'B_first'),
+      createTranscript('t-2', '5', 'A_first'),
+      createTranscript('t-3', '5', 'A_first'),
+    ]);
+
+    expect(summary.labelPair).toEqual({
+      firstValueLabel: 'Freedom',
+      secondValueLabel: 'Harmony',
+    });
+    expect(summary.buckets.map((bucket) => `${bucket.key}:${bucket.label}:${bucket.count}`)).toEqual([
+      'strong_first:Strongly favors Freedom:3',
+      'lean_first:Somewhat favors Freedom:0',
+      'neutral:Neutral:0',
+      'lean_second:Somewhat favors Harmony:0',
+      'strong_second:Strongly favors Harmony:0',
+      'unknown:Unknown:0',
+    ]);
+  });
+
   it('keeps explicit unknown handling when no renderable transcripts are available, even with legacy score fields present', () => {
     const summary = summarizeConditionDecisionBuckets([
       createTranscript('t-1', null),
