@@ -50,6 +50,14 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Cache Python dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('cloud/workers/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Install Python worker dependencies
         working-directory: cloud/workers
         run: python -m pip install -r requirements.txt
@@ -60,4 +68,7 @@ jobs:
 
       - name: Lint, Build, Test (Node)
         working-directory: cloud
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
         run: npx turbo lint build test
