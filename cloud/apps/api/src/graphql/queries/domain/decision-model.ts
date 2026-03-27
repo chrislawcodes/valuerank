@@ -84,6 +84,10 @@ export type DecisionModelInput = {
   legacyDecisionCode?: string | null;
   manualOverridePresent?: boolean;
   manualOverrideDecision?: CanonicalAppliedDecision | null;
+  /** True when the definition's presentation_order is 'B_first', meaning extractValuePair
+   *  swapped valueA/B. The canonical convention is always dimensions[0]=first, so we need
+   *  to un-swap when computing favor_first / favor_second from the favored value key. */
+  pairSwapped?: boolean;
 };
 
 export type DecisionModelResult = {
@@ -444,8 +448,13 @@ export function resolveTranscriptDecisionModel(
   const pair = extractValuePair(input.definitionSnapshot);
   const raw = buildRawDecisionEvidence(input.decisionMetadata);
   const manualOverrideDecision = extractManualOverrideDecision(input.decisionMetadata);
+  const defSnap = isRecord(input.definitionSnapshot) ? input.definitionSnapshot : null;
+  const methodology = defSnap != null && isRecord(defSnap['methodology']) ? defSnap['methodology'] : null;
+  const presentationOrder = methodology != null ? methodology['presentation_order'] : null;
+  const pairSwapped = presentationOrder === 'B_first';
   return resolveDecisionModel({
     pair,
+    pairSwapped,
     orientationFlipped: input.orientationFlipped,
     raw,
     legacyDecisionCode: input.decisionCode,
@@ -505,15 +514,25 @@ export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDe
       return buildUnknownCanonicalDecision('unknown');
     }
 
-    const direction = favoredValueKey === pair.valueA ? 'favor_first' : 'favor_second';
+    // When the definition is B_first, extractValuePair swaps valueA/B so that the legacy
+    // decisionCode path still works. But the canonical convention is always:
+    //   favor_first  = dimensions[0] (canonical first value) wins
+    //   favor_second = dimensions[1] (canonical second value) wins
+    // So for B_first we use pair.valueB as the canonical-first key to compute direction.
+    const canonicalFirstKey = input.pairSwapped === true ? pair.valueB : pair.valueA;
+    const normalizationApplied = input.pairSwapped === true;
+    const direction: DecisionDirection = favoredValueKey === canonicalFirstKey ? 'favor_first' : 'favor_second';
+    const opposedValueKey = favoredValueKey === pair.valueA ? pair.valueB : pair.valueA;
 
-    return buildCanonicalDecisionFromPair(
-      pair,
+    return {
+      favoredValueKey,
+      opposedValueKey,
       direction,
       strength,
-      false,
-      'deterministic',
-    );
+      normalizationApplied,
+      normalizationReason: normalizationApplied ? 'orientation_flipped' : null,
+      source: 'deterministic',
+    };
   }
 
   if (input.orientationFlipped == null) {

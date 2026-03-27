@@ -143,15 +143,15 @@ describe('Transcript decisionModelV2 GraphQL field', () => {
       canonical: {
         favoredValueKey: 'Benevolence_Dependability',
         opposedValueKey: 'Achievement',
-        direction: 'favor_first',
+        direction: 'favor_second',
         strength: 'strong',
-        normalizationApplied: false,
-        normalizationReason: null,
+        normalizationApplied: true,
+        normalizationReason: 'orientation_flipped',
         source: 'deterministic',
       },
       legacy: {
         rawScore: 5,
-        canonicalScore: 5,
+        canonicalScore: 1,
       },
     });
   });
