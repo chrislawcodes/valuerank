@@ -49,26 +49,6 @@ export type ExecutionMetrics = {
   totalRetries: number;
 };
 
-export type Transcript = {
-  id: string;
-  runId: string;
-  scenarioId: string | null;
-  modelId: string;
-  modelVersion: string | null;
-  content: unknown;
-  decisionCode: string | null;
-  decisionCodeSource?: string | null;
-  decisionMetadata?: unknown;
-  turnCount: number;
-  tokenCount: number;
-  durationMs: number;
-  estimatedCost: number | null;
-  createdAt: string;
-  lastAccessedAt: string | null;
-  dimensionValues?: Record<string, string | number> | null;
-  decisionModelV2?: TranscriptDecisionModelV2 | null;
-};
-
 export type TranscriptDecisionModelV2RawEvidence = {
   matchedText: string | null;
   matchedLabel: string | null;
@@ -102,6 +82,26 @@ export type TranscriptDecisionModelV2 = {
   raw: TranscriptDecisionModelV2RawEvidence;
   canonical: TranscriptDecisionModelV2Canonical;
   legacy: TranscriptDecisionModelV2LegacyCompat;
+};
+
+export type Transcript = {
+  id: string;
+  runId: string;
+  scenarioId: string | null;
+  modelId: string;
+  modelVersion: string | null;
+  content: unknown;
+  decisionCode: string | null;
+  decisionCodeSource?: string | null;
+  decisionMetadata?: unknown;
+  turnCount: number;
+  tokenCount: number;
+  durationMs: number;
+  estimatedCost: number | null;
+  createdAt: string;
+  lastAccessedAt: string | null;
+  dimensionValues?: Record<string, string | number> | null;
+  decisionModelV2?: TranscriptDecisionModelV2 | null;
 };
 
 export type RunConfig = {

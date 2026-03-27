@@ -425,7 +425,8 @@ describe('AnalysisPanel', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /^Conditions$/i }));
 
-    expect(screen.getAllByText('3.00').length).toBeGreaterThan(0);
+    // PivotAnalysisTable shows canonical score toFixed(2); ConditionDecisionsTable shows toFixed(1)
+    expect(screen.getAllByText('1.50').length).toBeGreaterThan(0);
     const canonicalScore = screen.getByText('1.5');
     expect(canonicalScore.parentElement).toHaveClass('text-blue-700');
     expect(screen.getByText('Unknown canonical trials are excluded from condition scores.')).toBeInTheDocument();

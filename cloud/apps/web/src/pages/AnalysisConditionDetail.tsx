@@ -119,6 +119,7 @@ export function AnalysisConditionDetail() {
   const selectedModel = searchParams.get('modelId') ?? searchParams.get('model') ?? '';
   const rowDim = searchParams.get('rowDim') ?? '';
   const colDim = searchParams.get('colDim') ?? '';
+  const companionRunIdHint = searchParams.get('companionRunId') ?? null;
   const parsedCondition = parseConditionKey(conditionKey ?? '');
 
   const { run, loading, error } = useRun({
@@ -134,24 +135,28 @@ export function AnalysisConditionDetail() {
     analysisStatus: run?.analysisStatus ?? null,
   });
 
+  // If companionRunId is in the URL, use it directly. Otherwise fall back to heuristic search.
   const { runs: candidatePairedRuns } = useRuns({
     limit: 1000,
-    pause: analysisMode !== 'paired' || !run,
+    pause: analysisMode !== 'paired' || !run || companionRunIdHint != null,
   });
 
-  const companionRunSummary = run == null
-    ? null
-    : findCompanionPairedRun(run, candidatePairedRuns);
+  const companionRunSummary = useMemo(
+    () => (run == null ? null : findCompanionPairedRun(run, candidatePairedRuns)),
+    [run, candidatePairedRuns],
+  );
+
+  const resolvedCompanionRunId = companionRunIdHint ?? companionRunSummary?.id ?? null;
 
   const { run: companionRun } = useRun({
-    id: companionRunSummary?.id ?? '',
-    pause: analysisMode !== 'paired' || companionRunSummary == null,
+    id: resolvedCompanionRunId ?? '',
+    pause: analysisMode !== 'paired' || resolvedCompanionRunId == null,
     enablePolling: true,
   });
 
   const { analysis: companionAnalysis } = useAnalysis({
-    runId: companionRunSummary?.id ?? '',
-    pause: analysisMode !== 'paired' || companionRunSummary == null,
+    runId: resolvedCompanionRunId ?? '',
+    pause: analysisMode !== 'paired' || resolvedCompanionRunId == null,
     enablePolling: false,
     analysisStatus: companionRun?.analysisStatus ?? companionRunSummary?.analysisStatus ?? null,
   });

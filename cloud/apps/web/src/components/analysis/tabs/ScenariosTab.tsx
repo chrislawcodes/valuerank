@@ -59,9 +59,12 @@ export function ScenariosTab({
                 runId={runId}
                 analysisBasePath={analysisBasePath}
                 analysisSearchParams={analysisSearchParams}
+                analysisMode={analysisMode}
                 visualizationData={visualizationData}
+                transcripts={transcripts}
                 dimensionLabels={dimensionLabels}
                 expectedAttributes={expectedAttributes}
+                companionRunId={analysisMode === 'paired' ? companionRunId ?? null : null}
               />
             ) : (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
