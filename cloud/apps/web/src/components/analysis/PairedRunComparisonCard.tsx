@@ -178,12 +178,12 @@ function buildComparisonRows(
   const firstValueKey = aFirstRun
     ? labels.canonicalValues?.[0] ?? null
     : bFirstRun
-      ? labels.flippedValues?.[1] ?? null
+      ? labels.flippedValues?.[0] ?? null
       : null;
   const secondValueKey = aFirstRun
     ? labels.canonicalValues?.[1] ?? null
     : bFirstRun
-      ? labels.flippedValues?.[0] ?? null
+      ? labels.flippedValues?.[1] ?? null
       : null;
 
   const valueKeyLookup = (() => {

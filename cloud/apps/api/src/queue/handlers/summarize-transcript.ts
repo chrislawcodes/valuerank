@@ -23,7 +23,7 @@ import { getSummarizerModel, type InfraModelConfig } from '../../services/infra-
 import { incrementSummarizeCompleted, incrementSummarizeFailed } from '../../services/run/progress.js';
 import { schedule as rateLimitSchedule, getLimiterStats, type ScheduleOptions } from '../../services/rate-limiter/index.js';
 import { getMaxParallelSummarizations } from '../../services/summarization-parallelism/index.js';
-import { buildRawDecisionEvidence } from '../../graphql/queries/domain/shared.js';
+import { buildRawDecisionEvidence, resolveTranscriptDecisionModel } from '../../graphql/queries/domain/shared.js';
 
 const log = createLogger('queue:summarize-transcript');
 
@@ -111,6 +111,8 @@ type ResolveSummarizeJobResult =
   | { kind: 'skipped' }
   | { kind: 'pending'; job: PreparedSummarizeJob };
 
+type WinnerFirstSummaryCache = NonNullable<SummaryCache['summary']['canonicalDecision']>;
+
 function isPlainJsonObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -171,6 +173,34 @@ function computeTranscriptResponseSha256(transcriptContent: unknown): string | n
   return crypto.createHash('sha256').update(responseText, 'utf8').digest('hex');
 }
 
+function isWinnerFirstSummaryCache(value: unknown): value is WinnerFirstSummaryCache {
+  if (!isPlainJsonObject(value)) {
+    return false;
+  }
+
+  if (
+    value.cacheVersion !== 1
+    || (value.decisionState !== 'resolved' && value.decisionState !== 'neutral' && value.decisionState !== 'unknown')
+    || (value.presentationOrder !== null && value.presentationOrder !== 'A_first' && value.presentationOrder !== 'B_first')
+  ) {
+    return false;
+  }
+
+  if (value.decisionState === 'resolved') {
+    return (
+      typeof value.favoredValueKey === 'string'
+      && value.favoredValueKey.length > 0
+      && (value.strength === 'strong' || value.strength === 'lean')
+    );
+  }
+
+  if (value.decisionState === 'neutral') {
+    return value.favoredValueKey === null && value.strength === 'neutral';
+  }
+
+  return value.favoredValueKey === null && value.strength === 'unknown';
+}
+
 function isSummaryCacheSummary(value: unknown): value is SummaryCache['summary'] {
   if (!isPlainJsonObject(value)) {
     return false;
@@ -182,6 +212,7 @@ function isSummaryCacheSummary(value: unknown): value is SummaryCache['summary']
     typeof value.decisionCodeSource === 'string' &&
     (typeof value.decisionText === 'string' || value.decisionText === null) &&
     isPlainJsonObject(value.decisionMetadata) &&
+    (!('canonicalDecision' in value) || isWinnerFirstSummaryCache(value.canonicalDecision)) &&
     !('summaryCache' in value)
   );
 }
@@ -208,6 +239,7 @@ function buildSummaryCacheRecord(
     decisionSource: string;
     decisionText: string | null;
     decisionMetadata?: unknown;
+    canonicalDecision?: WinnerFirstSummaryCache | null;
   },
   responseSha256: string,
   parserVersion: string,
@@ -228,6 +260,7 @@ function buildSummaryCacheRecord(
       decisionCodeSource: summary.decisionSource,
       decisionText: summary.decisionText,
       decisionMetadata: workerDecisionMetadata,
+      ...(summary.canonicalDecision ? { canonicalDecision: summary.canonicalDecision } : {}),
     },
   };
 }
@@ -330,6 +363,77 @@ function getProviderNameFromModelId(modelId: string, fallbackProvider: string): 
   return modelId.split(':', 1)[0] ?? fallbackProvider;
 }
 
+function readPresentationOrderFromTranscript(transcript: TranscriptRecord): 'A_first' | 'B_first' | null {
+  const snapshot = transcript.definitionSnapshot;
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+    return null;
+  }
+
+  const methodology = (snapshot as { methodology?: unknown }).methodology;
+  if (!methodology || typeof methodology !== 'object' || Array.isArray(methodology)) {
+    return null;
+  }
+
+  const presentationOrder = (methodology as { presentation_order?: unknown }).presentation_order;
+  return presentationOrder === 'A_first' || presentationOrder === 'B_first'
+    ? presentationOrder
+    : null;
+}
+
+async function buildWinnerFirstSummaryCache(
+  transcript: TranscriptRecord,
+  summary: SuccessfulSummarizeWorkerSummary,
+): Promise<WinnerFirstSummaryCache | null> {
+  const scenario = transcript.scenarioId
+    ? await db.scenario.findUnique({
+        where: { id: transcript.scenarioId },
+        select: { orientationFlipped: true },
+      })
+    : null;
+
+  const result = resolveTranscriptDecisionModel({
+    decisionCode: summary.decisionCode,
+    decisionMetadata: summary.decisionMetadata,
+    definitionSnapshot: transcript.definitionSnapshot,
+    orientationFlipped: scenario?.orientationFlipped ?? null,
+  });
+
+  const canonical = result.canonical;
+  const presentationOrder = readPresentationOrderFromTranscript(transcript);
+
+  if (canonical.direction === 'unknown' || canonical.strength === 'unknown') {
+    return {
+      cacheVersion: 1,
+      decisionState: 'unknown',
+      favoredValueKey: null,
+      strength: 'unknown',
+      presentationOrder,
+    };
+  }
+
+  if (canonical.direction === 'neutral' && canonical.strength === 'neutral') {
+    return {
+      cacheVersion: 1,
+      decisionState: 'neutral',
+      favoredValueKey: null,
+      strength: 'neutral',
+      presentationOrder,
+    };
+  }
+
+  if (canonical.favoredValueKey == null) {
+    return null;
+  }
+
+  return {
+    cacheVersion: 1,
+    decisionState: 'resolved',
+    favoredValueKey: canonical.favoredValueKey,
+    strength: canonical.strength,
+    presentationOrder,
+  };
+}
+
 async function persistCachedSummary(
   job: PgBoss.Job<SummarizeTranscriptJobData>,
   transcript: TranscriptRecord,
@@ -346,6 +450,7 @@ async function persistCachedSummary(
           decisionSource: summaryCache.summary.decisionCodeSource,
           decisionText: summaryCache.summary.decisionText,
           decisionMetadata: summaryCache.summary.decisionMetadata,
+          canonicalDecision: summaryCache.summary.canonicalDecision ?? null,
         },
         responseSha256,
         parserVersion,
@@ -381,8 +486,17 @@ async function persistSuccessfulSummary(
   summary: SuccessfulSummarizeWorkerSummary,
 ): Promise<void> {
   const rawDecisionEvidence = buildRawDecisionEvidence(summary.decisionMetadata);
+  const canonicalDecision = await buildWinnerFirstSummaryCache(transcript, summary);
   const freshSummaryCache = responseSha256
-    ? buildSummaryCacheRecord(summary, responseSha256, parserVersion, modelId)
+    ? buildSummaryCacheRecord(
+        {
+          ...summary,
+          canonicalDecision,
+        },
+        responseSha256,
+        parserVersion,
+        modelId,
+      )
     : null;
 
   await db.transcript.update({

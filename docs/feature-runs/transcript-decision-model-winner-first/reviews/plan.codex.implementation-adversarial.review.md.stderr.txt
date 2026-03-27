@@ -1,0 +1,199 @@
+OpenAI Codex v0.117.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d3059-479b-7a12-a16b-ac94d1ad36b5
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Transcript Decision Model: Winner-First Storage - Plan
+
+## Goal
+
+Keep the current visible analysis surfaces unchanged while making transcript
+decision handling more explicit internally:
+
+- `favoredValueKey` and `strength` are the primary decision facts
+- `presentationOrder` is stored as internal metadata in the transcript summary
+  cache
+- `direction` is derived at read time, not treated as the primary stored fact
+- paired counting continues to pool A-first and B-first runs safely
+
+## Architecture Decisions
+
+| Decision | Choice | Why |
+|---|---|---|
+| Storage location | Store winner-first metadata in the existing transcript `decisionMetadata.summaryCache.summary` payload, including a small `decisionState` discriminator | Avoids a schema migration and keeps neutral vs unknown readable without guessing |
+| Canonical reference frame | Use the transcript's `definitionSnapshot.methodology.pair_key` for pair identity and the transcript definition `dimensions` order for canonical value order | This anchors the cached interpretation to the transcript version that was actually summarized |
+| Neutral / unresolved handling | `neutral` becomes `favoredValueKey: null`, `strength: neutral`, `direction: neutral`; ambiguous or unparseable responses stay `unknown` | Prevents forced winners while preserving refusal / ambiguity signals |
+| Read path | Prefer cached winner-first metadata when it exists, is well-formed, and matches the transcript freshness keys; otherwise keep the current computed fallback path | Lets us speed up future reads without breaking historical transcripts, stale cache rows, or malformed cache rows |
+| Legacy coexistence | Do not backfill historical rows in this feature | Existing transcripts remain readable through the current compatibility path, and the new cache only applies to newly summarized transcripts |
+| UI scope | Keep all existing visible labels and report shapes; fix the B-first paired comparison mapping only | The product asked for stronger counting behind the scenes, not a new reporting surface |
+
+## Architecture Notes
+
+### Backend flow
+
+1. The summarize handler receives the worker summary and the transcript row.
+2. The handler stores the worker's raw decision metadata as it does today.
+3. The handler also stores a compact winner-first cache in
+   `decisionMetadata.summaryCache.summary` with:
+   - `favoredValueKey`
+   - `strength`
+   - `presentationOrder`
+   - `decisionState`
+   - freshness keys (`responseSha256`, `parserVersion`, `modelId`)
+4. The transcript resolver reads the cache when present and derives
+   `direction` from the canonical pair order.
+5. If the cache is absent, stale, or malformed, the resolver falls back to the
+   existing parse path.
+
+### Canonical ordering rule
+
+- `methodology.pair_key` identifies the pair.
+- `dimensions[0]` / `dimensions[1]` define the canonical value order.
+- `presentation_order` only says whether the vignette was shown as A-first or
+  B-first in that run.
+- `direction` is always derived relative to the canonical pair order.
+
+### Neutral and unknown behavior
+
+- `neutral` means the model explicitly chose neither side.
+- `unknown` means the model response could not be parsed into a stable
+  decision.
+- Unknown responses must remain distinguishable from explicit neutral outcomes
+  so the analysis layer can count them separately.
+
+## Blast Radius
+
+### Direct
+
+- `cloud/packages/db/src/types.ts`
+- `cloud/apps/api/src/queue/handlers/summarize-transcript.ts`
+- `cloud/apps/api/src/graphql/queries/domain/decision-model.ts`
+- `cloud/apps/api/src/graphql/types/transcript.ts`
+- `cloud/apps/web/src/utils/transcriptDecisionModel.ts`
+- `cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx`
+- `cloud/apps/api/src/routes/export.ts`
+
+### Secondary
+
+- `cloud/apps/api/tests/queue/handlers/summarize-transcript.test.ts`
+- `cloud/apps/api/tests/graphql/types/transcript-decision-model-v2.test.ts`
+- `cloud/apps/api/tests/graphql/queries/decision-model.test.ts`
+- `cloud/apps/web/tests/components/analysis/PairedRunComparisonCard.test.tsx`
+- `cloud/apps/api/tests/services/export/decision-display.test.ts`
+- `cloud/apps/api/tests/services/export/xlsx/*`
+
+## Wave Breakdown
+
+### Slice 1 [CHECKPOINT]
+
+Add winner-first summary caching and resolver support on the backend.
+
+Files:
+
+- `cloud/packages/db/src/types.ts`
+- `cloud/apps/api/src/queue/handlers/summarize-transcript.ts`
+- `cloud/apps/api/src/graphql/queries/domain/decision-model.ts`
+- `cloud/apps/api/tests/queue/handlers/summarize-transcript.test.ts`
+- `cloud/apps/api/tests/graphql/types/transcript-decision-model-v2.test.ts`
+- `cloud/packages/db/package.json`
+
+Goals:
+
+1. Persist the winner-first cache in existing transcript metadata.
+2. Keep neutral and unknown outcomes distinct.
+3. Keep historical transcripts readable without backfill.
+4. Make the transcript resolver accept the cached canonical fields when
+   present, but preserve the current fallback behavior.
+5. Keep the cache freshness keys and `decisionState` aligned so stale rows
+   cannot silently masquerade as valid winner-first data.
+
+Estimated diff:
+
+- About 220-280 lines
+
+### Slice 2 [CHECKPOINT]
+
+Fix the paired comparison B-first mapping and add regression coverage.
+
+Files:
+
+- `cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx`
+- `cloud/apps/web/tests/components/analysis/PairedRunComparisonCard.test.tsx`
+
+Goals:
+
+1. Map B-first rows so the first and second values stay in canonical order.
+2. Keep the visible labels and layout unchanged.
+3. Add a regression test that fails if the B-first row is inverted again.
+
+Estimated diff:
+
+- About 80-140 lines
+
+## Verification
+
+### Slice 1
+
+```bash
+cd /Users/chrislaw/valuerank/cloud
+npm run lint --workspace @valuerank/api
+npm run test --workspace @valuerank/api -- tests/queue/handlers/summarize-transcript.test.ts tests/graphql/types/transcript-decision-model-v2.test.ts tests/graphql/queries/decision-model.test.ts
+npm run build --workspace @valuerank/db
+npm run test --workspace @valuerank/db
+```
+
+### Slice 2
+
+```bash
+cd /Users/chrislaw/valuerank/cloud
+npm run lint --workspace @valuerank/web
+npm run test --workspace @valuerank/web -- tests/components/analysis/PairedRunComparisonCard.test.tsx
+```
+
+## Risk Callouts
+
+- The backend slice should not introduce a schema migration; if the cache cannot
+  live in existing transcript metadata, stop and escalate.
+- The resolver should not guess at canonical order from anything other than the
+  definition pair order and the existing orientation metadata.
+- The frontend slice is intentionally narrow: fix the swapped B-first indices
+  and nothing else.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+2026-03-27T17:30:50.730378Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d3059-479b-7a12-a16b-ac94d1ad36b5.tmp-1774632650653494000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+codex
+I’m reviewing this as a failure-hunting exercise, not a design approval. I’m checking for places where the plan quietly assumes invariants it does not prove, especially around stored shape, read/write compatibility, and paired-count correctness.
+codex
+## Findings
+- **High:** The plan is under-scoped relative to its own blast radius. `cloud/apps/api/src/routes/export.ts`, `cloud/apps/api/src/graphql/types/transcript.ts`, and `cloud/apps/web/src/utils/transcriptDecisionModel.ts` are all listed as directly affected, but none are assigned to a slice. That leaves a clear path for storage/resolver semantics to change while export, schema, or shared decoding code keeps the old interpretation.
+- **High:** The no-backfill decision is not safe for the stated goal of pooling A-first and B-first runs correctly. The plan assumes the existing compatibility path already interprets historical transcripts correctly, but it never proves that. If the old parse path is where the inversion lived, every report or export that includes pre-existing rows will remain wrong.
+- **Medium-High:** The storage contract is internally inconsistent. The plan says `direction` is derived at read time, but it also stores winner-first metadata inside `decisionMetadata.summaryCache.summary` with a `decisionState` discriminator. It never defines whether `summary` is still human-readable text or now a structured object, and it never requires validation that `decisionState`, `favoredValueKey`, `strength`, and `presentationOrder` agree. Fresh but semantically inconsistent rows could therefore be accepted as authoritative.
+- **Medium:** The canonical-order rule is too brittle. Using `definitionSnapshot.methodology.pair_key` plus `dimensions[0]/[1]` assumes pair arrays are always present, ordered, and stable across versions. The plan does not say what happens when a snapshot is malformed, reordered, or legacy, so a small data-shape drift could silently bring back the wrong winner mapping.
+
+## Residual Risks
+- **Medium:** Even if the backend cache is correct, only the summarize path and one UI card get explicit regression coverage. Any other transcript-decision reader not named in the slices can still diverge until it is audited.
+- **Medium:** The neutral vs unknown split depends on every downstream aggregation preserving `decisionState`. If any analytics or export step collapses them back into a single bucket, the distinction this plan tries to preserve will be lost.
+tokens used
+31,759

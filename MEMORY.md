@@ -134,3 +134,27 @@ Do not rename these casually once implementation starts:
 ALL 7 WAVES COMPLETE — PR open: feat/level-set-presets
 Branch: feat/level-set-presets
 Plan: docs/plans/level-set-presets-plan.md
+
+---
+
+# Transcript Decision Winner-First Memory
+
+## Architectural Decisions
+- Primary transcript facts are `favoredValueKey` and `strength`.
+- `presentationOrder` is persisted as internal metadata.
+- `direction` is derived from the primary facts plus canonical pair order.
+- Visible reporting surfaces stay unchanged.
+- Order-aware counting is internal and should not introduce new reporting labels.
+- Cached canonical decisions carry a versioned shape so stale summaries fall back to recomputation.
+
+## Off-limits Symbols
+- `favoredValueKey`
+- `strength`
+- `presentationOrder`
+- `direction`
+- `decisionState`
+- `canonicalDecision`
+
+## Status
+Implementation complete for the current slice.
+API and web verification passed on the targeted tests and workspace builds.
