@@ -222,7 +222,7 @@ describe('ConditionDecisionsTable', () => {
     expect(screen.getByTitle('View transcripts for gpt-4 | Achievement: low, Care: low | Decision: other | Unknown: 2')).toBeInTheDocument();
   });
 
-  it('keeps ties on the first-side score in blue', () => {
+  it('renders ties as 0.0 neutral (neither side won)', () => {
     const visualizationData = createVisualizationData();
     const transcripts = [
       createTranscript({ id: 't8', scenarioId: 'scenario-8', modelId: 'gpt-5', direction: 'favor_first', strength: 'strong' }),
@@ -244,8 +244,59 @@ describe('ConditionDecisionsTable', () => {
       </MemoryRouter>
     );
 
+    // tie: meanPreferenceScore === opponentMeanPreferenceScore → displayScore reads as 0
     const tieButton = screen.getByTitle('View transcripts for gpt-5 | Achievement: medium, Care: medium');
-    expect(within(tieButton).getByText('1.0').parentElement).toHaveClass('text-blue-700');
+    expect(within(tieButton).getByText('0.0')).toBeInTheDocument();
+  });
+
+  it('orders condition rows from negligible to full', () => {
+    render(
+      <MemoryRouter>
+        <ConditionDecisionsTable
+          runId="run-1"
+          expectedAttributes={['Achievement', 'Care']}
+          orientationLabels={{
+            canonical: 'Achievement -> Benevolence',
+            flipped: 'Benevolence -> Achievement',
+          }}
+          perModel={{
+            model1: {
+              sampleSize: 5,
+              values: {},
+              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+            },
+          } as any}
+          visualizationData={{
+            decisionDistribution: {},
+            scenarioDimensions: {
+              'scenario-1': { Achievement: 'full', Care: 'same' },
+              'scenario-2': { Achievement: 'minimal', Care: 'same' },
+              'scenario-3': { Achievement: 'moderate', Care: 'same' },
+              'scenario-4': { Achievement: 'negligible', Care: 'same' },
+              'scenario-5': { Achievement: 'substantial', Care: 'same' },
+            },
+            modelScenarioMatrix: {
+              model1: {
+                'scenario-1': 3,
+                'scenario-2': 3,
+                'scenario-3': 3,
+                'scenario-4': 3,
+                'scenario-5': 3,
+              },
+            },
+          } as any}
+        />
+      </MemoryRouter>
+    );
+
+    const bodyRows = screen.getAllByRole('row').slice(1);
+    expect(bodyRows.map((row) => within(row).getAllByRole('cell')[0].textContent?.trim())).toEqual([
+      'negligible',
+      'minimal',
+      'moderate',
+      'substantial',
+      'full',
+    ]);
   });
 
   it('orders condition rows from negligible to full', () => {
