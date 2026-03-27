@@ -134,8 +134,10 @@ function ConditionMatrix({ vignetteId, conditions, selectedConditionKey, onSelec
                 const condition = cellByKey.get(`${row}::${col}`);
                 const selectedScore = condition?.meanPreferenceScore ?? 0;
                 const opponentScore = condition?.opponentMeanPreferenceScore ?? 0;
-                const isOpponent = opponentScore >= selectedScore && (opponentScore > 0 || selectedScore > 0);
-                const displayScore = isOpponent ? opponentScore : selectedScore;
+                const isOpponent = opponentScore > selectedScore;
+                // Ties read as 0 (neutral) — neither side won a clear majority.
+                const isTie = !isOpponent && selectedScore === opponentScore && selectedScore > 0;
+                const displayScore = isTie ? 0 : isOpponent ? opponentScore : selectedScore;
                 const hasData = condition && condition.totalTrials > 0;
                 const conditionKey = condition
                   ? `${vignetteId}:${condition.scenarioId ?? '__unknown__'}`

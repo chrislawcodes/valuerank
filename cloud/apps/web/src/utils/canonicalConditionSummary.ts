@@ -132,7 +132,9 @@ export function summarizeCanonicalConditionTranscripts(
   const meanPreferenceScore = (2 * counts.strongly + counts.somewhat) / totalTrials;
   const opponentMeanPreferenceScore = (2 * counts.opponentStrongly + counts.opponentSomewhat) / totalTrials;
   const isOpponent = opponentMeanPreferenceScore > meanPreferenceScore;
-  const displayScore = isOpponent ? opponentMeanPreferenceScore : meanPreferenceScore;
+  // Ties read as 0 (neutral) — neither side won a clear majority.
+  const isTie = !isOpponent && meanPreferenceScore === opponentMeanPreferenceScore && meanPreferenceScore > 0;
+  const displayScore = isTie ? 0 : isOpponent ? opponentMeanPreferenceScore : meanPreferenceScore;
 
   return {
     ...counts,

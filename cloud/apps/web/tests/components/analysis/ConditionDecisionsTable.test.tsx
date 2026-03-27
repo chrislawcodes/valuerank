@@ -222,7 +222,7 @@ describe('ConditionDecisionsTable', () => {
     expect(screen.getByTitle('View transcripts for gpt-4 | Achievement: low, Care: low | Decision: other | Unknown: 2')).toBeInTheDocument();
   });
 
-  it('keeps ties on the first-side score in blue', () => {
+  it('renders ties as 0.0 neutral (neither side won)', () => {
     const visualizationData = createVisualizationData();
     const transcripts = [
       createTranscript({ id: 't8', scenarioId: 'scenario-8', modelId: 'gpt-5', direction: 'favor_first', strength: 'strong' }),
@@ -244,8 +244,9 @@ describe('ConditionDecisionsTable', () => {
       </MemoryRouter>
     );
 
+    // tie: meanPreferenceScore === opponentMeanPreferenceScore → displayScore reads as 0
     const tieButton = screen.getByTitle('View transcripts for gpt-5 | Achievement: medium, Care: medium');
-    expect(within(tieButton).getByText('1.0').parentElement).toHaveClass('text-blue-700');
+    expect(within(tieButton).getByText('0.0')).toBeInTheDocument();
   });
 
   it('orders condition rows from negligible to full', () => {
