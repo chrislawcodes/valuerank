@@ -1,0 +1,57 @@
+{
+  "session_id": "d3f41395-337a-478e-a33c-18cafdac942c",
+  "response": "## Findings\n\n1.  **High: Failed `forceSummarize` leads to stale cache hits.** The spec mandates that a forced rerun leaves the prior cache record in place until a successful replacement is written. This creates a critical flaw:\n    1.  A valid summary exists in the cache.\n    2.  A user triggers `forceSummarize` to update it, perhaps due to a known issue in the cached version.\n    3.  The new summarization job runs but fails (e.g., LLM timeout, transient bug).\n    4.  Because the job failed, the old cache entry is not replaced.\n    5.  The next *normal* (non-forced) job for this transcript runs. It will find the old, stale cache entry, register a cache hit, and restore the very data that the user explicitly tried to replace. The user's intent is violated, and the failure of the forced-rerun is silently ignored by subsequent workflows.\n\n2.  **Medium: `parserVersion` update is not atomic.** The spec assumes the API handler and the Python worker will read the same `parserVersion` from a \"shared env/config value.\" During a rolling deployment, the API service might be updated to a new version while workers from the old version are still running (or vice-versa). This desynchronization can lead to two failure modes:\n    *   **Cache Poisoning:** A new API handler sees `parserVersion: 2`, but an old worker (expecting `1`) processes the job. The resulting summary, generated with version 1 logic, is incorrectly saved to the cache with the `parserVersion: 2` key.\n    *   **Perpetual Cache Misses:** An old API handler sees `parserVersion: 1` and looks for a matching cache entry. A new worker runs, produces a summary, and the handler saves it with `parserVersion: 1`. However, the *next* time the new API handler runs, it will look for `parserVersion: 2` and miss, triggering another unnecessary rerun. The contract between services is brittle.\n\n3.  **Medium: Silent failure on malformed cache data.** The spec states that if stored cache data is \"malformed or incomplete, the handler ignores it and falls back to the worker path.\" This behavior is dangerous because it provides no observability. A systemic bug could be writing corrupted cache entries across thousands of transcripts, but because the system \"safely\" falls back, the issue would go completely undetected. There is no specified logging or alerting for cache read failures, creating a hidden source of technical debt and performance degradation.\n\n4.  **Low: Hashing algorithm is ambiguous.** The cache key relies on a `responseSha256` hash using the \"same normalization as the summarize worker.\" This normalization process (e.g., handling of whitespace, line endings, field order) is not defined in the spec. If the API handler's implementation of this normalization diverges even slightly from the Python worker's, the hashes will never match, silently disabling the cache entirely. The algorithm for normalization should be explicitly defined and shared, not just referenced.\n\n## Residual Risks\n\n1.  **No Bulk Invalidation Strategy.** The only cache invalidation mechanism is a manual, per-transcript `forceSummarize` flag. This poses a significant operational risk. If a systemic, non-obvious bug is discovered in the logic for a given `parserVersion` (e.g., it produces plausible but subtly incorrect summaries), there is no mechanism to invalidate all summaries associated with that version. This would necessitate a slow, manual, and error-prone database script to find and purge all affected cache entries.\n\n2.  **No Circuit Breaker for Persistent Failures.** The design intentionally avoids caching error states to ensure failed transcripts are retried. While reasonable, this means a transcript that will *always* fail to summarize (e.g., due to content that triggers a deterministic bug in the worker) will be re-submitted for summarization on every run. This creates a resource drain, incurs repeated LLM costs for no benefit, and clogs job queues with doomed work.\n\n3.  **Race Conditions Cause Wasted Work.** The spec does not prevent race conditions where two identical, uncached summarization jobs are dispatched simultaneously. Both will result in a cache miss, and both will spawn a Python worker to perform the exact same expensive task. The last worker to complete will overwrite the cache entry of the first, wasting the resources of the first run. While not leading to data corruption, this is an accepted inefficiency that could become costly at scale.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 33765
+        },
+        "tokens": {
+          "input": 1665,
+          "prompt": 13242,
+          "candidates": 966,
+          "total": 16280,
+          "cached": 11577,
+          "thoughts": 2072,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 33765,
+            "tokens": {
+              "input": 1665,
+              "prompt": 13242,
+              "candidates": 966,
+              "total": 16280,
+              "cached": 11577,
+              "thoughts": 2072,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

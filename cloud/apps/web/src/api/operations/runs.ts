@@ -167,6 +167,7 @@ export type Run = {
   status: RunStatus;
   runCategory: RunCategory;
   config: RunConfig;
+  stalledModels: string[];
   batchCount?: number;
   pairedBatchGroupId?: string | null;
   progress: { total: number; completed: number; failed: number } | null;
@@ -220,6 +221,7 @@ export const RUN_FRAGMENT = gql`
     status
     runCategory
     config
+    stalledModels
     batchCount
     pairedBatchGroupId
     progress
@@ -548,6 +550,7 @@ export const UPDATE_TRANSCRIPT_DECISION_MUTATION = gql`
       decisionCode
       decisionCodeSource
       decisionMetadata
+      decisionModelV2
       turnCount
       tokenCount
       durationMs

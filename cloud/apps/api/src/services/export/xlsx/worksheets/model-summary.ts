@@ -9,7 +9,23 @@ import type ExcelJS from 'exceljs';
 import { addWorksheet, createColumnConfig } from '../workbook.js';
 import { applyTableStyle, autoSizeColumns, applyNumberFormat, NUMBER_FORMATS } from '../formatting.js';
 import type { TranscriptWithScenario, ModelStatistics } from '../types.js';
-import { getModelName, parseDecisionScore, calculateStdDev } from './helpers.js';
+import {
+  createEmptyDecisionDistribution,
+  formatDecisionDisplay,
+} from '../../decision-display.js';
+import { calculateStdDev, getModelName } from './helpers.js';
+
+function createEmptyModelStatistics(modelName: string): ModelStatistics {
+  return {
+    modelName,
+    sampleCount: 0,
+    resolvedCount: 0,
+    unknownCount: 0,
+    meanPreferenceScore: null,
+    stdDev: 0,
+    decisionDistribution: createEmptyDecisionDistribution(),
+  };
+}
 
 /**
  * Build the Model Summary worksheet with per-model statistics.
@@ -18,9 +34,8 @@ import { getModelName, parseDecisionScore, calculateStdDev } from './helpers.js'
  */
 export function buildModelSummarySheet(
   workbook: ExcelJS.Workbook,
-  transcripts: TranscriptWithScenario[]
+  transcripts: TranscriptWithScenario[],
 ): ModelStatistics[] {
-  // Group transcripts by model
   const modelGroups = new Map<string, TranscriptWithScenario[]>();
   for (const transcript of transcripts) {
     const modelName = getModelName(transcript.modelId);
@@ -29,43 +44,47 @@ export function buildModelSummarySheet(
     modelGroups.set(modelName, group);
   }
 
-  // Calculate statistics for each model
   const stats: ModelStatistics[] = [];
 
   for (const [modelName, modelTranscripts] of modelGroups) {
-    // Parse decision codes as scores
-    const scores = modelTranscripts
-      .map((t) => parseDecisionScore(t.decisionCode))
-      .filter((s): s is number => s !== null);
+    const stat = createEmptyModelStatistics(modelName);
+    const resolvedScores: number[] = [];
 
-    // Calculate decision distribution
-    const distribution: Record<string, number> = {};
-    for (const t of modelTranscripts) {
-      const code = t.decisionCode ?? 'unknown';
-      distribution[code] = (distribution[code] ?? 0) + 1;
+    for (const transcript of modelTranscripts) {
+      const display = formatDecisionDisplay(transcript);
+      stat.decisionDistribution[display.bucketLabel] += 1;
+
+      if (display.bucketLabel === 'Unknown') {
+        stat.unknownCount += 1;
+        continue;
+      }
+
+      const preferenceScore = display.preferenceScore;
+      if (preferenceScore !== null) {
+        resolvedScores.push(preferenceScore);
+        stat.resolvedCount += 1;
+      } else {
+        stat.unknownCount += 1;
+        stat.decisionDistribution.Unknown += 1;
+      }
     }
 
-    // Calculate mean and std dev
-    const meanScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
-    const stdDev = calculateStdDev(scores);
-
-    stats.push({
-      modelName,
-      sampleCount: modelTranscripts.length,
-      meanScore,
-      stdDev,
-      decisionDistribution: distribution,
-    });
+    stat.sampleCount = modelTranscripts.length;
+    stat.meanPreferenceScore = resolvedScores.length > 0
+      ? resolvedScores.reduce((sum, score) => sum + score, 0) / resolvedScores.length
+      : null;
+    stat.stdDev = calculateStdDev(resolvedScores);
+    stats.push(stat);
   }
 
-  // Sort by model name
-  stats.sort((a, b) => a.modelName.localeCompare(b.modelName));
+  stats.sort((left, right) => left.modelName.localeCompare(right.modelName));
 
-  // Create worksheet
   const columns = createColumnConfig([
     { header: 'Model Name', key: 'modelName', width: 25 },
     { header: 'Sample Count', key: 'sampleCount', width: 14 },
-    { header: 'Mean Score', key: 'meanScore', width: 12 },
+    { header: 'Resolved Count', key: 'resolvedCount', width: 14 },
+    { header: 'Unknown Count', key: 'unknownCount', width: 13 },
+    { header: 'Mean Preference Score', key: 'meanPreferenceScore', width: 20 },
     { header: 'Std Deviation', key: 'stdDev', width: 14 },
   ]);
 
@@ -75,24 +94,23 @@ export function buildModelSummarySheet(
     columns,
   });
 
-  // Add data rows
   for (const stat of stats) {
     worksheet.addRow({
       modelName: stat.modelName,
       sampleCount: stat.sampleCount,
-      meanScore: stat.meanScore,
+      resolvedCount: stat.resolvedCount,
+      unknownCount: stat.unknownCount,
+      meanPreferenceScore: stat.meanPreferenceScore,
       stdDev: stat.stdDev,
     });
   }
 
-  // Apply formatting
   const rowCount = stats.length + 1;
   applyTableStyle(worksheet, 1, rowCount, 1, columns.length);
   autoSizeColumns(worksheet);
 
-  // Apply number formats
-  applyNumberFormat(worksheet, 3, NUMBER_FORMATS.decimal2); // Mean Score
-  applyNumberFormat(worksheet, 4, NUMBER_FORMATS.decimal3); // Std Deviation
+  applyNumberFormat(worksheet, 5, NUMBER_FORMATS.decimal2);
+  applyNumberFormat(worksheet, 6, NUMBER_FORMATS.decimal3);
 
   return stats;
 }

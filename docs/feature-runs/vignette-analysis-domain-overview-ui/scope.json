@@ -1,0 +1,9 @@
+{
+  "files": [
+    "cloud/apps/web/src/pages/DomainAnalysis.tsx",
+    "cloud/apps/web/src/components/domains/ValuePrioritiesSection.tsx",
+    "cloud/apps/web/src/components/domains/DominanceSection.tsx",
+    "cloud/apps/web/src/components/domains/SimilaritySection.tsx",
+    "cloud/apps/web/tests/pages/DomainAnalysis.test.tsx"
+  ]
+}

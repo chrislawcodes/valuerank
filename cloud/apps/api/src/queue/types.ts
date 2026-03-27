@@ -25,6 +25,7 @@ export type SummarizeTranscriptJobData = {
   runId: string;
   transcriptId: string;
   summaryModelId?: string; // Optional: defaults to configured summary model
+  forceSummarize?: boolean; // Optional: bypasses cache and summarization short-circuits
 };
 
 export type AnalyzeBasicJobData = {

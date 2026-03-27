@@ -1,0 +1,103 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "current_phase": "",
+    "open_decisions": [],
+    "deferred_items": [],
+    "context_summary": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "Phase 1 only covers visible report pages, not chart copy or export artifacts.",
+      "The pages to upgrade are AnalysisConditionDetail, AnalysisTranscripts, and SurveyResults.",
+      "Legacy 1-5 decision codes may still exist in backend data or non-report internals for now, but these pages must not present them as the report output."
+    ],
+    "summary": "Phase 1 upgrades the visible report pages only: condition detail, transcripts, and survey results. Charts, exports, and explanatory copy are deferred to later phases.",
+    "updated_at": 1774504322,
+    "answers": {},
+    "non_goals": [
+      "Do not change export sheets, compare charts, or dashboard visualizations in this phase."
+    ],
+    "acceptance_criteria": [
+      "Automated tests cover the upgraded report pages and pass in the isolated worktree."
+    ],
+    "unresolved": []
+  },
+  "delivery": {
+    "branch": "codex/domain-analysis-ordering-fix",
+    "head_sha": "b3e2d63328dccb036ae789ac1f04a3ce39404f32",
+    "updated_at": 1774507338,
+    "pr_number": 415,
+    "pr_url": "https://github.com/chrislawcodes/valuerank/pull/415",
+    "pr_state": "OPEN",
+    "pr_is_draft": false,
+    "pr_head_branch": "codex/domain-analysis-ordering-fix",
+    "pr_head_sha": "209e1db655d6c0573721f8e7b206bdbe83c70a82",
+    "pr_base_branch": "main",
+    "mergeable": "UNKNOWN",
+    "merge_state_status": "UNKNOWN",
+    "checks_summary": "pass",
+    "required_checks": [
+      {
+        "bucket": "pass",
+        "link": "https://github.com/chrislawcodes/valuerank/actions/runs/23577260638/job/68652247264",
+        "name": "Lint, Build & Test",
+        "state": "SUCCESS",
+        "workflow": "CI"
+      }
+    ],
+    "upstream": "origin/codex/domain-analysis-ordering-fix",
+    "checks_detail": "",
+    "head_mismatch": true
+  },
+  "dirty_overrides": {
+    "allowed_dirty_paths": [
+      ".worktrees",
+      "MEMORY.md",
+      "cloud/Dockerfile.api",
+      "cloud/railway.toml",
+      "cloud/apps/web/src/components/analysis",
+      "cloud/apps/web/src/pages/AnalysisDetail.tsx",
+      "cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx",
+      "cloud/apps/web/src/utils/conditionDisplay.ts",
+      "cloud/apps/web/tests/components/analysis",
+      "cloud/apps/web/tests/pages/AnalysisDetail.test.tsx",
+      "cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx",
+      "docs/feature-runs/analysis-scenarios-canonical-ui",
+      "docs/feature-runs/batch",
+      "docs/feature-runs/feature-workflow-discovery-shaping",
+      "docs/feature-runs/replace",
+      "docs/feature-runs/transcript-summarization-speedup",
+      "docs/feature-runs/vignette-analysis-decision-model",
+      "docs/feature-runs/vignette-analysis-group1-ui",
+      "docs/feature-runs/vignette-analysis-group2-wiring",
+      "docs/operations/codex-skills/feature-factory",
+      "docs/operations/codex-skills/review-lens/scripts/verify_reconciliation.py",
+      "docs/plans/feature-workflow-plan.md"
+    ],
+    "used": true,
+    "updated_at": 1774506690
+  },
+  "checkpoint_fallback": {},
+  "diff_slice_override": {
+    "used": true,
+    "changed_lines": 419,
+    "limit": 400,
+    "reason": "explicit --allow-large-diff-slice",
+    "updated_at": 1774506673
+  }
+}

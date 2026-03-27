@@ -35,6 +35,8 @@ compare/
     └── ValuesViz.tsx     # Value win rate comparison
 ```
 
+Decision-distribution comparisons use the shared canonical bucket labels from the analysis report helpers, so the compare dashboard stays aligned with the rest of the report surfaces.
+
 ## Adding a New Visualization
 
 Adding a new visualization requires only ~50 lines of code. Follow these steps:

@@ -84,6 +84,7 @@ export function ScenariosTab({
                 orientationLabels={orientationLabels}
                 analysisMode={analysisMode}
                 perModel={perModel}
+                transcripts={transcripts}
                 visualizationData={visualizationData}
                 expectedAttributes={expectedAttributes}
                 title="Condition Decisions"

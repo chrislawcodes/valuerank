@@ -16,9 +16,11 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-
-// Decision categories (1-5)
-const DECISIONS = [1, 2, 3, 4, 5] as const;
+import {
+  getDecisionDistributionChartAriaLabel,
+  type DecisionDistributionBucket,
+  DECISION_DISTRIBUTION_BUCKET_CODES,
+} from '../../../utils/decisionDistributionDisplay';
 
 export type DecisionData = {
   decision: number;
@@ -38,19 +40,21 @@ type OverlayTooltipProps = {
   payload?: readonly unknown[];
   label?: string | number;
   runNames: Map<string, string>;
+  buckets: DecisionDistributionBucket[];
 };
 
 /**
  * Custom tooltip for overlay chart
  */
-export function OverlayTooltip({ active, payload, label, runNames }: OverlayTooltipProps) {
+export function OverlayTooltip({ active, payload, label, runNames, buckets }: OverlayTooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
 
   const typedPayload = payload as ReadonlyArray<{ dataKey: string; value: number; color: string }>;
+  const bucketLabel = buckets.find((bucket) => bucket.code === String(label))?.label ?? String(label);
 
   return (
     <div className="bg-white p-3 shadow-lg rounded-lg border border-gray-200">
-      <p className="font-medium text-gray-900 mb-2">Decision {label}</p>
+      <p className="font-medium text-gray-900 mb-2">Decision bucket: {bucketLabel}</p>
       <div className="space-y-1 text-sm">
         {typedPayload.map((entry) => (
           <div key={entry.dataKey} className="flex items-center gap-2">
@@ -71,26 +75,29 @@ type OverlayChartProps = {
   distributions: RunDecisionDistribution[];
   chartData: DecisionData[];
   runColors: Map<string, string>;
+  buckets: DecisionDistributionBucket[];
 };
 
 /**
  * Overlay mode chart - grouped bars for all runs
  */
-export function OverlayChart({ distributions, chartData, runColors }: OverlayChartProps) {
+export function OverlayChart({ distributions, chartData, runColors, buckets }: OverlayChartProps) {
   const runNames = new Map(distributions.map((d) => [d.runId, d.runName]));
+  const bucketLabelByCode = new Map<string, string>(buckets.map((bucket) => [bucket.code, bucket.label]));
+  const chartAriaLabel = getDecisionDistributionChartAriaLabel(buckets);
 
   return (
-    <div style={{ height: 350 }}>
+    <div style={{ height: 350 }} aria-label={chartAriaLabel}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData} margin={{ left: 20, right: 20, top: 20, bottom: 30 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
           <XAxis
             dataKey="decision"
             tick={{ fill: '#6b7280' }}
-            tickFormatter={(d) => `Decision ${d}`}
+            tickFormatter={(d) => bucketLabelByCode.get(String(d)) ?? String(d)}
           />
           <YAxis tick={{ fill: '#6b7280' }} />
-          <Tooltip content={(props) => <OverlayTooltip {...props} runNames={runNames} />} />
+          <Tooltip content={(props) => <OverlayTooltip {...props} runNames={runNames} buckets={buckets} />} />
           <Legend
             formatter={(value: string) => runNames.get(value) || value}
             wrapperStyle={{ paddingTop: 10 }}
@@ -112,18 +119,22 @@ export function OverlayChart({ distributions, chartData, runColors }: OverlayCha
 type SideBySideChartProps = {
   distributions: RunDecisionDistribution[];
   runColors: Map<string, string>;
+  buckets: DecisionDistributionBucket[];
 };
 
 /**
  * Side-by-side mode - small multiples for each run
  */
-export function SideBySideChart({ distributions, runColors }: SideBySideChartProps) {
+export function SideBySideChart({ distributions, runColors, buckets }: SideBySideChartProps) {
+  const chartAriaLabel = getDecisionDistributionChartAriaLabel(buckets);
+  const bucketLabelByCode = new Map<string, string>(buckets.map((bucket) => [bucket.code, bucket.label]));
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3" aria-label={chartAriaLabel}>
       {distributions.map((dist) => {
-        const data = DECISIONS.map((d) => ({
-          decision: d,
-          count: dist.counts[d] || 0,
+        const data = DECISION_DISTRIBUTION_BUCKET_CODES.map((code) => ({
+          decision: Number(code),
+          count: dist.counts[Number(code)] || 0,
         }));
 
         const color = runColors.get(dist.runId) || '#14b8a6';
@@ -144,7 +155,7 @@ export function SideBySideChart({ distributions, runColors }: SideBySideChartPro
                   <XAxis
                     dataKey="decision"
                     tick={{ fill: '#6b7280', fontSize: 10 }}
-                    tickFormatter={(d) => String(d)}
+                    tickFormatter={(d) => bucketLabelByCode.get(String(d)) ?? String(d)}
                   />
                   <YAxis hide />
                   <Bar dataKey="count">

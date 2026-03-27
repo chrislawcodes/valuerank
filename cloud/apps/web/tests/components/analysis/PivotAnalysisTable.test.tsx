@@ -3,7 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { PivotAnalysisTable } from '../../../src/components/analysis/PivotAnalysisTable';
 import type { Transcript } from '../../../src/api/operations/runs';
@@ -128,6 +128,44 @@ describe('PivotAnalysisTable', () => {
     expect(screen.getByText('Neutral 1')).toBeInTheDocument();
     expect(screen.getByText('Harmony 1')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /copy pivot analysis table as image/i })).toBeInTheDocument();
+  });
+
+  it('orders pivot rows from negligible to full', () => {
+    render(
+      <MemoryRouter>
+        <PivotAnalysisTable
+          runId="run-1"
+          visualizationData={{
+            decisionDistribution: {},
+            scenarioDimensions: {
+              s1: { Freedom: 'full', Harmony: 'same' },
+              s2: { Freedom: 'minimal', Harmony: 'same' },
+              s3: { Freedom: 'moderate', Harmony: 'same' },
+              s4: { Freedom: 'negligible', Harmony: 'same' },
+              s5: { Freedom: 'substantial', Harmony: 'same' },
+            },
+            modelScenarioMatrix: {
+              model1: {
+                s1: 1,
+                s2: 3,
+                s3: 5,
+                s4: 2,
+                s5: 4,
+              },
+            },
+          }}
+        />
+      </MemoryRouter>
+    );
+
+    const bodyRows = screen.getAllByRole('row').slice(2);
+    expect(bodyRows.map((row) => within(row).getAllByRole('cell')[0].textContent?.trim())).toEqual([
+      'negligible',
+      'minimal',
+      'moderate',
+      'substantial',
+      'full',
+    ]);
   });
 
   it('keeps dimension selectors hidden until details are opened', () => {

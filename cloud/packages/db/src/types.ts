@@ -176,6 +176,27 @@ export type DecisionManualOverride = {
   overriddenByUserId?: string | null;
 };
 
+export type SummaryCacheSummary = {
+  decisionCode: string;
+  decisionCodeSource: string;
+  decisionText: string | null;
+  decisionMetadata: Record<string, unknown> | null;
+  canonicalDecision?: {
+    cacheVersion: 1;
+    decisionState: 'resolved' | 'neutral' | 'unknown';
+    favoredValueKey: string | null;
+    strength: 'strong' | 'lean' | 'neutral' | 'unknown';
+    presentationOrder: 'A_first' | 'B_first' | null;
+  };
+};
+
+export type SummaryCache = {
+  responseSha256: string;
+  parserVersion: string;
+  modelId: string;
+  summary: SummaryCacheSummary;
+};
+
 export type DecisionMetadata = {
   parserVersion: string;
   parseClass: 'exact' | 'fallback_resolved' | 'ambiguous';
@@ -185,6 +206,7 @@ export type DecisionMetadata = {
   matchedLabel?: string | null;
   scaleLabels?: DecisionScaleLabel[];
   manualOverride?: DecisionManualOverride;
+  summaryCache?: SummaryCache;
 };
 
 // ============================================================================

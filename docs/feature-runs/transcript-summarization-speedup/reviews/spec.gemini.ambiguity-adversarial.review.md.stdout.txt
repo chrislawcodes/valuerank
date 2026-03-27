@@ -1,0 +1,57 @@
+{
+  "session_id": "fec172c1-0b50-48cf-b8d9-ef5f296ebf89",
+  "response": "## Findings\n\n1.  **Partial Failure Handling is Undefined (High Severity):** The spec's most critical omission is the failure mode for a batch. If a batch contains 10 transcripts and one fails to summarize, what happens to the other 9?\n    *   **Ambiguity:** Does the entire Python process exit with an error, causing all 10 jobs to fail and be retried? This would be a significant regression, as a single \"poison pill\" transcript could block all others in its batch indefinitely.\n    *   **Weak Assumption:** The spec assumes error handling will \"remain deterministic and safe\" without specifying *how* the system will differentiate between a single transcript's failure and a catastrophic failure of the entire batch process. The mechanism for reporting partial success is not described.\n\n2.  **Batch Error Reporting Mechanism is Missing (Medium Severity):** The spec states results must be \"mapped back deterministically\" but fails to define the return payload structure from the Python worker.\n    *   **Omitted Case:** There is no schema for how the worker should report a mix of successful summaries and errors within the same batch. To handle partial failures correctly, the API layer needs a structured response detailing the outcome for each individual transcript ID (e.g., `{ \"success\": [...], \"errors\": [...] }`). This is not mentioned.\n\n3.  **Fault Isolation is Weaker (Medium Severity):** The proposed design reduces robustness. A single malformed transcript that causes the Python process to crash (e.g., due to a memory error or unhandled exception) will cause the entire batch of work to be lost. The current one-process-per-transcript model naturally isolates such faults. The spec does not address this new risk or propose a mitigation (e.g., the API handler re-trying a failed batch one-by-one, which would negate the performance benefit).\n\n4.  **Payload Compatibility Logic is Assumed (Low Severity):** The worker must handle both single and batch payloads. The spec does not state *how* the worker will distinguish between them. It's likely assuming a simple check for the existence of the `transcripts[]` key, but this should be explicitly defined to avoid ambiguity. For example, what should happen if a single-transcript payload accidentally contains a key named `transcripts`?\n\n5.  **Verification Strategy is Absent (Low Severity):** The spec requires that \"summary semantics must not change\" and \"compatibility behavior must remain intact\" but provides no acceptance criteria or requirements related to testing. There is no mention of regression tests, golden file comparisons, or other methods to prove these statements are true.\n\n## Residual Risks\n\n1.  **Performance Regression on Failure:** If partial batch failure is not handled gracefully, the system could spend more time on retries than it saves on process startup costs. A single recurring failure could cause the same batch of 9 healthy transcripts to be re-processed repeatedly, negating the goal of the feature.\n2.  **Silent Data Loss:** Without a clearly defined error and success reporting schema from the worker, there's a risk that the API handler misinterprets the results of a partial failure, potentially marking a failed summary as successful or vice-versa.\n3.  **Undetected Semantic Drift:** Without a required testing strategy to verify output, subtle changes in summary content, decision metadata, or V1 compatibility could be introduced and go unnoticed, violating a key requirement.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 25135
+        },
+        "tokens": {
+          "input": 1175,
+          "prompt": 12649,
+          "candidates": 720,
+          "total": 14807,
+          "cached": 11474,
+          "thoughts": 1438,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 25135,
+            "tokens": {
+              "input": 1175,
+              "prompt": 12649,
+              "candidates": 720,
+              "total": 14807,
+              "cached": 11474,
+              "thoughts": 1438,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

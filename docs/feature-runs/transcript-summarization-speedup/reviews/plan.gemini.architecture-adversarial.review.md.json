@@ -1,0 +1,57 @@
+{
+  "session_id": "37437395-2f0b-4983-bf40-bcd673d67766",
+  "response": "## Findings\n\n1.  **Critical Flaw: Rate Limiting Is Misinterpreted.** The plan incorrectly assumes rate-limiting can be applied to the *batch* as a single work unit. Rate limiting protects downstream services (LLM providers) from high-volume requests. If a batch contains 50 transcripts, this change would send 50 LLM API calls in a short burst where previously there was one. This will likely exceed provider rate limits, leading to service interruptions, blocked API keys, and significant cost overruns. The rate-limiting logic must operate on individual transcripts *within* the batch, not on the batch itself.\n\n2.  **High-Severity Flaw: Batch Failure \"Poison Pill\".** The plan states, \"A top-level Python failure should still be treated as a worker failure for the whole current PgBoss batch.\" This creates a critical single point of failure. If one malformed transcript payload causes the Python process to crash (e.g., via an OOM error or a library segfault), the entire batch fails. PgBoss will likely retry the same batch, which will crash on the same \"poison pill\" transcript, blocking the summarization queue indefinitely. The plan lacks a strategy to isolate and retry failing items individually. The Python worker must wrap each transcript's summarization in a `try/except` block to ensure that one failure does not kill the entire process, and it must be able to report partial success/failure back to the API handler.\n\n3.  **Inconsistent Error Handling Model.** One risk note implies a process-level failure kills the whole batch, while another implies transcript-level failures are handled gracefully. This is a contradiction. The plan appears to only account for clean, application-level errors (like a single API failure from the LLM provider) that are caught within the Python script. It doesn't properly address catastrophic, process-level failures, which are the more dangerous case in a batch processing model.\n\n4.  **Unspecified Batch Size and Resource Limits.** The plan relies on the \"PgBoss batch boundary\" but fails to consider its implications. There are no stated limits on batch size. A large batch could cause the Python worker to exceed memory or CPU limits, or hit external timeouts. This lack of constraints makes resource-exhaustion failures (and thus the \"Poison Pill\" scenario) more likely. The plan needs to define and enforce a maximum batch size.\n\n5.  **Lack of Transactional Integrity for Batch Updates.** The API handler processes batch results and updates the database \"transcript by transcript.\" If the API service crashes or restarts midway through processing a batch response, the PgBoss job will be considered complete, but a portion of the transcripts will not have their results saved. This leaves the system in an inconsistent state with no clear mechanism for recovery.\n\n## Residual Risks\n\n1.  **Scalability Ceiling.** The choice to forgo a persistent daemon or worker pool in favor of repeated process spawning is a bet on simplicity over performance. While this avoids the complexity of managing long-running processes, it has a scalability ceiling. If the summarization workload becomes more concurrent or requires lower latency, this \"one-shot batch\" architecture will become a bottleneck, and the work to migrate to a proper daemonized solution will have to be done anyway.\n\n2.  **Implicit Assumption of Statelessness.** The plan assumes the core `run_summarize()` function is entirely stateless and free of side effects, such that running many instances in the same process memory space has no cross-transcript impact. While likely true for this use case, this is a strong assumption that must be documented and enforced. A future change that introduces a shared, mutable global or class instance in the Python worker could introduce subtle, difficult-to-diagnose bugs.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 33022
+        },
+        "tokens": {
+          "input": 1243,
+          "prompt": 12732,
+          "candidates": 780,
+          "total": 15771,
+          "cached": 11489,
+          "thoughts": 2259,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 33022,
+            "tokens": {
+              "input": 1243,
+              "prompt": 12732,
+              "candidates": 780,
+              "total": 15771,
+              "cached": 11489,
+              "thoughts": 2259,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

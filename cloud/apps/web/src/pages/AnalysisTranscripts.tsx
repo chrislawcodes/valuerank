@@ -37,11 +37,15 @@ import {
 import { formatDisplayLabel } from '../utils/displayLabels';
 import { getRunDefinitionContent } from '../utils/runDefinitionContent';
 import {
+  assertRenderableReportTranscriptSummary,
+  summarizeReportTranscriptDecisions,
+} from '../utils/reportDecisionDisplay';
+import {
   ANALYSIS_BASE_PATH,
   buildAnalysisTranscriptsPath,
   isAggregateAnalysis,
 } from '../utils/analysisRouting';
-import { getDecisionMetadata, getPairedOrientationLabels } from '../utils/methodology';
+import { getPairedOrientationLabels } from '../utils/methodology';
 import {
   getOrientationBucketLabel,
   getOrientationCorrectedScenarioIds,
@@ -592,52 +596,24 @@ export function AnalysisTranscripts() {
     resolveDecisionBucketForValue,
   ]);
 
-  const normalizedDecisionTranscriptIds = useMemo(() => {
-    const shouldNormalizePairedScores = analysisMode === 'paired'
-      && (
-        (hasPairedConditionFilterParams && pairView === 'condition-blended')
-        || hasPairedValueFilterParams
-      );
-
-    if (!shouldNormalizePairedScores) {
-      return new Set<string>();
+  const decisionSummary = useMemo(
+    () => summarizeReportTranscriptDecisions(filteredTranscripts),
+    [filteredTranscripts],
+  );
+  const reportStateError = useMemo(() => {
+    try {
+      assertRenderableReportTranscriptSummary(decisionSummary);
+      return null;
+    } catch (error) {
+      return error instanceof Error
+        ? error
+        : new Error('AnalysisTranscripts requires canonical decisionModelV2 data for every visible transcript.');
     }
-
-    const normalizedRunIds = new Set<string>();
-    if (getOrientationBucketForContent(definitionContent) === 'flipped' && run?.id) {
-      normalizedRunIds.add(run.id);
-    }
-    if (getOrientationBucketForContent(companionDefinitionContent) === 'flipped' && companionRun?.id) {
-      normalizedRunIds.add(companionRun.id);
-    }
-
-    return new Set(
-      filteredTranscripts
-        .filter((transcript) => normalizedRunIds.has(transcript.runId))
-        .map((transcript) => transcript.id),
-    );
-  }, [
-    analysisMode,
-    companionDefinitionContent,
-    companionRun?.id,
-    definitionContent,
-    filteredTranscripts,
-    hasPairedConditionFilterParams,
-    hasPairedValueFilterParams,
-    pairView,
-    run?.id,
-  ]);
-
-  const decisionColumnLabel = normalizedDecisionTranscriptIds.size > 0
-    ? 'Normalized decision score'
-    : 'Decision';
-  const decisionColumnTooltip = normalizedDecisionTranscriptIds.size > 0
-    ? 'In this paired view, some prompts showed the two options in a different order. We adjust those scores so they all use the same scale. That way, the same number means the same choice direction across every transcript.'
-    : undefined;
-  const normalizationBadgeTitle = normalizedDecisionTranscriptIds.size > 0
-    ? 'This score was adjusted because this transcript showed the options in the opposite order.'
-    : undefined;
-
+  }, [decisionSummary]);
+  const listDisplayMode = 'audit' as const;
+  const viewerDisplayMode = 'audit' as const;
+  const decisionColumnLabel = 'Decision summary';
+  const decisionColumnTooltip = 'Shows the canonical decision headline and summary from the backend transcript data.';
   useEffect(() => {
     if (!hasDirectTranscriptParam) {
       return;
@@ -649,8 +625,9 @@ export function AnalysisTranscripts() {
   const transcriptCoverage = useMemo(() => {
     return filteredTranscripts.reduce(
       (acc, transcript) => {
-        const metadata = getDecisionMetadata(transcript.decisionMetadata);
-        if (transcript.decisionCodeSource === 'manual') {
+        const metadata = transcript.decisionModelV2?.raw;
+        const canonical = transcript.decisionModelV2?.canonical ?? null;
+        if (metadata?.manualOverride) {
           acc.manual += 1;
         }
         if (metadata?.parseClass === 'exact') {
@@ -660,7 +637,13 @@ export function AnalysisTranscripts() {
         } else if (metadata?.parseClass === 'ambiguous') {
           acc.ambiguous += 1;
         }
-        if (!['1', '2', '3', '4', '5'].includes(transcript.decisionCode ?? '')) {
+        if (
+          canonical == null
+          || canonical.direction === 'unknown'
+          || canonical.strength === 'unknown'
+          || canonical.source === 'error'
+          || metadata?.parseClass === 'unparseable'
+        ) {
           acc.unresolved += 1;
         }
         return acc;
@@ -766,6 +749,12 @@ export function AnalysisTranscripts() {
                   Model: <span className="font-medium text-gray-900">{selectedModel}</span>
                   <span className="mx-2">•</span>
                   Conditions: <span className="font-medium text-gray-900">{conditionIds.length}</span>
+                  {decisionSummary.headline !== '—' && (
+                    <>
+                      <span className="mx-2">•</span>
+                      Decision summary: <span className="font-medium text-gray-900">{decisionSummary.headline}</span>
+                    </>
+                  )}
                 </>
               ) : (activeRowDim && activeColDim) ? (
                 <>
@@ -800,10 +789,10 @@ export function AnalysisTranscripts() {
                   Paired Value: <span className="font-medium text-gray-900">{formatDisplayLabel(pairedValueLabel)}</span>
                 </>
               )}
-              {decisionCode && (
+              {decisionSummary.headline !== '—' && (
                 <>
                   <span className="mx-2">•</span>
-                  Decision: <span className="font-medium text-gray-900">{decisionCode}</span>
+                  Decision summary: <span className="font-medium text-gray-900">{decisionSummary.headline}</span>
                 </>
               )}
             </>
@@ -855,7 +844,9 @@ export function AnalysisTranscripts() {
       {filteredTranscripts.length > 0 && (
         <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium text-gray-900">Parse coverage</span>
+            <span className="font-medium text-gray-900">
+              Decision coverage
+            </span>
             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
               Exact {transcriptCoverage.exact}
             </span>
@@ -871,14 +862,16 @@ export function AnalysisTranscripts() {
           </div>
           {transcriptCoverage.unresolved > 0 && (
             <p className="mt-2 text-xs text-amber-700">
-              {transcriptCoverage.unresolved} transcript{transcriptCoverage.unresolved === 1 ? '' : 's'} in this view still do not have an analyzable 1-5 decision.
-              Open those transcripts to review and relabel them manually when needed.
+              {transcriptCoverage.unresolved} transcript{transcriptCoverage.unresolved === 1 ? '' : 's'} in this view still do not have an analyzable canonical decision.
+              Open those transcripts to review the raw evidence.
             </p>
           )}
         </div>
       )}
 
-      {!hasDirectTranscriptParam && !hasRepeatPatternParams && !hasPairedValueFilterParams && !hasPairedConditionFilterParams && scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
+      {reportStateError ? (
+        <ErrorMessage message={reportStateError.message} />
+      ) : !hasDirectTranscriptParam && !hasRepeatPatternParams && !hasPairedValueFilterParams && !hasPairedConditionFilterParams && scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
         <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
           Missing filter parameters. Return to the pivot table and click a cell to view transcripts.
         </div>
@@ -896,8 +889,7 @@ export function AnalysisTranscripts() {
           updatingTranscriptIds={updatingTranscriptIds}
           decisionColumnLabel={decisionColumnLabel}
           decisionColumnTooltip={decisionColumnTooltip}
-          normalizedDecisionTranscriptIds={normalizedDecisionTranscriptIds}
-          normalizationBadgeTitle={normalizationBadgeTitle}
+          decisionDisplayMode={listDisplayMode}
         />
       )}
 
@@ -907,6 +899,7 @@ export function AnalysisTranscripts() {
           onClose={() => setSelectedTranscript(null)}
           onDecisionChange={handleDecisionChange}
           decisionUpdating={updatingTranscriptIds.has(selectedTranscript.id)}
+          decisionDisplayMode={viewerDisplayMode}
         />
       )}
     </div>

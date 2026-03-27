@@ -1,0 +1,57 @@
+{
+  "session_id": "5cbbbf93-4c05-44b4-bf69-3027525b8115",
+  "response": "## Findings\n\n1.  **Insufficient Fallback Testing for Cache Corruption:** The plan requires the resolver to fall back to the computed path when encountering \"malformed\" or \"stale\" cached data. However, the verification plan is not explicit enough about adversarially testing this. The tests must go beyond simple `null` or `undefined` checks and actively inject multiple forms of corruption to validate the fallback's robustness. Missing test cases include:\n    *   Partially stale data (e.g., correct `responseSha256` but old `parserVersion`).\n    *   Type corruption (e.g., `strength` is a number instead of a string, `favoredValueKey` is a boolean).\n    *   Structurally valid JSON with unexpected or missing keys.\n    *   A test that confirms a change in the underlying `definition` metadata correctly invalidates the cache via the `responseSha256` mismatch and forces a re-computation.\n\n2.  **Lack of Visual Regression Testing for UI Changes:** Slice 2 aims to fix a data mapping in a React component while leaving the \"visible layout, labels, and report structure unchanged.\" Unit tests can verify the data flow but cannot guarantee against unintended visual side effects (e.g., changes in element wrapping, alignment, or styling). This poses a risk of visual regressions that would not be caught by the specified `*.test.tsx` files.\n\n3.  **Missing \"Empty Cache\" Compatibility Test:** The exit rule for Slice 1 is \"old transcripts still resolve through the compatibility path.\" The test plan must explicitly include a scenario where a transcript has a `decisionMetadata.summaryCache` object that is present but its `summary` property is `null` or an empty object `{}`. This simulates a potential state for data between schema versions and is distinct from the entire `summaryCache` being `null`. Failure to test this state could lead to `TypeError: Cannot read properties of null` if the resolver isn't guarded properly.\n\n4.  **Implicit Trust in Shared Utility Logic:** The same utility, likely covered by `transcriptDecisionModel.test.ts`, is used in both the Node.js (API) and browser (web) environments. The verification plan runs tests in both workspaces but does not explicitly call for tests that ensure environment-specific differences (e.g., date parsing, float precision) do not cause the utility to produce different outputs given the exact same inputs.\n\n## Residual Risks\n\n1.  **Silent Cache-Related Data Errors:** If the cache fallback logic is not hardened against all forms of corruption, it's possible for a resolver to interpret malformed data without crashing, leading to subtly incorrect `decisionState` or `strength` values being served via the GraphQL API. This is more dangerous than a crash because the data appears valid but is wrong, potentially corrupting downstream analysis.\n\n2.  **Unintended UI Degradation:** The B-first data fix in Slice 2 could cause a visual component to reflow incorrectly on specific viewport sizes or with certain data patterns (e.g., long value names). Without visual regression testing, a purely cosmetic but user-facing bug could be introduced and missed until manual QA or a user report.\n\n3.  **Post-Deployment Hotfix or Backfill Required:** The \"no-backfill\" goal is a critical constraint. An untested edge case in the compatibility logic for old transcripts (e.g., the \"empty cache\" case described above) could force an emergency patch and potentially a data backfill to correct the state of records that were resolved incorrectly after the deployment.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 32825
+        },
+        "tokens": {
+          "input": 1889,
+          "prompt": 13510,
+          "candidates": 752,
+          "total": 16038,
+          "cached": 11621,
+          "thoughts": 1776,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 32825,
+            "tokens": {
+              "input": 1889,
+              "prompt": 13510,
+              "candidates": 752,
+              "total": 16038,
+              "cached": 11621,
+              "thoughts": 1776,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

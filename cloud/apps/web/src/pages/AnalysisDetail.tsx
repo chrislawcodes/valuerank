@@ -4,6 +4,7 @@
  * Displays detailed analysis for a single run with full AnalysisPanel.
  */
 
+import { useEffect } from 'react';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Play } from 'lucide-react';
 import { formatTrialSignature } from '@valuerank/shared/trial-signature';
@@ -33,8 +34,13 @@ function parseAnalysisDetailMode(value: string | null): AnalysisDetailMode {
   return value === 'paired' ? 'paired' : 'single';
 }
 
-function buildAnalysisDetailParams(searchParams: URLSearchParams, mode: AnalysisDetailMode): URLSearchParams {
+function buildAnalysisDetailParams(
+  searchParams: URLSearchParams,
+  tab: AnalysisTab,
+  mode: AnalysisDetailMode,
+): URLSearchParams {
   const next = new URLSearchParams(searchParams);
+  next.set('tab', tab);
   next.set('mode', mode);
   return next;
 }
@@ -47,14 +53,47 @@ export function AnalysisDetail() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
-  const initialTab = parseAnalysisTab(searchParams.get('tab'));
+  const activeTab = parseAnalysisTab(searchParams.get('tab'));
   const analysisMode = parseAnalysisDetailMode(searchParams.get('mode'));
-  const handleModeChange = (mode: AnalysisDetailMode) => {
-    const next = buildAnalysisDetailParams(searchParams, mode);
+
+  useEffect(() => {
+    const currentTab = searchParams.get('tab');
+    const currentMode = searchParams.get('mode');
+    if (currentTab === activeTab && currentMode === analysisMode) {
+      return;
+    }
+
+    const nextSearch = buildAnalysisDetailParams(searchParams, activeTab, analysisMode).toString();
+    if (searchParams.toString() !== nextSearch) {
+      navigate({
+        pathname: buildAnalysisDetailPath(ANALYSIS_BASE_PATH, id || ''),
+        search: nextSearch.length > 0 ? `?${nextSearch}` : '',
+      }, { replace: true });
+    }
+  }, [activeTab, analysisMode, id, navigate, searchParams]);
+
+  const handleTabChange = (tab: AnalysisTab) => {
+    if (tab === activeTab) {
+      return;
+    }
+
+    const next = buildAnalysisDetailParams(searchParams, tab, analysisMode);
     navigate({
       pathname: buildAnalysisDetailPath(ANALYSIS_BASE_PATH, id || ''),
       search: next.toString().length > 0 ? `?${next.toString()}` : '',
-    }, { replace: true });
+    });
+  };
+
+  const handleModeChange = (mode: AnalysisDetailMode) => {
+    if (mode === analysisMode) {
+      return;
+    }
+
+    const next = buildAnalysisDetailParams(searchParams, activeTab, mode);
+    navigate({
+      pathname: buildAnalysisDetailPath(ANALYSIS_BASE_PATH, id || ''),
+      search: next.toString().length > 0 ? `?${next.toString()}` : '',
+    });
   };
 
   const { run, loading, error } = useRun({
@@ -81,6 +120,13 @@ export function AnalysisDetail() {
     pause: analysisMode !== 'paired' || companionRun == null,
     enablePolling: false,
     analysisStatus: companionRun?.analysisStatus ?? null,
+  });
+  // Load companion run with full transcript data so the conditions matrix can
+  // score both vignette orientations (the list query omits transcripts).
+  const { run: companionRunWithTranscripts } = useRun({
+    id: companionRun?.id ?? '',
+    pause: analysisMode !== 'paired' || companionRun == null,
+    enablePolling: false,
   });
 
   // Loading state
@@ -177,7 +223,7 @@ export function AnalysisDetail() {
       return;
     }
 
-    const next = buildAnalysisDetailParams(searchParams, 'single');
+    const next = buildAnalysisDetailParams(searchParams, activeTab, 'single');
     navigate({
       pathname: buildAnalysisDetailPath(ANALYSIS_BASE_PATH, nextRunId),
       search: next.toString().length > 0 ? `?${next.toString()}` : '',
@@ -216,16 +262,17 @@ export function AnalysisDetail() {
             analysisSearchParams={searchParams}
             analysisMode={analysisMode}
             onAnalysisModeChange={handleModeChange}
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
             onSingleVignetteChange={handleSingleVignetteChange}
             companionAnalysis={analysisMode === 'paired' ? companionAnalysis : null}
             currentRun={run}
-            companionRun={isPairedBatch ? companionRun : null}
+            companionRun={isPairedBatch ? (companionRunWithTranscripts ?? companionRun) : null}
             definitionContent={definitionContent}
             transcripts={run.transcripts}
             isOldVersion={isOldVersion}
             isAggregate={isAggregate}
             pendingSince={run.completedAt}
-            initialTab={initialTab}
           />
         </div>
       )}

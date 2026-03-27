@@ -1,0 +1,57 @@
+{
+  "session_id": "3d033782-0bd6-42a0-8d86-6f00da1ca702",
+  "response": "## Findings\n\n1.  **Contradictory Definition of Null Outcomes.** The spec creates a critical ambiguity in how to represent non-winning outcomes. In the `Proposed Decision Shape` table, `favoredValueKey` is `null` for \"neutral or unresolved\" outcomes. However, the subsequent definition states, \"Ambiguous, refused, or unparseable responses do not get forced into neutral. They remain unresolved and are carried as unknown.\" This is a direct contradiction. The system cannot treat a \"neutral\" decision (a deliberate choice for the middle) the same as an \"unparseable\" one (a system failure). This conflation makes it impossible for analysis to distinguish between a model's intentional neutrality and its failure to respond coherently. The `favoredValueKey` field, as defined, cannot support the stated goal.\n\n2.  **Canonical Frame Instability.** The entire strategy relies on a \"canonical value order\" derived from the vignette definition's `dimensions` order. This assumes the order of elements in the `dimensions` field is immutable. If a user ever edits a vignette and re-orders the `dimensions`, the canonical direction for that `pair_key` will flip, silently poisoning all past and future analysis by misclassifying what `direction` means for every transcript associated with that pair. The spec does not mention any mechanism (e.g., immutability constraints, versioning) to prevent this catastrophic data corruption.\n\n3.  **Vague Legacy Compatibility Path.** The spec asserts that legacy transcripts will remain readable \"through the existing compatibility path until consumers are migrated\" but fails to define this path. This is a high-risk omission. The analysis layer will have to contain conditional logic (e.g., `if (transcript.favoredValueKey) { ... } else { ... }`) to handle two different data models simultaneously. Without specifying how to derive the new model's concepts from the old model's `decisionCode`, the spec creates a significant implementation gap and a high probability of inconsistent analysis between old and new data.\n\n4.  **Undefined Location of `presentationOrder`.** The spec leaves a critical architectural decision, the storage location of `presentationOrder`, as an \"Open Question.\" This is not a peripheral detail; it is a core requirement for the feature to function. If `presentationOrder` is not stored atomically with the decision, the system risks losing the link between a transcript's outcome and the context in which it was generated, making the intended normalization impossible and defeating the purpose of the feature.\n\n5.  **Downplayed Impact of Changing Totals.** The spec claims to \"Keep the existing visible analysis surfaces unchanged\" while also noting \"totals may change if the prior path was mis-normalizing B-first runs.\" A change in reported numbers *is* a change to the analysis surface, and likely the most important one to users. The spec is weak on the assumption that this is a non-event. It omits the need for a plan to communicate, validate, and explain these numerical shifts to users, who will perceive them as a significant change to their results.\n\n## Residual Risks\n\n1.  **Migration and Consumer Coordination Risk.** The plan to migrate consumers over time instead of performing a \"big bang\" backfill introduces a prolonged period of system instability. During this transition, two different data models and two different analysis logics (new vs. compatibility path) will coexist. This creates a high risk of bugs if a data consumer is not correctly identified as \"migrated\" or \"unmigrated,\" leading to it applying the wrong logic and producing incorrect results.\n\n2.  **Insufficient Error State Representation.** The proposed `favoredValueKey` and `strength` fields do not adequately capture the variety of non-successful outcomes. Beyond \"neutral,\" a transcript can be \"ambiguous,\" \"refused,\" or \"unparseable.\" Forcing all of these into a single `null` state (as per the primary contradiction) loses vital diagnostic information. If this is not addressed, analysis cannot properly account for model failures, which is a key metric.\n\n3.  **Lack of Debuggability.** The \"Open Question\" about \"hidden diagnostics for order-aware counts\" should be a requirement. When numerical results in reports inevitably change, there will be an immediate need to trace how the new totals were calculated. Without a tool to expose the raw `favoredValueKey` and the applied `presentationOrder` normalization for a given result, debugging and validating the correctness of the new pipeline will be exceptionally difficult and time-consuming.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 87669
+        },
+        "tokens": {
+          "input": 13696,
+          "prompt": 13696,
+          "candidates": 946,
+          "total": 16344,
+          "cached": 0,
+          "thoughts": 1702,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 87669,
+            "tokens": {
+              "input": 13696,
+              "prompt": 13696,
+              "candidates": 946,
+              "total": 16344,
+              "cached": 0,
+              "thoughts": 1702,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

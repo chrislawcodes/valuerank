@@ -1,0 +1,39 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "Report helpers should throw on missing or unrenderable canonical decision-model-v2 data instead of rendering a legacy fallback.",
+      "Valid canonical decision-model-v2 data should keep report output unchanged."
+    ],
+    "summary": "Hard-guard report surfaces so they never fall back to legacy decision scores, and fail loudly when canonical decision-model-v2 data is missing or not renderable.",
+    "updated_at": 1774536663,
+    "answers": {},
+    "non_goals": [],
+    "acceptance_criteria": [],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "checkpoint_fallback": {}
+}
