@@ -84,6 +84,11 @@ export type DecisionModelInput = {
   legacyDecisionCode?: string | null;
   manualOverridePresent?: boolean;
   manualOverrideDecision?: CanonicalAppliedDecision | null;
+  cachedDecision?: CachedWinnerFirstDecision | null;
+  /** True when the definition's presentation_order is 'B_first', meaning extractValuePair
+   *  swapped valueA/B. The canonical convention is always dimensions[0]=first, so we need
+   *  to un-swap when computing favor_first / favor_second from the favored value key. */
+  pairSwapped?: boolean;
 };
 
 export type DecisionModelResult = {
@@ -105,6 +110,14 @@ type ParsedDecisionPath = {
   branch: 'exact' | 'fallback' | 'manual';
   direction: DecisionDirection;
   strength: DecisionStrength;
+};
+
+type CachedWinnerFirstDecision = {
+  cacheVersion: 1;
+  decisionState: 'resolved' | 'neutral' | 'unknown';
+  favoredValueKey: DomainAnalysisValueKey | null;
+  strength: DecisionStrength;
+  presentationOrder: 'A_first' | 'B_first' | null;
 };
 
 function isValueKey(value: string): value is DomainAnalysisValueKey {
@@ -131,6 +144,35 @@ function isCanonicalAppliedDecision(value: unknown): value is CanonicalAppliedDe
     (decision.favoredValueKey === null || (typeof decision.favoredValueKey === 'string' && isValueKey(decision.favoredValueKey))) &&
     (decision.opposedValueKey === null || (typeof decision.opposedValueKey === 'string' && isValueKey(decision.opposedValueKey)))
   );
+}
+
+function isCachedWinnerFirstDecision(value: unknown): value is CachedWinnerFirstDecision {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const decision = value as CachedWinnerFirstDecision;
+  if (
+    decision.cacheVersion !== 1
+    || (decision.decisionState !== 'resolved' && decision.decisionState !== 'neutral' && decision.decisionState !== 'unknown')
+    || (decision.presentationOrder !== null && decision.presentationOrder !== 'A_first' && decision.presentationOrder !== 'B_first')
+  ) {
+    return false;
+  }
+
+  if (decision.decisionState === 'resolved') {
+    return (
+      typeof decision.favoredValueKey === 'string'
+      && isValueKey(decision.favoredValueKey)
+      && (decision.strength === 'strong' || decision.strength === 'lean')
+    );
+  }
+
+  if (decision.decisionState === 'neutral') {
+    return decision.favoredValueKey === null && decision.strength === 'neutral';
+  }
+
+  return decision.favoredValueKey === null && decision.strength === 'unknown';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -388,6 +430,19 @@ function extractManualOverrideDecision(
   return manualOverride.appliedDecision;
 }
 
+function extractCachedWinnerFirstDecision(
+  decisionMetadata: unknown,
+): CachedWinnerFirstDecision | null {
+  const record = isRecord(decisionMetadata) ? decisionMetadata : null;
+  const summaryCache = record && isRecord(record.summaryCache) ? record.summaryCache : null;
+  const summary = summaryCache && isRecord(summaryCache.summary) ? summaryCache.summary : null;
+  const canonicalDecision = summary && isCachedWinnerFirstDecision(summary.canonicalDecision)
+    ? summary.canonicalDecision
+    : null;
+
+  return canonicalDecision;
+}
+
 export function buildRawDecisionEvidence(
   decisionMetadata: unknown,
 ): RawDecisionEvidence {
@@ -444,13 +499,20 @@ export function resolveTranscriptDecisionModel(
   const pair = extractValuePair(input.definitionSnapshot);
   const raw = buildRawDecisionEvidence(input.decisionMetadata);
   const manualOverrideDecision = extractManualOverrideDecision(input.decisionMetadata);
+  const cachedDecision = extractCachedWinnerFirstDecision(input.decisionMetadata);
+  const defSnap = isRecord(input.definitionSnapshot) ? input.definitionSnapshot : null;
+  const methodology = defSnap != null && isRecord(defSnap['methodology']) ? defSnap['methodology'] : null;
+  const presentationOrder = methodology != null ? methodology['presentation_order'] : null;
+  const pairSwapped = presentationOrder === 'B_first';
   return resolveDecisionModel({
     pair,
+    pairSwapped,
     orientationFlipped: input.orientationFlipped,
     raw,
     legacyDecisionCode: input.decisionCode,
     manualOverridePresent: manualOverrideDecision !== null,
     manualOverrideDecision,
+    cachedDecision,
   });
 }
 
@@ -474,6 +536,47 @@ export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDe
   }
 
   const parsedPath = parseDecisionPath(input.raw.parsePath);
+  const cachedDecision = input.cachedDecision ?? null;
+  if (cachedDecision) {
+    if (cachedDecision.decisionState === 'unknown') {
+      return buildUnknownCanonicalDecision('unknown');
+    }
+
+    if (cachedDecision.decisionState === 'neutral') {
+      return buildCanonicalDecisionFromPair(
+        pair,
+        'neutral',
+        'neutral',
+        false,
+        'deterministic',
+      );
+    }
+
+    if (
+      cachedDecision.favoredValueKey == null
+      || (cachedDecision.favoredValueKey !== pair.valueA && cachedDecision.favoredValueKey !== pair.valueB)
+      || cachedDecision.strength === 'unknown'
+      || cachedDecision.strength === 'neutral'
+    ) {
+      return buildUnknownCanonicalDecision('unknown');
+    }
+
+    const canonicalFirstKey = input.pairSwapped === true ? pair.valueB : pair.valueA;
+    const normalizationApplied = input.pairSwapped === true;
+    const direction: DecisionDirection = cachedDecision.favoredValueKey === canonicalFirstKey ? 'favor_first' : 'favor_second';
+    const opposedValueKey = cachedDecision.favoredValueKey === pair.valueA ? pair.valueB : pair.valueA;
+
+    return {
+      favoredValueKey: cachedDecision.favoredValueKey,
+      opposedValueKey,
+      direction,
+      strength: cachedDecision.strength,
+      normalizationApplied,
+      normalizationReason: normalizationApplied ? 'orientation_flipped' : null,
+      source: 'deterministic',
+    };
+  }
+
   if (
     input.raw.parserVersion === 'job-choice-v2'
     && isJobChoiceDecisionPath(input.raw.parsePath)
@@ -505,15 +608,25 @@ export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDe
       return buildUnknownCanonicalDecision('unknown');
     }
 
-    const direction = favoredValueKey === pair.valueA ? 'favor_first' : 'favor_second';
+    // When the definition is B_first, extractValuePair swaps valueA/B so that the legacy
+    // decisionCode path still works. But the canonical convention is always:
+    //   favor_first  = dimensions[0] (canonical first value) wins
+    //   favor_second = dimensions[1] (canonical second value) wins
+    // So for B_first we use pair.valueB as the canonical-first key to compute direction.
+    const canonicalFirstKey = input.pairSwapped === true ? pair.valueB : pair.valueA;
+    const normalizationApplied = input.pairSwapped === true;
+    const direction: DecisionDirection = favoredValueKey === canonicalFirstKey ? 'favor_first' : 'favor_second';
+    const opposedValueKey = favoredValueKey === pair.valueA ? pair.valueB : pair.valueA;
 
-    return buildCanonicalDecisionFromPair(
-      pair,
+    return {
+      favoredValueKey,
+      opposedValueKey,
       direction,
       strength,
-      false,
-      'deterministic',
-    );
+      normalizationApplied,
+      normalizationReason: normalizationApplied ? 'orientation_flipped' : null,
+      source: 'deterministic',
+    };
   }
 
   if (input.orientationFlipped == null) {

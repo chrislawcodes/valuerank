@@ -221,13 +221,13 @@ describe('decision model', () => {
     expect(result.canonical).toMatchObject({
       favoredValueKey: 'Benevolence_Dependability',
       opposedValueKey: 'Achievement',
-      direction: 'favor_first',
+      direction: 'favor_second',
       strength: 'strong',
-      normalizationApplied: false,
-      normalizationReason: null,
+      normalizationApplied: true,
+      normalizationReason: 'orientation_flipped',
       source: 'deterministic',
     });
-    expect(result.legacy).toEqual({ rawScore: 5, canonicalScore: 5 });
+    expect(result.legacy).toEqual({ rawScore: 5, canonicalScore: 1 });
   });
 
   it('resolves the current job-choice neutral metadata shape behind the shared boundary', () => {
@@ -604,5 +604,54 @@ describe('decision model', () => {
       source: 'manual',
     });
     expect(result.legacy).toEqual({ rawScore: 1, canonicalScore: 5 });
+  });
+
+  it('paired batch regression: A_first and B_first both report the same canonical direction when the same value wins', () => {
+    // In a paired batch, the same vignette is shown as A_first and B_first.
+    // When Achievement wins in both runs, both should produce direction=favor_first.
+    // Achievement label derived from JOB_CHOICE_VALUE_STATEMENTS body for 'achievement' token:
+    // body = '[level] recognition of their expertise because of ...'
+    // labelFromBody → 'taking the job with recognition of their expertise'
+    const achievementLabel = 'Strongly support taking the job with recognition of their expertise';
+
+    const aFirstResult = resolveTranscriptDecisionModel({
+      decisionCode: '5',
+      decisionMetadata: {
+        parseClass: 'exact',
+        parsePath: 'text_label_leading',
+        parserVersion: 'job-choice-v2',
+        matchedLabel: achievementLabel,
+        responseExcerpt: `Level of Support: ${achievementLabel}`,
+      },
+      definitionSnapshot: {
+        dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
+        methodology: { presentation_order: 'A_first' },
+      },
+      orientationFlipped: false,
+    });
+
+    const bFirstResult = resolveTranscriptDecisionModel({
+      decisionCode: '1',
+      decisionMetadata: {
+        parseClass: 'exact',
+        parsePath: 'text_label_leading',
+        parserVersion: 'job-choice-v2',
+        matchedLabel: achievementLabel,
+        responseExcerpt: `Level of Support: ${achievementLabel}`,
+      },
+      definitionSnapshot: {
+        dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
+        methodology: { presentation_order: 'B_first' },
+      },
+      orientationFlipped: true,
+    });
+
+    expect(aFirstResult.canonical.favoredValueKey).toBe('Achievement');
+    expect(aFirstResult.canonical.direction).toBe('favor_first');
+
+    // B_first run: Achievement wins → should also be favor_first (canonical first = Achievement)
+    expect(bFirstResult.canonical.favoredValueKey).toBe('Achievement');
+    expect(bFirstResult.canonical.direction).toBe('favor_first');
+    expect(bFirstResult.canonical.normalizationApplied).toBe(true);
   });
 });

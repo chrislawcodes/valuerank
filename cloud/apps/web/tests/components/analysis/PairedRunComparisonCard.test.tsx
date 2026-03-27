@@ -170,4 +170,33 @@ describe('PairedRunComparisonCard', () => {
     expect(await screen.findByText(/canonical decision buckets/i)).toBeInTheDocument();
     expect(screen.queryByText(/decision score from 1 to 5/i)).not.toBeInTheDocument();
   });
+
+  it('keeps the B-first order detail counts aligned with the canonical labels', async () => {
+    const currentRun = createRun('run-a', 'A_first');
+    const companionRun = createRun('run-b', 'B_first');
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <PairedRunComparisonCard
+          currentRun={currentRun}
+          currentAnalysis={createAnalysis('run-a')}
+          companionRun={companionRun}
+          companionAnalysis={createAnalysis('run-b')}
+          analysisBasePath="/analysis"
+          analysisSearch=""
+        />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Order Detail' }));
+
+    const cells = screen.getAllByRole('cell');
+    expect(cells).toHaveLength(12);
+
+    // B-first counts are the last three detail cells: first, neutral, second.
+    expect(cells[9]).toHaveTextContent('3');
+    expect(cells[10]).toHaveTextContent('0');
+    expect(cells[11]).toHaveTextContent('1');
+  });
 });

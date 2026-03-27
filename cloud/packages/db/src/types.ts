@@ -181,6 +181,13 @@ export type SummaryCacheSummary = {
   decisionCodeSource: string;
   decisionText: string | null;
   decisionMetadata: Record<string, unknown> | null;
+  canonicalDecision?: {
+    cacheVersion: 1;
+    decisionState: 'resolved' | 'neutral' | 'unknown';
+    favoredValueKey: string | null;
+    strength: 'strong' | 'lean' | 'neutral' | 'unknown';
+    presentationOrder: 'A_first' | 'B_first' | null;
+  };
 };
 
 export type SummaryCache = {

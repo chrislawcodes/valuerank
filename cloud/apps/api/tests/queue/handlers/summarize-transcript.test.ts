@@ -31,6 +31,7 @@ describe('summarize-transcript handler', () => {
   const createdIds = {
     definitions: [] as string[],
     runs: [] as string[],
+    scenarios: [] as string[],
     transcripts: [] as string[],
   };
 
@@ -51,6 +52,12 @@ describe('summarize-transcript handler', () => {
         where: { id: { in: createdIds.runs } },
       });
       createdIds.runs = [];
+    }
+    if (createdIds.scenarios.length > 0) {
+      await db.scenario.deleteMany({
+        where: { id: { in: createdIds.scenarios } },
+      });
+      createdIds.scenarios = [];
     }
     if (createdIds.definitions.length > 0) {
       await db.definition.deleteMany({
@@ -196,6 +203,116 @@ describe('summarize-transcript handler', () => {
           parserVersion: 'parser-1',
           responseExcerpt: 'Achievement',
           manualOverride: null,
+        },
+      });
+    });
+
+    it('stores a winner-first cache for a B-first transcript', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: `Transcript Cache Definition ${Date.now()}`,
+          content: {
+            schema_version: 1,
+            dimensions: [
+              { name: 'Achievement' },
+              { name: 'Benevolence_Dependability' },
+            ],
+          },
+        },
+      });
+      createdIds.definitions.push(definition.id);
+
+      const run = await db.run.create({
+        data: {
+          definitionId: definition.id,
+          status: 'SUMMARIZING',
+          config: { models: ['test-model'] },
+          progress: { total: 1, completed: 0, failed: 0 },
+        },
+      });
+      createdIds.runs.push(run.id);
+
+      const scenario = await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'Transcript Cache Scenario',
+          orientationFlipped: true,
+          content: { dimensions: { stakes: 'high' } },
+        },
+      });
+      createdIds.scenarios.push(scenario.id);
+
+      const transcript = await db.transcript.create({
+        data: {
+          runId: run.id,
+          scenarioId: scenario.id,
+          modelId: 'test-model',
+          content: {
+            turns: [{ probePrompt: 'Test prompt', targetResponse: 'Test response' }],
+          },
+          definitionSnapshot: {
+            dimensions: [
+              { name: 'Achievement' },
+              { name: 'Benevolence_Dependability' },
+            ],
+            methodology: {
+              presentation_order: 'B_first',
+            },
+          },
+          turnCount: 1,
+          tokenCount: 50,
+          durationMs: 1000,
+        },
+      });
+      createdIds.transcripts.push(transcript.id);
+
+      mockSpawnPython.mockResolvedValueOnce({
+        success: true,
+        data: {
+          success: true,
+          summary: buildSuccessfulWorkerSummary(
+            {
+              turns: [{ probePrompt: 'Test prompt', targetResponse: 'Test response' }],
+            },
+            {
+              decisionCode: '1',
+              decisionText: 'AI strongly preferred the first option',
+              decisionMetadata: {
+                matchedText: 'Achievement',
+                matchedLabel: 'Achievement',
+                parseClass: 'exact',
+                parsePath: 'exact.favor_first.strong',
+                parserVersion: 'parser-1',
+                responseExcerpt: 'Achievement',
+              },
+            },
+          ),
+        },
+      });
+
+      const handler = createSummarizeTranscriptHandler();
+      const job: MockJob<{ runId: string; transcriptId: string }> = {
+        id: 'test-job-id',
+        data: { runId: run.id, transcriptId: transcript.id },
+      };
+
+      await handler([job] as Parameters<typeof handler>[0]);
+
+      const updated = await db.transcript.findUnique({
+        where: { id: transcript.id },
+      });
+
+      expect(updated?.decisionMetadata).toMatchObject({
+        summaryCache: {
+          summary: {
+            canonicalDecision: {
+              cacheVersion: 1,
+              decisionState: 'resolved',
+              favoredValueKey: 'Achievement',
+              strength: 'strong',
+              presentationOrder: 'B_first',
+            },
+          },
         },
       });
     });
@@ -498,6 +615,35 @@ describe('summarize-transcript handler', () => {
       const { first, freshTranscript } = await seedCacheFromFreshRun();
       const changedMetadata = cloneJson(freshTranscript.decisionMetadata) as any;
       changedMetadata.summaryCache.modelId = 'anthropic:other-model';
+      await db.transcript.update({
+        where: { id: freshTranscript.id },
+        data: {
+          decisionMetadata: changedMetadata,
+          summarizedAt: new Date(),
+        },
+      });
+
+      mockSpawnPython.mockResolvedValueOnce({
+        success: true,
+        data: {
+          success: true,
+          summary: buildSuccessfulWorkerSummary(first.content, {
+            decisionCode: '1',
+            decisionText: 'AI chose the opposite side',
+          }),
+        },
+      });
+
+      const handler = createSummarizeTranscriptHandler();
+      await handler([makeJob(freshTranscript.runId, freshTranscript.id)] as Parameters<typeof handler>[0]);
+
+      expect(mockSpawnPython).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-runs summarization when the cached winner-first version is stale', async () => {
+      const { first, freshTranscript } = await seedCacheFromFreshRun();
+      const changedMetadata = cloneJson(freshTranscript.decisionMetadata) as any;
+      changedMetadata.summaryCache.summary.canonicalDecision.cacheVersion = 0;
       await db.transcript.update({
         where: { id: freshTranscript.id },
         data: {
