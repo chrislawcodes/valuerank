@@ -1,0 +1,137 @@
+2026-03-26T16:35:42.692209Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:42.692742Z  WARN codex_core::state_db: failed to initialize state runtime at /Users/chrislaw/.codex: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:42.699337Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank-worktrees/domain-analysis-value-detail-v2
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d2b00-71dd-7351-b207-ab46f1da6c1e
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Plan
+
+## Approach
+1. Add a reusable guard in `transcriptDecisionModel.ts` that throws a specific `CanonicalTranscriptRenderError` when a transcript cannot be rendered from canonical `decisionModelV2`.
+2. Remove the value-detail page's legacy query branch and any display-mode fallback that would silently switch to legacy decision scores.
+3. Trim the web GraphQL query/types so the page stops consuming `meanPreferenceScore` and `opponentMeanPreferenceScore`.
+4. Rework the condition matrix cell rendering to use canonical condition counts and emit only `1`, `2`, or `-`, with the label rule derived from `prioritized` vs `deprioritized` counts.
+5. Add tests that prove the guard fires and that the happy path still renders correctly.
+
+## Design Notes
+- The page is a report surface, so hidden compatibility behavior is not acceptable here.
+- The matrix does not need to know about legacy score math; it only needs a canonical win/loss summary from the aggregate condition data.
+- The transcript list below the matrix must be driven by renderable canonical transcripts only.
+- Keep row and column ordering intact so the page remains comparable to the current UI.
+- Keep the hard failure localized to the selected-condition transcript drilldown; the guard throws, and the page catches `CanonicalTranscriptRenderError` to show a local error state for that drilldown while the matrix stays visible.
+- Treat `prioritized > deprioritized` as `1`, `deprioritized > prioritized` as `2`, and ties or zero/zero cells as `-`.
+- Validate aggregate counts before deriving a matrix label. Non-finite, negative, or missing aggregate counts should surface as an explicit error state, not a tie label.
+- The trimmed GraphQL shape is page-local and should not rely on shared fragments or shared report helpers.
+
+## Risk Controls
+- If canonical v2 data is absent, throw a clear error rather than guessing a legacy value.
+- Keep the API change minimal: remove unused legacy score fields from the web query shape, but do not widen the backend contract unless a test proves it is necessary.
+- Avoid changing unrelated report surfaces.
+- Update the page-local TypeScript types and tests in the same slice so the trimmed query shape is enforced immediately.
+- Add a matrix count validator so label derivation cannot silently accept malformed aggregates.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+2026-03-26T16:35:42.722941Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:42.727529Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:42.750066Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d2b00-71dd-7351-b207-ab46f1da6c1e.tmp-1774542942694238000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-03-26T16:35:42.756606Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:42.757326Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:42.786927Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:42.787545Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:42.817142Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:42.817759Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:42.846026Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:42.846520Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:42.871011Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:42.871550Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:42.901058Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:42.901574Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:42.930392Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:42.930864Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:42.959665Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:42.960212Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:42.984727Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:42.985233Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.014729Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.015291Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.043960Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.046327Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.073116Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.075190Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.100600Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.102647Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.130438Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.132399Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.155757Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.157005Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.185781Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.188540Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.214104Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.216216Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.244583Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.246466Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.274965Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.276811Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.303968Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.306909Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.332392Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.333856Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.357653Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.359160Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.383798Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.384876Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.411069Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.411839Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.441535Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.442105Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.471636Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.472203Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.499001Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.499508Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.529010Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.529517Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.559715Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.561823Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.576216Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.577401Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.604580Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T16:35:43.606467Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T16:35:43.629439Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+codex
+## Findings
+- High: The plan only localizes `CanonicalTranscriptRenderError` to the selected-condition drilldown, but it never defines a page-level fallback if canonical v2 is absent or if the entire transcript set is non-renderable. That means the new guard could take down the whole report surface instead of producing the intended localized error state.
+- High: Trimming `meanPreferenceScore` and `opponentMeanPreferenceScore` assumes the value-detail query is fully page-local, but the plan does not verify whether shared generated GraphQL documents, cache normalization, or helpers still depend on those fields. If any indirect consumer remains, the page can break at runtime or read stale cached shapes even if the local types compile.
+- Medium: The matrix-count validation is stated as a risk control, not as a hard dependency in the implementation steps. If that validator is not wired into every matrix cell path, malformed aggregates can still fall through to the `-` branch and be rendered as neutral rather than failing loudly.
+- Medium: The transcript list below the matrix is said to be driven by renderable canonical transcripts only, but the plan does not specify behavior for mixed sets where some transcripts render and others do not. That can produce a partially populated list with no clear signal that items were silently dropped.
+
+## Residual Risks
+- Even with the guard and validator, incomplete canonical v2 coverage can still create user-visible error states for older data until backfill or cleanup is complete.
+- Collapsing the matrix to `1`, `2`, or `-` removes magnitude detail, so comparisons against prior reports may look different even when the underlying data is unchanged.
+- If any shared report component still assumes the legacy score fields exist, this page-local cleanup may not be sufficient and a broader type or query migration may still be needed.
+tokens used
+5,472

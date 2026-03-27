@@ -1,14 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { SurveyResults } from '../../src/pages/SurveyResults';
+import type { Transcript } from '../../src/api/operations/runs';
 import { SCENARIOS_QUERY } from '../../src/api/operations/scenarios';
 import { SURVEYS_QUERY } from '../../src/api/operations/surveys';
+import {
+  SurveyResults,
+  buildSurveyResultsCsv,
+  type SurveyMatrixData,
+} from '../../src/pages/SurveyResults';
 
 const mockUseQuery = vi.fn();
 const mockUseInfiniteRuns = vi.fn();
 const mockUseRun = vi.fn();
-const mockUpdateTranscriptDecision = vi.fn();
 
 vi.mock('urql', async () => {
   const actual = await vi.importActual<typeof import('urql')>('urql');
@@ -24,12 +28,6 @@ vi.mock('../../src/hooks/useInfiniteRuns', () => ({
 
 vi.mock('../../src/hooks/useRun', () => ({
   useRun: (...args: unknown[]) => mockUseRun(...args),
-}));
-
-vi.mock('../../src/hooks/useRunMutations', () => ({
-  useRunMutations: () => ({
-    updateTranscriptDecision: mockUpdateTranscriptDecision,
-  }),
 }));
 
 vi.mock('../../src/components/analysis', () => ({
@@ -73,18 +71,14 @@ function createSurvey() {
   };
 }
 
-function createRenderableTranscript(
-  id: string,
-  scenarioId: string,
-  overrides: Record<string, unknown> = {},
-) {
+function createTranscript(overrides: Partial<Transcript> = {}): Transcript {
   return {
-    id,
+    id: 'transcript-1',
     runId: 'run-1',
-    scenarioId,
+    scenarioId: 'scenario-1',
     modelId: 'model1',
     modelVersion: 'model-1',
-    content: { turns: [] },
+    content: { turns: [{ targetResponse: 'Canonical answer' }] },
     decisionCode: '5',
     decisionCodeSource: 'llm',
     decisionMetadata: null,
@@ -122,7 +116,15 @@ function createRenderableTranscript(
   };
 }
 
-function createLeanTranscript(id: string, scenarioId: string) {
+function createRenderableTranscript(id: string, scenarioId: string, overrides: Partial<Transcript> = {}): Transcript {
+  return createTranscript({
+    id,
+    scenarioId,
+    ...overrides,
+  });
+}
+
+function createLeanTranscript(id: string, scenarioId: string): Transcript {
   return createRenderableTranscript(id, scenarioId, {
     decisionCode: '4',
     decisionModelV2: {
@@ -152,18 +154,41 @@ function createLeanTranscript(id: string, scenarioId: string) {
   });
 }
 
-function createUnknownTranscript(id: string, scenarioId: string, decisionCode = 'x') {
+function createExplicitUnknownTranscript(id: string, scenarioId: string, decisionCode = 'x'): Transcript {
   return {
     id,
     runId: 'run-1',
     scenarioId,
     modelId: 'model1',
     modelVersion: 'model-1',
-    content: { turns: [] },
+    content: { turns: [{ targetResponse: 'Unknown answer' }] },
     decisionCode,
     decisionCodeSource: 'manual',
     decisionMetadata: null,
-    decisionModelV2: null,
+    decisionModelV2: {
+      raw: {
+        matchedText: null,
+        matchedLabel: null,
+        parseClass: 'unparseable',
+        parsePath: null,
+        parserVersion: null,
+        responseExcerpt: null,
+        manualOverride: null,
+      },
+      canonical: {
+        favoredValueKey: null,
+        opposedValueKey: null,
+        direction: 'unknown',
+        strength: 'unknown',
+        normalizationApplied: false,
+        normalizationReason: null,
+        source: 'unknown',
+      },
+      legacy: {
+        rawScore: null,
+        canonicalScore: null,
+      },
+    },
     turnCount: 2,
     tokenCount: 100,
     durationMs: 1500,
@@ -173,7 +198,35 @@ function createUnknownTranscript(id: string, scenarioId: string, decisionCode = 
   };
 }
 
-function createRun(transcripts: Array<Record<string, unknown>>) {
+function createMissingEnvelopeTranscript(id: string, scenarioId: string): Transcript {
+  return {
+    ...createRenderableTranscript(id, scenarioId),
+    decisionModelV2: null,
+  };
+}
+
+function createPartialEnvelopeTranscript(id: string, scenarioId: string): Transcript {
+  return {
+    ...createRenderableTranscript(id, scenarioId),
+    decisionModelV2: {
+      raw: {
+        parseClass: 'exact',
+      } as NonNullable<Transcript['decisionModelV2']>['raw'],
+      canonical: {
+        favoredValueKey: null,
+        opposedValueKey: null,
+        direction: 'favor_first',
+        strength: 'strong',
+        normalizationApplied: false,
+        normalizationReason: null,
+        source: 'deterministic',
+      } as NonNullable<Transcript['decisionModelV2']>['canonical'],
+      legacy: null,
+    } as NonNullable<Transcript['decisionModelV2']>,
+  };
+}
+
+function createRun(transcripts: Transcript[]) {
   return {
     id: 'run-1',
     experimentId: 'survey-1',
@@ -213,85 +266,85 @@ function renderPage(initialEntry = '/survey-results?surveyId=survey-1') {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <SurveyResults />
-    </MemoryRouter>
+    </MemoryRouter>,
   );
+}
+
+function setBaseQueryState(transcripts: Transcript[]) {
+  mockUseQuery.mockImplementation((args: { query: unknown }) => {
+    if (args.query === SURVEYS_QUERY) {
+      return [
+        {
+          data: { surveys: [createSurvey()] },
+          fetching: false,
+        },
+        vi.fn(),
+      ];
+    }
+
+    if (args.query === SCENARIOS_QUERY) {
+      return [
+        {
+          data: {
+            scenarios: [
+              createScenario('s-empty', 1, 'Empty cell'),
+              createScenario('s-unknown', 2, 'Unknown cell'),
+              createScenario('s-majority', 3, 'Majority cell'),
+              createScenario('s-mixed', 4, 'Mixed cell'),
+            ],
+          },
+          fetching: false,
+        },
+        vi.fn(),
+      ];
+    }
+
+    return [
+      {
+        data: null,
+        fetching: false,
+      },
+      vi.fn(),
+    ];
+  });
+
+  mockUseInfiniteRuns.mockReturnValue({
+    runs: [createRun(transcripts)],
+    loading: false,
+    loadingMore: false,
+    error: null,
+    hasNextPage: false,
+    totalCount: 1,
+    loadMore: vi.fn(),
+    refetch: vi.fn(),
+    softRefetch: vi.fn(),
+  });
+
+  mockUseRun.mockReturnValue({
+    run: createRun(transcripts),
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+  });
 }
 
 describe('SurveyResults', () => {
   beforeEach(() => {
-    const surveyTranscripts = [
-      createUnknownTranscript('tx-unknown', 's-unknown'),
+    mockUseQuery.mockReset();
+    mockUseInfiniteRuns.mockReset();
+    mockUseRun.mockReset();
+
+    setBaseQueryState([
+      createExplicitUnknownTranscript('tx-unknown', 's-unknown'),
       createRenderableTranscript('tx-majority-1', 's-majority'),
       createRenderableTranscript('tx-majority-2', 's-majority'),
       createLeanTranscript('tx-majority-3', 's-majority'),
       createRenderableTranscript('tx-mixed-1', 's-mixed'),
       createLeanTranscript('tx-mixed-2', 's-mixed'),
-      createUnknownTranscript('tx-other', 's-other', 'other'),
-    ];
-
-    mockUseQuery.mockImplementation((args: { query: unknown }) => {
-      if (args.query === SURVEYS_QUERY) {
-        return [
-          {
-            data: { surveys: [createSurvey()] },
-            fetching: false,
-          },
-          vi.fn(),
-        ];
-      }
-
-      if (args.query === SCENARIOS_QUERY) {
-        return [
-          {
-            data: {
-              scenarios: [
-                createScenario('s-empty', 1, 'Empty cell'),
-                createScenario('s-unknown', 2, 'Unknown cell'),
-                createScenario('s-majority', 3, 'Majority cell'),
-                createScenario('s-mixed', 4, 'Mixed cell'),
-                createScenario('s-other', 5, 'Other cell'),
-              ],
-            },
-            fetching: false,
-          },
-          vi.fn(),
-        ];
-      }
-
-      return [
-        {
-          data: null,
-          fetching: false,
-        },
-        vi.fn(),
-      ];
-    });
-
-    mockUseInfiniteRuns.mockReturnValue({
-      runs: [
-        createRun(surveyTranscripts),
-      ],
-      loading: false,
-      loadingMore: false,
-      error: null,
-      hasNextPage: false,
-      totalCount: 1,
-      loadMore: vi.fn(),
-      refetch: vi.fn(),
-      softRefetch: vi.fn(),
-    });
-
-    mockUseRun.mockReturnValue({
-      run: createRun(surveyTranscripts),
-      loading: false,
-      error: null,
-      refetch: vi.fn(),
-    });
-
-    mockUpdateTranscriptDecision.mockReset();
+    ]);
   });
 
-  it('renders canonical cell summaries instead of raw numeric averages', () => {
+  it('renders canonical cell summaries and ignores legacy score buckets', () => {
     renderPage();
 
     expect(screen.getByText('Question x AI Matrix')).toBeInTheDocument();
@@ -300,9 +353,11 @@ describe('SurveyResults', () => {
     expect(screen.getByText(/Strongly favors Benevolence Dependability/)).toBeInTheDocument();
     expect(screen.queryByText('4.00')).not.toBeInTheDocument();
     expect(screen.queryByText('5')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
 
     const majorityButton = screen.getByRole('button', { name: /View transcript for Majority cell \/ model1/i });
     expect(majorityButton).toHaveTextContent('Strongly favors Benevolence Dependability');
+    expect(majorityButton).toHaveTextContent('(n=3)');
     expect(majorityButton).toHaveAttribute(
       'title',
       'View transcript: Strongly favors Benevolence Dependability. Strongly favors Benevolence Dependability (2), Somewhat favors Achievement (1)',
@@ -311,22 +366,84 @@ describe('SurveyResults', () => {
     expect(screen.getByTestId('transcript-viewer')).toHaveTextContent('tx-majority-1');
 
     const mixedButton = screen.getByRole('button', { name: /View transcript for Mixed cell \/ model1/i });
-    expect(mixedButton).toHaveTextContent('Mixed*');
+    expect(mixedButton).toHaveTextContent('Mixed');
+    expect(mixedButton).toHaveTextContent('(n=2)');
     expect(mixedButton).toHaveAttribute(
       'title',
       'View transcript: Mixed. Strongly favors Benevolence Dependability (1), Somewhat favors Achievement (1)',
     );
   });
 
-  it('renders canonical labels in the override select for legacy other responses', () => {
+  it('exports canonical summaries instead of legacy decision codes', () => {
+    const csv = buildSurveyResultsCsv({
+      models: ['model1'],
+      rows: [
+        { scenarioId: 's-majority', order: 1, questionText: 'Majority cell' },
+        { scenarioId: 's-unknown', order: 2, questionText: 'Unknown cell' },
+      ],
+      transcriptsByCell: new Map<string, Transcript[]>([
+        ['s-majority::model1', [createRenderableTranscript('tx-majority-1', 's-majority')]],
+        ['s-unknown::model1', [createExplicitUnknownTranscript('tx-unknown', 's-unknown')]],
+      ]),
+      cellSummaries: new Map([
+        [
+          's-majority::model1',
+          {
+            headline: 'Strongly favors Benevolence Dependability',
+            totalCount: 1,
+            renderableCount: 1,
+            unknownCount: 0,
+            buckets: [
+              { kind: 'strong', label: 'Strongly favors Benevolence Dependability', count: 1 },
+            ],
+          },
+        ],
+        [
+          's-unknown::model1',
+          {
+            headline: 'Unknown',
+            totalCount: 1,
+            renderableCount: 0,
+            unknownCount: 1,
+            buckets: [
+              { kind: 'unknown', label: 'Unknown', count: 1 },
+            ],
+          },
+        ],
+      ]),
+    } satisfies SurveyMatrixData);
+
+    expect(csv).toContain('model1 decision summary');
+    expect(csv).toContain('Strongly favors Benevolence Dependability');
+    expect(csv).toContain('Unknown');
+    expect(csv).not.toContain('decision code');
+    expect(csv).not.toContain('4.00');
+  });
+
+  it('surfaces an inline matrix error when canonical v2 data is missing', () => {
+    setBaseQueryState([
+      createMissingEnvelopeTranscript('tx-missing', 's-majority'),
+      createRenderableTranscript('tx-valid', 's-majority'),
+    ]);
+
     renderPage();
 
-    const cell = screen.getByText('Other cell').closest('tr');
-    expect(cell).not.toBeNull();
+    expect(screen.getByRole('alert')).toHaveTextContent('Canonical decision-model-v2 data is missing or malformed.');
+    expect(screen.getByText(/Survey results require canonical decision-model-v2 data for transcript tx-missing/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Export CSV/i })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /View transcript for/ })).not.toBeInTheDocument();
+  });
 
-    const select = within(cell as HTMLElement).getByRole('combobox');
-    expect(within(select).getByRole('option', { name: 'Strongly disagree' })).toBeInTheDocument();
-    expect(within(select).getByRole('option', { name: 'Neutral' })).toBeInTheDocument();
-    expect(within(select).queryByRole('option', { name: '1' })).not.toBeInTheDocument();
+  it('surfaces the same inline matrix error when canonical v2 data is partial', () => {
+    setBaseQueryState([
+      createPartialEnvelopeTranscript('tx-partial', 's-majority'),
+      createRenderableTranscript('tx-valid', 's-majority'),
+    ]);
+
+    renderPage();
+
+    expect(screen.getByText('Canonical decision-model-v2 data is missing or malformed.')).toBeInTheDocument();
+    expect(screen.getByText(/Survey results require canonical decision-model-v2 data for transcript tx-partial/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Export CSV/i })).toBeDisabled();
   });
 });

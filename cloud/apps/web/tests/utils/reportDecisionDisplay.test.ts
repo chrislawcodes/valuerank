@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Transcript } from '../../src/api/operations/runs';
-import { summarizeReportTranscriptDecisions } from '../../src/utils/reportDecisionDisplay';
+import {
+  assertRenderableReportTranscriptSummary,
+  summarizeCanonicalReportTranscriptDecisions,
+  summarizeReportTranscriptDecisions,
+} from '../../src/utils/reportDecisionDisplay';
 
 function createTranscript(overrides: Partial<Transcript> = {}): Transcript {
   return {
@@ -222,5 +226,81 @@ describe('reportDecisionDisplay', () => {
         count: 2,
       },
     ]);
+  });
+
+  it('summarizes explicit unknown canonical envelopes as unknown instead of throwing', () => {
+    const summary = summarizeCanonicalReportTranscriptDecisions([
+      createRenderableTranscript('unknown-1', {
+        canonical: {
+          favoredValueKey: null,
+          opposedValueKey: null,
+          direction: 'unknown',
+          strength: 'unknown',
+          normalizationApplied: false,
+          normalizationReason: null,
+          source: 'unknown',
+        },
+        raw: {
+          matchedText: null,
+          matchedLabel: null,
+          parseClass: 'unparseable',
+          parsePath: null,
+          parserVersion: null,
+          responseExcerpt: null,
+          manualOverride: null,
+        },
+      }),
+    ]);
+
+    expect(summary.headline).toBe('Unknown');
+    expect(summary.buckets).toEqual([
+      {
+        kind: 'unknown',
+        label: 'Unknown',
+        count: 1,
+      },
+    ]);
+  });
+
+  it('throws before the report can fall back when unresolved transcripts are present', () => {
+    const summary = summarizeReportTranscriptDecisions([
+      createRenderableTranscript('renderable-1'),
+      createTranscript({ id: 'unknown-1', decisionModelV2: null }),
+    ]);
+
+    expect(() => assertRenderableReportTranscriptSummary(summary)).toThrow(
+      /canonical decisionModelV2 data for every visible transcript/i,
+    );
+  });
+
+  it('throws when canonical v2 envelopes are missing or partial in strict report mode', () => {
+    expect(() =>
+      summarizeCanonicalReportTranscriptDecisions([
+        createTranscript({ id: 'missing-1', decisionModelV2: null }),
+      ]),
+    ).toThrow(/Survey results require canonical decision-model-v2 data/);
+
+    expect(() =>
+      summarizeCanonicalReportTranscriptDecisions([
+        createTranscript({
+          id: 'partial-1',
+          decisionModelV2: {
+            raw: {
+              parseClass: 'exact',
+            } as NonNullable<Transcript['decisionModelV2']>['raw'],
+            canonical: {
+              favoredValueKey: null,
+              opposedValueKey: null,
+              direction: 'favor_first',
+              strength: 'strong',
+              normalizationApplied: false,
+              normalizationReason: null,
+              source: 'deterministic',
+            } as NonNullable<Transcript['decisionModelV2']>['canonical'],
+            legacy: null,
+          } as NonNullable<Transcript['decisionModelV2']>,
+        }),
+      ]),
+    ).toThrow(/Survey results require canonical decision-model-v2 data/);
   });
 });

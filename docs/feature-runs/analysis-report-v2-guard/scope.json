@@ -1,0 +1,21 @@
+{
+  "paths": [
+    "cloud/apps/web/src/pages/AnalysisConditionDetail.tsx",
+    "cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx",
+    "cloud/apps/web/src/utils/reportDecisionDisplay.ts",
+    "cloud/apps/web/src/utils/transcriptDecisionModel.ts",
+    "cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx",
+    "cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx",
+    "cloud/apps/web/tests/utils/reportDecisionDisplay.test.ts"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/web/src/pages/AnalysisConditionDetail.tsx",
+    "cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx",
+    "cloud/apps/web/src/utils/reportDecisionDisplay.ts",
+    "cloud/apps/web/src/utils/transcriptDecisionModel.ts",
+    "cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx",
+    "cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx",
+    "cloud/apps/web/tests/utils/reportDecisionDisplay.test.ts",
+    "docs/feature-runs/analysis-report-v2-guard"
+  ]
+}

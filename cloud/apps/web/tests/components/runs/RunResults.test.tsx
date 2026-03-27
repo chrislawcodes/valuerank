@@ -203,7 +203,7 @@ describe('RunResults', () => {
             },
             legacy: {
               rawScore: null,
-              canonicalScore: 1,
+              canonicalScore: null,
             },
           },
         }),

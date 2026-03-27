@@ -20,8 +20,12 @@ import {
   getCSVHeader,
   formatCSVRow,
   transcriptToCSVRow,
+  PRE_VARIABLE_HEADERS,
+  POST_VARIABLE_HEADERS,
+  POST_VARIABLE_HEADERS_WITH_METADATA,
   generateExportFilename,
 } from '../services/export/csv.js';
+import { collectVisibleDimensionColumns } from '../services/export/decision-display.js';
 import { exportDefinitionAsMd } from '../services/export/md.js';
 import { exportScenariosAsYaml } from '../services/export/yaml.js';
 import { generateExcelExport, type RunExportData } from '../services/export/xlsx/index.js';
@@ -98,21 +102,11 @@ exportRouter.get(
 
       log.info({ runId, transcriptCount: transcripts.length }, 'Transcripts fetched for export');
 
-      // Collect all variable names from scenario content dimensions
-      // Dimensions are stored as { "Freedom": 1, "Harmony": 2, ... } (numeric scores)
-      const variableSet = new Set<string>();
-      for (const transcript of transcripts) {
-        const content = transcript.scenario?.content as { dimensions?: Record<string, unknown> } | null;
-        if (content?.dimensions) {
-          for (const [key, value] of Object.entries(content.dimensions)) {
-            // Only include dimensions with numeric values
-            if (typeof value === 'number') {
-              variableSet.add(key);
-            }
-          }
-        }
-      }
-      const variableNames = Array.from(variableSet).sort();
+      const fixedHeaders = includeDecisionMetadata === true
+        ? [...PRE_VARIABLE_HEADERS, ...POST_VARIABLE_HEADERS_WITH_METADATA]
+        : [...PRE_VARIABLE_HEADERS, ...POST_VARIABLE_HEADERS];
+      const dimensionColumns = collectVisibleDimensionColumns(transcripts, fixedHeaders);
+      const { headers: variableNames } = dimensionColumns;
 
       // Set response headers
       const filename = generateExportFilename(runId);
@@ -123,13 +117,17 @@ exportRouter.get(
       res.write('\uFEFF');
 
       // Write header with variable columns
-      res.write(getCSVHeader(variableNames, { includeDecisionMetadata }) + '\n');
+      res.write(getCSVHeader(variableNames, { includeDecisionMetadata }));
+      if (transcripts.length > 0) {
+        res.write('\n');
+      }
 
       // Stream rows with variable names
-      for (const transcript of transcripts) {
-        const row = transcriptToCSVRow(transcript);
-        res.write(formatCSVRow(row, variableNames, { includeDecisionMetadata }) + '\n');
-      }
+      transcripts.forEach((transcript) => {
+        const row = transcriptToCSVRow(transcript, dimensionColumns);
+        res.write(formatCSVRow(row, variableNames, { includeDecisionMetadata }));
+        res.write('\n');
+      });
 
       log.info(
         { runId, rowsWritten: transcripts.length, variableCount: variableNames.length, includeDecisionMetadata },
@@ -197,7 +195,12 @@ exportRouter.get(
       // Get transcripts for the run with scenario relation
       const transcripts = await db.transcript.findMany({
         where: transcriptWhere,
-        include: { scenario: true },
+        include: {
+          scenario: true,
+          run: {
+            select: { name: true, config: true, definition: { select: { version: true } } },
+          },
+        },
         orderBy: [{ modelId: 'asc' }, { scenarioId: 'asc' }],
       });
 
@@ -256,7 +259,6 @@ exportRouter.get(
  * signature (or the default vnew signature if omitted).
  *
  * Includes all models and all latest-vignette runs matching the signature.
- * Only rows with decisionCode in 1–5 are included (consistent with domain analysis).
  * Streams the response to handle large exports.
  *
  * Requires authentication.
@@ -293,17 +295,16 @@ exportRouter.get(
 
       const transcripts = filteredSourceRunIds.length > 0
         ? await db.transcript.findMany({
-          where: {
-            runId: { in: filteredSourceRunIds },
-            deletedAt: null,
-            decisionCode: { in: ['1', '2', '3', '4', '5'] },
-          },
-          include: {
-            scenario: true,
-            run: { select: { name: true, config: true, definition: { select: { version: true } } } },
-          },
-          orderBy: [{ modelId: 'asc' }, { scenarioId: 'asc' }],
-        })
+            where: {
+              runId: { in: filteredSourceRunIds },
+              deletedAt: null,
+            },
+            include: {
+              scenario: true,
+              run: { select: { name: true, config: true, definition: { select: { version: true } } } },
+            },
+            orderBy: [{ modelId: 'asc' }, { scenarioId: 'asc' }],
+          })
         : [];
 
       log.info(
@@ -311,19 +312,11 @@ exportRouter.get(
         'Transcripts fetched for domain CSV export',
       );
 
-      // Collect variable names for dynamic column headers
-      const variableSet = new Set<string>();
-      for (const transcript of transcripts) {
-        const content = transcript.scenario?.content as { dimensions?: Record<string, unknown> } | null;
-        if (content?.dimensions) {
-          for (const [key, value] of Object.entries(content.dimensions)) {
-            if (typeof value === 'number') {
-              variableSet.add(key);
-            }
-          }
-        }
-      }
-      const variableNames = Array.from(variableSet).sort();
+      const fixedHeaders = includeDecisionMetadata === true
+        ? [...PRE_VARIABLE_HEADERS, ...POST_VARIABLE_HEADERS_WITH_METADATA]
+        : [...PRE_VARIABLE_HEADERS, ...POST_VARIABLE_HEADERS];
+      const dimensionColumns = collectVisibleDimensionColumns(transcripts, fixedHeaders);
+      const { headers: variableNames } = dimensionColumns;
 
       // Build filename: omit signature segment when not resolved
       const safeName = domain.name.replace(/[^a-z0-9-]/gi, '_').toLowerCase();
@@ -336,12 +329,18 @@ exportRouter.get(
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
       res.write('\uFEFF');
-      res.write(getCSVHeader(variableNames, { includeDecisionMetadata }) + '\n');
-
-      for (const transcript of transcripts) {
-        const row = transcriptToCSVRow(transcript);
-        res.write(formatCSVRow(row, variableNames, { includeDecisionMetadata }) + '\n');
+      res.write(getCSVHeader(variableNames, { includeDecisionMetadata }));
+      if (transcripts.length > 0) {
+        res.write('\n');
       }
+
+      transcripts.forEach((transcript, index) => {
+        const row = transcriptToCSVRow(transcript, dimensionColumns);
+        res.write(formatCSVRow(row, variableNames, { includeDecisionMetadata }));
+        if (index < transcripts.length - 1) {
+          res.write('\n');
+        }
+      });
 
       log.info(
         { domainId, rowsWritten: transcripts.length, variableCount: variableNames.length, includeDecisionMetadata },

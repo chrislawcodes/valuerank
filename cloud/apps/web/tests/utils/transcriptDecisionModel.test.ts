@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { Transcript } from '../../src/api/operations/runs';
 import {
+  CanonicalTranscriptRenderError,
+  assertReportTranscriptDecisionModelV2,
   formatCanonicalDecisionHeadline,
   getTranscriptDecisionAuditBadge,
   getTranscriptDecisionDisplayMode,
+  getTranscriptDecisionSortValue,
+  hasReportTranscriptDecisionModelV2,
   hasTranscriptDecisionModelV2,
+  requireRenderableTranscriptDecisionModelV2,
 } from '../../src/utils/transcriptDecisionModel';
 
 function createTranscript(overrides: Partial<Transcript> = {}): Transcript {
@@ -28,8 +33,14 @@ function createTranscript(overrides: Partial<Transcript> = {}): Transcript {
   };
 }
 
+type TranscriptDecisionModelV2FixtureOverrides = {
+  raw?: Partial<NonNullable<Transcript['decisionModelV2']>['raw']>;
+  canonical?: Partial<NonNullable<Transcript['decisionModelV2']>['canonical']>;
+  legacy?: Partial<NonNullable<Transcript['decisionModelV2']>['legacy']>;
+};
+
 function createRenderableV2Transcript(
-  overrides: Partial<Transcript['decisionModelV2']> = {},
+  overrides: TranscriptDecisionModelV2FixtureOverrides = {},
 ): NonNullable<Transcript['decisionModelV2']> {
   return {
     raw: {
@@ -78,6 +89,63 @@ describe('transcriptDecisionModel', () => {
     expect(getTranscriptDecisionDisplayMode([transcript])).toBe('legacy');
   });
 
+  it.each([
+    {
+      label: 'missing envelope',
+      transcript: createTranscript({ decisionModelV2: null }),
+    },
+    {
+      label: 'empty envelope',
+      transcript: createTranscript({ decisionModelV2: {} as NonNullable<Transcript['decisionModelV2']> }),
+    },
+    {
+      label: 'null subfields',
+      transcript: createTranscript({
+        decisionModelV2: {
+          raw: null,
+          canonical: null,
+          legacy: null,
+        } as NonNullable<Transcript['decisionModelV2']>,
+      }),
+    },
+    {
+      label: 'invalid canonical direction',
+      transcript: createTranscript({
+        decisionModelV2: createRenderableV2Transcript({
+          canonical: {
+            direction: 'unknown',
+            strength: 'strong',
+          },
+        }),
+      }),
+    },
+    {
+      label: 'invalid canonical strength',
+      transcript: createTranscript({
+        decisionModelV2: createRenderableV2Transcript({
+          canonical: {
+            direction: 'favor_first',
+            strength: 'unknown',
+          },
+        }),
+      }),
+    },
+    {
+      label: 'bad raw parse class',
+      transcript: createTranscript({
+        decisionModelV2: createRenderableV2Transcript({
+          raw: {
+            parseClass: '' as never,
+          },
+        }),
+      }),
+    },
+  ])('rejects malformed V2 envelopes: $label', ({ transcript }) => {
+    expect(() => requireRenderableTranscriptDecisionModelV2(transcript, 'DomainAnalysisValueDetail page'))
+      .toThrow(CanonicalTranscriptRenderError);
+    expect(hasTranscriptDecisionModelV2(transcript)).toBe(false);
+  });
+
   it('switches to audit mode only when every transcript has a renderable V2 envelope', () => {
     const renderable = createTranscript({ decisionModelV2: createRenderableV2Transcript() });
     const legacy = createTranscript({ id: 'transcript-2', decisionModelV2: null });
@@ -85,6 +153,59 @@ describe('transcriptDecisionModel', () => {
     expect(hasTranscriptDecisionModelV2(renderable)).toBe(true);
     expect(getTranscriptDecisionDisplayMode([renderable])).toBe('audit');
     expect(getTranscriptDecisionDisplayMode([renderable, legacy])).toBe('legacy');
+  });
+
+  it('treats an explicit unknown canonical envelope as report-renderable', () => {
+    const transcript = createTranscript({
+      decisionModelV2: createRenderableV2Transcript({
+        canonical: {
+          favoredValueKey: null,
+          opposedValueKey: null,
+          direction: 'unknown',
+          strength: 'unknown',
+          normalizationApplied: false,
+          normalizationReason: null,
+          source: 'unknown',
+        },
+        raw: {
+          matchedText: null,
+          matchedLabel: null,
+          parseClass: 'unparseable',
+          parsePath: null,
+          parserVersion: null,
+          responseExcerpt: null,
+          manualOverride: null,
+        },
+      }),
+    });
+
+    expect(hasReportTranscriptDecisionModelV2(transcript)).toBe(true);
+    expect(() => assertReportTranscriptDecisionModelV2(transcript)).not.toThrow();
+  });
+
+  it('rejects partial canonical envelopes that are missing required fields', () => {
+    const transcript = createTranscript({
+      decisionModelV2: {
+        raw: {
+          parseClass: 'exact',
+        } as NonNullable<Transcript['decisionModelV2']>['raw'],
+        canonical: {
+          favoredValueKey: null,
+          opposedValueKey: null,
+          direction: 'favor_first',
+          strength: 'strong',
+          normalizationApplied: false,
+          normalizationReason: null,
+          source: 'deterministic',
+        } as NonNullable<Transcript['decisionModelV2']>['canonical'],
+        legacy: null,
+      } as NonNullable<Transcript['decisionModelV2']>,
+    });
+
+    expect(hasReportTranscriptDecisionModelV2(transcript)).toBe(false);
+    expect(() => assertReportTranscriptDecisionModelV2(transcript)).toThrow(
+      /Survey results require canonical decision-model-v2 data/,
+    );
   });
 
   it('prefers the manual badge over fallback metadata', () => {
@@ -109,5 +230,27 @@ describe('transcriptDecisionModel', () => {
 
     expect(getTranscriptDecisionAuditBadge(transcript)).toBeNull();
     expect(formatCanonicalDecisionHeadline(transcript)).toBe('Strongly favors Benevolence Dependability');
+  });
+
+  it('uses canonical audit sort order instead of legacy canonical scores', () => {
+    const transcript = createTranscript({
+      decisionModelV2: createRenderableV2Transcript({
+        canonical: {
+          favoredValueKey: 'Achievement',
+          opposedValueKey: 'Benevolence_Dependability',
+          direction: 'favor_first',
+          strength: 'strong',
+          normalizationApplied: false,
+          normalizationReason: null,
+          source: 'deterministic',
+        },
+        legacy: {
+          rawScore: 5,
+          canonicalScore: 5,
+        },
+      }),
+    });
+
+    expect(getTranscriptDecisionSortValue(transcript, 'audit')).toBe(0);
   });
 });

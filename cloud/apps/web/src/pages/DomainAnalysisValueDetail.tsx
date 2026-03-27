@@ -10,7 +10,6 @@ import type { Transcript } from '../api/operations/runs';
 import {
   DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY,
   DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY,
-  DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY_LEGACY,
   type DomainAnalysisConditionTranscriptsQueryResult,
   type DomainAnalysisConditionTranscriptsQueryVariables,
   type DomainAnalysisValueDetailQueryResult,
@@ -18,14 +17,13 @@ import {
 } from '../api/operations/domainAnalysis';
 import { VALUE_LABELS, type ValueKey } from '../data/domainAnalysisData';
 import {
-  getTranscriptDecisionDisplayMode,
-  type TranscriptDecisionDisplayMode,
+  CanonicalTranscriptRenderError,
+  requireRenderableTranscriptDecisionModelV2,
 } from '../utils/transcriptDecisionModel';
 import { compareConditionLevels } from '../utils/conditionOrdering';
 
 const VALUE_DETAIL_COPY = {
   decisionColumnLabel: 'Decision summary',
-  legacyDecisionColumnLabel: 'Decision',
 } as const;
 
 function toPercent(value: number | null): string {
@@ -49,13 +47,70 @@ type MatrixCondition = {
   scenarioId: string | null;
   conditionName: string;
   dimensions: Record<string, string | number> | null;
-  meanPreferenceScore: number | null;
-  opponentMeanPreferenceScore: number | null;
-  unknownCount: number;
-  strongly: number;
-  opponentStrongly: number;
+  prioritized: number;
+  deprioritized: number;
+  neutral: number;
   totalTrials: number;
+  unknownCount: number;
 };
+
+function isValidCount(value: number): boolean {
+  return Number.isFinite(value) && Number.isInteger(value) && value >= 0;
+}
+
+function validateMatrixCondition(condition: MatrixCondition): string | null {
+  const countFields: Array<[string, number]> = [
+    ['prioritized', condition.prioritized],
+    ['deprioritized', condition.deprioritized],
+    ['neutral', condition.neutral],
+    ['totalTrials', condition.totalTrials],
+    ['unknownCount', condition.unknownCount],
+  ];
+
+  for (const [name, value] of countFields) {
+    if (!isValidCount(value)) {
+      return `DomainAnalysisValueDetail.ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" has an invalid ${name} value of ${String(value)}.`;
+    }
+  }
+
+  const expectedTotal = condition.prioritized + condition.deprioritized + condition.neutral;
+  if (condition.totalTrials !== expectedTotal) {
+    return `DomainAnalysisValueDetail.ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" reports totalTrials=${condition.totalTrials} and counts sum to ${expectedTotal}.`;
+  }
+
+  return null;
+}
+
+function getConditionMatrixDisplay(condition: MatrixCondition): {
+  label: '1' | '2' | '-';
+  isOpponent: boolean;
+  backgroundColor: string | undefined;
+  textColorClass: string;
+} {
+  const prioritized = condition.prioritized;
+  const deprioritized = condition.deprioritized;
+  const totalDirectionalTrials = prioritized + deprioritized;
+
+  if (totalDirectionalTrials === 0 || prioritized === deprioritized) {
+    return {
+      label: '-',
+      isOpponent: false,
+      backgroundColor: undefined,
+      textColorClass: 'text-gray-400',
+    };
+  }
+
+  const isOpponent = deprioritized > prioritized;
+  const dominant = isOpponent ? deprioritized : prioritized;
+  const opacitySeed = (dominant / Math.max(1, prioritized + deprioritized)) * 2;
+
+  return {
+    label: isOpponent ? '2' : '1',
+    isOpponent,
+    backgroundColor: getPreferenceBackground(opacitySeed, isOpponent),
+    textColorClass: getPreferenceTextColor(isOpponent),
+  };
+}
 
 type ConditionMatrixProps = {
   vignetteId: string;
@@ -77,6 +132,17 @@ function ConditionMatrix({ vignetteId, conditions, selectedConditionKey, onSelec
     return (
       <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
         Scenario dimensions are missing for this vignette, so pivot matrix rendering is unavailable.
+      </div>
+    );
+  }
+
+  const validationError = conditions
+    .map((condition) => validateMatrixCondition(condition))
+    .find((message): message is string => message !== null);
+  if (validationError !== undefined) {
+    return (
+      <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+        {validationError}
       </div>
     );
   }
@@ -132,17 +198,12 @@ function ConditionMatrix({ vignetteId, conditions, selectedConditionKey, onSelec
               </td>
               {cols.map((col) => {
                 const condition = cellByKey.get(`${row}::${col}`);
-                const selectedScore = condition?.meanPreferenceScore ?? 0;
-                const opponentScore = condition?.opponentMeanPreferenceScore ?? 0;
-                const isOpponent = opponentScore > selectedScore;
-                // Ties read as 0 (neutral) — neither side won a clear majority.
-                const isTie = !isOpponent && selectedScore === opponentScore && selectedScore > 0;
-                const displayScore = isTie ? 0 : isOpponent ? opponentScore : selectedScore;
-                const hasData = condition && condition.totalTrials > 0;
+                const hasData = condition !== undefined && condition.totalTrials > 0;
                 const conditionKey = condition
                   ? `${vignetteId}:${condition.scenarioId ?? '__unknown__'}`
                   : '';
                 const isSelected = condition != null && selectedConditionKey === conditionKey;
+                const display = condition ? getConditionMatrixDisplay(condition) : null;
 
                 return (
                   <td
@@ -150,7 +211,7 @@ function ConditionMatrix({ vignetteId, conditions, selectedConditionKey, onSelec
                     className={`border border-gray-100 p-3 text-center text-sm transition-colors ${
                       condition ? 'cursor-pointer hover:ring-1 hover:ring-sky-300' : ''
                     } ${isSelected ? 'ring-1 ring-sky-400' : ''}`}
-                    style={{ backgroundColor: hasData ? getPreferenceBackground(displayScore, isOpponent) : undefined }}
+                    style={{ backgroundColor: hasData ? display?.backgroundColor : undefined }}
                     onClick={() => {
                       if (!condition) return;
                       onSelect(vignetteId, condition.conditionName, condition.scenarioId);
@@ -158,7 +219,9 @@ function ConditionMatrix({ vignetteId, conditions, selectedConditionKey, onSelec
                     title={condition?.conditionName ?? 'No condition'}
                   >
                     {hasData ? (
-                      <span className={`font-semibold ${getPreferenceTextColor(isOpponent)}`}>{displayScore.toFixed(1)}</span>
+                      <span className={`font-semibold ${display?.textColorClass ?? 'text-gray-400'}`}>
+                        {display?.label ?? '-'}
+                      </span>
                     ) : (
                       <span className="text-gray-400">-</span>
                     )}
@@ -173,7 +236,7 @@ function ConditionMatrix({ vignetteId, conditions, selectedConditionKey, onSelec
         Click a cell to load condition transcripts below.
         {conditions.some((c) => c.unknownCount > 0) && (
           <span className="ml-2 font-semibold text-gray-600">
-            · N unknown trials excluded from counts.
+            · Unknown trials are excluded from the canonical condition counts.
           </span>
         )}
       </div>
@@ -193,7 +256,6 @@ export function DomainAnalysisValueDetail() {
   backParams.set('scoreMethod', scoreMethod);
   if (signature !== null && signature !== '') backParams.set('signature', signature);
   const backLink = `/domains/analysis?${backParams.toString()}`;
-  const [useLegacyQuery, setUseLegacyQuery] = useState(false);
 
   const [{ data: scoredData, fetching: scoredFetching, error: scoredError }] = useQuery<
     DomainAnalysisValueDetailQueryResult,
@@ -201,29 +263,9 @@ export function DomainAnalysisValueDetail() {
   >({
     query: DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY,
     variables: { domainId, modelId, valueKey, scoreMethod, signature: signature ?? undefined },
-    pause: domainId === '' || modelId === '' || valueKey === '' || useLegacyQuery,
+    pause: domainId === '' || modelId === '' || valueKey === '',
     requestPolicy: 'cache-and-network',
   });
-  const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<
-    DomainAnalysisValueDetailQueryResult,
-    { domainId: string; modelId: string; valueKey: string }
-  >({
-    query: DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY_LEGACY,
-    variables: { domainId, modelId, valueKey },
-    pause: domainId === '' || modelId === '' || valueKey === '' || !useLegacyQuery,
-    requestPolicy: 'cache-and-network',
-  });
-
-  useEffect(() => {
-    const message = scoredError?.message ?? '';
-    if ((message.includes('Unknown argument "scoreMethod"') || message.includes('Unknown argument "signature"')) && !useLegacyQuery) {
-      setUseLegacyQuery(true);
-    }
-  }, [scoredError, useLegacyQuery]);
-
-  const data = useLegacyQuery ? legacyData : scoredData;
-  const fetching = useLegacyQuery ? legacyFetching : scoredFetching;
-  const error = useLegacyQuery ? legacyError : scoredError;
   const [selectedCondition, setSelectedCondition] = useState<{
     definitionId: string;
     conditionName: string;
@@ -250,7 +292,11 @@ export function DomainAnalysisValueDetail() {
     requestPolicy: 'cache-and-network',
   });
 
-  const detail = data?.domainAnalysisValueDetail ?? null;
+  useEffect(() => {
+    setSelectedTranscript(null);
+  }, [selectedCondition?.definitionId, selectedCondition?.scenarioId]);
+
+  const detail = scoredData?.domainAnalysisValueDetail ?? null;
   const selectedConditionDimensions = useMemo(() => {
     if (detail === null || selectedCondition === null || selectedCondition.scenarioId === null) {
       return undefined;
@@ -274,6 +320,52 @@ export function DomainAnalysisValueDetail() {
     return undefined;
   }, [detail, selectedCondition]);
 
+  const selectedConditionTranscriptState = useMemo(() => {
+    if (selectedCondition === null) {
+      return {
+        error: null as CanonicalTranscriptRenderError | null,
+        transcripts: [] as Transcript[],
+      };
+    }
+
+    try {
+      const transcripts = (transcriptData?.domainAnalysisConditionTranscripts ?? []).map((transcript) => {
+        const normalizedTranscript: Transcript = {
+          id: transcript.id,
+          runId: transcript.runId,
+          scenarioId: transcript.scenarioId,
+          modelId: transcript.modelId,
+          modelVersion: null,
+          content: transcript.content,
+          decisionCode: transcript.decisionCode,
+          decisionCodeSource: transcript.decisionCodeSource,
+          decisionModelV2: transcript.decisionModelV2 ?? null,
+          turnCount: transcript.turnCount,
+          tokenCount: transcript.tokenCount,
+          durationMs: transcript.durationMs,
+          estimatedCost: null,
+          createdAt: transcript.createdAt,
+          lastAccessedAt: null,
+        };
+        return requireRenderableTranscriptDecisionModelV2(
+          normalizedTranscript,
+          `DomainAnalysisValueDetail.requireRenderableTranscriptDecisionModelV2 selected condition "${selectedCondition.conditionName}"`,
+        );
+      });
+
+      return { error: null, transcripts };
+    } catch (error) {
+      if (error instanceof CanonicalTranscriptRenderError) {
+        return {
+          error,
+          transcripts: [] as Transcript[],
+        };
+      }
+
+      throw error;
+    }
+  }, [selectedCondition, transcriptData]);
+
   if (domainId === '' || modelId === '' || valueKey === '') {
     return (
       <div className="space-y-4">
@@ -285,11 +377,11 @@ export function DomainAnalysisValueDetail() {
     );
   }
 
-  if (fetching) return <Loading size="lg" text="Loading value detail..." />;
-  if (error || !detail) {
+  if (scoredFetching) return <Loading size="lg" text="Loading value detail..." />;
+  if (scoredError || !detail) {
     return (
       <div className="space-y-4">
-        <ErrorMessage message={`Failed to load value detail: ${error?.message ?? 'Unknown error'}`} />
+        <ErrorMessage message={`Failed to load value detail: ${scoredError?.message ?? 'Unknown error'}`} />
         <Link to={backLink} className="inline-flex text-sm text-sky-700 hover:text-sky-900 hover:underline">
           Back to Domain Analysis
         </Link>
@@ -302,27 +394,8 @@ export function DomainAnalysisValueDetail() {
   const mathDenominator = detail.deprioritized + 1;
   const ratio = mathNumerator / mathDenominator;
   const selectedConditionKey = selectedCondition === null ? '' : `${selectedCondition.definitionId}:${selectedCondition.scenarioId ?? '__unknown__'}`;
-  const normalizedTranscripts: Transcript[] = (transcriptData?.domainAnalysisConditionTranscripts ?? []).map((transcript) => ({
-    id: transcript.id,
-    runId: transcript.runId,
-    scenarioId: transcript.scenarioId,
-    modelId: transcript.modelId,
-    modelVersion: null,
-    content: transcript.content,
-    decisionCode: transcript.decisionCode,
-    decisionCodeSource: transcript.decisionCodeSource,
-    decisionModelV2: transcript.decisionModelV2 ?? null,
-    turnCount: transcript.turnCount,
-    tokenCount: transcript.tokenCount,
-    durationMs: transcript.durationMs,
-    estimatedCost: null,
-    createdAt: transcript.createdAt,
-    lastAccessedAt: null,
-  }));
-  const reportDecisionDisplayMode: TranscriptDecisionDisplayMode = getTranscriptDecisionDisplayMode(normalizedTranscripts);
-  const decisionColumnLabel = reportDecisionDisplayMode === 'audit'
-    ? VALUE_DETAIL_COPY.decisionColumnLabel
-    : VALUE_DETAIL_COPY.legacyDecisionColumnLabel;
+  const reportDecisionDisplayMode = 'audit' as const;
+  const decisionColumnLabel = VALUE_DETAIL_COPY.decisionColumnLabel;
 
   const handleConditionClick = (definitionId: string, conditionName: string, scenarioId: string | null) => {
     const clickedKey = `${definitionId}:${scenarioId ?? '__unknown__'}`;
@@ -460,7 +533,7 @@ export function DomainAnalysisValueDetail() {
                   />
                 </div>
               )}
-                  {selectedCondition !== null && selectedCondition.definitionId === vignette.definitionId && (
+              {selectedCondition !== null && selectedCondition.definitionId === vignette.definitionId && (
                 <div className="border-t border-gray-200 bg-gray-50 px-3 py-3">
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <p className="text-xs font-medium text-gray-800">
@@ -472,12 +545,17 @@ export function DomainAnalysisValueDetail() {
                   {transcriptsError && (
                     <ErrorMessage message={`Failed to load transcripts: ${transcriptsError.message}`} />
                   )}
-                  {!transcriptsFetching && !transcriptsError && normalizedTranscripts.length === 0 && (
+                  {!transcriptsFetching && !transcriptsError && selectedConditionTranscriptState.error !== null && (
+                    <ErrorMessage
+                      message={`Failed to render transcripts for ${selectedCondition.conditionName}: ${selectedConditionTranscriptState.error.message}`}
+                    />
+                  )}
+                  {!transcriptsFetching && !transcriptsError && selectedConditionTranscriptState.error === null && selectedConditionTranscriptState.transcripts.length === 0 && (
                     <p className="text-xs text-gray-500">No transcripts found for this condition and model.</p>
                   )}
-                  {!transcriptsFetching && !transcriptsError && normalizedTranscripts.length > 0 && (
+                  {!transcriptsFetching && !transcriptsError && selectedConditionTranscriptState.error === null && selectedConditionTranscriptState.transcripts.length > 0 && (
                     <TranscriptList
-                      transcripts={normalizedTranscripts}
+                      transcripts={selectedConditionTranscriptState.transcripts}
                       onSelect={setSelectedTranscript}
                       groupByModel={false}
                       scenarioDimensions={selectedConditionDimensions}

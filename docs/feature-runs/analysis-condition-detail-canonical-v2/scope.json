@@ -1,0 +1,9 @@
+{
+  "paths": [
+    ".worktrees/analysis-condition-detail-canonical-v2"
+  ],
+  "allowed_dirty_paths": [
+    ".worktrees/analysis-condition-detail-canonical-v2",
+    "docs/feature-runs/analysis-condition-detail-canonical-v2"
+  ]
+}

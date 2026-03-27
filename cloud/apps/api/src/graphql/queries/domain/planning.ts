@@ -153,7 +153,7 @@ async function buildDomainEstimate(input: DomainEstimateInput): Promise<DomainEs
     where: { definitionId: { in: latestDefinitionIds }, deletedAt: null },
     _count: { _all: true },
   });
-  const scenarioCountByDefinition = new Map(
+  const scenarioCountByDefinition = new Map<string, number>(
     scenarioCounts.map((row) => [row.definitionId, row._count._all]),
   );
 
