@@ -121,6 +121,13 @@ export function AnalysisDetail() {
     enablePolling: false,
     analysisStatus: companionRun?.analysisStatus ?? null,
   });
+  // Load companion run with full transcript data so the conditions matrix can
+  // score both vignette orientations (the list query omits transcripts).
+  const { run: companionRunWithTranscripts } = useRun({
+    id: companionRun?.id ?? '',
+    pause: analysisMode !== 'paired' || companionRun == null,
+    enablePolling: false,
+  });
 
   // Loading state
   if (loading && !run) {
@@ -260,7 +267,7 @@ export function AnalysisDetail() {
             onSingleVignetteChange={handleSingleVignetteChange}
             companionAnalysis={analysisMode === 'paired' ? companionAnalysis : null}
             currentRun={run}
-            companionRun={isPairedBatch ? companionRun : null}
+            companionRun={isPairedBatch ? (companionRunWithTranscripts ?? companionRun) : null}
             definitionContent={definitionContent}
             transcripts={run.transcripts}
             isOldVersion={isOldVersion}
