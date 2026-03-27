@@ -229,9 +229,15 @@ builder.queryField('domainValueCoverage', (t) =>
           if (!latestMatchingRunIdByDefinitionId.has(run.definitionId)) {
             latestMatchingRunIdByDefinitionId.set(run.definitionId, run.id);
           }
+          const samplesPerScenario =
+            (run.config as { samplesPerScenario?: unknown } | null)?.samplesPerScenario;
+          const increment =
+            Number.isInteger(samplesPerScenario) && (samplesPerScenario as number) >= 1
+              ? (samplesPerScenario as number)
+              : 1;
           batchCountByDefinitionId.set(
             run.definitionId,
-            (batchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+            (batchCountByDefinitionId.get(run.definitionId) ?? 0) + increment,
           );
         }
       }
