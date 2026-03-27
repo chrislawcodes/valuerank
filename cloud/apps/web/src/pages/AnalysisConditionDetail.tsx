@@ -18,7 +18,6 @@ import {
   parseConditionKey,
 } from '../utils/analysisRouting';
 import { formatDisplayLabel } from '../utils/displayLabels';
-import { getPairedOrientationLabels } from '../utils/methodology';
 import { requireRenderableTranscriptDecisionModelV2 } from '../utils/transcriptDecisionModel';
 import { filterTranscriptsForPivotCell } from '../utils/scenarioUtils';
 import {
@@ -28,8 +27,7 @@ import {
 } from '../utils/conditionDecisionSummary';
 
 type AnalysisDetailMode = 'single' | 'paired';
-type JobChoicePresentationOrder = 'A_first' | 'B_first';
-type OrientationBucket = 'canonical' | 'flipped';
+type PairedConditionSource = 'current' | 'companion' | 'pooled';
 
 type DetailRow = {
   id: string;
@@ -43,27 +41,8 @@ const CONDITION_COPY = {
   unresolvedSummary: 'Unknown transcripts are shown in the final column. Known counts use only transcripts with canonical decision data.',
 } as const;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
 function parseAnalysisDetailMode(value: string | null): AnalysisDetailMode {
   return value === 'paired' ? 'paired' : 'single';
-}
-
-function getRunPresentationOrder(run: Run | null | undefined): JobChoicePresentationOrder | null {
-  const fromConfig = run?.config?.jobChoicePresentationOrder;
-  if (fromConfig === 'A_first' || fromConfig === 'B_first') {
-    return fromConfig;
-  }
-
-  const content = run?.definition?.content;
-  if (!isRecord(content) || !isRecord(content.methodology)) {
-    return null;
-  }
-
-  const value = content.methodology.presentation_order;
-  return value === 'A_first' || value === 'B_first' ? value : null;
 }
 
 function filterConditionTranscripts(
@@ -109,6 +88,16 @@ function buildDetailRow(
     summary: summarizeConditionDecisionBuckets(renderableTranscripts),
     baseSearchParams,
   };
+}
+
+function getSummaryLabelPair(rows: DetailRow[]): { firstValueLabel: string; secondValueLabel: string } | null {
+  for (const row of rows) {
+    if (row.summary.labelPair) {
+      return row.summary.labelPair;
+    }
+  }
+
+  return null;
 }
 
 export function AnalysisConditionDetail() {
@@ -194,41 +183,7 @@ export function AnalysisConditionDetail() {
       new URLSearchParams(`mode=${analysisMode}`),
     );
   }, [analysisMode, analysisPath, colDim, conditionKey, id, rowDim, selectedModel]);
-
-  const currentOrder = getRunPresentationOrder(run);
-  const companionOrder = getRunPresentationOrder(companionRun);
-
-  const aFirstRun = currentOrder === 'A_first'
-    ? run
-    : companionOrder === 'A_first'
-      ? companionRun
-      : null;
-  const bFirstRun = currentOrder === 'B_first'
-    ? run
-    : companionOrder === 'B_first'
-      ? companionRun
-      : null;
-  const aFirstAnalysis = currentOrder === 'A_first'
-    ? analysis
-    : companionOrder === 'A_first'
-      ? companionAnalysis
-      : null;
-  const bFirstAnalysis = currentOrder === 'B_first'
-    ? analysis
-    : companionOrder === 'B_first'
-      ? companionAnalysis
-      : null;
-  const currentRunName = run?.definition?.name;
   const companionRunId = companionRun?.id;
-  const aFirstRunName = aFirstRun?.definition?.name;
-  const bFirstRunName = bFirstRun?.definition?.name;
-
-  const orientationLabels = useMemo(
-    () => getPairedOrientationLabels(
-      aFirstRun?.definition?.content ?? bFirstRun?.definition?.content ?? run?.definition?.content ?? null,
-    ),
-    [aFirstRun?.definition?.content, bFirstRun?.definition?.content, run?.definition?.content],
-  );
 
   const detailRows = useMemo(() => {
     if (!parsedCondition || !rowDim || !colDim || !selectedModel || !run || !analysis) {
@@ -242,7 +197,7 @@ export function AnalysisConditionDetail() {
       extras?: {
         companionRunId?: string;
         pairView?: 'condition-blended' | 'condition-split';
-        orientationBucket?: OrientationBucket;
+        sourceRun?: PairedConditionSource;
       },
     ) => {
       const params = new URLSearchParams({
@@ -255,14 +210,16 @@ export function AnalysisConditionDetail() {
       params.set('mode', analysisMode);
       if (extras?.companionRunId) params.set('companionRunId', extras.companionRunId);
       if (extras?.pairView) params.set('pairView', extras.pairView);
-      if (extras?.orientationBucket) params.set('orientationBucket', extras.orientationBucket);
+      if (extras?.sourceRun) params.set('sourceRun', extras.sourceRun);
       return params;
     };
 
     if (analysisMode === 'paired' && companionRun && companionAnalysis) {
+      const currentTranscripts = filterConditionTranscripts(run, analysis, rowDim, colDim, row, col, selectedModel);
+      const companionTranscripts = filterConditionTranscripts(companionRun, companionAnalysis, rowDim, colDim, row, col, selectedModel);
       const pooledTranscripts = [
-        ...filterConditionTranscripts(run, analysis, rowDim, colDim, row, col, selectedModel),
-        ...filterConditionTranscripts(companionRun, companionAnalysis, rowDim, colDim, row, col, selectedModel),
+        ...currentTranscripts,
+        ...companionTranscripts,
       ];
 
       rows.push(buildDetailRow(
@@ -272,71 +229,62 @@ export function AnalysisConditionDetail() {
         makeBaseSearch({
           companionRunId,
           pairView: 'condition-blended',
+          sourceRun: 'pooled',
         }),
       ));
 
-      if (aFirstRun && aFirstAnalysis) {
-        rows.push(buildDetailRow(
-          'canonical',
-          aFirstRunName ?? orientationLabels.canonical,
-          filterConditionTranscripts(aFirstRun, aFirstAnalysis, rowDim, colDim, row, col, selectedModel),
-          makeBaseSearch({
-            companionRunId,
-            pairView: 'condition-split',
-            orientationBucket: 'canonical',
-          }),
-        ));
-      }
+      rows.push(buildDetailRow(
+        'current',
+        'Current vignette',
+        currentTranscripts,
+        makeBaseSearch({
+          companionRunId,
+          pairView: 'condition-split',
+          sourceRun: 'current',
+        }),
+      ));
 
-      if (bFirstRun && bFirstAnalysis) {
-        rows.push(buildDetailRow(
-          'flipped',
-          bFirstRunName ?? orientationLabels.flipped,
-          filterConditionTranscripts(bFirstRun, bFirstAnalysis, rowDim, colDim, row, col, selectedModel),
-          makeBaseSearch({
-            companionRunId,
-            pairView: 'condition-split',
-            orientationBucket: 'flipped',
-          }),
-        ));
-      }
+      rows.push(buildDetailRow(
+        'companion',
+        'Companion vignette',
+        companionTranscripts,
+        makeBaseSearch({
+          companionRunId,
+          pairView: 'condition-split',
+          sourceRun: 'companion',
+        }),
+      ));
 
       return rows;
     }
 
     rows.push(buildDetailRow(
       'single',
-      currentRunName ?? orientationLabels.current,
+      'Current vignette',
       filterConditionTranscripts(run, analysis, rowDim, colDim, parsedCondition.row, parsedCondition.col, selectedModel),
-      makeBaseSearch(),
+      makeBaseSearch({
+        sourceRun: 'current',
+      }),
     ));
 
     return rows;
   }, [
-    aFirstAnalysis,
-    aFirstRun,
     analysis,
     analysisMode,
-    bFirstAnalysis,
-    bFirstRun,
-    bFirstRunName,
     colDim,
     companionAnalysis,
     companionRun,
     companionRunId,
-    aFirstRunName,
-    orientationLabels,
     parsedCondition,
     rowDim,
     run,
-    currentRunName,
     selectedModel,
   ]);
 
   const decisionSummaryLabels = useMemo(() => {
-    const [firstCanonicalValue, secondCanonicalValue] = orientationLabels.canonicalValues ?? [];
-    const firstValueLabel = firstCanonicalValue ?? 'canonical first value';
-    const secondValueLabel = secondCanonicalValue ?? 'canonical second value';
+    const labelPair = getSummaryLabelPair(detailRows);
+    const firstValueLabel = labelPair?.firstValueLabel ?? 'canonical first value';
+    const secondValueLabel = labelPair?.secondValueLabel ?? 'canonical second value';
 
     const labels: Record<ConditionDecisionBucketKey, string> = {
       strong_first: `Strongly favors ${firstValueLabel}`,
@@ -351,7 +299,7 @@ export function AnalysisConditionDetail() {
       key,
       label: labels[key],
     }));
-  }, [orientationLabels.canonicalValues]);
+  }, [detailRows]);
 
   const hasUnresolvedTranscripts = detailRows.some((row) => row.summary.unknownCount > 0);
 
@@ -443,8 +391,8 @@ export function AnalysisConditionDetail() {
       </div>
 
       {analysisMode === 'paired' && (!companionRun || !companionAnalysis) && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          Paired companion data is not available yet, so this detail view is showing the current vignette order only.
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          Paired companion data is not available yet, so this detail view is showing the current vignette only.
         </div>
       )}
 
@@ -453,7 +401,7 @@ export function AnalysisConditionDetail() {
           <thead>
             <tr>
               <th className="border-b border-gray-200 bg-gray-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
-                Vignette Order
+                Vignette Scope
               </th>
               {decisionSummaryLabels.map(({ key, label }) => (
                 <th
