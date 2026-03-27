@@ -49,6 +49,41 @@ export type ExecutionMetrics = {
   totalRetries: number;
 };
 
+export type TranscriptDecisionModelV2RawEvidence = {
+  matchedText: string | null;
+  matchedLabel: string | null;
+  parseClass: 'exact' | 'fallback_resolved' | 'ambiguous' | 'unparseable' | null;
+  parsePath: string | null;
+  parserVersion: string | null;
+  responseExcerpt: string | null;
+  manualOverride: {
+    previousValue: string | null;
+    overriddenAt: string | null;
+    overriddenByUserId: string | null;
+  } | null;
+};
+
+export type TranscriptDecisionModelV2Canonical = {
+  favoredValueKey: string | null;
+  opposedValueKey: string | null;
+  direction: 'favor_first' | 'favor_second' | 'neutral' | 'unknown';
+  strength: 'strong' | 'lean' | 'neutral' | 'unknown';
+  normalizationApplied: boolean;
+  normalizationReason: 'orientation_flipped' | null;
+  source: 'deterministic' | 'manual' | 'error' | 'unknown';
+};
+
+export type TranscriptDecisionModelV2LegacyCompat = {
+  rawScore: 1 | 2 | 3 | 4 | 5 | null;
+  canonicalScore: 1 | 2 | 3 | 4 | 5 | null;
+};
+
+export type TranscriptDecisionModelV2 = {
+  raw: TranscriptDecisionModelV2RawEvidence;
+  canonical: TranscriptDecisionModelV2Canonical;
+  legacy: TranscriptDecisionModelV2LegacyCompat;
+};
+
 export type Transcript = {
   id: string;
   runId: string;
@@ -66,6 +101,7 @@ export type Transcript = {
   createdAt: string;
   lastAccessedAt: string | null;
   dimensionValues?: Record<string, string | number> | null;
+  decisionModelV2?: TranscriptDecisionModelV2 | null;
 };
 
 export type RunConfig = {
@@ -257,6 +293,7 @@ export const RUN_WITH_TRANSCRIPTS_FRAGMENT = gql`
       createdAt
       lastAccessedAt
       dimensionValues
+      decisionModelV2
     }
     analysis {
       actualCost {

@@ -7,6 +7,7 @@
 import { ConditionDecisionsTable } from '../ConditionDecisionsTable';
 import { PivotAnalysisTable } from '../PivotAnalysisTable';
 import type { VisualizationData, ContestedScenario, PerModelStats } from '../../../api/operations/analysis';
+import type { Transcript } from '../../../api/operations/runs';
 import { ANALYSIS_BASE_PATH, type AnalysisBasePath } from '../../../utils/analysisRouting';
 import { getPairedOrientationLabels } from '../../../utils/methodology';
 
@@ -17,6 +18,7 @@ type ScenariosTabProps = {
   analysisMode?: 'single' | 'paired';
   visualizationData: VisualizationData | null | undefined;
   perModel: Record<string, PerModelStats>;
+  transcripts?: Transcript[];
   contestedScenarios: ContestedScenario[];
   dimensionLabels?: Record<string, string>;
   expectedAttributes?: string[];
@@ -31,6 +33,7 @@ export function ScenariosTab({
   analysisMode,
   visualizationData,
   perModel,
+  transcripts,
   dimensionLabels,
   expectedAttributes = [],
   definitionContent,
@@ -56,9 +59,12 @@ export function ScenariosTab({
                 runId={runId}
                 analysisBasePath={analysisBasePath}
                 analysisSearchParams={analysisSearchParams}
+                analysisMode={analysisMode}
                 visualizationData={visualizationData}
+                transcripts={transcripts}
                 dimensionLabels={dimensionLabels}
                 expectedAttributes={expectedAttributes}
+                companionRunId={analysisMode === 'paired' ? companionRunId ?? null : null}
               />
             ) : (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
