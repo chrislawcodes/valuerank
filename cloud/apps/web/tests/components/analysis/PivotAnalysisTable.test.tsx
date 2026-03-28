@@ -88,13 +88,13 @@ const BASE_VISUALIZATION_DATA = {
   },
 };
 
-// s1 = favor_first strong → strongly=1 → score 2.00, blue (low/Freedom)
-// s2 = neutral neutral → neutral=1 → score 0.00 (neutral)
-// s3 = favor_second strong → opponentStrongly=1 → score 2.00, orange (high/Harmony)
+// s1 = favor_first strong → favoredValueKey='Freedom' (alphabetically first) → strongly=1 → score 2.00, blue
+// s2 = neutral neutral → neutral=1 → score 0.00
+// s3 = favor_second strong → favoredValueKey='Harmony' (alphabetically second) → opponentStrongly=1 → score 2.00, orange
 const BASE_TRANSCRIPTS: Transcript[] = [
   makeTranscript('t1', 's1', 'model1', 'favor_first', 'strong'),
   makeTranscript('t2', 's2', 'model1', 'neutral', 'neutral'),
-  makeTranscript('t3', 's3', 'model1', 'favor_second', 'strong'),
+  makeTranscript('t3', 's3', 'model1', 'favor_second', 'strong', { favoredValueKey: 'Harmony', opposedValueKey: 'Freedom' }),
 ];
 
 // Simpler fixtures for navigation tests: only one scored cell (a1,b1 = s1)
