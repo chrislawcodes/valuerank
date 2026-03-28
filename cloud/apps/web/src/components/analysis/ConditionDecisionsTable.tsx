@@ -264,10 +264,10 @@ export function ConditionDecisionsTable({
   const [selectedModels, setSelectedModels] = useState<string[]>(models);
   const canSplitOrientations = analysisMode === 'paired' && (varianceAnalysis?.orientationCorrectedCount ?? 0) > 0;
   const [inspectionMode, setInspectionMode] = useState<OrientationInspectionMode>('pooled');
-  const splitBucketLabels = canSplitOrientations
+  const splitSourceLabels = canSplitOrientations
     ? {
-        canonical: 'Current vignette',
-        flipped: 'Companion vignette',
+        current: 'Current vignette',
+        companion: 'Companion vignette',
       }
     : null;
 
@@ -373,10 +373,13 @@ export function ConditionDecisionsTable({
     });
     if (analysisMode === 'paired' && companionRunId) {
       params.set('companionRunId', companionRunId);
-      params.set('pairView', canSplitOrientations && inspectionMode === 'split' ? 'condition-split' : 'condition-blended');
-    }
-    if (canSplitOrientations && inspectionMode === 'split') {
-      params.set('orientationBucket', row.orientationBucket);
+      if (canSplitOrientations && inspectionMode === 'split') {
+        params.set('pairView', 'condition-split');
+        params.set('sourceRun', row.orientationBucket === 'canonical' ? 'current' : 'companion');
+      } else {
+        params.set('pairView', 'condition-blended');
+        params.set('sourceRun', 'pooled');
+      }
     }
     if (options?.decisionCode) {
       params.set('decisionCode', options.decisionCode);
@@ -491,7 +494,7 @@ export function ConditionDecisionsTable({
       {canSplitOrientations && inspectionMode === 'split' && (
         <div className="rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-800">
           Split inspection keeps the pooled paired summary above, but breaks these tables into
-          separate <span className="font-medium">{splitBucketLabels?.canonical}</span> and <span className="font-medium">{splitBucketLabels?.flipped}</span> buckets so you can verify the pair directly.
+          separate <span className="font-medium">{splitSourceLabels?.current}</span> and <span className="font-medium">{splitSourceLabels?.companion}</span> buckets so you can verify the pair directly.
         </div>
       )}
 
@@ -578,8 +581,8 @@ export function ConditionDecisionsTable({
                     {canSplitOrientations && inspectionMode === 'split' && (
                       <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800">
                         {row.orientationBucket === 'canonical'
-                          ? splitBucketLabels?.canonical
-                          : splitBucketLabels?.flipped}
+                          ? splitSourceLabels?.current
+                          : splitSourceLabels?.companion}
                       </span>
                     )}
                   </div>
@@ -589,10 +592,10 @@ export function ConditionDecisionsTable({
                     ?? summarizeCanonicalConditionTranscripts([]);
                   const hasResolvedCanonicalEvidence = stats.totalTrials > 0;
                   const isOtherCell = !hasResolvedCanonicalEvidence;
-                  const splitBucketLabel = row.orientationBucket === 'canonical'
-                    ? splitBucketLabels?.canonical
-                    : splitBucketLabels?.flipped;
-                  const title = `View transcripts for ${modelId} | ${formatDisplayLabel(attributeA)}: ${formatDisplayLabel(row.attributeALevel)}, ${formatDisplayLabel(attributeB)}: ${formatDisplayLabel(row.attributeBLevel)}${canSplitOrientations && inspectionMode === 'split' ? ` | ${splitBucketLabel}` : ''}${isOtherCell ? ' | Decision: other' : ''}${stats.unknownCount > 0 ? ` | Unknown: ${stats.unknownCount}` : ''}`;
+                  const splitSourceLabel = row.orientationBucket === 'canonical'
+                    ? splitSourceLabels?.current
+                    : splitSourceLabels?.companion;
+                  const title = `View transcripts for ${modelId} | ${formatDisplayLabel(attributeA)}: ${formatDisplayLabel(row.attributeALevel)}, ${formatDisplayLabel(attributeB)}: ${formatDisplayLabel(row.attributeBLevel)}${canSplitOrientations && inspectionMode === 'split' ? ` | ${splitSourceLabel}` : ''}${isOtherCell ? ' | Decision: other' : ''}${stats.unknownCount > 0 ? ` | Unknown: ${stats.unknownCount}` : ''}`;
 
                   return (
                     <td

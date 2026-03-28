@@ -45,12 +45,6 @@ import {
   buildAnalysisTranscriptsPath,
   isAggregateAnalysis,
 } from '../utils/analysisRouting';
-import { getPairedOrientationLabels } from '../utils/methodology';
-import {
-  getOrientationBucketLabel,
-  getOrientationCorrectedScenarioIds,
-  type OrientationBucket,
-} from '../utils/pairedScopeAdapter';
 
 function getDisplaySignature(signature: string | null | undefined): string {
   return signature && signature !== 'v?td' ? signature : 'Unknown Signature';
@@ -83,28 +77,6 @@ function normalizePairedValueKey(value: string): string {
 }
 
 type PairedConditionSource = 'current' | 'companion' | 'pooled';
-type JobChoicePresentationOrder = 'A_first' | 'B_first';
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function getPresentationOrderForContent(content: unknown): JobChoicePresentationOrder | null {
-  if (!isRecord(content) || !isRecord(content.methodology)) {
-    return null;
-  }
-
-  const value = content.methodology.presentation_order;
-  return value === 'A_first' || value === 'B_first' ? value : null;
-}
-
-function getOrientationBucketForContent(content: unknown): OrientationBucket | null {
-  const presentationOrder = getPresentationOrderForContent(content);
-  if (presentationOrder === 'A_first') return 'canonical';
-  if (presentationOrder === 'B_first') return 'flipped';
-  return null;
-}
-
 function parsePairedConditionSource(value: string | null): PairedConditionSource | null {
   if (value === 'current' || value === 'companion' || value === 'pooled') {
     return value;
@@ -198,11 +170,9 @@ export function AnalysisTranscripts() {
   const pairedDecisionBucketParam = searchParams.get('pairedDecisionBucket') ?? '';
   const pairedValueLabel = searchParams.get('pairedValueLabel') ?? '';
   const pairView = searchParams.get('pairView') ?? '';
-  const pairedConditionSource = parsePairedConditionSource(searchParams.get('sourceRun'));
   const orientationBucketParam = searchParams.get('orientationBucket');
-  const orientationBucket: OrientationBucket | null = orientationBucketParam === 'canonical' || orientationBucketParam === 'flipped'
-    ? orientationBucketParam
-    : null;
+  const hasLegacyOrientationBucket = orientationBucketParam === 'canonical' || orientationBucketParam === 'flipped';
+  const pairedConditionSource = parsePairedConditionSource(searchParams.get('sourceRun'));
   const analysisMode = searchParams.get('mode') === 'paired'
     ? 'paired'
     : searchParams.get('mode') === 'single'
@@ -312,16 +282,8 @@ export function AnalysisTranscripts() {
   const modelScenarioMatrix = analysis?.visualizationData?.modelScenarioMatrix;
   const companionScenarioDimensions = companionAnalysis?.visualizationData?.scenarioDimensions;
   const companionModelScenarioMatrix = companionAnalysis?.visualizationData?.modelScenarioMatrix;
-  const correctedScenarioIds = useMemo(
-    () => getOrientationCorrectedScenarioIds(analysis?.varianceAnalysis),
-    [analysis?.varianceAnalysis]
-  );
   const definitionContent = useMemo(() => getRunDefinitionContent(run), [run]);
   const companionDefinitionContent = useMemo(() => getRunDefinitionContent(companionRun), [companionRun]);
-  const orientationLabels = useMemo(
-    () => getPairedOrientationLabels(definitionContent),
-    [definitionContent],
-  );
   const preferredAttributes = useMemo(
     () => deriveScenarioAttributesFromDefinition(definitionContent),
     [definitionContent]
@@ -368,6 +330,25 @@ export function AnalysisTranscripts() {
     && col
     && (pairView === 'condition-blended' || pairView === 'condition-split')
   );
+  const pairedConditionStateError = useMemo(() => {
+    if (hasLegacyOrientationBucket && analysisMode === 'paired') {
+      return new Error('Legacy orientationBucket URLs are no longer supported. Use sourceRun=current, sourceRun=companion, or sourceRun=pooled.');
+    }
+
+    if (!hasPairedConditionFilterParams) {
+      return null;
+    }
+
+    if (pairView !== 'condition-split') {
+      return null;
+    }
+
+    if (pairedConditionSource === 'current' || pairedConditionSource === 'companion') {
+      return null;
+    }
+
+    return new Error('Split paired condition inspection requires sourceRun=current or sourceRun=companion.');
+  }, [analysisMode, hasLegacyOrientationBucket, hasPairedConditionFilterParams, pairView, pairedConditionSource]);
   const dimensionLabels = useMemo(
     () => deriveDecisionDimensionLabels(definitionContent),
     [definitionContent]
@@ -388,15 +369,6 @@ export function AnalysisTranscripts() {
     if (decisionBucket === 'neutral') return 'Neutral';
     return '';
   }, [bucketAttributes.highAttribute, bucketAttributes.lowAttribute, decisionBucket]);
-
-  const matchesOrientationBucket = useCallback((scenarioId: string | null | undefined) => {
-    if (!orientationBucket || !scenarioId) {
-      return true;
-    }
-
-    const isFlipped = correctedScenarioIds.has(String(scenarioId));
-    return orientationBucket === 'flipped' ? isFlipped : !isFlipped;
-  }, [correctedScenarioIds, orientationBucket]);
 
   const resolveDecisionBucketForValue = useCallback((
     content: unknown,
@@ -466,7 +438,7 @@ export function AnalysisTranscripts() {
   const filteredTranscripts = useMemo(() => {
     if (hasDirectTranscriptParam) {
       const matched = (run?.transcripts ?? []).find((transcript) => transcript.id === selectedTranscriptId);
-      return matched && matchesOrientationBucket(matched.scenarioId) ? [matched] : [];
+      return matched ? [matched] : [];
     }
 
     if (hasRepeatPatternParams) {
@@ -477,33 +449,42 @@ export function AnalysisTranscripts() {
         scenarioDimensions,
         activeRowDim,
         activeColDim,
-      ).filter((transcript) => matchesOrientationBucket(transcript.scenarioId));
+      );
     }
 
     if (hasPairedConditionFilterParams) {
       const runEntries = [
         {
           run,
+          source: 'current' as const,
           content: definitionContent,
           scenarioDims: scenarioDimensions,
         },
         {
           run: companionRun,
+          source: 'companion' as const,
           content: companionDefinitionContent,
           scenarioDims: companionScenarioDimensions,
         },
       ];
 
       return runEntries.flatMap((entry) => {
-        if (pairedConditionSource === 'current' && entry.run?.id !== run?.id) {
+        if (!entry.run) {
           return [];
         }
-        if (pairedConditionSource === 'companion' && entry.run?.id !== companionRun?.id) {
+        if (pairedConditionSource === 'current' && entry.source !== 'current') {
           return [];
         }
-        if (pairedConditionSource === 'current' || pairedConditionSource === 'companion' || pairedConditionSource === 'pooled') {
+        if (pairedConditionSource === 'companion' && entry.source !== 'companion') {
+          return [];
+        }
+        if (
+          pairedConditionSource === 'current'
+          || pairedConditionSource === 'companion'
+          || pairedConditionSource === 'pooled'
+        ) {
           return filterTranscriptsForPivotCell({
-            transcripts: entry.run?.transcripts ?? [],
+            transcripts: entry.run.transcripts ?? [],
             scenarioDimensions: entry.scenarioDims,
             rowDim: activeRowDim,
             colDim: activeColDim,
@@ -514,13 +495,8 @@ export function AnalysisTranscripts() {
           });
         }
 
-        const entryOrientation = getOrientationBucketForContent(entry.content);
-        if (pairView === 'condition-split' && orientationBucket && entryOrientation !== orientationBucket) {
-          return [];
-        }
-
         return filterTranscriptsForPivotCell({
-          transcripts: entry.run?.transcripts ?? [],
+          transcripts: entry.run.transcripts ?? [],
           scenarioDimensions: entry.scenarioDims,
           rowDim: activeRowDim,
           colDim: activeColDim,
@@ -589,13 +565,12 @@ export function AnalysisTranscripts() {
         activeColDim,
       );
 
-      return transcripts.filter((transcript) => (
-        transcript.modelId === selectedModel
-        && transcript.scenarioId !== null
-        && matchingScenarioIds.has(transcript.scenarioId)
-        && matchesOrientationBucket(transcript.scenarioId)
-      ));
-    }
+        return transcripts.filter((transcript) => (
+          transcript.modelId === selectedModel
+          && transcript.scenarioId !== null
+          && matchingScenarioIds.has(transcript.scenarioId)
+        ));
+      }
 
     return filterTranscriptsForPivotCell({
       transcripts: run?.transcripts ?? [],
@@ -606,7 +581,7 @@ export function AnalysisTranscripts() {
       col,
       selectedModel,
       decisionCode: decisionCode || undefined,
-    }).filter((transcript) => matchesOrientationBucket(transcript.scenarioId));
+    });
   }, [
     scenarioDimensions,
     modelScenarioMatrix,
@@ -623,7 +598,6 @@ export function AnalysisTranscripts() {
     hasPairedValueFilterParams,
     hasBucketFilterParams,
     hasDirectTranscriptParam,
-    matchesOrientationBucket,
     pairedConditionSource,
     selectedTranscriptId,
     companionRun,
@@ -634,8 +608,6 @@ export function AnalysisTranscripts() {
     definitionContent,
     pairedValueKey,
     pairedDecisionBucketParam,
-    pairView,
-    orientationBucket,
     resolveDecisionBucketForValue,
   ]);
 
@@ -820,12 +792,6 @@ export function AnalysisTranscripts() {
                   Favors: <span className="font-medium text-gray-900">{decisionBucketLabel}</span>
                 </>
               )}
-              {orientationBucket && (
-                <>
-                  <span className="mx-2">•</span>
-                  Orientation: <span className="font-medium text-gray-900">{getOrientationBucketLabel(orientationBucket, orientationLabels)}</span>
-                </>
-              )}
               {pairedConditionSource && (
                 <>
                   <span className="mx-2">•</span>
@@ -856,12 +822,6 @@ export function AnalysisTranscripts() {
         <AnalysisScopeBanner analysisMode={analysisMode} compact />
       )}
 
-      {orientationBucket && (
-        <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">
-          Split inspection is active for the <span className="font-medium">{getOrientationBucketLabel(orientationBucket, orientationLabels)}</span> side of the paired vignette.
-        </div>
-      )}
-
       {hasPairedValueFilterParams && pairedValueLabel && (
         <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">
           Blended paired inspection is active for <span className="font-medium">{formatDisplayLabel(pairedValueLabel)}</span>. This list merges transcripts from both companion runs for the selected model.
@@ -870,23 +830,15 @@ export function AnalysisTranscripts() {
 
       {hasPairedConditionFilterParams && (
         <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">
-          {pairView === 'condition-split' && pairedConditionSource
-            ? (
-              <>
-                Paired source inspection is active for the <span className="font-medium">{formatPairedConditionSourceLabel(pairedConditionSource)}</span> transcripts in this condition cell.
-              </>
-            )
-            : pairView === 'condition-split' && orientationBucket
-            ? (
-              <>
-                Order-detail paired inspection is active for the <span className="font-medium">{getOrientationBucketLabel(orientationBucket, orientationLabels)}</span> side of this condition cell.
-              </>
-            )
-            : (
-              <>
-                Blended paired inspection is active for this condition cell. This list merges transcripts from both companion runs for the selected model.
-              </>
-            )}
+          {pairView === 'condition-split' && pairedConditionSource ? (
+            <>
+              Paired source inspection is active for the <span className="font-medium">{formatPairedConditionSourceLabel(pairedConditionSource)}</span> transcripts in this condition cell.
+            </>
+          ) : (
+            <>
+              Blended paired inspection is active for this condition cell. This list merges transcripts from both companion runs for the selected model.
+            </>
+          )}
         </div>
       )}
 
@@ -924,7 +876,9 @@ export function AnalysisTranscripts() {
         </div>
       )}
 
-      {reportStateError ? (
+      {pairedConditionStateError ? (
+        <ErrorMessage message={pairedConditionStateError.message} />
+      ) : reportStateError ? (
         <ErrorMessage message={reportStateError.message} />
       ) : !hasDirectTranscriptParam && !hasRepeatPatternParams && !hasPairedValueFilterParams && !hasPairedConditionFilterParams && scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
         <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
