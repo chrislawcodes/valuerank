@@ -1,8 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ConditionDecisionsTable } from '../../../src/components/analysis/ConditionDecisionsTable';
 import type { Transcript } from '../../../src/api/operations/runs';
+
+const mockNavigate = vi.fn();
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
 
 function createTranscript({
   id,
@@ -96,6 +106,10 @@ function createVisualizationData() {
 }
 
 describe('ConditionDecisionsTable', () => {
+  beforeEach(() => {
+    mockNavigate.mockReset();
+  });
+
   it('groups model headers by family when multiple variants share a provider', () => {
     render(
       <MemoryRouter>
@@ -229,6 +243,20 @@ describe('ConditionDecisionsTable', () => {
 
     expect(screen.getAllByText('Current vignette').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Companion vignette').length).toBeGreaterThan(0);
+
+    const transcriptButton = screen
+      .getAllByRole('button')
+      .find((button) => button.getAttribute('title')?.startsWith('View transcripts for gpt-4'));
+
+    expect(transcriptButton).toBeDefined();
+    if (transcriptButton) {
+      fireEvent.click(transcriptButton);
+    }
+
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    const target = mockNavigate.mock.calls[0]?.[0] as string | undefined;
+    expect(target).toContain('sourceRun=current');
+    expect(target).not.toContain('orientationBucket=');
   });
 
   it('renders canonical winner scores and the unknown footer copy', () => {

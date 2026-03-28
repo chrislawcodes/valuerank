@@ -220,6 +220,83 @@ function createPairedAnalysis(
   };
 }
 
+function installPairedConditionSourceFixture() {
+  mockUseRun.mockImplementation((args?: { id?: string }) => {
+    if (args?.id === 'run-2') {
+      return {
+        run: createRun('run-2', 1, {
+          definition: {
+            id: 'def-2',
+            name: 'Harmony -> Freedom',
+            content: {
+              methodology: {
+                family: 'job-choice',
+                presentation_order: 'B_first',
+              },
+              template: 'Choose between [Harmony] and [Freedom].',
+              components: {
+                value_first: { token: 'harmony' },
+                value_second: { token: 'freedom' },
+              },
+              dimensions: [
+                { name: 'Freedom' },
+                { name: 'Harmony' },
+              ],
+            },
+          },
+          transcripts: [
+            createRenderableTranscript('tx-4', 's4', 'A', { runId: 'run-2' }),
+            createRenderableTranscript('tx-5', 's5', 'A', { runId: 'run-2' }),
+          ],
+        }),
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+      };
+    }
+
+    return {
+      run: createRun('run-1', 1, {
+        transcripts: [
+          createRenderableTranscript('tx-1', 's1', 'A'),
+          createRenderableTranscript('tx-2', 's2', 'A'),
+        ],
+      }),
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+  });
+
+  mockUseAnalysis.mockImplementation((args?: { runId?: string }) => {
+    if (args?.runId === 'run-2') {
+      return {
+        analysis: createPairedAnalysis([
+          { id: 's4', row: 'High', col: 'Low', score: 1 },
+          { id: 's5', row: 'Low', col: 'High', score: 5 },
+        ], ['s4', 's5']),
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+        recompute: vi.fn(),
+        recomputing: false,
+      };
+    }
+
+    return {
+      analysis: createPairedAnalysis([
+        { id: 's1', row: 'High', col: 'Low', score: 5 },
+        { id: 's2', row: 'Low', col: 'High', score: 1 },
+      ]),
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    };
+  });
+}
+
 describe('AnalysisTranscripts', () => {
   beforeEach(() => {
     mockNavigate.mockReset();
@@ -328,89 +405,42 @@ describe('AnalysisTranscripts', () => {
     expect(screen.getByText(/Paired mode keeps the matched vignette context visible while the analysis surface is adapted\./i)).toBeInTheDocument();
   });
 
-  it('filters transcript drilldown by orientation bucket in paired split inspection', () => {
+  it('fails loudly for legacy orientationBucket paired condition URLs', () => {
     renderPage('/analysis/run-1/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&row=High&col=Low&model=model1&orientationBucket=canonical');
 
-    expect(screen.getByText(/Split inspection is active/i)).toBeInTheDocument();
-    expect(screen.getByText((_, element) => element?.textContent === 'Split inspection is active for the Freedom -> Harmony side of the paired vignette.')).toBeInTheDocument();
+    expect(screen.getByText('Legacy orientationBucket URLs are no longer supported. Use sourceRun=current, sourceRun=companion, or sourceRun=pooled.')).toBeInTheDocument();
+    expect(screen.queryByTestId('transcript-list')).not.toBeInTheDocument();
+  });
+
+  it('filters sourceRun=current paired condition clickthroughs to the current vignette transcripts', () => {
+    installPairedConditionSourceFixture();
+
+    renderPage('/analysis/run-1/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&row=High&col=Low&companionRunId=run-2&modelId=model1&pairView=condition-split&sourceRun=current');
+
+    expect(screen.getByText('Current vignette', { selector: '.rounded-lg.border-teal-200.bg-teal-50.p-3 span.font-medium' })).toBeInTheDocument();
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 1');
   });
 
-  it('filters source-based paired clickthroughs across both runs', () => {
-    mockUseRun.mockImplementation((args?: { id?: string }) => {
-      if (args?.id === 'run-2') {
-        return {
-          run: createRun('run-2', 1, {
-            definition: {
-              id: 'def-2',
-              name: 'Harmony -> Freedom',
-              content: {
-                methodology: {
-                  family: 'job-choice',
-                  presentation_order: 'B_first',
-                },
-                template: 'Choose between [Harmony] and [Freedom].',
-                components: {
-                  value_first: { token: 'harmony' },
-                  value_second: { token: 'freedom' },
-                },
-                dimensions: [
-                  { name: 'Freedom' },
-                  { name: 'Harmony' },
-                ],
-              },
-            },
-            transcripts: [
-              createRenderableTranscript('tx-4', 's4', 'A', { runId: 'run-2' }),
-              createRenderableTranscript('tx-5', 's5', 'A', { runId: 'run-2' }),
-            ],
-          }),
-          loading: false,
-          error: null,
-          refetch: vi.fn(),
-        };
-      }
+  it('filters sourceRun=companion paired condition clickthroughs to the companion vignette transcripts', () => {
+    installPairedConditionSourceFixture();
 
-      return {
-        run: createRun('run-1', 1, {
-          transcripts: [
-            createRenderableTranscript('tx-1', 's1', 'A'),
-            createRenderableTranscript('tx-2', 's2', 'A'),
-          ],
-        }),
-        loading: false,
-        error: null,
-        refetch: vi.fn(),
-      };
-    });
+    renderPage('/analysis/run-1/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&row=High&col=Low&companionRunId=run-2&modelId=model1&pairView=condition-split&sourceRun=companion');
 
-    mockUseAnalysis.mockImplementation((args?: { runId?: string }) => {
-      if (args?.runId === 'run-2') {
-        return {
-          analysis: createPairedAnalysis([
-            { id: 's4', row: 'High', col: 'Low', score: 1 },
-            { id: 's5', row: 'Low', col: 'High', score: 5 },
-          ], ['s4', 's5']),
-          loading: false,
-          error: null,
-          refetch: vi.fn(),
-          recompute: vi.fn(),
-          recomputing: false,
-        };
-      }
+    expect(screen.getByText('Companion vignette', { selector: '.rounded-lg.border-teal-200.bg-teal-50.p-3 span.font-medium' })).toBeInTheDocument();
+    expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 1');
+  });
 
-      return {
-        analysis: createPairedAnalysis([
-          { id: 's1', row: 'High', col: 'Low', score: 5 },
-          { id: 's2', row: 'Low', col: 'High', score: 1 },
-        ]),
-        loading: false,
-        error: null,
-        refetch: vi.fn(),
-        recompute: vi.fn(),
-        recomputing: false,
-      };
-    });
+  it('fails loudly when split paired condition inspection is missing a sourceRun', () => {
+    installPairedConditionSourceFixture();
+
+    renderPage('/analysis/run-1/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&row=High&col=Low&companionRunId=run-2&modelId=model1&pairView=condition-split');
+
+    expect(screen.getByText('Split paired condition inspection requires sourceRun=current or sourceRun=companion.')).toBeInTheDocument();
+    expect(screen.queryByTestId('transcript-list')).not.toBeInTheDocument();
+  });
+
+  it('filters sourceRun=pooled paired clickthroughs across both runs', () => {
+    installPairedConditionSourceFixture();
 
     renderPage('/analysis/run-1/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&row=High&col=Low&companionRunId=run-2&modelId=model1&pairView=condition-blended&sourceRun=pooled');
 
@@ -656,7 +686,7 @@ describe('AnalysisTranscripts', () => {
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 2');
   });
 
-  it('filters reversed-order clickthrough to the flipped companion transcripts', () => {
+  it('fails loudly for flipped legacy orientationBucket paired URLs', () => {
     mockUseRun.mockReturnValue({
       run: createRun('run-2', 1, {
         definition: {
@@ -702,10 +732,8 @@ describe('AnalysisTranscripts', () => {
 
     renderPage('/analysis/run-2/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&modelId=model1&decisionBucket=a&orientationBucket=flipped');
 
-    expect(screen.getByText(/Split inspection is active/i)).toBeInTheDocument();
-    expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 1');
-    expect(lastTranscriptListProps?.decisionColumnLabel).toBe('Decision summary');
-    expect(lastTranscriptListProps?.decisionDisplayMode).toBe('audit');
+    expect(screen.getByText('Legacy orientationBucket URLs are no longer supported. Use sourceRun=current, sourceRun=companion, or sourceRun=pooled.')).toBeInTheDocument();
+    expect(screen.queryByTestId('transcript-list')).not.toBeInTheDocument();
   });
 
   it('switches transcript audit surfaces to canonical decision mode when V2 data is present', async () => {
