@@ -182,6 +182,17 @@ export function AnalysisTranscripts() {
     () => parseConditionIds(searchParams.get('conditionIds') ?? ''),
     [searchParams]
   );
+  const primaryConditionIds = useMemo(
+    () => parseConditionIds(searchParams.get('primaryConditionIds') ?? ''),
+    [searchParams]
+  );
+  const companionConditionIds = useMemo(
+    () => parseConditionIds(searchParams.get('companionConditionIds') ?? ''),
+    [searchParams]
+  );
+  const isPairedStabilityDrilldown = Boolean(
+    repeatPattern && companionRunId && searchParams.has('primaryConditionIds')
+  );
 
   const { run, loading, error, refetch } = useRun({
     id: id || '',
@@ -392,6 +403,7 @@ export function AnalysisTranscripts() {
   useEffect(() => {
     if (!scenarioDimensions) return;
     if (hasRepeatPatternParams) return;
+    if (isPairedStabilityDrilldown) return;
 
     const rowChanged = rowDim !== activeRowDim;
     const colChanged = colDim !== activeColDim;
@@ -415,6 +427,7 @@ export function AnalysisTranscripts() {
     activeRowDim,
     activeColDim,
     hasRepeatPatternParams,
+    isPairedStabilityDrilldown,
   ]);
 
   const handleDecisionChange = useCallback(async (transcript: Transcript, nextDecisionCode: string) => {
@@ -611,6 +624,30 @@ export function AnalysisTranscripts() {
     resolveDecisionBucketForValue,
   ]);
 
+  const primaryStabilityTranscripts = useMemo(() => {
+    if (!isPairedStabilityDrilldown) return [];
+    return filterTranscriptsForConditionIds(
+      run?.transcripts ?? [],
+      selectedModel,
+      primaryConditionIds,
+      scenarioDimensions,
+      activeRowDim,
+      activeColDim,
+    );
+  }, [isPairedStabilityDrilldown, run, selectedModel, primaryConditionIds, scenarioDimensions, activeRowDim, activeColDim]);
+
+  const companionStabilityTranscripts = useMemo(() => {
+    if (!isPairedStabilityDrilldown) return [];
+    return filterTranscriptsForConditionIds(
+      companionRun?.transcripts ?? [],
+      selectedModel,
+      companionConditionIds,
+      companionScenarioDimensions,
+      activeRowDim,
+      activeColDim,
+    );
+  }, [isPairedStabilityDrilldown, companionRun, selectedModel, companionConditionIds, companionScenarioDimensions, activeRowDim, activeColDim]);
+
   const decisionSummary = useMemo(
     () => summarizeReportTranscriptDecisions(filteredTranscripts),
     [filteredTranscripts],
@@ -757,7 +794,15 @@ export function AnalysisTranscripts() {
           )}
           <span className="text-gray-300">•</span>
           <div className="contents">
-              {hasRepeatPatternParams ? (
+              {isPairedStabilityDrilldown ? (
+                <>
+                  Repeat Pattern: <span className="font-medium text-gray-900">{formatRepeatPatternLabel(repeatPattern)}</span>
+                  <span className="mx-2">•</span>
+                  Model: <span className="font-medium text-gray-900">{selectedModel}</span>
+                  <span className="mx-2">•</span>
+                  <span className="font-medium text-gray-900">Both vignette orders</span>
+                </>
+              ) : hasRepeatPatternParams ? (
                 <>
                   Repeat Pattern: <span className="font-medium text-gray-900">{formatRepeatPatternLabel(repeatPattern)}</span>
                   <span className="mx-2">•</span>
@@ -842,13 +887,13 @@ export function AnalysisTranscripts() {
         </div>
       )}
 
-      {!scenarioDimensions && !hasRepeatPatternParams && !hasDirectTranscriptParam && !hasPairedValueFilterParams && !hasPairedConditionFilterParams && (
+      {!scenarioDimensions && !hasRepeatPatternParams && !hasDirectTranscriptParam && !hasPairedValueFilterParams && !hasPairedConditionFilterParams && !isPairedStabilityDrilldown && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
           Condition dimension data is not available for this run. Recompute analysis to enable pivot filtering.
         </div>
       )}
 
-      {filteredTranscripts.length > 0 && (
+      {!isPairedStabilityDrilldown && filteredTranscripts.length > 0 && (
         <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium text-gray-900">
@@ -876,7 +921,58 @@ export function AnalysisTranscripts() {
         </div>
       )}
 
-      {pairedConditionStateError ? (
+      {isPairedStabilityDrilldown ? (
+        <div className="space-y-6">
+          <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">
+            Stability drilldown is active for <span className="font-medium">{formatRepeatPatternLabel(repeatPattern)}</span>. Transcripts are shown separately for each vignette order.
+          </div>
+          {primaryStabilityTranscripts.length === 0 && companionStabilityTranscripts.length === 0 && (
+            <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
+              No transcripts match the selected stability pattern.
+            </div>
+          )}
+          <section className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700">Primary vignette order</h3>
+            {primaryStabilityTranscripts.length > 0 ? (
+              <TranscriptList
+                transcripts={primaryStabilityTranscripts}
+                onSelect={setSelectedTranscript}
+                groupByModel={false}
+                scenarioDimensions={scenarioDimensions}
+                onDecisionChange={handleDecisionChange}
+                updatingTranscriptIds={updatingTranscriptIds}
+                decisionColumnLabel={decisionColumnLabel}
+                decisionColumnTooltip={decisionColumnTooltip}
+                decisionDisplayMode={listDisplayMode}
+              />
+            ) : (
+              <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-500">
+                No transcripts matched this pattern for this vignette order.
+              </div>
+            )}
+          </section>
+          <section className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700">Companion vignette order</h3>
+            {companionStabilityTranscripts.length > 0 ? (
+              <TranscriptList
+                transcripts={companionStabilityTranscripts}
+                onSelect={setSelectedTranscript}
+                groupByModel={false}
+                scenarioDimensions={companionScenarioDimensions}
+                onDecisionChange={handleDecisionChange}
+                updatingTranscriptIds={updatingTranscriptIds}
+                decisionColumnLabel={decisionColumnLabel}
+                decisionColumnTooltip={decisionColumnTooltip}
+                decisionDisplayMode={listDisplayMode}
+              />
+            ) : (
+              <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-500">
+                No transcripts matched this pattern for this vignette order.
+              </div>
+            )}
+          </section>
+        </div>
+      ) : pairedConditionStateError ? (
         <ErrorMessage message={pairedConditionStateError.message} />
       ) : reportStateError ? (
         <ErrorMessage message={reportStateError.message} />

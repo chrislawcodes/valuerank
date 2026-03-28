@@ -762,7 +762,8 @@ describe('OverviewTab', () => {
 
     expect(screen.getByText('Run-level evidence: pooled across 2 companion runs')).toBeInTheDocument();
     expect(screen.getByText('62.5%')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /stable: 5 of 8 repeated conditions/i })).not.toBeInTheDocument();
+    // Paired mode now enables drilldown — the stable cell should be a clickable button
+    expect(screen.getByRole('button', { name: /stable: 5 of 8 repeated conditions/i })).toBeInTheDocument();
   });
 
   it('does not show the old paired scope note in overview', () => {

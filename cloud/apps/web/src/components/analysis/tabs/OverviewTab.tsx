@@ -600,6 +600,68 @@ function PatternMetricButton({
   );
 }
 
+function PairedPatternMetricButton({
+  runId,
+  companionRunId,
+  analysisBasePath,
+  analysisSearchParams,
+  modelId,
+  pattern,
+  primaryMetrics,
+  companionMetrics,
+  title,
+  rowDim,
+  colDim,
+}: {
+  runId: string;
+  companionRunId: string;
+  analysisBasePath: AnalysisBasePath;
+  analysisSearchParams?: URLSearchParams | string;
+  modelId: string;
+  pattern: RepeatPattern;
+  primaryMetrics: Extract<RepeatPatternMetrics, { status: 'available' }>;
+  companionMetrics: Extract<RepeatPatternMetrics, { status: 'available' }>;
+  title: string;
+  rowDim: string;
+  colDim: string;
+}) {
+  const navigate = useNavigate();
+  const primaryCount = primaryMetrics.counts[pattern];
+  const companionCount = companionMetrics.counts[pattern];
+  const totalClassified = primaryMetrics.classifiedCount + companionMetrics.classifiedCount;
+  const totalCount = primaryCount + companionCount;
+  const value = totalClassified === 0 ? 0 : totalCount / totalClassified;
+
+  if (totalCount === 0) {
+    return <SummaryCell title={title} align="center">{formatPercent(value)}</SummaryCell>;
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="h-auto min-h-0 px-0 py-0 text-sm font-medium text-gray-700 hover:bg-transparent hover:text-teal-700"
+      title={title}
+      aria-label={title}
+      onClick={() => {
+        const params = new URLSearchParams({
+          modelId,
+          repeatPattern: pattern,
+          rowDim,
+          colDim,
+          companionRunId,
+          primaryConditionIds: primaryMetrics.conditionIds[pattern].join(','),
+          companionConditionIds: companionMetrics.conditionIds[pattern].join(','),
+        });
+        navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params, analysisSearchParams));
+      }}
+    >
+      {formatPercent(value)}
+    </Button>
+  );
+}
+
 function OverviewSummaryTable({
   runId,
   analysisBasePath = ANALYSIS_BASE_PATH,
@@ -754,9 +816,10 @@ function OverviewSummaryTable({
             {models.map(({ modelId, preference, reliability }) => {
               const preferredValue = getPreferredValueName(preference);
               const preferenceStrengthText = formatPreferenceStrength(preference);
-              const repeatMetrics = mergeRepeatPatternMetrics(
-                repeatPatternSources.map((source) => getRepeatPatternMetrics(modelId, source.varianceAnalysis, source.conditionRows)),
-              );
+              const perSourceMetricsList = repeatPatternSources.map((source) => getRepeatPatternMetrics(modelId, source.varianceAnalysis, source.conditionRows));
+              const repeatMetrics = mergeRepeatPatternMetrics(perSourceMetricsList);
+              const primarySourceMetrics = perSourceMetricsList[0] ?? null;
+              const companionSourceMetrics = perSourceMetricsList[1] ?? null;
               const repeatEvidenceDetail = repeatMetrics.status === 'available'
                 ? `${repeatMetrics.classifiedCount} of ${repeatMetrics.repeatedCount} repeated conditions classified • ${repeatMetrics.strongerConfidenceCount} condition${repeatMetrics.strongerConfidenceCount === 1 ? '' : 's'} with 10+ repeats`
                 : `${repeatMetrics.reason} • ${repeatMetrics.strongerConfidenceCount} condition${repeatMetrics.strongerConfidenceCount === 1 ? '' : 's'} with 10+ repeats`;
@@ -791,15 +854,16 @@ function OverviewSummaryTable({
                   </td>
                   {(['stable', 'softLean', 'torn', 'noisy'] as const).map((pattern) => {
                     const label = REPEAT_PATTERN_LABELS[pattern];
+                    const count = repeatMetrics.status === 'available' ? repeatMetrics.counts[pattern] : 0;
                     const title = repeatMetrics.status === 'available'
                       ? isPooledAcrossRuns
-                        ? `${label}: ${repeatMetrics.counts[pattern]} of ${repeatMetrics.classifiedCount} repeated conditions across both vignette orders • transcript drilldown is not available from this pooled summary cell yet`
+                        ? `${label}: ${repeatMetrics.counts[pattern]} of ${repeatMetrics.classifiedCount} repeated conditions across both vignette orders`
                         : `${label}: ${repeatMetrics.counts[pattern]} of ${repeatMetrics.classifiedCount} repeated conditions • ${repeatMetrics.strongerConfidenceCount} condition${repeatMetrics.strongerConfidenceCount === 1 ? '' : 's'} with 10+ repeats`
                       : repeatEvidenceDetail;
 
                     return (
                       <td key={pattern} className="border border-gray-200 px-3 py-2 text-center text-sm text-gray-700">
-                        {repeatMetrics.status === 'available' && !isPooledAcrossRuns ? (
+                        {repeatMetrics.status === 'available' && count > 0 && !isPooledAcrossRuns ? (
                           <PatternMetricButton
                             runId={runId}
                             analysisBasePath={analysisBasePath}
@@ -807,6 +871,23 @@ function OverviewSummaryTable({
                             modelId={modelId}
                             pattern={pattern}
                             metrics={repeatMetrics}
+                            title={title}
+                            rowDim={attributeA}
+                            colDim={attributeB}
+                          />
+                        ) : repeatMetrics.status === 'available' && count > 0 && isPooledAcrossRuns
+                            && companionAnalysis != null
+                            && primarySourceMetrics !== null && primarySourceMetrics.status === 'available'
+                            && companionSourceMetrics !== null && companionSourceMetrics.status === 'available' ? (
+                          <PairedPatternMetricButton
+                            runId={runId}
+                            companionRunId={companionAnalysis.runId}
+                            analysisBasePath={analysisBasePath}
+                            analysisSearchParams={analysisSearchParams}
+                            modelId={modelId}
+                            pattern={pattern}
+                            primaryMetrics={primarySourceMetrics}
+                            companionMetrics={companionSourceMetrics}
                             title={title}
                             rowDim={attributeA}
                             colDim={attributeB}
