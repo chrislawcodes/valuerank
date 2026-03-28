@@ -405,7 +405,6 @@ describe('AnalysisConditionDetail', () => {
 
   it('routes a pooled row count click to the matching transcript slice', () => {
     renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
-
     const row = screen.getByText('Pooled').closest('tr');
     expect(row).not.toBeNull();
 
