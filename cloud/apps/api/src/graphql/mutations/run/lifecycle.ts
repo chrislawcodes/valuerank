@@ -1,4 +1,4 @@
-import { Prisma, db, type RunCategory } from '@valuerank/db';
+import { db, type Prisma, type RunCategory } from '@valuerank/db';
 import { AuthenticationError, NotFoundError, ValidationError } from '@valuerank/shared';
 import { builder } from '../../builder.js';
 import type { Context } from '../../context.js';
@@ -204,7 +204,7 @@ async function loadRunForResult(runId: string, ctx: Context): Promise<LoadedRun>
   if (run == null) {
     throw new Error(`Run not found: ${runId}`);
   }
-  return run as LoadedRun;
+  return run;
 }
 
 builder.mutationField('startRun', (t) =>
