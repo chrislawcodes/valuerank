@@ -32,6 +32,12 @@ export type ConditionDecisionSummary = {
   totalCount: number;
 };
 
+type PairLabelStats = {
+  count: number;
+  favoredCounts: Map<string, number>;
+  labels: [string, string];
+};
+
 function getConditionDecisionBucketKey(transcript: Transcript): ConditionDecisionBucketKey {
   if (!hasRenderableTranscriptDecisionModelV2(transcript)) {
     return 'unknown';
@@ -65,8 +71,8 @@ function getConditionDecisionBucketKey(transcript: Transcript): ConditionDecisio
   return 'unknown';
 }
 
-function resolveLabelPair(transcripts: Transcript[]): ConditionDecisionLabelPair | null {
-  const pairCounts = new Map<string, { count: number; firstValueLabel: string; secondValueLabel: string }>();
+export function resolveConditionDecisionLabelPair(transcripts: Transcript[]): ConditionDecisionLabelPair | null {
+  const pairCounts = new Map<string, PairLabelStats>();
 
   for (const transcript of transcripts) {
     if (!hasRenderableTranscriptDecisionModelV2(transcript)) {
@@ -78,17 +84,22 @@ function resolveLabelPair(transcripts: Transcript[]): ConditionDecisionLabelPair
       continue;
     }
 
-    const firstValueLabel = formatDisplayLabel(canonical.favoredValueKey);
-    const secondValueLabel = formatDisplayLabel(canonical.opposedValueKey);
-    const key = `${firstValueLabel}||${secondValueLabel}`;
+    const favoredValueLabel = formatDisplayLabel(canonical.favoredValueKey);
+    const opposedValueLabel = formatDisplayLabel(canonical.opposedValueKey);
+    const labels = [favoredValueLabel, opposedValueLabel].sort((left, right) => left.localeCompare(right)) as [string, string];
+    const key = `${labels[0]}||${labels[1]}`;
     const current = pairCounts.get(key);
     if (current) {
       current.count += 1;
+      current.favoredCounts.set(
+        favoredValueLabel,
+        (current.favoredCounts.get(favoredValueLabel) ?? 0) + 1,
+      );
     } else {
       pairCounts.set(key, {
         count: 1,
-        firstValueLabel,
-        secondValueLabel,
+        favoredCounts: new Map([[favoredValueLabel, 1]]),
+        labels,
       });
     }
   }
@@ -103,21 +114,40 @@ function resolveLabelPair(transcripts: Transcript[]): ConditionDecisionLabelPair
         return b.count - a.count;
       }
 
-      const firstCompare = a.firstValueLabel.localeCompare(b.firstValueLabel);
+      const leftLabels = [...a.labels].sort((left, right) => left.localeCompare(right));
+      const rightLabels = [...b.labels].sort((left, right) => left.localeCompare(right));
+      const firstCompare = (leftLabels[0] ?? '').localeCompare(rightLabels[0] ?? '');
       if (firstCompare !== 0) {
         return firstCompare;
       }
 
-      return a.secondValueLabel.localeCompare(b.secondValueLabel);
+      return (leftLabels[1] ?? '').localeCompare(rightLabels[1] ?? '');
     })[0] ?? null;
 
   if (!bestPair) {
     return null;
   }
 
+  const [labelA, labelB] = bestPair.labels;
+  const favoredA = bestPair.favoredCounts.get(labelA) ?? 0;
+  const favoredB = bestPair.favoredCounts.get(labelB) ?? 0;
+  if (favoredA > favoredB) {
+    return {
+      firstValueLabel: labelA,
+      secondValueLabel: labelB,
+    };
+  }
+
+  if (favoredB > favoredA) {
+    return {
+      firstValueLabel: labelB,
+      secondValueLabel: labelA,
+    };
+  }
+
   return {
-    firstValueLabel: bestPair.firstValueLabel,
-    secondValueLabel: bestPair.secondValueLabel,
+    firstValueLabel: labelA,
+    secondValueLabel: labelB,
   };
 }
 
@@ -150,7 +180,7 @@ export function summarizeConditionDecisionBuckets(transcripts: Transcript[]): Co
     counts[bucket] += 1;
   }
 
-  const labelPair = resolveLabelPair(transcripts);
+  const labelPair = resolveConditionDecisionLabelPair(transcripts);
   const labels = buildBucketLabels(labelPair);
 
   const buckets = CONDITION_DECISION_BUCKET_ORDER.map((key) => ({

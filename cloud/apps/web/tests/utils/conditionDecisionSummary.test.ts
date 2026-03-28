@@ -195,7 +195,7 @@ describe('conditionDecisionSummary', () => {
     ]);
   });
 
-  it('chooses labels from the dominant transcript pair instead of the first transcript order', () => {
+  it('chooses labels from the dominant unordered transcript pair', () => {
     const summary = summarizeConditionDecisionBuckets([
       createTranscript('t-1', '5', 'B_first'),
       createTranscript('t-2', '5', 'A_first'),

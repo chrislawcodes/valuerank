@@ -24,7 +24,19 @@ function makeTranscript(
   modelId: string,
   direction: 'favor_first' | 'favor_second' | 'neutral',
   strength: 'strong' | 'lean' | 'neutral',
+  valuePair: { favoredValueKey: string; opposedValueKey: string } = {
+    favoredValueKey: 'Freedom',
+    opposedValueKey: 'Harmony',
+  },
 ): Transcript {
+  const canonicalValues =
+    direction === 'neutral'
+      ? {
+          favoredValueKey: null,
+          opposedValueKey: null,
+        }
+      : valuePair;
+
   return {
     id,
     runId: 'run-1',
@@ -50,8 +62,8 @@ function makeTranscript(
         manualOverride: null,
       },
       canonical: {
-        favoredValueKey: null,
-        opposedValueKey: null,
+        favoredValueKey: canonicalValues.favoredValueKey,
+        opposedValueKey: canonicalValues.opposedValueKey,
         direction,
         strength,
         normalizationApplied: false,
@@ -113,10 +125,6 @@ describe('PivotAnalysisTable', () => {
       <MemoryRouter>
         <PivotAnalysisTable
           runId="run-1"
-          dimensionLabels={{
-            '1': 'Strongly Support Freedom',
-            '5': 'Strongly Support Harmony',
-          }}
           visualizationData={BASE_VISUALIZATION_DATA}
           transcripts={BASE_TRANSCRIPTS}
         />
@@ -128,6 +136,56 @@ describe('PivotAnalysisTable', () => {
     expect(screen.getByText('Neutral 1')).toBeInTheDocument();
     expect(screen.getByText('Harmony 1')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /copy pivot analysis table as image/i })).toBeInTheDocument();
+  });
+
+  it('uses transcript labels for the legend instead of vignette order', () => {
+    render(
+      <MemoryRouter>
+        <PivotAnalysisTable
+          runId="run-1"
+          visualizationData={{
+            decisionDistribution: {},
+            scenarioDimensions: {
+              s1: { Achievement: 'a1', Conformity_Interpersonal: 'b1' },
+              s2: { Achievement: 'a1', Conformity_Interpersonal: 'b2' },
+              s3: { Achievement: 'a2', Conformity_Interpersonal: 'b2' },
+            },
+            modelScenarioMatrix: {
+              model1: { s1: 1, s2: 3, s3: 5 },
+            },
+          }}
+          transcripts={[
+            makeTranscript(
+              't1',
+              's1',
+              'model1',
+              'favor_first',
+              'strong',
+              {
+                favoredValueKey: 'Conformity_Interpersonal',
+                opposedValueKey: 'Achievement',
+              },
+            ),
+            makeTranscript('t2', 's2', 'model1', 'neutral', 'neutral'),
+            makeTranscript(
+              't3',
+              's3',
+              'model1',
+              'favor_second',
+              'strong',
+              {
+                favoredValueKey: 'Achievement',
+                opposedValueKey: 'Conformity_Interpersonal',
+              },
+            ),
+          ]}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Conformity Interpersonal 1')).toBeInTheDocument();
+    expect(screen.getByText('Neutral 1')).toBeInTheDocument();
+    expect(screen.getByText('Achievement 1')).toBeInTheDocument();
   });
 
   it('orders pivot rows from negligible to full', () => {
@@ -203,10 +261,6 @@ describe('PivotAnalysisTable', () => {
           runId="run-1"
           analysisBasePath="/analysis"
           analysisSearchParams={new URLSearchParams({ mode: 'paired' })}
-          dimensionLabels={{
-            '1': 'Strongly Support Freedom',
-            '5': 'Strongly Support Harmony',
-          }}
           visualizationData={NAV_VISUALIZATION_DATA}
           transcripts={NAV_TRANSCRIPTS}
         />
@@ -228,10 +282,6 @@ describe('PivotAnalysisTable', () => {
           runId="run-1"
           analysisBasePath="/analysis"
           analysisSearchParams="?mode=paired"
-          dimensionLabels={{
-            '1': 'Strongly Support Freedom',
-            '5': 'Strongly Support Harmony',
-          }}
           visualizationData={NAV_VISUALIZATION_DATA}
           transcripts={NAV_TRANSCRIPTS}
         />
@@ -251,10 +301,6 @@ describe('PivotAnalysisTable', () => {
         <PivotAnalysisTable
           runId="run-1"
           analysisBasePath="/analysis"
-          dimensionLabels={{
-            '1': 'Strongly Support Freedom',
-            '5': 'Strongly Support Harmony',
-          }}
           visualizationData={NAV_VISUALIZATION_DATA}
           transcripts={NAV_TRANSCRIPTS}
         />

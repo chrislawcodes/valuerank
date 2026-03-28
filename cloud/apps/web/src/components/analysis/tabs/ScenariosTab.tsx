@@ -6,10 +6,9 @@
 
 import { ConditionDecisionsTable } from '../ConditionDecisionsTable';
 import { PivotAnalysisTable } from '../PivotAnalysisTable';
-import type { VisualizationData, ContestedScenario, PerModelStats } from '../../../api/operations/analysis';
+import type { VisualizationData, PerModelStats } from '../../../api/operations/analysis';
 import type { Transcript } from '../../../api/operations/runs';
 import { ANALYSIS_BASE_PATH, type AnalysisBasePath } from '../../../utils/analysisRouting';
-import { getPairedOrientationLabels } from '../../../utils/methodology';
 
 type ScenariosTabProps = {
   runId: string;
@@ -19,10 +18,7 @@ type ScenariosTabProps = {
   visualizationData: VisualizationData | null | undefined;
   perModel: Record<string, PerModelStats>;
   transcripts?: Transcript[];
-  contestedScenarios: ContestedScenario[];
-  dimensionLabels?: Record<string, string>;
   expectedAttributes?: string[];
-  definitionContent?: unknown;
   companionRunId?: string | null;
 };
 
@@ -34,9 +30,7 @@ export function ScenariosTab({
   visualizationData,
   perModel,
   transcripts,
-  dimensionLabels,
   expectedAttributes = [],
-  definitionContent,
   companionRunId,
 }: ScenariosTabProps) {
   const hasScenarioDimensions = Boolean(
@@ -47,7 +41,6 @@ export function ScenariosTab({
     visualizationData?.modelScenarioMatrix
     && Object.keys(visualizationData.modelScenarioMatrix).length > 0
   );
-  const orientationLabels = getPairedOrientationLabels(definitionContent);
 
   return (
     <div className="space-y-8">
@@ -62,7 +55,6 @@ export function ScenariosTab({
                 analysisMode={analysisMode}
                 visualizationData={visualizationData}
                 transcripts={transcripts}
-                dimensionLabels={dimensionLabels}
                 expectedAttributes={expectedAttributes}
                 companionRunId={analysisMode === 'paired' ? companionRunId ?? null : null}
               />
@@ -81,7 +73,6 @@ export function ScenariosTab({
                 analysisBasePath={analysisBasePath}
                 analysisSearchParams={analysisSearchParams}
                 companionRunId={analysisMode === 'paired' ? companionRunId ?? null : null}
-                orientationLabels={orientationLabels}
                 analysisMode={analysisMode}
                 perModel={perModel}
                 transcripts={transcripts}
