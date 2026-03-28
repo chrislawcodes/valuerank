@@ -110,6 +110,7 @@ export type RunConfig = {
   sampleSeed?: number;
   temperature?: number | null;
   priority?: string;
+  companionRunId?: string | null;
   jobChoiceLaunchMode?: 'PAIRED_BATCH' | 'AD_HOC_BATCH' | 'STANDARD' | null;
   jobChoiceBatchGroupId?: string | null;
   jobChoicePresentationOrder?: 'A_first' | 'B_first' | null;
@@ -164,6 +165,7 @@ export type Run = {
   definitionId: string;
   definitionVersion: number | null; // Added
   experimentId: string | null;
+  companionRunId: string | null;
   status: RunStatus;
   runCategory: RunCategory;
   config: RunConfig;
@@ -222,6 +224,7 @@ export const RUN_FRAGMENT = gql`
     runCategory
     config
     stalledModels
+    companionRunId
     batchCount
     pairedBatchGroupId
     progress
@@ -295,7 +298,34 @@ export const RUN_WITH_TRANSCRIPTS_FRAGMENT = gql`
       createdAt
       lastAccessedAt
       dimensionValues
-      decisionModelV2
+      decisionModelV2 {
+        raw {
+          matchedText
+          matchedLabel
+          parseClass
+          parsePath
+          parserVersion
+          responseExcerpt
+          manualOverride {
+            previousValue
+            overriddenAt
+            overriddenByUserId
+          }
+        }
+        canonical {
+          favoredValueKey
+          opposedValueKey
+          direction
+          strength
+          normalizationApplied
+          normalizationReason
+          source
+        }
+        legacy {
+          rawScore
+          canonicalScore
+        }
+      }
     }
     analysis {
       actualCost {
@@ -550,7 +580,6 @@ export const UPDATE_TRANSCRIPT_DECISION_MUTATION = gql`
       decisionCode
       decisionCodeSource
       decisionMetadata
-      decisionModelV2
       turnCount
       tokenCount
       durationMs

@@ -62,6 +62,11 @@ function getRunConfigBatchGroupId(run: Run): string | null {
   return typeof raw === 'string' && raw.trim().length > 0 ? raw : null;
 }
 
+function getRunCompanionRunId(run: Run): string | null {
+  const raw = run.companionRunId ?? run.config?.companionRunId;
+  return typeof raw === 'string' && raw.trim().length > 0 ? raw : null;
+}
+
 function getDefinitionPresentationOrder(run: Run): JobChoicePresentationOrder | null {
   const raw = run.definition?.content;
   if (!isRecord(raw) || !isRecord(raw.methodology)) return null;
@@ -434,7 +439,6 @@ function buildTranscriptHref(
 
 export function findCompanionPairedRun(currentRun: Run, candidateRuns: Run[]): Run | null {
   const batchGroupId = getRunConfigBatchGroupId(currentRun);
-  const currentOrder = getRunPresentationOrder(currentRun);
   const pairKey = getDefinitionPairKey(currentRun);
 
   const candidates = candidateRuns
@@ -453,16 +457,18 @@ export function findCompanionPairedRun(currentRun: Run, candidateRuns: Run[]): R
     return null;
   }
 
-  const oppositeOrder = currentOrder === 'A_first' ? 'B_first' : currentOrder === 'B_first' ? 'A_first' : null;
-  const sorted = [...candidates].sort((left, right) => {
-    const leftMatches = oppositeOrder != null && getRunPresentationOrder(left) === oppositeOrder ? 0 : 1;
-    const rightMatches = oppositeOrder != null && getRunPresentationOrder(right) === oppositeOrder ? 0 : 1;
-    if (leftMatches !== rightMatches) {
-      return leftMatches - rightMatches;
-    }
-    return Math.abs(new Date(left.createdAt).getTime() - new Date(currentRun.createdAt).getTime())
-      - Math.abs(new Date(right.createdAt).getTime() - new Date(currentRun.createdAt).getTime());
-  });
+  const reciprocalMatch = candidates.find((candidate) => getRunCompanionRunId(candidate) === currentRun.id);
+  if (reciprocalMatch) {
+    return reciprocalMatch;
+  }
+
+  const completedCandidates = candidates.filter((candidate) => candidate.status === 'COMPLETED');
+  const rankingPool = completedCandidates.length > 0 ? completedCandidates : candidates;
+
+  const sorted = [...rankingPool].sort((left, right) => (
+    Math.abs(new Date(left.createdAt).getTime() - new Date(currentRun.createdAt).getTime())
+    - Math.abs(new Date(right.createdAt).getTime() - new Date(currentRun.createdAt).getTime())
+  ));
 
   return sorted[0] ?? null;
 }
