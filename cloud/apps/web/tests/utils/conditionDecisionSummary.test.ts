@@ -195,7 +195,10 @@ describe('conditionDecisionSummary', () => {
     ]);
   });
 
-  it('chooses labels from the dominant unordered transcript pair', () => {
+  it('resolves labels alphabetically regardless of which run the transcript came from', () => {
+    // t-1 is from a B_first companion run: favoredValueKey='Harmony' (alphabetically second) → strong_second
+    // t-2, t-3 are from A_first runs: favoredValueKey='Freedom' (alphabetically first) → strong_first
+    // Label pair is always Freedom/Harmony by alphabetical order, independent of presentation order.
     const summary = summarizeConditionDecisionBuckets([
       createTranscript('t-1', '5', 'B_first'),
       createTranscript('t-2', '5', 'A_first'),
@@ -207,12 +210,37 @@ describe('conditionDecisionSummary', () => {
       secondValueLabel: 'Harmony',
     });
     expect(summary.buckets.map((bucket) => `${bucket.key}:${bucket.label}:${bucket.count}`)).toEqual([
-      'strong_first:Strongly favors Freedom:3',
+      'strong_first:Strongly favors Freedom:2',
       'lean_first:Somewhat favors Freedom:0',
       'neutral:Neutral:0',
       'lean_second:Somewhat favors Harmony:0',
-      'strong_second:Strongly favors Harmony:0',
+      'strong_second:Strongly favors Harmony:1',
       'unknown:Unknown:0',
+    ]);
+  });
+
+  it('Harmony wins on B_first run → strong_second bucket, firstValueLabel=Freedom — direction field ignored', () => {
+    // All transcripts are from a B_first companion run: firstValueKey=Harmony, secondValueKey=Freedom.
+    // decisionCode='5' → favoredValueKey='Harmony', direction='favor_first'.
+    // Old direction-based code would have bucketed these as strong_first (wrong: Harmony labeled blue).
+    // New alphabetical code: 'Harmony'.localeCompare('Freedom') > 0 → Harmony is second → strong_second ✓
+    const summary = summarizeConditionDecisionBuckets([
+      createTranscript('t-1', '5', 'B_first'),
+      createTranscript('t-2', '5', 'B_first'),
+      createTranscript('t-3', '5', 'B_first'),
+    ]);
+
+    expect(summary.labelPair).toEqual({
+      firstValueLabel: 'Freedom',
+      secondValueLabel: 'Harmony',
+    });
+    expect(summary.buckets.map((bucket) => `${bucket.key}:${bucket.count}`)).toEqual([
+      'strong_first:0',
+      'lean_first:0',
+      'neutral:0',
+      'lean_second:0',
+      'strong_second:3',
+      'unknown:0',
     ]);
   });
 

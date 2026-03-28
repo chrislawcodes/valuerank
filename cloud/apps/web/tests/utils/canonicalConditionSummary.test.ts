@@ -53,6 +53,54 @@ function createTranscript(
   } as Transcript;
 }
 
+// Creates a transcript where favoredValueKey and direction disagree:
+// direction='favor_first' would have caused old code to bucket as 'strongly',
+// but favoredValueKey='value-b' is alphabetically second → should be opponentStrongly.
+function createTranscriptKeysMismatch(id: string): Transcript {
+  return {
+    id,
+    runId: 'run-1',
+    scenarioId: 'scenario-1',
+    modelId: 'model-1',
+    modelVersion: null,
+    content: {},
+    decisionCode: null,
+    decisionCodeSource: null,
+    decisionMetadata: null,
+    turnCount: 4,
+    tokenCount: 100,
+    durationMs: 500,
+    estimatedCost: null,
+    createdAt: '2026-01-01T00:00:00Z',
+    lastAccessedAt: null,
+    dimensionValues: null,
+    decisionModelV2: {
+      raw: {
+        matchedText: 'test',
+        matchedLabel: 'test',
+        parseClass: 'exact',
+        parsePath: 'exact',
+        parserVersion: 'job-choice-v2',
+        responseExcerpt: null,
+        manualOverride: null,
+      },
+      canonical: {
+        favoredValueKey: 'value-b',
+        opposedValueKey: 'value-a',
+        direction: 'favor_first', // contradicts alphabetical order intentionally
+        strength: 'strong',
+        normalizationApplied: false,
+        normalizationReason: null,
+        source: 'deterministic',
+      },
+      legacy: {
+        rawScore: 5,
+        canonicalScore: 5,
+      },
+    },
+  } as Transcript;
+}
+
 function createStrongSelected(id: string) {
   return createTranscript(id, 'favor_first', 'strong');
 }
@@ -199,5 +247,17 @@ describe('summarizeCanonicalConditionTranscripts', () => {
     // tie → neither side won → displayScore reads as 0 (neutral)
     expect(result.isOpponent).toBe(false);
     expect(result.displayScore).toBe(0);
+  });
+
+  it('favoredValueKey alphabetically second (value-b) buckets as opponentStrongly — direction field ignored', () => {
+    // This transcript has direction='favor_first' but favoredValueKey='value-b' (> 'value-a').
+    // Old direction-based code would have bucketed this as 'strongly' (blue).
+    // New alphabetical code must bucket it as 'opponentStrongly' (orange).
+    const transcripts = [createTranscriptKeysMismatch('t1')];
+    const result = summarizeCanonicalConditionTranscripts(transcripts);
+    expect(result.opponentStrongly).toBe(1);
+    expect(result.strongly).toBe(0);
+    expect(result.isOpponent).toBe(true);
+    expect(result.displayScore).toBeCloseTo(2.0);
   });
 });

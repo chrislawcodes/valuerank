@@ -57,8 +57,8 @@ function createTranscript({
             manualOverride: null,
           },
           canonical: {
-            favoredValueKey: direction === 'neutral' ? null : 'value-a',
-            opposedValueKey: direction === 'neutral' ? null : 'value-b',
+            favoredValueKey: direction === 'neutral' ? null : direction === 'favor_second' ? 'value-b' : 'value-a',
+            opposedValueKey: direction === 'neutral' ? null : direction === 'favor_second' ? 'value-a' : 'value-b',
             direction,
             strength,
             normalizationApplied: false,

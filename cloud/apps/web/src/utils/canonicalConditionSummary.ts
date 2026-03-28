@@ -25,25 +25,25 @@ function getCanonicalBucket(transcript: Transcript): CanonicalBucket | null {
     return null;
   }
 
-  if (canonical.direction === 'neutral' && canonical.strength === 'neutral') {
+  if (canonical.strength === 'neutral') {
     return 'neutral';
   }
 
-  if (canonical.direction === 'favor_first' && canonical.strength === 'strong') {
-    return 'strongly';
+  const { favoredValueKey, opposedValueKey, strength } = canonical;
+  if (favoredValueKey == null || opposedValueKey == null) {
+    return null;
   }
 
-  if (canonical.direction === 'favor_first' && canonical.strength === 'lean') {
-    return 'somewhat';
-  }
+  // Alphabetically-first value is the canonical "first" (blue) side; second is
+  // the "opponent" (orange) side.  This is stable across both runs in a paired
+  // batch, unlike canonical.direction which is position-based (valueA/valueB)
+  // and flips between companion runs.
+  const isFirst = favoredValueKey.localeCompare(opposedValueKey) < 0;
 
-  if (canonical.direction === 'favor_second' && canonical.strength === 'lean') {
-    return 'opponentSomewhat';
-  }
-
-  if (canonical.direction === 'favor_second' && canonical.strength === 'strong') {
-    return 'opponentStrongly';
-  }
+  if (isFirst && strength === 'strong') return 'strongly';
+  if (isFirst && strength === 'lean') return 'somewhat';
+  if (!isFirst && strength === 'lean') return 'opponentSomewhat';
+  if (!isFirst && strength === 'strong') return 'opponentStrongly';
 
   return null;
 }

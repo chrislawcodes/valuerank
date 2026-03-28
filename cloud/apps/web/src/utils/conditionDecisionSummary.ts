@@ -34,7 +34,6 @@ export type ConditionDecisionSummary = {
 
 type PairLabelStats = {
   count: number;
-  favoredCounts: Map<string, number>;
   labels: [string, string];
 };
 
@@ -48,25 +47,24 @@ function getConditionDecisionBucketKey(transcript: Transcript): ConditionDecisio
     return 'unknown';
   }
 
-  if (canonical.direction === 'neutral' && canonical.strength === 'neutral') {
+  if (canonical.strength === 'neutral') {
     return 'neutral';
   }
 
-  if (canonical.direction === 'favor_first' && canonical.strength === 'strong') {
-    return 'strong_first';
+  const { favoredValueKey, opposedValueKey, strength } = canonical;
+  if (favoredValueKey == null || opposedValueKey == null) {
+    return 'unknown';
   }
 
-  if (canonical.direction === 'favor_first' && canonical.strength === 'lean') {
-    return 'lean_first';
-  }
+  // Alphabetically-first value is canonical "first" (blue) side; second is "second" (orange).
+  // This is stable across both runs in a paired batch, unlike canonical.direction which is
+  // position-based (valueA/valueB) and flips between companion runs.
+  const isFirst = favoredValueKey.localeCompare(opposedValueKey) < 0;
 
-  if (canonical.direction === 'favor_second' && canonical.strength === 'lean') {
-    return 'lean_second';
-  }
-
-  if (canonical.direction === 'favor_second' && canonical.strength === 'strong') {
-    return 'strong_second';
-  }
+  if (isFirst && strength === 'strong') return 'strong_first';
+  if (isFirst && strength === 'lean') return 'lean_first';
+  if (!isFirst && strength === 'lean') return 'lean_second';
+  if (!isFirst && strength === 'strong') return 'strong_second';
 
   return 'unknown';
 }
@@ -86,21 +84,14 @@ export function resolveConditionDecisionLabelPair(transcripts: Transcript[]): Co
 
     const favoredValueLabel = formatDisplayLabel(canonical.favoredValueKey);
     const opposedValueLabel = formatDisplayLabel(canonical.opposedValueKey);
+    // labels[0] is always the alphabetically-first value — stable "first" (blue) side
     const labels = [favoredValueLabel, opposedValueLabel].sort((left, right) => left.localeCompare(right)) as [string, string];
     const key = `${labels[0]}||${labels[1]}`;
     const current = pairCounts.get(key);
     if (current) {
       current.count += 1;
-      current.favoredCounts.set(
-        favoredValueLabel,
-        (current.favoredCounts.get(favoredValueLabel) ?? 0) + 1,
-      );
     } else {
-      pairCounts.set(key, {
-        count: 1,
-        favoredCounts: new Map([[favoredValueLabel, 1]]),
-        labels,
-      });
+      pairCounts.set(key, { count: 1, labels });
     }
   }
 
@@ -114,40 +105,21 @@ export function resolveConditionDecisionLabelPair(transcripts: Transcript[]): Co
         return b.count - a.count;
       }
 
-      const leftLabels = [...a.labels].sort((left, right) => left.localeCompare(right));
-      const rightLabels = [...b.labels].sort((left, right) => left.localeCompare(right));
-      const firstCompare = (leftLabels[0] ?? '').localeCompare(rightLabels[0] ?? '');
+      const firstCompare = a.labels[0].localeCompare(b.labels[0]);
       if (firstCompare !== 0) {
         return firstCompare;
       }
 
-      return (leftLabels[1] ?? '').localeCompare(rightLabels[1] ?? '');
+      return a.labels[1].localeCompare(b.labels[1]);
     })[0] ?? null;
 
   if (!bestPair) {
     return null;
   }
 
-  const [labelA, labelB] = bestPair.labels;
-  const favoredA = bestPair.favoredCounts.get(labelA) ?? 0;
-  const favoredB = bestPair.favoredCounts.get(labelB) ?? 0;
-  if (favoredA > favoredB) {
-    return {
-      firstValueLabel: labelA,
-      secondValueLabel: labelB,
-    };
-  }
-
-  if (favoredB > favoredA) {
-    return {
-      firstValueLabel: labelB,
-      secondValueLabel: labelA,
-    };
-  }
-
   return {
-    firstValueLabel: labelA,
-    secondValueLabel: labelB,
+    firstValueLabel: bestPair.labels[0],
+    secondValueLabel: bestPair.labels[1],
   };
 }
 

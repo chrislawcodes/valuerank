@@ -394,12 +394,13 @@ describe('AnalysisConditionDetail', () => {
       .getAllByRole('columnheader')
       .map((header) => header.textContent?.replace(/\s+/g, ' ').trim() ?? '');
 
+    // Achievement < Conformity_Interpersonal alphabetically → Achievement is canonical "first" (blue)
     expect(headers.slice(1, 6)).toEqual([
-      'Strongly favors Conformity Interpersonal',
-      'Somewhat favors Conformity Interpersonal',
-      'Neutral',
-      'Somewhat favors Achievement',
       'Strongly favors Achievement',
+      'Somewhat favors Achievement',
+      'Neutral',
+      'Somewhat favors Conformity Interpersonal',
+      'Strongly favors Conformity Interpersonal',
     ]);
   });
 
