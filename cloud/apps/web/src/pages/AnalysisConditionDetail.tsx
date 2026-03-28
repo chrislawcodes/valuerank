@@ -90,9 +90,17 @@ function buildDetailRow(
   };
 }
 
-function getSummaryLabelPair(rows: DetailRow[]): { firstValueLabel: string; secondValueLabel: string } | null {
-  for (const row of rows) {
-    if (row.summary.labelPair) {
+function getSummaryLabelPair(
+  rows: DetailRow[],
+  analysisMode: AnalysisDetailMode,
+): { firstValueLabel: string; secondValueLabel: string } | null {
+  const preferredRowIds = analysisMode === 'paired'
+    ? ['current', 'single', 'companion', 'pooled']
+    : ['single', 'current', 'companion', 'pooled'];
+
+  for (const rowId of preferredRowIds) {
+    const row = rows.find((candidate) => candidate.id === rowId);
+    if (row?.summary.labelPair) {
       return row.summary.labelPair;
     }
   }
@@ -282,7 +290,7 @@ export function AnalysisConditionDetail() {
   ]);
 
   const decisionSummaryLabels = useMemo(() => {
-    const labelPair = getSummaryLabelPair(detailRows);
+    const labelPair = getSummaryLabelPair(detailRows, analysisMode);
     const firstValueLabel = labelPair?.firstValueLabel ?? 'canonical first value';
     const secondValueLabel = labelPair?.secondValueLabel ?? 'canonical second value';
 
@@ -299,7 +307,7 @@ export function AnalysisConditionDetail() {
       key,
       label: labels[key],
     }));
-  }, [detailRows]);
+  }, [analysisMode, detailRows]);
 
   const hasUnresolvedTranscripts = detailRows.some((row) => row.summary.unknownCount > 0);
 

@@ -33,24 +33,30 @@ function createTranscript(
   scenarioId: string,
   presentationOrder: 'A_first' | 'B_first',
   decisionCode: string | null,
+  valuePair?: {
+    favoredValueKey: string;
+    opposedValueKey: string;
+  },
 ) {
   const firstValueKey = presentationOrder === 'A_first' ? 'Freedom' : 'Harmony';
   const secondValueKey = presentationOrder === 'A_first' ? 'Harmony' : 'Freedom';
+  const favoredValueKey = valuePair?.favoredValueKey ?? firstValueKey;
+  const opposedValueKey = valuePair?.opposedValueKey ?? secondValueKey;
 
   const decisionModelV2 = decisionCode === '5'
     ? {
         raw: {
-          matchedText: firstValueKey,
-          matchedLabel: firstValueKey,
+          matchedText: favoredValueKey,
+          matchedLabel: favoredValueKey,
           parseClass: 'exact',
           parsePath: 'exact.favor_first.strong',
           parserVersion: 'v1',
-          responseExcerpt: firstValueKey,
+          responseExcerpt: favoredValueKey,
           manualOverride: null,
         },
         canonical: {
-          favoredValueKey: firstValueKey,
-          opposedValueKey: secondValueKey,
+          favoredValueKey,
+          opposedValueKey,
           direction: 'favor_first',
           strength: 'strong',
           normalizationApplied: false,
@@ -62,20 +68,20 @@ function createTranscript(
           canonicalScore: 5,
         },
       }
-    : decisionCode === '1'
+      : decisionCode === '1'
       ? {
           raw: {
-            matchedText: secondValueKey,
-            matchedLabel: secondValueKey,
+            matchedText: opposedValueKey,
+            matchedLabel: opposedValueKey,
             parseClass: 'exact',
             parsePath: 'exact.favor_second.strong',
             parserVersion: 'v1',
-            responseExcerpt: secondValueKey,
+            responseExcerpt: opposedValueKey,
             manualOverride: null,
           },
           canonical: {
-            favoredValueKey: secondValueKey,
-            opposedValueKey: firstValueKey,
+            favoredValueKey: opposedValueKey,
+            opposedValueKey: favoredValueKey,
             direction: 'favor_second',
             strength: 'strong',
             normalizationApplied: false,
@@ -309,9 +315,96 @@ describe('AnalysisConditionDetail', () => {
     expect(within(row as HTMLElement).getAllByRole('button').length).toBeGreaterThan(0);
   });
 
-  it('routes a pooled row count click to the matching transcript slice', () => {
+  it('prefers the current vignette labels over the pooled row in paired mode', () => {
+    const currentRun = createRun('run-1', 'A_first', [
+      createTranscript(
+        'tx-1',
+        's1',
+        'A_first',
+        '5',
+        {
+          favoredValueKey: 'Conformity_Interpersonal',
+          opposedValueKey: 'Achievement',
+        },
+      ),
+    ]);
+    const companionRun = createRun('run-2', 'B_first', [
+      createTranscript(
+        'tx-2',
+        's2',
+        'B_first',
+        '5',
+        {
+          favoredValueKey: 'Achievement',
+          opposedValueKey: 'Conformity_Interpersonal',
+        },
+      ),
+    ]);
+
+    mockUseRun.mockImplementation((args?: { id?: string }) => {
+      if (args?.id === 'run-2') {
+        return {
+          run: companionRun,
+          loading: false,
+          error: null,
+          refetch: vi.fn(),
+        };
+      }
+
+      return {
+        run: currentRun,
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+      };
+    });
+
+    mockUseRuns.mockReturnValue({
+      runs: [companionRun],
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    mockUseAnalysis.mockImplementation((args?: { runId?: string }) => {
+      if (args?.runId === 'run-2') {
+        return {
+          analysis: createAnalysis('run-2', 's2'),
+          loading: false,
+          error: null,
+          refetch: vi.fn(),
+          recompute: vi.fn(),
+          recomputing: false,
+        };
+      }
+
+      return {
+        analysis: createAnalysis('run-1', 's1'),
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+        recompute: vi.fn(),
+        recomputing: false,
+      };
+    });
+
     renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
 
+    const headers = screen
+      .getAllByRole('columnheader')
+      .map((header) => header.textContent?.replace(/\s+/g, ' ').trim() ?? '');
+
+    expect(headers.slice(1, 6)).toEqual([
+      'Strongly favors Conformity Interpersonal',
+      'Somewhat favors Conformity Interpersonal',
+      'Neutral',
+      'Somewhat favors Achievement',
+      'Strongly favors Achievement',
+    ]);
+  });
+
+  it('routes a pooled row count click to the matching transcript slice', () => {
+    renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
     const row = screen.getByText('Pooled').closest('tr');
     expect(row).not.toBeNull();
 
