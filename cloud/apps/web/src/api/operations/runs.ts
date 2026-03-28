@@ -257,6 +257,7 @@ export const RUN_WITH_TRANSCRIPTS_FRAGMENT = gql`
       createdAt
       lastAccessedAt
       dimensionValues
+      decisionModelV2
     }
     analysis {
       actualCost {
