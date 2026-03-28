@@ -6,7 +6,6 @@ import { AnalysisConditionDetail } from '../../src/pages/AnalysisConditionDetail
 const mockNavigate = vi.fn();
 const mockUseRun = vi.fn();
 const mockUseRuns = vi.fn();
-const mockUseInfiniteRuns = vi.fn();
 const mockUseAnalysis = vi.fn();
 
 vi.mock('react-router-dom', async () => {
@@ -23,10 +22,6 @@ vi.mock('../../src/hooks/useRun', () => ({
 
 vi.mock('../../src/hooks/useRuns', () => ({
   useRuns: () => mockUseRuns(),
-}));
-
-vi.mock('../../src/hooks/useInfiniteRuns', () => ({
-  useInfiniteRuns: () => mockUseInfiniteRuns(),
 }));
 
 vi.mock('../../src/hooks/useAnalysis', () => ({
@@ -240,7 +235,6 @@ describe('AnalysisConditionDetail', () => {
     mockNavigate.mockReset();
     mockUseRun.mockReset();
     mockUseRuns.mockReset();
-    mockUseInfiniteRuns.mockReset();
     mockUseAnalysis.mockReset();
 
     const currentRun = createRun('run-1', 'A_first', [
@@ -274,17 +268,6 @@ describe('AnalysisConditionDetail', () => {
       loading: false,
       error: null,
       refetch: vi.fn(),
-    });
-    mockUseInfiniteRuns.mockReturnValue({
-      runs: [companionRun],
-      loading: false,
-      loadingMore: false,
-      error: null,
-      refetch: vi.fn(),
-      items: [companionRun],
-      hasNextPage: false,
-      loadMore: vi.fn(),
-      softRefetch: vi.fn(),
     });
 
     mockUseAnalysis.mockImplementation((args?: { runId?: string }) => {

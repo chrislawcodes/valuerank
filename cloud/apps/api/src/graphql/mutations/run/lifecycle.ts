@@ -1,4 +1,5 @@
-import { db, type Prisma, type RunCategory } from '@valuerank/db';
+import { db, type RunCategory } from '@valuerank/db';
+import type { Prisma } from '@valuerank/db';
 import { AuthenticationError, NotFoundError, ValidationError } from '@valuerank/shared';
 import { builder } from '../../builder.js';
 import type { Context } from '../../context.js';
@@ -70,7 +71,7 @@ function mergeCompanionRunId(config: unknown, companionRunId: string): Prisma.In
   return {
     ...(isRecord(config) ? config : {}),
     companionRunId,
-  } as Prisma.InputJsonValue;
+  };
 }
 
 function getConfiguredCompanionRunId(config: unknown): string | null {

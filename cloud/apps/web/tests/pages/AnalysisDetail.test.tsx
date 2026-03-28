@@ -502,13 +502,13 @@ describe('AnalysisDetail', () => {
 
       expect(screen.getByRole('button', { name: /single vignette/i })).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'false');
-      expect(screen.getByTestId('location-search')).toHaveTextContent('');
+      expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=overview&mode=single');
 
       fireEvent.click(screen.getByRole('button', { name: /paired vignettes/i }));
 
       expect(screen.getByRole('button', { name: /single vignette/i })).toHaveAttribute('aria-pressed', 'false');
       expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByTestId('location-search')).toHaveTextContent('?mode=paired');
+      expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=overview&mode=paired');
     });
 
     it('switches to the selected single vignette run and preserves single mode', () => {
