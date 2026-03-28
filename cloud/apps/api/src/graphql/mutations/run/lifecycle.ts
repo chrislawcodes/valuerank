@@ -1,4 +1,4 @@
-import { db, type RunCategory } from '@valuerank/db';
+import { Prisma, db, type RunCategory } from '@valuerank/db';
 import { AuthenticationError, NotFoundError, ValidationError } from '@valuerank/shared';
 import { builder } from '../../builder.js';
 import type { Context } from '../../context.js';
@@ -40,6 +40,10 @@ type DefinitionMethodology = {
   pair_key?: string;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 function getDefinitionMethodology(content: unknown): DefinitionMethodology | null {
   if (!content || typeof content !== 'object' || Array.isArray(content)) {
     return null;
@@ -60,6 +64,74 @@ function getDefinitionMethodology(content: unknown): DefinitionMethodology | nul
         : undefined,
     pair_key: typeof record.pair_key === 'string' ? record.pair_key : undefined,
   };
+}
+
+function mergeCompanionRunId(config: unknown, companionRunId: string): Prisma.InputJsonValue {
+  return {
+    ...(isRecord(config) ? config : {}),
+    companionRunId,
+  } as Prisma.InputJsonValue;
+}
+
+function getConfiguredCompanionRunId(config: unknown): string | null {
+  if (!isRecord(config)) {
+    return null;
+  }
+
+  const raw = config.companionRunId;
+  return typeof raw === 'string' && raw.trim().length > 0 ? raw : null;
+}
+
+export async function persistPairedCompanionRunIds(primaryRunId: string, companionRunId: string): Promise<void> {
+  await db.$transaction(async (tx) => {
+    const [primaryRun, companionRun] = await Promise.all([
+      tx.run.findUnique({
+        where: { id: primaryRunId },
+        select: { id: true, config: true },
+      }),
+      tx.run.findUnique({
+        where: { id: companionRunId },
+        select: { id: true, config: true },
+      }),
+    ]);
+
+    if (!primaryRun) {
+      throw new NotFoundError('Run', primaryRunId);
+    }
+    if (!companionRun) {
+      throw new NotFoundError('Run', companionRunId);
+    }
+
+    const primaryConfiguredCompanionRunId = getConfiguredCompanionRunId(primaryRun.config);
+    if (primaryConfiguredCompanionRunId !== null && primaryConfiguredCompanionRunId !== companionRunId) {
+      throw new ValidationError(`Run ${primaryRunId} is already paired with a different companion run.`);
+    }
+
+    const companionConfiguredCompanionRunId = getConfiguredCompanionRunId(companionRun.config);
+    if (companionConfiguredCompanionRunId !== null && companionConfiguredCompanionRunId !== primaryRunId) {
+      throw new ValidationError(`Run ${companionRunId} is already paired with a different companion run.`);
+    }
+
+    const primaryNeedsUpdate = primaryConfiguredCompanionRunId !== companionRunId;
+    const companionNeedsUpdate = companionConfiguredCompanionRunId !== primaryRunId;
+    if (!primaryNeedsUpdate && !companionNeedsUpdate) {
+      return;
+    }
+
+    await tx.run.update({
+      where: { id: primaryRunId },
+      data: {
+        config: mergeCompanionRunId(primaryRun.config, companionRunId),
+      },
+    });
+
+    await tx.run.update({
+      where: { id: companionRunId },
+      data: {
+        config: mergeCompanionRunId(companionRun.config, primaryRunId),
+      },
+    });
+  });
 }
 
 async function resolvePairedJobChoiceDefinition(
@@ -125,12 +197,14 @@ async function resolvePairedJobChoiceDefinition(
   };
 }
 
-async function loadRunForResult(runId: string, ctx: Context) {
+type LoadedRun = NonNullable<Awaited<ReturnType<Context['loaders']['run']['load']>>>;
+
+async function loadRunForResult(runId: string, ctx: Context): Promise<LoadedRun> {
   const run = await ctx.loaders.run.load(runId);
   if (run == null) {
     throw new Error(`Run not found: ${runId}`);
   }
-  return run;
+  return run as LoadedRun;
 }
 
 builder.mutationField('startRun', (t) =>
@@ -233,8 +307,16 @@ builder.mutationField('startRun', (t) =>
           },
         });
 
+        await persistPairedCompanionRunIds(primaryRun.run.id, companionRun.run.id);
+
         result = {
-          run: primaryRun.run,
+          run: {
+            ...primaryRun.run,
+            config: {
+              ...(isRecord(primaryRun.run.config) ? primaryRun.run.config : {}),
+              companionRunId: companionRun.run.id,
+            },
+          },
           jobCount: primaryRun.jobCount + companionRun.jobCount,
         };
         pairedRunIds = [companionRun.run.id];

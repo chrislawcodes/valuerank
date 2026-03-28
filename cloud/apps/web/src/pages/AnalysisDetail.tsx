@@ -14,6 +14,7 @@ import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { AnalysisPanel } from '../components/analysis/AnalysisPanel';
 import { findCompanionPairedRun } from '../components/analysis/PairedRunComparisonCard';
 import { useAnalysis } from '../hooks/useAnalysis';
+import { useInfiniteRuns } from '../hooks/useInfiniteRuns';
 import { useRun } from '../hooks/useRun';
 import { useRuns } from '../hooks/useRuns';
 import { getRunDefinitionContent } from '../utils/runDefinitionContent';
@@ -108,13 +109,44 @@ export function AnalysisDetail() {
     enablePolling: false,
     analysisStatus: run?.analysisStatus ?? null,
   });
-  const { runs: candidatePairedRuns } = useRuns({
-    limit: 1000,
-    pause: !run,
+  const hasDirectCompanionRunId = typeof run?.companionRunId === 'string' && run.companionRunId.trim().length > 0;
+  const { run: directCompanionRun, loading: directCompanionLoading } = useRun({
+    id: run?.companionRunId ?? '',
+    pause: !hasDirectCompanionRunId,
+    enablePolling: true,
   });
-  const companionRun = run == null
+  const directCompanionResolved = directCompanionRun?.id === run?.id ? null : directCompanionRun;
+  const shouldUseLegacyCompanionSearch = run != null && (
+    !hasDirectCompanionRunId
+    || (!directCompanionLoading && directCompanionResolved == null)
+  );
+  const legacyCompanionSearch = useInfiniteRuns({
+    runCategory: run?.runCategory,
+    runType: 'all',
+    pause: !shouldUseLegacyCompanionSearch,
+  });
+  const legacyCompanionRun = run == null || !shouldUseLegacyCompanionSearch
     ? null
-    : findCompanionPairedRun(run, candidatePairedRuns);
+    : findCompanionPairedRun(run, legacyCompanionSearch.runs);
+  useEffect(() => {
+    if (!shouldUseLegacyCompanionSearch) {
+      return;
+    }
+    if (legacyCompanionRun != null) {
+      return;
+    }
+    if (!legacyCompanionSearch.hasNextPage || legacyCompanionSearch.loadingMore) {
+      return;
+    }
+    legacyCompanionSearch.loadMore();
+  }, [
+    legacyCompanionRun,
+    legacyCompanionSearch.hasNextPage,
+    legacyCompanionSearch.loadingMore,
+    legacyCompanionSearch.loadMore,
+    shouldUseLegacyCompanionSearch,
+  ]);
+  const companionRun = directCompanionResolved ?? legacyCompanionRun;
   const { analysis: companionAnalysis } = useAnalysis({
     runId: companionRun?.id ?? '',
     pause: analysisMode !== 'paired' || companionRun == null,
