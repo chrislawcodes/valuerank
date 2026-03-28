@@ -1,0 +1,75 @@
+{
+  "paths": [
+    "cloud/apps/web/src/components/runs/TranscriptList.tsx",
+    "cloud/apps/web/src/components/runs/TranscriptRow.tsx",
+    "cloud/apps/web/src/components/runs/TranscriptViewer.tsx",
+    "cloud/apps/web/src/pages/AnalysisConditionDetail.tsx",
+    "cloud/apps/web/src/pages/AnalysisTranscripts.tsx",
+    "cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx",
+    "cloud/apps/web/tests/components/runs/RunResults.test.tsx",
+    "cloud/apps/web/tests/components/runs/TranscriptList.test.tsx",
+    "cloud/apps/web/tests/components/runs/TranscriptViewer.test.tsx",
+    "cloud/apps/web/tests/pages/AnalysisTranscripts.test.tsx",
+    "cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx",
+    "cloud/apps/web/tests/utils/transcriptDecisionModel.test.ts",
+    "cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/web/src/components/runs/TranscriptList.tsx",
+    "cloud/apps/web/src/components/runs/TranscriptRow.tsx",
+    "cloud/apps/web/src/components/runs/TranscriptViewer.tsx",
+    "cloud/apps/web/src/pages/AnalysisConditionDetail.tsx",
+    "cloud/apps/web/src/pages/AnalysisTranscripts.tsx",
+    "cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx",
+    "cloud/apps/web/tests/components/runs/RunResults.test.tsx",
+    "cloud/apps/web/tests/components/runs/TranscriptList.test.tsx",
+    "cloud/apps/web/tests/components/runs/TranscriptViewer.test.tsx",
+    "cloud/apps/web/tests/pages/AnalysisTranscripts.test.tsx",
+    "cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx",
+    "cloud/apps/web/tests/utils/transcriptDecisionModel.test.ts",
+    "cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx",
+    "docs/feature-runs/vignette-analysis-group1-ui"
+  ],
+  "validation": {
+    "before_diff": [
+      {
+        "name": "build",
+        "command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "cwd": "cloud"
+      }
+    ],
+    "before_pr_staging": [
+      {
+        "name": "build",
+        "command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "cwd": "cloud"
+      },
+      {
+        "name": "lint",
+        "command": [
+          "npm",
+          "run",
+          "lint"
+        ],
+        "cwd": "cloud"
+      },
+      {
+        "name": "test",
+        "command": [
+          "npm",
+          "run",
+          "test"
+        ],
+        "cwd": "cloud"
+      }
+    ]
+  }
+}

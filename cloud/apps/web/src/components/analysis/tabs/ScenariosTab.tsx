@@ -6,9 +6,9 @@
 
 import { ConditionDecisionsTable } from '../ConditionDecisionsTable';
 import { PivotAnalysisTable } from '../PivotAnalysisTable';
-import type { VisualizationData, ContestedScenario, PerModelStats } from '../../../api/operations/analysis';
+import type { VisualizationData, PerModelStats } from '../../../api/operations/analysis';
+import type { Transcript } from '../../../api/operations/runs';
 import { ANALYSIS_BASE_PATH, type AnalysisBasePath } from '../../../utils/analysisRouting';
-import { getPairedOrientationLabels } from '../../../utils/methodology';
 
 type ScenariosTabProps = {
   runId: string;
@@ -17,10 +17,8 @@ type ScenariosTabProps = {
   analysisMode?: 'single' | 'paired';
   visualizationData: VisualizationData | null | undefined;
   perModel: Record<string, PerModelStats>;
-  contestedScenarios: ContestedScenario[];
-  dimensionLabels?: Record<string, string>;
+  transcripts?: Transcript[];
   expectedAttributes?: string[];
-  definitionContent?: unknown;
   companionRunId?: string | null;
 };
 
@@ -31,9 +29,8 @@ export function ScenariosTab({
   analysisMode,
   visualizationData,
   perModel,
-  dimensionLabels,
+  transcripts,
   expectedAttributes = [],
-  definitionContent,
   companionRunId,
 }: ScenariosTabProps) {
   const hasScenarioDimensions = Boolean(
@@ -44,7 +41,6 @@ export function ScenariosTab({
     visualizationData?.modelScenarioMatrix
     && Object.keys(visualizationData.modelScenarioMatrix).length > 0
   );
-  const orientationLabels = getPairedOrientationLabels(definitionContent);
 
   return (
     <div className="space-y-8">
@@ -56,9 +52,11 @@ export function ScenariosTab({
                 runId={runId}
                 analysisBasePath={analysisBasePath}
                 analysisSearchParams={analysisSearchParams}
+                analysisMode={analysisMode}
                 visualizationData={visualizationData}
-                dimensionLabels={dimensionLabels}
+                transcripts={transcripts}
                 expectedAttributes={expectedAttributes}
+                companionRunId={analysisMode === 'paired' ? companionRunId ?? null : null}
               />
             ) : (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
@@ -75,9 +73,9 @@ export function ScenariosTab({
                 analysisBasePath={analysisBasePath}
                 analysisSearchParams={analysisSearchParams}
                 companionRunId={analysisMode === 'paired' ? companionRunId ?? null : null}
-                orientationLabels={orientationLabels}
                 analysisMode={analysisMode}
                 perModel={perModel}
+                transcripts={transcripts}
                 visualizationData={visualizationData}
                 expectedAttributes={expectedAttributes}
                 title="Condition Decisions"

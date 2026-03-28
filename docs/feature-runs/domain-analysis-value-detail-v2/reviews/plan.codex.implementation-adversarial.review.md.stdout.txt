@@ -1,0 +1,10 @@
+## Findings
+- High: The plan only localizes `CanonicalTranscriptRenderError` to the selected-condition drilldown, but it never defines a page-level fallback if canonical v2 is absent or if the entire transcript set is non-renderable. That means the new guard could take down the whole report surface instead of producing the intended localized error state.
+- High: Trimming `meanPreferenceScore` and `opponentMeanPreferenceScore` assumes the value-detail query is fully page-local, but the plan does not verify whether shared generated GraphQL documents, cache normalization, or helpers still depend on those fields. If any indirect consumer remains, the page can break at runtime or read stale cached shapes even if the local types compile.
+- Medium: The matrix-count validation is stated as a risk control, not as a hard dependency in the implementation steps. If that validator is not wired into every matrix cell path, malformed aggregates can still fall through to the `-` branch and be rendered as neutral rather than failing loudly.
+- Medium: The transcript list below the matrix is said to be driven by renderable canonical transcripts only, but the plan does not specify behavior for mixed sets where some transcripts render and others do not. That can produce a partially populated list with no clear signal that items were silently dropped.
+
+## Residual Risks
+- Even with the guard and validator, incomplete canonical v2 coverage can still create user-visible error states for older data until backfill or cleanup is complete.
+- Collapsing the matrix to `1`, `2`, or `-` removes magnitude detail, so comparisons against prior reports may look different even when the underlying data is unchanged.
+- If any shared report component still assumes the legacy score fields exist, this page-local cleanup may not be sufficient and a broader type or query migration may still be needed.

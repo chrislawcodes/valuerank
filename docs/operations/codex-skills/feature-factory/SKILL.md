@@ -117,6 +117,9 @@ If the answers are already clear from the repo context or user instructions:
 - do not invent extra questions
 - briefly state the assumptions you are carrying into the spec
 
+If discovery has unresolved items, do not mark discovery complete or checkpoint spec until
+each item is either resolved or explicitly deferred.
+
 **Discovery is not optional.** Before authoring the spec, always either ask the clarifying questions or explicitly state the assumptions you are carrying in. Do not silently proceed to spec authoring without one of these two. If the request arrives with enough context to make the spec stable, a one-sentence "here are the assumptions I'm carrying in" satisfies this requirement — but the step must not be skipped entirely.
 
 Do not start implementation until the answers are good enough to make the spec and plan stable.

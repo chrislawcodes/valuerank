@@ -62,6 +62,11 @@ function getRunConfigBatchGroupId(run: Run): string | null {
   return typeof raw === 'string' && raw.trim().length > 0 ? raw : null;
 }
 
+function getRunCompanionRunId(run: Run): string | null {
+  const raw = run.companionRunId ?? run.config?.companionRunId;
+  return typeof raw === 'string' && raw.trim().length > 0 ? raw : null;
+}
+
 function getDefinitionPresentationOrder(run: Run): JobChoicePresentationOrder | null {
   const raw = run.definition?.content;
   if (!isRecord(raw) || !isRecord(raw.methodology)) return null;
@@ -178,12 +183,12 @@ function buildComparisonRows(
   const firstValueKey = aFirstRun
     ? labels.canonicalValues?.[0] ?? null
     : bFirstRun
-      ? labels.flippedValues?.[1] ?? null
+      ? labels.flippedValues?.[0] ?? null
       : null;
   const secondValueKey = aFirstRun
     ? labels.canonicalValues?.[1] ?? null
     : bFirstRun
-      ? labels.flippedValues?.[0] ?? null
+      ? labels.flippedValues?.[1] ?? null
       : null;
 
   const valueKeyLookup = (() => {
@@ -294,9 +299,9 @@ function SensitivityHeader({
       <Tooltip
         content={(
           <div className="space-y-1 text-left">
-            <p>Each vignette uses this value at one of five strength levels, from weakest (1) to strongest (5).</p>
-            <p>The model then gives a decision score from 1 to 5: 1 means it strongly prefers the other value, 3 means neutral, and 5 means it strongly prefers this value.</p>
-            <p>Sensitivity shows how much that decision score changes when this value goes up by one level, while the other value stays the same.</p>
+            <p>Each vignette uses this value across five strength levels, from weakest to strongest.</p>
+            <p>The model then assigns one of the canonical decision buckets, from strongest preference for the other value to strongest preference for this value.</p>
+            <p>Sensitivity shows how much the model shifts toward this value when this value goes up by one level, while the other value stays the same.</p>
             <p>For example, if sensitivity is 0.5, then raising {valueLabel} from level 1 to level 5 would be expected to move the model about 2 points toward {valueLabel} on average.</p>
           </div>
         )}
@@ -434,7 +439,6 @@ function buildTranscriptHref(
 
 export function findCompanionPairedRun(currentRun: Run, candidateRuns: Run[]): Run | null {
   const batchGroupId = getRunConfigBatchGroupId(currentRun);
-  const currentOrder = getRunPresentationOrder(currentRun);
   const pairKey = getDefinitionPairKey(currentRun);
 
   const candidates = candidateRuns
@@ -453,16 +457,18 @@ export function findCompanionPairedRun(currentRun: Run, candidateRuns: Run[]): R
     return null;
   }
 
-  const oppositeOrder = currentOrder === 'A_first' ? 'B_first' : currentOrder === 'B_first' ? 'A_first' : null;
-  const sorted = [...candidates].sort((left, right) => {
-    const leftMatches = oppositeOrder != null && getRunPresentationOrder(left) === oppositeOrder ? 0 : 1;
-    const rightMatches = oppositeOrder != null && getRunPresentationOrder(right) === oppositeOrder ? 0 : 1;
-    if (leftMatches !== rightMatches) {
-      return leftMatches - rightMatches;
-    }
-    return Math.abs(new Date(left.createdAt).getTime() - new Date(currentRun.createdAt).getTime())
-      - Math.abs(new Date(right.createdAt).getTime() - new Date(currentRun.createdAt).getTime());
-  });
+  const reciprocalMatch = candidates.find((candidate) => getRunCompanionRunId(candidate) === currentRun.id);
+  if (reciprocalMatch) {
+    return reciprocalMatch;
+  }
+
+  const completedCandidates = candidates.filter((candidate) => candidate.status === 'COMPLETED');
+  const rankingPool = completedCandidates.length > 0 ? completedCandidates : candidates;
+
+  const sorted = [...rankingPool].sort((left, right) => (
+    Math.abs(new Date(left.createdAt).getTime() - new Date(currentRun.createdAt).getTime())
+    - Math.abs(new Date(right.createdAt).getTime() - new Date(currentRun.createdAt).getTime())
+  ));
 
   return sorted[0] ?? null;
 }

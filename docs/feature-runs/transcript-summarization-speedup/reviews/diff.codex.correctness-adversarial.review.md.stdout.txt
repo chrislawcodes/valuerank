@@ -1,0 +1,9 @@
+## Findings
+1. **High**: `main()` switches to batch mode whenever the top-level dict contains a `transcripts` key, so a payload that accidentally includes that key will skip single-transcript validation and can silently drop the real transcript fields. For example, a malformed single job like `{"transcriptId": "...", "modelId": "...", "transcriptContent": {...}, "transcripts": []}` will now be treated as an empty batch and return success instead of failing fast. That is a correctness regression because the worker no longer rejects mixed or malformed envelopes.
+
+2. **Medium**: `run_summarize_batch()` returns `success: False` for any partial failure, even though it already produced successful per-item summaries. If the queue layer treats that as a failed job and retries the batch, the transcripts that already succeeded will be processed again, which can duplicate downstream side effects. The new batch contract needs an explicit separation between “job completed with item errors” and “job failed and should be retried.”
+
+## Residual Risks
+- `SUMMARIZE_PARSER_VERSION` is now an unvalidated runtime override. A typo or unsupported value will silently change parser behavior instead of failing at startup.
+- The new batch size ceiling is hard-coded in the worker. If the API-side limit changes and this constant is not updated in lockstep, valid batches will start being rejected here.
+- The partial-failure response shape is new. Any caller that assumes old single-job semantics may mis-handle `summaries` or `BATCH_PARTIAL_FAILURE` without an explicit compatibility update.

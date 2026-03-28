@@ -1,0 +1,41 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 1774328637
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "Proceed with a 6-phase migration: contract foundation, backend migration, transcript audit UI, analysis/report UI, validation and rollout, legacy cleanup.",
+      "Phase 1 is backend-only; transcript UI does not ship until a later phase.",
+      "Phase 2 includes API, workers, and exports together so the compatibility contract stays in one place."
+    ],
+    "summary": "Discovery complete. The plan is stable enough to proceed with a phased feature-factory run that keeps the versioned V2 boundary before UI migration and separates transcript audit UI from report UI for safety.",
+    "updated_at": 1774301820,
+    "answers": {},
+    "non_goals": [],
+    "acceptance_criteria": [],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {
+    "allowed_dirty_paths": [
+      "cloud/apps/api/tests/graphql/queries/domain-analysis.test.ts"
+    ],
+    "used": true,
+    "updated_at": 1774335685
+  },
+  "checkpoint_fallback": {}
+}

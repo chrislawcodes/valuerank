@@ -37,16 +37,14 @@ import {
 import { formatDisplayLabel } from '../utils/displayLabels';
 import { getRunDefinitionContent } from '../utils/runDefinitionContent';
 import {
+  assertRenderableReportTranscriptSummary,
+  summarizeReportTranscriptDecisions,
+} from '../utils/reportDecisionDisplay';
+import {
   ANALYSIS_BASE_PATH,
   buildAnalysisTranscriptsPath,
   isAggregateAnalysis,
 } from '../utils/analysisRouting';
-import { getDecisionMetadata, getPairedOrientationLabels } from '../utils/methodology';
-import {
-  getOrientationBucketLabel,
-  getOrientationCorrectedScenarioIds,
-  type OrientationBucket,
-} from '../utils/pairedScopeAdapter';
 
 function getDisplaySignature(signature: string | null | undefined): string {
   return signature && signature !== 'v?td' ? signature : 'Unknown Signature';
@@ -78,26 +76,26 @@ function normalizePairedValueKey(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, '_');
 }
 
-type JobChoicePresentationOrder = 'A_first' | 'B_first';
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
+type PairedConditionSource = 'current' | 'companion' | 'pooled';
+function parsePairedConditionSource(value: string | null): PairedConditionSource | null {
+  if (value === 'current' || value === 'companion' || value === 'pooled') {
+    return value;
+  }
+  return null;
 }
 
-function getPresentationOrderForContent(content: unknown): JobChoicePresentationOrder | null {
-  if (!isRecord(content) || !isRecord(content.methodology)) {
+function formatPairedConditionSourceLabel(source: PairedConditionSource | null): string | null {
+  if (!source) {
     return null;
   }
 
-  const value = content.methodology.presentation_order;
-  return value === 'A_first' || value === 'B_first' ? value : null;
-}
-
-function getOrientationBucketForContent(content: unknown): OrientationBucket | null {
-  const presentationOrder = getPresentationOrderForContent(content);
-  if (presentationOrder === 'A_first') return 'canonical';
-  if (presentationOrder === 'B_first') return 'flipped';
-  return null;
+  if (source === 'current') {
+    return 'Current vignette';
+  }
+  if (source === 'companion') {
+    return 'Companion vignette';
+  }
+  return 'Pooled';
 }
 
 function filterTranscriptsForConditionIds(
@@ -173,9 +171,8 @@ export function AnalysisTranscripts() {
   const pairedValueLabel = searchParams.get('pairedValueLabel') ?? '';
   const pairView = searchParams.get('pairView') ?? '';
   const orientationBucketParam = searchParams.get('orientationBucket');
-  const orientationBucket: OrientationBucket | null = orientationBucketParam === 'canonical' || orientationBucketParam === 'flipped'
-    ? orientationBucketParam
-    : null;
+  const hasLegacyOrientationBucket = orientationBucketParam === 'canonical' || orientationBucketParam === 'flipped';
+  const pairedConditionSource = parsePairedConditionSource(searchParams.get('sourceRun'));
   const analysisMode = searchParams.get('mode') === 'paired'
     ? 'paired'
     : searchParams.get('mode') === 'single'
@@ -285,16 +282,8 @@ export function AnalysisTranscripts() {
   const modelScenarioMatrix = analysis?.visualizationData?.modelScenarioMatrix;
   const companionScenarioDimensions = companionAnalysis?.visualizationData?.scenarioDimensions;
   const companionModelScenarioMatrix = companionAnalysis?.visualizationData?.modelScenarioMatrix;
-  const correctedScenarioIds = useMemo(
-    () => getOrientationCorrectedScenarioIds(analysis?.varianceAnalysis),
-    [analysis?.varianceAnalysis]
-  );
   const definitionContent = useMemo(() => getRunDefinitionContent(run), [run]);
   const companionDefinitionContent = useMemo(() => getRunDefinitionContent(companionRun), [companionRun]);
-  const orientationLabels = useMemo(
-    () => getPairedOrientationLabels(definitionContent),
-    [definitionContent],
-  );
   const preferredAttributes = useMemo(
     () => deriveScenarioAttributesFromDefinition(definitionContent),
     [definitionContent]
@@ -341,6 +330,25 @@ export function AnalysisTranscripts() {
     && col
     && (pairView === 'condition-blended' || pairView === 'condition-split')
   );
+  const pairedConditionStateError = useMemo(() => {
+    if (hasLegacyOrientationBucket && analysisMode === 'paired') {
+      return new Error('Legacy orientationBucket URLs are no longer supported. Use sourceRun=current, sourceRun=companion, or sourceRun=pooled.');
+    }
+
+    if (!hasPairedConditionFilterParams) {
+      return null;
+    }
+
+    if (pairView !== 'condition-split') {
+      return null;
+    }
+
+    if (pairedConditionSource === 'current' || pairedConditionSource === 'companion') {
+      return null;
+    }
+
+    return new Error('Split paired condition inspection requires sourceRun=current or sourceRun=companion.');
+  }, [analysisMode, hasLegacyOrientationBucket, hasPairedConditionFilterParams, pairView, pairedConditionSource]);
   const dimensionLabels = useMemo(
     () => deriveDecisionDimensionLabels(definitionContent),
     [definitionContent]
@@ -361,15 +369,6 @@ export function AnalysisTranscripts() {
     if (decisionBucket === 'neutral') return 'Neutral';
     return '';
   }, [bucketAttributes.highAttribute, bucketAttributes.lowAttribute, decisionBucket]);
-
-  const matchesOrientationBucket = useCallback((scenarioId: string | null | undefined) => {
-    if (!orientationBucket || !scenarioId) {
-      return true;
-    }
-
-    const isFlipped = correctedScenarioIds.has(String(scenarioId));
-    return orientationBucket === 'flipped' ? isFlipped : !isFlipped;
-  }, [correctedScenarioIds, orientationBucket]);
 
   const resolveDecisionBucketForValue = useCallback((
     content: unknown,
@@ -439,7 +438,7 @@ export function AnalysisTranscripts() {
   const filteredTranscripts = useMemo(() => {
     if (hasDirectTranscriptParam) {
       const matched = (run?.transcripts ?? []).find((transcript) => transcript.id === selectedTranscriptId);
-      return matched && matchesOrientationBucket(matched.scenarioId) ? [matched] : [];
+      return matched ? [matched] : [];
     }
 
     if (hasRepeatPatternParams) {
@@ -450,31 +449,54 @@ export function AnalysisTranscripts() {
         scenarioDimensions,
         activeRowDim,
         activeColDim,
-      ).filter((transcript) => matchesOrientationBucket(transcript.scenarioId));
+      );
     }
 
     if (hasPairedConditionFilterParams) {
       const runEntries = [
         {
           run,
+          source: 'current' as const,
           content: definitionContent,
           scenarioDims: scenarioDimensions,
         },
         {
           run: companionRun,
+          source: 'companion' as const,
           content: companionDefinitionContent,
           scenarioDims: companionScenarioDimensions,
         },
       ];
 
       return runEntries.flatMap((entry) => {
-        const entryOrientation = getOrientationBucketForContent(entry.content);
-        if (pairView === 'condition-split' && orientationBucket && entryOrientation !== orientationBucket) {
+        if (!entry.run) {
           return [];
+        }
+        if (pairedConditionSource === 'current' && entry.source !== 'current') {
+          return [];
+        }
+        if (pairedConditionSource === 'companion' && entry.source !== 'companion') {
+          return [];
+        }
+        if (
+          pairedConditionSource === 'current'
+          || pairedConditionSource === 'companion'
+          || pairedConditionSource === 'pooled'
+        ) {
+          return filterTranscriptsForPivotCell({
+            transcripts: entry.run.transcripts ?? [],
+            scenarioDimensions: entry.scenarioDims,
+            rowDim: activeRowDim,
+            colDim: activeColDim,
+            row,
+            col,
+            selectedModel,
+            decisionCode: decisionCode || undefined,
+          });
         }
 
         return filterTranscriptsForPivotCell({
-          transcripts: entry.run?.transcripts ?? [],
+          transcripts: entry.run.transcripts ?? [],
           scenarioDimensions: entry.scenarioDims,
           rowDim: activeRowDim,
           colDim: activeColDim,
@@ -543,13 +565,12 @@ export function AnalysisTranscripts() {
         activeColDim,
       );
 
-      return transcripts.filter((transcript) => (
-        transcript.modelId === selectedModel
-        && transcript.scenarioId !== null
-        && matchingScenarioIds.has(transcript.scenarioId)
-        && matchesOrientationBucket(transcript.scenarioId)
-      ));
-    }
+        return transcripts.filter((transcript) => (
+          transcript.modelId === selectedModel
+          && transcript.scenarioId !== null
+          && matchingScenarioIds.has(transcript.scenarioId)
+        ));
+      }
 
     return filterTranscriptsForPivotCell({
       transcripts: run?.transcripts ?? [],
@@ -560,7 +581,7 @@ export function AnalysisTranscripts() {
       col,
       selectedModel,
       decisionCode: decisionCode || undefined,
-    }).filter((transcript) => matchesOrientationBucket(transcript.scenarioId));
+    });
   }, [
     scenarioDimensions,
     modelScenarioMatrix,
@@ -577,7 +598,7 @@ export function AnalysisTranscripts() {
     hasPairedValueFilterParams,
     hasBucketFilterParams,
     hasDirectTranscriptParam,
-    matchesOrientationBucket,
+    pairedConditionSource,
     selectedTranscriptId,
     companionRun,
     run,
@@ -587,57 +608,27 @@ export function AnalysisTranscripts() {
     definitionContent,
     pairedValueKey,
     pairedDecisionBucketParam,
-    pairView,
-    orientationBucket,
     resolveDecisionBucketForValue,
   ]);
 
-  const normalizedDecisionTranscriptIds = useMemo(() => {
-    const shouldNormalizePairedScores = analysisMode === 'paired'
-      && (
-        (hasPairedConditionFilterParams && pairView === 'condition-blended')
-        || hasPairedValueFilterParams
-      );
-
-    if (!shouldNormalizePairedScores) {
-      return new Set<string>();
+  const decisionSummary = useMemo(
+    () => summarizeReportTranscriptDecisions(filteredTranscripts),
+    [filteredTranscripts],
+  );
+  const reportStateError = useMemo(() => {
+    try {
+      assertRenderableReportTranscriptSummary(decisionSummary);
+      return null;
+    } catch (error) {
+      return error instanceof Error
+        ? error
+        : new Error('AnalysisTranscripts requires canonical decisionModelV2 data for every visible transcript.');
     }
-
-    const normalizedRunIds = new Set<string>();
-    if (getOrientationBucketForContent(definitionContent) === 'flipped' && run?.id) {
-      normalizedRunIds.add(run.id);
-    }
-    if (getOrientationBucketForContent(companionDefinitionContent) === 'flipped' && companionRun?.id) {
-      normalizedRunIds.add(companionRun.id);
-    }
-
-    return new Set(
-      filteredTranscripts
-        .filter((transcript) => normalizedRunIds.has(transcript.runId))
-        .map((transcript) => transcript.id),
-    );
-  }, [
-    analysisMode,
-    companionDefinitionContent,
-    companionRun?.id,
-    definitionContent,
-    filteredTranscripts,
-    hasPairedConditionFilterParams,
-    hasPairedValueFilterParams,
-    pairView,
-    run?.id,
-  ]);
-
-  const decisionColumnLabel = normalizedDecisionTranscriptIds.size > 0
-    ? 'Normalized decision score'
-    : 'Decision';
-  const decisionColumnTooltip = normalizedDecisionTranscriptIds.size > 0
-    ? 'In this paired view, some prompts showed the two options in a different order. We adjust those scores so they all use the same scale. That way, the same number means the same choice direction across every transcript.'
-    : undefined;
-  const normalizationBadgeTitle = normalizedDecisionTranscriptIds.size > 0
-    ? 'This score was adjusted because this transcript showed the options in the opposite order.'
-    : undefined;
-
+  }, [decisionSummary]);
+  const listDisplayMode = 'audit' as const;
+  const viewerDisplayMode = 'audit' as const;
+  const decisionColumnLabel = 'Decision summary';
+  const decisionColumnTooltip = 'Shows the canonical decision headline and summary from the backend transcript data.';
   useEffect(() => {
     if (!hasDirectTranscriptParam) {
       return;
@@ -649,8 +640,9 @@ export function AnalysisTranscripts() {
   const transcriptCoverage = useMemo(() => {
     return filteredTranscripts.reduce(
       (acc, transcript) => {
-        const metadata = getDecisionMetadata(transcript.decisionMetadata);
-        if (transcript.decisionCodeSource === 'manual') {
+        const metadata = transcript.decisionModelV2?.raw;
+        const canonical = transcript.decisionModelV2?.canonical ?? null;
+        if (metadata?.manualOverride) {
           acc.manual += 1;
         }
         if (metadata?.parseClass === 'exact') {
@@ -660,7 +652,13 @@ export function AnalysisTranscripts() {
         } else if (metadata?.parseClass === 'ambiguous') {
           acc.ambiguous += 1;
         }
-        if (!['1', '2', '3', '4', '5'].includes(transcript.decisionCode ?? '')) {
+        if (
+          canonical == null
+          || canonical.direction === 'unknown'
+          || canonical.strength === 'unknown'
+          || canonical.source === 'error'
+          || metadata?.parseClass === 'unparseable'
+        ) {
           acc.unresolved += 1;
         }
         return acc;
@@ -766,6 +764,12 @@ export function AnalysisTranscripts() {
                   Model: <span className="font-medium text-gray-900">{selectedModel}</span>
                   <span className="mx-2">•</span>
                   Conditions: <span className="font-medium text-gray-900">{conditionIds.length}</span>
+                  {decisionSummary.headline !== '—' && (
+                    <>
+                      <span className="mx-2">•</span>
+                      Decision summary: <span className="font-medium text-gray-900">{decisionSummary.headline}</span>
+                    </>
+                  )}
                 </>
               ) : (activeRowDim && activeColDim) ? (
                 <>
@@ -788,10 +792,10 @@ export function AnalysisTranscripts() {
                   Favors: <span className="font-medium text-gray-900">{decisionBucketLabel}</span>
                 </>
               )}
-              {orientationBucket && (
+              {pairedConditionSource && (
                 <>
                   <span className="mx-2">•</span>
-                  Orientation: <span className="font-medium text-gray-900">{getOrientationBucketLabel(orientationBucket, orientationLabels)}</span>
+                  Source: <span className="font-medium text-gray-900">{formatPairedConditionSourceLabel(pairedConditionSource)}</span>
                 </>
               )}
               {pairedValueLabel && (
@@ -800,10 +804,10 @@ export function AnalysisTranscripts() {
                   Paired Value: <span className="font-medium text-gray-900">{formatDisplayLabel(pairedValueLabel)}</span>
                 </>
               )}
-              {decisionCode && (
+              {decisionSummary.headline !== '—' && (
                 <>
                   <span className="mx-2">•</span>
-                  Decision: <span className="font-medium text-gray-900">{decisionCode}</span>
+                  Decision summary: <span className="font-medium text-gray-900">{decisionSummary.headline}</span>
                 </>
               )}
             </>
@@ -818,12 +822,6 @@ export function AnalysisTranscripts() {
         <AnalysisScopeBanner analysisMode={analysisMode} compact />
       )}
 
-      {orientationBucket && (
-        <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">
-          Split inspection is active for the <span className="font-medium">{getOrientationBucketLabel(orientationBucket, orientationLabels)}</span> side of the paired vignette.
-        </div>
-      )}
-
       {hasPairedValueFilterParams && pairedValueLabel && (
         <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">
           Blended paired inspection is active for <span className="font-medium">{formatDisplayLabel(pairedValueLabel)}</span>. This list merges transcripts from both companion runs for the selected model.
@@ -832,17 +830,15 @@ export function AnalysisTranscripts() {
 
       {hasPairedConditionFilterParams && (
         <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">
-          {pairView === 'condition-split' && orientationBucket
-            ? (
-              <>
-                Order-detail paired inspection is active for the <span className="font-medium">{getOrientationBucketLabel(orientationBucket, orientationLabels)}</span> side of this condition cell.
-              </>
-            )
-            : (
-              <>
-                Blended paired inspection is active for this condition cell. This list merges transcripts from both companion runs for the selected model.
-              </>
-            )}
+          {pairView === 'condition-split' && pairedConditionSource ? (
+            <>
+              Paired source inspection is active for the <span className="font-medium">{formatPairedConditionSourceLabel(pairedConditionSource)}</span> transcripts in this condition cell.
+            </>
+          ) : (
+            <>
+              Blended paired inspection is active for this condition cell. This list merges transcripts from both companion runs for the selected model.
+            </>
+          )}
         </div>
       )}
 
@@ -855,7 +851,9 @@ export function AnalysisTranscripts() {
       {filteredTranscripts.length > 0 && (
         <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium text-gray-900">Parse coverage</span>
+            <span className="font-medium text-gray-900">
+              Decision coverage
+            </span>
             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
               Exact {transcriptCoverage.exact}
             </span>
@@ -871,14 +869,18 @@ export function AnalysisTranscripts() {
           </div>
           {transcriptCoverage.unresolved > 0 && (
             <p className="mt-2 text-xs text-amber-700">
-              {transcriptCoverage.unresolved} transcript{transcriptCoverage.unresolved === 1 ? '' : 's'} in this view still do not have an analyzable 1-5 decision.
-              Open those transcripts to review and relabel them manually when needed.
+              {transcriptCoverage.unresolved} transcript{transcriptCoverage.unresolved === 1 ? '' : 's'} in this view still do not have an analyzable canonical decision.
+              Open those transcripts to review the raw evidence.
             </p>
           )}
         </div>
       )}
 
-      {!hasDirectTranscriptParam && !hasRepeatPatternParams && !hasPairedValueFilterParams && !hasPairedConditionFilterParams && scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
+      {pairedConditionStateError ? (
+        <ErrorMessage message={pairedConditionStateError.message} />
+      ) : reportStateError ? (
+        <ErrorMessage message={reportStateError.message} />
+      ) : !hasDirectTranscriptParam && !hasRepeatPatternParams && !hasPairedValueFilterParams && !hasPairedConditionFilterParams && scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
         <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
           Missing filter parameters. Return to the pivot table and click a cell to view transcripts.
         </div>
@@ -896,8 +898,7 @@ export function AnalysisTranscripts() {
           updatingTranscriptIds={updatingTranscriptIds}
           decisionColumnLabel={decisionColumnLabel}
           decisionColumnTooltip={decisionColumnTooltip}
-          normalizedDecisionTranscriptIds={normalizedDecisionTranscriptIds}
-          normalizationBadgeTitle={normalizationBadgeTitle}
+          decisionDisplayMode={listDisplayMode}
         />
       )}
 
@@ -907,6 +908,7 @@ export function AnalysisTranscripts() {
           onClose={() => setSelectedTranscript(null)}
           onDecisionChange={handleDecisionChange}
           decisionUpdating={updatingTranscriptIds.has(selectedTranscript.id)}
+          decisionDisplayMode={viewerDisplayMode}
         />
       )}
     </div>

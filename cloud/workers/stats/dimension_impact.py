@@ -10,6 +10,8 @@ from typing import Any, TypedDict
 import numpy as np
 from scipy import stats
 
+from stats.decision_model import resolve_transcript_normalized_score
+
 
 class DimensionEffect(TypedDict):
     """Effect of a single dimension on variance."""
@@ -143,11 +145,10 @@ def compute_dimension_effects(
     dimensions: dict[str, list[str]] = {}
 
     for t in transcripts:
-        summary = t.get("summary", {})
         scenario = t.get("scenario", {})
 
-        # Get score
-        score = summary.get("score")
+        # Get score from the V2 decision envelope when available.
+        score = resolve_transcript_normalized_score(t)
         if score is None:
             continue
         scores.append(float(score))

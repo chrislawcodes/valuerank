@@ -45,7 +45,8 @@ type AnalysisPanelProps = {
   isOldVersion?: boolean;
   isAggregate?: boolean;
   pendingSince?: string | null;
-  initialTab?: AnalysisTab;
+  activeTab: AnalysisTab;
+  onTabChange: (tab: AnalysisTab) => void;
   analysisSearchParams?: URLSearchParams | string;
   analysisMode?: 'single' | 'paired';
   onAnalysisModeChange?: (mode: 'single' | 'paired') => void;
@@ -119,6 +120,19 @@ function getBatchStats(
 
 function pluralize(count: number, singular: string, plural = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function prefixTranscriptScenarioIds(transcripts: Transcript[], prefix: 'canonical' | 'flipped'): Transcript[] {
+  return transcripts.map((transcript) => {
+    if (transcript.scenarioId == null || transcript.scenarioId === '') {
+      return transcript;
+    }
+
+    return {
+      ...transcript,
+      scenarioId: `${prefix}:${transcript.scenarioId}`,
+    };
+  });
 }
 
 /**
@@ -269,7 +283,8 @@ export function AnalysisPanel({
   isOldVersion: _isOldVersion = false,
   isAggregate,
   pendingSince,
-  initialTab = 'overview',
+  activeTab = 'overview',
+  onTabChange,
   analysisSearchParams,
   analysisMode,
   onAnalysisModeChange,
@@ -293,7 +308,6 @@ export function AnalysisPanel({
     [definitionContent]
   );
 
-  const [activeTab, setActiveTab] = useState<AnalysisTab>(initialTab);
   const [showDetails, setShowDetails] = useState(false);
   const semantics = useMemo(() => {
     if (!analysis) {
@@ -333,6 +347,18 @@ export function AnalysisPanel({
     () => analysis?.perModel ?? {},
     [analysis]
   );
+  const scenariosTranscripts = useMemo(() => {
+    const currentTranscripts = transcripts ?? currentRun?.transcripts ?? [];
+
+    if (analysisMode !== 'paired' || companionRun == null) {
+      return currentTranscripts;
+    }
+
+    return [
+      ...prefixTranscriptScenarioIds(currentTranscripts, 'canonical'),
+      ...prefixTranscriptScenarioIds(companionRun.transcripts ?? [], 'flipped'),
+    ];
+  }, [analysisMode, companionRun, currentRun?.transcripts, transcripts]);
   const singleVignetteOptions = useMemo(() => {
     const runs = [currentRun, companionRun].filter((candidate): candidate is Run => candidate != null);
     const seen = new Set<string>();
@@ -544,10 +570,10 @@ export function AnalysisPanel({
         <nav className="flex gap-4 -mb-px">
           {TABS.map((tab) => (
             // eslint-disable-next-line react/forbid-elements -- Tab button requires custom semantic styling
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`py-2 px-1 border-b-2 text-sm font-medium transition-colors ${activeTab === tab.id
+              <button
+                key={tab.id}
+              onClick={() => onTabChange(tab.id)}
+                className={`py-2 px-1 border-b-2 text-sm font-medium transition-colors ${activeTab === tab.id
                 ? 'border-teal-500 text-teal-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
@@ -597,10 +623,8 @@ export function AnalysisPanel({
             analysisMode={analysisMode}
             visualizationData={decisionsVisualizationData}
             perModel={perModel}
-            contestedScenarios={analysis.mostContestedScenarios}
-            dimensionLabels={dimensionLabels}
+            transcripts={scenariosTranscripts}
             expectedAttributes={expectedScenarioAttributes}
-            definitionContent={definitionContent}
             companionRunId={analysisMode === 'paired' ? companionRun?.id ?? null : null}
           />
         )}

@@ -1,0 +1,40 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "The page is a report surface and must not use any legacy decision-score fallback on this path.",
+      "The transcript list below the matrix is the comparison source; both surfaces must stay in sync for the same condition.",
+      "If the canonical v2 data is absent or malformed, throwing a clear error is preferable to silently rendering old scores."
+    ],
+    "summary": "DomainAnalysisValueDetail condition matrix must use canonical decisionModelV2 only, preserve the visible 1 / 2 / - display and click-through behavior, and fail loudly if canonical v2 data is missing or not renderable.",
+    "updated_at": 1774541558,
+    "answers": {},
+    "non_goals": [],
+    "acceptance_criteria": [],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  }
+}

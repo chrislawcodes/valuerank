@@ -1,0 +1,264 @@
+2026-03-26T06:12:12.750166Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:12.750187Z  WARN codex_core::state_db: failed to initialize state runtime at /Users/chrislaw/.codex: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:12.753103Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.worktrees/analysis-reports-decision-score-phase1
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d28c5-9d4d-72c3-b3eb-e8c5dc2b656a
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Analysis Reports Decision Score Phase 1 - Plan
+
+## Goal
+
+Upgrade the remaining visible report pages so they stop presenting legacy 1-5
+decision scores as report output. This is a UI-only slice: it keeps the
+existing backend contracts, internal `decisionCode` plumbing, and export
+pipelines in place for later phases.
+
+## Architecture Decisions
+
+| Decision | Choice | Why |
+|---|---|---|
+| Canonical single-transcript wording | Reuse `formatCanonicalDecisionHeadline()` and the other helpers in `cloud/apps/web/src/utils/transcriptDecisionModel.ts` | The repo already has the canonical plain-language transcript summary; the report pages should not invent a second version |
+| Aggregate cell rule | Use a strict-majority canonical headline for aggregate cells; `Mixed` only when no canonical headline has a strict majority of the known transcripts | Preserves real signal without averaging raw numeric scores |
+| Unknown handling | `Unknown` is used only when there are no renderable canonical transcripts; `—` is reserved for empty cells | Keeps empty, unresolved, and mixed states distinct |
+| Condition detail summary | Show bucketed canonical counts instead of a numeric mean | Removes the legacy 1-5 score while keeping the row-level breakdown useful |
+| Internal plumbing | Keep `decisionCode` in filters, overrides, and hidden backing fields where needed | Avoids backend changes in this phase and keeps the report slice small |
+| Shared aggregation helper | Add a small frontend helper for aggregate report display so `AnalysisConditionDetail` and `SurveyResults` do not each invent their own rule | Keeps the aggregation contract consistent between report pages |
+
+## Display Rules
+
+### Canonical transcript headlines
+
+Use the existing transcript decision model helpers as the source of truth for
+single transcript display:
+
+- `Strongly favors <value>`
+- `Somewhat favors <value>`
+- `Neutral`
+- `Unknown`
+
+These labels already exist in the transcript model helper and should be reused
+verbatim on report pages when a single transcript is being summarized.
+
+Visible report output in this phase includes table headers, summary copy,
+helper text, tooltips, aria labels, table summaries, drilldown headers, and
+data attributes on the three pages in scope. All of those visible strings must
+use canonical wording when they describe decisions.
+
+The shared renderable-transcript definition is the existing
+`hasRenderableTranscriptDecisionModelV2()` helper. That helper, together with
+`decisionModelV2.canonical`, is the source of truth for visible labels in this
+phase.
+
+### Aggregate report cells
+
+Aggregate report surfaces must not average numeric `decisionCode` values.
+Instead:
+
+- if there are no transcripts, show `—`
+- if there are transcripts but none can be rendered canonically, show
+  `Unknown`
+- if there are renderable canonical transcripts, count by canonical headline
+- if one canonical headline has a strict majority of the renderable transcripts,
+  show that headline
+- otherwise show `Mixed`
+- unknown or unrenderable transcripts are excluded from the strict-majority
+  calculation, but they still count toward the cell's transcript total and are
+  surfaced separately in the drilldown and tooltip
+
+For `SurveyResults`, this rule applies to the visible matrix cells. The page can
+still expose transcript drilldown and override controls, but the visible cell
+value itself must follow the aggregate rule above.
+
+### Condition detail page
+
+`AnalysisConditionDetail.tsx` should stop teaching score-first language:
+
+- remove the raw mean derived from `decisionCode`
+- render bucketed canonical counts instead of the numeric mean
+- keep the same navigation and transcript drilldown behavior
+- keep the count table useful by making the canonical buckets explicit in the
+  column headers
+- if a condition has both renderable and unrenderable transcripts, render the
+  canonical bucket counts plus an explicit `Unknown` bucket rather than
+  collapsing the whole row to a numeric summary
+
+### Analysis transcripts page
+
+`AnalysisTranscripts.tsx` should keep its transcript list behavior, but the
+visible header and helper text must use canonical wording:
+
+- no raw `Decision: 1` style labels in the visible header area
+- use the transcript model helper wording for any visible decision summary
+- keep filter and drilldown behavior intact
+- any visible transcript summary in the page header, aria labels, or helper
+  copy must come from the canonical decision display, not the numeric backing
+  code
+
+### Survey results page
+
+`SurveyResults.tsx` should stop averaging numeric decision codes in the matrix
+and instead use the aggregate cell rule above. The visible matrix value is the
+canonical report output; the cell may still open the transcript viewer or
+support overrides using the legacy backing value where required.
+The cell tooltip or drilldown should show the full bucket breakdown so the
+strict-majority headline never hides the underlying distribution.
+
+## Wave Breakdown
+
+| Wave | Scope | Files | Exit Rule |
+|---|---|---|---|
+| 1 | Shared canonical report helper plus `AnalysisConditionDetail` and `AnalysisTranscripts` cleanup | `cloud/apps/web/src/pages/AnalysisConditionDetail.tsx`, `cloud/apps/web/src/pages/AnalysisTranscripts.tsx`, `cloud/apps/web/src/utils/reportDecisionDisplay.ts` or equivalent helper, `cloud/apps/web/tests/utils/reportDecisionDisplay.test.ts`, `cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx`, `cloud/apps/web/tests/pages/AnalysisTranscripts.test.tsx` | The condition detail and transcripts report pages no longer surface raw 1-5 scores in visible text, and the shared helper has direct unit coverage |
+| 2 | `SurveyResults` aggregate matrix cleanup | `cloud/apps/web/src/pages/SurveyResults.tsx`, `cloud/apps/web/tests/pages/SurveyResults.test.tsx`, `cloud/apps/web/tests/utils/reportDecisionDisplay.test.ts` | The matrix uses the strict-majority canonical headline rule, mixed/unknown/empty states are explicit, and the helper/page tests cover the aggregate branches |
+
+## Implementation Notes
+
+- Keep the canonical transcript headline helpers as the source of truth for a
+  single transcript.
+- Put any aggregate-cell helper in a small shared frontend utility so the
+  condition detail and survey matrix do not drift.
+- The shared aggregate helper must expose a single contract that both pages use
+  for strict-majority, mixed, unknown, and empty handling.
+- The aggregate helper should operate on already-loaded transcript arrays or
+  memoized cell groupings so the pages do not perform extra network fetches or
+  repeated full-list scans on every render.
+- Visible labels should derive from `decisionModelV2.canonical`; hidden
+  `decisionCode` values stay for filtering and overrides only.
+- Do not change the backend GraphQL contract, export sheets, or comparison
+  charts in this phase.
+- Preserve existing drilldown and filter URLs; only the visible report labels
+  should change.
+
+## Risks
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Aggregate report cells can still be ambiguous if mixed states are not defined precisely | Users may still see confusing output | Use strict-majority and explicit `Mixed`, `Unknown`, and `—` rules |
+| Shared helper changes could affect other transcript consumers | Unintended wording changes in non-report surfaces | Keep the helper scoped to report aggregation and update tests for the exact pages in scope |
+| Users may expect more nuance than a `Mixed` label | Some distribution signal may be lost | Keep the cell drilldown and transcript viewer intact so the full transcript set remains visible |
+
+## Verification Plan
+
+1. Wave 1:
+   - run the web build
+   - run the `AnalysisConditionDetail` and `AnalysisTranscripts` page tests
+   - run the shared helper unit test
+2. Wave 2:
+   - run the web build
+   - run the `SurveyResults` page test
+   - run the shared helper unit test
+3. Before PR staging:
+   - run the web build, lint, and targeted web tests from `cloud/`
+
+## Acceptance Criteria
+
+- The three report pages no longer render visible 1-5 decision score output.
+- The condition detail page shows canonical bucket counts instead of a raw
+  mean.
+- The transcripts page uses canonical decision wording in its visible summary
+  area.
+- The survey results matrix uses the strict-majority canonical headline rule
+  and renders explicit `Mixed`, `Unknown`, or `—` states where appropriate.
+- The shared aggregate helper has direct unit test coverage for empty,
+  unknown-only, strict-majority, and tie cases.
+- The helper tests also cover mixed known/unknown sets and malformed legacy
+  values such as `0`, `6`, and `null`.
+- Existing navigation, filtering, and transcript drilldown behavior still works.
+- Automated tests cover the upgraded report pages and pass in the isolated
+  worktree.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+2026-03-26T06:12:12.773809Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:12.774968Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:12.804664Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:12.805395Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:12.816281Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d28c5-9d4d-72c3-b3eb-e8c5dc2b656a.tmp-1774505532750514000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-03-26T06:12:12.835113Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:12.835943Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:12.865622Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:12.866461Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:12.892305Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:12.893206Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:12.922901Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:12.923741Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:12.953449Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:12.954341Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:12.984030Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:12.984827Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.009204Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:13.009974Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.035783Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:13.036635Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.062138Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:13.062997Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.092723Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:13.094268Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.121575Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:13.123218Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.148145Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:13.150288Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.178321Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:13.180991Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.207900Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:13.210048Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.231752Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:13.233918Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.258487Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:13.260587Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.288889Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:13.291018Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.315110Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:13.317765Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.341238Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:13.343396Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.370026Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:13.371290Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.398691Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:13.400910Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.427508Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:13.429730Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.456953Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:13.459079Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.481130Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:13.483249Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.510490Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-26T06:12:13.512643Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-26T06:12:13.538441Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+codex
+## Findings
+1. **High** - The aggregate-cell rule is internally inconsistent around `Unknown`, which can make the matrix lie about certainty. The plan says `Unknown` is only for cells with no renderable canonical transcripts, but it also says to “count by canonical headline.” If `formatCanonicalDecisionHeadline()` returns `Unknown` for a renderable transcript, the same label can be used both as a real bucket and as the fallback for “nothing renderable,” which breaks the stated rule and can produce contradictory cells. The separate choice to exclude unknown/unrenderable transcripts from the strict-majority denominator also means a cell with one renderable transcript and many unusable ones can still display a confident headline, even though the underlying data is mostly unresolved.
+
+2. **Medium-High** - The plan names two different sources of truth for visible wording without defining precedence: `formatCanonicalDecisionHeadline()` and `decisionModelV2.canonical`. That is a drift risk, not a harmless implementation detail. A later helper change, a page-level fallback, or a test fixture update can easily make headers, tooltips, aria labels, and drilldown text disagree with each other, which is exactly the kind of visible inconsistency this phase is trying to remove.
+
+3. **Medium** - The `AnalysisTranscripts` scope is too narrow to guarantee removal of legacy score text from the page. The plan only calls out the header, helper copy, aria labels, and visible transcript summary in the page header, but it does not explicitly cover per-row transcript summaries, badges, empty states, or any other list-item text. If those rows still render `Decision: 1`-style labels, the page will still violate the goal even though the header cleanup passes.
+
+## Residual Risks
+- The phase intentionally leaves `decisionCode` in filters, overrides, exports, and other backend-adjacent paths, so legacy numeric values can still surface outside the three report pages.
+- The plan relies heavily on tooltip/drilldown coverage to explain `Mixed` and sparse-data cases; users who do not hover or open details can still misread the visible matrix.
+- Accessibility text, document titles, and responsive fallback copy are easy places for numeric score leakage if tests only assert the main rendered text.
+tokens used
+5,927

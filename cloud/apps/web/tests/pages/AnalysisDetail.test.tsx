@@ -19,6 +19,7 @@ const mockClient = createClient({
 // Mock useRun hook
 const mockUseRun = vi.fn();
 const mockUseRuns = vi.fn();
+const mockUseInfiniteRuns = vi.fn();
 const mockUseAnalysis = vi.fn();
 
 function LocationProbe() {
@@ -33,6 +34,10 @@ vi.mock('../../src/hooks/useRun', () => ({
 
 vi.mock('../../src/hooks/useRuns', () => ({
   useRuns: (args: unknown) => mockUseRuns(args),
+}));
+
+vi.mock('../../src/hooks/useInfiniteRuns', () => ({
+  useInfiniteRuns: (args: unknown) => mockUseInfiniteRuns(args),
 }));
 
 vi.mock('../../src/hooks/useAnalysis', () => ({
@@ -110,12 +115,24 @@ describe('AnalysisDetail', () => {
   beforeEach(() => {
     mockUseRun.mockReset();
     mockUseRuns.mockReset();
+    mockUseInfiniteRuns.mockReset();
     mockUseAnalysis.mockReset();
     mockUseRuns.mockReturnValue({
       runs: [],
       loading: false,
       error: null,
       refetch: vi.fn(),
+    });
+    mockUseInfiniteRuns.mockReturnValue({
+      runs: [],
+      loading: false,
+      loadingMore: false,
+      error: null,
+      refetch: vi.fn(),
+      items: [],
+      hasNextPage: false,
+      loadMore: vi.fn(),
+      softRefetch: vi.fn(),
     });
     mockUseAnalysis.mockReturnValue({
       analysis: null,
@@ -242,6 +259,234 @@ describe('AnalysisDetail', () => {
       expect(screen.getByTestId('analysis-panel')).toBeInTheDocument();
     });
 
+    it('uses a direct companionRunId and skips the legacy run-list search', () => {
+      mockUseRun.mockImplementation(({ id, pause }: { id: string; pause?: boolean }) => {
+        if (pause || !id) {
+          return {
+            run: null,
+            loading: false,
+            error: null,
+            refetch: vi.fn(),
+          };
+        }
+
+        if (id === 'run-companion') {
+          return {
+            run: {
+              id: 'run-companion',
+              analysisStatus: 'completed',
+              definition: { name: 'Companion Definition' },
+              createdAt: '2024-01-01T00:01:00Z',
+            },
+            loading: false,
+            error: null,
+            refetch: vi.fn(),
+          };
+        }
+
+        return {
+          run: {
+            id: 'run-123',
+            analysisStatus: 'completed',
+            companionRunId: 'run-companion',
+            config: {
+              jobChoiceLaunchMode: 'PAIRED_BATCH',
+              jobChoiceBatchGroupId: 'batch-1',
+              jobChoicePresentationOrder: 'A_first',
+            },
+            definition: {
+              name: 'Achievement -> Benevolence',
+              content: {
+                methodology: {
+                  family: 'job-choice',
+                  pair_key: 'pair-1',
+                  presentation_order: 'A_first',
+                },
+              },
+            },
+            createdAt: '2024-01-01T00:00:00Z',
+          },
+          loading: false,
+          error: null,
+          refetch: vi.fn(),
+        };
+      });
+      mockUseInfiniteRuns.mockImplementation(({ pause }: { pause?: boolean }) => ({
+        runs: [],
+        loading: false,
+        loadingMore: false,
+        error: null,
+        refetch: vi.fn(),
+        items: [],
+        hasNextPage: false,
+        loadMore: vi.fn(),
+        softRefetch: vi.fn(),
+        pause,
+      }));
+
+      renderWithRouter('/analysis/run-123?mode=single');
+
+      expect(screen.getByText('Analysis Panel for run-123')).toBeInTheDocument();
+      expect(screen.getByLabelText('Vignette')).toBeInTheDocument();
+      expect(mockUseInfiniteRuns).toHaveBeenCalled();
+      expect(mockUseInfiniteRuns.mock.calls.some(([args]) => args?.pause === true)).toBe(true);
+    });
+
+    it('falls back to the legacy search when the direct companion link is invalid', () => {
+      mockUseRun.mockImplementation(({ id, pause }: { id: string; pause?: boolean }) => {
+        if (pause || !id) {
+          return {
+            run: null,
+            loading: false,
+            error: null,
+            refetch: vi.fn(),
+          };
+        }
+
+        if (id === 'missing-run') {
+          return {
+            run: null,
+            loading: false,
+            error: null,
+            refetch: vi.fn(),
+          };
+        }
+
+        return {
+          run: {
+            id: 'run-123',
+            analysisStatus: 'completed',
+            companionRunId: 'missing-run',
+            config: {
+              jobChoiceLaunchMode: 'PAIRED_BATCH',
+              jobChoiceBatchGroupId: 'batch-1',
+              jobChoicePresentationOrder: 'A_first',
+            },
+            definition: {
+              name: 'Achievement -> Benevolence',
+              content: {
+                methodology: {
+                  family: 'job-choice',
+                  pair_key: 'pair-1',
+                  presentation_order: 'A_first',
+                },
+              },
+            },
+            createdAt: '2024-01-01T00:00:00Z',
+          },
+          loading: false,
+          error: null,
+          refetch: vi.fn(),
+        };
+      });
+      mockUseInfiniteRuns.mockImplementation(({ pause }: { pause?: boolean }) => ({
+        runs: pause ? [] : [
+          {
+            id: 'run-456',
+            analysisStatus: 'completed',
+            config: {
+              jobChoiceBatchGroupId: 'batch-1',
+              jobChoicePresentationOrder: 'B_first',
+            },
+            definition: {
+              name: 'Benevolence -> Achievement',
+              content: {
+                methodology: {
+                  family: 'job-choice',
+                  pair_key: 'pair-1',
+                  presentation_order: 'B_first',
+                },
+              },
+            },
+            createdAt: '2024-01-01T00:01:00Z',
+          },
+        ],
+        loading: false,
+        loadingMore: false,
+        error: null,
+        refetch: vi.fn(),
+        items: [],
+        hasNextPage: false,
+        loadMore: vi.fn(),
+        softRefetch: vi.fn(),
+        pause,
+      }));
+
+      renderWithRouter('/analysis/run-123?mode=single');
+
+      expect(screen.getByText('Analysis Panel for run-123')).toBeInTheDocument();
+      expect(screen.getByLabelText('Vignette')).toBeInTheDocument();
+      expect(mockUseInfiniteRuns).toHaveBeenCalled();
+      expect(mockUseInfiniteRuns.mock.calls.some(([args]) => args?.pause === false)).toBe(true);
+    });
+
+    it('keeps paging through legacy run results until the companion appears', () => {
+      const loadMore = vi.fn();
+
+      mockUseRun.mockImplementation(({ id, pause }: { id: string; pause?: boolean }) => {
+        if (pause || !id) {
+          return {
+            run: null,
+            loading: false,
+            error: null,
+            refetch: vi.fn(),
+          };
+        }
+
+        if (id === 'missing-run') {
+          return {
+            run: null,
+            loading: false,
+            error: null,
+            refetch: vi.fn(),
+          };
+        }
+
+        return {
+          run: {
+            id: 'run-123',
+            analysisStatus: 'completed',
+            companionRunId: 'missing-run',
+            config: {
+              jobChoiceLaunchMode: 'PAIRED_BATCH',
+              jobChoiceBatchGroupId: 'batch-1',
+            },
+            definition: {
+              name: 'Achievement -> Benevolence',
+              content: {
+                methodology: {
+                  family: 'job-choice',
+                  pair_key: 'pair-1',
+                  presentation_order: 'A_first',
+                },
+              },
+            },
+            createdAt: '2024-01-01T00:00:00Z',
+          },
+          loading: false,
+          error: null,
+          refetch: vi.fn(),
+        };
+      });
+      mockUseInfiniteRuns.mockImplementation(({ pause }: { pause?: boolean }) => ({
+        runs: [],
+        loading: false,
+        loadingMore: false,
+        error: null,
+        refetch: vi.fn(),
+        items: [],
+        hasNextPage: true,
+        loadMore,
+        softRefetch: vi.fn(),
+        pause,
+      }));
+
+      renderWithRouter('/analysis/run-123?mode=single');
+
+      expect(loadMore).toHaveBeenCalled();
+      expect(screen.getByText('Analysis Panel for run-123')).toBeInTheDocument();
+    });
+
     it('shows the analysis mode toggle and updates the URL when switched', () => {
       mockUseRun.mockReturnValue({
         run: {
@@ -257,37 +502,57 @@ describe('AnalysisDetail', () => {
 
       expect(screen.getByRole('button', { name: /single vignette/i })).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'false');
-      expect(screen.getByTestId('location-search')).toHaveTextContent('');
+      expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=overview&mode=single');
 
       fireEvent.click(screen.getByRole('button', { name: /paired vignettes/i }));
 
       expect(screen.getByRole('button', { name: /single vignette/i })).toHaveAttribute('aria-pressed', 'false');
       expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByTestId('location-search')).toHaveTextContent('?mode=paired');
+      expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=overview&mode=paired');
     });
 
     it('switches to the selected single vignette run and preserves single mode', () => {
-      mockUseRun.mockImplementation(({ id }: { id: string }) => ({
-        run: {
-          id,
-          analysisStatus: 'completed',
-          config: {
-            jobChoiceLaunchMode: 'PAIRED_BATCH',
-            jobChoiceBatchGroupId: 'batch-1',
-            jobChoicePresentationOrder: id === 'run-123' ? 'A_first' : 'B_first',
+      mockUseRun.mockImplementation(({ id, pause }: { id: string; pause?: boolean }) => {
+        if (pause || !id) {
+          return {
+            run: null,
+            loading: false,
+            error: null,
+            refetch: vi.fn(),
+          };
+        }
+
+        return {
+          run: {
+            id,
+            analysisStatus: 'completed',
+            config: {
+              jobChoiceLaunchMode: 'PAIRED_BATCH',
+              jobChoiceBatchGroupId: 'batch-1',
+              jobChoicePresentationOrder: id === 'run-123' ? 'A_first' : 'B_first',
+            },
+            definition: {
+              name: id === 'run-123' ? 'Achievement -> Benevolence' : 'Benevolence -> Achievement',
+              content: {
+                methodology: {
+                  family: 'job-choice',
+                  pair_key: 'pair-1',
+                  presentation_order: id === 'run-123' ? 'A_first' : 'B_first',
+                },
+              },
+            },
+            createdAt: id === 'run-123' ? '2024-01-01T00:00:00Z' : '2024-01-01T00:01:00Z',
           },
-          definition: {
-            name: id === 'run-123' ? 'Achievement -> Benevolence' : 'Benevolence -> Achievement',
-          },
-          createdAt: id === 'run-123' ? '2024-01-01T00:00:00Z' : '2024-01-01T00:01:00Z',
-        },
-        loading: false,
-        error: null,
-      }));
-      mockUseRuns.mockReturnValue({
+          loading: false,
+          error: null,
+          refetch: vi.fn(),
+        };
+      });
+      mockUseInfiniteRuns.mockReturnValue({
         runs: [
           {
             id: 'run-123',
+            analysisStatus: 'completed',
             createdAt: '2024-01-01T00:00:00Z',
             config: {
               jobChoiceBatchGroupId: 'batch-1',
@@ -300,6 +565,7 @@ describe('AnalysisDetail', () => {
           },
           {
             id: 'run-456',
+            analysisStatus: 'completed',
             createdAt: '2024-01-01T00:01:00Z',
             config: {
               jobChoiceBatchGroupId: 'batch-1',
@@ -312,8 +578,13 @@ describe('AnalysisDetail', () => {
           },
         ],
         loading: false,
+        loadingMore: false,
         error: null,
         refetch: vi.fn(),
+        items: [],
+        hasNextPage: false,
+        loadMore: vi.fn(),
+        softRefetch: vi.fn(),
       });
 
       renderWithRouter('/analysis/run-123?tab=scenarios');

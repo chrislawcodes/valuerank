@@ -31,6 +31,7 @@ type RunConfig = {
   priority?: string;
   definitionSnapshot?: unknown;
   estimatedCosts?: CostEstimateShape;
+  companionRunId?: string | null;
   jobChoiceBatchGroupId?: string | null;
   jobChoicePresentationOrder?: 'A_first' | 'B_first' | null;
   isAggregate?: boolean;
@@ -248,6 +249,16 @@ builder.objectType(RunRef, {
       description: 'Workflow category assigned to the run',
     }),
     config: t.expose('config', { type: 'JSON' }),
+    companionRunId: t.string({
+      nullable: true,
+      description: 'Direct companion run ID for paired launches',
+      resolve: (run) => {
+        const config = run.config as RunConfig | null;
+        return typeof config?.companionRunId === 'string' && config.companionRunId.trim() !== ''
+          ? config.companionRunId
+          : null;
+      },
+    }),
     batchCount: t.int({
       description: 'Number of batches represented by this saved record',
       resolve: (run) => {
@@ -276,6 +287,9 @@ builder.objectType(RunRef, {
     }),
     // Keep raw progress as JSON for backward compatibility
     progress: t.expose('progress', { type: 'JSON', nullable: true }),
+    stalledModels: t.exposeStringList('stalledModels', {
+      description: 'Model IDs currently detected as stalled (no successful probe completion for 3+ minutes while jobs are pending)',
+    }),
     startedAt: t.expose('startedAt', { type: 'DateTime', nullable: true }),
     completedAt: t.expose('completedAt', { type: 'DateTime', nullable: true }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),

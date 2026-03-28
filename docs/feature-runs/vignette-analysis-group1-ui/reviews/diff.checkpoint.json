@@ -1,0 +1,45 @@
+{
+  "feature_slug": "vignette-analysis-group1-ui",
+  "stage": "diff",
+  "artifact_path": "docs/feature-runs/vignette-analysis-group1-ui/reviews/implementation.diff.patch",
+  "git_base_ref": "9cf5b60dc2f1274c190de0f6d382366a86555257",
+  "allowed_dirty_paths": [
+    "cloud/apps/web/src/utils/transcriptDecisionModel.ts",
+    "cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx",
+    "cloud/apps/web/tests/utils/transcriptDecisionModel.test.ts",
+    "docs/feature-runs/feature-workflow-discovery-shaping",
+    "docs/feature-runs/transcript-summarization-speedup",
+    "docs/operations/codex-skills/feature-factory",
+    "docs/operations/codex-skills/review-lens/scripts",
+    "docs/plans/feature-workflow-plan.md"
+  ],
+  "required_reviews": [
+    {
+      "reviewer": "gemini",
+      "lens": "regression-adversarial",
+      "stage": "diff",
+      "path": "docs/feature-runs/vignette-analysis-group1-ui/reviews/diff.gemini.regression-adversarial.review.md",
+      "context_paths": [],
+      "model": "gemini-2.5-pro"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "operational-risk-adversarial",
+      "stage": "diff",
+      "path": "docs/feature-runs/vignette-analysis-group1-ui/reviews/diff.gemini.operational-risk-adversarial.review.md",
+      "context_paths": [],
+      "model": "gemini-2.5-pro"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "correctness-adversarial",
+      "stage": "diff",
+      "path": "docs/feature-runs/vignette-analysis-group1-ui/reviews/diff.codex.correctness-adversarial.review.md",
+      "context_paths": [],
+      "model": "gpt-5.4-mini"
+    }
+  ],
+  "max_artifact_chars": null,
+  "max_context_chars": null,
+  "max_total_chars": null
+}

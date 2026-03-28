@@ -1,0 +1,527 @@
+2026-03-25T05:09:49.963214Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:49.963242Z  WARN codex_core::state_db: failed to initialize state runtime at /Users/chrislaw/.codex: migration 2 was previously applied but is missing in the resolved migrations
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d2366-2509-7262-8f59-fe3a86c732fb
+--------
+user
+Review this diff artifact using a correctness-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/workers/summarize.py b/cloud/workers/summarize.py
+index 6ba46527..29761308 100644
+--- a/cloud/workers/summarize.py
++++ b/cloud/workers/summarize.py
+@@ -48,6 +48,7 @@ Error:
+ import json
+ import hashlib
+ import re
++import os
+ import sys
+ from typing import Any, Optional
+ 
+@@ -120,7 +121,19 @@ LEADING_DECISION_PREFIX_PATTERN = re.compile(
+ # Default summary model if none specified
+ DEFAULT_SUMMARY_MODEL = "anthropic:claude-sonnet-4-20250514"
+ LLM_FALLBACK_MODEL = "xai:grok-4-1-fast-reasoning"
+-PARSER_VERSION = "job-choice-v2"
++DEFAULT_SUMMARIZE_PARSER_VERSION = "job-choice-v2"
++
++# Keep batch size aligned with the API-side PgBoss worker batch size ceiling.
++MAX_SUMMARIZE_BATCH_SIZE = 500
++
++
++def load_parser_version() -> str:
++    raw_version = os.getenv("SUMMARIZE_PARSER_VERSION", DEFAULT_SUMMARIZE_PARSER_VERSION)
++    normalized_version = raw_version.strip()
++    return normalized_version if normalized_version else DEFAULT_SUMMARIZE_PARSER_VERSION
++
++
++PARSER_VERSION = load_parser_version()
+ 
+ 
+ def validate_input(data: dict[str, Any]) -> None:
+@@ -673,6 +686,98 @@ def run_summarize(data: dict[str, Any]) -> dict[str, Any]:
+         }
+ 
+ 
++def run_summarize_batch(data: dict[str, Any]) -> dict[str, Any]:
++    """Execute summarization for a batch of transcripts."""
++    transcripts = data.get("transcripts", [])
++    if not isinstance(transcripts, list):
++        return {
++            "success": False,
++            "error": {
++                "message": "transcripts must be an array",
++                "code": ErrorCode.VALIDATION_ERROR.value,
++                "retryable": False,
++            },
++        }
++    if len(transcripts) > MAX_SUMMARIZE_BATCH_SIZE:
++        return {
++            "success": False,
++            "error": {
++                "message": f"Batch size exceeds maximum of {MAX_SUMMARIZE_BATCH_SIZE}",
++                "code": ErrorCode.VALIDATION_ERROR.value,
++                "retryable": False,
++            },
++        }
++
++    summaries: list[dict[str, Any]] = []
++    failure_count = 0
++    retryable_failure = False
++    for batch_index, item in enumerate(transcripts):
++        if not isinstance(item, dict):
++            failure_count += 1
++            summaries.append(
++                {
++                    "transcriptId": None,
++                    "batchIndex": batch_index,
++                    "success": False,
++                    "error": {
++                        "message": "Transcript item must be an object",
++                        "code": ErrorCode.VALIDATION_ERROR.value,
++                        "retryable": False,
++                    },
++                }
++            )
++            continue
++
++        transcript_id = item.get("transcriptId")
++        try:
++            validate_input(item)
++            result = run_summarize(item)
++        except ValidationError as err:
++                result = {
++                    "success": False,
++                    "error": err.to_dict(),
++                }
++        except Exception as err:
++            worker_err = classify_exception(err)
++            result = {
++                "success": False,
++                "error": worker_err.to_dict(),
++            }
++        if not result.get("success", False):
++            failure_count += 1
++            error = result.get("error")
++            if isinstance(error, dict) and error.get("retryable") is True:
++                retryable_failure = True
++        summaries.append(
++            {
++                "transcriptId": transcript_id,
++                "batchIndex": batch_index,
++                **result,
++            }
++        )
++
++    if failure_count > 0:
++        return {
++            "success": False,
++            "error": {
++                "message": f"{failure_count} transcript(s) failed",
++                "code": "BATCH_PARTIAL_FAILURE",
++                "retryable": retryable_failure,
++                "details": {
++                    "failedCount": failure_count,
++                    "totalCount": len(transcripts),
++                    "maxBatchSize": MAX_SUMMARIZE_BATCH_SIZE,
++                },
++            },
++            "summaries": summaries,
++        }
++
++    return {
++        "success": True,
++        "summaries": summaries,
++    }
++
++
+ def main() -> None:
+     """Main entry point - read from stdin, write to stdout."""
+     try:
+@@ -704,19 +809,22 @@ def main() -> None:
+             print(json.dumps(result))
+             return
+ 
+-        # Validate input
+-        try:
+-            validate_input(data)
+-        except ValidationError as err:
+-            result = {
+-                "success": False,
+-                "error": err.to_dict(),
+-            }
+-            print(json.dumps(result))
+-            return
+-
+-        # Run summarization
+-        result = run_summarize(data)
++        if isinstance(data, dict) and "transcripts" in data:
++            result = run_summarize_batch(data)
++        else:
++            # Validate input
++            try:
++                validate_input(data)
++            except ValidationError as err:
++                result = {
++                    "success": False,
++                    "error": err.to_dict(),
++                }
++                print(json.dumps(result))
++                return
++
++            # Run summarization
++            result = run_summarize(data)
+ 
+         # Output result
+         print(json.dumps(result))
+diff --git a/cloud/workers/tests/test_summarize.py b/cloud/workers/tests/test_summarize.py
+index c9903966..4d4efb0c 100644
+--- a/cloud/workers/tests/test_summarize.py
++++ b/cloud/workers/tests/test_summarize.py
+@@ -1,6 +1,8 @@
+ """Tests for summarize worker."""
+ 
++import importlib
+ import json
++import sys
+ from typing import Any
+ from unittest.mock import MagicMock, patch
+ 
+@@ -95,6 +97,15 @@ class TestValidateInput:
+         assert "turns must be an array" in exc_info.value.message
+ 
+ 
++def load_summarize_module(monkeypatch: pytest.MonkeyPatch, parser_version: str | None = None):
++    """Reload summarize.py with controlled environment."""
++    monkeypatch.delenv("SUMMARIZE_PARSER_VERSION", raising=False)
++    if parser_version is not None:
++        monkeypatch.setenv("SUMMARIZE_PARSER_VERSION", parser_version)
++    sys.modules.pop("summarize", None)
++    return importlib.import_module("summarize")
++
++
+ class TestExtractDecisionCodeFromText:
+     """Tests for extract_decision_code_from_text helper function."""
+ 
+@@ -667,6 +678,20 @@ class TestRunSummarize:
+         assert result["summary"]["decisionMetadata"]["parseClass"] == "ambiguous"
+         assert result["summary"]["decisionText"] is None
+ 
++    def test_parser_version_defaults_to_current_value(self, monkeypatch: pytest.MonkeyPatch) -> None:
++        """Test parser version defaults to the current worker value."""
++        module = load_summarize_module(monkeypatch)
++
++        assert module.PARSER_VERSION == "job-choice-v2"
++        sys.modules.pop("summarize", None)
++
++    def test_parser_version_uses_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
++        """Test parser version can be overridden from the environment."""
++        module = load_summarize_module(monkeypatch, "parser-override-1")
++
++        assert module.PARSER_VERSION == "parser-override-1"
++        sys.modules.pop("summarize", None)
++
+     def test_extracts_text_label_scale_decision(self) -> None:
+         """Test deterministic text-label parsing for Job Choice scales."""
+         from summarize import extract_decision_result
+@@ -1057,6 +1082,145 @@ class TestRunSummarize:
+         assert "error" in result
+ 
+ 
++class TestRunSummarizeBatch:
++    """Tests for run_summarize_batch function."""
++
++    def test_returns_per_transcript_results(self) -> None:
++        """Batch mode should preserve per-transcript summaries."""
++        from summarize import run_summarize_batch
++
++        data = {
++            "transcripts": [
++                {
++                    "transcriptId": "transcript-1",
++                    "modelId": "anthropic:claude-3.5-sonnet",
++                    "transcriptContent": {"turns": []},
++                },
++                {
++                    "transcriptId": "transcript-2",
++                    "modelId": "anthropic:claude-3.5-sonnet",
++                    "transcriptContent": {"turns": []},
++                },
++            ]
++        }
++
++        with patch("summarize.run_summarize") as mock_run, patch(
++            "summarize.validate_input"
++        ) as mock_validate:
++            mock_run.side_effect = [
++                {
++                    "success": True,
++                    "summary": {
++                        "decisionCode": "4",
++                        "decisionSource": "deterministic",
++                        "decisionText": None,
++                        "decisionMetadata": {"parseClass": "exact"},
++                    },
++                },
++                {
++                    "success": False,
++                    "error": {
++                        "message": "Rate limited",
++                        "code": "RATE_LIMIT",
++                        "retryable": True,
++                    },
++                },
++            ]
++
++            result = run_summarize_batch(data)
++
++        assert result["success"] is False
++        assert result["error"]["code"] == "BATCH_PARTIAL_FAILURE"
++        assert result["error"]["retryable"] is True
++        assert len(result["summaries"]) == 2
++        assert result["summaries"][0]["transcriptId"] == "transcript-1"
++        assert result["summaries"][0]["success"] is True
++        assert result["summaries"][0]["summary"]["decisionCode"] == "4"
++        assert result["summaries"][1]["transcriptId"] == "transcript-2"
++        assert result["summaries"][1]["success"] is False
++        assert result["summaries"][1]["error"]["code"] == "RATE_LIMIT"
++        assert mock_validate.call_count == 2
++        assert mock_run.call_count == 2
++
++    def test_returns_item_validation_error_without_failing_batch(self) -> None:
++        """Invalid batch items should be returned as per-item errors."""
++        from summarize import run_summarize_batch
++
++        data = {
++            "transcripts": [
++                {
++                    "transcriptId": "transcript-1",
++                    "modelId": "anthropic:claude-3.5-sonnet",
++                    "transcriptContent": {"turns": []},
++                },
++                {
++                    "transcriptId": "transcript-2",
++                    "modelId": "anthropic:claude-3.5-sonnet",
++                },
++            ]
++        }
++
++        with patch("summarize.run_summarize") as mock_run:
++            mock_run.return_value = {
++                "success": True,
++                "summary": {
++                    "decisionCode": "4",
++                    "decisionSource": "deterministic",
++                    "decisionText": None,
++                    "decisionMetadata": {"parseClass": "exact"},
++                },
++            }
++
++            result = run_summarize_batch(data)
++
++        assert result["success"] is False
++        assert result["error"]["code"] == "BATCH_PARTIAL_FAILURE"
++        assert len(result["summaries"]) == 2
++        assert result["summaries"][0]["success"] is True
++        assert result["summaries"][1]["batchIndex"] == 1
++        assert result["summaries"][1]["success"] is False
++        assert result["summaries"][1]["error"]["code"] == ErrorCode.VALIDATION_ERROR.value
++        assert mock_run.call_count == 1
++
++    def test_returns_success_for_empty_batch(self) -> None:
++        """An empty batch should round-trip cleanly."""
++        from summarize import run_summarize_batch
++
++        result = run_summarize_batch({"transcripts": []})
++
++        assert result["success"] is True
++        assert result["summaries"] == []
++
++    def test_rejects_non_list_batch_envelope(self) -> None:
++        """A malformed transcripts envelope should fail fast."""
++        from summarize import run_summarize_batch
++
++        result = run_summarize_batch({"transcripts": "not-a-list"})
++
++        assert result["success"] is False
++        assert result["error"]["code"] == ErrorCode.VALIDATION_ERROR.value
++
++    def test_rejects_oversized_batch(self) -> None:
++        """A batch larger than the configured maximum should fail fast."""
++        from summarize import MAX_SUMMARIZE_BATCH_SIZE, run_summarize_batch
++
++        result = run_summarize_batch(
++            {
++                "transcripts": [
++                    {
++                        "transcriptId": f"transcript-{index}",
++                        "modelId": "anthropic:claude-3.5-sonnet",
++                        "transcriptContent": {"turns": []},
++                    }
++                    for index in range(MAX_SUMMARIZE_BATCH_SIZE + 1)
++                ]
++            }
++        )
++
++        assert result["success"] is False
++        assert result["error"]["code"] == ErrorCode.VALIDATION_ERROR.value
++
++
+ class TestMain:
+     """Tests for main entry point."""
+ 
+@@ -1133,3 +1297,77 @@ class TestMain:
+         result = json.loads(captured.out)
+         assert result["success"] is False
+         assert ErrorCode.VALIDATION_ERROR.value == result["error"]["code"]
++
++    @patch("summarize.run_summarize_batch")
++    @patch("sys.stdin")
++    def test_batch_execution(
++        self, mock_stdin: MagicMock, mock_run_batch: MagicMock, capsys: pytest.CaptureFixture[str]
++    ) -> None:
++        """Test batch execution path."""
++        from summarize import main
++
++        mock_stdin.read.return_value = json.dumps({
++            "transcripts": [
++                {
++                    "transcriptId": "transcript-1",
++                    "modelId": "anthropic:claude-3.5-sonnet",
++                    "transcriptContent": {"turns": []},
++                },
++                {
++                    "transcriptId": "transcript-2",
++                    "modelId": "anthropic:claude-3.5-sonnet",
++                    "transcriptContent": {"turns": []},
++                },
++            ]
++        })
++        mock_run_batch.return_value = {
++            "success": True,
++            "summaries": [
++                {
++                    "transcriptId": "transcript-1",
++                    "success": True,
++                    "summary": {
++                        "decisionCode": "4",
++                        "decisionSource": "deterministic",
++                        "decisionText": None,
++                        "decisionMetadata": {"parseClass": "exact"},
++                    },
++                },
++                {
++                    "transcriptId": "transcript-2",
++                    "success": True,
++                    "summary": {
++                        "decisionCode": "2",
++                        "decisionSource": "deterministic",
++                        "decisionText": None,
++                        "decisionMetadata": {"parseClass": "exact"},
++                    },
++                },
++            ],
++        }
++
++        main()
++
++        captured = capsys.readouterr()
++        result = json.loads(captured.out)
++        assert result["success"] is True
++        assert len(result["summaries"]) == 2
++        mock_run_batch.assert_called_once()
++
++    @patch("sys.stdin")
++    def test_batch_validation_error(
++        self, mock_stdin: MagicMock, capsys: pytest.CaptureFixture[str]
++    ) -> None:
++        """Test malformed batch envelopes stay in batch mode."""
++        from summarize import main
++
++        mock_stdin.read.return_value = json.dumps({
++            "transcripts": "not-a-list",
++        })
++
++        main()
++
++        captured = capsys.readouterr()
++        result = json.loads(captured.out)
++        assert result["success"] is False
++        assert result["error"]["code"] == ErrorCode.VALIDATION_ERROR.value
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+2026-03-25T05:09:49.965926Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:49.988826Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:09:49.991995Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:50.019198Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:09:50.021162Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:50.044963Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:09:50.046182Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:50.049397Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d2366-2509-7262-8f59-fe3a86c732fb.tmp-1774415389963508000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-03-25T05:09:50.070346Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:09:50.071485Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:50.096520Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:09:50.097565Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:50.122271Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:09:50.123382Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:50.148129Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:09:50.149344Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:50.173409Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:09:50.174545Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:50.197971Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:09:50.199902Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:50.222881Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:09:50.224131Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:50.247119Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:09:50.248175Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:50.272560Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:09:50.273871Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:50.298028Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:09:50.299123Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:50.323205Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:09:50.324485Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:50.348737Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:09:50.349965Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:50.371924Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:09:50.373167Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:50.398110Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:09:50.399380Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:50.421893Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:09:50.422962Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:50.446569Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:09:50.447615Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:09:50.472820Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+codex
+## Findings
+1. **High**: `main()` switches to batch mode whenever the top-level dict contains a `transcripts` key, so a payload that accidentally includes that key will skip single-transcript validation and can silently drop the real transcript fields. For example, a malformed single job like `{"transcriptId": "...", "modelId": "...", "transcriptContent": {...}, "transcripts": []}` will now be treated as an empty batch and return success instead of failing fast. That is a correctness regression because the worker no longer rejects mixed or malformed envelopes.
+
+2. **Medium**: `run_summarize_batch()` returns `success: False` for any partial failure, even though it already produced successful per-item summaries. If the queue layer treats that as a failed job and retries the batch, the transcripts that already succeeded will be processed again, which can duplicate downstream side effects. The new batch contract needs an explicit separation between “job completed with item errors” and “job failed and should be retried.”
+
+## Residual Risks
+- `SUMMARIZE_PARSER_VERSION` is now an unvalidated runtime override. A typo or unsupported value will silently change parser behavior instead of failing at startup.
+- The new batch size ceiling is hard-coded in the worker. If the API-side limit changes and this constant is not updated in lockstep, valid batches will start being rejected here.
+- The partial-failure response shape is new. Any caller that assumes old single-job semantics may mis-handle `summaries` or `BATCH_PARTIAL_FAILURE` without an explicit compatibility update.
+tokens used
+16,956

@@ -99,8 +99,9 @@ describe('buildRawDataSheet', () => {
     // Check standard headers (note: values array is 1-indexed)
     expect(headers).toContain('AI Model Name');
     expect(headers).toContain('Sample Index');
-    expect(headers).toContain('Decision Code');
-    expect(headers).toContain('Decision Text');
+    expect(headers).toContain('Decision Direction');
+    expect(headers).toContain('Decision Strength');
+    expect(headers).toContain('Decision Reason');
     expect(headers).toContain('Transcript ID');
     expect(headers).toContain('Full Response');
   });
@@ -183,9 +184,46 @@ describe('buildModelSummarySheet', () => {
 
   it('returns model statistics', () => {
     const transcripts = [
-      createMockTranscript({ modelId: 'model-a', decisionCode: '3' }),
-      createMockTranscript({ modelId: 'model-a', decisionCode: '4' }),
-      createMockTranscript({ modelId: 'model-b', decisionCode: '2' }),
+      createMockTranscript({
+        modelId: 'model-a',
+        decisionCode: '5',
+        decisionMetadata: {
+          parseClass: 'exact',
+          parsePath: 'exact.favor_first.strong',
+          matchedLabel: 'Achievement',
+        },
+        definitionSnapshot: {
+          dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
+          methodology: { presentation_order: 'A_first' },
+        },
+        scenario: {
+          ...createMockTranscript().scenario,
+          orientationFlipped: false,
+        },
+      }),
+      createMockTranscript({
+        modelId: 'model-a',
+        decisionCode: '4',
+        decisionMetadata: {
+          parseClass: 'exact',
+          parsePath: 'exact.favor_first.lean',
+          matchedLabel: 'Achievement',
+        },
+        definitionSnapshot: {
+          dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
+          methodology: { presentation_order: 'A_first' },
+        },
+        scenario: {
+          ...createMockTranscript().scenario,
+          orientationFlipped: false,
+        },
+      }),
+      createMockTranscript({
+        modelId: 'model-b',
+        decisionCode: null,
+        decisionMetadata: null,
+        definitionSnapshot: null,
+      }),
     ];
     const stats = buildModelSummarySheet(workbook, transcripts);
 
@@ -194,40 +232,107 @@ describe('buildModelSummarySheet', () => {
     expect(stats.map((s) => s.modelName)).toContain('model-b');
   });
 
-  it('calculates correct mean score', () => {
+  it('calculates canonical summary statistics', () => {
     const transcripts = [
-      createMockTranscript({ modelId: 'model-a', decisionCode: '2' }),
-      createMockTranscript({ modelId: 'model-a', decisionCode: '4' }),
+      createMockTranscript({
+        modelId: 'model-a',
+        decisionCode: '5',
+        decisionMetadata: {
+          parseClass: 'exact',
+          parsePath: 'exact.favor_first.strong',
+          matchedLabel: 'Achievement',
+        },
+        definitionSnapshot: {
+          dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
+          methodology: { presentation_order: 'A_first' },
+        },
+        scenario: {
+          ...createMockTranscript().scenario,
+          orientationFlipped: false,
+        },
+      }),
+      createMockTranscript({
+        modelId: 'model-a',
+        decisionCode: '4',
+        decisionMetadata: {
+          parseClass: 'exact',
+          parsePath: 'exact.favor_first.lean',
+          matchedLabel: 'Achievement',
+        },
+        definitionSnapshot: {
+          dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
+          methodology: { presentation_order: 'A_first' },
+        },
+        scenario: {
+          ...createMockTranscript().scenario,
+          orientationFlipped: false,
+        },
+      }),
+      createMockTranscript({
+        modelId: 'model-a',
+        decisionCode: null,
+        decisionMetadata: null,
+        definitionSnapshot: null,
+      }),
     ];
     const stats = buildModelSummarySheet(workbook, transcripts);
 
     const modelAStat = stats.find((s) => s.modelName === 'model-a');
     expect(modelAStat).toBeDefined();
-    expect(modelAStat!.meanScore).toBe(3); // (2 + 4) / 2
+    expect(modelAStat!.sampleCount).toBe(3);
+    expect(modelAStat!.resolvedCount).toBe(2);
+    expect(modelAStat!.unknownCount).toBe(1);
+    expect(modelAStat!.meanPreferenceScore).toBe(1.5);
+    expect(modelAStat!.stdDev).toBeCloseTo(0.707106, 5);
   });
 
-  it('calculates correct sample count', () => {
+  it('sorts models alphabetically', () => {
     const transcripts = [
-      createMockTranscript({ modelId: 'model-a' }),
-      createMockTranscript({ modelId: 'model-a' }),
-      createMockTranscript({ modelId: 'model-b' }),
+      createMockTranscript({
+        modelId: 'z-model',
+        decisionCode: null,
+        decisionMetadata: null,
+        definitionSnapshot: null,
+      }),
+      createMockTranscript({
+        modelId: 'a-model',
+        decisionCode: null,
+        decisionMetadata: null,
+        definitionSnapshot: null,
+      }),
+    ];
+    const stats = buildModelSummarySheet(workbook, transcripts);
+
+    expect(stats.map((s) => s.modelName)).toEqual(['a-model', 'z-model']);
+  });
+
+  it('treats unresolved transcripts as unknown and leaves the mean blank', () => {
+    const transcripts = [
+      createMockTranscript({
+        modelId: 'model-a',
+        decisionCode: null,
+        decisionMetadata: null,
+        definitionSnapshot: null,
+      }),
+      createMockTranscript({
+        modelId: 'model-a',
+        decisionCode: 'pending',
+        decisionMetadata: null,
+        definitionSnapshot: null,
+      }),
     ];
     const stats = buildModelSummarySheet(workbook, transcripts);
 
     const modelAStat = stats.find((s) => s.modelName === 'model-a');
     expect(modelAStat!.sampleCount).toBe(2);
-  });
+    expect(modelAStat!.resolvedCount).toBe(0);
+    expect(modelAStat!.unknownCount).toBe(2);
+    expect(modelAStat!.meanPreferenceScore).toBeNull();
+    expect(modelAStat!.stdDev).toBe(0);
 
-  it('handles non-numeric decision codes', () => {
-    const transcripts = [
-      createMockTranscript({ modelId: 'model-a', decisionCode: 'error' }),
-      createMockTranscript({ modelId: 'model-a', decisionCode: '3' }),
-    ];
-    const stats = buildModelSummarySheet(workbook, transcripts);
-
-    const modelAStat = stats.find((s) => s.modelName === 'model-a');
-    // Mean should only include valid numeric codes
-    expect(modelAStat!.meanScore).toBe(3);
+    const worksheet = workbook.getWorksheet('Model Summary');
+    expect(worksheet).toBeDefined();
+    expect(worksheet!.getCell(2, 5).value).toBeNull();
   });
 });
 

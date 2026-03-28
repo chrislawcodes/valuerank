@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AnalysisTranscripts } from '../../src/pages/AnalysisTranscripts';
 
@@ -8,6 +8,16 @@ const mockUseRun = vi.fn();
 const mockUseRuns = vi.fn();
 const mockUseAnalysis = vi.fn();
 const mockUpdateTranscriptDecision = vi.fn();
+let lastTranscriptListProps: {
+  transcripts: Array<{ id: string }>;
+  decisionColumnLabel?: string;
+  normalizedDecisionTranscriptIds?: Set<string>;
+  decisionDisplayMode?: string;
+} | null = null;
+let lastTranscriptViewerProps: {
+  transcript: { id: string };
+  decisionDisplayMode?: string;
+} | null = null;
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -36,18 +46,35 @@ vi.mock('../../src/hooks/useRunMutations', () => ({
 }));
 
 vi.mock('../../src/components/runs/TranscriptList', () => ({
-  TranscriptList: ({ transcripts }: { transcripts: Array<{ id: string }> }) => (
-    <div data-testid="transcript-list">Transcript count: {transcripts.length}</div>
-  ),
+  TranscriptList: (props: {
+    transcripts: Array<{ id: string }>;
+    decisionColumnLabel?: string;
+    normalizedDecisionTranscriptIds?: Set<string>;
+    decisionDisplayMode?: string;
+  }) => {
+    lastTranscriptListProps = props;
+    return (
+      <div data-testid="transcript-list">Transcript count: {props.transcripts.length}</div>
+    );
+  },
 }));
 
 vi.mock('../../src/components/runs/TranscriptViewer', () => ({
-  TranscriptViewer: ({ transcript }: { transcript: { id: string } }) => (
-    <div data-testid="transcript-viewer">Viewer transcript: {transcript.id}</div>
-  ),
+  TranscriptViewer: (props: { transcript: { id: string }; decisionDisplayMode?: string }) => {
+    lastTranscriptViewerProps = props;
+    return <div data-testid="transcript-viewer">Viewer transcript: {props.transcript.id}</div>;
+  },
 }));
 
 function createRun(id: string, definitionVersion: number, overrides: Record<string, unknown> = {}) {
+  const transcripts = Array.isArray(overrides.transcripts)
+    ? overrides.transcripts
+    : [
+        createRenderableTranscript('tx-1', 's1', 'A', { runId: id }),
+        createRenderableTranscript('tx-2', 's2', 'A', { runId: id }),
+        createRenderableTranscript('tx-3', 's3', 'B', { runId: id, modelId: 'model2' }),
+      ];
+
   return {
     id,
     tags: [],
@@ -78,27 +105,8 @@ function createRun(id: string, definitionVersion: number, overrides: Record<stri
         ],
       },
     },
-    transcripts: [
-      {
-        id: 'tx-1',
-        modelId: 'model1',
-        scenarioId: 's1',
-        decisionCode: 'A',
-      },
-      {
-        id: 'tx-2',
-        modelId: 'model1',
-        scenarioId: 's2',
-        decisionCode: 'A',
-      },
-      {
-        id: 'tx-3',
-        modelId: 'model2',
-        scenarioId: 's3',
-        decisionCode: 'B',
-      },
-    ],
     ...overrides,
+    transcripts,
   };
 }
 
@@ -106,6 +114,45 @@ function createAggregateRun(id: string, definitionVersion: number) {
   return createRun(id, definitionVersion, {
     tags: [{ name: 'Aggregate' }],
   });
+}
+
+function createRenderableTranscript(
+  id: string,
+  scenarioId: string,
+  decisionCode: string,
+  overrides: Partial<{ runId: string; modelId: string }> = {},
+) {
+  return {
+    id,
+    runId: overrides.runId ?? 'run-1',
+    modelId: overrides.modelId ?? 'model1',
+    scenarioId,
+    decisionCode,
+    decisionModelV2: {
+      raw: {
+        matchedText: 'Benevolence',
+        matchedLabel: 'Benevolence',
+        parseClass: 'exact',
+        parsePath: 'exact.favor_second.strong',
+        parserVersion: 'v1',
+        responseExcerpt: 'Benevolence',
+        manualOverride: null,
+      },
+      canonical: {
+        favoredValueKey: 'Benevolence_Dependability',
+        opposedValueKey: 'Achievement',
+        direction: 'favor_second',
+        strength: 'strong',
+        normalizationApplied: true,
+        normalizationReason: 'orientation_flipped',
+        source: 'deterministic',
+      },
+      legacy: {
+        rawScore: null,
+        canonicalScore: 1,
+      },
+    },
+  };
 }
 
 function renderPage(initialEntry: string) {
@@ -173,6 +220,83 @@ function createPairedAnalysis(
   };
 }
 
+function installPairedConditionSourceFixture() {
+  mockUseRun.mockImplementation((args?: { id?: string }) => {
+    if (args?.id === 'run-2') {
+      return {
+        run: createRun('run-2', 1, {
+          definition: {
+            id: 'def-2',
+            name: 'Harmony -> Freedom',
+            content: {
+              methodology: {
+                family: 'job-choice',
+                presentation_order: 'B_first',
+              },
+              template: 'Choose between [Harmony] and [Freedom].',
+              components: {
+                value_first: { token: 'harmony' },
+                value_second: { token: 'freedom' },
+              },
+              dimensions: [
+                { name: 'Freedom' },
+                { name: 'Harmony' },
+              ],
+            },
+          },
+          transcripts: [
+            createRenderableTranscript('tx-4', 's4', 'A', { runId: 'run-2' }),
+            createRenderableTranscript('tx-5', 's5', 'A', { runId: 'run-2' }),
+          ],
+        }),
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+      };
+    }
+
+    return {
+      run: createRun('run-1', 1, {
+        transcripts: [
+          createRenderableTranscript('tx-1', 's1', 'A'),
+          createRenderableTranscript('tx-2', 's2', 'A'),
+        ],
+      }),
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+  });
+
+  mockUseAnalysis.mockImplementation((args?: { runId?: string }) => {
+    if (args?.runId === 'run-2') {
+      return {
+        analysis: createPairedAnalysis([
+          { id: 's4', row: 'High', col: 'Low', score: 1 },
+          { id: 's5', row: 'Low', col: 'High', score: 5 },
+        ], ['s4', 's5']),
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+        recompute: vi.fn(),
+        recomputing: false,
+      };
+    }
+
+    return {
+      analysis: createPairedAnalysis([
+        { id: 's1', row: 'High', col: 'Low', score: 5 },
+        { id: 's2', row: 'Low', col: 'High', score: 1 },
+      ]),
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    };
+  });
+}
+
 describe('AnalysisTranscripts', () => {
   beforeEach(() => {
     mockNavigate.mockReset();
@@ -180,6 +304,8 @@ describe('AnalysisTranscripts', () => {
     mockUseRuns.mockReset();
     mockUseAnalysis.mockReset();
     mockUpdateTranscriptDecision.mockReset();
+    lastTranscriptListProps = null;
+    lastTranscriptViewerProps = null;
 
     mockUseRun.mockReturnValue({
       run: createRun('run-1', 1),
@@ -246,6 +372,8 @@ describe('AnalysisTranscripts', () => {
     expect(headerMeta).toHaveTextContent('Repeat Pattern: Stable');
     expect(headerMeta).toHaveTextContent('Model: model1');
     expect(headerMeta).toHaveTextContent('Conditions: 1');
+    expect(headerMeta).toHaveTextContent('Decision summary: Strongly favors Benevolence Dependability');
+    expect(screen.queryByText('Decision: 1')).not.toBeInTheDocument();
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 2');
   });
 
@@ -277,92 +405,49 @@ describe('AnalysisTranscripts', () => {
     expect(screen.getByText(/Paired mode keeps the matched vignette context visible while the analysis surface is adapted\./i)).toBeInTheDocument();
   });
 
-  it('filters transcript drilldown by orientation bucket in paired split inspection', () => {
+  it('fails loudly for legacy orientationBucket paired condition URLs', () => {
     renderPage('/analysis/run-1/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&row=High&col=Low&model=model1&orientationBucket=canonical');
 
-    expect(screen.getByText(/Split inspection is active/i)).toBeInTheDocument();
-    expect(screen.getByText((_, element) => element?.textContent === 'Split inspection is active for the Freedom -> Harmony side of the paired vignette.')).toBeInTheDocument();
+    expect(screen.getByText('Legacy orientationBucket URLs are no longer supported. Use sourceRun=current, sourceRun=companion, or sourceRun=pooled.')).toBeInTheDocument();
+    expect(screen.queryByTestId('transcript-list')).not.toBeInTheDocument();
+  });
+
+  it('filters sourceRun=current paired condition clickthroughs to the current vignette transcripts', () => {
+    installPairedConditionSourceFixture();
+
+    renderPage('/analysis/run-1/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&row=High&col=Low&companionRunId=run-2&modelId=model1&pairView=condition-split&sourceRun=current');
+
+    expect(screen.getByText('Current vignette', { selector: '.rounded-lg.border-teal-200.bg-teal-50.p-3 span.font-medium' })).toBeInTheDocument();
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 1');
   });
 
-  it('filters blended paired clickthrough to matching transcripts across both orders', () => {
-    mockUseRun.mockImplementation((args?: { id?: string }) => {
-      if (args?.id === 'run-2') {
-        return {
-          run: createRun('run-2', 1, {
-            definition: {
-              id: 'def-2',
-              name: 'Harmony -> Freedom',
-              content: {
-                methodology: {
-                  family: 'job-choice',
-                  presentation_order: 'B_first',
-                },
-                template: 'Choose between [Harmony] and [Freedom].',
-                components: {
-                  value_first: { token: 'harmony' },
-                  value_second: { token: 'freedom' },
-                },
-                dimensions: [
-                  { name: 'Freedom' },
-                  { name: 'Harmony' },
-                ],
-              },
-            },
-            transcripts: [
-              { id: 'tx-4', modelId: 'model1', scenarioId: 's4', decisionCode: 'A' },
-              { id: 'tx-5', modelId: 'model1', scenarioId: 's5', decisionCode: 'A' },
-            ],
-          }),
-          loading: false,
-          error: null,
-          refetch: vi.fn(),
-        };
-      }
+  it('filters sourceRun=companion paired condition clickthroughs to the companion vignette transcripts', () => {
+    installPairedConditionSourceFixture();
 
-      return {
-        run: createRun('run-1', 1, {
-          transcripts: [
-            { id: 'tx-1', modelId: 'model1', scenarioId: 's1', decisionCode: 'A' },
-            { id: 'tx-2', modelId: 'model1', scenarioId: 's2', decisionCode: 'A' },
-          ],
-        }),
-        loading: false,
-        error: null,
-        refetch: vi.fn(),
-      };
-    });
+    renderPage('/analysis/run-1/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&row=High&col=Low&companionRunId=run-2&modelId=model1&pairView=condition-split&sourceRun=companion');
 
-    mockUseAnalysis.mockImplementation((args?: { runId?: string }) => {
-      if (args?.runId === 'run-2') {
-        return {
-          analysis: createPairedAnalysis([
-            { id: 's4', row: 'High', col: 'Low', score: 1 },
-            { id: 's5', row: 'Low', col: 'High', score: 5 },
-          ], ['s4', 's5']),
-          loading: false,
-          error: null,
-          refetch: vi.fn(),
-          recompute: vi.fn(),
-          recomputing: false,
-        };
-      }
+    expect(screen.getByText('Companion vignette', { selector: '.rounded-lg.border-teal-200.bg-teal-50.p-3 span.font-medium' })).toBeInTheDocument();
+    expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 1');
+  });
 
-      return {
-        analysis: createPairedAnalysis([
-          { id: 's1', row: 'High', col: 'Low', score: 5 },
-          { id: 's2', row: 'Low', col: 'High', score: 1 },
-        ]),
-        loading: false,
-        error: null,
-        refetch: vi.fn(),
-        recompute: vi.fn(),
-        recomputing: false,
-      };
-    });
+  it('fails loudly when split paired condition inspection is missing a sourceRun', () => {
+    installPairedConditionSourceFixture();
 
-    renderPage('/analysis/run-1/transcripts?mode=paired&companionRunId=run-2&modelId=model1&pairedValueKey=freedom&pairedValueLabel=Freedom&pairView=blended');
+    renderPage('/analysis/run-1/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&row=High&col=Low&companionRunId=run-2&modelId=model1&pairView=condition-split');
 
+    expect(screen.getByText('Split paired condition inspection requires sourceRun=current or sourceRun=companion.')).toBeInTheDocument();
+    expect(screen.queryByTestId('transcript-list')).not.toBeInTheDocument();
+  });
+
+  it('filters sourceRun=pooled paired clickthroughs across both runs', () => {
+    installPairedConditionSourceFixture();
+
+    renderPage('/analysis/run-1/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&row=High&col=Low&companionRunId=run-2&modelId=model1&pairView=condition-blended&sourceRun=pooled');
+
+    const pooledSourceLabel = screen.getByText('Pooled');
+    expect(pooledSourceLabel).toBeInTheDocument();
+    expect(pooledSourceLabel.parentElement).toHaveTextContent('Source: Pooled');
+    expect(screen.getByText('Paired vignette scope')).toBeInTheDocument();
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 2');
   });
 
@@ -390,7 +475,7 @@ describe('AnalysisTranscripts', () => {
               },
             },
             transcripts: [
-              { id: 'tx-4', modelId: 'model1', scenarioId: 's4', decisionCode: 'A' },
+              createRenderableTranscript('tx-4', 's4', 'A', { runId: 'run-2' }),
             ],
           }),
           loading: false,
@@ -402,7 +487,7 @@ describe('AnalysisTranscripts', () => {
       return {
         run: createRun('run-1', 1, {
           transcripts: [
-            { id: 'tx-1', modelId: 'model1', scenarioId: 's1', decisionCode: 'A' },
+            createRenderableTranscript('tx-1', 's1', 'A'),
           ],
         }),
         loading: false,
@@ -467,7 +552,7 @@ describe('AnalysisTranscripts', () => {
               },
             },
             transcripts: [
-              { id: 'tx-4', modelId: 'model1', scenarioId: 's4', decisionCode: '1' },
+              createRenderableTranscript('tx-4', 's4', '1', { runId: 'run-2' }),
             ],
           }),
           loading: false,
@@ -479,8 +564,8 @@ describe('AnalysisTranscripts', () => {
       return {
         run: createRun('run-1', 1, {
           transcripts: [
-            { id: 'tx-1', modelId: 'model1', scenarioId: 's1', decisionCode: '5' },
-            { id: 'tx-2', modelId: 'model1', scenarioId: 's1', decisionCode: '1' },
+            createRenderableTranscript('tx-1', 's1', '5'),
+            createRenderableTranscript('tx-2', 's1', '1'),
           ],
         }),
         loading: false,
@@ -545,8 +630,8 @@ describe('AnalysisTranscripts', () => {
               },
             },
             transcripts: [
-              { id: 'tx-4', modelId: 'model1', scenarioId: 's4', decisionCode: 'A' },
-              { id: 'tx-5', modelId: 'model1', scenarioId: 's5', decisionCode: 'A' },
+              createRenderableTranscript('tx-4', 's4', 'A', { runId: 'run-2' }),
+              createRenderableTranscript('tx-5', 's5', 'A', { runId: 'run-2' }),
             ],
           }),
           loading: false,
@@ -558,8 +643,8 @@ describe('AnalysisTranscripts', () => {
       return {
         run: createRun('run-1', 1, {
           transcripts: [
-            { id: 'tx-1', modelId: 'model1', scenarioId: 's1', decisionCode: 'A' },
-            { id: 'tx-2', modelId: 'model1', scenarioId: 's2', decisionCode: 'A' },
+            createRenderableTranscript('tx-1', 's1', 'A'),
+            createRenderableTranscript('tx-2', 's2', 'A'),
           ],
         }),
         loading: false,
@@ -601,7 +686,7 @@ describe('AnalysisTranscripts', () => {
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 2');
   });
 
-  it('filters reversed-order clickthrough to the flipped companion transcripts', () => {
+  it('fails loudly for flipped legacy orientationBucket paired URLs', () => {
     mockUseRun.mockReturnValue({
       run: createRun('run-2', 1, {
         definition: {
@@ -624,8 +709,8 @@ describe('AnalysisTranscripts', () => {
           },
         },
         transcripts: [
-          { id: 'tx-4', modelId: 'model1', scenarioId: 's4', decisionCode: 'A' },
-          { id: 'tx-5', modelId: 'model1', scenarioId: 's5', decisionCode: 'A' },
+          createRenderableTranscript('tx-4', 's4', 'A', { runId: 'run-2' }),
+          createRenderableTranscript('tx-5', 's5', 'A', { runId: 'run-2' }),
         ],
       }),
       loading: false,
@@ -647,8 +732,138 @@ describe('AnalysisTranscripts', () => {
 
     renderPage('/analysis/run-2/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&modelId=model1&decisionBucket=a&orientationBucket=flipped');
 
-    expect(screen.getByText(/Split inspection is active/i)).toBeInTheDocument();
-    expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 1');
+    expect(screen.getByText('Legacy orientationBucket URLs are no longer supported. Use sourceRun=current, sourceRun=companion, or sourceRun=pooled.')).toBeInTheDocument();
+    expect(screen.queryByTestId('transcript-list')).not.toBeInTheDocument();
+  });
+
+  it('switches transcript audit surfaces to canonical decision mode when V2 data is present', async () => {
+    mockUseRun.mockReturnValue({
+      run: createRun('run-3', 1, {
+        transcripts: [
+          {
+            id: 'tx-10',
+            runId: 'run-3',
+            modelId: 'model1',
+            scenarioId: 's10',
+            decisionCode: '1',
+            decisionModelV2: {
+              raw: {
+                matchedText: 'Achievement',
+                matchedLabel: 'Achievement',
+                parseClass: 'exact',
+                parsePath: 'exact.favor_second.strong',
+                parserVersion: 'v1',
+                responseExcerpt: 'Achievement',
+                manualOverride: null,
+              },
+              canonical: {
+                favoredValueKey: 'Benevolence_Dependability',
+                opposedValueKey: 'Achievement',
+                direction: 'favor_second',
+                strength: 'strong',
+                normalizationApplied: true,
+                normalizationReason: 'orientation_flipped',
+                source: 'deterministic',
+              },
+              legacy: {
+                rawScore: null,
+                canonicalScore: null,
+              },
+            },
+          },
+        ],
+      }),
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    mockUseAnalysis.mockReturnValue({
+      analysis: createPairedAnalysis([{ id: 's10', row: 'High', col: 'Low', score: 1 }], ['s10']),
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    renderPage('/analysis/run-3/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&modelId=model1&transcriptId=tx-10');
+
+    await waitFor(() => {
+      expect(lastTranscriptListProps?.decisionColumnLabel).toBe('Decision summary');
+      expect(lastTranscriptListProps?.decisionDisplayMode).toBe('audit');
+      expect(lastTranscriptViewerProps?.decisionDisplayMode).toBe('audit');
+    });
+  });
+
+  it('blocks the report path when unresolved transcripts would otherwise require legacy fallback', () => {
+    mockUseRun.mockReturnValue({
+      run: createRun('run-4', 1, {
+        transcripts: [
+          {
+            id: 'tx-11',
+            runId: 'run-4',
+            modelId: 'model1',
+            scenarioId: 's11',
+            decisionCode: '1',
+            decisionModelV2: {
+              raw: {
+                matchedText: 'Achievement',
+                matchedLabel: 'Achievement',
+                parseClass: 'exact',
+                parsePath: 'exact.favor_second.strong',
+                parserVersion: 'v1',
+                responseExcerpt: 'Achievement',
+                manualOverride: null,
+              },
+              canonical: {
+                favoredValueKey: 'Benevolence_Dependability',
+                opposedValueKey: 'Achievement',
+                direction: 'favor_second',
+                strength: 'strong',
+                normalizationApplied: true,
+                normalizationReason: 'orientation_flipped',
+                source: 'deterministic',
+              },
+              legacy: {
+                rawScore: null,
+                canonicalScore: null,
+              },
+            },
+          },
+          {
+            id: 'tx-12',
+            runId: 'run-4',
+            modelId: 'model1',
+            scenarioId: 's12',
+            decisionCode: '4',
+            decisionModelV2: null,
+          },
+        ],
+      }),
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    mockUseAnalysis.mockReturnValue({
+      analysis: createPairedAnalysis([
+        { id: 's11', row: 'High', col: 'Low', score: 1 },
+        { id: 's12', row: 'High', col: 'Low', score: 4 },
+      ]),
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    renderPage('/analysis/run-4/transcripts?modelId=model1&repeatPattern=stable&rowDim=Freedom&colDim=Harmony&conditionIds=High%7C%7CLow');
+
+    expect(screen.getByText('Strongly favors Benevolence Dependability')).toBeInTheDocument();
+    expect(screen.getByText(/requires canonical decisionModelV2 data for every visible transcript/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('transcript-list')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('transcript-viewer')).not.toBeInTheDocument();
   });
 
   it('keeps repeat-pattern query params when aggregate signature switching changes runs', () => {

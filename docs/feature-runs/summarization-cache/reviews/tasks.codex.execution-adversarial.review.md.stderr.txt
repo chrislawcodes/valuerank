@@ -1,0 +1,176 @@
+2026-03-24T18:28:01.529895Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:28:01.529918Z  WARN codex_core::state_db: failed to initialize state runtime at /Users/chrislaw/.codex: migration 2 was previously applied but is missing in the resolved migrations
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d211a-8d78-7d41-a6b5-9d324eee0e24
+--------
+user
+Review this tasks artifact using a execution-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: tasks.md
+# Tasks
+# Tasks: Transcript Summarization Cache
+
+## Slice 1 [CHECKPOINT] Shared parser version source + bypass plumbing
+
+Estimated diff: 180-240 lines
+
+### Scope
+
+- add `SUMMARIZE_PARSER_VERSION` to the API config and summarize worker
+- add a `forceSummarize` job flag that can bypass the cache
+- make the restart path pass `forceSummarize` when force reruns are requested
+- add tests proving both services read the shared parser version and the bypass works
+
+### Work
+
+1. Update `cloud/apps/api/src/config.ts` with `SUMMARIZE_PARSER_VERSION`, defaulting to the
+   current parser version value (`job-choice-v2`).
+2. Update `cloud/workers/summarize.py` so the emitted `parserVersion` uses the same env var
+   with the same default (`job-choice-v2`).
+3. Update `cloud/apps/api/src/queue/types.ts` to add an optional `forceSummarize` job flag.
+4. Update `cloud/apps/api/src/services/run/summarization.ts` so `restartSummarization(..., true)`
+   sets `forceSummarize: true` on queued jobs.
+5. Update `cloud/apps/api/tests/config.test.ts`, `cloud/workers/tests/test_summarize.py`, and
+   `cloud/apps/api/tests/services/run/summarization.test.ts` with focused assertions for the
+   shared parser version, the bypass flag, and the normal-job path that leaves
+   `forceSummarize` unset.
+
+### Verification
+
+- `npm run typecheck --workspace=@valuerank/api`
+- `npm run test --workspace=@valuerank/api -- tests/config.test.ts tests/services/run/summarization.test.ts`
+- `python3 -m pytest workers/tests/test_summarize.py`
+
+## Slice 2 [CHECKPOINT] Transcript cache reuse and persistence
+
+Estimated diff: 220-300 lines
+
+### Scope
+
+- extend `DecisionMetadata` with an optional cache payload
+- add cache-key helpers in `cloud/apps/api/src/queue/handlers/summarize-transcript.ts`
+- reuse cached summaries before spawning the Python worker
+- reconstruct persisted decision metadata and raw decision evidence on cache hits
+- persist a fresh cache record only after a successful worker run
+- keep the current fallback worker path intact on cache miss
+- add tests for cache hit, content miss, parser miss, model miss, bypass, and miss fallback
+- add tests for malformed or incomplete cache payloads falling back to the worker
+
+### Work
+
+1. Update `cloud/packages/db/src/types.ts` with a small additive cache type on
+   `DecisionMetadata`.
+2. Update `cloud/apps/api/src/queue/handlers/summarize-transcript.ts` to:
+   - compute the current transcript response hash from transcript content
+   - compare hash, parser version, and model against the stored cache record
+   - bypass cache lookup when `forceSummarize` is true
+   - restore `decisionCode`, `decisionCodeSource`, `decisionText`, and `decisionMetadata`
+     by rehydrating the worker summary and transcript persistence metadata when the key matches
+   - store a fresh `summaryCache` record after a successful worker run
+   - ignore malformed cache data and fall back to the worker
+3. Update `cloud/apps/api/tests/queue/handlers/summarize-transcript.test.ts` with a compact
+   table of cases:
+   - unchanged transcript reuses the cached summary
+   - cache hit rehydrates the same persisted transcript fields as a fresh worker result
+   - changed transcript content forces a worker run
+   - changed parser version forces a worker run
+   - changed model forces a worker run
+   - `forceSummarize` bypasses the cache
+   - malformed or incomplete cache data falls back to the worker path
+   - missing cache falls back to the worker path
+4. Keep restart and recovery services unchanged unless a review finds they need a direct
+   adjustment. Their existing queue paths already benefit from handler-level reuse.
+
+### Verification
+
+- `npm run typecheck --workspace=@valuerank/api`
+- `npm run test --workspace=@valuerank/api -- tests/config.test.ts tests/queue/handlers/summarize-transcript.test.ts tests/services/run/summarization.test.ts`
+- `python3 -m pytest workers/tests/test_summarize.py`
+
+### Notes
+
+- This slice is intentionally additive. No schema migration, queue type change, or UI work.
+- If the cache shape turns out to need broader storage than `decisionMetadata.summaryCache`,
+  stop and escalate instead of guessing.
+- `forceSummarize` bypasses both the cache and the normal `summarizedAt` short-circuit for
+  that job, but it does not delete the previous good cache entry up front.
+- The handler should check cache before any legacy `summarizedAt` fallback so cache-aware
+  reruns can work on already-summarized transcripts.
+- Cache-hit assertions should compare the persisted transcript fields against a fresh worker
+  result field by field, not just check that the worker was skipped.
+- Duplicate summarize jobs are still a known near-term limitation; this slice does not add
+  queue locking or in-progress cache records.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+2026-03-24T18:28:01.532789Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:28:01.556807Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:28:01.558850Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:28:01.582896Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:28:01.583992Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:28:01.590524Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d211a-8d78-7d41-a6b5-9d324eee0e24.tmp-1774376881530159000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-03-24T18:28:01.608666Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:28:01.609804Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:28:01.633673Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:28:01.634554Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:28:01.657912Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:28:01.658832Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:28:01.683497Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:28:01.684378Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:28:01.706157Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:28:01.707213Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:28:01.730139Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:28:01.731507Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:28:01.754395Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:28:01.755392Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:28:01.778043Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:28:01.779150Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:28:01.802706Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:28:01.803723Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:28:01.828791Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:28:01.829677Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:28:01.852176Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:28:01.853280Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:28:01.878010Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:28:01.878942Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:28:01.903639Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:28:01.904655Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:28:01.928218Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:28:01.929156Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:28:01.953606Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:28:01.954771Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:28:01.978482Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+codex
+I’m reviewing the task plan as an implementation attack surface, not as a spec. I’ll look for places where the plan can silently go stale, miss invalidation inputs, or create behavior gaps even if each individual step is coded as written.
+codex
+## Findings
+- High: The cache key is incomplete. It only keys off transcript content hash, parser version, and model, but it does not include the summarization worker/prompt/version itself or any other input that can change the output. That means a code or prompt change can silently reuse stale summaries until someone remembers to bump `SUMMARIZE_PARSER_VERSION`.
+- High: The plan does not guard against stale writes after the transcript changes while a summarize job is in flight. A worker can finish for an old transcript snapshot and then persist its cache record into a now-updated transcript, poisoning later cache hits unless the write is validated against the same hash snapshot used at queue time.
+- Medium: `forceSummarize` is only wired through `restartSummarization(..., true)`. Any other forced rerun path, direct job enqueue, or future retry path will still hit the cache or the existing `summarizedAt` short-circuit unless it is updated separately, so the bypass semantics are easy to break unevenly.
+
+## Residual Risks
+- Duplicate summarize jobs are still possible because the plan explicitly does not add locking or in-progress cache records, so concurrent workers can still race on the same transcript.
+- The design still depends on manual version bumps to invalidate cache entries when output changes for reasons other than the parser env var.
+- Malformed cache payload fallback helps with shape errors, but not with semantically wrong payloads that still look valid enough to pass basic checks.
+tokens used
+6,412

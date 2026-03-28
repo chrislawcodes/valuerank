@@ -4,6 +4,7 @@ import {
   computeRankingShapes,
 } from '../domain-shape.js';
 import { computeClusterAnalysis } from '../domain-clustering.js';
+import { buildScenarioAnalysisDimensionRecord, normalizeScenarioAnalysisMetadata } from '../../../services/analysis/scenario-metadata.js';
 import {
   DomainAnalysisConditionTranscriptRef,
   DomainAnalysisResultRef,
@@ -12,10 +13,8 @@ import {
 } from './types.js';
 import {
   aggregateValueCountsFromTranscripts,
-  classifyDecisionForSelectedValue,
   computeFullBTScores,
   computeSmoothedLogOddsScore,
-  DOMAIN_ANALYSIS_VALUE_KEYS,
   getMissingReasonLabel,
   hydrateDefinitionAncestors,
   incrementPairwiseWin,
@@ -24,13 +23,16 @@ import {
   resolveSignatureRuns,
   resolveValuePairsInChunks,
   selectLatestDefinitionPerLineage,
+  resolveCanonicalDecision,
+  buildRawDecisionEvidence,
 } from './shared.js';
+import { DOMAIN_ANALYSIS_VALUE_KEYS } from '../domain-analysis-values.js';
 import type {
   DomainAnalysisConditionDetail,
   DomainAnalysisValueCounts,
-  DomainAnalysisValueKey,
   DomainAnalysisVignetteDetail,
 } from './shared.js';
+import type { DomainAnalysisValueKey } from '../domain-analysis-values.js';
 
 builder.queryField('domainAnalysis', (t) =>
   t.field({
@@ -381,7 +383,11 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         deprioritized: number;
         neutral: number;
         totalTrials: number;
-        decisionSum: number;
+        strongly: number;
+        somewhat: number;
+        opponentSomewhat: number;
+        opponentStrongly: number;
+        unknownCount: number;
       };
 
       type MutableVignette = {
@@ -431,12 +437,12 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
             runId: { in: filteredSourceRunIds },
             modelId,
             deletedAt: null,
-            decisionCode: { in: ['1', '2', '3', '4', '5'] },
           },
           select: {
             runId: true,
             scenarioId: true,
             decisionCode: true,
+            decisionMetadata: true,
           },
         });
 
@@ -453,24 +459,15 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
           : await db.scenario.findMany({
             where: { id: { in: scenarioIds } },
             select: { id: true, name: true, content: true },
-          });
+        });
         const scenarioNameById = new Map(scenarios.map((scenario) => [scenario.id, scenario.name]));
         const scenarioDimensionsById = new Map<string, Record<string, string | number>>();
-        const isDimensionValue = (value: unknown): value is string | number =>
-          typeof value === 'string' || typeof value === 'number';
         for (const scenario of scenarios) {
-          if (scenario.content == null || typeof scenario.content !== 'object' || Array.isArray(scenario.content)) continue;
-          const content = scenario.content as Record<string, unknown>;
-          const dimensions = content.dimensions;
-          if (dimensions == null || typeof dimensions !== 'object' || Array.isArray(dimensions)) continue;
-          const sanitized: Record<string, string | number> = {};
-          for (const [key, value] of Object.entries(dimensions)) {
-            if (isDimensionValue(value)) {
-              sanitized[key] = value;
-            }
-          }
-          if (Object.keys(sanitized).length > 0) {
-            scenarioDimensionsById.set(scenario.id, sanitized);
+          const metadata = normalizeScenarioAnalysisMetadata(scenario.content);
+          if (metadata === null) continue;
+          const dimensions = buildScenarioAnalysisDimensionRecord(metadata);
+          if (Object.keys(dimensions).length > 0) {
+            scenarioDimensionsById.set(scenario.id, dimensions);
           }
         }
 
@@ -479,23 +476,55 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
           if (definitionId == null || definitionId === '') continue;
           const pair = valuePairByDefinition.get(definitionId);
           const vignette = vignetteByDefinitionId.get(definitionId);
-          if (!pair) continue;
-          if (transcript.decisionCode == null || transcript.decisionCode === '') continue;
+          if (!pair || !vignette) continue;
 
-          const decision = Number.parseInt(transcript.decisionCode, 10);
-          if (!Number.isFinite(decision)) continue;
-          analyzedDefinitionIds.add(definitionId);
+          const canon = resolveCanonicalDecision({
+            pair,
+            raw: buildRawDecisionEvidence(transcript.decisionMetadata),
+            legacyDecisionCode: transcript.decisionCode,
+            orientationFlipped: null,
+          });
 
-          const selectedIsValueA = pair.valueA === valueKey;
-          if (decision >= 4) {
-            incrementPairwiseWin(pairwiseWins, pair.valueA, pair.valueB);
-          } else if (decision <= 2) {
-            incrementPairwiseWin(pairwiseWins, pair.valueB, pair.valueA);
+          if (canon.direction === 'unknown') {
+            const scenarioKey = transcript.scenarioId ?? '__unknown__';
+            const existingCondition = vignette.conditions.get(scenarioKey);
+            if (existingCondition) {
+              existingCondition.unknownCount += 1;
+            } else {
+              const hasScenarioId = transcript.scenarioId !== null && transcript.scenarioId !== '';
+              const scenarioId = hasScenarioId ? transcript.scenarioId : null;
+              const conditionName = scenarioId === null
+                ? 'Unknown Condition'
+                : (scenarioNameById.get(scenarioId) ?? scenarioId);
+              vignette.conditions.set(scenarioKey, {
+                scenarioId,
+                conditionName,
+                dimensions: scenarioId === null ? null : (scenarioDimensionsById.get(scenarioId) ?? null),
+                prioritized: 0,
+                deprioritized: 0,
+                neutral: 0,
+                totalTrials: 0,
+                strongly: 0,
+                somewhat: 0,
+                opponentSomewhat: 0,
+                opponentStrongly: 0,
+                unknownCount: 1,
+              });
+            }
+            continue;
           }
 
+          analyzedDefinitionIds.add(definitionId);
+
+          if (canon.favoredValueKey) {
+            incrementPairwiseWin(pairwiseWins, canon.favoredValueKey, canon.opposedValueKey!);
+          }
+          
           if (!targetDefinitionIdSet.has(definitionId) || !vignette) continue;
 
-          const outcome = classifyDecisionForSelectedValue(decision, selectedIsValueA);
+          const outcome = canon.direction === 'neutral'
+            ? 'neutral'
+            : (canon.favoredValueKey === valueKey ? 'prioritized' : 'deprioritized');
 
           if (outcome === 'prioritized') {
             totalPrioritized += 1;
@@ -524,14 +553,27 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
             deprioritized: 0,
             neutral: 0,
             totalTrials: 0,
-            decisionSum: 0,
+            strongly: 0,
+            somewhat: 0,
+            opponentSomewhat: 0,
+            opponentStrongly: 0,
+            unknownCount: 0,
           };
 
-          if (outcome === 'prioritized') condition.prioritized += 1;
-          if (outcome === 'deprioritized') condition.deprioritized += 1;
-          if (outcome === 'neutral') condition.neutral += 1;
+          if (outcome === 'prioritized') {
+            condition.prioritized += 1;
+            if (canon.strength === 'strong') condition.strongly += 1;
+            if (canon.strength === 'lean') condition.somewhat += 1;
+          }
+          if (outcome === 'deprioritized') {
+            condition.deprioritized += 1;
+            if (canon.strength === 'strong') condition.opponentStrongly += 1;
+            if (canon.strength === 'lean') condition.opponentSomewhat += 1;
+          }
+          if (outcome === 'neutral') {
+            condition.neutral += 1;
+          }
           condition.totalTrials += 1;
-          condition.decisionSum += decision;
           vignette.conditions.set(scenarioKey, condition);
         }
       }
@@ -552,7 +594,13 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
                 neutral: condition.neutral,
                 totalTrials: condition.totalTrials,
                 selectedValueWinRate: comparisonDenominator === 0 ? null : condition.prioritized / comparisonDenominator,
-                meanDecisionScore: condition.totalTrials === 0 ? null : condition.decisionSum / condition.totalTrials,
+                strongly: condition.strongly,
+                somewhat: condition.somewhat,
+                opponentSomewhat: condition.opponentSomewhat,
+                opponentStrongly: condition.opponentStrongly,
+                unknownCount: condition.unknownCount,
+                meanPreferenceScore: condition.totalTrials === 0 ? null : (2 * condition.strongly + 1 * condition.somewhat) / condition.totalTrials,
+                opponentMeanPreferenceScore: condition.totalTrials === 0 ? null : (2 * condition.opponentStrongly + 1 * condition.opponentSomewhat) / condition.totalTrials,
               };
             });
 
@@ -654,7 +702,6 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
           modelId,
           ...(scenarioId === null ? {} : { scenarioId }),
           deletedAt: null,
-          decisionCode: { in: ['1', '2', '3', '4', '5'] },
         },
         orderBy: { createdAt: 'desc' },
         take: limit,
@@ -665,6 +712,8 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
           modelId: true,
           decisionCode: true,
           decisionCodeSource: true,
+          decisionMetadata: true,
+          definitionSnapshot: true,
           turnCount: true,
           tokenCount: true,
           durationMs: true,
