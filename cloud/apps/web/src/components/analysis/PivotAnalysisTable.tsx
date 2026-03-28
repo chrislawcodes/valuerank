@@ -6,7 +6,6 @@ import type { Transcript } from '../../api/operations/runs';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { Button } from '../ui/Button';
 import {
-    getDecisionSideNames,
     mapDecisionSidesToScenarioAttributes,
     resolveScenarioAttributes,
 } from '../../utils/decisionLabels';
@@ -26,6 +25,7 @@ import {
     type CanonicalConditionSummary,
 } from '../../utils/canonicalConditionSummary';
 import { compareConditionLevels } from '../../utils/conditionOrdering';
+import { resolveConditionDecisionLabelPair } from '../../utils/conditionDecisionSummary';
 
 type PivotAnalysisTableProps = {
     runId: string;
@@ -34,7 +34,6 @@ type PivotAnalysisTableProps = {
     analysisMode?: 'single' | 'paired';
     visualizationData: VisualizationData;
     transcripts?: Transcript[];
-    dimensionLabels?: Record<string, string>;
     expectedAttributes?: string[];
     companionRunId?: string | null;
 };
@@ -70,7 +69,6 @@ export function PivotAnalysisTable({
     analysisSearchParams,
     visualizationData,
     transcripts,
-    dimensionLabels,
     expectedAttributes = [],
     companionRunId,
 }: PivotAnalysisTableProps) {
@@ -92,7 +90,28 @@ export function PivotAnalysisTable({
     // Default to first alphabetical model if available
     const [selectedModel, setSelectedModel] = useState<string>(models[0] || '');
     const [showDetails, setShowDetails] = useState<boolean>(false);
-    const decisionSideNames = useMemo(() => getDecisionSideNames(dimensionLabels), [dimensionLabels]);
+    const decisionSideNames = useMemo(() => {
+        const modelTranscripts = (transcripts ?? []).filter((transcript) => transcript.modelId === selectedModel);
+        if (modelTranscripts.length === 0) {
+            return {
+                aName: 'Canonical first value',
+                bName: 'Canonical second value',
+            };
+        }
+
+        const labelPair = resolveConditionDecisionLabelPair(modelTranscripts);
+        if (!labelPair) {
+            return {
+                aName: 'Canonical first value',
+                bName: 'Canonical second value',
+            };
+        }
+
+        return {
+            aName: labelPair.firstValueLabel,
+            bName: labelPair.secondValueLabel,
+        };
+    }, [selectedModel, transcripts]);
     const sideAttributeMap = useMemo(
         () => mapDecisionSidesToScenarioAttributes(decisionSideNames.aName, decisionSideNames.bName, [rowDim, colDim].filter((d) => d !== '')),
         [colDim, decisionSideNames.aName, decisionSideNames.bName, rowDim]

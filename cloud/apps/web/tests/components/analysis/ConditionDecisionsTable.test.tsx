@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ConditionDecisionsTable } from '../../../src/components/analysis/ConditionDecisionsTable';
 import type { Transcript } from '../../../src/api/operations/runs';
@@ -101,10 +101,6 @@ describe('ConditionDecisionsTable', () => {
       <MemoryRouter>
         <ConditionDecisionsTable
           runId="run-1"
-          orientationLabels={{
-            canonical: 'Achievement -> Benevolence',
-            flipped: 'Benevolence -> Achievement',
-          }}
           perModel={{}}
           visualizationData={{
             decisionDistribution: {},
@@ -135,10 +131,6 @@ describe('ConditionDecisionsTable', () => {
       <MemoryRouter>
         <ConditionDecisionsTable
           runId="run-1"
-          orientationLabels={{
-            canonical: 'Achievement -> Benevolence',
-            flipped: 'Benevolence -> Achievement',
-          }}
           perModel={{}}
           visualizationData={{
             decisionDistribution: {},
@@ -167,10 +159,6 @@ describe('ConditionDecisionsTable', () => {
       <MemoryRouter>
         <ConditionDecisionsTable
           runId="run-1"
-          orientationLabels={{
-            canonical: 'Achievement -> Benevolence',
-            flipped: 'Benevolence -> Achievement',
-          }}
           perModel={{}}
           visualizationData={{
             decisionDistribution: {},
@@ -189,6 +177,60 @@ describe('ConditionDecisionsTable', () => {
     expect(screen.getByRole('columnheader', { name: /4\.1 Fast\s+Reasoning/i })).toBeInTheDocument();
   });
 
+  it('shows source-based split labels instead of order labels in paired mode', () => {
+    render(
+      <MemoryRouter>
+        <ConditionDecisionsTable
+          runId="run-1"
+          analysisMode="paired"
+          companionRunId="run-2"
+          varianceAnalysis={{
+            isMultiSample: true,
+            samplesPerScenario: 12,
+            orientationCorrectedCount: 1,
+            perModel: {
+              model1: {
+                totalSamples: 1,
+                uniqueScenarios: 1,
+                samplesPerScenario: 1,
+                avgWithinScenarioVariance: 0,
+                maxWithinScenarioVariance: 0,
+                consistencyScore: 1,
+                perScenario: {
+                  'scenario-4': {
+                    sampleCount: 1,
+                    mean: 3,
+                    stdDev: 0,
+                    variance: 0,
+                    min: 3,
+                    max: 3,
+                    range: 0,
+                    directionalAgreement: 1,
+                    medianSignedDistance: 0,
+                    neutralShare: 0,
+                    orientationCorrected: true,
+                  },
+                },
+              },
+            },
+            mostVariableScenarios: [],
+            leastVariableScenarios: [],
+          } as any}
+          perModel={{ 'gpt-4': { sampleSize: 7, values: {}, overall: { mean: 3, stdDev: 0, min: 3, max: 3 } } as any }}
+          visualizationData={createVisualizationData() as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByRole('button', { name: 'Split by order' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Split by source' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Split by source' }));
+
+    expect(screen.getAllByText('Current vignette').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Companion vignette').length).toBeGreaterThan(0);
+  });
+
   it('renders canonical winner scores and the unknown footer copy', () => {
     const visualizationData = createVisualizationData();
     const transcripts = [
@@ -205,10 +247,6 @@ describe('ConditionDecisionsTable', () => {
       <MemoryRouter>
         <ConditionDecisionsTable
           runId="run-1"
-          orientationLabels={{
-            canonical: 'Achievement -> Care',
-            flipped: 'Care -> Achievement',
-          }}
           perModel={{ 'gpt-4': { sampleSize: 7, values: {}, overall: { mean: 3, stdDev: 0, min: 3, max: 3 } } as any }}
           transcripts={transcripts}
           visualizationData={visualizationData as any}
@@ -233,10 +271,6 @@ describe('ConditionDecisionsTable', () => {
       <MemoryRouter>
         <ConditionDecisionsTable
           runId="run-1"
-          orientationLabels={{
-            canonical: 'Achievement -> Care',
-            flipped: 'Care -> Achievement',
-          }}
           perModel={{ 'gpt-5': { sampleSize: 2, values: {}, overall: { mean: 3, stdDev: 0, min: 3, max: 3 } } as any }}
           transcripts={transcripts}
           visualizationData={visualizationData as any}
@@ -255,10 +289,6 @@ describe('ConditionDecisionsTable', () => {
         <ConditionDecisionsTable
           runId="run-1"
           expectedAttributes={['Achievement', 'Care']}
-          orientationLabels={{
-            canonical: 'Achievement -> Benevolence',
-            flipped: 'Benevolence -> Achievement',
-          }}
           perModel={{
             model1: {
               sampleSize: 5,
@@ -305,10 +335,6 @@ describe('ConditionDecisionsTable', () => {
         <ConditionDecisionsTable
           runId="run-1"
           expectedAttributes={['Achievement', 'Care']}
-          orientationLabels={{
-            canonical: 'Achievement -> Benevolence',
-            flipped: 'Benevolence -> Achievement',
-          }}
           perModel={{
             model1: {
               sampleSize: 5,
@@ -360,10 +386,6 @@ describe('ConditionDecisionsTable', () => {
       <MemoryRouter>
         <ConditionDecisionsTable
           runId="run-1"
-          orientationLabels={{
-            canonical: 'Achievement -> Care',
-            flipped: 'Care -> Achievement',
-          }}
           perModel={{ 'gpt-4': { sampleSize: 2, values: {}, overall: { mean: 3, stdDev: 0, min: 3, max: 3 } } as any }}
           transcripts={transcripts}
           visualizationData={visualizationData as any}

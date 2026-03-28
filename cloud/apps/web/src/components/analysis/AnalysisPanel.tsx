@@ -624,10 +624,7 @@ export function AnalysisPanel({
             visualizationData={decisionsVisualizationData}
             perModel={perModel}
             transcripts={scenariosTranscripts}
-            contestedScenarios={analysis.mostContestedScenarios}
-            dimensionLabels={dimensionLabels}
             expectedAttributes={expectedScenarioAttributes}
-            definitionContent={definitionContent}
             companionRunId={analysisMode === 'paired' ? companionRun?.id ?? null : null}
           />
         )}

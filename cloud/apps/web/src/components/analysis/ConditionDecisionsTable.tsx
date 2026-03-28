@@ -10,12 +10,10 @@ import {
 } from '../../utils/analysisRouting';
 import {
   buildOrientedConditionRows,
-  getOrientationBucketLabel,
 } from '../../utils/pairedScopeAdapter';
 import type { OrientationInspectionMode, OrientedConditionRow } from '../../utils/pairedScopeAdapter';
 import { compareConditionRows } from '../../utils/conditionOrdering';
 import { formatDisplayLabel } from '../../utils/displayLabels';
-import type { PairedOrientationLabels } from '../../utils/methodology';
 import { Button } from '../ui/Button';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
 import {
@@ -39,7 +37,6 @@ type ConditionDecisionsTableProps = {
   analysisBasePath?: AnalysisBasePath;
   analysisSearchParams?: URLSearchParams | string;
   companionRunId?: string | null;
-  orientationLabels: PairedOrientationLabels;
   analysisMode?: 'single' | 'paired';
   perModel: Record<string, PerModelStats>;
   transcripts?: Transcript[];
@@ -238,7 +235,6 @@ export function ConditionDecisionsTable({
   analysisBasePath = ANALYSIS_BASE_PATH,
   analysisSearchParams,
   companionRunId,
-  orientationLabels,
   analysisMode,
   perModel,
   transcripts = [],
@@ -268,8 +264,12 @@ export function ConditionDecisionsTable({
   const [selectedModels, setSelectedModels] = useState<string[]>(models);
   const canSplitOrientations = analysisMode === 'paired' && (varianceAnalysis?.orientationCorrectedCount ?? 0) > 0;
   const [inspectionMode, setInspectionMode] = useState<OrientationInspectionMode>('pooled');
-  const canonicalOrientationLabel = orientationLabels.canonical;
-  const flippedOrientationLabel = orientationLabels.flipped;
+  const splitBucketLabels = canSplitOrientations
+    ? {
+        canonical: 'Current vignette',
+        flipped: 'Companion vignette',
+      }
+    : null;
 
   useEffect(() => {
     setSelectedModels((current) => {
@@ -480,7 +480,7 @@ export function ConditionDecisionsTable({
                   aria-pressed={inspectionMode === 'split'}
                   onClick={() => setInspectionMode('split')}
                 >
-                  Split by order
+                  Split by source
                 </Button>
               </div>
             </div>
@@ -491,7 +491,7 @@ export function ConditionDecisionsTable({
       {canSplitOrientations && inspectionMode === 'split' && (
         <div className="rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-800">
           Split inspection keeps the pooled paired summary above, but breaks these tables into
-          separate <span className="font-medium">{canonicalOrientationLabel}</span> and <span className="font-medium">{flippedOrientationLabel}</span> buckets so you can verify the pair directly.
+          separate <span className="font-medium">{splitBucketLabels?.canonical}</span> and <span className="font-medium">{splitBucketLabels?.flipped}</span> buckets so you can verify the pair directly.
         </div>
       )}
 
@@ -577,7 +577,9 @@ export function ConditionDecisionsTable({
                     </span>
                     {canSplitOrientations && inspectionMode === 'split' && (
                       <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800">
-                        {getOrientationBucketLabel(row.orientationBucket, orientationLabels)}
+                        {row.orientationBucket === 'canonical'
+                          ? splitBucketLabels?.canonical
+                          : splitBucketLabels?.flipped}
                       </span>
                     )}
                   </div>
@@ -587,7 +589,10 @@ export function ConditionDecisionsTable({
                     ?? summarizeCanonicalConditionTranscripts([]);
                   const hasResolvedCanonicalEvidence = stats.totalTrials > 0;
                   const isOtherCell = !hasResolvedCanonicalEvidence;
-                  const title = `View transcripts for ${modelId} | ${formatDisplayLabel(attributeA)}: ${formatDisplayLabel(row.attributeALevel)}, ${formatDisplayLabel(attributeB)}: ${formatDisplayLabel(row.attributeBLevel)}${canSplitOrientations && inspectionMode === 'split' ? ` | ${getOrientationBucketLabel(row.orientationBucket, orientationLabels)}` : ''}${isOtherCell ? ' | Decision: other' : ''}${stats.unknownCount > 0 ? ` | Unknown: ${stats.unknownCount}` : ''}`;
+                  const splitBucketLabel = row.orientationBucket === 'canonical'
+                    ? splitBucketLabels?.canonical
+                    : splitBucketLabels?.flipped;
+                  const title = `View transcripts for ${modelId} | ${formatDisplayLabel(attributeA)}: ${formatDisplayLabel(row.attributeALevel)}, ${formatDisplayLabel(attributeB)}: ${formatDisplayLabel(row.attributeBLevel)}${canSplitOrientations && inspectionMode === 'split' ? ` | ${splitBucketLabel}` : ''}${isOtherCell ? ' | Decision: other' : ''}${stats.unknownCount > 0 ? ` | Unknown: ${stats.unknownCount}` : ''}`;
 
                   return (
                     <td
