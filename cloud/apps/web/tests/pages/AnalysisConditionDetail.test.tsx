@@ -21,7 +21,7 @@ vi.mock('../../src/hooks/useRun', () => ({
 }));
 
 vi.mock('../../src/hooks/useRuns', () => ({
-  useRuns: () => mockUseRuns(),
+  useRuns: (args: unknown) => mockUseRuns(args),
 }));
 
 vi.mock('../../src/hooks/useAnalysis', () => ({
@@ -591,5 +591,84 @@ describe('AnalysisConditionDetail', () => {
     expect(() => renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired')).toThrow(
       /AnalysisConditionDetail page: transcript tx-legacy is missing renderable canonical decisionModelV2 data\./,
     );
+  });
+
+  describe('companion run resolution', () => {
+    it('uses direct companionRunId from run data and skips the heuristic runs search', () => {
+      const currentRun = {
+        ...createRun('run-1', 'A_first', [
+          createTranscript('tx-1', 's1', 'A_first', '5'),
+        ]),
+        // Direct companion link — this is what the paired launch path writes
+        companionRunId: 'run-2',
+      };
+      const companionRun = createRun('run-2', 'B_first', [
+        createTranscript('tx-2', 's2', 'B_first', '1'),
+      ]);
+
+      mockUseRun.mockImplementation((args?: { id?: string }) => {
+        if (args?.id === 'run-2') {
+          return { run: companionRun, loading: false, error: null, refetch: vi.fn() };
+        }
+        return { run: currentRun, loading: false, error: null, refetch: vi.fn() };
+      });
+
+      mockUseAnalysis.mockImplementation((args?: { runId?: string; pause?: boolean }) => {
+        if (args?.pause) return { analysis: null, loading: false, error: null, refetch: vi.fn(), recompute: vi.fn(), recomputing: false };
+        if (args?.runId === 'run-2') return { analysis: createAnalysis('run-2', 's2'), loading: false, error: null, refetch: vi.fn(), recompute: vi.fn(), recomputing: false };
+        return { analysis: createAnalysis('run-1', 's1'), loading: false, error: null, refetch: vi.fn(), recompute: vi.fn(), recomputing: false };
+      });
+
+      // Do NOT include companionRunId in the URL — it must come from run.companionRunId
+      renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
+
+      // Paired rows must appear (companion was resolved via direct link)
+      expect(screen.getByText('Pooled')).toBeInTheDocument();
+      expect(screen.getByText('Current vignette')).toBeInTheDocument();
+      expect(screen.getByText('Companion vignette')).toBeInTheDocument();
+
+      // useRuns must have been paused — heuristic search should NOT run
+      expect(mockUseRuns).toHaveBeenCalled();
+      expect(
+        (mockUseRuns.mock.calls as Array<[{ pause?: boolean }]>).every(([args]) => args?.pause === true),
+      ).toBe(true);
+    });
+
+    it('falls back to heuristic search when companionRunId is absent from the run', () => {
+      // currentRun has NO companionRunId — legacy run scenario
+      const currentRun = createRun('run-1', 'A_first', [
+        createTranscript('tx-1', 's1', 'A_first', '5'),
+      ]);
+      const companionRun = createRun('run-2', 'B_first', [
+        createTranscript('tx-2', 's2', 'B_first', '1'),
+      ]);
+
+      mockUseRun.mockImplementation((args?: { id?: string }) => {
+        if (args?.id === 'run-2') {
+          return { run: companionRun, loading: false, error: null, refetch: vi.fn() };
+        }
+        return { run: currentRun, loading: false, error: null, refetch: vi.fn() };
+      });
+
+      mockUseAnalysis.mockImplementation((args?: { runId?: string; pause?: boolean }) => {
+        if (args?.pause) return { analysis: null, loading: false, error: null, refetch: vi.fn(), recompute: vi.fn(), recomputing: false };
+        if (args?.runId === 'run-2') return { analysis: createAnalysis('run-2', 's2'), loading: false, error: null, refetch: vi.fn(), recompute: vi.fn(), recomputing: false };
+        return { analysis: createAnalysis('run-1', 's1'), loading: false, error: null, refetch: vi.fn(), recompute: vi.fn(), recomputing: false };
+      });
+
+      // No companionRunId in URL and none on run — must use heuristic
+      renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
+
+      // Paired rows must appear (companion found by heuristic via batchGroupId)
+      expect(screen.getByText('Pooled')).toBeInTheDocument();
+      expect(screen.getByText('Current vignette')).toBeInTheDocument();
+      expect(screen.getByText('Companion vignette')).toBeInTheDocument();
+
+      // useRuns must NOT have been fully paused — heuristic search must run
+      expect(mockUseRuns).toHaveBeenCalled();
+      expect(
+        (mockUseRuns.mock.calls as Array<[{ pause?: boolean }]>).some(([args]) => args?.pause !== true),
+      ).toBe(true);
+    });
   });
 });
