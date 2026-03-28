@@ -132,10 +132,14 @@ export function AnalysisConditionDetail() {
     analysisStatus: run?.analysisStatus ?? null,
   });
 
-  // If companionRunId is in the URL, use it directly. Otherwise fall back to heuristic search.
+  // Prefer: URL hint → direct companionRunId on the run → legacy heuristic search.
+  const directCompanionRunId = run?.companionRunId ?? null;
+  const hasResolvedCompanionId = companionRunIdHint != null || directCompanionRunId != null;
+
+  // Only load the full runs list when neither a URL hint nor a direct link is available.
   const { runs: candidatePairedRuns } = useRuns({
     limit: 1000,
-    pause: analysisMode !== 'paired' || !run || companionRunIdHint != null,
+    pause: analysisMode !== 'paired' || !run || hasResolvedCompanionId,
   });
 
   const companionRunSummary = useMemo(
@@ -143,7 +147,7 @@ export function AnalysisConditionDetail() {
     [run, candidatePairedRuns],
   );
 
-  const resolvedCompanionRunId = companionRunIdHint ?? companionRunSummary?.id ?? null;
+  const resolvedCompanionRunId = companionRunIdHint ?? directCompanionRunId ?? companionRunSummary?.id ?? null;
 
   const { run: companionRun } = useRun({
     id: resolvedCompanionRunId ?? '',
@@ -182,6 +186,7 @@ export function AnalysisConditionDetail() {
     if (rowDim) detailSearch.set('rowDim', rowDim);
     if (colDim) detailSearch.set('colDim', colDim);
     if (selectedModel) detailSearch.set('modelId', selectedModel);
+    if (resolvedCompanionRunId) detailSearch.set('companionRunId', resolvedCompanionRunId);
 
     return buildAnalysisConditionDetailPath(
       ANALYSIS_BASE_PATH,
@@ -190,7 +195,7 @@ export function AnalysisConditionDetail() {
       detailSearch,
       new URLSearchParams(`mode=${analysisMode}`),
     );
-  }, [analysisMode, analysisPath, colDim, conditionKey, id, rowDim, selectedModel]);
+  }, [analysisMode, analysisPath, colDim, conditionKey, id, resolvedCompanionRunId, rowDim, selectedModel]);
   const companionRunId = companionRun?.id;
 
   const detailRows = useMemo(() => {
