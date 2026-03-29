@@ -2,26 +2,22 @@ import type { Transcript } from '../api/operations/runs';
 import { formatDisplayLabel } from './displayLabels';
 import { hasRenderableTranscriptDecisionModelV2 } from './transcriptDecisionModel';
 
-export const CONDITION_DECISION_BUCKET_ORDER = [
-  'strong_first',
-  'lean_first',
-  'neutral',
-  'lean_second',
-  'strong_second',
-  'unknown',
-] as const;
-
-export type ConditionDecisionBucketKey = (typeof CONDITION_DECISION_BUCKET_ORDER)[number];
+export type ConditionDecisionFilterParams = {
+  decisionStrength: 'strong' | 'lean' | 'neutral' | 'unknown';
+  favoredValueKey?: string;
+};
 
 export type ConditionDecisionLabelPair = {
+  firstValueKey: string;
   firstValueLabel: string;
+  secondValueKey: string;
   secondValueLabel: string;
 };
 
 export type ConditionDecisionBucket = {
-  key: ConditionDecisionBucketKey;
   label: string;
   count: number;
+  filterParams: ConditionDecisionFilterParams | null;
 };
 
 export type ConditionDecisionSummary = {
@@ -34,26 +30,35 @@ export type ConditionDecisionSummary = {
 
 type PairLabelStats = {
   count: number;
+  firstValueKey: string;
+  secondValueKey: string;
   labels: [string, string];
 };
 
-function getConditionDecisionBucketKey(transcript: Transcript): ConditionDecisionBucketKey {
+type ConditionDecisionBucketSlot = 0 | 1 | 2 | 3 | 4 | 5;
+
+type ConditionDecisionBucketSpec = {
+  label: string;
+  filterParams: ConditionDecisionFilterParams | null;
+};
+
+function getConditionDecisionBucketSlot(transcript: Transcript): ConditionDecisionBucketSlot {
   if (!hasRenderableTranscriptDecisionModelV2(transcript)) {
-    return 'unknown';
+    return 5;
   }
 
   const canonical = transcript.decisionModelV2?.canonical;
   if (!canonical) {
-    return 'unknown';
+    return 5;
   }
 
   if (canonical.strength === 'neutral') {
-    return 'neutral';
+    return 2;
   }
 
   const { favoredValueKey, opposedValueKey, strength } = canonical;
   if (favoredValueKey == null || opposedValueKey == null) {
-    return 'unknown';
+    return 5;
   }
 
   // Alphabetically-first value is canonical "first" (blue) side; second is "second" (orange).
@@ -61,12 +66,12 @@ function getConditionDecisionBucketKey(transcript: Transcript): ConditionDecisio
   // position-based (valueA/valueB) and flips between companion runs.
   const isFirst = favoredValueKey.localeCompare(opposedValueKey) < 0;
 
-  if (isFirst && strength === 'strong') return 'strong_first';
-  if (isFirst && strength === 'lean') return 'lean_first';
-  if (!isFirst && strength === 'lean') return 'lean_second';
-  if (!isFirst && strength === 'strong') return 'strong_second';
+  if (isFirst && strength === 'strong') return 0;
+  if (isFirst && strength === 'lean') return 1;
+  if (!isFirst && strength === 'lean') return 3;
+  if (!isFirst && strength === 'strong') return 4;
 
-  return 'unknown';
+  return 5;
 }
 
 export function resolveConditionDecisionLabelPair(transcripts: Transcript[]): ConditionDecisionLabelPair | null {
@@ -82,16 +87,27 @@ export function resolveConditionDecisionLabelPair(transcripts: Transcript[]): Co
       continue;
     }
 
-    const favoredValueLabel = formatDisplayLabel(canonical.favoredValueKey);
-    const opposedValueLabel = formatDisplayLabel(canonical.opposedValueKey);
-    // labels[0] is always the alphabetically-first value — stable "first" (blue) side
-    const labels = [favoredValueLabel, opposedValueLabel].sort((left, right) => left.localeCompare(right)) as [string, string];
-    const key = `${labels[0]}||${labels[1]}`;
+    const firstValueKey = canonical.favoredValueKey.localeCompare(canonical.opposedValueKey) < 0
+      ? canonical.favoredValueKey
+      : canonical.opposedValueKey;
+    const secondValueKey = firstValueKey === canonical.favoredValueKey
+      ? canonical.opposedValueKey
+      : canonical.favoredValueKey;
+    const labels = [
+      formatDisplayLabel(firstValueKey),
+      formatDisplayLabel(secondValueKey),
+    ] as [string, string];
+    const key = `${firstValueKey}||${secondValueKey}`;
     const current = pairCounts.get(key);
     if (current) {
       current.count += 1;
     } else {
-      pairCounts.set(key, { count: 1, labels });
+      pairCounts.set(key, {
+        count: 1,
+        firstValueKey,
+        secondValueKey,
+        labels,
+      });
     }
   }
 
@@ -118,59 +134,84 @@ export function resolveConditionDecisionLabelPair(transcripts: Transcript[]): Co
   }
 
   return {
+    firstValueKey: bestPair.firstValueKey,
     firstValueLabel: bestPair.labels[0],
+    secondValueKey: bestPair.secondValueKey,
     secondValueLabel: bestPair.labels[1],
   };
 }
 
-function buildBucketLabels(labelPair: ConditionDecisionLabelPair | null): Record<ConditionDecisionBucketKey, string> {
+function buildBucketSpecs(labelPair: ConditionDecisionLabelPair | null): ConditionDecisionBucketSpec[] {
   const firstValueLabel = labelPair?.firstValueLabel ?? 'canonical first value';
   const secondValueLabel = labelPair?.secondValueLabel ?? 'canonical second value';
 
-  return {
-    strong_first: `Strongly favors ${firstValueLabel}`,
-    lean_first: `Somewhat favors ${firstValueLabel}`,
-    neutral: 'Neutral',
-    lean_second: `Somewhat favors ${secondValueLabel}`,
-    strong_second: `Strongly favors ${secondValueLabel}`,
-    unknown: 'Unknown',
-  };
+  return [
+    {
+      label: `Strongly favors ${firstValueLabel}`,
+      filterParams: labelPair == null
+        ? null
+        : { decisionStrength: 'strong', favoredValueKey: labelPair.firstValueKey },
+    },
+    {
+      label: `Somewhat favors ${firstValueLabel}`,
+      filterParams: labelPair == null
+        ? null
+        : { decisionStrength: 'lean', favoredValueKey: labelPair.firstValueKey },
+    },
+    {
+      label: 'Neutral',
+      filterParams: { decisionStrength: 'neutral' },
+    },
+    {
+      label: `Somewhat favors ${secondValueLabel}`,
+      filterParams: labelPair == null
+        ? null
+        : { decisionStrength: 'lean', favoredValueKey: labelPair.secondValueKey },
+    },
+    {
+      label: `Strongly favors ${secondValueLabel}`,
+      filterParams: labelPair == null
+        ? null
+        : { decisionStrength: 'strong', favoredValueKey: labelPair.secondValueKey },
+    },
+    {
+      label: 'Unknown',
+      filterParams: { decisionStrength: 'unknown' },
+    },
+  ];
 }
 
 export function summarizeConditionDecisionBuckets(transcripts: Transcript[]): ConditionDecisionSummary {
-  const counts: Record<ConditionDecisionBucketKey, number> = {
-    strong_first: 0,
-    lean_first: 0,
-    neutral: 0,
-    lean_second: 0,
-    strong_second: 0,
-    unknown: 0,
+  const counts: Record<ConditionDecisionBucketSlot, number> = {
+    0: 0,
+    1: 0,
+    2: 0,
+    3: 0,
+    4: 0,
+    5: 0,
   };
 
   for (const transcript of transcripts) {
-    const bucket = getConditionDecisionBucketKey(transcript);
+    const bucket = getConditionDecisionBucketSlot(transcript);
     counts[bucket] += 1;
   }
 
   const labelPair = resolveConditionDecisionLabelPair(transcripts);
-  const labels = buildBucketLabels(labelPair);
-
-  const buckets = CONDITION_DECISION_BUCKET_ORDER.map((key) => ({
-    key,
-    label: labels[key],
-    count: counts[key],
+  const buckets = buildBucketSpecs(labelPair).map((bucket, index) => ({
+    ...bucket,
+    count: counts[index as ConditionDecisionBucketSlot],
   }));
 
   return {
     buckets,
     labelPair,
     knownCount:
-      counts.strong_first
-      + counts.lean_first
-      + counts.neutral
-      + counts.lean_second
-      + counts.strong_second,
-    unknownCount: counts.unknown,
+      counts[0]
+      + counts[1]
+      + counts[2]
+      + counts[3]
+      + counts[4],
+    unknownCount: counts[5],
     totalCount: transcripts.length,
   };
 }

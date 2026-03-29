@@ -528,7 +528,7 @@ describe('AnalysisTranscripts', () => {
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 2');
   });
 
-  it('filters paired condition clickthrough by exact decision code when requested', () => {
+  it('filters paired condition clickthrough by semantic decision filters when requested', () => {
     mockUseRun.mockImplementation((args?: { id?: string }) => {
       if (args?.id === 'run-2') {
         return {
@@ -565,7 +565,33 @@ describe('AnalysisTranscripts', () => {
         run: createRun('run-1', 1, {
           transcripts: [
             createRenderableTranscript('tx-1', 's1', '5'),
-            createRenderableTranscript('tx-2', 's1', '1'),
+            {
+              ...createRenderableTranscript('tx-2', 's1', '1'),
+              decisionModelV2: {
+                raw: {
+                  matchedText: 'Achievement',
+                  matchedLabel: 'Achievement',
+                  parseClass: 'exact',
+                  parsePath: 'exact.favor_second.strong',
+                  parserVersion: 'v1',
+                  responseExcerpt: 'Achievement',
+                  manualOverride: null,
+                },
+                canonical: {
+                  favoredValueKey: 'Achievement',
+                  opposedValueKey: 'Benevolence_Dependability',
+                  direction: 'favor_second',
+                  strength: 'strong',
+                  normalizationApplied: false,
+                  normalizationReason: null,
+                  source: 'deterministic',
+                },
+                legacy: {
+                  rawScore: null,
+                  canonicalScore: null,
+                },
+              },
+            },
           ],
         }),
         loading: false,
@@ -600,7 +626,7 @@ describe('AnalysisTranscripts', () => {
       };
     });
 
-    renderPage('/analysis/run-1/transcripts?mode=paired&companionRunId=run-2&pairView=condition-blended&rowDim=Freedom&colDim=Harmony&row=High&col=Low&modelId=model1&decisionCode=1');
+    renderPage('/analysis/run-1/transcripts?mode=paired&companionRunId=run-2&pairView=condition-blended&rowDim=Freedom&colDim=Harmony&row=High&col=Low&modelId=model1&favoredValueKey=Benevolence_Dependability&decisionStrength=strong');
 
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 2');
   });

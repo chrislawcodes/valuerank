@@ -11,6 +11,8 @@ export function normalizeModelId(value: string): string {
 
 export type ScenarioDimensionValues = Record<string, string | number>;
 
+export type TranscriptDecisionStrength = 'strong' | 'lean' | 'neutral' | 'unknown';
+
 export function buildNormalizedScenarioDimensionsMap(
   scenarioDimensions?: VisualizationData['scenarioDimensions']
 ): Map<string, ScenarioDimensionValues> {
@@ -44,7 +46,8 @@ type FilterTranscriptsForPivotCellInput = {
   row: string;
   col: string;
   selectedModel?: string;
-  decisionCode?: string;
+  favoredValueKey?: string;
+  decisionStrength?: TranscriptDecisionStrength;
 };
 
 export function filterTranscriptsForPivotCell({
@@ -55,7 +58,8 @@ export function filterTranscriptsForPivotCell({
   row,
   col,
   selectedModel = '',
-  decisionCode,
+  favoredValueKey,
+  decisionStrength,
 }: FilterTranscriptsForPivotCellInput): Transcript[] {
   if (!transcripts.length || !scenarioDimensions || !rowDim || !colDim || !row || !col) {
     return [];
@@ -75,7 +79,19 @@ export function filterTranscriptsForPivotCell({
   const selectedModelNormalized = selectedModel ? normalizeModelId(selectedModel) : '';
 
   return transcripts.filter((transcript) => {
-    if (decisionCode && transcript.decisionCode !== decisionCode) return false;
+    const canonical = transcript.decisionModelV2?.canonical ?? null;
+
+    if (decisionStrength) {
+      if (decisionStrength === 'unknown') {
+        if (canonical && canonical.direction !== 'unknown' && canonical.strength !== 'unknown') {
+          return false;
+        }
+      } else {
+        if (!canonical) return false;
+        if (canonical.strength !== decisionStrength) return false;
+        if (favoredValueKey && canonical.favoredValueKey !== favoredValueKey) return false;
+      }
+    }
     if (!transcript.scenarioId) return false;
 
     const transcriptScenarioId = String(transcript.scenarioId);

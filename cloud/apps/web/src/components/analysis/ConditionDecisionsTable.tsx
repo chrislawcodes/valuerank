@@ -367,7 +367,7 @@ export function ConditionDecisionsTable({
     return summaryMap;
   }, [sortedConditionRows, transcriptIndex, visibleModels]);
 
-  const handleCellClick = (modelId: string, row: OrientedConditionRow, options?: { decisionCode?: string }) => {
+  const handleCellClick = (modelId: string, row: OrientedConditionRow, options?: { decisionStrength?: 'unknown' }) => {
     const params = new URLSearchParams({
       rowDim: attributeA,
       colDim: attributeB,
@@ -385,8 +385,8 @@ export function ConditionDecisionsTable({
         params.set('sourceRun', 'pooled');
       }
     }
-    if (options?.decisionCode) {
-      params.set('decisionCode', options.decisionCode);
+    if (options?.decisionStrength) {
+      params.set('decisionStrength', options.decisionStrength);
     }
     navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params, analysisSearchParams));
   };
@@ -613,7 +613,7 @@ export function ConditionDecisionsTable({
                         size="sm"
                         className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
                         title={title}
-                        onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionCode: 'other' } : undefined)}
+                        onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionStrength: 'unknown' } : undefined)}
                       >
                         {hasResolvedCanonicalEvidence ? (
                           <span className={`inline-flex flex-col items-center ${getCanonicalConditionTextColor(stats.isOpponent)}`}>
