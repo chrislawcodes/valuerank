@@ -135,7 +135,10 @@ export function summarizeCanonicalConditionTranscripts(
 }
 
 export function getCanonicalConditionBackground(score: number, isOpponent: boolean): string {
-  const opacity = Math.min(1, Math.max(0, score));
+  // score is selectedValueWinRate (0–1). Opacity reflects distance from 0.5 (neutral),
+  // mapped to 0–1 so both strong-selected (1.0) and strong-opponent (0.0) render at full intensity.
+  const clamped = Math.min(1, Math.max(0, score));
+  const opacity = Math.abs(clamped - 0.5) * 2;
   if (isOpponent) {
     return `rgba(251, 146, 60, ${opacity * 0.5})`;
   }
