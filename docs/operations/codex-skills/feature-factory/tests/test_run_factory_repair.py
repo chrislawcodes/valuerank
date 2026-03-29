@@ -17,12 +17,11 @@ MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 
-# Import factory_state directly for migration tests
-_FS_PATH = Path(__file__).resolve().parents[1] / "scripts" / "factory_state.py"
-_FS_SPEC = importlib.util.spec_from_file_location("factory_state", _FS_PATH)
-assert _FS_SPEC and _FS_SPEC.loader
-FACTORY_STATE = importlib.util.module_from_spec(_FS_SPEC)
-_FS_SPEC.loader.exec_module(FACTORY_STATE)
+# Use the modules that run_factory actually imported (same object identity)
+# so that unittest.mock.patch.object targets the right namespace.
+FACTORY_STATE = sys.modules["factory_state"]
+STAGES_MODULE = sys.modules["factory_stages"]
+REVIEW_MODULE = sys.modules["factory_review"]
 
 
 def stage_state(
@@ -58,8 +57,8 @@ class RepairDecisionTests(unittest.TestCase):
             "git_base_ref": "origin/main",
             "max_artifact_chars": 123,
         }
-        with patch.object(MODULE, "load_checkpoint_manifest", return_value=manifest), patch.object(
-            MODULE, "load_workflow_state", return_value={"dirty_overrides": {}}
+        with patch.object(REVIEW_MODULE, "load_checkpoint_manifest", return_value=manifest), patch.object(
+            REVIEW_MODULE, "load_workflow_state", return_value={"dirty_overrides": {}}
         ):
             args = MODULE.repair_checkpoint_args(
                 "feature-workflow-repair",
@@ -286,7 +285,7 @@ class RepairDecisionTests(unittest.TestCase):
             "closeout": stage_state(),
         }
         with patch.object(
-            MODULE,
+            REVIEW_MODULE,
             "diff_review_budget_state",
             return_value={"head_mismatch": True, "recorded_head_sha": "abc123", "current_head_sha": "def456"},
         ):
@@ -300,7 +299,7 @@ class RepairDecisionTests(unittest.TestCase):
 
     def test_preferred_diff_base_ref_uses_last_reviewed_head_for_resumed_slice(self) -> None:
         with patch.object(
-            MODULE,
+            STAGES_MODULE,
             "diff_review_budget_state",
             return_value={
                 "artifact_exists": True,
@@ -312,7 +311,7 @@ class RepairDecisionTests(unittest.TestCase):
             self.assertEqual(MODULE.preferred_diff_base_ref("feature-workflow-repair"), "abc123def456")
 
     def test_preferred_diff_base_ref_keeps_explicit_request(self) -> None:
-        with patch.object(MODULE, "diff_review_budget_state", return_value={"suggested_base_ref": "abc123def456"}):
+        with patch.object(STAGES_MODULE, "diff_review_budget_state", return_value={"suggested_base_ref": "abc123def456"}):
             self.assertEqual(MODULE.preferred_diff_base_ref("feature-workflow-repair", "origin/main"), "origin/main")
 
     def test_status_reports_resumed_diff_scope_basis(self) -> None:
@@ -566,6 +565,7 @@ class RepairDecisionTests(unittest.TestCase):
             "diff": stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True),
             "closeout": stage_state(),
         }
+        diff_budget = {"head_mismatch": True, "recorded_head_sha": "abc123", "current_head_sha": "def456"}
         args = SimpleNamespace(slug="feature-workflow-repair")
         with patch.object(MODULE, "ensure_sync"), patch.object(
             MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}, "checkpoint_fallback": {}}
@@ -574,7 +574,9 @@ class RepairDecisionTests(unittest.TestCase):
         ), patch.object(
             MODULE, "stage_review_inventory", return_value=([], [])
         ), patch.object(
-            MODULE, "diff_review_budget_state", return_value={"head_mismatch": True, "recorded_head_sha": "abc123", "current_head_sha": "def456"}
+            MODULE, "diff_review_budget_state", return_value=diff_budget
+        ), patch.object(
+            STAGES_MODULE, "diff_review_budget_state", return_value=diff_budget
         ), patch.object(
             MODULE, "repair_checkpoint_args", return_value=SimpleNamespace(slug="feature-workflow-repair", stage="diff")
         ), patch.object(
@@ -685,7 +687,7 @@ class RepairDecisionTests(unittest.TestCase):
                 complete=False,
             )
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 exit_code = MODULE.command_discover(args)
 
@@ -728,7 +730,7 @@ class RepairDecisionTests(unittest.TestCase):
             )
             args = self._discover_args(force_complete=True)
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 with self.assertRaises(SystemExit) as ctx:
                     MODULE.command_discover(args)
@@ -762,7 +764,7 @@ class RepairDecisionTests(unittest.TestCase):
             )
             args = self._discover_args(resolve="Decide API shape", complete=True)
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 exit_code = MODULE.command_discover(args)
 
@@ -798,7 +800,7 @@ class RepairDecisionTests(unittest.TestCase):
             )
             args = self._discover_args(complete=True)
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 with self.assertRaises(SystemExit) as ctx:
                     MODULE.command_discover(args)
@@ -845,7 +847,7 @@ class RepairDecisionTests(unittest.TestCase):
                 clear=True,
             )
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 exit_code = MODULE.command_discover(args)
 
@@ -904,7 +906,7 @@ class RepairDecisionTests(unittest.TestCase):
                 clear=False,
             )
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 with self.assertRaises(SystemExit) as ctx:
                     MODULE.command_discover(args)
@@ -944,7 +946,7 @@ class RepairDecisionTests(unittest.TestCase):
             state_path = Path(temp_dir) / "state.json"
             args = self._discover_args(unresolved="Need API contract")
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 exit_code = MODULE.command_discover(args)
 
@@ -969,7 +971,7 @@ class RepairDecisionTests(unittest.TestCase):
             )
             args = self._discover_args(resolve="Remove this")
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 exit_code = MODULE.command_discover(args)
 
@@ -988,7 +990,7 @@ class RepairDecisionTests(unittest.TestCase):
             )
             args = self._discover_args(resolve="Missing item")
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 exit_code = MODULE.command_discover(args)
 
@@ -1007,7 +1009,7 @@ class RepairDecisionTests(unittest.TestCase):
             )
             args = self._discover_args(defer="Need follow-up")
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 exit_code = MODULE.command_discover(args)
 
@@ -1023,7 +1025,7 @@ class RepairDecisionTests(unittest.TestCase):
             state_path = Path(temp_dir) / "state.json"
             args = self._discover_args(non_goal="Avoid broad scope")
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 first_exit = MODULE.command_discover(args)
                 second_exit = MODULE.command_discover(args)
@@ -1038,7 +1040,7 @@ class RepairDecisionTests(unittest.TestCase):
             state_path = Path(temp_dir) / "state.json"
             args = self._discover_args(acceptance_criteria="Clear owner for each decision")
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 first_exit = MODULE.command_discover(args)
                 second_exit = MODULE.command_discover(args)
@@ -1053,7 +1055,7 @@ class RepairDecisionTests(unittest.TestCase):
             state_path = Path(temp_dir) / "state.json"
             args = self._discover_args(answer=("What is the goal?", "Ship the first slice"))
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 exit_code = MODULE.command_discover(args)
 
@@ -1397,6 +1399,21 @@ class RepairDecisionTests(unittest.TestCase):
                     "artifact_changed_since_codex": False,
                 },
             ), patch.object(
+                STAGES_MODULE, "diff_review_budget_state",
+                return_value={
+                    "artifact_exists": True,
+                    "artifact_bytes": 20,
+                    "large_artifact": False,
+                    "recorded_base_ref": "origin/main",
+                    "recorded_base_sha": "d3335ded7c643eda3d4ad7c2ac730325ff394d2c",
+                    "recorded_head_sha": "abc123def4567890",
+                    "current_head_sha": "fed456cba9876543",
+                    "head_mismatch": True,
+                    "scope_basis": "last-reviewed-head",
+                    "suggested_base_ref": "abc123def4567890",
+                    "artifact_changed_since_codex": False,
+                },
+            ), patch.object(
                 MODULE, "required_reviews", return_value=[]
             ), patch.object(
                 MODULE, "update_workflow_state", return_value={}
@@ -1419,7 +1436,7 @@ class CheckpointMarkerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tasks = Path(tmp) / "tasks.md"
             tasks.write_text("# Tasks\n\n- [ ] Do something\n- [ ] Do something else\n")
-            with patch.object(MODULE, "workflow_dir", return_value=Path(tmp)):
+            with patch.object(STAGES_MODULE, "workflow_dir", return_value=Path(tmp)):
                 count, sha = MODULE.parse_checkpoint_markers("slug")
         self.assertEqual(count, 0)
         self.assertEqual(sha, "")
@@ -1437,7 +1454,7 @@ class CheckpointMarkerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tasks = Path(tmp) / "tasks.md"
             tasks.write_text(content)
-            with patch.object(MODULE, "workflow_dir", return_value=Path(tmp)):
+            with patch.object(STAGES_MODULE, "workflow_dir", return_value=Path(tmp)):
                 count, sha = MODULE.parse_checkpoint_markers("slug")
         self.assertEqual(count, 6)
         self.assertNotEqual(sha, "")
@@ -1452,7 +1469,7 @@ class CheckpointMarkerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tasks = Path(tmp) / "tasks.md"
             tasks.write_text(content)
-            with patch.object(MODULE, "workflow_dir", return_value=Path(tmp)):
+            with patch.object(STAGES_MODULE, "workflow_dir", return_value=Path(tmp)):
                 count, sha = MODULE.parse_checkpoint_markers("slug")
         self.assertEqual(count, 1)
 
@@ -1462,19 +1479,19 @@ class CheckpointMarkerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tasks = Path(tmp) / "tasks.md"
             tasks.write_text(content)
-            with patch.object(MODULE, "workflow_dir", return_value=Path(tmp)):
+            with patch.object(STAGES_MODULE, "workflow_dir", return_value=Path(tmp)):
                 count, _ = MODULE.parse_checkpoint_markers("slug")
         self.assertEqual(count, 0)
 
     def test_parse_checkpoint_markers_returns_zero_when_file_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(MODULE, "workflow_dir", return_value=Path(tmp)):
+            with patch.object(STAGES_MODULE, "workflow_dir", return_value=Path(tmp)):
                 count, sha = MODULE.parse_checkpoint_markers("slug")
         self.assertEqual(count, 0)
         self.assertEqual(sha, "")
 
     def test_checkpoint_progress_defaults_when_absent(self) -> None:
-        with patch.object(MODULE, "load_workflow_state", return_value={}):
+        with patch.object(STAGES_MODULE, "load_workflow_state", return_value={}):
             progress = MODULE.checkpoint_progress_state("slug")
         self.assertEqual(progress["index"], 0)
         self.assertEqual(progress["markers_sha"], "")
@@ -1482,7 +1499,7 @@ class CheckpointMarkerTests(unittest.TestCase):
 
     def test_checkpoint_progress_normalizes_partial_state(self) -> None:
         partial = {MODULE.CHECKPOINT_PROGRESS_KEY: {"index": 2}}
-        with patch.object(MODULE, "load_workflow_state", return_value=partial):
+        with patch.object(STAGES_MODULE, "load_workflow_state", return_value=partial):
             progress = MODULE.checkpoint_progress_state("slug")
         self.assertEqual(progress["index"], 2)
         self.assertEqual(progress["markers_sha"], "")
@@ -1499,10 +1516,10 @@ class CheckpointMarkerTests(unittest.TestCase):
             captured.append(state[MODULE.CHECKPOINT_PROGRESS_KEY])
 
         with (
-            patch.object(MODULE, "load_workflow_state", return_value={MODULE.CHECKPOINT_PROGRESS_KEY: initial}),
-            patch.object(MODULE, "parse_checkpoint_markers", return_value=(3, "newsha")),
-            patch.object(MODULE, "checkpoint_progress_state", return_value=initial),
-            patch.object(MODULE, "update_workflow_state", side_effect=fake_update),
+            patch.object(REVIEW_MODULE, "load_workflow_state", return_value={MODULE.CHECKPOINT_PROGRESS_KEY: initial}),
+            patch.object(REVIEW_MODULE, "parse_checkpoint_markers", return_value=(3, "newsha")),
+            patch.object(REVIEW_MODULE, "checkpoint_progress_state", return_value=initial),
+            patch.object(REVIEW_MODULE, "update_workflow_state", side_effect=fake_update),
         ):
             MODULE._advance_checkpoint_progress("slug", "diff", "newhead")
 
