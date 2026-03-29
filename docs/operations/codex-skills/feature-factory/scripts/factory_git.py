@@ -17,6 +17,19 @@ from factory_state import REPO_ROOT  # noqa: E402
 
 SYNC_SCRIPT = REPO_ROOT / "scripts" / "sync-codex-skills.py"
 
+# Files that agents (Codex, Gemini) frequently edit out-of-scope.
+# revert_protected_files() restores these to HEAD after every agent subprocess.
+PROTECTED_FILES = [
+    "CLAUDE.md",
+    "AGENTS.md",
+    "MEMORY.md",
+    "GEMINI.md",
+    ".gitignore",
+    "cloud/CLAUDE.md",
+    "cloud/GEMINI.md",
+    "cloud/agents.md",
+]
+
 
 def run(cmd: list[str]) -> None:
     subprocess.run(cmd, check=True, text=True)
@@ -111,3 +124,27 @@ def ensure_sync() -> None:
 def ensure_file(path: Path, heading: str) -> None:
     if not path.exists():
         path.write_text(f"# {heading}\n", encoding="utf-8")
+
+
+def revert_protected_files() -> list[str]:
+    """Revert PROTECTED_FILES to HEAD. Returns list of files actually reverted."""
+    # Only revert files that are tracked and have been modified.
+    dirty = git_output("diff", "--name-only", "HEAD", "--")
+    if not dirty:
+        return []
+    dirty_set = set(dirty.splitlines())
+    to_revert = [f for f in PROTECTED_FILES if f in dirty_set]
+    if not to_revert:
+        return []
+    try:
+        subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "checkout", "HEAD", "--"] + to_revert,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception as exc:
+        print(f"warning: failed to revert protected files: {exc}", file=sys.stderr)
+        return []
+    return to_revert

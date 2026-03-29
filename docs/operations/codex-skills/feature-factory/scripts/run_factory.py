@@ -65,6 +65,7 @@ from factory_git import (  # noqa: E402
     command_path,
     ensure_sync,
     ensure_file,
+    revert_protected_files,
 )
 
 from factory_stages import (  # noqa: E402
@@ -415,6 +416,9 @@ def command_checkpoint(args: argparse.Namespace) -> int:
         fallback_reason = f"repair exceeded {args.repair_timeout_seconds}s"
     else:
         if result.returncode == 0:
+            reverted = revert_protected_files()
+            if reverted:
+                print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
             _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
             return 0
         if not args.fallback:
@@ -430,6 +434,9 @@ def command_checkpoint(args: argparse.Namespace) -> int:
     if not fallback_ok:
         print(f"checkpoint blocked: fallback review path failed for {args.stage} on {args.slug}: {trim_detail(fallback_detail)}", file=sys.stderr)
         return 1
+    reverted = revert_protected_files()
+    if reverted:
+        print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
     record_checkpoint_fallback(args.slug, args.stage, fallback_reason)
     _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
     print(f"warning: fallback checkpoint path used for {args.stage} on {args.slug}: {fallback_reason}", file=sys.stderr)
