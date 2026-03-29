@@ -20,6 +20,8 @@ type ScenariosTabProps = {
   transcripts?: Transcript[];
   expectedAttributes?: string[];
   companionRunId?: string | null;
+  currentVignetteName?: string | null;
+  companionVignetteName?: string | null;
 };
 
 export function ScenariosTab({
@@ -32,6 +34,8 @@ export function ScenariosTab({
   transcripts,
   expectedAttributes = [],
   companionRunId,
+  currentVignetteName,
+  companionVignetteName,
 }: ScenariosTabProps) {
   const hasScenarioDimensions = Boolean(
     visualizationData?.scenarioDimensions
@@ -80,6 +84,8 @@ export function ScenariosTab({
                 expectedAttributes={expectedAttributes}
                 title="Condition Decisions"
                 description="Detailed breakdown of how each model scored each condition."
+                currentVignetteName={currentVignetteName}
+                companionVignetteName={companionVignetteName}
               />
             ) : (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
