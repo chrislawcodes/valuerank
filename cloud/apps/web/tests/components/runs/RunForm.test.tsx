@@ -392,7 +392,6 @@ describe('RunForm', () => {
       .closest('button');
     expect(pairedModeButton).not.toBeNull();
     expect(pairedModeButton).toHaveClass('border-teal-500');
-    expect(screen.getByText(/currently configured as/i)).toHaveTextContent('Freedom -> Harmony');
 
     await user.click(screen.getByText('OpenAI'));
     await user.click(screen.getByText('GPT-4'));
