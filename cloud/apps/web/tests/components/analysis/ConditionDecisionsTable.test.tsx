@@ -308,9 +308,9 @@ describe('ConditionDecisionsTable', () => {
       </MemoryRouter>
     );
 
-    // tie: selectedValueWinRate === 0.5 → win rate reads as 50%
+    // tie: selectedValueWinRate === 0.5 → isOpponent=false, winnerScore=(2×1+0)/2=1.0
     const tieButton = screen.getByTitle('View transcripts for gpt-5 | Achievement: medium, Care: medium');
-    expect(within(tieButton).getByText('50%')).toBeInTheDocument();
+    expect(within(tieButton).getByText('1.0')).toBeInTheDocument();
   });
 
   it('orders condition rows from negligible to full', () => {
