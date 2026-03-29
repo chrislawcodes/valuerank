@@ -248,7 +248,7 @@ export function AnalysisConditionDetail() {
 
       rows.push(buildDetailRow(
         'current',
-        'Current vignette',
+        run?.definition?.name ?? 'Current vignette',
         currentTranscripts,
         makeBaseSearch({
           companionRunId,
@@ -259,7 +259,7 @@ export function AnalysisConditionDetail() {
 
       rows.push(buildDetailRow(
         'companion',
-        'Companion vignette',
+        companionRun?.definition?.name ?? 'Companion vignette',
         companionTranscripts,
         makeBaseSearch({
           companionRunId,
@@ -273,7 +273,7 @@ export function AnalysisConditionDetail() {
 
     rows.push(buildDetailRow(
       'single',
-      'Current vignette',
+      run?.definition?.name ?? 'Current vignette',
       filterConditionTranscripts(run, analysis, rowDim, colDim, parsedCondition.row, parsedCondition.col, selectedModel),
       makeBaseSearch({
         sourceRun: 'current',
