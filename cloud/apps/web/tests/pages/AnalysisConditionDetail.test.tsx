@@ -300,8 +300,8 @@ describe('AnalysisConditionDetail', () => {
     expect(screen.getByText('Freedom = High, Harmony = Low')).toBeInTheDocument();
     expect(screen.getByText('model1')).toBeInTheDocument();
     expect(screen.getByText('Pooled')).toBeInTheDocument();
-    expect(screen.getByText('Current vignette')).toBeInTheDocument();
-    expect(screen.getByText('Companion vignette')).toBeInTheDocument();
+    expect(screen.getByText('Freedom -> Harmony')).toBeInTheDocument();
+    expect(screen.getByText('Harmony -> Freedom')).toBeInTheDocument();
     expect(screen.getByText('Strongly favors Freedom')).toBeInTheDocument();
     expect(screen.getByText('Somewhat favors Freedom')).toBeInTheDocument();
     expect(screen.getByText('Neutral')).toBeInTheDocument();
@@ -495,14 +495,14 @@ describe('AnalysisConditionDetail', () => {
 
     expect(screen.getByText('Condition Detail')).toBeInTheDocument();
     expect(screen.getByText('Freedom = High, Harmony = Low')).toBeInTheDocument();
-    expect(screen.getByText('Current vignette')).toBeInTheDocument();
+    expect(screen.getByText('Freedom -> Harmony')).toBeInTheDocument();
     expect(screen.getByText('Strongly favors Freedom')).toBeInTheDocument();
     expect(screen.getByText('Somewhat favors Freedom')).toBeInTheDocument();
     expect(screen.getByText('Neutral')).toBeInTheDocument();
     expect(screen.getByText('Somewhat favors Harmony')).toBeInTheDocument();
     expect(screen.getByText('Strongly favors Harmony')).toBeInTheDocument();
 
-    const row = screen.getByText('Current vignette').closest('tr');
+    const row = screen.getByText('Freedom -> Harmony').closest('tr');
     expect(row).not.toBeNull();
     expect(within(row as HTMLElement).getAllByRole('button').length).toBeGreaterThan(0);
   });
@@ -510,7 +510,7 @@ describe('AnalysisConditionDetail', () => {
   it('routes a current row bucket click to the matching transcript slice', () => {
     renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
 
-    const row = screen.getByText('Current vignette').closest('tr');
+    const row = screen.getByText('Freedom -> Harmony').closest('tr');
     expect(row).not.toBeNull();
 
     const button = within(row as HTMLElement).getAllByRole('button', { name: '1' })[0];
@@ -574,7 +574,7 @@ describe('AnalysisConditionDetail', () => {
 
     renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=single');
 
-    const row = screen.getByText('Current vignette').closest('tr');
+    const row = screen.getByText('Freedom -> Harmony').closest('tr');
     expect(row).not.toBeNull();
     expect(within(row as HTMLElement).getAllByRole('button').length).toBeGreaterThan(0);
   });
@@ -625,8 +625,8 @@ describe('AnalysisConditionDetail', () => {
 
       // Paired rows must appear (companion was resolved via direct link)
       expect(screen.getByText('Pooled')).toBeInTheDocument();
-      expect(screen.getByText('Current vignette')).toBeInTheDocument();
-      expect(screen.getByText('Companion vignette')).toBeInTheDocument();
+      expect(screen.getByText('Freedom -> Harmony')).toBeInTheDocument();
+      expect(screen.getByText('Harmony -> Freedom')).toBeInTheDocument();
 
       // useRuns must have been paused — heuristic search should NOT run
       expect(mockUseRuns).toHaveBeenCalled();
@@ -662,8 +662,8 @@ describe('AnalysisConditionDetail', () => {
 
       // Paired rows must appear (companion found by heuristic via batchGroupId)
       expect(screen.getByText('Pooled')).toBeInTheDocument();
-      expect(screen.getByText('Current vignette')).toBeInTheDocument();
-      expect(screen.getByText('Companion vignette')).toBeInTheDocument();
+      expect(screen.getByText('Freedom -> Harmony')).toBeInTheDocument();
+      expect(screen.getByText('Harmony -> Freedom')).toBeInTheDocument();
 
       // useRuns must NOT have been fully paused — heuristic search must run
       expect(mockUseRuns).toHaveBeenCalled();
