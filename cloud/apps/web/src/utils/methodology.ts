@@ -3,7 +3,6 @@ type DefinitionMethodology = {
   response_scale?: 'numeric' | 'option_text' | 'value_labels';
   legacy_label?: string;
   canonical_value_order?: string[];
-  presentation_order?: 'A_first' | 'B_first';
   pair_key?: string;
 };
 
@@ -115,7 +114,6 @@ export function getDefinitionMethodology(content: unknown): DefinitionMethodolog
   const family = typeof raw.family === 'string' ? raw.family : undefined;
   const responseScale = raw.response_scale;
   const legacyLabel = typeof raw.legacy_label === 'string' ? raw.legacy_label : undefined;
-  const presentationOrder = raw.presentation_order;
   const pairKey = typeof raw.pair_key === 'string' ? raw.pair_key : undefined;
   const canonicalValueOrder = Array.isArray(raw.canonical_value_order)
     ? raw.canonical_value_order.filter((value): value is string => typeof value === 'string')
@@ -129,10 +127,6 @@ export function getDefinitionMethodology(content: unknown): DefinitionMethodolog
         : undefined,
     legacy_label: legacyLabel,
     canonical_value_order: canonicalValueOrder,
-    presentation_order:
-      presentationOrder === 'A_first' || presentationOrder === 'B_first'
-        ? presentationOrder
-        : undefined,
     pair_key: pairKey,
   };
 }
@@ -222,15 +216,10 @@ export function getPairedOrientationLabels(content: unknown): PairedOrientationL
   })();
 
   const canonicalValues = canonicalOrderFromMethodology
-    ?? (componentOrder && methodology?.presentation_order === 'B_first'
-      ? reverseValueOrder(componentOrder)
-      : componentOrder)
+    ?? componentOrder
     ?? canonicalOrderFromDimensions;
 
-  const currentValues = componentOrder
-    ?? (methodology?.presentation_order === 'B_first'
-      ? reverseValueOrder(canonicalValues)
-      : canonicalValues);
+  const currentValues = componentOrder ?? canonicalValues;
 
   const flippedValues = reverseValueOrder(canonicalValues);
 

@@ -45,12 +45,5 @@ export function extractValuePair(content: unknown): DomainAnalysisValuePair | nu
   const normalizedA = toPascalCaseKey(nameA);
   const normalizedB = toPascalCaseKey(nameB);
   if (!isDomainAnalysisValueKey(normalizedA) || !isDomainAnalysisValueKey(normalizedB)) return null;
-  const methodology = (content as { methodology?: unknown }).methodology;
-  const presentationOrder = methodology && typeof methodology === 'object' && !Array.isArray(methodology)
-    ? (methodology as { presentation_order?: unknown }).presentation_order
-    : null;
-  if (presentationOrder === 'B_first') {
-    return { valueA: normalizedB, valueB: normalizedA };
-  }
   return { valueA: normalizedA, valueB: normalizedB };
 }

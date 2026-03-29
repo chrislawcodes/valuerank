@@ -51,10 +51,6 @@ type JobChoiceComponents = {
   value_second?: { token?: string; body?: string };
 };
 
-type JobChoiceMethodology = {
-  family?: string;
-  presentation_order?: 'A_first' | 'B_first';
-};
 
 const PREAMBLES_QUERY = gql`
   query PreamblesForJobChoice {
@@ -108,12 +104,6 @@ function getJobChoiceComponents(content: unknown): JobChoiceComponents | null {
   return components as JobChoiceComponents;
 }
 
-function getJobChoiceMethodology(content: unknown): JobChoiceMethodology | null {
-  if (!content || typeof content !== 'object' || Array.isArray(content)) return null;
-  const methodology = (content as Record<string, unknown>).methodology;
-  if (!methodology || typeof methodology !== 'object' || Array.isArray(methodology)) return null;
-  return methodology as JobChoiceMethodology;
-}
 
 export function JobChoiceNew() {
   const navigate = useNavigate();
@@ -194,20 +184,11 @@ export function JobChoiceNew() {
   const requestedDomainId = searchParams.get('domainId') ?? '';
   const editingDefinition = definitionData?.definition ?? null;
   const editingContent = editingDefinition?.resolvedContent ?? editingDefinition?.content ?? null;
-  const editingMethodology = getJobChoiceMethodology(editingContent);
   const editingComponents = getJobChoiceComponents(editingContent);
 
   const canonicalComponents = useMemo(() => {
-    if (editingComponents == null) return null;
-    if (editingMethodology?.presentation_order === 'B_first') {
-      return {
-        context_id: editingComponents.context_id,
-        value_first: editingComponents.value_second,
-        value_second: editingComponents.value_first,
-      } satisfies JobChoiceComponents;
-    }
     return editingComponents;
-  }, [editingComponents, editingMethodology?.presentation_order]);
+  }, [editingComponents]);
 
   const valueFirst = valueStatements.find((v) => v.id === selectedValueFirstId) ?? null;
   const valueSecond = valueStatements.find((v) => v.id === selectedValueSecondId) ?? null;
@@ -375,7 +356,7 @@ export function JobChoiceNew() {
     }
 
     if (result.data != null) {
-      navigate(`/definitions/${result.data.createJobChoicePair.aFirst.id}`);
+      navigate(`/definitions/${result.data.createJobChoicePair.definitionA.id}`);
     }
   }
 

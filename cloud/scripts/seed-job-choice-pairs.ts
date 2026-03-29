@@ -78,7 +78,7 @@ function buildPairContent(
   valueFirst: { token: string; body: string },
   valueSecond: { token: string; body: string },
   levelPreset: LevelPresetWords | null,
-): { aFirst: JobChoiceContent; bFirst: JobChoiceContent; compA: DefinitionComponents; compB: DefinitionComponents } {
+): { definitionA: JobChoiceContent; definitionB: JobChoiceContent; compA: DefinitionComponents; compB: DefinitionComponents } {
   const compA: DefinitionComponents = {
     context_id: contextId,
     value_first: { token: valueFirst.token, body: valueFirst.body },
@@ -90,21 +90,21 @@ function buildPairContent(
     value_second: { token: valueFirst.token, body: valueFirst.body },
   };
   const dimensions = [{ name: valueFirst.token }, { name: valueSecond.token }];
-  const aFirst = applyLevelPreset<JobChoiceContent>({
+  const definitionA = applyLevelPreset<JobChoiceContent>({
     schema_version: 1,
     template: assembleTemplate(contextText, compA),
     dimensions,
-    methodology: { family: 'job-choice', response_scale: 'option_text', presentation_order: 'A_first', pair_key: pairKey },
+    methodology: { family: 'job-choice', response_scale: 'option_text', pair_key: pairKey },
     components: compA,
   }, levelPreset);
-  const bFirst = applyLevelPreset<JobChoiceContent>({
+  const definitionB = applyLevelPreset<JobChoiceContent>({
     schema_version: 1,
     template: assembleTemplate(contextText, compB),
     dimensions,
-    methodology: { family: 'job-choice', response_scale: 'option_text', presentation_order: 'B_first', pair_key: pairKey },
+    methodology: { family: 'job-choice', response_scale: 'option_text', pair_key: pairKey },
     components: compB,
   }, levelPreset);
-  return { aFirst, bFirst, compA, compB };
+  return { definitionA, definitionB, compA, compB };
 }
 
 async function createVignettes(
@@ -316,7 +316,7 @@ async function main(): Promise<void> {
     }
 
     const pairKey = randomUUID();
-    const { aFirst, bFirst, compA, compB } = buildPairContent(
+    const { definitionA, definitionB, compA, compB } = buildPairContent(
       pairKey,
       context.text,
       context.id,
@@ -329,7 +329,7 @@ async function main(): Promise<void> {
       const defA = await tx.definition.create({
         data: {
           name: definitionName(tokenA, tokenB),
-          content: aFirst as unknown as Prisma.InputJsonValue,
+          content: definitionA as unknown as Prisma.InputJsonValue,
           domainId: domain.id,
           domainContextId: context.id,
           preambleVersionId,
@@ -340,7 +340,7 @@ async function main(): Promise<void> {
       const defB = await tx.definition.create({
         data: {
           name: definitionName(tokenB, tokenA),
-          content: bFirst as unknown as Prisma.InputJsonValue,
+          content: definitionB as unknown as Prisma.InputJsonValue,
           domainId: domain.id,
           domainContextId: context.id,
           preambleVersionId,
@@ -349,7 +349,7 @@ async function main(): Promise<void> {
         },
       });
       const vCount = await createVignettes(tx, defA.id, defB.id, context.text, compA, compB, tokenA, tokenB, levelPreset);
-      log.info({ pair: name, aFirstId: defA.id, bFirstId: defB.id, pairKey, vignettes: vCount }, 'Created pair');
+      log.info({ pair: name, definitionAId: defA.id, definitionBId: defB.id, pairKey, vignettes: vCount }, 'Created pair');
     });
 
     created += 1;

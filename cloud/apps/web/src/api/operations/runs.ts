@@ -113,7 +113,7 @@ export type RunConfig = {
   companionRunId?: string | null;
   jobChoiceLaunchMode?: 'PAIRED_BATCH' | 'AD_HOC_BATCH' | 'STANDARD' | null;
   jobChoiceBatchGroupId?: string | null;
-  jobChoicePresentationOrder?: 'A_first' | 'B_first' | null;
+  jobChoiceValueFirst?: string | null;
   isAggregate?: boolean;
   sourceRunIds?: string[];
   methodologySafe?: boolean | null;

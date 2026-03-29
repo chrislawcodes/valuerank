@@ -4,8 +4,8 @@ export type JobChoicePairDefinition = { id: string; name: string };
 
 export type CreateJobChoicePairResult = {
   createJobChoicePair: {
-    aFirst: JobChoicePairDefinition;
-    bFirst: JobChoicePairDefinition;
+    definitionA: JobChoicePairDefinition;
+    definitionB: JobChoicePairDefinition;
   };
 };
 
@@ -23,8 +23,8 @@ export type CreateJobChoicePairVariables = {
 
 export type UpdateJobChoicePairResult = {
   updateJobChoicePair: {
-    aFirst: JobChoicePairDefinition;
-    bFirst: JobChoicePairDefinition;
+    definitionA: JobChoicePairDefinition;
+    definitionB: JobChoicePairDefinition;
   };
 };
 
@@ -43,11 +43,11 @@ export type UpdateJobChoicePairVariables = {
 export const CREATE_JOB_CHOICE_PAIR_MUTATION = gql`
   mutation CreateJobChoicePair($input: CreateJobChoicePairInput!) {
     createJobChoicePair(input: $input) {
-      aFirst {
+      definitionA {
         id
         name
       }
-      bFirst {
+      definitionB {
         id
         name
       }
@@ -58,11 +58,11 @@ export const CREATE_JOB_CHOICE_PAIR_MUTATION = gql`
 export const UPDATE_JOB_CHOICE_PAIR_MUTATION = gql`
   mutation UpdateJobChoicePair($input: UpdateJobChoicePairInput!) {
     updateJobChoicePair(input: $input) {
-      aFirst {
+      definitionA {
         id
         name
       }
-      bFirst {
+      definitionB {
         id
         name
       }
