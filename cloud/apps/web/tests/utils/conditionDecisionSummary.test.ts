@@ -179,25 +179,29 @@ describe('conditionDecisionSummary', () => {
     ]);
 
     expect(summary.labelPair).toEqual({
+      firstValueKey: 'Freedom',
       firstValueLabel: 'Freedom',
+      secondValueKey: 'Harmony',
       secondValueLabel: 'Harmony',
     });
     expect(summary.knownCount).toBe(5);
     expect(summary.unknownCount).toBe(1);
     expect(summary.totalCount).toBe(6);
-    expect(summary.buckets.map((bucket) => `${bucket.key}:${bucket.label}:${bucket.count}`)).toEqual([
-      'strong_first:Strongly favors Freedom:1',
-      'lean_first:Somewhat favors Freedom:1',
-      'neutral:Neutral:1',
-      'lean_second:Somewhat favors Harmony:1',
-      'strong_second:Strongly favors Harmony:1',
-      'unknown:Unknown:1',
+    expect(summary.buckets.map((bucket) => `${bucket.label}:${bucket.count}`)).toEqual([
+      'Strongly favors Freedom:1',
+      'Somewhat favors Freedom:1',
+      'Neutral:1',
+      'Somewhat favors Harmony:1',
+      'Strongly favors Harmony:1',
+      'Unknown:1',
     ]);
+    expect(summary.buckets[0].filterParams).toEqual({ decisionStrength: 'strong', favoredValueKey: 'Freedom' });
+    expect(summary.buckets[5].filterParams).toEqual({ decisionStrength: 'unknown' });
   });
 
   it('resolves labels alphabetically regardless of which run the transcript came from', () => {
-    // t-1 is from a B_first companion run: favoredValueKey='Harmony' (alphabetically second) → strong_second
-    // t-2, t-3 are from A_first runs: favoredValueKey='Freedom' (alphabetically first) → strong_first
+    // t-1 is from a B_first companion run: favoredValueKey='Harmony' (alphabetically second)
+    // t-2, t-3 are from A_first runs: favoredValueKey='Freedom' (alphabetically first)
     // Label pair is always Freedom/Harmony by alphabetical order, independent of presentation order.
     const summary = summarizeConditionDecisionBuckets([
       createTranscript('t-1', '5', 'B_first'),
@@ -206,24 +210,26 @@ describe('conditionDecisionSummary', () => {
     ]);
 
     expect(summary.labelPair).toEqual({
+      firstValueKey: 'Freedom',
       firstValueLabel: 'Freedom',
+      secondValueKey: 'Harmony',
       secondValueLabel: 'Harmony',
     });
-    expect(summary.buckets.map((bucket) => `${bucket.key}:${bucket.label}:${bucket.count}`)).toEqual([
-      'strong_first:Strongly favors Freedom:2',
-      'lean_first:Somewhat favors Freedom:0',
-      'neutral:Neutral:0',
-      'lean_second:Somewhat favors Harmony:0',
-      'strong_second:Strongly favors Harmony:1',
-      'unknown:Unknown:0',
+    expect(summary.buckets.map((bucket) => `${bucket.label}:${bucket.count}`)).toEqual([
+      'Strongly favors Freedom:2',
+      'Somewhat favors Freedom:0',
+      'Neutral:0',
+      'Somewhat favors Harmony:0',
+      'Strongly favors Harmony:1',
+      'Unknown:0',
     ]);
   });
 
-  it('Harmony wins on B_first run → strong_second bucket, firstValueLabel=Freedom — direction field ignored', () => {
+  it('Harmony wins on B_first run → canonical second bucket, firstValueLabel=Freedom — direction field ignored', () => {
     // All transcripts are from a B_first companion run: firstValueKey=Harmony, secondValueKey=Freedom.
     // decisionCode='5' → favoredValueKey='Harmony', direction='favor_first'.
-    // Old direction-based code would have bucketed these as strong_first (wrong: Harmony labeled blue).
-    // New alphabetical code: 'Harmony'.localeCompare('Freedom') > 0 → Harmony is second → strong_second ✓
+    // Old direction-based code would have bucketed these as the wrong side (wrong: Harmony labeled blue).
+    // New alphabetical code: 'Harmony'.localeCompare('Freedom') > 0 → Harmony is canonical second ✓
     const summary = summarizeConditionDecisionBuckets([
       createTranscript('t-1', '5', 'B_first'),
       createTranscript('t-2', '5', 'B_first'),
@@ -231,16 +237,18 @@ describe('conditionDecisionSummary', () => {
     ]);
 
     expect(summary.labelPair).toEqual({
+      firstValueKey: 'Freedom',
       firstValueLabel: 'Freedom',
+      secondValueKey: 'Harmony',
       secondValueLabel: 'Harmony',
     });
-    expect(summary.buckets.map((bucket) => `${bucket.key}:${bucket.count}`)).toEqual([
-      'strong_first:0',
-      'lean_first:0',
-      'neutral:0',
-      'lean_second:0',
-      'strong_second:3',
-      'unknown:0',
+    expect(summary.buckets.map((bucket) => `${bucket.label}:${bucket.count}`)).toEqual([
+      'Strongly favors Freedom:0',
+      'Somewhat favors Freedom:0',
+      'Neutral:0',
+      'Somewhat favors Harmony:0',
+      'Strongly favors Harmony:3',
+      'Unknown:0',
     ]);
   });
 
@@ -253,13 +261,13 @@ describe('conditionDecisionSummary', () => {
     expect(summary.labelPair).toBeNull();
     expect(summary.knownCount).toBe(0);
     expect(summary.unknownCount).toBe(2);
-    expect(summary.buckets.map((bucket) => `${bucket.key}:${bucket.label}:${bucket.count}`)).toEqual([
-      'strong_first:Strongly favors canonical first value:0',
-      'lean_first:Somewhat favors canonical first value:0',
-      'neutral:Neutral:0',
-      'lean_second:Somewhat favors canonical second value:0',
-      'strong_second:Strongly favors canonical second value:0',
-      'unknown:Unknown:2',
+    expect(summary.buckets.map((bucket) => `${bucket.label}:${bucket.count}`)).toEqual([
+      'Strongly favors canonical first value:0',
+      'Somewhat favors canonical first value:0',
+      'Neutral:0',
+      'Somewhat favors canonical second value:0',
+      'Strongly favors canonical second value:0',
+      'Unknown:2',
     ]);
   });
 });

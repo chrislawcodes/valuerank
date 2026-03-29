@@ -21,9 +21,7 @@ import { formatDisplayLabel } from '../utils/displayLabels';
 import { requireRenderableTranscriptDecisionModelV2 } from '../utils/transcriptDecisionModel';
 import { filterTranscriptsForPivotCell } from '../utils/scenarioUtils';
 import {
-  CONDITION_DECISION_BUCKET_ORDER,
   summarizeConditionDecisionBuckets,
-  type ConditionDecisionBucketKey,
 } from '../utils/conditionDecisionSummary';
 
 type AnalysisDetailMode = 'single' | 'paired';
@@ -88,24 +86,6 @@ function buildDetailRow(
     summary: summarizeConditionDecisionBuckets(renderableTranscripts),
     baseSearchParams,
   };
-}
-
-function getSummaryLabelPair(
-  rows: DetailRow[],
-  analysisMode: AnalysisDetailMode,
-): { firstValueLabel: string; secondValueLabel: string } | null {
-  const preferredRowIds = analysisMode === 'paired'
-    ? ['current', 'single', 'companion', 'pooled']
-    : ['single', 'current', 'companion', 'pooled'];
-
-  for (const rowId of preferredRowIds) {
-    const row = rows.find((candidate) => candidate.id === rowId);
-    if (row?.summary.labelPair) {
-      return row.summary.labelPair;
-    }
-  }
-
-  return null;
 }
 
 export function AnalysisConditionDetail() {
@@ -294,24 +274,19 @@ export function AnalysisConditionDetail() {
     selectedModel,
   ]);
 
-  const decisionSummaryLabels = useMemo(() => {
-    const labelPair = getSummaryLabelPair(detailRows, analysisMode);
-    const firstValueLabel = labelPair?.firstValueLabel ?? 'canonical first value';
-    const secondValueLabel = labelPair?.secondValueLabel ?? 'canonical second value';
+  const decisionSummaryBuckets = useMemo(() => {
+    const preferredRowIds = analysisMode === 'paired'
+      ? ['current', 'single', 'companion', 'pooled']
+      : ['single', 'current', 'companion', 'pooled'];
 
-    const labels: Record<ConditionDecisionBucketKey, string> = {
-      strong_first: `Strongly favors ${firstValueLabel}`,
-      lean_first: `Somewhat favors ${firstValueLabel}`,
-      neutral: 'Neutral',
-      lean_second: `Somewhat favors ${secondValueLabel}`,
-      strong_second: `Strongly favors ${secondValueLabel}`,
-      unknown: 'Unknown',
-    };
+    for (const rowId of preferredRowIds) {
+      const row = detailRows.find((candidate) => candidate.id === rowId);
+      if (row?.summary.labelPair) {
+        return row.summary.buckets;
+      }
+    }
 
-    return CONDITION_DECISION_BUCKET_ORDER.map((key) => ({
-      key,
-      label: labels[key],
-    }));
+    return detailRows[0]?.summary.buckets ?? [];
   }, [analysisMode, detailRows]);
 
   const hasUnresolvedTranscripts = detailRows.some((row) => row.summary.unknownCount > 0);
@@ -347,27 +322,18 @@ export function AnalysisConditionDetail() {
     );
   }
 
-  const handleBucketClick = (row: DetailRow, bucketKey: ConditionDecisionBucketKey) => {
-    const count = row.summary.buckets.find((bucket) => bucket.key === bucketKey)?.count ?? 0;
-    if (count === 0) {
-      return;
-    }
-
-    if (bucketKey === 'unknown') {
+  const handleBucketClick = (row: DetailRow, bucketIndex: number) => {
+    const bucket = row.summary.buckets[bucketIndex];
+    if (!bucket || bucket.count === 0 || !bucket.filterParams) {
       return;
     }
 
     const params = new URLSearchParams(row.baseSearchParams);
-    const bucketDecisionCodeMap: Record<Exclude<ConditionDecisionBucketKey, 'unknown'>, string> = {
-      strong_first: '5',
-      lean_first: '4',
-      neutral: '3',
-      lean_second: '2',
-      strong_second: '1',
-    };
-    const decisionCode = bucketDecisionCodeMap[bucketKey];
+    params.set('decisionStrength', bucket.filterParams.decisionStrength);
+    if (bucket.filterParams.favoredValueKey) {
+      params.set('favoredValueKey', bucket.filterParams.favoredValueKey);
+    }
 
-    params.set('decisionCode', decisionCode);
     navigate(buildAnalysisTranscriptsPath(ANALYSIS_BASE_PATH, run.id, params));
   };
 
@@ -416,13 +382,13 @@ export function AnalysisConditionDetail() {
               <th className="border-b border-gray-200 bg-gray-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                 Vignette Scope
               </th>
-              {decisionSummaryLabels.map(({ key, label }) => (
+              {decisionSummaryBuckets.map((bucket, index) => (
                 <th
-                  key={key}
+                  key={`${index}-${bucket.label}`}
                   className="border-b border-gray-200 bg-gray-50 px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-600"
                 >
                   <div className="mx-auto flex max-w-[8rem] flex-col items-center gap-1 whitespace-normal leading-tight">
-                    <span>{label}</span>
+                    <span>{bucket.label}</span>
                   </div>
                 </th>
               ))}
@@ -440,17 +406,16 @@ export function AnalysisConditionDetail() {
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">
                   {row.label}
                 </td>
-                {CONDITION_DECISION_BUCKET_ORDER.map((bucketKey) => {
-                  const bucket = row.summary.buckets.find((entry) => entry.key === bucketKey);
-                  const count = bucket?.count ?? 0;
+                {row.summary.buckets.map((bucket, index) => {
+                  const count = bucket.count;
                   return (
-                    <td key={`${row.id}-${bucketKey}`} className="px-3 py-3 text-center text-sm text-gray-700">
+                    <td key={`${row.id}-${index}`} className="px-3 py-3 text-center text-sm text-gray-700">
                       {count > 0 ? (
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleBucketClick(row, bucketKey)}
+                          onClick={() => handleBucketClick(row, index)}
                           className="h-auto min-h-0 px-1 py-0 font-medium text-teal-700 hover:bg-transparent hover:text-teal-800"
                         >
                           {count}

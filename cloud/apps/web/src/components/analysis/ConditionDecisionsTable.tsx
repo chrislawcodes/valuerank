@@ -367,7 +367,7 @@ export function ConditionDecisionsTable({
     return summaryMap;
   }, [sortedConditionRows, transcriptIndex, visibleModels]);
 
-  const handleCellClick = (modelId: string, row: OrientedConditionRow, options?: { decisionCode?: string }) => {
+  const handleCellClick = (modelId: string, row: OrientedConditionRow, options?: { decisionStrength?: 'unknown' }) => {
     const params = new URLSearchParams({
       rowDim: attributeA,
       colDim: attributeB,
@@ -385,8 +385,8 @@ export function ConditionDecisionsTable({
         params.set('sourceRun', 'pooled');
       }
     }
-    if (options?.decisionCode) {
-      params.set('decisionCode', options.decisionCode);
+    if (options?.decisionStrength) {
+      params.set('decisionStrength', options.decisionStrength);
     }
     navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params, analysisSearchParams));
   };
@@ -605,7 +605,7 @@ export function ConditionDecisionsTable({
                     <td
                       key={`${row.id}-${modelId}`}
                       className="border border-gray-200 px-3 py-2 text-center text-sm transition-colors"
-                      style={{ backgroundColor: hasResolvedCanonicalEvidence ? getCanonicalConditionBackground(stats.selectedValueWinRate ?? 0, stats.isOpponent) : undefined }}
+                      style={{ backgroundColor: hasResolvedCanonicalEvidence ? getCanonicalConditionBackground(stats.winnerScore ?? 0, stats.isOpponent) : undefined }}
                     >
                       <Button
                         type="button"
@@ -613,12 +613,12 @@ export function ConditionDecisionsTable({
                         size="sm"
                         className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
                         title={title}
-                        onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionCode: 'other' } : undefined)}
+                        onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionStrength: 'unknown' } : undefined)}
                       >
                         {hasResolvedCanonicalEvidence ? (
                           <span className={`inline-flex flex-col items-center ${getCanonicalConditionTextColor(stats.isOpponent)}`}>
                             <span className="font-semibold">
-                              {stats.selectedValueWinRate == null ? '—' : `${Math.round(stats.selectedValueWinRate * 100)}%`}
+                              {stats.winnerScore == null ? '—' : stats.winnerScore.toFixed(1)}
                             </span>
                           </span>
                         ) : (

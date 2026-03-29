@@ -165,7 +165,16 @@ export function AnalysisTranscripts() {
   const row = searchParams.get('row') ?? '';
   const col = searchParams.get('col') ?? '';
   const selectedModel = searchParams.get('modelId') ?? searchParams.get('model') ?? '';
-  const decisionCode = searchParams.get('decisionCode') ?? '';
+  const favoredValueKey = searchParams.get('favoredValueKey') ?? '';
+  const decisionStrength = searchParams.get('decisionStrength') ?? '';
+  const hasLegacyDecisionCode = searchParams.has('decisionCode');
+  const normalizedFavoredValueKey = favoredValueKey === '' ? undefined : favoredValueKey;
+  const normalizedDecisionStrength = decisionStrength === 'strong'
+    || decisionStrength === 'lean'
+    || decisionStrength === 'neutral'
+    || decisionStrength === 'unknown'
+    ? decisionStrength
+    : undefined;
   const decisionBucket = searchParams.get('decisionBucket') ?? '';
   const repeatPattern = searchParams.get('repeatPattern') ?? '';
   const selectedTranscriptId = searchParams.get('transcriptId') ?? '';
@@ -364,6 +373,13 @@ export function AnalysisTranscripts() {
 
     return new Error('Split paired condition inspection requires sourceRun=current or sourceRun=companion.');
   }, [analysisMode, hasLegacyOrientationBucket, hasPairedConditionFilterParams, pairView, pairedConditionSource]);
+  const legacyDecisionCodeError = useMemo(() => {
+    if (!hasLegacyDecisionCode) {
+      return null;
+    }
+
+    return new Error('Legacy decisionCode URLs are no longer supported. Reopen the condition detail page to get a semantic transcript link.');
+  }, [hasLegacyDecisionCode]);
   const dimensionLabels = useMemo(
     () => deriveDecisionDimensionLabels(definitionContent),
     [definitionContent]
@@ -508,7 +524,8 @@ export function AnalysisTranscripts() {
             row,
             col,
             selectedModel,
-            decisionCode: decisionCode || undefined,
+            favoredValueKey: normalizedFavoredValueKey,
+            decisionStrength: normalizedDecisionStrength,
           });
         }
 
@@ -520,7 +537,8 @@ export function AnalysisTranscripts() {
           row,
           col,
           selectedModel,
-          decisionCode: decisionCode || undefined,
+          favoredValueKey: normalizedFavoredValueKey,
+          decisionStrength: normalizedDecisionStrength,
         });
       });
     }
@@ -597,7 +615,8 @@ export function AnalysisTranscripts() {
       row,
       col,
       selectedModel,
-      decisionCode: decisionCode || undefined,
+      favoredValueKey: normalizedFavoredValueKey,
+      decisionStrength: normalizedDecisionStrength,
     });
   }, [
     scenarioDimensions,
@@ -607,8 +626,9 @@ export function AnalysisTranscripts() {
     row,
     col,
     selectedModel,
+    normalizedFavoredValueKey,
+    normalizedDecisionStrength,
     conditionIds,
-    decisionCode,
     decisionBucket,
     hasRepeatPatternParams,
     hasPairedConditionFilterParams,
@@ -978,6 +998,8 @@ export function AnalysisTranscripts() {
         </div>
       ) : pairedConditionStateError ? (
         <ErrorMessage message={pairedConditionStateError.message} />
+      ) : legacyDecisionCodeError ? (
+        <ErrorMessage message={legacyDecisionCodeError.message} />
       ) : reportStateError ? (
         <ErrorMessage message={reportStateError.message} />
       ) : !hasDirectTranscriptParam && !hasRepeatPatternParams && !hasPairedValueFilterParams && !hasPairedConditionFilterParams && scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
