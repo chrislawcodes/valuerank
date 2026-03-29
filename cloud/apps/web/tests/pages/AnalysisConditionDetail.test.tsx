@@ -404,6 +404,83 @@ describe('AnalysisConditionDetail', () => {
     ]);
   });
 
+  it('falls back to a later paired row when the preferred row has no resolved label pair', () => {
+    const currentRun = createRun('run-1', 'A_first', []);
+    const companionRun = createRun('run-2', 'B_first', [
+      createTranscript(
+        'tx-2',
+        's2',
+        'B_first',
+        '5',
+        {
+          favoredValueKey: 'Conformity_Interpersonal',
+          opposedValueKey: 'Achievement',
+        },
+      ),
+    ]);
+
+    mockUseRun.mockImplementation((args?: { id?: string }) => {
+      if (args?.id === 'run-2') {
+        return {
+          run: companionRun,
+          loading: false,
+          error: null,
+          refetch: vi.fn(),
+        };
+      }
+
+      return {
+        run: currentRun,
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+      };
+    });
+
+    mockUseRuns.mockReturnValue({
+      runs: [companionRun],
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    mockUseAnalysis.mockImplementation((args?: { runId?: string }) => {
+      if (args?.runId === 'run-2') {
+        return {
+          analysis: createAnalysis('run-2', 's2'),
+          loading: false,
+          error: null,
+          refetch: vi.fn(),
+          recompute: vi.fn(),
+          recomputing: false,
+        };
+      }
+
+      return {
+        analysis: createAnalysis('run-1', 's1'),
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+        recompute: vi.fn(),
+        recomputing: false,
+      };
+    });
+
+    renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
+
+    const headers = screen
+      .getAllByRole('columnheader')
+      .map((header) => header.textContent?.replace(/\s+/g, ' ').trim() ?? '');
+
+    expect(headers.slice(1, 6)).toEqual([
+      'Strongly favors Achievement',
+      'Somewhat favors Achievement',
+      'Neutral',
+      'Somewhat favors Conformity Interpersonal',
+      'Strongly favors Conformity Interpersonal',
+    ]);
+  });
+
   it('routes a pooled row count click to the matching transcript slice', () => {
     renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
     const row = screen.getByText('Pooled').closest('tr');
@@ -413,7 +490,7 @@ describe('AnalysisConditionDetail', () => {
     fireEvent.click(buttons[0]);
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=High&col=Low&modelId=model1&mode=paired&companionRunId=run-2&pairView=condition-blended&sourceRun=pooled&decisionCode=5'
+      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=High&col=Low&modelId=model1&mode=paired&companionRunId=run-2&pairView=condition-blended&sourceRun=pooled&decisionStrength=strong&favoredValueKey=Freedom'
     );
   });
 
@@ -517,7 +594,7 @@ describe('AnalysisConditionDetail', () => {
     fireEvent.click(button);
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=High&col=Low&modelId=model1&mode=paired&companionRunId=run-2&pairView=condition-split&sourceRun=current&decisionCode=5'
+      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=High&col=Low&modelId=model1&mode=paired&companionRunId=run-2&pairView=condition-split&sourceRun=current&decisionStrength=strong&favoredValueKey=Freedom'
     );
   });
 

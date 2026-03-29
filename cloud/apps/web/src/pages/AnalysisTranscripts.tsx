@@ -165,7 +165,15 @@ export function AnalysisTranscripts() {
   const row = searchParams.get('row') ?? '';
   const col = searchParams.get('col') ?? '';
   const selectedModel = searchParams.get('modelId') ?? searchParams.get('model') ?? '';
-  const decisionCode = searchParams.get('decisionCode') ?? '';
+  const favoredValueKey = searchParams.get('favoredValueKey') ?? '';
+  const decisionStrength = searchParams.get('decisionStrength') ?? '';
+  const normalizedFavoredValueKey = favoredValueKey === '' ? undefined : favoredValueKey;
+  const normalizedDecisionStrength = decisionStrength === 'strong'
+    || decisionStrength === 'lean'
+    || decisionStrength === 'neutral'
+    || decisionStrength === 'unknown'
+    ? decisionStrength
+    : undefined;
   const decisionBucket = searchParams.get('decisionBucket') ?? '';
   const repeatPattern = searchParams.get('repeatPattern') ?? '';
   const selectedTranscriptId = searchParams.get('transcriptId') ?? '';
@@ -508,7 +516,8 @@ export function AnalysisTranscripts() {
             row,
             col,
             selectedModel,
-            decisionCode: decisionCode || undefined,
+            favoredValueKey: normalizedFavoredValueKey,
+            decisionStrength: normalizedDecisionStrength,
           });
         }
 
@@ -520,7 +529,8 @@ export function AnalysisTranscripts() {
           row,
           col,
           selectedModel,
-          decisionCode: decisionCode || undefined,
+          favoredValueKey: normalizedFavoredValueKey,
+          decisionStrength: normalizedDecisionStrength,
         });
       });
     }
@@ -597,7 +607,8 @@ export function AnalysisTranscripts() {
       row,
       col,
       selectedModel,
-      decisionCode: decisionCode || undefined,
+      favoredValueKey: normalizedFavoredValueKey,
+      decisionStrength: normalizedDecisionStrength,
     });
   }, [
     scenarioDimensions,
@@ -607,8 +618,9 @@ export function AnalysisTranscripts() {
     row,
     col,
     selectedModel,
+    normalizedFavoredValueKey,
+    normalizedDecisionStrength,
     conditionIds,
-    decisionCode,
     decisionBucket,
     hasRepeatPatternParams,
     hasPairedConditionFilterParams,
