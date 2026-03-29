@@ -167,6 +167,7 @@ export function AnalysisTranscripts() {
   const selectedModel = searchParams.get('modelId') ?? searchParams.get('model') ?? '';
   const favoredValueKey = searchParams.get('favoredValueKey') ?? '';
   const decisionStrength = searchParams.get('decisionStrength') ?? '';
+  const hasLegacyDecisionCode = searchParams.has('decisionCode');
   const normalizedFavoredValueKey = favoredValueKey === '' ? undefined : favoredValueKey;
   const normalizedDecisionStrength = decisionStrength === 'strong'
     || decisionStrength === 'lean'
@@ -372,6 +373,13 @@ export function AnalysisTranscripts() {
 
     return new Error('Split paired condition inspection requires sourceRun=current or sourceRun=companion.');
   }, [analysisMode, hasLegacyOrientationBucket, hasPairedConditionFilterParams, pairView, pairedConditionSource]);
+  const legacyDecisionCodeError = useMemo(() => {
+    if (!hasLegacyDecisionCode) {
+      return null;
+    }
+
+    return new Error('Legacy decisionCode URLs are no longer supported. Reopen the condition detail page to get a semantic transcript link.');
+  }, [hasLegacyDecisionCode]);
   const dimensionLabels = useMemo(
     () => deriveDecisionDimensionLabels(definitionContent),
     [definitionContent]
@@ -990,6 +998,8 @@ export function AnalysisTranscripts() {
         </div>
       ) : pairedConditionStateError ? (
         <ErrorMessage message={pairedConditionStateError.message} />
+      ) : legacyDecisionCodeError ? (
+        <ErrorMessage message={legacyDecisionCodeError.message} />
       ) : reportStateError ? (
         <ErrorMessage message={reportStateError.message} />
       ) : !hasDirectTranscriptParam && !hasRepeatPatternParams && !hasPairedValueFilterParams && !hasPairedConditionFilterParams && scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
