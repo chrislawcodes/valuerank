@@ -45,6 +45,8 @@ type ConditionDecisionsTableProps = {
   expectedAttributes?: string[];
   title?: string;
   description?: string | null;
+  currentVignetteName?: string | null;
+  companionVignetteName?: string | null;
 };
 
 function inferModelFamily(modelId: string): { key: string; label: string } {
@@ -243,6 +245,8 @@ export function ConditionDecisionsTable({
   expectedAttributes = [],
   title = 'Condition Decisions',
   description = null,
+  currentVignetteName,
+  companionVignetteName,
 }: ConditionDecisionsTableProps) {
   const meanTableRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -266,8 +270,8 @@ export function ConditionDecisionsTable({
   const [inspectionMode, setInspectionMode] = useState<OrientationInspectionMode>('pooled');
   const splitSourceLabels = canSplitOrientations
     ? {
-        current: 'Current vignette',
-        companion: 'Companion vignette',
+        current: currentVignetteName ?? 'Current vignette',
+        companion: companionVignetteName ?? 'Companion vignette',
       }
     : null;
 

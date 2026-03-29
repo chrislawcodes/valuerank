@@ -626,6 +626,8 @@ export function AnalysisPanel({
             transcripts={scenariosTranscripts}
             expectedAttributes={expectedScenarioAttributes}
             companionRunId={analysisMode === 'paired' ? companionRun?.id ?? null : null}
+            currentVignetteName={currentRun?.definition?.name ?? null}
+            companionVignetteName={companionRun?.definition?.name ?? null}
           />
         )}
       </div>

@@ -28,7 +28,7 @@ vi.mock('react-router-dom', async () => {
 });
 
 vi.mock('../../src/hooks/useRun', () => ({
-  useRun: () => mockUseRun(),
+  useRun: (args: { id?: string }) => mockUseRun(args),
 }));
 
 vi.mock('../../src/hooks/useRuns', () => ({
@@ -36,7 +36,7 @@ vi.mock('../../src/hooks/useRuns', () => ({
 }));
 
 vi.mock('../../src/hooks/useAnalysis', () => ({
-  useAnalysis: () => mockUseAnalysis(),
+  useAnalysis: (args: unknown) => mockUseAnalysis(args),
 }));
 
 vi.mock('../../src/hooks/useRunMutations', () => ({
@@ -417,7 +417,7 @@ describe('AnalysisTranscripts', () => {
 
     renderPage('/analysis/run-1/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&row=High&col=Low&companionRunId=run-2&modelId=model1&pairView=condition-split&sourceRun=current');
 
-    expect(screen.getByText('Current vignette', { selector: '.rounded-lg.border-teal-200.bg-teal-50.p-3 span.font-medium' })).toBeInTheDocument();
+    expect(screen.getByText('Test Definition', { selector: '.rounded-lg.border-teal-200.bg-teal-50.p-3 span.font-medium' })).toBeInTheDocument();
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 1');
   });
 
@@ -426,7 +426,7 @@ describe('AnalysisTranscripts', () => {
 
     renderPage('/analysis/run-1/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&row=High&col=Low&companionRunId=run-2&modelId=model1&pairView=condition-split&sourceRun=companion');
 
-    expect(screen.getByText('Companion vignette', { selector: '.rounded-lg.border-teal-200.bg-teal-50.p-3 span.font-medium' })).toBeInTheDocument();
+    expect(screen.getByText('Harmony -> Freedom', { selector: '.rounded-lg.border-teal-200.bg-teal-50.p-3 span.font-medium' })).toBeInTheDocument();
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 1');
   });
 

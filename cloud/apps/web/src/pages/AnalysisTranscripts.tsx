@@ -84,16 +84,20 @@ function parsePairedConditionSource(value: string | null): PairedConditionSource
   return null;
 }
 
-function formatPairedConditionSourceLabel(source: PairedConditionSource | null): string | null {
+function formatPairedConditionSourceLabel(
+  source: PairedConditionSource | null,
+  currentName?: string | null,
+  companionName?: string | null,
+): string | null {
   if (!source) {
     return null;
   }
 
   if (source === 'current') {
-    return 'Current vignette';
+    return currentName ?? 'Current vignette';
   }
   if (source === 'companion') {
-    return 'Companion vignette';
+    return companionName ?? 'Companion vignette';
   }
   return 'Pooled';
 }
@@ -840,7 +844,7 @@ export function AnalysisTranscripts() {
               {pairedConditionSource && (
                 <>
                   <span className="mx-2">•</span>
-                  Source: <span className="font-medium text-gray-900">{formatPairedConditionSourceLabel(pairedConditionSource)}</span>
+                  Source: <span className="font-medium text-gray-900">{formatPairedConditionSourceLabel(pairedConditionSource, run?.definition?.name, companionRun?.definition?.name)}</span>
                 </>
               )}
               {pairedValueLabel && (
@@ -877,7 +881,7 @@ export function AnalysisTranscripts() {
         <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">
           {pairView === 'condition-split' && pairedConditionSource ? (
             <>
-              Paired source inspection is active for the <span className="font-medium">{formatPairedConditionSourceLabel(pairedConditionSource)}</span> transcripts in this condition cell.
+              Paired source inspection is active for the <span className="font-medium">{formatPairedConditionSourceLabel(pairedConditionSource, run?.definition?.name, companionRun?.definition?.name)}</span> transcripts in this condition cell.
             </>
           ) : (
             <>
@@ -932,7 +936,7 @@ export function AnalysisTranscripts() {
             </div>
           )}
           <section className="space-y-3">
-            <h3 className="text-sm font-semibold text-gray-700">Primary vignette order</h3>
+            <h3 className="text-sm font-semibold text-gray-700">{run?.definition?.name ?? 'Primary vignette order'}</h3>
             {primaryStabilityTranscripts.length > 0 ? (
               <TranscriptList
                 transcripts={primaryStabilityTranscripts}
@@ -952,7 +956,7 @@ export function AnalysisTranscripts() {
             )}
           </section>
           <section className="space-y-3">
-            <h3 className="text-sm font-semibold text-gray-700">Companion vignette order</h3>
+            <h3 className="text-sm font-semibold text-gray-700">{companionRun?.definition?.name ?? 'Companion vignette order'}</h3>
             {companionStabilityTranscripts.length > 0 ? (
               <TranscriptList
                 transcripts={companionStabilityTranscripts}
