@@ -268,7 +268,7 @@ describe('PivotAnalysisTable', () => {
     );
 
     // s1 (a1, b1) has favor_first strong → win rate = 100%
-    fireEvent.click(screen.getByText('100%'));
+    fireEvent.click(screen.getByText('2.0'));
 
     expect(mockNavigate).toHaveBeenCalledWith(
       '/analysis/run-1/conditions/a1%7C%7Cb1?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired'
@@ -288,7 +288,7 @@ describe('PivotAnalysisTable', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByText('100%'));
+    fireEvent.click(screen.getByText('2.0'));
 
     expect(mockNavigate).toHaveBeenCalledWith(
       '/analysis/run-1/conditions/a1%7C%7Cb1?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired'
@@ -307,7 +307,7 @@ describe('PivotAnalysisTable', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByText('100%'));
+    fireEvent.click(screen.getByText('2.0'));
 
     expect(mockNavigate).toHaveBeenCalledWith(
       '/analysis/run-1/conditions/a1%7C%7Cb1?rowDim=Freedom&colDim=Harmony&modelId=model1'

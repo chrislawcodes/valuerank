@@ -9,6 +9,7 @@ export type CanonicalConditionSummary = {
   unknownCount: number;
   totalTrials: number;
   selectedValueWinRate: number | null;
+  winnerScore: number | null;
   isOpponent: boolean;
 };
 
@@ -119,6 +120,7 @@ export function summarizeCanonicalConditionTranscripts(
       ...counts,
       totalTrials,
       selectedValueWinRate: null,
+      winnerScore: null,
       isOpponent: false,
     };
   }
@@ -126,19 +128,23 @@ export function summarizeCanonicalConditionTranscripts(
   const selectedValueWinRate = (counts.strongly + counts.somewhat) / totalTrials;
   const isOpponent = (selectedValueWinRate ?? 0.5) < 0.5;
 
+  const winnerStrongly = isOpponent ? counts.opponentStrongly : counts.strongly;
+  const winnerSomewhat = isOpponent ? counts.opponentSomewhat : counts.somewhat;
+  const winnerScore = (2 * winnerStrongly + 1 * winnerSomewhat) / totalTrials;
+
   return {
     ...counts,
     totalTrials,
     selectedValueWinRate,
+    winnerScore,
     isOpponent,
   };
 }
 
 export function getCanonicalConditionBackground(score: number, isOpponent: boolean): string {
-  // score is selectedValueWinRate (0–1). Opacity reflects distance from 0.5 (neutral),
-  // mapped to 0–1 so both strong-selected (1.0) and strong-opponent (0.0) render at full intensity.
-  const clamped = Math.min(1, Math.max(0, score));
-  const opacity = Math.abs(clamped - 0.5) * 2;
+  // score is winnerScore (0–2). Opacity scales linearly from 0 (no conviction) to 1 (max conviction).
+  const clamped = Math.min(2, Math.max(0, score));
+  const opacity = clamped / 2;
   if (isOpponent) {
     return `rgba(251, 146, 60, ${opacity * 0.5})`;
   }

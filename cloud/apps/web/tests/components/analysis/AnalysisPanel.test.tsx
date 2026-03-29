@@ -425,9 +425,10 @@ describe('AnalysisPanel', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /^Conditions$/i }));
 
-    // PivotAnalysisTable and ConditionDecisionsTable now show win rates as percentages.
+    // PivotAnalysisTable and ConditionDecisionsTable now show winner's weighted score (0–2).
+    // t1=strongly(1) + t2=somewhat(1), totalTrials=2 → winnerScore=(2×1+1×1)/2=1.5
     const canonicalScore = screen
-      .getAllByText('100%')
+      .getAllByText('1.5')
       .find((element) => element.className.includes('text-blue-700'));
     expect(canonicalScore).toBeDefined();
     expect(canonicalScore).toHaveClass('text-blue-700');
