@@ -30,20 +30,18 @@ describe('extractValuePair', () => {
     });
   });
 
-  it('reverses B-first paired definitions', () => {
+  it('returns dimension order regardless of methodology', () => {
     expect(
       extractValuePair({
         dimensions: [
           { name: 'achievement' },
           { name: 'benevolence_dependability' },
         ],
-        methodology: {
-          presentation_order: 'B_first',
-        },
+        methodology: {},
       }),
     ).toEqual({
-      valueA: 'Benevolence_Dependability',
-      valueB: 'Achievement',
+      valueA: 'Achievement',
+      valueB: 'Benevolence_Dependability',
     });
   });
 
