@@ -572,8 +572,11 @@ describe('GraphQL Run Mutations', () => {
             methodology: {
               family: 'job-choice',
               response_scale: 'option_text_short',
-              presentation_order: 'A_first',
               pair_key: pairKey,
+            },
+            components: {
+              value_first: { token: 'career' },
+              value_second: { token: 'family' },
             },
           },
         },
@@ -587,8 +590,11 @@ describe('GraphQL Run Mutations', () => {
             methodology: {
               family: 'job-choice',
               response_scale: 'option_text_short',
-              presentation_order: 'B_first',
               pair_key: pairKey,
+            },
+            components: {
+              value_first: { token: 'family' },
+              value_second: { token: 'career' },
             },
           },
         },
@@ -675,8 +681,8 @@ describe('GraphQL Run Mutations', () => {
       expect((bRun?.config as Record<string, unknown>).jobChoiceLaunchMode).toBe('PAIRED_BATCH');
       expect((aRun?.config as Record<string, unknown>).methodologySafe).toBe(true);
       expect((bRun?.config as Record<string, unknown>).methodologySafe).toBe(true);
-      expect((aRun?.config as Record<string, unknown>).jobChoicePresentationOrder).toBe('A_first');
-      expect((bRun?.config as Record<string, unknown>).jobChoicePresentationOrder).toBe('B_first');
+      expect((aRun?.config as Record<string, unknown>).jobChoiceValueFirst).toBe('career');
+      expect((bRun?.config as Record<string, unknown>).jobChoiceValueFirst).toBe('family');
       expect((aRun?.config as Record<string, unknown>).jobChoiceBatchGroupId).toBe(
         (bRun?.config as Record<string, unknown>).jobChoiceBatchGroupId
       );

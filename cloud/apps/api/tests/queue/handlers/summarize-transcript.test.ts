@@ -308,9 +308,8 @@ describe('summarize-transcript handler', () => {
             canonicalDecision: {
               cacheVersion: 1,
               decisionState: 'resolved',
-              favoredValueKey: 'Achievement',
+              favoredValueKey: 'Benevolence_Dependability',
               strength: 'strong',
-              presentationOrder: 'B_first',
             },
           },
         },

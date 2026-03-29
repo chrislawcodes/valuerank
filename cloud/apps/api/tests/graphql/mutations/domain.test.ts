@@ -503,7 +503,8 @@ describe('GraphQL Domain Mutations', () => {
           domainId: domain.id,
           version: 1,
           content: {
-            methodology: { family: 'job-choice', pair_key: 'pair1', presentation_order: 'A_first' },
+            methodology: { family: 'job-choice', pair_key: 'pair1' },
+            components: { value_first: { token: 'career' }, value_second: { token: 'family' } },
           },
           createdByUserId: TEST_USER.id,
         },
@@ -514,7 +515,8 @@ describe('GraphQL Domain Mutations', () => {
           domainId: domain.id,
           version: 1,
           content: {
-            methodology: { family: 'job-choice', pair_key: 'pair1', presentation_order: 'B_first' },
+            methodology: { family: 'job-choice', pair_key: 'pair1' },
+            components: { value_first: { token: 'family' }, value_second: { token: 'career' } },
           },
           createdByUserId: TEST_USER.id,
         },
@@ -539,8 +541,8 @@ describe('GraphQL Domain Mutations', () => {
       expect(callB?.configExtras?.jobChoiceLaunchMode).toBe('PAIRED_BATCH');
       expect(callA?.configExtras?.jobChoiceBatchGroupId).toBeTruthy();
       expect(callA?.configExtras?.jobChoiceBatchGroupId).toBe(callB?.configExtras?.jobChoiceBatchGroupId);
-      expect(callA?.configExtras?.jobChoicePresentationOrder).toBe('A_first');
-      expect(callB?.configExtras?.jobChoicePresentationOrder).toBe('B_first');
+      expect(callA?.configExtras?.jobChoiceValueFirst).toBe('career');
+      expect(callB?.configExtras?.jobChoiceValueFirst).toBe('family');
     });
 
     it('launches two distinct pairs as two batches with different batchGroupIds', async () => {
@@ -550,10 +552,10 @@ describe('GraphQL Domain Mutations', () => {
       createdDomainIds.push(domain.id);
 
       const [p1a, p1b, p2a, p2b] = await Promise.all([
-        db.definition.create({ data: { name: 'Pair1 A', domainId: domain.id, version: 1, content: { methodology: { family: 'job-choice', pair_key: 'p1', presentation_order: 'A_first' } }, createdByUserId: TEST_USER.id } }),
-        db.definition.create({ data: { name: 'Pair1 B', domainId: domain.id, version: 1, content: { methodology: { family: 'job-choice', pair_key: 'p1', presentation_order: 'B_first' } }, createdByUserId: TEST_USER.id } }),
-        db.definition.create({ data: { name: 'Pair2 A', domainId: domain.id, version: 1, content: { methodology: { family: 'job-choice', pair_key: 'p2', presentation_order: 'A_first' } }, createdByUserId: TEST_USER.id } }),
-        db.definition.create({ data: { name: 'Pair2 B', domainId: domain.id, version: 1, content: { methodology: { family: 'job-choice', pair_key: 'p2', presentation_order: 'B_first' } }, createdByUserId: TEST_USER.id } }),
+        db.definition.create({ data: { name: 'Pair1 A', domainId: domain.id, version: 1, content: { methodology: { family: 'job-choice', pair_key: 'p1', presentation_order: 'A_first' }, components: { value_first: { token: 'career' }, value_second: { token: 'family' } } }, createdByUserId: TEST_USER.id } }),
+        db.definition.create({ data: { name: 'Pair1 B', domainId: domain.id, version: 1, content: { methodology: { family: 'job-choice', pair_key: 'p1', presentation_order: 'B_first' }, components: { value_first: { token: 'family' }, value_second: { token: 'career' } } }, createdByUserId: TEST_USER.id } }),
+        db.definition.create({ data: { name: 'Pair2 A', domainId: domain.id, version: 1, content: { methodology: { family: 'job-choice', pair_key: 'p2', presentation_order: 'A_first' }, components: { value_first: { token: 'freedom' }, value_second: { token: 'safety' } } }, createdByUserId: TEST_USER.id } }),
+        db.definition.create({ data: { name: 'Pair2 B', domainId: domain.id, version: 1, content: { methodology: { family: 'job-choice', pair_key: 'p2', presentation_order: 'B_first' }, components: { value_first: { token: 'safety' }, value_second: { token: 'freedom' } } }, createdByUserId: TEST_USER.id } }),
       ]);
       createdDefinitionIds.push(p1a.id, p1b.id, p2a.id, p2b.id);
 

@@ -4,7 +4,6 @@ import { createLogger } from '@valuerank/shared';
 import {
   transformJobChoiceDefinition,
   isTransformableJobChoiceTemplate,
-  type JobChoicePresentationOrder,
 } from './job-choice-transform.js';
 import { buildJobChoiceScenarios } from './job-choice-vignette-utils.js';
 
@@ -109,7 +108,7 @@ async function createJobChoiceDefinition(
   targetDomainId: string,
   tagId: string,
   preambleVersionIdOverride: string | null,
-  presentationOrder: JobChoicePresentationOrder,
+  swapped: boolean,
   pairKey: string,
 ): Promise<string> {
   const resolved = await resolveDefinitionContent(sourceDefinition.id);
@@ -118,11 +117,11 @@ async function createJobChoiceDefinition(
   }
 
   const transformed = transformJobChoiceDefinition(resolved.resolvedContent, {
-    presentationOrder,
+    swapped,
     pairKey,
   });
   const preambleVersionId = preambleVersionIdOverride ?? sourceDefinition.preambleVersionId ?? null;
-  const variantName = `${sourceDefinition.name} [Job Choice ${presentationOrder === 'A_first' ? 'A First' : 'B First'}]`;
+  const variantName = `${sourceDefinition.name} [Job Choice ${swapped ? 'B First' : 'A First'}]`;
 
   const created = await db.$transaction(async (tx) => {
     const definition = await tx.definition.create({
@@ -185,8 +184,8 @@ async function main(): Promise<void> {
     summary.transformable += 1;
     const pairKey = `job-choice:${definition.id}`;
 
-    for (const presentationOrder of ['A_first', 'B_first'] as const) {
-      const variantName = `${definition.name} [Job Choice ${presentationOrder === 'A_first' ? 'A First' : 'B First'}]`;
+    for (const swapped of [false, true]) {
+      const variantName = `${definition.name} [Job Choice ${swapped ? 'B First' : 'A First'}]`;
       const existing = await db.definition.findFirst({
         where: {
           name: variantName,
@@ -209,12 +208,12 @@ async function main(): Promise<void> {
         targetDomain.id,
         jobChoiceTag.id,
         args.preambleVersionId,
-        presentationOrder,
+        swapped,
         pairKey,
       );
       summary.created += 1;
       log.info(
-        { sourceDefinitionId: definition.id, createdId, name: variantName, presentationOrder },
+        { sourceDefinitionId: definition.id, createdId, name: variantName, swapped },
         'Created Job Choice definition'
       );
     }

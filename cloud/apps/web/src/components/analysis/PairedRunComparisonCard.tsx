@@ -27,7 +27,6 @@ type PairedRunComparisonCardProps = {
   embedded?: boolean;
 };
 
-type JobChoicePresentationOrder = 'A_first' | 'B_first';
 
 type ValueCounts = {
   first: number | null;
@@ -49,11 +48,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function getRunConfigPresentationOrder(run: Run): JobChoicePresentationOrder | null {
-  const raw = run.config?.jobChoicePresentationOrder;
-  return raw === 'A_first' || raw === 'B_first' ? raw : null;
-}
-
 function getRunConfigBatchGroupId(run: Run): string | null {
   if (typeof run.pairedBatchGroupId === 'string' && run.pairedBatchGroupId.trim().length > 0) {
     return run.pairedBatchGroupId;
@@ -67,22 +61,11 @@ function getRunCompanionRunId(run: Run): string | null {
   return typeof raw === 'string' && raw.trim().length > 0 ? raw : null;
 }
 
-function getDefinitionPresentationOrder(run: Run): JobChoicePresentationOrder | null {
-  const raw = run.definition?.content;
-  if (!isRecord(raw) || !isRecord(raw.methodology)) return null;
-  const value = raw.methodology.presentation_order;
-  return value === 'A_first' || value === 'B_first' ? value : null;
-}
-
 function getDefinitionPairKey(run: Run): string | null {
   const raw = run.definition?.content;
   if (!isRecord(raw) || !isRecord(raw.methodology)) return null;
   const value = raw.methodology.pair_key;
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
-}
-
-function getRunPresentationOrder(run: Run): JobChoicePresentationOrder | null {
-  return getRunConfigPresentationOrder(run) ?? getDefinitionPresentationOrder(run);
 }
 
 function getPriorityCount(
@@ -483,29 +466,11 @@ export function PairedRunComparisonCard({
   embedded = false,
 }: PairedRunComparisonCardProps) {
   const comparisonRef = useRef<HTMLElement>(null);
-  const currentOrder = getRunPresentationOrder(currentRun);
-  const companionOrder = companionRun ? getRunPresentationOrder(companionRun) : null;
 
-  const aFirstRun = currentOrder === 'A_first'
-    ? currentRun
-    : companionOrder === 'A_first'
-      ? companionRun
-      : null;
-  const bFirstRun = currentOrder === 'B_first'
-    ? currentRun
-    : companionOrder === 'B_first'
-      ? companionRun
-      : null;
-  const aFirstAnalysis = currentOrder === 'A_first'
-    ? currentAnalysis
-    : companionOrder === 'A_first'
-      ? companionAnalysis
-      : null;
-  const bFirstAnalysis = currentOrder === 'B_first'
-    ? currentAnalysis
-    : companionOrder === 'B_first'
-      ? companionAnalysis
-      : null;
+  const aFirstRun = currentRun;
+  const bFirstRun = companionRun ?? null;
+  const aFirstAnalysis = currentAnalysis;
+  const bFirstAnalysis = companionAnalysis ?? null;
 
   const labels = getPairedOrientationLabels(
     aFirstRun?.definition?.content ?? bFirstRun?.definition?.content ?? null,

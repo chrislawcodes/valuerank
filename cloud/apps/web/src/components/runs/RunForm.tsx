@@ -9,7 +9,7 @@ import { useAvailableModels } from '../../hooks/useAvailableModels';
 import { useCostEstimate } from '../../hooks/useCostEstimate';
 import { useRunConditionGrid } from '../../hooks/useRunConditionGrid';
 import type { StartRunInput } from '../../api/operations/runs';
-import { getDefinitionMethodology, getPairedOrientationLabels } from '../../utils/methodology';
+import { getDefinitionMethodology } from '../../utils/methodology';
 
 type RunFormProps = {
   definitionId: string;
@@ -33,7 +33,6 @@ export function RunForm({
   isSubmitting = false,
 }: RunFormProps) {
   const methodology = getDefinitionMethodology(definitionContent);
-  const orientationLabels = getPairedOrientationLabels(definitionContent);
   const isJobChoiceDefinition = methodology?.family === 'job-choice';
   const { models, loading: loadingModels, error: modelsError } = useAvailableModels({
     onlyAvailable: false,
@@ -190,15 +189,6 @@ export function RunForm({
               })}
             </div>
           </div>
-          {methodology?.presentation_order && (
-            <p className="text-xs text-gray-500">
-              This vignette is currently configured as{' '}
-              <span className="font-medium">
-                {orientationLabels.current}
-              </span>
-              . Paired batches use the matching companion definition to balance the order.
-            </p>
-          )}
         </div>
       )}
 

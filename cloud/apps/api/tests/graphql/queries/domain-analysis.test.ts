@@ -275,17 +275,20 @@ describe('GraphQL domain analysis', () => {
     expect(model).toBeDefined();
 
     const valueByKey = new Map(model?.values.map((value) => [value.valueKey, value]) ?? []);
+    // domainAnalysis uses legacy decisionCode-based counting.
+    // Both definitions now have valueA=Achievement (no presentation_order swap),
+    // so both decisionCode '5' transcripts count as Achievement prioritized.
     expect(valueByKey.get('Achievement')).toEqual({
       valueKey: 'Achievement',
-      prioritized: 1,
-      deprioritized: 1,
+      prioritized: 2,
+      deprioritized: 0,
       neutral: 0,
       totalComparisons: 2,
     });
     expect(valueByKey.get('Benevolence_Dependability')).toEqual({
       valueKey: 'Benevolence_Dependability',
-      prioritized: 1,
-      deprioritized: 1,
+      prioritized: 0,
+      deprioritized: 2,
       neutral: 0,
       totalComparisons: 2,
     });

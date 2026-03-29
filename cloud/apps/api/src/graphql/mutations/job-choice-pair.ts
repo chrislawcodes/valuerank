@@ -12,12 +12,13 @@ import { DefinitionRef } from '../types/refs.js';
 import type { DefinitionShape } from '../types/refs.js';
 import { createAuditLog } from '../../services/audit/index.js';
 import { applyLevelPresetToDefinitionContent } from '../../utils/definition-level-preset.js';
+import { findPairedCompanion } from '../../utils/auto-pair.js';
 
 type JobChoiceDefinitionContent = DefinitionContentV1 & {
   components: DefinitionComponents;
 };
 
-type JobChoicePairResult = { aFirst: DefinitionShape; bFirst: DefinitionShape };
+type JobChoicePairResult = { definitionA: DefinitionShape; definitionB: DefinitionShape };
 
 type ResolvedPairInputs = {
   domainId: string;
@@ -39,8 +40,8 @@ const CreateJobChoicePairResultRef =
 
 builder.objectType(CreateJobChoicePairResultRef, {
   fields: (t) => ({
-    aFirst: t.field({ type: DefinitionRef, resolve: (result) => result.aFirst }),
-    bFirst: t.field({ type: DefinitionRef, resolve: (result) => result.bFirst }),
+    definitionA: t.field({ type: DefinitionRef, resolve: (result) => result.definitionA }),
+    definitionB: t.field({ type: DefinitionRef, resolve: (result) => result.definitionB }),
   }),
 });
 
@@ -123,7 +124,6 @@ function buildJobChoicePairContent(
     methodology: {
       family: 'job-choice',
       response_scale: 'option_text',
-      presentation_order: 'A_first',
       pair_key: pairKey,
     },
     components: componentsAFirst,
@@ -135,7 +135,6 @@ function buildJobChoicePairContent(
     methodology: {
       family: 'job-choice',
       response_scale: 'option_text',
-      presentation_order: 'B_first',
       pair_key: pairKey,
     },
     components: componentsBFirst,
@@ -377,16 +376,13 @@ async function resolveJobChoicePair(definitionId: string) {
       ? contentRecord.methodology as Record<string, unknown>
       : null;
 
-  if (
-    methodology?.family !== 'job-choice'
-    || typeof methodology.pair_key !== 'string'
-    || (methodology.presentation_order !== 'A_first' && methodology.presentation_order !== 'B_first')
-  ) {
+  if (methodology?.family !== 'job-choice' || typeof methodology.pair_key !== 'string') {
     throw new Error('Definition is not a paired Job Choice vignette');
   }
 
-  const pairDefinitions = await db.definition.findMany({
+  const candidates = await db.definition.findMany({
     where: {
+      id: { not: definition.id },
       domainId: definition.domainId,
       deletedAt: null,
       content: {
@@ -394,40 +390,24 @@ async function resolveJobChoicePair(definitionId: string) {
         equals: methodology.pair_key,
       },
     },
-    select: {
-      id: true,
-      name: true,
-      content: true,
-    },
+    select: { id: true, name: true, content: true },
   });
 
-  const aFirst = pairDefinitions.find((candidate) => (
-    candidate.content != null
-    && typeof candidate.content === 'object'
-    && !Array.isArray(candidate.content)
-    && (candidate.content as Record<string, unknown>).methodology != null
-    && typeof (candidate.content as Record<string, unknown>).methodology === 'object'
-    && !Array.isArray((candidate.content as Record<string, unknown>).methodology)
-    && ((candidate.content as Record<string, unknown>).methodology as Record<string, unknown>).presentation_order === 'A_first'
-  ));
-  const bFirst = pairDefinitions.find((candidate) => (
-    candidate.content != null
-    && typeof candidate.content === 'object'
-    && !Array.isArray(candidate.content)
-    && (candidate.content as Record<string, unknown>).methodology != null
-    && typeof (candidate.content as Record<string, unknown>).methodology === 'object'
-    && !Array.isArray((candidate.content as Record<string, unknown>).methodology)
-    && ((candidate.content as Record<string, unknown>).methodology as Record<string, unknown>).presentation_order === 'B_first'
-  ));
+  const companion = findPairedCompanion(
+    { id: definition.id, content: definition.content },
+    candidates,
+  );
 
-  if (aFirst == null || bFirst == null) {
-    throw new Error('Paired Job Choice vignette is missing either the A-first or B-first definition');
+  if (companion == null) {
+    throw new Error('Paired Job Choice vignette is missing its companion with mirrored value tokens');
   }
+
+  const definitionB = companion as { id: string; name: string; content: unknown };
 
   return {
     pairKey: methodology.pair_key,
-    aFirst,
-    bFirst,
+    definitionA: { id: definition.id, name: definition.name, content: definition.content },
+    definitionB,
   };
 }
 
@@ -519,8 +499,8 @@ builder.mutationField('createJobChoicePair', (t) =>
 
       ctx.log.info(
         {
-          aFirstId: defA.id,
-          bFirstId: defB.id,
+          definitionAId: defA.id,
+          definitionBId: defB.id,
           pairKey,
           levelPresetVersionId: resolvedInputs.resolvedLevelPresetVersionId,
           scenarioCount: resolvedInputs.levelPresetVersion != null ? 50 : 2,
@@ -544,8 +524,8 @@ builder.mutationField('createJobChoicePair', (t) =>
       });
 
       return {
-        aFirst: defA as DefinitionShape,
-        bFirst: defB as DefinitionShape,
+        definitionA: defA as DefinitionShape,
+        definitionB: defB as DefinitionShape,
       };
     },
   }),
@@ -568,7 +548,7 @@ builder.mutationField('updateJobChoicePair', (t) =>
       const existingPair = await resolveJobChoicePair(definitionId);
       const domainId = (
         await db.definition.findUnique({
-          where: { id: existingPair.aFirst.id },
+          where: { id: existingPair.definitionA.id },
           select: { domainId: true },
         })
       )?.domainId;
@@ -602,12 +582,12 @@ builder.mutationField('updateJobChoicePair', (t) =>
 
       const [updatedA, updatedB] = await db.$transaction(async (tx) => {
         await tx.scenario.deleteMany({
-          where: { definitionId: { in: [existingPair.aFirst.id, existingPair.bFirst.id] } },
+          where: { definitionId: { in: [existingPair.definitionA.id, existingPair.definitionB.id] } },
         });
 
         const updatedDefinitions = await Promise.all([
           tx.definition.update({
-            where: { id: existingPair.aFirst.id },
+            where: { id: existingPair.definitionA.id },
             data: {
               name: buildJobChoiceDefinitionName(
                 input.name,
@@ -621,7 +601,7 @@ builder.mutationField('updateJobChoicePair', (t) =>
             },
           }),
           tx.definition.update({
-            where: { id: existingPair.bFirst.id },
+            where: { id: existingPair.definitionB.id },
             data: {
               name: buildJobChoiceDefinitionName(
                 input.name,
@@ -637,8 +617,8 @@ builder.mutationField('updateJobChoicePair', (t) =>
         ]);
 
         await createJobChoiceScenarios(tx, {
-          definitionAId: existingPair.aFirst.id,
-          definitionBId: existingPair.bFirst.id,
+          definitionAId: existingPair.definitionA.id,
+          definitionBId: existingPair.definitionB.id,
           contextText: resolvedInputs.context.text,
           componentsAFirst,
           componentsBFirst,
@@ -668,8 +648,8 @@ builder.mutationField('updateJobChoicePair', (t) =>
       ctx.log.info(
         {
           sourceDefinitionId: definitionId,
-          aFirstId: updatedA.id,
-          bFirstId: updatedB.id,
+          definitionAId: updatedA.id,
+          definitionBId: updatedB.id,
           pairKey: existingPair.pairKey,
           levelPresetVersionId: resolvedInputs.resolvedLevelPresetVersionId,
           scenarioCount: resolvedInputs.levelPresetVersion != null ? 50 : 2,
@@ -678,8 +658,8 @@ builder.mutationField('updateJobChoicePair', (t) =>
       );
 
       return {
-        aFirst: updatedA as DefinitionShape,
-        bFirst: updatedB as DefinitionShape,
+        definitionA: updatedA as DefinitionShape,
+        definitionB: updatedB as DefinitionShape,
       };
     },
   }),

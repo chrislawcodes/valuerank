@@ -33,7 +33,7 @@ type RunConfig = {
   estimatedCosts?: CostEstimateShape;
   companionRunId?: string | null;
   jobChoiceBatchGroupId?: string | null;
-  jobChoicePresentationOrder?: 'A_first' | 'B_first' | null;
+  jobChoiceValueFirst?: string | null;
   isAggregate?: boolean;
   sourceRunIds?: string[];
 };

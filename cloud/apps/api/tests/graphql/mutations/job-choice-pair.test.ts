@@ -9,8 +9,8 @@ const app = createServer();
 const CREATE_JOB_CHOICE_PAIR_MUTATION = `
   mutation CreateJobChoicePair($input: CreateJobChoicePairInput!) {
     createJobChoicePair(input: $input) {
-      aFirst { id name }
-      bFirst { id name }
+      definitionA { id name }
+      definitionB { id name }
     }
   }
 `;
@@ -18,8 +18,8 @@ const CREATE_JOB_CHOICE_PAIR_MUTATION = `
 const UPDATE_JOB_CHOICE_PAIR_MUTATION = `
   mutation UpdateJobChoicePair($input: UpdateJobChoicePairInput!) {
     updateJobChoicePair(input: $input) {
-      aFirst { id name }
-      bFirst { id name }
+      definitionA { id name }
+      definitionB { id name }
     }
   }
 `;
@@ -115,8 +115,8 @@ describe('GraphQL Job Choice Pair Mutations', () => {
     expect(createResponse.status).toBe(200);
     expect(createResponse.body.errors).toBeUndefined();
 
-    const aFirstId = createResponse.body.data.createJobChoicePair.aFirst.id as string;
-    const bFirstId = createResponse.body.data.createJobChoicePair.bFirst.id as string;
+    const aFirstId = createResponse.body.data.createJobChoicePair.definitionA.id as string;
+    const bFirstId = createResponse.body.data.createJobChoicePair.definitionB.id as string;
     createdDefinitionIds.push(aFirstId, bFirstId);
 
     const updateResponse = await request(app)
@@ -137,8 +137,8 @@ describe('GraphQL Job Choice Pair Mutations', () => {
 
     expect(updateResponse.status).toBe(200);
     expect(updateResponse.body.errors).toBeUndefined();
-    expect(updateResponse.body.data.updateJobChoicePair.aFirst.name).toBe('Care -> Fairness');
-    expect(updateResponse.body.data.updateJobChoicePair.bFirst.name).toBe('Fairness -> Care');
+    expect(updateResponse.body.data.updateJobChoicePair.definitionA.name).toBe('Care -> Fairness');
+    expect(updateResponse.body.data.updateJobChoicePair.definitionB.name).toBe('Fairness -> Care');
 
     const definitions = await db.definition.findMany({
       where: { id: { in: [aFirstId, bFirstId] } },
@@ -217,8 +217,8 @@ describe('GraphQL Job Choice Pair Mutations', () => {
     expect(createResponse.status).toBe(200);
     expect(createResponse.body.errors).toBeUndefined();
 
-    const aFirstId = createResponse.body.data.createJobChoicePair.aFirst.id as string;
-    const bFirstId = createResponse.body.data.createJobChoicePair.bFirst.id as string;
+    const aFirstId = createResponse.body.data.createJobChoicePair.definitionA.id as string;
+    const bFirstId = createResponse.body.data.createJobChoicePair.definitionB.id as string;
     createdDefinitionIds.push(aFirstId, bFirstId);
 
     let definitions = await db.definition.findMany({
@@ -356,8 +356,8 @@ describe('GraphQL Job Choice Pair Mutations', () => {
     expect(createResponse.status).toBe(200);
     expect(createResponse.body.errors).toBeUndefined();
 
-    const aFirstId = createResponse.body.data.createJobChoicePair.aFirst.id as string;
-    const bFirstId = createResponse.body.data.createJobChoicePair.bFirst.id as string;
+    const aFirstId = createResponse.body.data.createJobChoicePair.definitionA.id as string;
+    const bFirstId = createResponse.body.data.createJobChoicePair.definitionB.id as string;
     createdDefinitionIds.push(aFirstId, bFirstId);
 
     const definitions = await db.definition.findMany({

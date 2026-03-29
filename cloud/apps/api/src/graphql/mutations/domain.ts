@@ -13,6 +13,7 @@ import {
   DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,
   DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
 } from '../../services/run/config.js';
+import { isValidPair, getComponentTokens } from '../../utils/auto-pair.js';
 
 const MAX_DOMAIN_NAME_LENGTH = 120;
 const MAX_BULK_ASSIGN_IDS = 5000;
@@ -141,7 +142,7 @@ type DefinitionRow = {
   createdAt: Date;
   updatedAt: Date;
   createdByUserId?: string | null;
-  content?: unknown;
+  content: unknown;
 };
 
 function getLineageRootId(definition: DefinitionRow, definitionsById: Map<string, DefinitionRow>): string {
@@ -205,6 +206,7 @@ async function hydrateDefinitionAncestors(definitions: DefinitionRow[]): Promise
         version: true,
         createdAt: true,
         updatedAt: true,
+        content: true,
       },
     });
 
@@ -223,7 +225,6 @@ async function hydrateDefinitionAncestors(definitions: DefinitionRow[]): Promise
 type JobChoiceMethodology = {
   family: string;
   pair_key: string;
-  presentation_order: 'A_first' | 'B_first';
 };
 
 function extractJobChoiceMethodology(content: unknown): JobChoiceMethodology | null {
@@ -234,15 +235,13 @@ function extractJobChoiceMethodology(content: unknown): JobChoiceMethodology | n
   if (
     rec.family !== 'job-choice' ||
     typeof rec.pair_key !== 'string' ||
-    rec.pair_key === '' ||
-    (rec.presentation_order !== 'A_first' && rec.presentation_order !== 'B_first')
+    rec.pair_key === ''
   ) {
     return null;
   }
   return {
     family: 'job-choice',
     pair_key: rec.pair_key,
-    presentation_order: rec.presentation_order as 'A_first' | 'B_first',
   };
 }
 
@@ -256,8 +255,9 @@ type LaunchGroup = {
  * Returns groups plus a list of pair_keys that had an incomplete pair (missing companion)
  * so the caller can log warnings.
  *
- * A valid pair: exactly 2 definitions with the same pair_key, one A_first and one B_first.
- * Anything else (1 member, 2 same-order, 3+ members) falls back to individual singles.
+ * A valid pair: exactly 2 definitions with the same pair_key whose value tokens mirror
+ * each other (value_first of one equals value_second of the other, and vice versa).
+ * Anything else (1 member, non-mirrored tokens, 3+ members) falls back to individual singles.
  */
 function groupDefinitionsByPairKey(definitions: DefinitionRow[]): {
   groups: LaunchGroup[];
@@ -281,13 +281,10 @@ function groupDefinitionsByPairKey(definitions: DefinitionRow[]): {
   const incompletePairKeys: string[] = [];
 
   for (const [pairKey, defs] of byPairKey) {
-    const orders = defs.map((d) => extractJobChoiceMethodology(d.content)?.presentation_order);
-    const hasAFirst = orders.includes('A_first');
-    const hasBFirst = orders.includes('B_first');
-    if (defs.length === 2 && hasAFirst && hasBFirst) {
+    if (isValidPair(defs)) {
       groups.push({ pairKey, definitions: defs });
     } else {
-      // Incomplete or malformed pair - fall back to individual runs.
+      // Incomplete or malformed pair — fall back to individual runs.
       incompletePairKeys.push(pairKey);
       for (const def of defs) {
         singles.push(def);
@@ -469,11 +466,11 @@ async function launchDomainEvaluation(input: DomainEvaluationLaunchInput): Promi
     if (group.pairKey !== null) {
       const batchGroupId = randomUUID();
       for (const def of group.definitions) {
-        const methodology = extractJobChoiceMethodology(def.content);
+        const tokens = getComponentTokens(def.content);
         definitionConfigExtras.set(def.id, {
           jobChoiceLaunchMode: 'PAIRED_BATCH',
           jobChoiceBatchGroupId: batchGroupId,
-          jobChoicePresentationOrder: methodology?.presentation_order,
+          jobChoiceValueFirst: tokens?.value_first.token,
           methodologySafe: true,
         });
       }

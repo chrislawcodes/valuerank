@@ -12,7 +12,7 @@ export type BridgeRunInput = {
   responseScale: string | null;
   family: string | null;
   pairKey: string | null;
-  presentationOrder: string | null;
+  valueFirst: string | null;
   trialSignature: string;
   transcripts: BridgeTranscriptInput[];
 };
@@ -50,7 +50,7 @@ export type BridgeRunSummary = BridgeCountSummary & {
   responseScale: string | null;
   family: string | null;
   pairKey: string | null;
-  presentationOrder: string | null;
+  valueFirst: string | null;
   launchMode: string | null;
   methodologySafe: boolean | null;
   trialSignature: string;
@@ -207,7 +207,7 @@ export function buildJobChoiceBridgeReport(
       responseScale: run.responseScale,
       family: run.family,
       pairKey: run.pairKey,
-      presentationOrder: run.presentationOrder,
+      valueFirst: run.valueFirst,
       launchMode: run.launchMode,
       methodologySafe: run.methodologySafe,
       trialSignature: run.trialSignature,

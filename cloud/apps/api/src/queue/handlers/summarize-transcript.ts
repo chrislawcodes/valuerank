@@ -181,7 +181,6 @@ function isWinnerFirstSummaryCache(value: unknown): value is WinnerFirstSummaryC
   if (
     value.cacheVersion !== 1
     || (value.decisionState !== 'resolved' && value.decisionState !== 'neutral' && value.decisionState !== 'unknown')
-    || (value.presentationOrder !== null && value.presentationOrder !== 'A_first' && value.presentationOrder !== 'B_first')
   ) {
     return false;
   }
@@ -363,23 +362,6 @@ function getProviderNameFromModelId(modelId: string, fallbackProvider: string): 
   return modelId.split(':', 1)[0] ?? fallbackProvider;
 }
 
-function readPresentationOrderFromTranscript(transcript: TranscriptRecord): 'A_first' | 'B_first' | null {
-  const snapshot = transcript.definitionSnapshot;
-  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
-    return null;
-  }
-
-  const methodology = (snapshot as { methodology?: unknown }).methodology;
-  if (!methodology || typeof methodology !== 'object' || Array.isArray(methodology)) {
-    return null;
-  }
-
-  const presentationOrder = (methodology as { presentation_order?: unknown }).presentation_order;
-  return presentationOrder === 'A_first' || presentationOrder === 'B_first'
-    ? presentationOrder
-    : null;
-}
-
 async function buildWinnerFirstSummaryCache(
   transcript: TranscriptRecord,
   summary: SuccessfulSummarizeWorkerSummary,
@@ -399,7 +381,6 @@ async function buildWinnerFirstSummaryCache(
   });
 
   const canonical = result.canonical;
-  const presentationOrder = readPresentationOrderFromTranscript(transcript);
 
   if (canonical.direction === 'unknown' || canonical.strength === 'unknown') {
     return {
@@ -407,7 +388,6 @@ async function buildWinnerFirstSummaryCache(
       decisionState: 'unknown',
       favoredValueKey: null,
       strength: 'unknown',
-      presentationOrder,
     };
   }
 
@@ -417,7 +397,6 @@ async function buildWinnerFirstSummaryCache(
       decisionState: 'neutral',
       favoredValueKey: null,
       strength: 'neutral',
-      presentationOrder,
     };
   }
 
@@ -430,7 +409,6 @@ async function buildWinnerFirstSummaryCache(
     decisionState: 'resolved',
     favoredValueKey: canonical.favoredValueKey,
     strength: canonical.strength,
-    presentationOrder,
   };
 }
 

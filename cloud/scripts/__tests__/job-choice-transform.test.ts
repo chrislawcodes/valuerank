@@ -85,14 +85,13 @@ describe('transformJobChoiceDefinition', () => {
       response_scale: 'option_text',
       legacy_label: 'Old V1',
       canonical_value_order: ['Achievement', 'Hedonism'],
-      presentation_order: 'A_first',
       pair_key: undefined,
     });
   });
 
   it('swaps value_first and value_second and applies pair_key for B_first', () => {
     const result = transformJobChoiceDefinition(SAMPLE_CONTENT, {
-      presentationOrder: 'B_first',
+      swapped: true,
       pairKey: 'jobs-achievement-vs-hedonism',
     });
 
@@ -107,7 +106,6 @@ describe('transformJobChoiceDefinition', () => {
       response_scale: 'option_text',
       legacy_label: 'Old V1',
       canonical_value_order: ['Achievement', 'Hedonism'],
-      presentation_order: 'B_first',
       pair_key: 'jobs-achievement-vs-hedonism',
     });
   });

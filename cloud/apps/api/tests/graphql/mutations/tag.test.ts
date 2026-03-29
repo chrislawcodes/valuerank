@@ -1,14 +1,26 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll } from 'vitest';
 import request from 'supertest';
 import { createServer } from '../../../src/server.js';
 import { db } from '@valuerank/db';
-import { getAuthHeader } from '../../test-utils.js';
+import { getAuthHeader, TEST_USER } from '../../test-utils.js';
 
 const app = createServer();
 
 describe('GraphQL Tag Mutations', () => {
   const createdTagIds: string[] = [];
   const createdDefinitionIds: string[] = [];
+
+  beforeAll(async () => {
+    await db.user.upsert({
+      where: { id: TEST_USER.id },
+      create: {
+        id: TEST_USER.id,
+        email: TEST_USER.email,
+        passwordHash: 'test-hash',
+      },
+      update: {},
+    });
+  });
 
   afterEach(async () => {
     // Clean up created definition-tag relations first

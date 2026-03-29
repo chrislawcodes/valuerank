@@ -223,8 +223,8 @@ describe('decision model', () => {
       opposedValueKey: 'Achievement',
       direction: 'favor_second',
       strength: 'strong',
-      normalizationApplied: true,
-      normalizationReason: 'orientation_flipped',
+      normalizationApplied: false,
+      normalizationReason: null,
       source: 'deterministic',
     });
     expect(result.legacy).toEqual({ rawScore: 5, canonicalScore: 1 });
@@ -649,9 +649,9 @@ describe('decision model', () => {
     expect(aFirstResult.canonical.favoredValueKey).toBe('Achievement');
     expect(aFirstResult.canonical.direction).toBe('favor_first');
 
-    // B_first run: Achievement wins → should also be favor_first (canonical first = Achievement)
+    // B_first run: Achievement wins → should also be favor_first (canonical first = Achievement from dimensions[0])
     expect(bFirstResult.canonical.favoredValueKey).toBe('Achievement');
     expect(bFirstResult.canonical.direction).toBe('favor_first');
-    expect(bFirstResult.canonical.normalizationApplied).toBe(true);
+    expect(bFirstResult.canonical.normalizationApplied).toBe(false);
   });
 });

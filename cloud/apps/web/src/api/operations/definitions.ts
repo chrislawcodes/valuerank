@@ -135,7 +135,6 @@ export type DefinitionMethodology = {
   response_scale?: 'numeric' | 'option_text' | 'value_labels';
   legacy_label?: string;
   canonical_value_order?: string[];
-  presentation_order?: 'A_first' | 'B_first';
   pair_key?: string;
 };
 
