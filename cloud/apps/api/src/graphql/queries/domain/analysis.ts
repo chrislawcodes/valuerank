@@ -599,8 +599,6 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
                 opponentSomewhat: condition.opponentSomewhat,
                 opponentStrongly: condition.opponentStrongly,
                 unknownCount: condition.unknownCount,
-                meanPreferenceScore: condition.totalTrials === 0 ? null : (2 * condition.strongly + 1 * condition.somewhat) / condition.totalTrials,
-                opponentMeanPreferenceScore: condition.totalTrials === 0 ? null : (2 * condition.opponentStrongly + 1 * condition.opponentSomewhat) / condition.totalTrials,
               };
             });
 

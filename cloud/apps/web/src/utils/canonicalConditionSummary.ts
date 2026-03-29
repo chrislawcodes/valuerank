@@ -9,9 +9,6 @@ export type CanonicalConditionSummary = {
   unknownCount: number;
   totalTrials: number;
   selectedValueWinRate: number | null;
-  meanPreferenceScore: number | null;
-  opponentMeanPreferenceScore: number | null;
-  displayScore: number | null;
   isOpponent: boolean;
 };
 
@@ -122,33 +119,23 @@ export function summarizeCanonicalConditionTranscripts(
       ...counts,
       totalTrials,
       selectedValueWinRate: null,
-      meanPreferenceScore: null,
-      opponentMeanPreferenceScore: null,
-      displayScore: null,
       isOpponent: false,
     };
   }
 
-  const meanPreferenceScore = (2 * counts.strongly + counts.somewhat) / totalTrials;
-  const opponentMeanPreferenceScore = (2 * counts.opponentStrongly + counts.opponentSomewhat) / totalTrials;
-  const isOpponent = opponentMeanPreferenceScore > meanPreferenceScore;
-  // Ties read as 0 (neutral) — neither side won a clear majority.
-  const isTie = !isOpponent && meanPreferenceScore === opponentMeanPreferenceScore && meanPreferenceScore > 0;
-  const displayScore = isTie ? 0 : isOpponent ? opponentMeanPreferenceScore : meanPreferenceScore;
+  const selectedValueWinRate = (counts.strongly + counts.somewhat) / totalTrials;
+  const isOpponent = (selectedValueWinRate ?? 0.5) < 0.5;
 
   return {
     ...counts,
     totalTrials,
-    selectedValueWinRate: (counts.strongly + counts.somewhat) / totalTrials,
-    meanPreferenceScore,
-    opponentMeanPreferenceScore,
-    displayScore,
+    selectedValueWinRate,
     isOpponent,
   };
 }
 
 export function getCanonicalConditionBackground(score: number, isOpponent: boolean): string {
-  const opacity = Math.min(1, Math.max(0, score / 2));
+  const opacity = Math.min(1, Math.max(0, score));
   if (isOpponent) {
     return `rgba(251, 146, 60, ${opacity * 0.5})`;
   }

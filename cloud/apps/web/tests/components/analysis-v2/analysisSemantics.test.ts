@@ -143,9 +143,9 @@ describe('buildAnalysisSemanticsView', () => {
     expect(Object.keys(semantics.preference.byModel)).toEqual(['claude-3', 'gpt-4']);
     expect(semantics.preference.byModel['claude-3']).toMatchObject({
       overallLean: 'A',
-      topPrioritizedValues: ['Compassion'],
-      topDeprioritizedValues: ['Discipline'],
-      neutralValues: ['Balance'],
+      topPrioritizedValues: [{ name: 'Compassion', winRate: 0.7 }],
+      topDeprioritizedValues: [{ name: 'Discipline', winRate: 0.2 }],
+      neutralValues: [{ name: 'Balance', winRate: 0.5 }],
     });
     expect(semantics.reliability.byModel['gpt-4']).toMatchObject({
       baselineReliability: 0.92,
@@ -544,12 +544,10 @@ describe('buildPairedAnalysisSemanticsView', () => {
     expect(semantics.preference.rowAvailability).toEqual({ status: 'available' });
     expect(semantics.reliability.rowAvailability).toEqual({ status: 'available' });
     expect(semantics.preference.byModel['claude-3']).toMatchObject({
-      topPrioritizedValues: ['Care'],
+      topPrioritizedValues: [{ name: 'Care', winRate: 0.6 }],
       topDeprioritizedValues: [],
       overallLean: 'B',
     });
-    expect(semantics.preference.byModel['claude-3']?.overallSignedCenter).toBeCloseTo(-0.05, 6);
-    expect(semantics.preference.byModel['claude-3']?.preferenceStrength).toBeCloseTo(1.1, 6);
     expect(semantics.reliability.byModel['claude-3']).toMatchObject({
       coverageCount: 10,
       uniqueScenarios: 10,

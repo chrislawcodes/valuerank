@@ -425,10 +425,12 @@ describe('AnalysisPanel', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /^Conditions$/i }));
 
-    // PivotAnalysisTable shows canonical score toFixed(2); ConditionDecisionsTable shows toFixed(1)
-    expect(screen.getAllByText('1.50').length).toBeGreaterThan(0);
-    const canonicalScore = screen.getByText('1.5');
-    expect(canonicalScore.parentElement).toHaveClass('text-blue-700');
+    // PivotAnalysisTable and ConditionDecisionsTable now show win rates as percentages.
+    const canonicalScore = screen
+      .getAllByText('100%')
+      .find((element) => element.className.includes('text-blue-700'));
+    expect(canonicalScore).toBeDefined();
+    expect(canonicalScore).toHaveClass('text-blue-700');
     expect(screen.getByText('Unknown canonical trials are excluded from condition scores.')).toBeInTheDocument();
   });
 
@@ -644,8 +646,10 @@ describe('AnalysisPanel', () => {
 
     expect(claudeRow).not.toBeNull();
     expect(gptRow).not.toBeNull();
-    expect(within(claudeRow as HTMLTableRowElement).getByText('Moderate (+0.05)')).toBeInTheDocument();
-    expect(within(gptRow as HTMLTableRowElement).getByText('Moderate (−0.10)')).toBeInTheDocument();
+    expect(within(claudeRow as HTMLTableRowElement).getByText('Achievement')).toBeInTheDocument();
+    expect(within(claudeRow as HTMLTableRowElement).getAllByText('—').length).toBeGreaterThan(0);
+    expect(within(gptRow as HTMLTableRowElement).getByText('Care')).toBeInTheDocument();
+    expect(within(gptRow as HTMLTableRowElement).getByText('60%')).toBeInTheDocument();
     expect(screen.getByText('Run-level evidence: pooled across 2 companion runs')).toBeInTheDocument();
   });
 

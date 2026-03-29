@@ -88,9 +88,9 @@ const BASE_VISUALIZATION_DATA = {
   },
 };
 
-// s1 = favor_first strong → favoredValueKey='Freedom' (alphabetically first) → strongly=1 → score 2.00, blue
-// s2 = neutral neutral → neutral=1 → score 0.00
-// s3 = favor_second strong → favoredValueKey='Harmony' (alphabetically second) → opponentStrongly=1 → score 2.00, orange
+// s1 = favor_first strong → favoredValueKey='Freedom' (alphabetically first) → selectedValueWinRate 100%, blue
+// s2 = neutral neutral → neutral=1 → win rate 0%
+// s3 = favor_second strong → favoredValueKey='Harmony' (alphabetically second) → selectedValueWinRate 0%, orange
 const BASE_TRANSCRIPTS: Transcript[] = [
   makeTranscript('t1', 's1', 'model1', 'favor_first', 'strong'),
   makeTranscript('t2', 's2', 'model1', 'neutral', 'neutral'),
@@ -109,7 +109,7 @@ const NAV_VISUALIZATION_DATA = {
   },
 };
 
-// s1 = favor_first strong → score 2.00; s2 = neutral → score 0.00
+// s1 = favor_first strong → win rate 100%; s2 = neutral → win rate 0%
 const NAV_TRANSCRIPTS: Transcript[] = [
   makeTranscript('t1', 's1', 'model1', 'favor_first', 'strong'),
   makeTranscript('t2', 's2', 'model1', 'neutral', 'neutral'),
@@ -133,8 +133,8 @@ describe('PivotAnalysisTable', () => {
 
     // s1 → favor_first → low (Freedom side), s2 → neutral, s3 → favor_second → high (Harmony side)
     expect(screen.getByText('Freedom 1')).toBeInTheDocument();
-    expect(screen.getByText('Neutral 1')).toBeInTheDocument();
-    expect(screen.getByText('Harmony 1')).toBeInTheDocument();
+    expect(screen.getByText('Neutral 0')).toBeInTheDocument();
+    expect(screen.getByText('Harmony 2')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /copy pivot analysis table as image/i })).toBeInTheDocument();
   });
 
@@ -183,8 +183,8 @@ describe('PivotAnalysisTable', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText('Conformity Interpersonal 1')).toBeInTheDocument();
-    expect(screen.getByText('Neutral 1')).toBeInTheDocument();
+    expect(screen.getByText(/Conformity Interpersonal\s*2/)).toBeInTheDocument();
+    expect(screen.getByText('Neutral 0')).toBeInTheDocument();
     expect(screen.getByText('Achievement 1')).toBeInTheDocument();
   });
 
@@ -267,8 +267,8 @@ describe('PivotAnalysisTable', () => {
       </MemoryRouter>
     );
 
-    // s1 (a1, b1) has favor_first strong → displayScore = 2.00
-    fireEvent.click(screen.getByText('2.00'));
+    // s1 (a1, b1) has favor_first strong → win rate = 100%
+    fireEvent.click(screen.getByText('100%'));
 
     expect(mockNavigate).toHaveBeenCalledWith(
       '/analysis/run-1/conditions/a1%7C%7Cb1?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired'
@@ -288,7 +288,7 @@ describe('PivotAnalysisTable', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByText('2.00'));
+    fireEvent.click(screen.getByText('100%'));
 
     expect(mockNavigate).toHaveBeenCalledWith(
       '/analysis/run-1/conditions/a1%7C%7Cb1?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired'
@@ -307,7 +307,7 @@ describe('PivotAnalysisTable', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByText('2.00'));
+    fireEvent.click(screen.getByText('100%'));
 
     expect(mockNavigate).toHaveBeenCalledWith(
       '/analysis/run-1/conditions/a1%7C%7Cb1?rowDim=Freedom&colDim=Harmony&modelId=model1'

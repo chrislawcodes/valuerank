@@ -120,14 +120,23 @@ function createSomewhatOpponent(id: string) {
 describe('summarizeCanonicalConditionTranscripts', () => {
   it('empty input → all null metrics, isOpponent false', () => {
     const result = summarizeCanonicalConditionTranscripts([]);
-    expect(result.meanPreferenceScore).toBeNull();
-    expect(result.opponentMeanPreferenceScore).toBeNull();
-    expect(result.displayScore).toBeNull();
+    expect(result.selectedValueWinRate).toBeNull();
     expect(result.isOpponent).toBe(false);
     expect(result.totalTrials).toBe(0);
+    expect(result).not.toHaveProperty('meanPreferenceScore');
+    expect(result).not.toHaveProperty('opponentMeanPreferenceScore');
+    expect(result).not.toHaveProperty('displayScore');
   });
 
-  it('all-unknown input → totalTrials 0, displayScore null', () => {
+  it('null selectedValueWinRate falls back to false for isOpponent', () => {
+    const result = summarizeCanonicalConditionTranscripts([
+      createTranscript('t1', 'unknown', 'unknown'),
+    ]);
+    expect(result.selectedValueWinRate).toBeNull();
+    expect(result.isOpponent).toBe(false);
+  });
+
+  it('all-unknown input → totalTrials 0, selectedValueWinRate null', () => {
     const transcripts = [
       createTranscript('t1', 'unknown', 'unknown'),
       createTranscript('t2', 'unknown', 'unknown'),
@@ -136,11 +145,11 @@ describe('summarizeCanonicalConditionTranscripts', () => {
     const result = summarizeCanonicalConditionTranscripts(transcripts);
     expect(result.unknownCount).toBe(3);
     expect(result.totalTrials).toBe(0);
-    expect(result.displayScore).toBeNull();
+    expect(result.selectedValueWinRate).toBeNull();
     expect(result.isOpponent).toBe(false);
   });
 
-  it('all strongly selected → meanPreferenceScore 2.0, isOpponent false (blue)', () => {
+  it('all strongly selected → selectedValueWinRate 100%, isOpponent false (blue)', () => {
     const transcripts = [
       createStrongSelected('t1'),
       createStrongSelected('t2'),
@@ -150,13 +159,11 @@ describe('summarizeCanonicalConditionTranscripts', () => {
     ];
     const result = summarizeCanonicalConditionTranscripts(transcripts);
     expect(result.strongly).toBe(5);
-    expect(result.meanPreferenceScore).toBeCloseTo(2.0);
-    expect(result.opponentMeanPreferenceScore).toBeCloseTo(0.0);
+    expect(result.selectedValueWinRate).toBeCloseTo(1.0);
     expect(result.isOpponent).toBe(false);
-    expect(result.displayScore).toBeCloseTo(2.0);
   });
 
-  it('all somewhat selected → meanPreferenceScore 1.0, isOpponent false (blue)', () => {
+  it('all somewhat selected → selectedValueWinRate 100%, isOpponent false (blue)', () => {
     const transcripts = [
       createSomewhatSelected('t1'),
       createSomewhatSelected('t2'),
@@ -166,13 +173,11 @@ describe('summarizeCanonicalConditionTranscripts', () => {
     ];
     const result = summarizeCanonicalConditionTranscripts(transcripts);
     expect(result.somewhat).toBe(5);
-    expect(result.meanPreferenceScore).toBeCloseTo(1.0);
-    expect(result.opponentMeanPreferenceScore).toBeCloseTo(0.0);
+    expect(result.selectedValueWinRate).toBeCloseTo(1.0);
     expect(result.isOpponent).toBe(false);
-    expect(result.displayScore).toBeCloseTo(1.0);
   });
 
-  it('strongly selected > somewhat selected (weight 2 > weight 1)', () => {
+  it('keeps selected-side win rate at 100% when the chosen side is mixed', () => {
     const allStrong = summarizeCanonicalConditionTranscripts([
       createStrongSelected('t1'),
       createStrongSelected('t2'),
@@ -183,10 +188,11 @@ describe('summarizeCanonicalConditionTranscripts', () => {
       createSomewhatSelected('t5'),
       createSomewhatSelected('t6'),
     ]);
-    expect(allStrong.meanPreferenceScore).toBeGreaterThan(allSomewhat.meanPreferenceScore!);
+    expect(allStrong.selectedValueWinRate).toBeCloseTo(1.0);
+    expect(allSomewhat.selectedValueWinRate).toBeCloseTo(1.0);
   });
 
-  it('all strongly opponent → opponentMeanPreferenceScore 2.0, isOpponent true (orange)', () => {
+  it('all strongly opponent → selectedValueWinRate 0%, isOpponent true (orange)', () => {
     const transcripts = [
       createStrongOpponent('t1'),
       createStrongOpponent('t2'),
@@ -196,13 +202,11 @@ describe('summarizeCanonicalConditionTranscripts', () => {
     ];
     const result = summarizeCanonicalConditionTranscripts(transcripts);
     expect(result.opponentStrongly).toBe(5);
-    expect(result.opponentMeanPreferenceScore).toBeCloseTo(2.0);
-    expect(result.meanPreferenceScore).toBeCloseTo(0.0);
+    expect(result.selectedValueWinRate).toBeCloseTo(0.0);
     expect(result.isOpponent).toBe(true);
-    expect(result.displayScore).toBeCloseTo(2.0);
   });
 
-  it('all somewhat opponent → opponentMeanPreferenceScore 1.0, isOpponent true (orange)', () => {
+  it('all somewhat opponent → selectedValueWinRate 0%, isOpponent true (orange)', () => {
     const transcripts = [
       createSomewhatOpponent('t1'),
       createSomewhatOpponent('t2'),
@@ -212,13 +216,11 @@ describe('summarizeCanonicalConditionTranscripts', () => {
     ];
     const result = summarizeCanonicalConditionTranscripts(transcripts);
     expect(result.opponentSomewhat).toBe(5);
-    expect(result.opponentMeanPreferenceScore).toBeCloseTo(1.0);
-    expect(result.meanPreferenceScore).toBeCloseTo(0.0);
+    expect(result.selectedValueWinRate).toBeCloseTo(0.0);
     expect(result.isOpponent).toBe(true);
-    expect(result.displayScore).toBeCloseTo(1.0);
   });
 
-  it('mixed: 3 opponentStrongly + 1 opponentSomewhat + 1 neutral = displayScore 1.4 (orange)', () => {
+  it('mixed: 3 opponentStrongly + 1 opponentSomewhat + 1 neutral = selectedValueWinRate 0% (orange)', () => {
     const transcripts = [
       createStrongOpponent('t1'),
       createStrongOpponent('t2'),
@@ -227,26 +229,18 @@ describe('summarizeCanonicalConditionTranscripts', () => {
       createTranscript('t5', 'neutral', 'neutral'),
     ];
     const result = summarizeCanonicalConditionTranscripts(transcripts);
-    // opponentMeanPreferenceScore = (2*3 + 1*1) / 5 = 7/5 = 1.4
-    expect(result.opponentMeanPreferenceScore).toBeCloseTo(1.4);
-    expect(result.meanPreferenceScore).toBeCloseTo(0.0);
+    expect(result.selectedValueWinRate).toBeCloseTo(0.0);
     expect(result.isOpponent).toBe(true);
-    expect(result.displayScore).toBeCloseTo(1.4);
   });
 
-  it('tie (1 strongly selected + 1 strongly opponent) → isOpponent false, displayScore 0 (neutral)', () => {
+  it('tie (1 strongly selected + 1 strongly opponent) → selectedValueWinRate 50%, isOpponent false (neutral)', () => {
     const transcripts = [
       createStrongSelected('t1'),
       createStrongOpponent('t2'),
     ];
     const result = summarizeCanonicalConditionTranscripts(transcripts);
-    // meanPreferenceScore = (2*1 + 0) / 2 = 1.0
-    // opponentMeanPreferenceScore = (2*1 + 0) / 2 = 1.0
-    expect(result.meanPreferenceScore).toBeCloseTo(1.0);
-    expect(result.opponentMeanPreferenceScore).toBeCloseTo(1.0);
-    // tie → neither side won → displayScore reads as 0 (neutral)
+    expect(result.selectedValueWinRate).toBeCloseTo(0.5);
     expect(result.isOpponent).toBe(false);
-    expect(result.displayScore).toBe(0);
   });
 
   it('favoredValueKey alphabetically second (value-b) buckets as opponentStrongly — direction field ignored', () => {
@@ -257,7 +251,7 @@ describe('summarizeCanonicalConditionTranscripts', () => {
     const result = summarizeCanonicalConditionTranscripts(transcripts);
     expect(result.opponentStrongly).toBe(1);
     expect(result.strongly).toBe(0);
+    expect(result.selectedValueWinRate).toBeCloseTo(0.0);
     expect(result.isOpponent).toBe(true);
-    expect(result.displayScore).toBeCloseTo(2.0);
   });
 });

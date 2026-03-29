@@ -80,7 +80,7 @@ const REPEAT_PATTERN_LABELS: Record<RepeatPattern, string> = {
 const SUMMARY_COLUMN_TITLES = {
   model: 'AI model summarized in this row. Each row combines that model’s overall value preference and its repeat-pattern mix across repeated conditions in this analysis.',
   preferredValue: 'The value this model most often favors overall in this analysis slice. This is the top value on the model-level preference summary, not a count of individual transcript decisions.',
-  preferenceStrength: 'How strong the model’s overall preference is, combining direction and distance from neutral. Stronger values mean the model leans more clearly toward one side overall.',
+  winRate: 'Win rate for the preferred value. Higher values mean the model chooses that value more often when it is on the selected side.',
   valueAgreement: 'How often repeated judgments stay on the same value side. Higher means the model usually leans the same way when the same conflict is repeated, even if the exact score changes a little.',
   stable: 'Share of repeated conditions where the model shows a settled pattern. These are repeats where one clear pattern wins and the answers do not move around much.',
   softLean: 'Share of repeated conditions where the model shows a narrow but only slightly off-neutral lean. These are coherent repeats with a mild lean, but not strong enough to count as fully settled.',
@@ -153,55 +153,11 @@ function formatPercent(value: number): string {
   return `${roundedToTenth.toFixed(1)}%`;
 }
 
-function formatSignedCenter(value: number | null): string {
-  if (value === null) {
-    return '—';
-  }
-
-  const rounded = Math.round(value * 100) / 100;
-  if (Object.is(rounded, -0) || rounded === 0) {
-    return '0.00';
-  }
-
-  if (rounded > 0) {
-    return `+${rounded.toFixed(2)}`;
-  }
-
-  return `−${Math.abs(rounded).toFixed(2)}`;
-}
-
-function getPreferenceStrengthLabel(preferenceStrength: number | null): string | null {
-  if (preferenceStrength === null) {
-    return null;
-  }
-
-  if (preferenceStrength >= 1.0) {
-    return 'Strong';
-  }
-  if (preferenceStrength >= 0.5) {
-    return 'Moderate';
-  }
-  return 'Weak';
-}
-
 function getPreferredValueName(model: PreferenceViewModel): string | null {
-  return model.topPrioritizedValues[0]
-    ?? model.neutralValues[0]
-    ?? model.topDeprioritizedValues[0]
+  return model.topPrioritizedValues[0]?.name
+    ?? model.neutralValues[0]?.name
+    ?? model.topDeprioritizedValues[0]?.name
     ?? null;
-}
-
-function formatPreferenceStrength(model: PreferenceViewModel): string | null {
-  if (model.availability.status === 'unavailable') {
-    return null;
-  }
-
-  const strengthLabel = getPreferenceStrengthLabel(model.preferenceStrength);
-  if (strengthLabel === null || model.overallSignedCenter === null) {
-    return null;
-  }
-
-  return `${strengthLabel} (${formatSignedCenter(model.overallSignedCenter)})`;
 }
 
 function getPreferenceUnavailableReason(model: PreferenceViewModel): string {
@@ -793,7 +749,7 @@ function OverviewSummaryTable({
                 <SummaryHeader label="Preferred Value" title={SUMMARY_COLUMN_TITLES.preferredValue} />
               </th>
               <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">
-                <SummaryHeader label="Preference Strength" title={SUMMARY_COLUMN_TITLES.preferenceStrength} />
+                <SummaryHeader label="Win Rate" title={SUMMARY_COLUMN_TITLES.winRate} />
               </th>
               <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold uppercase text-gray-600">
                 <SummaryHeader label="Value Agreement" title={SUMMARY_COLUMN_TITLES.valueAgreement} align="center" />
@@ -815,7 +771,7 @@ function OverviewSummaryTable({
           <tbody>
             {models.map(({ modelId, preference, reliability }) => {
               const preferredValue = getPreferredValueName(preference);
-              const preferenceStrengthText = formatPreferenceStrength(preference);
+              const preferredValueWinRate = preference.topPrioritizedValues[0]?.winRate ?? null;
               const perSourceMetricsList = repeatPatternSources.map((source) => getRepeatPatternMetrics(modelId, source.varianceAnalysis, source.conditionRows));
               const repeatMetrics = mergeRepeatPatternMetrics(perSourceMetricsList);
               const primarySourceMetrics = perSourceMetricsList[0] ?? null;
@@ -837,8 +793,10 @@ function OverviewSummaryTable({
                     )}
                   </td>
                   <td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">
-                    {preferenceStrengthText ? (
-                      <SummaryCell title={preferenceStrengthText}>{preferenceStrengthText}</SummaryCell>
+                    {preferredValueWinRate !== null && preferredValueWinRate !== undefined ? (
+                      <SummaryCell title={`Preferred value win rate: ${Math.round(preferredValueWinRate * 100)}%`}>
+                        {Math.round(preferredValueWinRate * 100)}%
+                      </SummaryCell>
                     ) : (
                       <SummaryCell title={getPreferenceUnavailableReason(preference)} showInfoIcon>—</SummaryCell>
                     )}

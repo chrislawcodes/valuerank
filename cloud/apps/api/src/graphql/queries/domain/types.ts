@@ -260,8 +260,6 @@ builder.objectType(DomainAnalysisConditionDetailRef, {
     opponentSomewhat: t.exposeInt('opponentSomewhat'),
     opponentStrongly: t.exposeInt('opponentStrongly'),
     unknownCount: t.exposeInt('unknownCount'),
-    meanPreferenceScore: t.exposeFloat('meanPreferenceScore', { nullable: true }),
-    opponentMeanPreferenceScore: t.exposeFloat('opponentMeanPreferenceScore', { nullable: true }),
   }),
 });
 
