@@ -358,7 +358,7 @@ export function PivotAnalysisTable({
                                     </td>
                                     {pivotData.cols.map(col => {
                                         const summary = pivotData.grid[row]?.[col];
-                                        const hasScore = summary != null && summary.displayScore != null && summary.totalTrials > 0;
+                                        const hasScore = summary != null && summary.selectedValueWinRate != null && summary.totalTrials > 0;
 
                                         return (
                                             <td
@@ -366,16 +366,16 @@ export function PivotAnalysisTable({
                                                 className="p-4 border border-gray-100 text-center text-sm transition-colors cursor-pointer hover:ring-1 hover:ring-teal-300"
                                                 style={{
                                                     backgroundColor: hasScore && summary != null
-                                                        ? getCanonicalConditionBackground(summary.displayScore ?? 0, summary.isOpponent)
+                                                        ? getCanonicalConditionBackground(summary.selectedValueWinRate ?? 0, summary.isOpponent)
                                                         : undefined,
                                                 }}
                                                 onClick={() => handleCellClick(row, col)}
                                             >
                                                 {hasScore && summary != null ? (
                                                     <span className={`font-semibold ${getCanonicalConditionTextColor(summary.isOpponent)}`}>
-                                                        {(summary.displayScore ?? 0).toFixed(2)}
+                                                        {summary.selectedValueWinRate == null ? '—' : `${Math.round(summary.selectedValueWinRate * 100)}%`}
                                                     </span>
-                                                ) : <span className="text-gray-500">-</span>}
+                                                ) : <span className="text-gray-500">—</span>}
                                             </td>
                                         );
                                     })}

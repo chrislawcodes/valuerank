@@ -96,8 +96,6 @@ export type DomainAnalysisConditionDetail = {
   opponentSomewhat: number;
   opponentStrongly: number;
   unknownCount: number;
-  meanPreferenceScore: number | null;
-  opponentMeanPreferenceScore: number | null;
 };
 
 export type DomainAnalysisVignetteDetail = {

@@ -371,7 +371,11 @@ class TestAnalyzeBasicIntegration:
         per_model = result["analysis"]["perModel"]
         assert per_model["m1"]["overall"]["mean"] == pytest.approx(4.0, abs=0.001)
         assert per_model["m2"]["overall"]["mean"] == pytest.approx(4.0, abs=0.001)
-        pairwise = result["analysis"]["modelAgreement"]["pairwise"]["m1:m2"]
+        pairwise = (
+            result["analysis"]["modelAgreement"]["pairwise"].get("m1:m2")
+            or result["analysis"]["modelAgreement"]["pairwise"].get("m2:m1")
+        )
+        assert pairwise is not None
         assert pairwise["spearmanRho"] == pytest.approx(1.0, abs=0.001)
         contested = result["analysis"]["mostContestedScenarios"]
         assert contested[0]["variance"] == pytest.approx(0.0, abs=0.001)
@@ -450,8 +454,8 @@ class TestAnalyzeBasicIntegration:
         direction = summary["preferenceDirection"]
 
         assert direction["overallLean"] == "A"
-        assert direction["overallSignedCenter"] == pytest.approx(1.333333, abs=1e-6)
-        assert summary["preferenceStrength"] == pytest.approx(1.333333, abs=1e-6)
+        assert "overallSignedCenter" not in direction
+        assert "preferenceStrength" not in summary
 
     def test_reliability_summary_is_unavailable_without_repeats(self):
         """Single-sample runs should not expose reliability from cross-scenario spread."""
@@ -622,7 +626,8 @@ class TestAnalyzeBasicIntegration:
         reliability = analysis["reliabilitySummary"]["perModel"]["m1"]
         aggregate_semantics = analysis["aggregateSemantics"]
 
-        assert preference["preferenceStrength"] is not None
+        assert preference["preferenceDirection"]["overallLean"] is not None
+        assert "preferenceStrength" not in preference
         assert reliability["coverageCount"] == 0
         assert reliability["baselineReliability"] is None
         assert reliability["baselineNoise"] is None
@@ -671,8 +676,8 @@ class TestAnalyzeBasicIntegration:
         assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageCount"] == 5
         assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageShare"] == pytest.approx(1.0, abs=1e-6)
         assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["contributingRunCount"] == 2
-        assert aggregate_semantics["perModelDrift"]["m1"]["weightedOverallSignedCenterSd"] is not None
-        assert aggregate_semantics["perModelDrift"]["m1"]["exceedsWarningThreshold"] is True
+        assert aggregate_semantics["perModelDrift"]["m1"]["weightedOverallSignedCenterSd"] is None
+        assert aggregate_semantics["perModelDrift"]["m1"]["exceedsWarningThreshold"] is False
 
     def test_same_signature_aggregate_sums_repeat_coverage_across_runs_without_treating_runs_as_repeats(self):
         """Pooled coverage should sum run-level repeat coverage while preserving within-run repeatability."""

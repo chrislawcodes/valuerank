@@ -259,7 +259,7 @@ describe('ConditionDecisionsTable', () => {
     expect(target).not.toContain('orientationBucket=');
   });
 
-  it('renders canonical winner scores and the unknown footer copy', () => {
+  it('renders canonical win rates and the unknown footer copy', () => {
     const visualizationData = createVisualizationData();
     const transcripts = [
       createTranscript({ id: 't1', scenarioId: 'scenario-1', modelId: 'gpt-4', direction: 'favor_second', strength: 'strong' }),
@@ -282,13 +282,15 @@ describe('ConditionDecisionsTable', () => {
       </MemoryRouter>
     );
 
-    const winnerScore = screen.getByText('1.4');
-    expect(winnerScore.parentElement).toHaveClass('text-orange-700');
+    const winnerButton = screen.getByTitle('View transcripts for gpt-4 | Achievement: low, Care: low | Decision: other | Unknown: 2');
+    const winnerScore = within(winnerButton).getByText('—');
+    expect(winnerScore).toHaveClass('text-gray-500');
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
     expect(screen.getByText('Unknown canonical trials are excluded from condition scores.')).toBeInTheDocument();
-    expect(screen.getByTitle('View transcripts for gpt-4 | Achievement: low, Care: low | Decision: other | Unknown: 2')).toBeInTheDocument();
+    expect(winnerButton).toBeInTheDocument();
   });
 
-  it('renders ties as 0.0 neutral (neither side won)', () => {
+  it('renders ties as 50% neutral (neither side won)', () => {
     const visualizationData = createVisualizationData();
     const transcripts = [
       createTranscript({ id: 't8', scenarioId: 'scenario-8', modelId: 'gpt-5', direction: 'favor_first', strength: 'strong' }),
@@ -306,9 +308,9 @@ describe('ConditionDecisionsTable', () => {
       </MemoryRouter>
     );
 
-    // tie: meanPreferenceScore === opponentMeanPreferenceScore → displayScore reads as 0
+    // tie: selectedValueWinRate === 0.5 → win rate reads as 50%
     const tieButton = screen.getByTitle('View transcripts for gpt-5 | Achievement: medium, Care: medium');
-    expect(within(tieButton).getByText('0.0')).toBeInTheDocument();
+    expect(within(tieButton).getByText('50%')).toBeInTheDocument();
   });
 
   it('orders condition rows from negligible to full', () => {
@@ -422,6 +424,6 @@ describe('ConditionDecisionsTable', () => {
     );
 
     const unknownButton = screen.getByTitle('View transcripts for gpt-4 | Achievement: low, Care: low | Decision: other | Unknown: 2');
-    expect(within(unknownButton).getByText('-')).toBeInTheDocument();
+    expect(within(unknownButton).getByText('—')).toBeInTheDocument();
   });
 });

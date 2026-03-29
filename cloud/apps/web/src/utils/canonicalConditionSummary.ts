@@ -9,9 +9,6 @@ export type CanonicalConditionSummary = {
   unknownCount: number;
   totalTrials: number;
   selectedValueWinRate: number | null;
-  meanPreferenceScore: number | null;
-  opponentMeanPreferenceScore: number | null;
-  displayScore: number | null;
   isOpponent: boolean;
 };
 
@@ -122,33 +119,26 @@ export function summarizeCanonicalConditionTranscripts(
       ...counts,
       totalTrials,
       selectedValueWinRate: null,
-      meanPreferenceScore: null,
-      opponentMeanPreferenceScore: null,
-      displayScore: null,
       isOpponent: false,
     };
   }
 
-  const meanPreferenceScore = (2 * counts.strongly + counts.somewhat) / totalTrials;
-  const opponentMeanPreferenceScore = (2 * counts.opponentStrongly + counts.opponentSomewhat) / totalTrials;
-  const isOpponent = opponentMeanPreferenceScore > meanPreferenceScore;
-  // Ties read as 0 (neutral) — neither side won a clear majority.
-  const isTie = !isOpponent && meanPreferenceScore === opponentMeanPreferenceScore && meanPreferenceScore > 0;
-  const displayScore = isTie ? 0 : isOpponent ? opponentMeanPreferenceScore : meanPreferenceScore;
+  const selectedValueWinRate = (counts.strongly + counts.somewhat) / totalTrials;
+  const isOpponent = (selectedValueWinRate ?? 0.5) < 0.5;
 
   return {
     ...counts,
     totalTrials,
-    selectedValueWinRate: (counts.strongly + counts.somewhat) / totalTrials,
-    meanPreferenceScore,
-    opponentMeanPreferenceScore,
-    displayScore,
+    selectedValueWinRate,
     isOpponent,
   };
 }
 
 export function getCanonicalConditionBackground(score: number, isOpponent: boolean): string {
-  const opacity = Math.min(1, Math.max(0, score / 2));
+  // score is selectedValueWinRate (0–1). Opacity reflects distance from 0.5 (neutral),
+  // mapped to 0–1 so both strong-selected (1.0) and strong-opponent (0.0) render at full intensity.
+  const clamped = Math.min(1, Math.max(0, score));
+  const opacity = Math.abs(clamped - 0.5) * 2;
   if (isOpponent) {
     return `rgba(251, 146, 60, ${opacity * 0.5})`;
   }

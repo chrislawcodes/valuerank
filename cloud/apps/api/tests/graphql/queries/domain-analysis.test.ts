@@ -237,8 +237,6 @@ describe('GraphQL domain analysis', () => {
               opponentSomewhat
               opponentStrongly
               unknownCount
-              meanPreferenceScore
-              opponentMeanPreferenceScore
             }
           }
         }

@@ -284,14 +284,12 @@ def build_preference_summary(
 
         overall_signed_center: float | None = None
         overall_lean: str | None = None
-        preference_strength: float | None = None
 
         if scenario_means:
             signed_center = sum(mean - 3.0 for mean in scenario_means) / len(scenario_means)
             strength = sum(abs(mean - 3.0) for mean in scenario_means) / len(scenario_means)
 
             overall_signed_center = round(float(signed_center), 6)
-            preference_strength = round(float(strength), 6)
 
             if overall_signed_center > 0:
                 overall_lean = "A"
@@ -304,9 +302,7 @@ def build_preference_summary(
             "preferenceDirection": {
                 "byValue": model_stats.get("values", {}),
                 "overallLean": overall_lean,
-                "overallSignedCenter": overall_signed_center,
             },
-            "preferenceStrength": preference_strength,
         }
 
     return {
@@ -501,7 +497,6 @@ def build_pooled_aggregate_reliability(
             baseline_noise = model_summary.get("baselineNoise")
             directional_agreement = model_summary.get("directionalAgreement")
             neutral_share = model_summary.get("neutralShare")
-            overall_signed_center = model_preference.get("preferenceDirection", {}).get("overallSignedCenter")
 
             if baseline_reliability is not None:
                 reliability_samples.append((coverage_count, float(baseline_reliability)))
@@ -511,8 +506,6 @@ def build_pooled_aggregate_reliability(
                 agreement_samples.append((coverage_count, float(directional_agreement)))
             if neutral_share is not None:
                 neutral_samples.append((coverage_count, float(neutral_share)))
-            if overall_signed_center is not None:
-                drift_samples.append((coverage_count, float(overall_signed_center)))
 
         repeat_coverage_breadth = (
             len(repeated_condition_ids & planned_condition_set)

@@ -601,7 +601,7 @@ export function ConditionDecisionsTable({
                     <td
                       key={`${row.id}-${modelId}`}
                       className="border border-gray-200 px-3 py-2 text-center text-sm transition-colors"
-                      style={{ backgroundColor: hasResolvedCanonicalEvidence ? getCanonicalConditionBackground(stats.displayScore ?? 0, stats.isOpponent) : undefined }}
+                      style={{ backgroundColor: hasResolvedCanonicalEvidence ? getCanonicalConditionBackground(stats.selectedValueWinRate ?? 0, stats.isOpponent) : undefined }}
                     >
                       <Button
                         type="button"
@@ -613,10 +613,12 @@ export function ConditionDecisionsTable({
                       >
                         {hasResolvedCanonicalEvidence ? (
                           <span className={`inline-flex flex-col items-center ${getCanonicalConditionTextColor(stats.isOpponent)}`}>
-                            <span className="font-semibold">{stats.displayScore?.toFixed(1) ?? '-'}</span>
+                            <span className="font-semibold">
+                              {stats.selectedValueWinRate == null ? '—' : `${Math.round(stats.selectedValueWinRate * 100)}%`}
+                            </span>
                           </span>
                         ) : (
-                          <span className="text-gray-500">-</span>
+                          <span className="text-gray-500">—</span>
                         )}
                       </Button>
                     </td>
