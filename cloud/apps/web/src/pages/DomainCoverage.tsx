@@ -184,7 +184,14 @@ function isTempZeroSignature(option: DomainAvailableSignature): boolean {
   return Number.isFinite(parsed) && parsed === 0;
 }
 
+function isDefaultTemperatureSignature(option: DomainAvailableSignature): boolean {
+  return option.signature === 'vnewtd';
+}
+
 function selectPreferredSignature(options: DomainAvailableSignature[]): string {
+  // Prefer "Latest @ default" (vnewtd) first, then temp-zero, then anything
+  const defaultOptions = options.filter(isDefaultTemperatureSignature);
+  if (defaultOptions.length > 0) return defaultOptions[0]!.signature;
   const t0Options = options.filter(isTempZeroSignature);
   if (t0Options.length === 0) return options[0]?.signature ?? '';
   const sorted = [...t0Options].sort((left, right) => {
