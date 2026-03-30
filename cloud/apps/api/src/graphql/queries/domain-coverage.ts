@@ -114,8 +114,8 @@ builder.queryField('domainValueCoverage', (t) =>
       that tests that pair of values in conflict. Optionally filtered to count only
       runs that included the specified model IDs.
 
-      The matrix is directional: cell (col=X, row=Y) shows runs where X was presented first.
-      Diagonal cells are returned as batchCount=0 with no definitionId.
+      The matrix is symmetric: each unique value pair appears once, with the cell key
+      sorted alphabetically (valueA < valueB). Diagonal cells are omitted.
     `,
     args: {
       domainId: t.arg.id({
@@ -265,24 +265,14 @@ builder.queryField('domainValueCoverage', (t) =>
         label: m.displayName,
       }));
 
-      // Build the full directional 10×10 matrix
+      // Build the symmetric 45-cell matrix (one cell per unique sorted pair)
       const values = [...COVERAGE_VALUE_KEYS] as string[];
       const cells: DomainValueCoverageCell[] = [];
 
       for (const valueA of COVERAGE_VALUE_KEYS) {
         for (const valueB of COVERAGE_VALUE_KEYS) {
-          if (valueA === valueB) {
-            // Diagonal — no vignette tests a value against itself
-            cells.push({
-              valueA,
-              valueB,
-              batchCount: 0,
-              definitionId: null,
-              definitionName: null,
-              aggregateRunId: null,
-            });
-            continue;
-          }
+          // Only emit sorted pairs: skip diagonal and reversed pairs
+          if (valueA.localeCompare(valueB) >= 0) continue;
 
           const key = `${valueA}::${valueB}`;
           const defIdsForPair = definitionsByPairKey.get(key) ?? [];
