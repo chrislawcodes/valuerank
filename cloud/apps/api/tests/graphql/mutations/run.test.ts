@@ -771,6 +771,28 @@ describe('GraphQL Run Mutations', () => {
           runId: run.id,
           scenarioId: scenario.id,
           modelId: 'gpt-4',
+          definitionSnapshot: {
+            dimensions: [
+              { name: 'Achievement' },
+              { name: 'Benevolence_Dependability' },
+            ],
+            methodology: {
+              presentation_order: 'A_first',
+            },
+          },
+          decisionMetadata: {
+            manualOverride: {
+              appliedDecision: {
+                favoredValueKey: 'Achievement',
+                opposedValueKey: 'Benevolence_Dependability',
+                direction: 'favor_first',
+                strength: 'strong',
+              },
+              previousValue: 'other',
+              overriddenAt: '2026-03-29T00:00:00.000Z',
+              overriddenByUserId: TEST_USER.id,
+            },
+          },
           content: { turns: [] },
           decisionCode: 'other',
           turnCount: 1,
@@ -784,7 +806,7 @@ describe('GraphQL Run Mutations', () => {
         mutation UpdateTranscriptDecision($transcriptId: ID!, $decisionCode: String!) {
           updateTranscriptDecision(transcriptId: $transcriptId, decisionCode: $decisionCode) {
             id
-            decisionCode
+            decisionMetadata
             runId
           }
         }
@@ -803,13 +825,34 @@ describe('GraphQL Run Mutations', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.errors).toBeUndefined();
-      expect(response.body.data.updateTranscriptDecision.decisionCode).toBe('4');
+      expect(response.body.data.updateTranscriptDecision.decisionMetadata).toMatchObject({
+        manualOverride: {
+          previousValue: 'other',
+          overriddenByUserId: expect.any(String),
+          appliedDecision: {
+            favoredValueKey: 'Achievement',
+            opposedValueKey: 'Benevolence_Dependability',
+            direction: 'favor_first',
+            strength: 'strong',
+          },
+        },
+      });
       expect(response.body.data.updateTranscriptDecision.runId).toBe(run.id);
 
       const updated = await db.transcript.findUnique({
         where: { id: transcript.id },
       });
-      expect(updated?.decisionCode).toBe('4');
+      expect(updated?.decisionMetadata).toMatchObject({
+        manualOverride: {
+          previousValue: 'other',
+          appliedDecision: {
+            favoredValueKey: 'Achievement',
+            opposedValueKey: 'Benevolence_Dependability',
+            direction: 'favor_first',
+            strength: 'strong',
+          },
+        },
+      });
     });
 
     it('returns validation error for unsupported decision code', async () => {
