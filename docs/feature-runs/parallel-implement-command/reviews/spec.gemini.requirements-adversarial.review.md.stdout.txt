@@ -1,0 +1,57 @@
+{
+  "session_id": "bc4c8f20-6dd6-4427-a254-b7c3cd73662b",
+  "response": "## Findings\n\n### 1. Critical Flaw: Unenforced File Scopes Invalidate Overlap Detection\n\nThe entire safety model for parallelism rests on detecting overlapping file modifications. However, the spec explicitly states:\n\n> What if Codex produces changes to a file not listed in the `[P]` annotation? → Cherry-pick proceeds; the annotation is advisory for overlap detection only. Post-hoc file-scope validation is deferred to a future wave.\n\nThis turns the overlap detection into security theater. If two tasks are deemed parallel because their declared scopes are disjoint, but both modify the *same undeclared file*, the system will run them concurrently. This creates a race condition that leads to a non-atomic merge conflict when the changes are cherry-picked. The \"atomic failure\" logic in FR-011 will be triggered, but only after a complex failure state has been created. The core premise of safe parallelism is undermined if the scopes that guarantee it are not enforced.\n\n### 2. Concurrency Hazard: Unlocked Main Branch Allows Race Conditions\n\nThe spec addresses worktree path collisions between concurrent `implement` runs by using the process PID in the path (`wt-{slug}-{pid}-{index}`). However, it completely ignores the far more dangerous race condition on the main branch itself.\n\nIf two developers (or CI jobs) run `implement --slug <same_slug>` on the same repository and branch at the same time, their processes will not collide on worktree creation. But they will race to perform the final cherry-pick and HEAD manipulation on the shared main branch. This will inevitably lead to a corrupt git history, lost commits, or a branch in an indeterminate state. A repository-level locking mechanism (e.g., creating a `.git/implement.lock` file) is required to prevent concurrent execution against the same branch.\n\n### 3. Ambiguous State in Mixed Parallel/Serial Slices\n\nUser Story 2.3 and FR-013 define a dangerous ambiguity for slices containing both parallel (`[P]`) and serial (non-`[P]`) tasks. The spec states the serial group runs *after* the parallel group completes and is merged.\n\nHowever, it fails to specify the state of the world that the serial Codex worker is given. If the serial worker's prompt and context are based on the *original* pre-dispatch HEAD, its generated changes will be based on stale code and will almost certainly conflict with the just-merged parallel work. The implementation **must** ensure the serial task is executed against the new, post-parallel HEAD, but the spec omits this critical orchestration detail, making a severe implementation error highly likely.\n\n### 4. Brittle Dependency on Upstream Annotation Accuracy\n\nUser Story 3 places the burden of creating correct `[P: file-scope]` annotations on the upstream `feature-tasks` skill. While there is a safe fallback for missing annotations (treat as serial), there is no protection against *incorrect* annotations.\n\nIf the skill marks a task `[P]` but provides an incomplete file list, the overlap detector will have a blind spot. This will lead to the exact race condition described in Finding #1, where tasks believed to be independent are not. Relying on a separate agent to provide mission-critical safety data without a verification step is inherently fragile.\n\n## Residual Risks\n\n### 1. Semantic Conflicts Will Lead to \"Successful\" but Broken Merges\n\nThe spec explicitly puts semantic conflicts out of scope. This is a reasonable scoping decision for v1, but it remains the highest-severity risk for the user. Two workers can make changes to different files that are textually and syntactically valid but logically incompatible.\n\nFor example, a worker for Task A renames a function `calculate_total()` to `compute_final_total()`, and a worker for Task B adds a new call to the old `calculate_total()` function in a different file. The file scopes are disjoint. Both tasks will run in parallel. Both will be \"successfully\" cherry-picked. The resulting code will be broken, but the `implement` command will report success. This is more dangerous than a merge conflict because the failure is latent.\n\n### 2. Cherry-Pick Ordering is Brittle\n\nFR-010 mandates a deterministic cherry-pick order (by task index). While deterministic, this order is arbitrary. A conflict can occur during the cherry-pick of task 2's changes that would not have occurred if task 3's changes were applied first. The current design will fail atomically (which is good), but has no recourse. It will not try alternative orderings or provide context on why the conflict occurred, leading to brittle failures that require manual intervention to debug and resolve.\n\n### 3. Prompt Engineering Complexity is Underestimated\n\nFR-007 states that each worker receives a prompt \"describing only that task's scope\". This hand-waves a significant implementation challenge. Generating a high-quality, minimal, and sufficient prompt for an LLM to perform a surgical code change is non-trivial. A poorly-scoped prompt will cause Codex to either fail or produce low-quality changes that require manual cleanup, partially defeating the purpose of the automation. This risk is amplified for the serial-fallback case in mixed slices, where the prompt must correctly describe a set of non-contiguous tasks against a just-modified codebase.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 46730
+        },
+        "tokens": {
+          "input": 14968,
+          "prompt": 14968,
+          "candidates": 1117,
+          "total": 18851,
+          "cached": 0,
+          "thoughts": 2766,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 46730,
+            "tokens": {
+              "input": 14968,
+              "prompt": 14968,
+              "candidates": 1117,
+              "total": 18851,
+              "cached": 0,
+              "thoughts": 2766,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

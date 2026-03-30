@@ -5,7 +5,7 @@ import sys
 import unittest
 from pathlib import Path
 import tempfile
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -22,6 +22,7 @@ SPEC.loader.exec_module(MODULE)
 FACTORY_STATE = sys.modules["factory_state"]
 STAGES_MODULE = sys.modules["factory_stages"]
 REVIEW_MODULE = sys.modules["factory_review"]
+FACTORY_GIT = sys.modules["factory_git"]
 
 
 def stage_state(
@@ -2178,3 +2179,368 @@ class TestMigrateDiscoveryState(unittest.TestCase):
         }
         result = FACTORY_STATE.migrate_discovery_state(v1)
         self.assertEqual(result["unresolved"], [])
+
+
+class TestParsePAnnotation(unittest.TestCase):
+    def test_valid_single_file(self) -> None:
+        line = "- [ ] T001 [P: src/foo.ts] do thing"
+        self.assertEqual(STAGES_MODULE.parse_p_annotation(line), ["src/foo.ts"])
+
+    def test_valid_multiple_files(self) -> None:
+        line = "- [ ] T001 [P: src/foo.ts, src/bar.ts] do thing"
+        self.assertEqual(STAGES_MODULE.parse_p_annotation(line), ["src/foo.ts", "src/bar.ts"])
+
+    def test_empty_list(self) -> None:
+        line = "- [ ] T001 [P:] do thing"
+        self.assertEqual(STAGES_MODULE.parse_p_annotation(line), [])
+
+    def test_bare_p_no_colon(self) -> None:
+        line = "- [ ] T001 [P] do thing"
+        self.assertEqual(STAGES_MODULE.parse_p_annotation(line), [])
+
+    def test_no_annotation(self) -> None:
+        line = "- [ ] T001 do thing"
+        self.assertEqual(STAGES_MODULE.parse_p_annotation(line), [])
+
+    def test_dot_slash_prefix_normalized(self) -> None:
+        line = "- [ ] T001 [P: ./src/foo.ts] do thing"
+        self.assertEqual(STAGES_MODULE.parse_p_annotation(line), ["src/foo.ts"])
+
+    def test_duplicate_paths_deduped(self) -> None:
+        line = "- [ ] T001 [P: src/foo.ts, src/foo.ts] do thing"
+        self.assertEqual(STAGES_MODULE.parse_p_annotation(line), ["src/foo.ts"])
+
+    def test_absolute_path_rejected(self) -> None:
+        line = "- [ ] T001 [P: /etc/passwd] do thing"
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = STAGES_MODULE.parse_p_annotation(line)
+        self.assertEqual(result, [])
+        self.assertIn("rejecting absolute path", stderr.getvalue())
+
+    def test_dotdot_escape_rejected(self) -> None:
+        line = "- [ ] T001 [P: ../outside/repo.ts] do thing"
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = STAGES_MODULE.parse_p_annotation(line)
+        self.assertEqual(result, [])
+        self.assertIn("rejecting path outside repository", stderr.getvalue())
+
+    def test_paths_with_subdirs(self) -> None:
+        line = "- [ ] T001 [P: src/services/foo.ts, cloud/apps/api/src/index.ts] do thing"
+        self.assertEqual(
+            STAGES_MODULE.parse_p_annotation(line),
+            ["src/services/foo.ts", "cloud/apps/api/src/index.ts"],
+        )
+
+
+class TestParseParallelTaskGroups(unittest.TestCase):
+    def _groups(self, tasks_md: str) -> list[dict]:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "tasks.md").write_text(tasks_md, encoding="utf-8")
+            with patch.object(STAGES_MODULE, "workflow_dir", return_value=root):
+                return STAGES_MODULE.parse_parallel_task_groups("slug")
+
+    def test_no_p_tasks_returns_serial_group(self) -> None:
+        groups = self._groups(
+            "- [ ] T001 do thing\n"
+            "- [ ] T002 do other\n"
+        )
+        self.assertEqual(len(groups), 1)
+        self.assertFalse(groups[0]["parallel"])
+        self.assertIsNone(groups[0]["overlap_warning"])
+        self.assertEqual(groups[0]["files"], [])
+        self.assertEqual(len(groups[0]["tasks"]), 2)
+
+    def test_two_nonoverlapping_p_tasks_returns_parallel_group(self) -> None:
+        groups = self._groups(
+            "- [ ] T001 [P: src/a.ts] do thing\n"
+            "- [ ] T002 [P: src/b.ts] do thing\n"
+        )
+        self.assertEqual(len(groups), 1)
+        self.assertTrue(groups[0]["parallel"])
+        self.assertIsNone(groups[0]["overlap_warning"])
+        self.assertEqual(groups[0]["files"], ["src/a.ts", "src/b.ts"])
+        self.assertEqual(len(groups[0]["tasks"]), 2)
+
+    def test_two_overlapping_p_tasks_returns_serial_with_warning(self) -> None:
+        groups = self._groups(
+            "- [ ] T001 [P: src/same-file.ts] do thing\n"
+            "- [ ] T002 [P: src/same-file.ts] do thing\n"
+        )
+        self.assertEqual(len(groups), 1)
+        self.assertFalse(groups[0]["parallel"])
+        self.assertIn("same-file.ts", groups[0]["overlap_warning"])
+        self.assertEqual(len(groups[0]["tasks"]), 2)
+
+    def test_single_p_task_returns_serial(self) -> None:
+        groups = self._groups("- [ ] T001 [P: src/file.ts] do thing\n")
+        self.assertEqual(len(groups), 1)
+        self.assertFalse(groups[0]["parallel"])
+        self.assertIsNone(groups[0]["overlap_warning"])
+        self.assertEqual(len(groups[0]["tasks"]), 1)
+
+    def test_bare_p_without_file_list_treated_as_unannotated(self) -> None:
+        groups = self._groups(
+            "- [ ] T001 [P] do thing\n"
+            "- [ ] T002 [P: src/file.ts] do thing\n"
+        )
+        self.assertEqual(len(groups), 1)
+        self.assertFalse(groups[0]["parallel"])
+        self.assertIsNone(groups[0]["overlap_warning"])
+        self.assertEqual(len(groups[0]["tasks"]), 2)
+
+    def test_tasks_after_checkpoint_not_included(self) -> None:
+        groups = self._groups(
+            "- [ ] T001 do thing\n"
+            "- [ ] T002 [CHECKPOINT]\n"
+            "- [ ] T003 do later\n"
+        )
+        self.assertEqual(len(groups), 1)
+        self.assertFalse(groups[0]["parallel"])
+        self.assertEqual(len(groups[0]["tasks"]), 1)
+
+    def test_all_tasks_checked_returns_empty(self) -> None:
+        groups = self._groups(
+            "- [x] T001 do thing\n"
+            "- [x] T002 do other\n"
+        )
+        self.assertEqual(groups, [])
+
+    def test_dot_slash_and_bare_path_overlap_detected(self) -> None:
+        groups = self._groups(
+            "- [ ] T001 [P: ./src/a.ts] do thing\n"
+            "- [ ] T002 [P: src/a.ts] do thing\n"
+        )
+        self.assertEqual(len(groups), 1)
+        self.assertFalse(groups[0]["parallel"])
+        self.assertIn("src/a.ts", groups[0]["overlap_warning"])
+
+
+class TestWorktreeHelpers(unittest.TestCase):
+    def test_create_worktree_calls_correct_git_commands(self) -> None:
+        calls: list[list[str]] = []
+
+        def mock_run(cmd, **kwargs):
+            calls.append(cmd)
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
+
+        with patch.object(Path, "exists", return_value=False):
+            path = FACTORY_GIT.create_worktree("my-slug", 0, run_fn=mock_run)
+
+        self.assertIn("my-slug", str(path))
+        self.assertEqual(
+            calls[-1],
+            ["git", "-C", str(FACTORY_GIT.REPO_ROOT), "worktree", "add", str(path), "HEAD"],
+        )
+
+    def test_create_worktree_removes_stale_before_add(self) -> None:
+        calls: list[list[str]] = []
+
+        def mock_run(cmd, **kwargs):
+            calls.append(cmd)
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
+
+        with patch.object(Path, "exists", return_value=True):
+            path = FACTORY_GIT.create_worktree("my-slug", 1, run_fn=mock_run)
+
+        remove_index = next(
+            i for i, cmd in enumerate(calls) if cmd[3:6] == ["worktree", "remove", "--force"]
+        )
+        add_index = next(i for i, cmd in enumerate(calls) if cmd[3:5] == ["worktree", "add"])
+        self.assertLess(remove_index, add_index)
+        self.assertIn(str(path), calls[remove_index])
+        self.assertTrue(any(cmd == ["git", "-C", str(FACTORY_GIT.REPO_ROOT), "worktree", "prune"] for cmd in calls))
+
+    def test_remove_worktree_silent_if_path_absent(self) -> None:
+        calls: list[list[str]] = []
+
+        def mock_run(cmd, **kwargs):
+            calls.append(cmd)
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
+
+        with patch.object(Path, "exists", return_value=False):
+            FACTORY_GIT.remove_worktree(Path("/tmp/nonexistent_12345"), run_fn=mock_run)
+
+        self.assertEqual(calls, [])
+
+    def test_stage_and_commit_if_dirty_returns_sha_when_dirty(self) -> None:
+        calls: list[list[str]] = []
+
+        def mock_run(cmd, **kwargs):
+            calls.append(cmd)
+            result = MagicMock()
+            result.returncode = 0
+            result.stderr = ""
+            if cmd[-2:] == ["status", "--porcelain"]:
+                result.stdout = "M foo.ts\n"
+            elif cmd[-2:] == ["rev-parse", "HEAD"]:
+                result.stdout = "abc123\n"
+            else:
+                result.stdout = ""
+            return result
+
+        result = FACTORY_GIT.stage_and_commit_if_dirty(Path("/tmp/wt-test"), "commit message", run_fn=mock_run)
+        self.assertEqual(result, "abc123")
+        self.assertGreaterEqual(len(calls), 4)
+
+    def test_stage_and_commit_if_dirty_returns_none_when_clean(self) -> None:
+        calls: list[list[str]] = []
+
+        def mock_run(cmd, **kwargs):
+            calls.append(cmd)
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
+
+        result = FACTORY_GIT.stage_and_commit_if_dirty(Path("/tmp/wt-test"), "commit message", run_fn=mock_run)
+        self.assertIsNone(result)
+        self.assertEqual(len(calls), 1)
+
+    def test_stage_and_commit_with_deleted_file_returns_sha(self) -> None:
+        def mock_run(cmd, **kwargs):
+            result = MagicMock()
+            result.returncode = 0
+            result.stderr = ""
+            if cmd[-2:] == ["status", "--porcelain"]:
+                result.stdout = "D deleted.ts\n"
+            elif cmd[-2:] == ["rev-parse", "HEAD"]:
+                result.stdout = "deadbeef\n"
+            else:
+                result.stdout = ""
+            return result
+
+        result = FACTORY_GIT.stage_and_commit_if_dirty(Path("/tmp/wt-test"), "commit message", run_fn=mock_run)
+        self.assertIsNotNone(result)
+        self.assertEqual(result, "deadbeef")
+
+    def test_cherry_pick_commits_returns_true_on_success(self) -> None:
+        calls: list[list[str]] = []
+
+        def mock_run(cmd, **kwargs):
+            calls.append(cmd)
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
+
+        result = FACTORY_GIT.cherry_pick_commits(["sha1", "sha2"], run_fn=mock_run)
+        self.assertEqual(result, (True, ""))
+        self.assertEqual(len(calls), 2)
+
+    def test_cherry_pick_commits_returns_false_and_calls_abort_on_failure(self) -> None:
+        calls: list[list[str]] = []
+
+        def mock_run(cmd, **kwargs):
+            calls.append(cmd)
+            if cmd[-2:] == ["cherry-pick", "sha1"]:
+                raise FACTORY_GIT.subprocess.CalledProcessError(1, cmd, output="", stderr="conflict")
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
+
+        result = FACTORY_GIT.cherry_pick_commits(["sha1", "sha2"], run_fn=mock_run)
+        self.assertFalse(result[0])
+        self.assertIn("sha1", result[1])
+        self.assertTrue(any(cmd[-1] == "--abort" for cmd in calls))
+
+
+class TestCommandImplement(unittest.TestCase):
+    def _args(self, slug: str = "test-slug", max_workers: int = 4):
+        return SimpleNamespace(slug=slug, max_workers=max_workers)
+
+    def _clean_status(self) -> MagicMock:
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    def test_serial_path_calls_run_serial(self) -> None:
+        with patch.object(MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
+            MODULE,
+            "parse_parallel_task_groups",
+            return_value=[{"tasks": ["T001"], "parallel": False, "files": [], "overlap_warning": None}],
+        ) as mock_parse, patch.object(MODULE, "_run_serial", return_value=0) as mock_run_serial:
+            result = MODULE.command_implement(self._args())
+
+        self.assertEqual(result, 0)
+        mock_parse.assert_called_once_with("test-slug")
+        mock_run_serial.assert_called_once_with("test-slug", ["T001"])
+
+    def test_parallel_path_calls_run_parallel(self) -> None:
+        group = {"tasks": ["T001", "T002"], "parallel": True, "files": ["a.ts", "b.ts"], "overlap_warning": None}
+        with patch.object(MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
+            MODULE, "parse_parallel_task_groups", return_value=[group]
+        ), patch.object(MODULE, "_run_parallel", return_value=0) as mock_run_parallel:
+            result = MODULE.command_implement(self._args())
+
+        self.assertEqual(result, 0)
+        mock_run_parallel.assert_called_once()
+        self.assertEqual(mock_run_parallel.call_args.args[0], "test-slug")
+        self.assertEqual(mock_run_parallel.call_args.args[1], group)
+        self.assertEqual(mock_run_parallel.call_args.kwargs["max_workers"], 4)
+
+    def test_overlap_warning_printed_and_runs_serial(self) -> None:
+        group = {
+            "tasks": ["T001", "T002"],
+            "parallel": False,
+            "files": [],
+            "overlap_warning": "tasks 1,2 share file foo.ts",
+        }
+        stderr = io.StringIO()
+        with patch.object(MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
+            MODULE, "parse_parallel_task_groups", return_value=[group]
+        ), patch.object(MODULE, "_run_serial", return_value=0) as mock_run_serial, redirect_stderr(stderr):
+            result = MODULE.command_implement(self._args())
+
+        self.assertEqual(result, 0)
+        self.assertIn("tasks 1,2 share file foo.ts", stderr.getvalue())
+        mock_run_serial.assert_called_once_with("test-slug", ["T001", "T002"])
+
+    def test_dirty_working_tree_exits_1_without_codex(self) -> None:
+        dirty_status = MagicMock(returncode=0, stdout="M foo.ts\n", stderr="")
+        with patch.object(MODULE.subprocess, "run", return_value=dirty_status), patch.object(
+            MODULE, "_run_serial", return_value=0
+        ) as mock_run_serial:
+            result = MODULE.command_implement(self._args())
+
+        self.assertEqual(result, 1)
+        mock_run_serial.assert_not_called()
+
+    def test_empty_groups_prints_nothing_to_implement_and_exits_0(self) -> None:
+        stdout = io.StringIO()
+        with patch.object(MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
+            MODULE, "parse_parallel_task_groups", return_value=[]
+        ), redirect_stdout(stdout):
+            result = MODULE.command_implement(self._args())
+
+        self.assertEqual(result, 0)
+        self.assertIn("nothing to implement", stdout.getvalue())
+
+    def test_nonzero_rc_propagated_immediately(self) -> None:
+        groups = [
+            {"tasks": ["T001"], "parallel": False, "files": [], "overlap_warning": None},
+            {"tasks": ["T002"], "parallel": False, "files": [], "overlap_warning": None},
+        ]
+        with patch.object(MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
+            MODULE, "parse_parallel_task_groups", return_value=groups
+        ), patch.object(MODULE, "_run_serial", side_effect=[1, 0]) as mock_run_serial:
+            result = MODULE.command_implement(self._args())
+
+        self.assertEqual(result, 1)
+        self.assertEqual(mock_run_serial.call_count, 1)
