@@ -119,7 +119,7 @@ src/
 **Components**:
 - `- [ ]` - Markdown checkbox (unchecked)
 - `T001` - Sequential task ID
-- `[P]` - Optional parallel marker (different files, no dependencies)
+- `[P: path/to/file.ext]` - Optional parallel marker with **required** file scope (comma-separated repo-relative paths). A bare `[P]` without a file list is treated as unannotated (serial) by the runner.
 - `[US1]` - Story label (for user story phases ONLY)
 - Description - Clear action with file path from plan.md
 
@@ -402,9 +402,9 @@ src/
 
 **Prerequisites**: plan.md, spec.md [, data-model.md] [, contracts/]
 
-## Format: `[ID] [P?] [Story] Description`
+## Format: `[ID] [P: file]? [Story]? Description`
 
-- **[P]**: Can run in parallel
+- **[P: repo/relative/file.ext]**: Can run in parallel — file list is **required** (comma-separated). Bare `[P]` without a file list is treated as serial by the runner.
 - **[Story]**: User story (US1, US2, US3)
 - Include exact file paths from plan.md
 
@@ -514,15 +514,27 @@ Every task MUST have:
 
 ### Parallel Marker [P] Rules
 
-Use `[P]` when:
+**Format**: `[P: repo/relative/file.ext]` or `[P: file1.ts, path/to/file2.ts]`
+
+The file list is **required** whenever you mark a task `[P]`. A bare `[P]` without a file list is treated as unannotated (serial) by the `run_factory.py implement` runner. The runner uses the file list for overlap detection — tasks whose file sets are disjoint can run in parallel; tasks whose file sets overlap are forced serial with a warning.
+
+**Correct format example**:
+```
+- [ ] T005 [P: src/services/foo.ts] [US1] Add FooService in src/services/foo.ts
+- [ ] T006 [P: src/components/Bar.tsx] [US1] Add Bar component in src/components/Bar.tsx
+```
+
+Use `[P: ...]` when:
 - ✅ Different file than previous task
 - ✅ No dependency on incomplete tasks
 - ✅ Can run simultaneously with other [P] tasks
+- ✅ You can list all files the task will modify
 
 Do NOT use `[P]` when:
-- ❌ Same file as previous task
+- ❌ Same file as another [P] task in the same slice (use serial instead)
 - ❌ Depends on previous task output
 - ❌ Must run in specific order
+- ❌ You cannot enumerate the files in advance (omit [P] entirely — it will run serially)
 
 ---
 
