@@ -284,12 +284,14 @@ def build_preference_summary(
 
         overall_signed_center: float | None = None
         overall_lean: str | None = None
+        preference_strength: float | None = None
 
         if scenario_means:
             signed_center = sum(mean - 3.0 for mean in scenario_means) / len(scenario_means)
             strength = sum(abs(mean - 3.0) for mean in scenario_means) / len(scenario_means)
 
             overall_signed_center = round(float(signed_center), 6)
+            preference_strength = round(float(strength), 6)
 
             if overall_signed_center > 0:
                 overall_lean = "A"
@@ -302,7 +304,9 @@ def build_preference_summary(
             "preferenceDirection": {
                 "byValue": model_stats.get("values", {}),
                 "overallLean": overall_lean,
+                "overallSignedCenter": overall_signed_center,
             },
+            "preferenceStrength": preference_strength,
         }
 
     return {
