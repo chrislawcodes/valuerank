@@ -1,0 +1,9 @@
+{
+  "paths": [
+    "specs/001-parallel-implement-command"
+  ],
+  "allowed_dirty_paths": [
+    "docs/feature-runs/parallel-implement-command",
+    "specs/001-parallel-implement-command"
+  ]
+}
