@@ -75,7 +75,7 @@ Once the above are resolved:
 
 **Goal:** AI iterates on features more independently, less human-in-the-loop
 
-**Assessment (2026-03-29):** The feature factory is best-in-class for requirements quality (discovery, spec, adversarial review). It's behind the curve on implementation speed (no parallelism, high ceremony for small tasks). Plan: keep the front half, modernize the back half.
+**Assessment (2026-03-30):** Front half (discovery → spec → plan → tasks → adversarial review) is solid. Back half is now catching up: fast path added, parallel Codex dispatch added (PR #458, pending merge). Remaining gaps: review parallelism experiment underway, no cost visibility, Composio/SpecKit not evaluated.
 
 ### What We Keep (Differentiated)
 - Mandatory discovery phase — catches bad requirements early
@@ -93,20 +93,17 @@ Once the above are resolved:
 
 ### Priority 3: Speed Up Implementation
 - [x] **Add `implement` command with parallel Codex dispatch** — PR pending. `run_factory.py implement --slug <slug>` reads the next `[CHECKPOINT]` slice from tasks.md, detects `[P: file]`-annotated tasks, and dispatches parallel Codex workers in isolated git worktrees for non-overlapping tasks. Cherry-picks back in task-index order. Serial fallback for overlap or unannotated tasks.
-- [ ] **Run reviews in parallel** — Codex always runs parallel with Gemini (safe). Gemini reviews launch 30s apart without the file lock (experiment). See tracking note below.
-
-  **Experiment tracking — Gemini stagger** (`GEMINI_STAGGER_SECONDS` in `factory_review.py`):
-  - Currently: `30` seconds between Gemini launches, lock bypassed via `--no-gemini-lock`
-  - If review output contains rate-limit errors → increase to `60`, then `90`, then `120`
-  - If failures persist at `120` → set `GEMINI_STAGGER_SECONDS = None` to revert to strict serial
-  - If no rate-limit errors after several checkpoints → experiment succeeded; update this note
+- [x] **Run reviews in parallel** — Validated 2026-03-30. Codex runs fully parallel with Gemini. Gemini reviews stagger 30s apart (no file lock). Zero 429s across parallel-implement-command checkpoints. `GEMINI_STAGGER_SECONDS = 30` is now permanent default in `factory_review.py`.
 
 ### Priority 4: Integrate Best-of-Breed Tools
-- [ ] **Integrate [Spec Kit](https://github.com/github/spec-kit) constitution validation** — Lightweight pre-check before expensive adversarial Gemini reviews.
 - [ ] **Evaluate [Composio Agent Orchestrator](https://github.com/ComposioHQ/agent-orchestrator)** — Handles parallel agent spawning, CI failure auto-fix, and review comment routing. Could replace the implementation half of the runner.
+- ~~**Integrate Spec Kit**~~ — Evaluated 2026-03-30. Spec Kit is a parallel workflow (specify → plan → tasks → implement), not a pre-check tool. It lacks adversarial review, which is the factory's core differentiator. Not worth adopting — would mean migrating to their conventions and then rebuilding adversarial review on top anyway.
 
-### Priority 5: Observability
-- [ ] **Add cost tracking** — Log token usage per checkpoint per agent per feature. No visibility today into what the ceremony costs.
+### Priority 5: Detect phantom task completions
+- [ ] **Add post-implement verification that checked tasks have real code behind them** — Inspired by [spec-kit-verify-tasks](https://github.com/datastone-inc/spec-kit-verify-tasks). When Codex marks a task `[x]` but didn't actually implement it, nothing catches this today. Simple fix: for each newly-checked task, verify the diff contains changes in the files that task claimed to touch. ~20 lines of Python in the factory. Hold until after the Claude-direct experiment — if checkpoint stage gets simplified, where this lives changes.
+
+### Priority 6: Validate the factory is net positive
+- [ ] **Run one feature Claude-direct as a control** — Give Claude the spec, implement in one shot with a self-review pass (no checkpoints, no Gemini, no Codex). Compare PR quality and wall-clock time against a factory run of similar scope. If output quality is comparable, the checkpoint stage isn't pulling its weight and we simplify or remove it. If output is noticeably worse, the factory earns its keep and we invest in fixing the repairable loop (checkpoint hash goes stale on every edit, forcing full re-review of unchanged content).
 
 ---
 
