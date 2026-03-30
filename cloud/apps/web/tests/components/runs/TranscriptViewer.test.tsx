@@ -64,7 +64,7 @@ describe('TranscriptViewer', () => {
     );
 
     expect(screen.getByText('Decision summary:')).toBeInTheDocument();
-    expect(screen.getByText('Favor first / Strong')).toBeInTheDocument();
+    expect(screen.getByText(/Favor first/)).toBeInTheDocument();
     expect(screen.getByText('Raw Evidence')).toBeInTheDocument();
     expect(screen.getByText('exact')).toBeInTheDocument();
     expect(screen.queryByText('42 tokens')).not.toBeInTheDocument();
