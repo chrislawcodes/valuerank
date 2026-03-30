@@ -1,10 +1,11 @@
 import { db } from '@valuerank/db';
-import { AuthenticationError, bucketDecisionDirection, decisionsMatch } from '@valuerank/shared';
+import { AuthenticationError } from '@valuerank/shared';
 import { formatVnewSignature, isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
 import { builder } from '../builder.js';
 import { estimateCost as estimateCostService } from '../../services/cost/estimate.js';
 import { parseTemperature } from '../../utils/temperature.js';
 import { LOCKED_ASSUMPTION_VIGNETTES } from '../assumptions-constants.js';
+import { resolveTranscriptDecisionModel } from './domain/decision-model.js';
 
 type AssumptionStatus = 'COMPUTED' | 'INSUFFICIENT_DATA';
 type TempZeroMismatchType = 'decision_flip' | 'missing_trial' | null;
@@ -107,11 +108,12 @@ type TranscriptRecord = {
   modelId: string;
   modelVersion: string | null;
   decisionCode: string | null;
+  decisionMetadata: unknown;
+  definitionSnapshot: unknown;
+  scenario: { orientationFlipped: boolean | null } | null;
   content: unknown;
   createdAt: Date;
 };
-
-const VALID_DECISIONS = ['1', '2', '3', '4', '5'] as const;
 
 function signatureMatches(runConfig: unknown, signature: string | null): boolean {
   if (signature === null) return true;
@@ -154,23 +156,52 @@ function computeMatch(values: Array<string | null>, transcriptCount: number): bo
   return nonNullValues.every((value) => value === nonNullValues[0]);
 }
 
-function decisionSeriesMatches(decisions: Array<string | null>, directionOnly: boolean): boolean {
+function decisionSeriesMatches(decisions: Array<string | null>): boolean {
   if (decisions.length < 2 || decisions.some((decision) => decision == null)) {
     return false;
   }
 
-  if (!directionOnly) {
-    const firstDecision = decisions[0];
-    return decisions.every((decision) => decision === firstDecision);
+  const firstDecision = decisions[0];
+  return decisions.every((decision) => decision === firstDecision);
+}
+
+function resolveDecisionSummary(transcript: TranscriptRecord): {
+  exact: string | null;
+  direction: string | null;
+  display: string | null;
+} {
+  const resolved = resolveTranscriptDecisionModel({
+    decisionCode: transcript.decisionCode,
+    decisionMetadata: transcript.decisionMetadata,
+    definitionSnapshot: transcript.definitionSnapshot,
+    orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+  });
+
+  if (resolved.canonical.direction === 'unknown') {
+    return { exact: null, direction: null, display: null };
   }
 
-  const directions = decisions.map((decision) => bucketDecisionDirection(decision));
-  if (directions.some((direction) => direction == null)) {
-    return false;
+  if (resolved.canonical.direction === 'neutral') {
+    return {
+      exact: 'neutral',
+      direction: 'neutral',
+      display: 'neutral',
+    };
   }
 
-  const firstDirection = directions[0];
-  return directions.every((direction) => direction === firstDirection);
+  if (resolved.canonical.favoredValueKey == null) {
+    return { exact: null, direction: null, display: null };
+  }
+
+  const direction = resolved.canonical.direction;
+  const strength = resolved.canonical.strength;
+  const favoredValueKey = resolved.canonical.favoredValueKey;
+
+  return {
+    exact: `${direction}:${strength}:${favoredValueKey}`,
+    direction,
+    display: `${direction}:${strength}`,
+  };
 }
 
 function summarizeDecisionCodes(decisionCodes: Array<string | null>, transcriptCount: number): string {
@@ -475,7 +506,7 @@ builder.queryField('assumptionsTempZero', (t) =>
             modelId: { in: models.map((model) => model.modelId) },
             scenarioId: { not: null },
             deletedAt: null,
-            decisionCode: { in: VALID_DECISIONS as unknown as string[] },
+            summarizedAt: { not: null },
           },
           orderBy: { createdAt: 'desc' },
           select: {
@@ -484,6 +515,13 @@ builder.queryField('assumptionsTempZero', (t) =>
             modelId: true,
             modelVersion: true,
             decisionCode: true,
+            decisionMetadata: true,
+            definitionSnapshot: true,
+            scenario: {
+              select: {
+                orientationFlipped: true,
+              },
+            },
             content: true,
             createdAt: true,
           },
@@ -575,15 +613,20 @@ builder.queryField('assumptionsTempZero', (t) =>
           for (const scenario of sortedScenarios) {
             const group = transcriptGroups.get(`${model.modelId}::${scenario.id}`) ?? [];
             const usedGroup = batchesRun > 0 ? group.slice(0, batchesRun) : [];
-            const batch1 = usedGroup[0]?.decisionCode ?? null;
-            const batch2 = usedGroup[1]?.decisionCode ?? null;
-            const batch3 = usedGroup[2]?.decisionCode ?? null;
+            const decisionSummaries = usedGroup.map(resolveDecisionSummary);
+            const batch1 = decisionSummaries[0]?.display ?? null;
+            const batch2 = decisionSummaries[1]?.display ?? null;
+            const batch3 = decisionSummaries[2]?.display ?? null;
             const comparable = batchesRun >= 2 && usedGroup.length === batchesRun;
             const isMatch = comparable
               ? (
                 batchesRun === 3
-                  ? decisionsMatch(batch1, batch2, batch3, directionOnly)
-                  : decisionSeriesMatches(usedGroup.map((transcript) => transcript.decisionCode), directionOnly)
+                  ? decisionSeriesMatches(
+                    decisionSummaries.map((summary) => (directionOnly ? summary.direction : summary.exact)),
+                  )
+                  : decisionSeriesMatches(
+                    decisionSummaries.map((summary) => (directionOnly ? summary.direction : summary.exact)),
+                  )
               )
               : false;
             const mismatchType: TempZeroMismatchType = comparable ? (isMatch ? null : 'decision_flip') : 'missing_trial';
@@ -609,7 +652,7 @@ builder.queryField('assumptionsTempZero', (t) =>
               decisions: usedGroup.map((transcript, index) => ({
                 label: `Batch ${index + 1}`,
                 transcriptId: transcript.id,
-                decision: transcript.decisionCode,
+                decision: decisionSummaries[index]?.display ?? null,
                 content: transcript.content,
               })),
             });

@@ -424,8 +424,8 @@ async function persistCachedSummary(
   const persistedSummaryCache = responseSha256
     ? buildSummaryCacheRecord(
         {
-          decisionCode: summaryCache.summary.decisionCode,
-          decisionSource: summaryCache.summary.decisionCodeSource,
+          decisionCode: summaryCache.summary.decisionCode ?? '',
+          decisionSource: summaryCache.summary.decisionCodeSource ?? '',
           decisionText: summaryCache.summary.decisionText,
           decisionMetadata: summaryCache.summary.decisionMetadata,
           canonicalDecision: summaryCache.summary.canonicalDecision ?? null,
@@ -439,8 +439,6 @@ async function persistCachedSummary(
   await db.transcript.update({
     where: { id: transcript.id },
     data: {
-      decisionCode: summaryCache.summary.decisionCode,
-      decisionCodeSource: summaryCache.summary.decisionCodeSource,
       decisionText: summaryCache.summary.decisionText,
       decisionMetadata: buildDecisionMetadataForPersist(
         summaryCache.summary.decisionMetadata,
@@ -480,8 +478,6 @@ async function persistSuccessfulSummary(
   await db.transcript.update({
     where: { id: transcript.id },
     data: {
-      decisionCode: summary.decisionCode,
-      decisionCodeSource: summary.decisionSource,
       decisionText: summary.decisionText,
       decisionMetadata: buildDecisionMetadataForPersist(
         summary.decisionMetadata,
@@ -493,7 +489,7 @@ async function persistSuccessfulSummary(
   });
 
   log.info(
-    { jobId: job.id, transcriptId: transcript.id, decisionCode: summary.decisionCode },
+    { jobId: job.id, transcriptId: transcript.id },
     'Transcript summarized'
   );
 
@@ -525,8 +521,6 @@ async function persistSummarizeFailure(
   await db.transcript.update({
     where: { id: transcript.id },
     data: {
-      decisionCode: 'error',
-      decisionCodeSource: 'error',
       decisionText: failureText,
       decisionMetadata: Prisma.DbNull,
       summarizedAt: new Date(),

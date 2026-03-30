@@ -152,8 +152,8 @@ export function mergeDecisionDistributions(
   distributions.forEach((distribution) => {
     Object.entries(distribution ?? {}).forEach(([modelId, counts]) => {
       const currentCounts = merged[modelId] ?? {};
-      Object.entries(counts ?? {}).forEach(([decisionCode, count]) => {
-        currentCounts[decisionCode] = (currentCounts[decisionCode] ?? 0) + count;
+      Object.entries(counts ?? {}).forEach(([decisionKey, count]) => {
+        currentCounts[decisionKey] = (currentCounts[decisionKey] ?? 0) + count;
       });
       merged[modelId] = currentCounts;
     });

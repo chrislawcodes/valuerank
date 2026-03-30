@@ -1,9 +1,10 @@
-import { db } from '@valuerank/db';
+import { db, type Prisma } from '@valuerank/db';
 import { AuthenticationError, NotFoundError } from '@valuerank/shared';
 import { builder } from '../../builder.js';
 import { RunRef, TranscriptRef } from '../../types/refs.js';
 import { triggerBasicAnalysis } from '../../../services/analysis/trigger.js';
 import { createAuditLog } from '../../../services/audit/index.js';
+import { resolveTranscriptDecisionModel } from '../../queries/domain/decision-model.js';
 import { UpdateRunInput } from './payloads.js';
 
 function isValidManualDecisionCode(value: string): boolean {
@@ -173,6 +174,9 @@ builder.mutationField('updateTranscriptDecision', (t) =>
           id: true,
           runId: true,
           decisionCode: true,
+          decisionMetadata: true,
+          definitionSnapshot: true,
+          scenario: { select: { orientationFlipped: true } },
         },
       });
 
@@ -180,11 +184,43 @@ builder.mutationField('updateTranscriptDecision', (t) =>
         throw new NotFoundError('Transcript', transcriptId);
       }
 
+      // Resolve canonical v2 decision for the new code so the manual
+      // override is readable through the v2 model.
+      const resolved = resolveTranscriptDecisionModel({
+        decisionCode,
+        decisionMetadata: transcript.decisionMetadata,
+        definitionSnapshot: transcript.definitionSnapshot,
+        orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+      });
+
+      const existingMetadata =
+        transcript.decisionMetadata != null &&
+        typeof transcript.decisionMetadata === 'object' &&
+        !Array.isArray(transcript.decisionMetadata)
+          ? (transcript.decisionMetadata as Record<string, unknown>)
+          : {};
+
+      const manualOverrideMetadata = {
+        ...existingMetadata,
+        manualOverride: {
+          appliedDecision: {
+            favoredValueKey: resolved.canonical.favoredValueKey,
+            opposedValueKey: resolved.canonical.opposedValueKey,
+            direction: resolved.canonical.direction,
+            strength: resolved.canonical.strength,
+          },
+          previousValue: transcript.decisionCode,
+          overriddenAt: new Date().toISOString(),
+          overriddenByUserId: ctx.user.id,
+        },
+      };
+
       const updatedTranscript = await db.transcript.update({
         where: { id: transcriptId },
         data: {
           decisionCode,
           decisionCodeSource: 'manual',
+          decisionMetadata: manualOverrideMetadata as Prisma.InputJsonValue,
         },
       });
 

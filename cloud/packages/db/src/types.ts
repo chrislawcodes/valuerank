@@ -176,8 +176,8 @@ export type DecisionManualOverride = {
 };
 
 export type SummaryCacheSummary = {
-  decisionCode: string;
-  decisionCodeSource: string;
+  decisionCode?: string;
+  decisionCodeSource?: string;
   decisionText: string | null;
   decisionMetadata: Record<string, unknown> | null;
   canonicalDecision?: {

@@ -30,6 +30,7 @@ import { exportDefinitionAsMd } from '../services/export/md.js';
 import { exportScenariosAsYaml } from '../services/export/yaml.js';
 import { generateExcelExport, type RunExportData } from '../services/export/xlsx/index.js';
 import { resolveDomainSignatureRunIds } from '../services/domain.js';
+import { resolveTranscriptDecisionModel } from '../graphql/queries/domain/decision-model.js';
 
 const log = createLogger('export');
 
@@ -566,6 +567,7 @@ exportRouter.get(
               id: true,
               name: true,
               content: true,
+              orientationFlipped: true,
             },
           },
         },
@@ -587,28 +589,43 @@ exportRouter.get(
           definition: run.definition,
         },
         transcriptCount: transcripts.length,
-        transcripts: transcripts.map((t) => ({
-          id: t.id,
-          modelId: t.modelId,
-          modelVersion: t.modelVersion,
-          scenario: t.scenario
-            ? {
-              id: t.scenario.id,
-              name: t.scenario.name,
-              dimensions: (t.scenario.content as { dimensions?: Record<string, unknown> } | null)?.dimensions,
-            }
-            : null,
-          content: t.content,
-          turnCount: t.turnCount,
-          tokenCount: t.tokenCount,
-          durationMs: t.durationMs,
-          estimatedCost: t.estimatedCost,
-          decisionCode: t.decisionCode,
-          decisionText: t.decisionText,
-          decisionCodeSource: t.decisionCodeSource,
-          decisionMetadata: t.decisionMetadata,
-          createdAt: t.createdAt,
-        })),
+        transcripts: transcripts.map((t) => {
+          const decision = resolveTranscriptDecisionModel({
+            decisionCode: t.decisionCode,
+            decisionMetadata: t.decisionMetadata,
+            definitionSnapshot: t.definitionSnapshot,
+            orientationFlipped: t.scenario?.orientationFlipped ?? null,
+          });
+
+          return {
+            id: t.id,
+            modelId: t.modelId,
+            modelVersion: t.modelVersion,
+            scenario: t.scenario
+              ? {
+                id: t.scenario.id,
+                name: t.scenario.name,
+                dimensions: (t.scenario.content as { dimensions?: Record<string, unknown> } | null)?.dimensions,
+              }
+              : null,
+            content: t.content,
+            turnCount: t.turnCount,
+            tokenCount: t.tokenCount,
+            durationMs: t.durationMs,
+            estimatedCost: t.estimatedCost,
+            decision: decision.canonical.direction === 'unknown'
+              ? null
+              : {
+                direction: decision.canonical.direction,
+                strength: decision.canonical.strength,
+                favoredValueKey: decision.canonical.favoredValueKey,
+                opposedValueKey: decision.canonical.opposedValueKey,
+              },
+            decisionText: t.decisionText,
+            decisionMetadata: t.decisionMetadata,
+            createdAt: t.createdAt,
+          };
+        }),
       };
 
       // Set response headers

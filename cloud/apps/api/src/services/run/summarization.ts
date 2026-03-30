@@ -4,7 +4,7 @@
  * Handles cancel and restart operations for the summarization phase.
  */
 
-import { db } from '@valuerank/db';
+import { db, Prisma } from '@valuerank/db';
 import { createLogger, NotFoundError, RunStateError } from '@valuerank/shared';
 import { getBoss } from '../../queue/boss.js';
 import { invalidateCache } from '../analysis/cache.js';
@@ -186,7 +186,7 @@ export async function restartSummarization(
   }
 
   // Invalidate any cached analysis results so they get recomputed
-  // with the new decision codes after summarization completes
+  // with the new decision state after summarization completes
   const invalidatedCount = await invalidateCache(runId);
   if (invalidatedCount > 0) {
     log.info({ runId, invalidatedCount }, 'Invalidated cached analysis results');
@@ -195,7 +195,16 @@ export async function restartSummarization(
   // Get transcripts to re-summarize
   const whereClause = force
     ? { runId }
-    : { runId, OR: [{ summarizedAt: null }, { decisionCode: 'error' }] };
+    : {
+      runId,
+      OR: [
+        { summarizedAt: null },
+        {
+          summarizedAt: { not: null },
+          decisionMetadata: { equals: Prisma.DbNull },
+        },
+      ],
+    };
 
   const transcriptsToQueue = await db.transcript.findMany({
     where: whereClause,

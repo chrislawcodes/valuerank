@@ -178,8 +178,6 @@ export const DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY = gql`
       runId
       scenarioId
       modelId
-      decisionCode
-      decisionCodeSource
       decisionModelV2
       turnCount
       tokenCount

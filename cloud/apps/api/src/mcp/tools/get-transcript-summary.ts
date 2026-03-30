@@ -10,6 +10,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import { buildMcpResponse } from '../../services/mcp/index.js';
+import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/decision-model.js';
 import { addToolRegistrar } from './registry.js';
 
 const log = createLogger('mcp:tools:get-transcript-summary');
@@ -35,7 +36,9 @@ type TranscriptSummaryOutput = {
     turnCount: number;
     wordCount: number;
     decision: {
-      code: string;
+      direction: string;
+      strength: string;
+      favoredValueKey: string | null;
       text: string;
     };
     keyReasoning: string[];
@@ -122,6 +125,9 @@ function formatTranscriptSummary(
   transcript: {
     content: unknown;
     decisionCode: string | null;
+    decisionMetadata: unknown;
+    definitionSnapshot: unknown;
+    scenario: { orientationFlipped: boolean | null } | null;
     decisionText: string | null;
     keyReasoning: unknown;
     createdAt: Date;
@@ -136,6 +142,20 @@ function formatTranscriptSummary(
     };
   }
 
+  const resolved = resolveTranscriptDecisionModel({
+    decisionCode: transcript.decisionCode,
+    decisionMetadata: transcript.decisionMetadata,
+    definitionSnapshot: transcript.definitionSnapshot,
+    orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+  });
+  const decision = resolved.canonical.direction === 'unknown'
+    ? null
+    : {
+      direction: resolved.canonical.direction,
+      strength: resolved.canonical.strength,
+      favoredValueKey: resolved.canonical.favoredValueKey,
+    };
+
   return {
     runId,
     scenarioId,
@@ -145,7 +165,9 @@ function formatTranscriptSummary(
       turnCount: extractTurnCount(transcript.content),
       wordCount: extractWordCount(transcript.content),
       decision: {
-        code: transcript.decisionCode ?? 'unknown',
+        direction: decision?.direction ?? 'unknown',
+        strength: decision?.strength ?? 'unknown',
+        favoredValueKey: decision?.favoredValueKey ?? null,
         text: transcript.decisionText ?? 'No decision recorded',
       },
       keyReasoning: safeJsonStringArray(transcript.keyReasoning).slice(0, 5),
@@ -190,6 +212,13 @@ Limited to 1KB token budget.`,
           select: {
             content: true,
             decisionCode: true,
+            decisionMetadata: true,
+            definitionSnapshot: true,
+            scenario: {
+              select: {
+                orientationFlipped: true,
+              },
+            },
             decisionText: true,
             createdAt: true,
           },

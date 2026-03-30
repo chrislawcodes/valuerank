@@ -33,6 +33,7 @@ import {
   buildScenarioAnalysisDimensionRecord,
   normalizeScenarioAnalysisMetadata,
 } from '../scenario-metadata.js';
+import { resolveTranscriptDecisionModel } from '../../../graphql/queries/domain/decision-model.js';
 
 const log = createLogger('analysis:aggregate');
 const AGGREGATE_CLAIM_LEASE_MS = 300_000;
@@ -114,6 +115,35 @@ function buildValueOutcomes(
   return {
     [valueA]: 'neutral',
     [valueB]: 'neutral',
+  };
+}
+
+function buildCanonicalValueOutcomes(
+  direction: 'favor_first' | 'favor_second' | 'neutral' | 'unknown',
+  valueA: string | null,
+  valueB: string | null,
+): Record<string, 'prioritized' | 'deprioritized' | 'neutral'> | undefined {
+  if (valueA == null || valueB == null || direction === 'unknown') {
+    return undefined;
+  }
+
+  if (direction === 'neutral') {
+    return {
+      [valueA]: 'neutral',
+      [valueB]: 'neutral',
+    };
+  }
+
+  if (direction === 'favor_first') {
+    return {
+      [valueA]: 'prioritized',
+      [valueB]: 'deprioritized',
+    };
+  }
+
+  return {
+    [valueA]: 'deprioritized',
+    [valueB]: 'prioritized',
   };
 }
 
@@ -253,7 +283,7 @@ export async function prepareAggregateRunSnapshot(
     where: {
       runId: { in: compatibleRuns.map((run) => run.id) },
       scenarioId: { not: null },
-      decisionCode: { in: ['1', '2', '3', '4', '5'] },
+      summarizedAt: { not: null },
     },
     orderBy: [{ runId: 'asc' }, { scenarioId: 'asc' }, { modelId: 'asc' }, { sampleIndex: 'asc' }, { id: 'asc' }],
     select: {
@@ -263,6 +293,9 @@ export async function prepareAggregateRunSnapshot(
       modelId: true,
       scenarioId: true,
       decisionCode: true,
+      decisionMetadata: true,
+      definitionSnapshot: true,
+      summarizedAt: true,
       createdAt: true,
       scenario: {
         select: {
@@ -282,7 +315,7 @@ export async function prepareAggregateRunSnapshot(
       transcript.modelId !== '' &&
       transcript.scenarioId != null &&
       transcript.scenarioId !== '' &&
-      transcript.decisionCode != null &&
+      transcript.summarizedAt != null &&
       transcript.scenario != null &&
       transcript.scenario.deletedAt == null
   );
@@ -355,13 +388,23 @@ export async function prepareAggregateRunSnapshot(
   }
 
   const aggregateWorkerTranscripts: AggregateWorkerTranscript[] = validAggregateTranscripts.map((transcript) => {
-    const score = transcript.decisionCode == null ? null : Number.parseInt(transcript.decisionCode, 10);
     const normalizedScenarioMetadata = normalizeScenarioAnalysisMetadata(transcript.scenario?.content ?? null);
     const dimensions = buildScenarioAnalysisDimensionRecord(normalizedScenarioMetadata);
     const orientationFlipped = transcript.scenario?.orientationFlipped ?? false;
-    const values = buildValueOutcomes(
-      Number.isFinite(score) ? score : null,
+    const resolved = resolveTranscriptDecisionModel({
+      decisionCode: transcript.decisionCode,
+      decisionMetadata: transcript.decisionMetadata,
+      definitionSnapshot: transcript.definitionSnapshot,
       orientationFlipped,
+    });
+    const score = resolved.legacy.canonicalScore;
+    const values = buildCanonicalValueOutcomes(
+      resolved.canonical.direction,
+      valueA,
+      valueB,
+    ) ?? buildValueOutcomes(
+      score,
+      false,
       valueA,
       valueB,
     );
@@ -477,7 +520,12 @@ export async function prepareAggregateRunSnapshot(
       sampleIndex: transcript.sampleIndex,
       modelId: transcript.modelId,
       scenarioId: transcript.scenarioId,
-      decisionCode: transcript.decisionCode,
+      decision: resolveTranscriptDecisionModel({
+        decisionCode: transcript.decisionCode,
+        decisionMetadata: transcript.decisionMetadata,
+        definitionSnapshot: transcript.definitionSnapshot,
+        orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+      }).canonical,
       createdAt: transcript.createdAt?.toISOString?.() ?? null,
       scenario: transcript.scenario == null
         ? null

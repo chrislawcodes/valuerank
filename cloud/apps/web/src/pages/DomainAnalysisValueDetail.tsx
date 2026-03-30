@@ -337,8 +337,6 @@ export function DomainAnalysisValueDetail() {
           modelId: transcript.modelId,
           modelVersion: null,
           content: transcript.content,
-          decisionCode: transcript.decisionCode,
-          decisionCodeSource: transcript.decisionCodeSource,
           decisionModelV2: transcript.decisionModelV2 ?? null,
           turnCount: transcript.turnCount,
           tokenCount: transcript.tokenCount,

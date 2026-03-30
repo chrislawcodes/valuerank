@@ -1,4 +1,4 @@
-import { db } from '@valuerank/db';
+import { db, Prisma } from '@valuerank/db';
 import { AuthenticationError } from '@valuerank/shared';
 import { builder } from '../../builder.js';
 import { estimateCost as estimateCostService } from '../../../services/cost/estimate.js';
@@ -430,7 +430,12 @@ builder.queryField('domainTrialRunsStatus', (t) =>
       });
       const summarizeFailedRows = await db.transcript.groupBy({
         by: ['runId', 'modelId'],
-        where: { runId: { in: runIds }, deletedAt: null, decisionCode: 'error' },
+        where: {
+          runId: { in: runIds },
+          deletedAt: null,
+          summarizedAt: { not: null },
+          decisionMetadata: { equals: Prisma.DbNull },
+        },
         _count: { _all: true },
       });
       const selectedScenarioCounts = await db.runScenarioSelection.groupBy({

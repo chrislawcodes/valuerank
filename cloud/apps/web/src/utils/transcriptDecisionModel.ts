@@ -218,6 +218,7 @@ export function getTranscriptDecisionSortValue(
   }
 
   const fallbackCandidates = [
+    transcript.decisionModelV2?.legacy?.canonicalScore,
     transcript.decisionCode,
     (transcript.content as { decisionCode?: unknown } | null)?.decisionCode,
     (transcript.content as { decision?: unknown } | null)?.decision,

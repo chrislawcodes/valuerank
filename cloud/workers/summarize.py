@@ -671,8 +671,6 @@ def run_summarize(data: dict[str, Any]) -> dict[str, Any]:
         return {
             "success": True,
             "summary": {
-                "decisionCode": decision_code,
-                "decisionSource": decision_source,
                 "decisionText": decision_text,
                 "decisionMetadata": decision_metadata,
             },
