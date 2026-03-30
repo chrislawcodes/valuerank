@@ -62,12 +62,10 @@ RUN_CODEX_REVIEW = REVIEW_SCRIPTS / "run_codex_review.py"
 DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"
 DEFAULT_CODEX_MODEL = "gpt-5.4-mini"
 
-# EXPERIMENT: staggered-parallel Gemini reviews.
-# Gemini reviews launch GEMINI_STAGGER_SECONDS apart without the file lock, so they overlap.
-# Codex reviews always run fully in parallel with Gemini (different API, no rate limit).
-# If rate-limit errors appear in review output → increase this value (try 60, 90, 120).
-# If failures persist at 120 → set to None to revert to strict serial execution.
-# See STATUS.md "Run reviews in parallel" for experiment tracking notes.
+# Gemini reviews launch GEMINI_STAGGER_SECONDS apart without the file lock so they overlap.
+# Codex reviews always run fully in parallel with Gemini (different API, no rate limit concern).
+# Validated 2026-03-30: zero 429s across parallel-implement-command checkpoints at 30s stagger.
+# Set to None to revert to strict serial execution if rate-limit errors reappear.
 GEMINI_STAGGER_SECONDS: int | None = 30
 
 
