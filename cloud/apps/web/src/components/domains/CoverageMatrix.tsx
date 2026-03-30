@@ -346,7 +346,7 @@ export function CoverageMatrix({ domainId }: { domainId: string }) {
     const defaultCells = data?.domainValueCoverage?.cells ?? [];
     const map = new Map<string, (typeof defaultCells)[0]>();
     for (const cell of defaultCells) {
-      map.set(`${cell.valueA}::${cell.valueB}`, cell);
+      map.set([cell.valueA, cell.valueB].sort().join('::'), cell);
     }
     return map;
   }, [data?.domainValueCoverage?.cells]);
@@ -571,7 +571,7 @@ export function CoverageMatrix({ domainId }: { domainId: string }) {
                     </th>
 
                     {displayValues.map((colVal) => {
-                      const keyA = `${colVal}::${rowVal}`;
+                      const keyA = [colVal, rowVal].sort().join('::');
                       const cell = cellLookup.get(keyA);
 
                       return (

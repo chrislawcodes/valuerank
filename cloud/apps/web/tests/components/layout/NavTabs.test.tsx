@@ -47,7 +47,7 @@ describe('NavTabs Component', () => {
       screen.getAllByRole('link', { name: 'Overview' }).some((link) => link.getAttribute('href') === '/domains')
     ).toBe(true);
     expect(screen.getByRole('link', { name: 'Domain Analysis' })).toHaveAttribute('href', '/domains/analysis');
-    expect(screen.getByRole('link', { name: 'Coverage' })).toHaveAttribute('href', '/domains/coverage');
+    expect(screen.queryByRole('link', { name: 'Coverage' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'New Vignette' })).not.toBeInTheDocument();
 
     // Domain Setup is a hover flyout — children are always in the DOM
