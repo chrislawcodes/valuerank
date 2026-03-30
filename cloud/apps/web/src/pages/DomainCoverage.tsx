@@ -174,27 +174,19 @@ function parseSignatureVersion(signature: string): number | null {
   return Number.isFinite(version) ? version : null;
 }
 
-function isTempZeroSignature(option: DomainAvailableSignature): boolean {
-  if (option.temperature === 0) return true;
-  const tokenMatch = option.signature.match(/t(.+)$/i);
-  if (!tokenMatch) return false;
-  const token = (tokenMatch[1] ?? '').trim().toLowerCase();
-  if (token === 'd') return false;
-  const parsed = Number.parseFloat(token);
-  return Number.isFinite(parsed) && parsed === 0;
-}
-
-function isDefaultTemperatureSignature(option: DomainAvailableSignature): boolean {
-  return option.signature === 'vnewtd';
-}
 
 function selectPreferredSignature(options: DomainAvailableSignature[]): string {
-  // Prefer "Latest @ default" (vnewtd) first, then temp-zero, then anything
-  const defaultOptions = options.filter(isDefaultTemperatureSignature);
-  if (defaultOptions.length > 0) return defaultOptions[0]!.signature;
-  const t0Options = options.filter(isTempZeroSignature);
-  if (t0Options.length === 0) return options[0]?.signature ?? '';
-  const sorted = [...t0Options].sort((left, right) => {
+  // Virtual signatures ("Latest @ X") always beat exact versioned ones.
+  // Among virtuals, prefer default temperature (vnewtd) then temp-zero (vnewt0).
+  const virtualDefault = options.find((o) => o.isVirtual && o.signature === 'vnewtd');
+  if (virtualDefault) return virtualDefault.signature;
+  const virtualT0 = options.find((o) => o.isVirtual && o.signature === 'vnewt0');
+  if (virtualT0) return virtualT0.signature;
+  const anyVirtual = options.find((o) => o.isVirtual);
+  if (anyVirtual) return anyVirtual.signature;
+
+  // Fall back to highest-version exact signature
+  const sorted = [...options].sort((left, right) => {
     const leftVersion = parseSignatureVersion(left.signature) ?? -1;
     const rightVersion = parseSignatureVersion(right.signature) ?? -1;
     if (leftVersion !== rightVersion) return rightVersion - leftVersion;
