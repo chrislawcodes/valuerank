@@ -75,7 +75,7 @@ Once the above are resolved:
 
 **Goal:** AI iterates on features more independently, less human-in-the-loop
 
-**Assessment (2026-03-30):** Front half (discovery → spec → plan → tasks → adversarial review) is solid. Back half is now catching up: fast path added, parallel Codex dispatch added (PR #458, merged), parallel reviews validated. Remaining gaps: Claude-direct experiment pending, phantom task detection deferred, Composio not evaluated.
+**Assessment (2026-03-30):** Front half (discovery → spec → plan → tasks → adversarial review) is solid. Back half is now catching up: fast path added, parallel Codex dispatch added (PR #458, merged), parallel reviews validated. Second experiment complete (aggregate-cross-batch-reliability): factory caught a real correctness gap Claude-direct missed. Pattern is mixed across 2 data points. Remaining gaps: more experiment runs needed, phantom task detection deferred, Composio not evaluated.
 
 ### What We Keep (Differentiated)
 - Mandatory discovery phase — catches bad requirements early
@@ -103,7 +103,31 @@ Once the above are resolved:
 - [ ] **Add post-implement verification that checked tasks have real code behind them** — Inspired by [spec-kit-verify-tasks](https://github.com/datastone-inc/spec-kit-verify-tasks). When Codex marks a task `[x]` but didn't actually implement it, nothing catches this today. Hold until after the Claude-direct experiment.
 
 ### Priority 6: Validate the factory is net positive
-- [ ] **Run one feature Claude-direct as a control** — Give Claude the spec, implement in one shot with a self-review pass (no checkpoints, no Gemini, no Codex). Compare PR quality and wall-clock time against a factory run of similar scope. If output quality is comparable, the checkpoint stage isn't pulling its weight and we simplify or remove it. If output is noticeably worse, the factory earns its keep and we invest in fixing the repairable loop.
+- [ ] **Run more comparisons — pattern is mixed across 2 data points**
+
+  **Experiment 1 — `domain-coverage-hub` (UI feature, PR #465, 2026-03-30):**
+
+  | | Claude-direct | Factory (spec+checkpoint only) |
+  |--|--------------|-------------------------------|
+  | Actionable findings pre-implementation | 7 | 4 |
+  | Unique findings | 3 (file size limit, legacy fallback, empty state) | 0 |
+  | False positives | Low | Several |
+  | Human interruptions | 1 (4 product decisions) | n/a |
+
+  Factory's one "unique" finding turned out to be a deliberate architectural choice. Claude-direct caught more real issues.
+
+  **Experiment 2 — `aggregate-cross-batch-reliability` (backend bug fix, PR #466, 2026-03-30):**
+
+  | | Claude-direct | Factory (spec+checkpoint) |
+  |--|--------------|-------------------------------|
+  | Actionable findings pre-implementation | 0 | 3 |
+  | Unique findings | 0 | 1 HIGH (mixed-mode gap — real correctness bug) |
+  | False positives | n/a | Low |
+  | Human interruptions | 0 | 1 (approved acting on all findings) |
+
+  Factory caught a real bug Claude-direct missed: the conditional fallback silently under-reported reliability for mixed aggregates. Final implementation materially better because of the review.
+
+  **Pattern:** Factory has an edge on backend/algorithmic work where edge cases are hard to see. Claude-direct has an edge on UI/product work where context matters more than exhaustive analysis. Two data points — need more before drawing firm conclusions.
 
 ---
 
