@@ -456,6 +456,9 @@ def build_pooled_aggregate_reliability(
     per_model_repeat_coverage: dict[str, Any] = {}
     per_model_drift: dict[str, Any] = {}
 
+    pooled_variance = compute_variance_analysis(transcripts)
+    pooled_reliability_per_model = build_reliability_summary(pooled_variance)["perModel"]
+
     def weighted_average(metric_samples: list[tuple[int, float]]) -> float | None:
         if not metric_samples:
             return None
@@ -510,6 +513,28 @@ def build_pooled_aggregate_reliability(
                 agreement_samples.append((coverage_count, float(directional_agreement)))
             if neutral_share is not None:
                 neutral_samples.append((coverage_count, float(neutral_share)))
+
+        # Cross-batch fallback: if no within-run reliability, use pooled cross-batch data
+        if len(reliability_samples) == 0:
+            pooled_model_rel = pooled_reliability_per_model.get(model_id, {})
+            pooled_coverage = int(pooled_model_rel.get("coverageCount", 0))
+            if pooled_coverage > 0:
+                pooled_model_variance = pooled_variance.get("perModel", {}).get(model_id, {})
+                cross_batch_conditions = {
+                    sid
+                    for sid, stats in pooled_model_variance.get("perScenario", {}).items()
+                    if isinstance(stats, dict) and int(stats.get("sampleCount", 0)) > 1
+                }
+                repeated_condition_ids.update(cross_batch_conditions)
+                total_repeat_coverage_count += pooled_coverage
+                if pooled_model_rel.get("baselineReliability") is not None:
+                    reliability_samples.append((pooled_coverage, float(pooled_model_rel["baselineReliability"])))
+                if pooled_model_rel.get("baselineNoise") is not None:
+                    noise_samples.append((pooled_coverage, float(pooled_model_rel["baselineNoise"])))
+                if pooled_model_rel.get("directionalAgreement") is not None:
+                    agreement_samples.append((pooled_coverage, float(pooled_model_rel["directionalAgreement"])))
+                if pooled_model_rel.get("neutralShare") is not None:
+                    neutral_samples.append((pooled_coverage, float(pooled_model_rel["neutralShare"])))
 
         repeat_coverage_breadth = (
             len(repeated_condition_ids & planned_condition_set)
