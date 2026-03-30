@@ -4,6 +4,7 @@
 Pure wrappers around git, shell commands, and filesystem scaffolding.
 No domain knowledge — just tool invocation.
 """
+import os
 import shutil
 import subprocess
 import sys
@@ -124,6 +125,85 @@ def ensure_sync() -> None:
 def ensure_file(path: Path, heading: str) -> None:
     if not path.exists():
         path.write_text(f"# {heading}\n", encoding="utf-8")
+
+
+def create_worktree(slug: str, index: int, run_fn=subprocess.run) -> Path:
+    safe_slug = "".join(
+        ch if ch.isalnum() or ch in "-_" else "_"
+        for ch in slug
+    )
+    path = Path(f"/tmp/wt-{safe_slug}-{os.getpid()}-{index}")
+
+    try:
+        if path.exists():
+            remove_worktree(path, run_fn)
+        run_fn(
+            ["git", "-C", str(REPO_ROOT), "worktree", "add", str(path), "HEAD"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        return path
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"failed to create worktree at {path}: {exc.stderr or exc.stdout or exc}"
+        ) from exc
+    except RuntimeError as exc:
+        raise RuntimeError(f"failed to create worktree at {path}: {exc}") from exc
+
+
+def remove_worktree(path: Path, run_fn=subprocess.run) -> None:
+    if not path.exists():
+        return
+    try:
+        run_fn(
+            ["git", "-C", str(REPO_ROOT), "worktree", "remove", "--force", str(path)],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        run_fn(
+            ["git", "-C", str(REPO_ROOT), "worktree", "prune"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        if not path.exists():
+            return
+        raise RuntimeError(
+            f"failed to remove worktree at {path}: {exc.stderr or exc.stdout or exc}"
+        ) from exc
+
+
+def remove_all_worktrees(paths: list[Path], run_fn=subprocess.run) -> None:
+    def _run_without_prune(cmd: list[str], **kwargs):
+        if cmd == ["git", "-C", str(REPO_ROOT), "worktree", "prune"]:
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+        return run_fn(cmd, **kwargs)
+
+    for path in paths:
+        try:
+            remove_worktree(path, run_fn=_run_without_prune)
+        except RuntimeError as exc:
+            print(f"warning: {exc}", file=sys.stderr)
+        except subprocess.CalledProcessError as exc:
+            print(
+                f"warning: failed to remove worktree at {path}: {exc.stderr or exc.stdout or exc}",
+                file=sys.stderr,
+            )
+    try:
+        run_fn(
+            ["git", "-C", str(REPO_ROOT), "worktree", "prune"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        print(
+            f"warning: failed to prune worktrees: {exc.stderr or exc.stdout or exc}",
+            file=sys.stderr,
+        )
 
 
 def revert_protected_files() -> list[str]:

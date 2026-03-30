@@ -338,3 +338,49 @@ def prerequisite_failure(slug: str, stage: str) -> str | None:
         if not prereq_state["healthy"]:
             return f"{stage} checkpoint requires a healthy {prereq} checkpoint first"
     return None
+
+
+def parse_p_annotation(line: str) -> list[str]:
+    match = re.search(r"\[P:\s*([^\]]*)\]", line)
+    if not match:
+        return []
+
+    raw_paths = [part.strip() for part in match.group(1).split(",")]
+    if not any(raw_paths):
+        return []
+
+    repo_root = REPO_ROOT.resolve()
+    parsed_paths: list[str] = []
+    seen: set[str] = set()
+
+    for raw_path in raw_paths:
+        if not raw_path:
+            continue
+
+        cleaned = raw_path
+        while cleaned.startswith("./"):
+            cleaned = cleaned[2:]
+        while "//" in cleaned:
+            cleaned = cleaned.replace("//", "/")
+
+        if not cleaned:
+            continue
+
+        if cleaned.startswith("/"):
+            print(f"warning: rejecting absolute path in [P:] annotation: {raw_path}", file=sys.stderr)
+            continue
+
+        try:
+            resolved = (REPO_ROOT / cleaned).resolve()
+            resolved.relative_to(repo_root)
+        except Exception:
+            print(f"warning: rejecting path outside repository in [P:] annotation: {raw_path}", file=sys.stderr)
+            continue
+
+        normalized = resolved.relative_to(repo_root).as_posix()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        parsed_paths.append(normalized)
+
+    return parsed_paths
