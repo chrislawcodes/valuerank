@@ -562,7 +562,7 @@ class TestAnalyzeBasicIntegration:
         assert reliability["neutralShare"] == pytest.approx(0.2, abs=1e-6)
 
     def test_same_signature_aggregate_keeps_preference_but_leaves_reliability_unavailable_without_within_run_repeats(self):
-        """Pooling single-sample runs should not create fake repeatability."""
+        """Pooling runs with non-overlapping conditions should not produce cross-batch reliability (no shared conditions)."""
         input_data = {
             "runId": "aggregate-run-preference-only",
             "emitVignetteSemantics": True,
@@ -599,16 +599,6 @@ class TestAnalyzeBasicIntegration:
                     "id": "t3",
                     "runId": "run-b",
                     "modelId": "m1",
-                    "scenarioId": "s1",
-                    "sampleIndex": 0,
-                    "orientationFlipped": False,
-                    "summary": {"score": 5, "values": {}},
-                    "scenario": {},
-                },
-                {
-                    "id": "t4",
-                    "runId": "run-b",
-                    "modelId": "m1",
                     "scenarioId": "s3",
                     "sampleIndex": 0,
                     "orientationFlipped": False,
@@ -628,6 +618,7 @@ class TestAnalyzeBasicIntegration:
 
         assert preference["preferenceDirection"]["overallLean"] is not None
         assert preference["preferenceStrength"] is not None
+        # No condition appears in more than one run → no cross-batch repeats → reliability unavailable
         assert reliability["coverageCount"] == 0
         assert reliability["baselineReliability"] is None
         assert reliability["baselineNoise"] is None
@@ -680,27 +671,31 @@ class TestAnalyzeBasicIntegration:
         assert aggregate_semantics["perModelDrift"]["m1"]["exceedsWarningThreshold"] is False
 
     def test_same_signature_aggregate_sums_repeat_coverage_across_runs_without_treating_runs_as_repeats(self):
-        """Pooled coverage should sum run-level repeat coverage while preserving within-run repeatability."""
+        """Three single-trial batches covering the same conditions should produce cross-batch reliability."""
         input_data = {
-            "runId": "aggregate-run-overlapping-repeat-coverage",
+            "runId": "aggregate-run-cross-batch-single-trial",
             "emitVignetteSemantics": True,
             "aggregateSemantics": {
                 "mode": "same_signature_v1",
-                "plannedScenarioIds": ["s1", "s2", "s3", "s4", "s5"],
+                "plannedScenarioIds": ["s1", "s2", "s3"],
                 "minRepeatCoverageCount": 3,
                 "minRepeatCoverageShare": 0.2,
                 "lowCoverageCautionThreshold": 5,
                 "driftWarningThreshold": 0.25,
             },
             "transcripts": [
-                # Run A: repeated s1, s2
+                # Run A: single trial per condition
                 {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 4, "values": {}}, "scenario": {}},
-                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 2, "values": {}}, "scenario": {}},
-                {"id": "a4", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
-                # Run B: repeated s1 again only
+                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 3, "values": {}}, "scenario": {}},
+                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
+                # Run B: single trial per condition (same scenarios)
                 {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 3, "values": {}}, "scenario": {}},
+                {"id": "b3", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
+                # Run C: single trial per condition (same scenarios)
+                {"id": "c1", "runId": "run-c", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "c2", "runId": "run-c", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 3, "values": {}}, "scenario": {}},
+                {"id": "c3", "runId": "run-c", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
             ],
         }
 
@@ -710,11 +705,51 @@ class TestAnalyzeBasicIntegration:
         reliability = result["analysis"]["reliabilitySummary"]["perModel"]["m1"]
         aggregate_semantics = result["analysis"]["aggregateSemantics"]
 
+        # Cross-batch fallback: 3 single-trial batches covering 3 conditions = 3 cross-batch repeats
         assert reliability["coverageCount"] == 3
-        assert reliability["uniqueScenarios"] == 2
+        assert reliability["uniqueScenarios"] == 3
+        assert reliability["baselineReliability"] is not None
+        assert reliability["directionalAgreement"] is not None
         assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageCount"] == 3
-        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageShare"] == pytest.approx(0.4, abs=1e-6)
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageShare"] == pytest.approx(1.0, abs=1e-6)
+
+    def test_same_signature_aggregate_uses_pooled_reliability_for_mixed_batch_types(self):
+        """Mixed aggregate (some runs with within-run repeats, some single-trial) should pool all data."""
+        input_data = {
+            "runId": "aggregate-run-mixed-types",
+            "emitVignetteSemantics": True,
+            "aggregateSemantics": {
+                "mode": "same_signature_v1",
+                "plannedScenarioIds": ["s1", "s2"],
+                "minRepeatCoverageCount": 2,
+                "minRepeatCoverageShare": 0.5,
+                "lowCoverageCautionThreshold": 5,
+                "driftWarningThreshold": 0.25,
+            },
+            "transcripts": [
+                # Run A: within-run repeats for s1 and s2
+                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 3, "values": {}}, "scenario": {}},
+                {"id": "a4", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 3, "values": {}}, "scenario": {}},
+                # Run B: single trial per condition — cross-batch signal should also be captured
+                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 3, "values": {}}, "scenario": {}},
+            ],
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        reliability = result["analysis"]["reliabilitySummary"]["perModel"]["m1"]
+        aggregate_semantics = result["analysis"]["aggregateSemantics"]
+
+        # Pooled: s1 has 3 trials (run-a x2 + run-b x1), s2 has 3 trials → coverageCount = 2
+        assert reliability["coverageCount"] == 2
+        assert reliability["baselineReliability"] is not None
+        assert reliability["directionalAgreement"] is not None
         assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["contributingRunCount"] == 2
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageShare"] == pytest.approx(1.0, abs=1e-6)
 
     def test_summaries_are_suppressed_when_vignette_semantics_are_disabled(self):
         """Assumption-style runs should not emit baseline semantic summaries."""
