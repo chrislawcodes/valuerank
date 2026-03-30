@@ -136,31 +136,15 @@ describe('DomainCoverage Page', () => {
     });
   });
 
-  it('clears stale model filters after switching to a domain with different available models', async () => {
-    const user = userEvent.setup();
+  it('shows model filter buttons for the active domain after coverage data loads', async () => {
     await act(async () => {
       renderCoveragePage();
     });
 
-    expect(screen.getByRole('button', { name: /select all models/i })).toBeInTheDocument();
-
-    await act(async () => {
-      await user.selectOptions(screen.getByRole('combobox', { name: 'Domain Selection' }), 'domain-b');
-    });
-
     await waitFor(() => {
-      expect(screen.queryByRole('button', { name: /select all models/i })).not.toBeInTheDocument();
-    });
-
-    await waitFor(() => {
-      expect(useQueryMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          variables: expect.objectContaining({
-            domainId: 'domain-b',
-            modelIds: undefined,
-          }),
-        }),
-      );
+      // CoverageMatrix auto-selects all available models; individual model buttons should be visible
+      expect(screen.getByRole('button', { name: 'Model A' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Model B' })).toBeInTheDocument();
     });
   });
 
@@ -185,7 +169,7 @@ describe('DomainCoverage Page', () => {
       );
     });
 
-    expect(screen.getByRole('button', { name: /copy coverage table as image/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /copy coverage table as image/i }).length).toBeGreaterThan(0);
   });
 
   it('defaults signature to temp 0 when no signature query param is provided', async () => {

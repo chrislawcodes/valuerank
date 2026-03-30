@@ -205,9 +205,9 @@ describe('Domains workspace', () => {
     renderDomainsPage();
 
     await user.click(screen.getByRole('button', { name: /domain a/i }));
-    await user.click(screen.getByRole('tab', { name: /overview/i }));
 
-    expect(screen.getByText(/no domain defaults\. each vignette must explicitly choose its own setup\./i)).toBeInTheDocument();
+    // Overview is now the default tab — verify quick actions are shown
+    expect(screen.getByRole('heading', { name: /quick actions/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole('tab', { name: /setup/i }));
 
@@ -227,6 +227,7 @@ describe('Domains workspace', () => {
     renderDomainsPage();
 
     await user.click(screen.getByRole('button', { name: /domain a/i }));
+    await user.click(screen.getByRole('tab', { name: /vignettes/i }));
 
     expect(screen.getByRole('columnheader', { name: /vignette/i })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: /version/i })).toBeInTheDocument();
@@ -256,6 +257,7 @@ describe('Domains workspace', () => {
     renderDomainsPage();
 
     await user.click(screen.getByRole('button', { name: /domain a/i }));
+    await user.click(screen.getByRole('tab', { name: /vignettes/i }));
 
     expect(screen.queryByRole('button', { name: /open domain evaluation/i })).not.toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /run domain trials/i }).length).toBeGreaterThan(0);
