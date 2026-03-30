@@ -8,9 +8,9 @@ import { X, User, Bot, Clock, Hash } from 'lucide-react';
 import type { ChangeEvent } from 'react';
 import { Button } from '../ui/Button';
 import type { Transcript } from '../../api/operations/runs';
-import { formatDisplayLabel } from '../../utils/displayLabels';
 import { getDecisionMetadata } from '../../utils/methodology';
 import {
+  formatCanonicalDecisionHeadline,
   getTranscriptDecisionAuditBadge,
   hasRenderableTranscriptDecisionModelV2,
   normalizeLegacyDecisionCode,
@@ -25,8 +25,6 @@ type TranscriptViewerProps = {
   normalizeDecision?: boolean;
   decisionDisplayMode?: TranscriptDecisionDisplayMode;
 };
-
-type TranscriptCanonicalDecision = NonNullable<Transcript['decisionModelV2']>['canonical'] | null | undefined;
 
 type Turn = {
   role: 'user' | 'assistant';
@@ -105,22 +103,6 @@ function formatAuditValue(value: string | null | undefined): string {
   return value;
 }
 
-function formatCanonicalDecisionField(value: string | null | undefined): string {
-  if (value == null || value.trim().length === 0) {
-    return '-';
-  }
-
-  const displayValue = formatDisplayLabel(value);
-  return displayValue.charAt(0).toUpperCase() + displayValue.slice(1);
-}
-
-function formatCanonicalDecisionDisplay(canonical: TranscriptCanonicalDecision): string {
-  if (!canonical) {
-    return '-';
-  }
-
-  return `${formatCanonicalDecisionField(canonical.direction)} / ${formatCanonicalDecisionField(canonical.strength)}`;
-}
 
 export function TranscriptViewer({
   transcript,
@@ -140,7 +122,7 @@ export function TranscriptViewer({
   const isAuditMode = viewMode === 'audit' && hasRenderableTranscriptDecisionModelV2(transcript);
   const canonicalDecision = transcript.decisionModelV2?.canonical ?? null;
   const rawEvidence = transcript.decisionModelV2?.raw ?? null;
-  const canonicalDecisionHeadline = isAuditMode ? formatCanonicalDecisionDisplay(canonicalDecision) : '-';
+  const canonicalDecisionHeadline = isAuditMode ? formatCanonicalDecisionHeadline(transcript) : '-';
   const auditDecisionBadge = isAuditMode ? getTranscriptDecisionAuditBadge(transcript) : null;
   const scaleLabels = decisionMetadata?.scaleLabels ?? [];
   const canOverrideDecision = Boolean(onDecisionChange) && (
