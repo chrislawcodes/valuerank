@@ -32,14 +32,12 @@ function CoverageCell({
   batchCount,
   definitionId,
   aggregateRunId,
-  domainId,
 }: {
   valueA: string;
   valueB: string;
   batchCount: number;
   definitionId: string | null;
   aggregateRunId: string | null;
-  domainId: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const isDiagonal = valueA === valueB;
@@ -133,7 +131,7 @@ function CoverageCell({
 
             {hasVignette && (
               <Link
-                to={`/domains/${domainId}/run-trials?definitionIds=${definitionId}`}
+                to={`/definitions/${definitionId}/start-paired-batch`}
                 className="flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-sm w-full text-left"
                 onClick={() => setIsOpen(false)}
               >
@@ -661,7 +659,6 @@ export function DomainCoverage() {
                           <CoverageCell
                             valueA={rowVal}
                             valueB={colVal}
-                            domainId={selectedDomainId}
                             batchCount={cell?.batchCount ?? 0}
                             definitionId={cell?.definitionId ?? null}
                             aggregateRunId={cell?.aggregateRunId ?? null}

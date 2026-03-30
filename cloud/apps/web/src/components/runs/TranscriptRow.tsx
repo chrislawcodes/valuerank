@@ -4,6 +4,7 @@ import type { Transcript } from '../../api/operations/runs';
 import { formatDisplayLabel } from '../../utils/displayLabels';
 import { getDecisionMetadata } from '../../utils/methodology';
 import {
+  formatCanonicalDecisionHeadline,
   getTranscriptDecisionAuditBadge,
   hasRenderableTranscriptDecisionModelV2,
   normalizeLegacyDecisionCode,
@@ -25,7 +26,6 @@ type TranscriptRowProps = {
   decisionDisplayMode?: TranscriptDecisionDisplayMode;
 };
 
-type TranscriptCanonicalDecision = NonNullable<Transcript['decisionModelV2']>['canonical'] | null | undefined;
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
@@ -62,24 +62,6 @@ function extractShortDirection(fullLabel: string): string {
   return idx !== -1 ? fullLabel.slice(0, idx) : fullLabel;
 }
 
-function formatCanonicalDecisionField(value: string | null | undefined): string {
-  if (value == null || value.trim().length === 0) {
-    return '-';
-  }
-
-  const displayValue = formatDisplayLabel(value);
-  return displayValue.charAt(0).toUpperCase() + displayValue.slice(1);
-}
-
-function formatCanonicalDecisionDisplay(
-  canonical: TranscriptCanonicalDecision,
-): string {
-  if (!canonical) {
-    return '-';
-  }
-
-  return `${formatCanonicalDecisionField(canonical.direction)} / ${formatCanonicalDecisionField(canonical.strength)}`;
-}
 
 function extractDecision(content: unknown): string {
   if (!isRecord(content)) return '-';
@@ -156,7 +138,7 @@ export function TranscriptRow({
     : 'legacy';
   const legacyDecisionDisplay = getLegacyDecisionDisplay(transcript, String(rawDecision), normalizeDecision, dimensions);
   const canonicalDecision = transcript.decisionModelV2?.canonical ?? null;
-  const canonicalDecisionDisplay = formatCanonicalDecisionDisplay(canonicalDecision);
+  const canonicalDecisionDisplay = formatCanonicalDecisionHeadline(transcript);
   const auditDecisionBadge = rowDecisionDisplayMode === 'audit'
     && hasRenderableTranscriptDecisionModelV2(transcript)
     ? getTranscriptDecisionAuditBadge(transcript)
