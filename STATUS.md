@@ -127,7 +127,18 @@ Once the above are resolved:
 
   Factory caught a real bug Claude-direct missed: the conditional fallback silently under-reported reliability for mixed aggregates. Final implementation materially better because of the review.
 
-  **Pattern:** Factory has an edge on backend/algorithmic work where edge cases are hard to see. Claude-direct has an edge on UI/product work where context matters more than exhaustive analysis. Two data points — need more before drawing firm conclusions.
+  **Experiment 3 — `settings-restructure` (UI/nav refactor, PR #468, 2026-03-30):**
+
+  | | Claude-direct | Factory (spec+checkpoint) |
+  |--|--------------|-------------------------------|
+  | Pre-impl actionable findings | 4 (structural, test, scope) | 0 actionable |
+  | Unique findings | 4 real (redirect, ref/state wiring, tests, thin wrappers) | 0 |
+  | False positives | 0 | 6 (deep links, RBAC, shared state, MEMORY.md clause misread) |
+  | Human interruptions | 0 | 1 (triage) |
+
+  Factory generated 6 false positives, 0 actionable findings. All HIGH findings were based on assumptions that don't hold (no URL-hash tabs, no RBAC, no shared panel state). Claude-direct caught the real structural issues.
+
+  **Pattern (3 data points):** Factory has an edge on backend/algorithmic work. Claude-direct has an edge on UI/nav work where codebase context eliminates false assumptions. Pattern is holding across 3 experiments — though UI experiments are 2 vs 1 for backend.
 
 ---
 

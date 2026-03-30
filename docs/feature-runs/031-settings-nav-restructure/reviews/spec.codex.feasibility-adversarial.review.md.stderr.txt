@@ -1,0 +1,148 @@
+OpenAI Codex v0.117.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d40bb-d024-7ae0-9cee-8979077e4de3
+--------
+user
+Review this spec artifact using a feasibility-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: spec.md
+# Spec: Settings Nav Restructure
+
+## Problem
+Settings is currently a single page with 5 tabs (Account, System Health, Models, Infrastructure, API Keys) accessible via a plain nav link. This is hard to discover and doesn't scale. Preambles and Level Presets live under the Domains dropdown as "Domain Setup" children, but they are global resources (not domain-scoped) — wrong home.
+
+## Goal
+- Convert Settings from a single tabbed page to a dropdown nav with separate pages per section
+- Move Preambles and Level Presets from Domains → Settings as a "Research Setup" sub-menu
+- Simplify the Domains dropdown to its core analysis items only
+
+## Scope
+
+### Files to modify
+- `cloud/apps/web/src/App.tsx` — add new routes, redirect old /settings
+- `cloud/apps/web/src/components/layout/NavTabs.tsx` — restructure menus
+- `cloud/apps/web/src/components/layout/MobileNav.tsx` — restructure menus
+
+### Files to create
+- `cloud/apps/web/src/pages/SettingsAccount.tsx`
+- `cloud/apps/web/src/pages/SettingsSystemHealth.tsx`
+- `cloud/apps/web/src/pages/SettingsModels.tsx`
+- `cloud/apps/web/src/pages/SettingsInfrastructure.tsx`
+- `cloud/apps/web/src/pages/SettingsApiKeys.tsx`
+
+### Files NOT to modify
+`cloud/apps/web/src/pages/Settings.tsx` (legacy, can be left in place), panel components (AccountPanel, SystemHealth, ModelsPanel, InfraPanel, ApiKeysPanel), Preambles.tsx, LevelPresets.tsx, CLAUDE.md, AGENTS.md, MEMORY.md.
+
+## Implementation
+
+### 1. New settings pages
+Each is a thin wrapper around its existing panel component:
+
+```tsx
+// SettingsAccount.tsx
+import { AccountPanel } from '../components/settings/AccountPanel';
+export function SettingsAccount() {
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Account</h1>
+      <AccountPanel />
+    </div>
+  );
+}
+```
+
+Same pattern for SettingsSystemHealth (SystemHealth), SettingsModels (ModelsPanel), SettingsInfrastructure (InfraPanel), SettingsApiKeys (ApiKeysPanel).
+
+### 2. App.tsx routes
+- Remove the `import { Settings }` import
+- Add 5 imports for the new page components
+- Replace the single `/settings` route with:
+  - `<Route path="/settings" element={<Navigate to="/settings/account" replace />} />`
+  - 5 new routes for `/settings/account`, `/settings/system-health`, `/settings/models`, `/settings/infrastructure`, `/settings/api-keys`
+
+### 3. NavTabs.tsx
+- Remove Settings from `utilityTabs` array (currently alongside Compare)
+- Add `settingsMenuItems` array:
+  ```ts
+  const settingsMenuItems: MenuItem[] = [
+    { name: 'Research Setup', children: [
+      { name: 'Preambles', path: '/preambles' },
+      { name: 'Level Presets', path: '/level-presets' },
+    ]},
+    { name: 'Account', path: '/settings/account' },
+    { name: 'System Health', path: '/settings/system-health' },
+    { name: 'Models', path: '/settings/models' },
+    { name: 'Infrastructure', path: '/settings/infrastructure' },
+    { name: 'API Keys', path: '/settings/api-keys' },
+  ];
+  ```
+- Add `settingsMenuRef`, `isSettingsMenuOpen` state, `isSettingsActive` derived value
+- Add Settings to `useEffect` that closes menus on navigation
+- Add `useClickOutside` for settingsMenuRef
+- Call `renderMenu(settingsMenuRef, 'Settings', '/settings/account', Settings, settingsMenuItems, isSettingsActive, isSettingsMenuOpen, setIsSettingsMenuOpen)` at end of nav
+- Simplify `domainMenuItems` to: Overview + Domain Analysis only (remove Coverage and Domain Setup group)
+
+### 4. MobileNav.tsx
+- Simplify Domains children to `[{ name: 'Domain Analysis', path: '/domains/analysis', icon: BarChart2 }]`
+- Convert Settings from `{ name: 'Settings', path: '/settings', icon: Settings }` to a group:
+  ```ts
+  {
+    name: 'Settings',
+    path: '/settings/account',
+    icon: Settings,
+    children: [
+      { name: 'Research Setup', icon: FileText, children: [
+        { name: 'Preambles', path: '/preambles', icon: FileText },
+        { name: 'Level Presets', path: '/level-presets', icon: FileText },
+      ]},
+      { name: 'Account', path: '/settings/account', icon: Settings },
+      { name: 'System Health', path: '/settings/system-health', icon: Settings },
+      { name: 'Models', path: '/settings/models', icon: Settings },
+      { name: 'Infrastructure', path: '/settings/infrastructure', icon: Settings },
+      { name: 'API Keys', path: '/settings/api-keys', icon: Settings },
+    ],
+  }
+  ```
+
+## Verification
+```bash
+cd cloud/
+npm run lint --workspace @valuerank/web
+npm run test --workspace @valuerank/web
+npm run build --workspace @valuerank/web
+```
+All must pass. No `@ts-ignore`. No new lint errors.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m reviewing this as a feasibility check, not a design review: I’m looking for places where the spec is likely to break at implementation time, miss a required edit, or leave navigation in an inconsistent state.
+codex
+## Findings
+1. High: The spec conflicts with the repo’s required closeout workflow. It explicitly forbids editing `MEMORY.md`, but the project instructions say every feature must update `MEMORY.md`, and they also require a `STATUS.md` update when work is completed. As written, this change cannot be finished in a way that satisfies the repo rules.
+2. High: The new Settings menu hierarchy assumes the existing desktop and mobile nav renderers can support a second nesting level for `Research Setup -> Preambles / Level Presets`, but the spec does not call out any renderer changes or fallback behavior. If the current menu model only supports one level of children, this will either not compile, render incorrectly, or require an unplanned refactor.
+3. High: The split-page approach assumes `Settings.tsx` is only a visual tab wrapper, but the spec does not preserve any shared behavior that may live there, such as auth checks, shared fetches, layout shell, or URL normalization. Removing the single `/settings` page without proving those responsibilities are absent is a risky assumption and could silently break section pages.
+
+## Residual Risks
+- The spec only redirects the base `/settings` path. Any other existing links, bookmarks, or in-app references to settings sections or domain setup pages are not explicitly audited, so some navigation paths may still be inconsistent after rollout.
+- The verification plan only checks lint, test, and build for the web workspace. It does not explicitly cover interaction behavior like click-outside close, keyboard navigation, active-state highlighting, or the nested Settings submenu on mobile.
+tokens used
+30,472
