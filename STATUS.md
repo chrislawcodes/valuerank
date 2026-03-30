@@ -92,7 +92,7 @@ Once the above are resolved:
 - [x] **CLAUDE.md audit** — PR #454, merged 2026-03-29. Trimmed cloud/CLAUDE.md from 1011 to 271 lines; removed ops runbooks, kept all coding standards.
 
 ### Priority 3: Speed Up Implementation
-- [ ] **Adopt Claude Code Agent Teams for parallel implementation** — `[P]` markers in tasks.md already identify parallelizable work. Use native worktree-isolated subagents instead of serial checkpoints.
+- [x] **Add `implement` command with parallel Codex dispatch** — PR pending. `run_factory.py implement --slug <slug>` reads the next `[CHECKPOINT]` slice from tasks.md, detects `[P: file]`-annotated tasks, and dispatches parallel Codex workers in isolated git worktrees for non-overlapping tasks. Cherry-picks back in task-index order. Serial fallback for overlap or unannotated tasks.
 - [ ] **Run reviews in parallel** — Codex always runs parallel with Gemini (safe). Gemini reviews launch 30s apart without the file lock (experiment). See tracking note below.
 
   **Experiment tracking — Gemini stagger** (`GEMINI_STAGGER_SECONDS` in `factory_review.py`):
