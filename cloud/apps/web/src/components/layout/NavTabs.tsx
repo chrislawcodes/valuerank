@@ -31,7 +31,6 @@ const vignettesMenuItems: MenuItem[] = [
 const domainMenuItems: MenuItem[] = [
   { name: 'Overview', path: '/domains' },
   { name: 'Domain Analysis', path: '/domains/analysis' },
-  { name: 'Coverage', path: '/domains/coverage' },
   {
     name: 'Domain Setup',
     children: [

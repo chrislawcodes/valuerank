@@ -11,6 +11,7 @@ import { useDefinitions } from '../hooks/useDefinitions';
 import { useDomains } from '../hooks/useDomains';
 import { DomainContexts } from './DomainContexts';
 import { ValueStatements } from './ValueStatements';
+import { CoverageMatrix } from '../components/domains/CoverageMatrix';
 import {
   DOMAIN_CONTEXTS_QUERY,
   type DomainContextsQueryResult,
@@ -103,7 +104,7 @@ export function Domains() {
   const [activeTab, setActiveTab] = useState<DomainTab>(
     initialTab === 'overview' || initialTab === 'vignettes' || initialTab === 'setup' || initialTab === 'runs' || initialTab === 'findings'
       ? initialTab
-      : 'vignettes',
+      : 'overview',
   );
   const [setupTab, setSetupTab] = useState<SetupTab>(
     initialSetupTab === 'contexts' || initialSetupTab === 'value-statements' || initialSetupTab === 'defaults'
@@ -266,10 +267,6 @@ export function Domains() {
     () => (setupReady ? definitions.filter((definition) => definition.runCount === 0).length : 0),
     [definitions, setupReady],
   );
-  const recommendedProductionCount = useMemo(
-    () => (setupReady ? definitions.filter((definition) => definition.runCount > 0).length : 0),
-    [definitions, setupReady],
-  );
   const evaluatedDefinitionCount = useMemo(
     () => definitions.filter((definition) => definition.runCount > 0).length,
     [definitions],
@@ -277,7 +274,7 @@ export function Domains() {
 
   useEffect(() => {
     if (selectedFolder === 'all' || selectedFolder === 'none') {
-      setActiveTab('vignettes');
+      setActiveTab('overview');
       setSetupTab('contexts');
     }
   }, [selectedFolder, domains]);
@@ -506,85 +503,62 @@ export function Domains() {
             </div>
           )}
           {selectedDomain != null && activeTab === 'overview' ? (
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <div className="space-y-4">
+              {/* Action bar */}
               <div className="rounded-xl border border-gray-200 bg-white p-5">
-                <h3 className="text-lg font-medium text-[#1A1A1A]">Readiness snapshot</h3>
-                <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Vignettes</div>
-                    <div className="mt-1 text-2xl font-semibold text-gray-900">{selectedDomain.definitionCount}</div>
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h3 className="text-lg font-medium text-[#1A1A1A]">Quick actions</h3>
+                    <p className="mt-1 text-sm text-gray-600">
+                      {setupReady
+                        ? recommendedPilotCount > 0
+                          ? `${recommendedPilotCount} vignette${recommendedPilotCount === 1 ? '' : 's'} ready to pilot.`
+                          : `${evaluatedDefinitionCount} vignette${evaluatedDefinitionCount === 1 ? '' : 's'} evaluated.`
+                        : `Setup incomplete — needs ${formatRequirementList(missingSetupRequirements)}.`}
+                    </p>
                   </div>
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Setup readiness</div>
-                    <div className="mt-1 text-sm font-semibold text-gray-900">
-                      {setupReady ? 'Ready to pilot' : formatRequirementList(missingSetupRequirements)}
-                    </div>
-                  </div>
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Suggested next step</div>
-                    <div className="mt-1 text-sm font-semibold text-gray-900">
-                      {!setupReady
-                        ? 'Complete setup'
-                        : recommendedPilotCount > 0
-                          ? `Pilot ${recommendedPilotCount} vignette${recommendedPilotCount === 1 ? '' : 's'}`
-                          : recommendedProductionCount > 0
-                            ? `Production-ready on ${recommendedProductionCount} vignette${recommendedProductionCount === 1 ? '' : 's'}`
-                            : 'Add vignettes'}
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-5 grid gap-3 md:grid-cols-2">
-                  <div className="rounded-lg border border-dashed border-gray-300 bg-[#F8F5EF] p-4 text-sm text-gray-600">
-                    <p className="font-medium text-gray-900">Setup coverage</p>
-                    <p className="mt-2">Contexts: {contextsCount}</p>
-                    <p>Value statements: {valueStatementsCount}</p>
-                    <p className="mt-2">No domain defaults. Each vignette must explicitly choose its own setup.</p>
-                  </div>
-                  <div className="rounded-lg border border-dashed border-gray-300 bg-[#F8F5EF] p-4 text-sm text-gray-600">
-                    <p className="font-medium text-gray-900">Execution signal</p>
-                    <p className="mt-2">{evaluatedDefinitionCount} vignette{evaluatedDefinitionCount === 1 ? '' : 's'} already have runs.</p>
-                    <p>{definitions.length} vignette{definitions.length === 1 ? '' : 's'} visible in the current domain view.</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="secondary" onClick={() => void handleCreateVignettePair()}>
+                      Create Vignette
+                    </Button>
+                    <Button type="button" variant="secondary" onClick={() => {
+                      setActiveTab('setup');
+                      setSetupTab(missingSetupRequirements[0]?.tab ?? 'contexts');
+                    }}>
+                      {setupReady ? 'Review Setup' : 'Fix Setup'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => navigate(`/domains/${selectedDomain.id}/run-trials?scopeCategory=PILOT`)}
+                    >
+                      Start Pilot
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => navigate(`/domains/${selectedDomain.id}/run-trials?scopeCategory=PRODUCTION`)}
+                    >
+                      Start Production
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={handleOpenDomainFindings}
+                    >
+                      Open Findings
+                    </Button>
                   </div>
                 </div>
               </div>
 
+              {/* Coverage matrix */}
               <div className="rounded-xl border border-gray-200 bg-white p-5">
-                <h3 className="text-lg font-medium text-[#1A1A1A]">Recommended next steps</h3>
-                <div className="mt-4 space-y-2">
-                  <Button type="button" variant="secondary" className="w-full" onClick={() => void handleCreateVignettePair()}>
-                    Create Vignette
-                  </Button>
-                  <Button type="button" variant="secondary" className="w-full" onClick={() => {
-                    setActiveTab('setup');
-                    setSetupTab(missingSetupRequirements[0]?.tab ?? 'contexts');
-                  }}>
-                    {setupReady ? 'Review setup coverage' : 'Fix setup gaps'}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="w-full"
-                    onClick={() => navigate(`/domains/${selectedDomain.id}/run-trials?scopeCategory=PILOT`)}
-                  >
-                    Start pilot evaluation
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="w-full"
-                    onClick={() => navigate(`/domains/${selectedDomain.id}/run-trials?scopeCategory=PRODUCTION`)}
-                  >
-                    Start production evaluation
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="w-full"
-                    onClick={handleOpenDomainFindings}
-                  >
-                    Open current findings
-                  </Button>
-                </div>
+                <h3 className="text-lg font-medium text-[#1A1A1A]">Value coverage</h3>
+                <p className="mt-1 mb-4 text-sm text-gray-600">
+                  Batch density across Schwartz value pairs. Green cells (10+ batches) indicate well-covered pairs; red cells (&lt;3) or empty cells show gaps.
+                </p>
+                <CoverageMatrix domainId={selectedDomain.id} />
               </div>
             </div>
           ) : (selectedDomain == null || activeTab === 'vignettes') ? (
