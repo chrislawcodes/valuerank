@@ -206,6 +206,94 @@ def remove_all_worktrees(paths: list[Path], run_fn=subprocess.run) -> None:
         )
 
 
+def get_new_commits(worktree_path: Path, base_sha: str, run_fn=subprocess.run) -> list[str]:
+    try:
+        result = run_fn(
+            ["git", "log", "--reverse", "--format=%H", f"{base_sha}..HEAD"],
+            cwd=str(worktree_path),
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"failed to get commits in {worktree_path} since {base_sha}: {exc.stderr or exc.stdout or exc}"
+        ) from exc
+    output = result.stdout.strip()
+    if not output:
+        return []
+    return [line.strip() for line in output.splitlines() if line.strip()]
+
+
+def stage_and_commit_if_dirty(worktree_path: Path, message: str, run_fn=subprocess.run) -> str | None:
+    try:
+        status = run_fn(
+            ["git", "-C", str(worktree_path), "status", "--porcelain"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"failed to check status for {worktree_path}: {exc.stderr or exc.stdout or exc}"
+        ) from exc
+
+    if not status.stdout.strip():
+        return None
+
+    try:
+        run_fn(
+            ["git", "-C", str(worktree_path), "add", "-A"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        run_fn(
+            ["git", "-C", str(worktree_path), "commit", "-m", message],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        rev_parse = run_fn(
+            ["git", "-C", str(worktree_path), "rev-parse", "HEAD"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"failed to commit changes in {worktree_path}: {exc.stderr or exc.stdout or exc}"
+        ) from exc
+    return rev_parse.stdout.strip()
+
+
+def cherry_pick_commits(commits: list[str], run_fn=subprocess.run) -> tuple[bool, str]:
+    if not commits:
+        return True, ""
+
+    for sha in commits:
+        try:
+            run_fn(
+                ["git", "-C", str(REPO_ROOT), "cherry-pick", sha],
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            try:
+                run_fn(
+                    ["git", "-C", str(REPO_ROOT), "cherry-pick", "--abort"],
+                    check=True,
+                    text=True,
+                    capture_output=True,
+                )
+            except Exception:
+                pass
+            return False, f"cherry-pick failed on {sha}: {exc.stderr or exc.stdout or exc}"
+
+    return True, ""
+
+
 def revert_protected_files() -> list[str]:
     """Revert PROTECTED_FILES to HEAD. Returns list of files actually reverted."""
     # Only revert files that are tracked and have been modified.
