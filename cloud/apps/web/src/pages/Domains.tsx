@@ -274,8 +274,9 @@ export function Domains() {
 
   useEffect(() => {
     if (selectedFolder === 'all' || selectedFolder === 'none') {
-      setActiveTab('overview');
-      setSetupTab('contexts');
+      if (domains.length > 0 && domains[0] != null) {
+        setSelectedFolder(domains[0].id);
+      }
     }
   }, [selectedFolder, domains]);
 
