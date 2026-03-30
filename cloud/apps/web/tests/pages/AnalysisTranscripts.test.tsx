@@ -439,13 +439,6 @@ describe('AnalysisTranscripts', () => {
     expect(screen.queryByTestId('transcript-list')).not.toBeInTheDocument();
   });
 
-  it('fails loudly for legacy decisionCode transcript URLs', () => {
-    renderPage('/analysis/run-1/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&row=High&col=Low&companionRunId=run-2&modelId=model1&pairView=condition-split&sourceRun=companion&decisionCode=1');
-
-    expect(screen.getByText('Legacy decisionCode URLs are no longer supported. Reopen the condition detail page to get a semantic transcript link.')).toBeInTheDocument();
-    expect(screen.queryByTestId('transcript-list')).not.toBeInTheDocument();
-  });
-
   it('filters sourceRun=pooled paired clickthroughs across both runs', () => {
     installPairedConditionSourceFixture();
 

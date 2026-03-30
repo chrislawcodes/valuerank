@@ -216,7 +216,7 @@ describe('RunResults', () => {
     await user.click(screen.getByText('gpt-4'));
 
     expect(screen.getByText('Decision summary')).toBeInTheDocument();
-    expect(screen.getByText('Strongly favors Benevolence Dependability')).toBeInTheDocument();
+    expect(screen.getByText('Favor first / Strong')).toBeInTheDocument();
   });
 
   it('opens transcript viewer when transcript is clicked', async () => {

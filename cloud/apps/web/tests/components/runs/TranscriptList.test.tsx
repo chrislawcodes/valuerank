@@ -216,7 +216,7 @@ describe('TranscriptList', () => {
       />
     );
 
-    expect(screen.getByText('Strongly favors Benevolence Dependability')).toBeInTheDocument();
+    expect(screen.getByText('Favor first / Strong')).toBeInTheDocument();
     expect(screen.queryByText('Fallback')).not.toBeInTheDocument();
   });
 
