@@ -24,14 +24,6 @@ builder.objectType(TranscriptRef, {
     turnCount: t.exposeInt('turnCount'),
     tokenCount: t.exposeInt('tokenCount'),
     durationMs: t.exposeInt('durationMs'),
-    decisionCode: t.exposeString('decisionCode', {
-      nullable: true,
-      description: 'Decision code assigned during summarization (typically 1-5)',
-    }),
-    decisionCodeSource: t.exposeString('decisionCodeSource', {
-      nullable: true,
-      description: 'How decisionCode was assigned: deterministic, llm, manual, or error',
-    }),
     decisionMetadata: t.expose('decisionMetadata', {
       type: 'JSON',
       nullable: true,

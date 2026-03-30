@@ -92,7 +92,7 @@ describe('restart_summarization MCP Tool [T035]', () => {
           tokenCount: 100,
           durationMs: 1000,
           summarizedAt: i < summarizedCount ? new Date() : null,
-          decisionCode: i < summarizedCount ? '3' : null,
+          decisionMetadata: i < summarizedCount ? { summaryCache: {} } : null,
         },
       });
     }

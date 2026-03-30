@@ -100,7 +100,7 @@ describe('Summarization Control Mutations', () => {
           tokenCount: 100,
           durationMs: 1000,
           summarizedAt: i < summarizedCount ? new Date() : null,
-          decisionCode: i < summarizedCount ? '3' : null,
+          decisionMetadata: i < summarizedCount ? { rawDecisionEvidence: { matchedLabel: 'Test' } } : null,
         },
       });
     }

@@ -157,7 +157,7 @@ describe('summarize-transcript handler', () => {
   }
 
   describe('successful summarization', () => {
-    it('updates transcript with decision code and text', async () => {
+    it('updates transcript with summary metadata and text', async () => {
       const { run, transcript } = await createTestData();
 
       mockSpawnPython.mockResolvedValueOnce({
@@ -191,7 +191,6 @@ describe('summarize-transcript handler', () => {
         where: { id: transcript.id },
       });
 
-      expect(updated?.decisionCode).toBe('1');
       expect(updated?.decisionText).toBe('AI prioritized safety over efficiency');
       expect(updated?.summarizedAt).not.toBeNull();
       expect(updated?.decisionMetadata).toMatchObject({
@@ -540,8 +539,6 @@ describe('summarize-transcript handler', () => {
         where: { id: first.transcript.id },
       });
 
-      expect(cachedTranscript?.decisionCode).toBe(freshTranscript.decisionCode);
-      expect(cachedTranscript?.decisionCodeSource).toBe(freshTranscript.decisionCodeSource);
       expect(cachedTranscript?.decisionText).toBe(freshTranscript.decisionText);
       expect(cachedTranscript?.decisionMetadata).toEqual(freshTranscript.decisionMetadata);
       expect(cachedTranscript?.summarizedAt).not.toBeNull();
@@ -578,7 +575,8 @@ describe('summarize-transcript handler', () => {
         where: { id: first.transcript.id },
       });
 
-      expect(updated?.decisionCode).toBe('2');
+      expect(updated?.decisionText).toBe('AI chose balanced approach');
+      expect(updated?.summarizedAt).not.toBeNull();
     });
 
     it('re-runs summarization when parser version changes', async () => {
@@ -772,8 +770,8 @@ describe('summarize-transcript handler', () => {
         where: { id: transcript.id },
       });
 
-      expect(updated?.decisionCode).toBe('error');
       expect(updated?.decisionText).toContain('Invalid model');
+      expect(updated?.decisionMetadata).toBeNull();
       expect(updated?.summarizedAt).not.toBeNull();
     });
 
@@ -837,8 +835,8 @@ describe('summarize-transcript handler', () => {
         where: { id: transcript.id },
       });
 
-      expect(updated?.decisionCode).toBe('error');
       expect(updated?.decisionText).toContain('Network error');
+      expect(updated?.decisionMetadata).toBeNull();
     });
   });
 });

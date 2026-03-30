@@ -10,6 +10,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import { buildMcpResponse, truncateArray } from '../../services/mcp/index.js';
+import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/decision-model.js';
 import { addToolRegistrar } from './registry.js';
 
 const log = createLogger('mcp:tools:get-run-results');
@@ -51,7 +52,11 @@ type RunResultItem = {
   sampleIndex: number;
   status: 'SUCCESS' | 'FAILED';
   transcriptId: string | null;
-  decisionCode: string | null;
+  decision: {
+    direction: string;
+    strength: string;
+    favoredValueKey: string | null;
+  } | null;
   decisionText: string | null;
   errorCode: string | null;
   errorMessage: string | null;
@@ -210,7 +215,14 @@ Limited to 8KB token budget.`,
             select: {
               id: true,
               decisionCode: true,
+              decisionMetadata: true,
+              definitionSnapshot: true,
               decisionText: true,
+              scenario: {
+                select: {
+                  orientationFlipped: true,
+                },
+              },
             },
           })
           : [];
@@ -226,7 +238,23 @@ Limited to 8KB token budget.`,
             sampleIndex: row.sampleIndex,
             status: row.status,
             transcriptId: row.transcriptId,
-            decisionCode: transcript?.decisionCode ?? null,
+            decision: transcript == null
+              ? null
+              : (() => {
+                const resolved = resolveTranscriptDecisionModel({
+                  decisionCode: transcript.decisionCode,
+                  decisionMetadata: transcript.decisionMetadata,
+                  definitionSnapshot: transcript.definitionSnapshot,
+                  orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+                });
+                return resolved.canonical.direction === 'unknown'
+                  ? null
+                  : {
+                    direction: resolved.canonical.direction,
+                    strength: resolved.canonical.strength,
+                    favoredValueKey: resolved.canonical.favoredValueKey,
+                  };
+              })(),
             decisionText: truncateDecisionText(transcript?.decisionText ?? null),
             errorCode: row.errorCode,
             errorMessage: row.errorMessage,

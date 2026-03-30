@@ -5,7 +5,7 @@
  * Called automatically when all transcripts in a run have been summarized.
  */
 
-import { db } from '@valuerank/db';
+import { db, Prisma } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import { getBoss } from '../../queue/boss.js';
 import { DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
@@ -31,13 +31,13 @@ export async function triggerBasicAnalysis(
 
   log.info({ runId, force }, 'Triggering basic analysis for run');
 
-  // Get all successful transcripts for this run
-  // Only include transcripts that have been summarized and have a decision code
+  // Get all successful transcripts for this run.
+  // A failed summary is represented by summarizedAt being set while decisionMetadata is missing.
   const transcripts = await db.transcript.findMany({
     where: {
       runId,
       summarizedAt: { not: null },
-      decisionCode: { not: null, notIn: ['error'] },
+      decisionMetadata: { not: Prisma.DbNull },
     },
     select: { id: true },
   });

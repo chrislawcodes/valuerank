@@ -1,5 +1,6 @@
 import type { Transcript } from '../api/operations/runs';
 import { getDecisionMetadata } from './methodology';
+import { getTranscriptDecisionSortValue } from './transcriptDecisionModel';
 
 export type ModelDecisionCoverage = {
   modelId: string;
@@ -43,8 +44,17 @@ function createEmptyModelCoverage(modelId: string): ModelDecisionCoverage {
   };
 }
 
-function isNumericDecisionCode(decisionCode: string | null | undefined): boolean {
-  return decisionCode === '1' || decisionCode === '2' || decisionCode === '3' || decisionCode === '4' || decisionCode === '5';
+function isNumericDecisionValue(decisionValue: string | number | null | undefined): boolean {
+  return decisionValue === '1'
+    || decisionValue === '2'
+    || decisionValue === '3'
+    || decisionValue === '4'
+    || decisionValue === '5'
+    || decisionValue === 1
+    || decisionValue === 2
+    || decisionValue === 3
+    || decisionValue === 4
+    || decisionValue === 5;
 }
 
 function hasMeaningfulMetadata(transcript: Transcript): boolean {
@@ -88,7 +98,7 @@ export function summarizeDecisionCoverage(transcripts: Transcript[]): DecisionCo
     const metadata = getDecisionMetadata(transcript.decisionMetadata);
     const parseClass = metadata?.parseClass;
     const hasManualOverride = Boolean(metadata?.manualOverride);
-    const isScored = isNumericDecisionCode(transcript.decisionCode);
+    const isScored = isNumericDecisionValue(getTranscriptDecisionSortValue(transcript, 'legacy'));
 
     summary.totalTranscripts += 1;
     perModel.totalTranscripts += 1;

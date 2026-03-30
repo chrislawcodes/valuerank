@@ -13,20 +13,51 @@ describe('get_transcript_summary tool', () => {
   const testScenarioId = 'test-scenario-456';
   const testModel = 'openai:gpt-4';
 
+  function buildResolvedTranscript(overrides: Record<string, unknown> = {}) {
+    return {
+      content: { turns: [] },
+      decisionCode: null,
+      decisionMetadata: {
+        manualOverride: {
+          appliedDecision: {
+            favoredValueKey: 'Achievement',
+            opposedValueKey: 'Benevolence_Dependability',
+            direction: 'favor_first',
+            strength: 'strong',
+          },
+          previousValue: '4',
+          overriddenAt: '2024-01-15T10:00:00Z',
+          overriddenByUserId: 'test-user',
+        },
+      },
+      definitionSnapshot: {
+        dimensions: [
+          { name: 'Achievement' },
+          { name: 'Benevolence_Dependability' },
+        ],
+        methodology: {
+          presentation_order: 'A_first',
+        },
+      },
+      decisionText: 'Prioritize safety over efficiency',
+      keyReasoning: [],
+      createdAt: new Date(),
+      ...overrides,
+    };
+  }
+
   describe('formatTranscriptSummary', () => {
     it('formats transcript with full data correctly', () => {
-      const transcript = {
+      const transcript = buildResolvedTranscript({
         content: {
           turns: [
             { role: 'user', content: 'What would you do?' },
             { role: 'assistant', content: 'I would prioritize safety.' },
           ],
         },
-        decisionCode: 'A',
-        decisionText: 'Prioritize safety over efficiency',
         keyReasoning: ['Safety is paramount', 'Ethics matter'],
         createdAt: new Date('2024-01-15T10:00:00Z'),
-      };
+      });
 
       const result = formatTranscriptSummary(
         testRunId,
@@ -53,6 +84,8 @@ describe('get_transcript_summary tool', () => {
           ],
         },
         decisionCode: null,
+        decisionMetadata: null,
+        definitionSnapshot: null,
         decisionText: null,
         keyReasoning: [],
         createdAt: new Date(),
@@ -77,6 +110,8 @@ describe('get_transcript_summary tool', () => {
           ],
         },
         decisionCode: null,
+        decisionMetadata: null,
+        definitionSnapshot: null,
         decisionText: null,
         keyReasoning: [],
         createdAt: new Date(),
@@ -93,14 +128,10 @@ describe('get_transcript_summary tool', () => {
       expect(result.summary?.wordCount).toBeGreaterThan(10);
     });
 
-    it('includes decision code and text', () => {
-      const transcript = {
+    it('includes canonical decision and text', () => {
+      const transcript = buildResolvedTranscript({
         content: { turns: [] },
-        decisionCode: 'A',
-        decisionText: 'Prioritize safety over efficiency',
-        keyReasoning: [],
-        createdAt: new Date(),
-      };
+      });
 
       const result = formatTranscriptSummary(
         testRunId,
@@ -109,18 +140,18 @@ describe('get_transcript_summary tool', () => {
         transcript
       );
 
-      expect(result.summary?.decision.code).toBe('A');
+      expect(result.summary?.decision.direction).toBe('favor_first');
+      expect(result.summary?.decision.strength).toBe('strong');
+      expect(result.summary?.decision.favoredValueKey).toBe('Achievement');
       expect(result.summary?.decision.text).toBe('Prioritize safety over efficiency');
     });
 
     it('includes key reasoning points', () => {
-      const transcript = {
+      const transcript = buildResolvedTranscript({
         content: { turns: [] },
-        decisionCode: 'A',
         decisionText: 'Test decision',
         keyReasoning: ['Safety is paramount', 'Ethical considerations matter', 'Human welfare first'],
-        createdAt: new Date(),
-      };
+      });
 
       const result = formatTranscriptSummary(
         testRunId,
@@ -137,6 +168,8 @@ describe('get_transcript_summary tool', () => {
       const transcript = {
         content: { turns: [] },
         decisionCode: null,
+        decisionMetadata: null,
+        definitionSnapshot: null,
         decisionText: null,
         keyReasoning: [],
         createdAt: new Date('2024-01-15T10:30:00Z'),
@@ -168,6 +201,8 @@ describe('get_transcript_summary tool', () => {
       const transcript = {
         content: { turns: [] },
         decisionCode: null,
+        decisionMetadata: null,
+        definitionSnapshot: null,
         decisionText: null,
         keyReasoning: [],
         createdAt: new Date(),
@@ -180,18 +215,18 @@ describe('get_transcript_summary tool', () => {
         transcript
       );
 
-      expect(result.summary?.decision.code).toBe('unknown');
+      expect(result.summary?.decision.direction).toBe('unknown');
+      expect(result.summary?.decision.strength).toBe('unknown');
+      expect(result.summary?.decision.favoredValueKey).toBeNull();
       expect(result.summary?.decision.text).toBe('No decision recorded');
     });
 
     it('truncates key reasoning to 5 points', () => {
-      const transcript = {
+      const transcript = buildResolvedTranscript({
         content: { turns: [] },
-        decisionCode: 'A',
         decisionText: 'Test',
         keyReasoning: ['Point 1', 'Point 2', 'Point 3', 'Point 4', 'Point 5', 'Point 6', 'Point 7'],
-        createdAt: new Date(),
-      };
+      });
 
       const result = formatTranscriptSummary(
         testRunId,
@@ -212,6 +247,8 @@ describe('get_transcript_summary tool', () => {
           ],
         },
         decisionCode: null,
+        decisionMetadata: null,
+        definitionSnapshot: null,
         decisionText: null,
         keyReasoning: [],
         createdAt: new Date(),

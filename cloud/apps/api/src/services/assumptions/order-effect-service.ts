@@ -1,6 +1,7 @@
 import { db, type Prisma } from '@valuerank/db';
 import { AppError, createLogger } from '@valuerank/shared';
 import { LOCKED_ASSUMPTION_VIGNETTES } from '../../graphql/assumptions-constants.js';
+import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/decision-model.js';
 import { parseTemperature } from '../../utils/temperature.js';
 import {
   aggregateWithinCellDisagreementRate,
@@ -167,6 +168,8 @@ type CandidateTranscriptRecord = {
   modelId: string;
   modelVersion: string | null;
   decisionCode: string | null;
+  decisionMetadata: unknown;
+  definitionSnapshot: unknown;
   createdAt: Date;
   run: {
     deletedAt: Date | null;
@@ -328,9 +331,12 @@ export async function getOrderInvarianceAnalysisResult(params: {
       relevantPairs.flatMap((pair) => [pair.sourceScenario.id, pair.variantScenario.id])
     ));
     const scenarioIdToVariantType = new Map<string, string | null>();
+    const scenarioOrientationById = new Map<string, boolean>();
     for (const pair of pairRows) {
       scenarioIdToVariantType.set(pair.sourceScenario.id, null);
       scenarioIdToVariantType.set(pair.variantScenario.id, pair.variantType);
+      scenarioOrientationById.set(pair.sourceScenario.id, pair.sourceScenario.orientationFlipped);
+      scenarioOrientationById.set(pair.variantScenario.id, pair.variantScenario.orientationFlipped);
     }
 
     const transcriptRecords = allScenarioIds.length > 0
@@ -346,6 +352,8 @@ export async function getOrderInvarianceAnalysisResult(params: {
           modelId: true,
           modelVersion: true,
           decisionCode: true,
+          decisionMetadata: true,
+          definitionSnapshot: true,
           createdAt: true,
           run: {
             select: {
@@ -391,7 +399,12 @@ export async function getOrderInvarianceAnalysisResult(params: {
         }
       }
 
-      const decision = parseDecision(transcript.decisionCode);
+      const decision = parseDecision({
+        decisionCode: transcript.decisionCode,
+        decisionMetadata: transcript.decisionMetadata,
+        definitionSnapshot: transcript.definitionSnapshot,
+        orientationFlipped: scenarioOrientationById.get(transcript.scenarioId) ?? false,
+      });
       if (decision == null) {
         continue;
       }
@@ -1101,11 +1114,28 @@ function isTempZeroRun(config: unknown): boolean {
   return parseTemperature((config as { temperature?: unknown } | null)?.temperature) === 0;
 }
 
-function parseDecision(decisionCode: string | null): number | null {
-  if (decisionCode == null || !VALID_DECISIONS.has(decisionCode)) {
+function parseDecision(input: {
+  decisionCode: string | null;
+  decisionMetadata: unknown;
+  definitionSnapshot: unknown;
+  orientationFlipped: boolean;
+}): number | null {
+  const resolved = resolveTranscriptDecisionModel({
+    decisionCode: input.decisionCode,
+    decisionMetadata: input.decisionMetadata,
+    definitionSnapshot: input.definitionSnapshot,
+    orientationFlipped: input.orientationFlipped,
+  });
+  const canonicalScore = resolved.legacy.canonicalScore;
+  if (canonicalScore != null) {
+    return canonicalScore;
+  }
+
+  if (input.decisionCode == null || !VALID_DECISIONS.has(input.decisionCode)) {
     return null;
   }
-  return Number(decisionCode);
+
+  return Number(input.decisionCode);
 }
 
 function pickStableTranscripts(

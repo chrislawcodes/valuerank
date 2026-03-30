@@ -4,7 +4,6 @@ import type { Transcript } from '../../api/operations/runs';
 import { formatDisplayLabel } from '../../utils/displayLabels';
 import { getDecisionMetadata } from '../../utils/methodology';
 import {
-  formatCanonicalDecisionHeadline,
   getTranscriptDecisionAuditBadge,
   hasRenderableTranscriptDecisionModelV2,
   normalizeLegacyDecisionCode,
@@ -25,6 +24,8 @@ type TranscriptRowProps = {
   normalizeDecision?: boolean;
   decisionDisplayMode?: TranscriptDecisionDisplayMode;
 };
+
+type TranscriptCanonicalDecision = NonNullable<Transcript['decisionModelV2']>['canonical'] | null | undefined;
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
@@ -59,6 +60,25 @@ const LEVEL_WORD_TO_NUMBER: Record<string, number> = {
 function extractShortDirection(fullLabel: string): string {
   const idx = fullLabel.toLowerCase().indexOf(' taking ');
   return idx !== -1 ? fullLabel.slice(0, idx) : fullLabel;
+}
+
+function formatCanonicalDecisionField(value: string | null | undefined): string {
+  if (value == null || value.trim().length === 0) {
+    return '-';
+  }
+
+  const displayValue = formatDisplayLabel(value);
+  return displayValue.charAt(0).toUpperCase() + displayValue.slice(1);
+}
+
+function formatCanonicalDecisionDisplay(
+  canonical: TranscriptCanonicalDecision,
+): string {
+  if (!canonical) {
+    return '-';
+  }
+
+  return `${formatCanonicalDecisionField(canonical.direction)} / ${formatCanonicalDecisionField(canonical.strength)}`;
 }
 
 function extractDecision(content: unknown): string {
@@ -129,16 +149,14 @@ export function TranscriptRow({
 }: TranscriptRowProps) {
   const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
   const showGrid = !compact && Boolean(gridTemplateColumns);
-  const rawDecision = transcript.decisionCode ?? extractDecision(transcript.content);
+  const rawDecision = transcript.decisionModelV2?.legacy?.canonicalScore ?? transcript.decisionCode ?? extractDecision(transcript.content);
   const decisionScaleLabels = decisionMetadata?.scaleLabels ?? [];
   const rowDecisionDisplayMode = hasRenderableTranscriptDecisionModelV2(transcript)
     ? (decisionDisplayMode ?? 'audit')
     : 'legacy';
-  const legacyDecisionDisplay = getLegacyDecisionDisplay(transcript, rawDecision, normalizeDecision, dimensions);
+  const legacyDecisionDisplay = getLegacyDecisionDisplay(transcript, String(rawDecision), normalizeDecision, dimensions);
   const canonicalDecision = transcript.decisionModelV2?.canonical ?? null;
-  const canonicalDecisionDisplay = canonicalDecision
-    ? formatCanonicalDecisionHeadline(transcript)
-    : '-';
+  const canonicalDecisionDisplay = formatCanonicalDecisionDisplay(canonicalDecision);
   const auditDecisionBadge = rowDecisionDisplayMode === 'audit'
     && hasRenderableTranscriptDecisionModelV2(transcript)
     ? getTranscriptDecisionAuditBadge(transcript)
@@ -272,7 +290,7 @@ export function TranscriptRow({
                     Fallback
                   </span>
                 )}
-                {transcript.decisionCodeSource === 'manual' && (
+                {canonicalDecision?.source === 'manual' && (
                   <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
                     Manual
                   </span>
@@ -296,11 +314,7 @@ export function TranscriptRow({
           <div className="flex items-center gap-4 text-sm text-gray-500 flex-shrink-0">
             <span
               className="flex items-center gap-2"
-              title={rowDecisionDisplayMode === 'audit'
-                ? 'Decision summary'
-                : transcript.decisionCodeSource === 'llm'
-                  ? 'Decision (LLM-classified)'
-                  : 'Decision'}
+              title={rowDecisionDisplayMode === 'audit' ? 'Decision summary' : 'Decision'}
             >
               {auditDecisionBadge && (
                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
@@ -318,7 +332,7 @@ export function TranscriptRow({
                   Fallback
                 </span>
               )}
-              {rowDecisionDisplayMode === 'legacy' && transcript.decisionCodeSource === 'manual' && (
+              {rowDecisionDisplayMode === 'legacy' && canonicalDecision?.source === 'manual' && (
                 <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
                   Manual
                 </span>

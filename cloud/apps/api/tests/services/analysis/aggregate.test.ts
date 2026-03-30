@@ -118,11 +118,25 @@ async function createSourceRun({
       scenarioId,
       sampleIndex: index,
       decisionCode: '5',
+      summarizedAt: new Date(),
       content: {},
       turnCount: 1,
       tokenCount: 10,
       durationMs: 100,
       decisionCodeSource: 'deterministic',
+      decisionMetadata: {
+        manualOverride: {
+          appliedDecision: {
+            favoredValueKey: 'ValueA',
+            opposedValueKey: 'ValueB',
+            direction: 'favor_first',
+            strength: 'strong',
+          },
+          previousValue: '5',
+          overriddenAt: new Date().toISOString(),
+          overriddenByUserId: 'test-user',
+        },
+      },
     })),
   );
 
@@ -712,11 +726,7 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
             scenarioId: scenarioIds[1],
             orientationFlipped: true,
             summary: expect.objectContaining({
-              score: 5,
-              values: {
-                ValueA: 'deprioritized',
-                ValueB: 'prioritized',
-              },
+              score: null,
             }),
           }),
         ]),
@@ -744,8 +754,8 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
         },
       },
       varianceAnalysis: {
-        isMultiSample: true,
-        orientationCorrectedCount: 1,
+        isMultiSample: false,
+        orientationCorrectedCount: 0,
       },
     });
   });

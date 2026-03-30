@@ -8,9 +8,9 @@ import { X, User, Bot, Clock, Hash } from 'lucide-react';
 import type { ChangeEvent } from 'react';
 import { Button } from '../ui/Button';
 import type { Transcript } from '../../api/operations/runs';
+import { formatDisplayLabel } from '../../utils/displayLabels';
 import { getDecisionMetadata } from '../../utils/methodology';
 import {
-  formatCanonicalDecisionHeadline,
   getTranscriptDecisionAuditBadge,
   hasRenderableTranscriptDecisionModelV2,
   normalizeLegacyDecisionCode,
@@ -25,6 +25,8 @@ type TranscriptViewerProps = {
   normalizeDecision?: boolean;
   decisionDisplayMode?: TranscriptDecisionDisplayMode;
 };
+
+type TranscriptCanonicalDecision = NonNullable<Transcript['decisionModelV2']>['canonical'] | null | undefined;
 
 type Turn = {
   role: 'user' | 'assistant';
@@ -103,6 +105,23 @@ function formatAuditValue(value: string | null | undefined): string {
   return value;
 }
 
+function formatCanonicalDecisionField(value: string | null | undefined): string {
+  if (value == null || value.trim().length === 0) {
+    return '-';
+  }
+
+  const displayValue = formatDisplayLabel(value);
+  return displayValue.charAt(0).toUpperCase() + displayValue.slice(1);
+}
+
+function formatCanonicalDecisionDisplay(canonical: TranscriptCanonicalDecision): string {
+  if (!canonical) {
+    return '-';
+  }
+
+  return `${formatCanonicalDecisionField(canonical.direction)} / ${formatCanonicalDecisionField(canonical.strength)}`;
+}
+
 export function TranscriptViewer({
   transcript,
   onClose,
@@ -113,16 +132,15 @@ export function TranscriptViewer({
 }: TranscriptViewerProps) {
   const content = parseTranscriptContent(transcript.content);
   const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
-  const rawDecision = transcript.decisionCode ?? '-';
-  const legacyDecision = normalizeLegacyDecisionCode(rawDecision, normalizeDecision);
-  const legacyDecisionDisplay = transcript.decisionCodeSource === 'llm' ? `${legacyDecision}*` : legacyDecision;
+  const rawDecision = transcript.decisionModelV2?.legacy?.canonicalScore ?? transcript.decisionCode ?? '-';
+  const legacyDecision = normalizeLegacyDecisionCode(String(rawDecision), normalizeDecision);
   const viewMode = decisionDisplayMode ?? (
     hasRenderableTranscriptDecisionModelV2(transcript) ? 'audit' : 'legacy'
   );
   const isAuditMode = viewMode === 'audit' && hasRenderableTranscriptDecisionModelV2(transcript);
   const canonicalDecision = transcript.decisionModelV2?.canonical ?? null;
   const rawEvidence = transcript.decisionModelV2?.raw ?? null;
-  const canonicalDecisionHeadline = isAuditMode ? formatCanonicalDecisionHeadline(transcript) : '-';
+  const canonicalDecisionHeadline = isAuditMode ? formatCanonicalDecisionDisplay(canonicalDecision) : '-';
   const auditDecisionBadge = isAuditMode ? getTranscriptDecisionAuditBadge(transcript) : null;
   const scaleLabels = decisionMetadata?.scaleLabels ?? [];
   const canOverrideDecision = Boolean(onDecisionChange) && (
@@ -191,8 +209,8 @@ export function TranscriptViewer({
           ) : (
             <span className="flex items-center gap-2">
               <span className="text-gray-500">Decision:</span>
-              <span className="font-medium text-gray-800" title={transcript.decisionCodeSource === 'llm' ? 'LLM-classified decision' : undefined}>
-                {legacyDecisionDisplay}
+              <span className="font-medium text-gray-800" title={canonicalDecision?.source === 'deterministic' ? 'Deterministic decision' : undefined}>
+                {legacyDecision}
               </span>
               {decisionMetadata?.parseClass === 'ambiguous' && (
                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
@@ -204,7 +222,7 @@ export function TranscriptViewer({
                   Fallback
                 </span>
               )}
-              {transcript.decisionCodeSource === 'manual' && (
+              {canonicalDecision?.source === 'manual' && (
                 <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
                   Manual
                 </span>

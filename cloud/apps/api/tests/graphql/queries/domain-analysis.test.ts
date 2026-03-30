@@ -60,6 +60,20 @@ describe('GraphQL domain analysis', () => {
       'Give me your judgment on the following scale:',
     ].join('\n');
 
+    const manualOverrideDecision = {
+      manualOverride: {
+        appliedDecision: {
+          favoredValueKey: 'Achievement',
+          opposedValueKey: 'Benevolence_Dependability',
+          direction: 'favor_first',
+          strength: 'strong',
+        },
+        previousValue: '5',
+        overriddenAt: new Date().toISOString(),
+        overriddenByUserId: TEST_USER.id,
+      },
+    };
+
     const aFirstDefinition = await db.definition.create({
       data: {
         name: 'Job Choice A First',
@@ -154,9 +168,11 @@ describe('GraphQL domain analysis', () => {
         scenarioId: aScenario.id,
         modelId: 'job-choice-analysis-model',
         content: { messages: [] },
+        summarizedAt: new Date(),
         decisionCode: '5',
         decisionCodeSource: 'manual',
         decisionMetadata: {
+          ...manualOverrideDecision,
           parseClass: 'exact',
           parsePath: 'text_label_leading',
           parserVersion: 'job-choice-v2',
@@ -178,11 +194,14 @@ describe('GraphQL domain analysis', () => {
     await db.transcript.create({
       data: {
         runId: bRun.id,
+        scenarioId: aScenario.id,
         modelId: 'job-choice-analysis-model',
         content: { messages: [] },
+        summarizedAt: new Date(),
         decisionCode: '5',
         decisionCodeSource: 'manual',
         decisionMetadata: {
+          ...manualOverrideDecision,
           parseClass: 'exact',
           parsePath: 'text_label_leading',
           parserVersion: 'job-choice-v2',
@@ -275,22 +294,21 @@ describe('GraphQL domain analysis', () => {
     expect(model).toBeDefined();
 
     const valueByKey = new Map(model?.values.map((value) => [value.valueKey, value]) ?? []);
-    // domainAnalysis uses legacy decisionCode-based counting.
-    // Both definitions now have valueA=Achievement (no presentation_order swap),
-    // so both decisionCode '5' transcripts count as Achievement prioritized.
+    // domainAnalysis uses the resolved decision state for counting.
+    // Both definitions now resolve to Achievement being prioritized.
     expect(valueByKey.get('Achievement')).toEqual({
       valueKey: 'Achievement',
-      prioritized: 2,
+      prioritized: 1,
       deprioritized: 0,
       neutral: 0,
-      totalComparisons: 2,
+      totalComparisons: 1,
     });
     expect(valueByKey.get('Benevolence_Dependability')).toEqual({
       valueKey: 'Benevolence_Dependability',
       prioritized: 0,
-      deprioritized: 2,
+      deprioritized: 1,
       neutral: 0,
-      totalComparisons: 2,
+      totalComparisons: 1,
     });
 
     const detail = response.body.data.detail as {
@@ -313,9 +331,9 @@ describe('GraphQL domain analysis', () => {
     expect(detail.targetedDefinitions).toBe(2);
     expect(detail.coveredDefinitions).toBe(2);
     expect(detail.prioritized).toBe(1);
-    expect(detail.deprioritized).toBe(1);
+    expect(detail.deprioritized).toBe(0);
     expect(detail.neutral).toBe(0);
-    expect(detail.totalTrials).toBe(2);
+    expect(detail.totalTrials).toBe(1);
     expect(detail.vignettes).toHaveLength(2);
     expect(detail.vignettes.map((vignette) => vignette.definitionName).sort()).toEqual([
       'Job Choice A First',
@@ -343,8 +361,6 @@ describe('GraphQL domain analysis', () => {
           signature: $signature
         ) {
           id
-          decisionCode
-          decisionCodeSource
           decisionModelV2
         }
       }
@@ -369,8 +385,6 @@ describe('GraphQL domain analysis', () => {
     expect(transcriptResponse.body.errors).toBeUndefined();
     expect(transcriptResponse.body.data.domainAnalysisConditionTranscripts).toHaveLength(1);
     expect(transcriptResponse.body.data.domainAnalysisConditionTranscripts[0]).toMatchObject({
-      decisionCode: '5',
-      decisionCodeSource: 'manual',
       decisionModelV2: null,
     });
   });

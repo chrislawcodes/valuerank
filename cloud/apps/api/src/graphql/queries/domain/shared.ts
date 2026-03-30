@@ -3,6 +3,7 @@ import { formatTrialSignature, formatVnewLabel, formatVnewSignature, isVnewSigna
 import { DOMAIN_ANALYSIS_VALUE_KEYS, type DomainAnalysisValueKey, extractValuePair } from '../domain-analysis-values.js';
 import { parseTemperature } from '../../../utils/temperature.js';
 import { parseDefinitionVersion } from '../../../utils/definition-version.js';
+import { resolveTranscriptDecisionModel } from './decision-model.js';
 import type { TranscriptDecisionModelResult } from './decision-model.js';
 export {
   buildRawDecisionEvidence,
@@ -528,7 +529,14 @@ export async function resolveValuePairsInChunks(
 
 
 export function aggregateValueCountsFromTranscripts(
-  transcripts: Array<{ runId: string; modelId: string; decisionCode: string | null }>,
+  transcripts: Array<{
+    runId: string;
+    modelId: string;
+    decisionCode: string | null;
+    decisionMetadata: unknown;
+    definitionSnapshot: unknown;
+    scenario: { orientationFlipped: boolean | null } | null;
+  }>,
   sourceRunDefinitionById: Map<string, string>,
   valuePairByDefinition: Map<string, DomainAnalysisValuePair>,
 ): {
@@ -545,9 +553,15 @@ export function aggregateValueCountsFromTranscripts(
     if (definitionId == null || definitionId === '') continue;
     const pair = valuePairByDefinition.get(definitionId);
     if (!pair) continue;
-    if (transcript.decisionCode == null || transcript.decisionCode === '') continue;
-    const decision = Number.parseInt(transcript.decisionCode, 10);
-    if (!Number.isFinite(decision)) continue;
+
+    const resolved = resolveTranscriptDecisionModel({
+      decisionCode: transcript.decisionCode,
+      decisionMetadata: transcript.decisionMetadata,
+      definitionSnapshot: transcript.definitionSnapshot,
+      orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+    });
+    const canonical = resolved.canonical;
+    if (canonical.direction === 'unknown') continue;
 
     let valueMap = aggregatedByModel.get(transcript.modelId);
     if (!valueMap) {
@@ -561,14 +575,14 @@ export function aggregateValueCountsFromTranscripts(
       pairwiseWinsByModel.set(transcript.modelId, pairwiseWins);
     }
 
-    if (decision >= 4) {
-      incrementValueCount(valueMap, pair.valueA, 'prioritized');
-      incrementValueCount(valueMap, pair.valueB, 'deprioritized');
-      incrementPairwiseWin(pairwiseWins, pair.valueA, pair.valueB);
-    } else if (decision <= 2) {
-      incrementValueCount(valueMap, pair.valueA, 'deprioritized');
-      incrementValueCount(valueMap, pair.valueB, 'prioritized');
-      incrementPairwiseWin(pairwiseWins, pair.valueB, pair.valueA);
+    if (
+      canonical.direction !== 'neutral'
+      && canonical.favoredValueKey != null
+      && canonical.opposedValueKey != null
+    ) {
+      incrementValueCount(valueMap, canonical.favoredValueKey, 'prioritized');
+      incrementValueCount(valueMap, canonical.opposedValueKey, 'deprioritized');
+      incrementPairwiseWin(pairwiseWins, canonical.favoredValueKey, canonical.opposedValueKey);
     } else {
       incrementValueCount(valueMap, pair.valueA, 'neutral');
       incrementValueCount(valueMap, pair.valueB, 'neutral');

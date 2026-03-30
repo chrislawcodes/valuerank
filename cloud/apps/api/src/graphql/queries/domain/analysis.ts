@@ -22,9 +22,8 @@ import {
   parseDomainAnalysisScoreMethod,
   resolveSignatureRuns,
   resolveValuePairsInChunks,
+  resolveTranscriptDecisionModel,
   selectLatestDefinitionPerLineage,
-  resolveCanonicalDecision,
-  buildRawDecisionEvidence,
 } from './shared.js';
 import { DOMAIN_ANALYSIS_VALUE_KEYS } from '../domain-analysis-values.js';
 import type {
@@ -114,12 +113,19 @@ builder.queryField('domainAnalysis', (t) =>
           where: {
             runId: { in: filteredSourceRunIds },
             deletedAt: null,
-            decisionCode: { in: ['1', '2', '3', '4', '5'] },
+            summarizedAt: { not: null },
           },
           select: {
             runId: true,
             modelId: true,
             decisionCode: true,
+            decisionMetadata: true,
+            definitionSnapshot: true,
+            scenario: {
+              select: {
+                orientationFlipped: true,
+              },
+            },
           },
         });
         const aggregated = aggregateValueCountsFromTranscripts(
@@ -443,6 +449,12 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
             scenarioId: true,
             decisionCode: true,
             decisionMetadata: true,
+            definitionSnapshot: true,
+            scenario: {
+              select: {
+                orientationFlipped: true,
+              },
+            },
           },
         });
 
@@ -478,12 +490,12 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
           const vignette = vignetteByDefinitionId.get(definitionId);
           if (!pair || !vignette) continue;
 
-          const canon = resolveCanonicalDecision({
-            pair,
-            raw: buildRawDecisionEvidence(transcript.decisionMetadata),
-            legacyDecisionCode: transcript.decisionCode,
-            orientationFlipped: null,
-          });
+          const canon = resolveTranscriptDecisionModel({
+            decisionCode: transcript.decisionCode,
+            decisionMetadata: transcript.decisionMetadata,
+            definitionSnapshot: transcript.definitionSnapshot,
+            orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+          }).canonical;
 
           if (canon.direction === 'unknown') {
             const scenarioKey = transcript.scenarioId ?? '__unknown__';

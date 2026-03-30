@@ -153,7 +153,6 @@ describe('OData Endpoints', () => {
       // Check base properties are present
       expect(res.text).toContain('<Property Name="id" Type="Edm.String" Nullable="false"/>');
       expect(res.text).toContain('<Property Name="modelId" Type="Edm.String" Nullable="false"/>');
-      expect(res.text).toContain('<Property Name="decisionCode" Type="Edm.String"/>');
     });
 
     it('handles XML special characters in dimension names', async () => {
@@ -251,7 +250,6 @@ describe('OData Endpoints', () => {
 
       const transcript = res.body.value[0];
       expect(transcript.modelId).toBe('anthropic:claude-3-5-sonnet');
-      expect(transcript.decisionCode).toBe('3');
 
       // Check dimension values are included
       expect(transcript.Power_Dominance).toBe(3);
@@ -297,7 +295,6 @@ describe('OData Endpoints', () => {
       expect(transcript.Power_Dominance).toBe(3);
 
       // Should not have non-selected fields
-      expect(transcript.decisionCode).toBeUndefined();
       expect(transcript.Self_Direction_Action).toBeUndefined();
     });
 

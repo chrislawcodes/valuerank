@@ -113,7 +113,8 @@ def fetch_transcripts(conn: Any, run_ids: Sequence[Any]) -> List[Dict[str, Any]]
         "t.id" if "id" in columns else "NULL::bigint AS id",
         "t.model_id" if "model_id" in columns else "NULL::text AS model_id",
         "t.scenario_id" if "scenario_id" in columns else "NULL::text AS scenario_id",
-        "t.decision_code" if "decision_code" in columns else "NULL::text AS decision_code",
+        "t.decision_metadata" if "decision_metadata" in columns else "NULL::jsonb AS decision_metadata",
+        "t.summarized_at" if "summarized_at" in columns else "NULL::timestamptz AS summarized_at",
     ]
 
     if "content" in columns:
@@ -175,6 +176,57 @@ def normalize_text(value: Any) -> Optional[str]:
     return text or None
 
 
+def _serialize_applied_decision(value: Any) -> Optional[str]:
+    if not isinstance(value, dict):
+        return None
+    direction = normalize_text(value.get("direction"))
+    strength = normalize_text(value.get("strength"))
+    favored_value_key = normalize_text(value.get("favoredValueKey"))
+
+    if direction == "neutral":
+      return "neutral"
+
+    if direction is None or strength is None or favored_value_key is None:
+        return None
+
+    return f"{direction}:{strength}:{favored_value_key}"
+
+
+def extract_decision_key(item: Dict[str, Any]) -> Optional[str]:
+    if item.get("summarized_at") is None:
+        return None
+
+    metadata = item.get("decision_metadata")
+    if not isinstance(metadata, dict):
+        return None
+
+    manual_override = metadata.get("manualOverride")
+    if isinstance(manual_override, dict):
+        decision = _serialize_applied_decision(manual_override.get("appliedDecision"))
+        if decision is not None:
+            return decision
+
+    summary_cache = metadata.get("summaryCache")
+    if isinstance(summary_cache, dict):
+        summary = summary_cache.get("summary")
+        if isinstance(summary, dict):
+            canonical = summary.get("canonicalDecision")
+            if isinstance(canonical, dict):
+                decision_state = normalize_text(canonical.get("decisionState"))
+                favored_value_key = normalize_text(canonical.get("favoredValueKey"))
+                strength = normalize_text(canonical.get("strength"))
+                if decision_state == "neutral":
+                    return "neutral"
+                if decision_state == "resolved" and favored_value_key is not None and strength is not None:
+                    return f"resolved:{strength}:{favored_value_key}"
+
+    parse_path = normalize_text(metadata.get("parsePath"))
+    if parse_path is not None:
+        return parse_path
+
+    return None
+
+
 def stable_metric_for_groups(
     groups: Dict[Any, List[Dict[str, Any]]], key: str, min_items: int = 2
 ) -> MetricResult:
@@ -222,7 +274,7 @@ def decision_match_metric(groups: Dict[Any, List[Dict[str, Any]]]) -> MetricResu
             reverse=True,
         )
         recent = sorted_items[:3]
-        decisions = [normalize_text(item.get("decision_code")) for item in recent]
+        decisions = [extract_decision_key(item) for item in recent]
         if len(decisions) < 3 or any(decision is None for decision in decisions):
             continue
         total += 1

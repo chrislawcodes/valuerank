@@ -87,6 +87,39 @@ function buildContent(values: {
   };
 }
 
+function buildDefinitionSnapshot(): unknown {
+  return {
+    dimensions: [
+      { name: 'Achievement' },
+      { name: 'Benevolence_Dependability' },
+    ],
+    methodology: {
+      presentation_order: 'A_first',
+    },
+  };
+}
+
+function buildDecisionMetadata(favoredValueKey: 'Achievement' | 'Benevolence_Dependability'): unknown {
+  const opposedValueKey = favoredValueKey === 'Achievement'
+    ? 'Benevolence_Dependability'
+    : 'Achievement';
+  const direction = favoredValueKey === 'Achievement' ? 'favor_first' : 'favor_second';
+
+  return {
+    manualOverride: {
+      appliedDecision: {
+        favoredValueKey,
+        opposedValueKey,
+        direction,
+        strength: 'strong',
+      },
+      previousValue: favoredValueKey === 'Achievement' ? '5' : '1',
+      overriddenAt: '2026-03-02T10:00:00.000Z',
+      overriddenByUserId: 'test-user',
+    },
+  };
+}
+
 describe('tempZeroVerificationReport query', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -138,7 +171,8 @@ describe('tempZeroVerificationReport query', () => {
         id: 't-a-1',
         modelId: 'model-a',
         scenarioId: 'scenario-1',
-        decisionCode: 'ALLOW',
+        decisionMetadata: buildDecisionMetadata('Achievement'),
+        definitionSnapshot: buildDefinitionSnapshot(),
         content: buildContent({ adapterMode: 'chat', promptHash: 'prompt-1', systemFingerprint: 'fp-1' }),
         createdAt: new Date('2026-03-02T10:00:00.000Z'),
       },
@@ -146,7 +180,8 @@ describe('tempZeroVerificationReport query', () => {
         id: 't-a-2',
         modelId: 'model-a',
         scenarioId: 'scenario-1',
-        decisionCode: 'ALLOW',
+        decisionMetadata: buildDecisionMetadata('Achievement'),
+        definitionSnapshot: buildDefinitionSnapshot(),
         content: buildContent({ adapterMode: 'chat', promptHash: 'prompt-1', systemFingerprint: 'fp-2' }),
         createdAt: new Date('2026-03-02T09:00:00.000Z'),
       },
@@ -154,7 +189,8 @@ describe('tempZeroVerificationReport query', () => {
         id: 't-a-3',
         modelId: 'model-a',
         scenarioId: 'scenario-1',
-        decisionCode: 'ALLOW',
+        decisionMetadata: buildDecisionMetadata('Achievement'),
+        definitionSnapshot: buildDefinitionSnapshot(),
         content: buildContent({ adapterMode: 'chat', promptHash: 'prompt-1', systemFingerprint: 'fp-1' }),
         createdAt: new Date('2026-03-02T08:00:00.000Z'),
       },
@@ -162,7 +198,8 @@ describe('tempZeroVerificationReport query', () => {
         id: 't-a-4',
         modelId: 'model-a',
         scenarioId: 'scenario-2',
-        decisionCode: 'BLOCK',
+        decisionMetadata: buildDecisionMetadata('Benevolence_Dependability'),
+        definitionSnapshot: buildDefinitionSnapshot(),
         content: buildContent({ adapterMode: 'legacy', promptHash: 'prompt-2', systemFingerprint: 'fp-9' }),
         createdAt: new Date('2026-03-02T07:00:00.000Z'),
       },
@@ -170,7 +207,8 @@ describe('tempZeroVerificationReport query', () => {
         id: 't-a-5',
         modelId: 'model-a',
         scenarioId: 'scenario-2',
-        decisionCode: 'ALLOW',
+        decisionMetadata: buildDecisionMetadata('Achievement'),
+        definitionSnapshot: buildDefinitionSnapshot(),
         content: buildContent({ adapterMode: 'legacy', promptHash: 'prompt-3', systemFingerprint: 'fp-9' }),
         createdAt: new Date('2026-03-02T06:00:00.000Z'),
       },
@@ -178,7 +216,8 @@ describe('tempZeroVerificationReport query', () => {
         id: 't-a-6',
         modelId: 'model-a',
         scenarioId: 'scenario-3',
-        decisionCode: 'ALLOW',
+        decisionMetadata: buildDecisionMetadata('Achievement'),
+        definitionSnapshot: buildDefinitionSnapshot(),
         content: buildContent({ adapterMode: 'batch', systemFingerprint: 'fp-3' }),
         createdAt: new Date('2026-03-02T05:00:00.000Z'),
       },
@@ -186,7 +225,8 @@ describe('tempZeroVerificationReport query', () => {
         id: 't-a-7',
         modelId: 'model-a',
         scenarioId: 'scenario-3',
-        decisionCode: 'BLOCK',
+        decisionMetadata: buildDecisionMetadata('Benevolence_Dependability'),
+        definitionSnapshot: buildDefinitionSnapshot(),
         content: buildContent({ adapterMode: 'batch', promptHash: 'prompt-4', systemFingerprint: 'fp-3' }),
         createdAt: new Date('2026-03-02T04:00:00.000Z'),
       },
@@ -194,7 +234,8 @@ describe('tempZeroVerificationReport query', () => {
         id: 't-a-8',
         modelId: 'model-a',
         scenarioId: 'scenario-3',
-        decisionCode: 'ALLOW',
+        decisionMetadata: buildDecisionMetadata('Achievement'),
+        definitionSnapshot: buildDefinitionSnapshot(),
         content: buildContent({ adapterMode: 'batch', promptHash: 'prompt-4', systemFingerprint: 'fp-3' }),
         createdAt: new Date('2026-03-02T03:00:00.000Z'),
       },
@@ -202,7 +243,8 @@ describe('tempZeroVerificationReport query', () => {
         id: 't-b-1',
         modelId: 'model-b',
         scenarioId: 'scenario-1',
-        decisionCode: 'ALLOW',
+        decisionMetadata: buildDecisionMetadata('Achievement'),
+        definitionSnapshot: buildDefinitionSnapshot(),
         content: buildContent({ adapterMode: 'solo', promptHash: 'prompt-b', systemFingerprint: 'fp-b' }),
         createdAt: new Date('2026-03-02T02:00:00.000Z'),
       },

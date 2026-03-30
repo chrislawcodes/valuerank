@@ -8,7 +8,7 @@
 import { z } from 'zod';
 import crypto from 'crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { db } from '@valuerank/db';
+import { db, Prisma } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
 import { logAuditEvent } from '../../services/mcp/index.js';
 import { formatError, formatSuccess, createOperationsAudit } from './helpers.js';
@@ -25,7 +25,7 @@ const GetUnsummarizedTranscriptsInputSchema = {
     .boolean()
     .optional()
     .default(false)
-    .describe('Include transcripts with error status (decisionCode = "error")'),
+    .describe('Include transcripts whose summarization completed with missing decision metadata'),
   limit: z
     .number()
     .int()
@@ -57,7 +57,7 @@ function registerGetUnsummarizedTranscriptsTool(server: McpServer): void {
 **What this tool returns:**
 - List of transcript IDs with model and scenario info
 - Total count of unsummarized transcripts
-- Decision code for failed transcripts (when include_failed=true)
+- Summary status for failed transcripts (when include_failed=true)
 
 **When to use:**
 - Diagnose which specific transcripts are stuck
@@ -67,7 +67,7 @@ function registerGetUnsummarizedTranscriptsTool(server: McpServer): void {
 
 **Filtering options:**
 - include_failed=false (default): Only transcripts without any summary
-- include_failed=true: Also include transcripts where summary failed (decisionCode='error')
+- include_failed=true: Also include transcripts where summary failed
 
 **Pagination:**
 - limit: Max transcripts to return (default 50, max 100)
@@ -108,18 +108,24 @@ how many exist even if only 'limit' are returned.`,
           return formatError('NOT_FOUND', `Run has been deleted: ${args.run_id}`);
         }
 
-        // Build query conditions
-        // When excluding failed transcripts, we need to include both NULL decisionCode
-        // and non-error decisionCode (NOT: { decisionCode: 'error' } excludes NULLs in SQL)
-        const where = {
-          runId: args.run_id,
-          summarizedAt: null,
-          ...(includeFailed
-            ? {}
-            : {
-              OR: [{ decisionCode: null }, { decisionCode: { not: 'error' } }],
-            }),
-        };
+        // Build query conditions.
+        // Unsummarized transcripts have summarizedAt = null.
+        // Failed summaries have summarizedAt set but no persisted decision metadata.
+        const where = includeFailed
+          ? {
+            runId: args.run_id,
+            OR: [
+              { summarizedAt: null },
+              {
+                summarizedAt: { not: null },
+                decisionMetadata: { equals: Prisma.DbNull },
+              },
+            ],
+          }
+          : {
+            runId: args.run_id,
+            summarizedAt: null,
+          };
 
         // Get total count
         const totalCount = await db.transcript.count({ where });
@@ -132,7 +138,8 @@ how many exist even if only 'limit' are returned.`,
             modelId: true,
             scenarioId: true,
             createdAt: true,
-            decisionCode: true,
+            summarizedAt: true,
+            decisionMetadata: true,
           },
           orderBy: { createdAt: 'asc' },
           take: limit,
@@ -176,7 +183,15 @@ how many exist even if only 'limit' are returned.`,
             model_id: t.modelId,
             scenario_id: t.scenarioId,
             created_at: t.createdAt.toISOString(),
-            ...(includeFailed && t.decisionCode !== null && t.decisionCode !== '' ? { decision_code: t.decisionCode } : {}),
+            ...(includeFailed
+              ? {
+                summary_status: t.summarizedAt === null
+                  ? 'pending'
+                  : t.decisionMetadata === null
+                    ? 'failed'
+                    : 'completed',
+              }
+              : {}),
           })),
         });
       } catch (err) {

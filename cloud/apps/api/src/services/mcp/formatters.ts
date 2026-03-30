@@ -7,6 +7,7 @@
 
 import type { Definition, Run, Transcript, AnalysisResult } from '@prisma/client';
 import type { JsonValue } from '@prisma/client/runtime/library';
+import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/decision-model.js';
 
 /**
  * Definition list item shape for MCP responses
@@ -69,7 +70,11 @@ export type TranscriptSummary = {
   model: string;
   turnCount: number;
   wordCount: number;
-  decision: string | null;
+  decision: {
+    direction: string;
+    strength: string;
+    favoredValueKey: string | null;
+  } | null;
   keyReasoning: string[];
 };
 
@@ -176,7 +181,7 @@ export function formatRunListItem(
  * Uses the transcript's summary fields (decisionCode, decisionText)
  */
 export function formatTranscriptSummary(
-  transcript: Transcript
+  transcript: Transcript & { scenario?: { orientationFlipped?: boolean | null } | null }
 ): TranscriptSummary {
   // Count words from content if available
   const content = safeJsonObject<{ messages?: Array<{ content?: string }> }>(transcript.content);
@@ -197,13 +202,27 @@ export function formatTranscriptSummary(
     keyReasoning.push(...points);
   }
 
+  const resolved = resolveTranscriptDecisionModel({
+    decisionCode: transcript.decisionCode,
+    decisionMetadata: transcript.decisionMetadata,
+    definitionSnapshot: transcript.definitionSnapshot,
+    orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+  });
+  const decision = resolved.canonical.direction === 'unknown'
+    ? null
+    : {
+      direction: resolved.canonical.direction,
+      strength: resolved.canonical.strength,
+      favoredValueKey: resolved.canonical.favoredValueKey,
+    };
+
   return {
     runId: transcript.runId,
     scenarioId: transcript.scenarioId ?? '',
     model: transcript.modelId,
     turnCount: transcript.turnCount,
     wordCount,
-    decision: transcript.decisionCode,
+    decision,
     keyReasoning,
   };
 }

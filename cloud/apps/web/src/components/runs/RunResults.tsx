@@ -4,7 +4,7 @@
  * Displays results of a completed run with transcript list and export options.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Download, FileText, BarChart2, List, Grid, DollarSign, FileJson, FileSpreadsheet } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { TranscriptList } from './TranscriptList';
@@ -26,6 +26,7 @@ type RunResultsProps = {
 };
 
 type ViewMode = 'list' | 'grouped';
+const EMPTY_TRANSCRIPTS: Transcript[] = [];
 
 /**
  * Format cost for display.
@@ -110,7 +111,7 @@ export function RunResults({
   const [viewMode, setViewMode] = useState<ViewMode>('grouped');
   const [updatingTranscriptIds, setUpdatingTranscriptIds] = useState<Set<string>>(new Set());
 
-  const transcripts = run.transcripts ?? [];
+  const transcripts = run.transcripts ?? EMPTY_TRANSCRIPTS;
   const stats = calculateStats(transcripts, run.analysis);
   const listDisplayMode = transcripts.length > 0
     && transcripts.every(hasTranscriptDecisionModelV2)
@@ -140,10 +141,6 @@ export function RunResults({
     setUpdatingTranscriptIds((prev) => new Set(prev).add(transcript.id));
     try {
       await onUpdateTranscriptDecision(transcript.id, decisionCode);
-      setSelectedTranscript((current) => {
-        if (!current || current.id !== transcript.id) return current;
-        return { ...current, decisionCode, decisionCodeSource: 'manual' };
-      });
     } finally {
       setUpdatingTranscriptIds((prev) => {
         const next = new Set(prev);
@@ -152,6 +149,19 @@ export function RunResults({
       });
     }
   }, [onUpdateTranscriptDecision]);
+
+  useEffect(() => {
+    if (!selectedTranscript) {
+      return;
+    }
+
+    const nextTranscript = transcripts.find((item) => item.id === selectedTranscript.id);
+    if (!nextTranscript || nextTranscript === selectedTranscript) {
+      return;
+    }
+
+    setSelectedTranscript(nextTranscript);
+  }, [selectedTranscript, transcripts]);
 
   if (transcripts.length === 0) {
     return (

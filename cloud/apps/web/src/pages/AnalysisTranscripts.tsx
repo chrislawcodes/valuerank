@@ -167,7 +167,6 @@ export function AnalysisTranscripts() {
   const selectedModel = searchParams.get('modelId') ?? searchParams.get('model') ?? '';
   const favoredValueKey = searchParams.get('favoredValueKey') ?? '';
   const decisionStrength = searchParams.get('decisionStrength') ?? '';
-  const hasLegacyDecisionCode = searchParams.has('decisionCode');
   const normalizedFavoredValueKey = favoredValueKey === '' ? undefined : favoredValueKey;
   const normalizedDecisionStrength = decisionStrength === 'strong'
     || decisionStrength === 'lean'
@@ -373,13 +372,6 @@ export function AnalysisTranscripts() {
 
     return new Error('Split paired condition inspection requires sourceRun=current or sourceRun=companion.');
   }, [analysisMode, hasLegacyOrientationBucket, hasPairedConditionFilterParams, pairView, pairedConditionSource]);
-  const legacyDecisionCodeError = useMemo(() => {
-    if (!hasLegacyDecisionCode) {
-      return null;
-    }
-
-    return new Error('Legacy decisionCode URLs are no longer supported. Reopen the condition detail page to get a semantic transcript link.');
-  }, [hasLegacyDecisionCode]);
   const dimensionLabels = useMemo(
     () => deriveDecisionDimensionLabels(definitionContent),
     [definitionContent]
@@ -454,10 +446,6 @@ export function AnalysisTranscripts() {
     setUpdatingTranscriptIds((prev) => new Set(prev).add(transcript.id));
     try {
       await updateTranscriptDecision(transcript.id, nextDecisionCode);
-      setSelectedTranscript((current) => {
-        if (!current || current.id !== transcript.id) return current;
-        return { ...current, decisionCode: nextDecisionCode };
-      });
       refetch();
     } finally {
       setUpdatingTranscriptIds((prev) => {
@@ -697,6 +685,19 @@ export function AnalysisTranscripts() {
     const matched = filteredTranscripts.find((transcript) => transcript.id === selectedTranscriptId) ?? null;
     setSelectedTranscript(matched);
   }, [filteredTranscripts, hasDirectTranscriptParam, selectedTranscriptId]);
+
+  useEffect(() => {
+    if (!selectedTranscript) {
+      return;
+    }
+
+    const matched = filteredTranscripts.find((transcript) => transcript.id === selectedTranscript.id);
+    if (!matched || matched === selectedTranscript) {
+      return;
+    }
+
+    setSelectedTranscript(matched);
+  }, [filteredTranscripts, selectedTranscript]);
 
   const transcriptCoverage = useMemo(() => {
     return filteredTranscripts.reduce(
@@ -998,8 +999,6 @@ export function AnalysisTranscripts() {
         </div>
       ) : pairedConditionStateError ? (
         <ErrorMessage message={pairedConditionStateError.message} />
-      ) : legacyDecisionCodeError ? (
-        <ErrorMessage message={legacyDecisionCodeError.message} />
       ) : reportStateError ? (
         <ErrorMessage message={reportStateError.message} />
       ) : !hasDirectTranscriptParam && !hasRepeatPatternParams && !hasPairedValueFilterParams && !hasPairedConditionFilterParams && scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
