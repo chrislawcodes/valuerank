@@ -29,7 +29,11 @@ import { AnalysisTranscripts } from './pages/AnalysisTranscripts';
 import { Compare } from './pages/Compare';
 import { Survey } from './pages/Survey';
 import { SurveyResults } from './pages/SurveyResults';
-import { Settings } from './pages/Settings';
+import { SettingsAccount } from './pages/SettingsAccount';
+import { SettingsSystemHealth } from './pages/SettingsSystemHealth';
+import { SettingsModels } from './pages/SettingsModels';
+import { SettingsInfrastructure } from './pages/SettingsInfrastructure';
+import { SettingsApiKeys } from './pages/SettingsApiKeys';
 import { Preambles } from './pages/Preambles';
 import { LevelPresets } from './pages/LevelPresets';
 import { DomainContexts } from './pages/DomainContexts';
@@ -261,11 +265,44 @@ function App() {
             <Route path="/survey" element={<LegacyRouteRedirect to="/archive/surveys" />} />
             <Route path="/survey-results" element={<LegacyRouteRedirect to="/archive/survey-results" />} />
             <Route path="/experiments" element={<Navigate to="/archive" replace />} />
+            <Route path="/settings" element={<Navigate to="/settings/account" replace />} />
             <Route
-              path="/settings"
+              path="/settings/account"
               element={
                 <ProtectedLayout>
-                  <Settings />
+                  <SettingsAccount />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/settings/system-health"
+              element={
+                <ProtectedLayout>
+                  <SettingsSystemHealth />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/settings/models"
+              element={
+                <ProtectedLayout>
+                  <SettingsModels />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/settings/infrastructure"
+              element={
+                <ProtectedLayout>
+                  <SettingsInfrastructure />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/settings/api-keys"
+              element={
+                <ProtectedLayout>
+                  <SettingsApiKeys />
                 </ProtectedLayout>
               }
             />

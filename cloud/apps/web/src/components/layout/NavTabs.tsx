@@ -6,7 +6,6 @@ import { useClickOutside } from '../../hooks/useClickOutside';
 
 const utilityTabs = [
   { name: 'Compare', path: '/compare', icon: GitCompare },
-  { name: 'Settings', path: '/settings', icon: Settings },
 ];
 
 type MenuLinkItem = {
@@ -31,15 +30,6 @@ const vignettesMenuItems: MenuItem[] = [
 const domainMenuItems: MenuItem[] = [
   { name: 'Overview', path: '/domains' },
   { name: 'Domain Analysis', path: '/domains/analysis' },
-  {
-    name: 'Domain Setup',
-    children: [
-      { name: 'Preamble', path: '/preambles' },
-      { name: 'Context', path: '/domain-contexts' },
-      { name: 'Value Statements', path: '/value-statements' },
-      { name: 'Level Presets', path: '/level-presets' },
-    ],
-  },
 ];
 
 const validationMenuItems = [
@@ -55,6 +45,21 @@ const archiveMenuItems = [
   { name: 'Legacy Survey Results', path: '/archive/survey-results', aliases: ['/survey-results'] },
 ];
 
+const settingsMenuItems: MenuItem[] = [
+  {
+    name: 'Research Setup',
+    children: [
+      { name: 'Preambles', path: '/preambles' },
+      { name: 'Level Presets', path: '/level-presets' },
+    ],
+  },
+  { name: 'Account', path: '/settings/account' },
+  { name: 'System Health', path: '/settings/system-health' },
+  { name: 'Models', path: '/settings/models' },
+  { name: 'Infrastructure', path: '/settings/infrastructure' },
+  { name: 'API Keys', path: '/settings/api-keys' },
+];
+
 function isMenuGroupItem(item: MenuItem): item is MenuGroupItem {
   return 'children' in item;
 }
@@ -65,10 +70,12 @@ export function NavTabs() {
   const [isDomainsMenuOpen, setIsDomainsMenuOpen] = useState(false);
   const [isValidationMenuOpen, setIsValidationMenuOpen] = useState(false);
   const [isArchiveMenuOpen, setIsArchiveMenuOpen] = useState(false);
+  const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const vignettesMenuRef = useRef<HTMLDivElement>(null);
   const domainMenuRef = useRef<HTMLDivElement>(null);
   const validationMenuRef = useRef<HTMLDivElement>(null);
   const archiveMenuRef = useRef<HTMLDivElement>(null);
+  const settingsMenuRef = useRef<HTMLDivElement>(null);
 
   const isPathActive = useCallback((path: string) => (
     location.pathname === path || location.pathname.startsWith(`${path}/`)
@@ -89,12 +96,14 @@ export function NavTabs() {
   const isDomainsActive = domainMenuItems.some((item) => isMenuItemActive(item));
   const isValidationActive = validationMenuItems.some((item) => isTabActive(item.path));
   const isArchiveActive = archiveMenuItems.some((item) => isTabActive(item.path, item.aliases));
+  const isSettingsActive = settingsMenuItems.some((item) => isMenuItemActive(item));
 
   useEffect(() => {
     setIsVignettesMenuOpen(false);
     setIsDomainsMenuOpen(false);
     setIsValidationMenuOpen(false);
     setIsArchiveMenuOpen(false);
+    setIsSettingsMenuOpen(false);
   }, [location.pathname, isMenuItemActive]);
 
   useClickOutside(vignettesMenuRef, () => {
@@ -109,6 +118,9 @@ export function NavTabs() {
   useClickOutside(archiveMenuRef, () => {
     if (isArchiveMenuOpen) setIsArchiveMenuOpen(false);
   }, isArchiveMenuOpen);
+  useClickOutside(settingsMenuRef, () => {
+    if (isSettingsMenuOpen) setIsSettingsMenuOpen(false);
+  }, isSettingsMenuOpen);
 
   const handleMenuFocus = (setOpen: (value: boolean) => void) => () => {
     setOpen(true);
@@ -236,6 +248,7 @@ export function NavTabs() {
           {renderMenu(domainMenuRef, 'Domains', '/domains', FolderTree, domainMenuItems, isDomainsActive, isDomainsMenuOpen, setIsDomainsMenuOpen)}
           {renderMenu(validationMenuRef, 'Validation', '/validation', ShieldCheck, validationMenuItems, isValidationActive, isValidationMenuOpen, setIsValidationMenuOpen)}
           {renderMenu(archiveMenuRef, 'Archive', '/archive', Archive, archiveMenuItems, isArchiveActive, isArchiveMenuOpen, setIsArchiveMenuOpen)}
+          {renderMenu(settingsMenuRef, 'Settings', '/settings/account', Settings, settingsMenuItems, isSettingsActive, isSettingsMenuOpen, setIsSettingsMenuOpen)}
 
           {utilityTabs.map((tab) => {
             const Icon = tab.icon;
