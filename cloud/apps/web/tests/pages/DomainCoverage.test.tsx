@@ -332,12 +332,12 @@ describe('DomainCoverage Page', () => {
 
     await act(async () => {
       await user.click(
-        screen.getByRole('button', { name: /self-direction versus achievement.*1 batch/i })
+        screen.getByRole('button', { name: /self-direction versus achievement.*3 batch/i })
       );
     });
 
     const vignetteAnalysisLink = await screen.findByRole('link', { name: /view vignette analysis/i });
-    expect(vignetteAnalysisLink).toHaveAttribute('href', '/analysis/run-2');
+    expect(vignetteAnalysisLink).toHaveAttribute('href', '/analysis/run-1');
     expect(screen.queryByRole('link', { name: /view domain analysis/i })).not.toBeInTheDocument();
   });
 });

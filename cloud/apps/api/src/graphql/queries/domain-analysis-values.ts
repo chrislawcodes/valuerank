@@ -45,5 +45,6 @@ export function extractValuePair(content: unknown): DomainAnalysisValuePair | nu
   const normalizedA = toPascalCaseKey(nameA);
   const normalizedB = toPascalCaseKey(nameB);
   if (!isDomainAnalysisValueKey(normalizedA) || !isDomainAnalysisValueKey(normalizedB)) return null;
-  return { valueA: normalizedA, valueB: normalizedB };
+  const [first, second] = [normalizedA, normalizedB].sort() as [DomainAnalysisValueKey, DomainAnalysisValueKey];
+  return { valueA: first, valueB: second };
 }

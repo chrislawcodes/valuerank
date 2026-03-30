@@ -650,7 +650,7 @@ export function DomainCoverage() {
 
                     {/* Data cells */}
                     {displayValues.map((colVal) => {
-                      const keyA = `${colVal}::${rowVal}`;
+                      const keyA = [colVal, rowVal].sort().join('::');
                       const cell = cellLookup.get(keyA);
 
                       return (
