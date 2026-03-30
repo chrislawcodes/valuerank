@@ -428,6 +428,13 @@ def main() -> int:
     parser.add_argument("--max-context-chars", type=int, default=10000)
     parser.add_argument("--max-total-chars", type=int, default=70000)
     parser.add_argument("--retries", type=int, default=1)
+    parser.add_argument(
+        "--no-gemini-lock",
+        action="store_true",
+        default=False,
+        help="Skip the Gemini concurrency lock. Used for staggered-parallel experiments where the "
+        "caller manages launch timing instead of relying on the lock for serialization.",
+    )
     args = parser.parse_args()
 
     try:
@@ -531,7 +538,8 @@ def main() -> int:
     lock_path = None
     owner_pid = None
     try:
-        lock_path, owner_pid = acquire_gemini_lock(workspace_root, args.timeout_seconds)
+        if not args.no_gemini_lock:
+            lock_path, owner_pid = acquire_gemini_lock(workspace_root, args.timeout_seconds)
         for _ in range(args.retries + 1):
             try:
                 if run_cwd is None:

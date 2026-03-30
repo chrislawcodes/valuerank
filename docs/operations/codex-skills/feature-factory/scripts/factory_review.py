@@ -4,6 +4,7 @@
 Builds review specs, runs fallback reviews, manages checkpoint progress.
 """
 import argparse
+import concurrent.futures
 import json
 import subprocess
 import sys
@@ -60,6 +61,14 @@ RUN_GEMINI_REVIEW = REVIEW_SCRIPTS / "run_gemini_review.py"
 RUN_CODEX_REVIEW = REVIEW_SCRIPTS / "run_codex_review.py"
 DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"
 DEFAULT_CODEX_MODEL = "gpt-5.4-mini"
+
+# EXPERIMENT: staggered-parallel Gemini reviews.
+# Gemini reviews launch GEMINI_STAGGER_SECONDS apart without the file lock, so they overlap.
+# Codex reviews always run fully in parallel with Gemini (different API, no rate limit).
+# If rate-limit errors appear in review output → increase this value (try 60, 90, 120).
+# If failures persist at 120 → set to None to revert to strict serial execution.
+# See STATUS.md "Run reviews in parallel" for experiment tracking notes.
+GEMINI_STAGGER_SECONDS: int | None = 30
 
 
 # ---------------------------------------------------------------------------
@@ -321,22 +330,60 @@ def run_checkpoint_fallback(manifest_path: Path, workspace_root: Path, gemini_ti
     checkpoint = json.loads(manifest_path.read_text(encoding="utf-8"))
     artifact_path = resolve_stored_path(checkpoint["artifact_path"], REPO_ROOT)
     workspace_dir = workspace_root.resolve()
-    failed: list[str] = []
 
-    for spec in checkpoint.get("required_reviews", []):
+    def _already_done(spec: dict) -> bool:
         review_path = resolve_stored_path(spec["path"], REPO_ROOT)
-        if review_path.exists():
-            try:
-                data, _ = parse_review_frontmatter(review_path)
-            except Exception:
-                data = {}
-            if data.get("artifact_sha256") == normalized_artifact_hash(checkpoint.get("stage", ""), artifact_path):
-                continue
+        if not review_path.exists():
+            return False
+        try:
+            data, _ = parse_review_frontmatter(review_path)
+        except Exception:
+            data = {}
+        return data.get("artifact_sha256") == normalized_artifact_hash(checkpoint.get("stage", ""), artifact_path)
+
+    def _run_review(spec: dict, no_gemini_lock: bool = False) -> str | None:
+        if _already_done(spec):
+            return None
         cmd = fallback_review_command(spec, artifact_path, checkpoint, workspace_dir, gemini_timeout_seconds, gemini_retries)
+        if no_gemini_lock and spec.get("reviewer") == "gemini":
+            cmd.append("--no-gemini-lock")
         timeout = gemini_timeout_seconds + 30 if spec.get("reviewer") == "gemini" else 210
         result = subprocess.run(cmd, text=True, capture_output=True, timeout=timeout)
         if result.returncode != 0:
-            failed.append(f"{spec['path']}: {trim_detail(result.stderr or result.stdout or 'review failed')}")
+            return f"{spec['path']}: {trim_detail(result.stderr or result.stdout or 'review failed')}"
+        return None
+
+    all_specs = checkpoint.get("required_reviews", [])
+    gemini_specs = [s for s in all_specs if s.get("reviewer") == "gemini"]
+    codex_specs = [s for s in all_specs if s.get("reviewer") != "gemini"]
+    parallel_gemini = GEMINI_STAGGER_SECONDS is not None
+
+    failed: list[str] = []
+    futures: list[concurrent.futures.Future[str | None]] = []
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Codex always runs in parallel with Gemini (different API, no rate limit concern).
+        for spec in codex_specs:
+            futures.append(executor.submit(_run_review, spec))
+
+        if parallel_gemini:
+            # EXPERIMENT: launch Gemini reviews GEMINI_STAGGER_SECONDS apart without the
+            # file lock. See constant definition above for tuning / rollback instructions.
+            for i, spec in enumerate(gemini_specs):
+                if i > 0:
+                    time.sleep(GEMINI_STAGGER_SECONDS)
+                futures.append(executor.submit(_run_review, spec, True))
+        else:
+            # Serial fallback: run Gemini reviews one at a time (rate-limit safe).
+            for spec in gemini_specs:
+                err = _run_review(spec)
+                if err:
+                    failed.append(err)
+
+        for future in concurrent.futures.as_completed(futures):
+            err = future.result()
+            if err:
+                failed.append(err)
 
     verify = subprocess.run(
         [sys.executable, str(VERIFY_CHECKPOINT), "--checkpoint-manifest", str(manifest_path)],
