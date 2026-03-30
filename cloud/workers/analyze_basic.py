@@ -456,6 +456,9 @@ def build_pooled_aggregate_reliability(
     per_model_repeat_coverage: dict[str, Any] = {}
     per_model_drift: dict[str, Any] = {}
 
+    pooled_variance = compute_variance_analysis(transcripts)
+    pooled_reliability_per_model = build_reliability_summary(pooled_variance)["perModel"]
+
     def weighted_average(metric_samples: list[tuple[int, float]]) -> float | None:
         if not metric_samples:
             return None
@@ -468,48 +471,40 @@ def build_pooled_aggregate_reliability(
         )
 
     for model_id in sorted(model_ids):
-        repeated_condition_ids: set[str] = set()
-        contributing_run_count = 0
-        total_repeat_coverage_count = 0
-        drift_samples: list[tuple[int, float]] = []
+        # Use pooled cross-batch analysis as the primary reliability signal.
+        # Pooling all transcripts captures both within-run and cross-batch repeats,
+        # correctly handling all cases: all-single-trial batches, mixed batches (some
+        # runs with within-run repeats, some without), and pure within-run repeats.
+        pooled_model_rel = pooled_reliability_per_model.get(model_id, {})
+        pooled_model_variance = pooled_variance.get("perModel", {}).get(model_id, {})
+
+        total_repeat_coverage_count = int(pooled_model_rel.get("coverageCount", 0))
+        repeated_condition_ids: set[str] = {
+            sid
+            for sid, stats in pooled_model_variance.get("perScenario", {}).items()
+            if isinstance(stats, dict) and int(stats.get("sampleCount", 0)) > 1
+        }
+
         reliability_samples: list[tuple[int, float]] = []
         noise_samples: list[tuple[int, float]] = []
         agreement_samples: list[tuple[int, float]] = []
         neutral_samples: list[tuple[int, float]] = []
+        drift_samples: list[tuple[int, float]] = []
 
-        for run_id, model_reliability in run_level_reliability.items():
-            model_summary = model_reliability.get(model_id)
-            model_variance = run_level_variance.get(run_id, {}).get(model_id, {})
-            model_preference = run_level_preference.get(run_id, {}).get(model_id, {})
-            if not isinstance(model_summary, dict):
-                continue
+        if total_repeat_coverage_count > 0:
+            if pooled_model_rel.get("baselineReliability") is not None:
+                reliability_samples.append((total_repeat_coverage_count, float(pooled_model_rel["baselineReliability"])))
+            if pooled_model_rel.get("baselineNoise") is not None:
+                noise_samples.append((total_repeat_coverage_count, float(pooled_model_rel["baselineNoise"])))
+            if pooled_model_rel.get("directionalAgreement") is not None:
+                agreement_samples.append((total_repeat_coverage_count, float(pooled_model_rel["directionalAgreement"])))
+            if pooled_model_rel.get("neutralShare") is not None:
+                neutral_samples.append((total_repeat_coverage_count, float(pooled_model_rel["neutralShare"])))
 
-            run_repeated_conditions = {
-                scenario_id
-                for scenario_id, stats in model_variance.get("perScenario", {}).items()
-                if isinstance(stats, dict) and int(stats.get("sampleCount", 0)) > 1
-            }
-            repeated_condition_ids.update(run_repeated_conditions)
-
-            coverage_count = int(model_summary.get("coverageCount", 0))
-            if coverage_count <= 0:
-                continue
-
-            contributing_run_count += 1
-            total_repeat_coverage_count += coverage_count
-            baseline_reliability = model_summary.get("baselineReliability")
-            baseline_noise = model_summary.get("baselineNoise")
-            directional_agreement = model_summary.get("directionalAgreement")
-            neutral_share = model_summary.get("neutralShare")
-
-            if baseline_reliability is not None:
-                reliability_samples.append((coverage_count, float(baseline_reliability)))
-            if baseline_noise is not None:
-                noise_samples.append((coverage_count, float(baseline_noise)))
-            if directional_agreement is not None:
-                agreement_samples.append((coverage_count, float(directional_agreement)))
-            if neutral_share is not None:
-                neutral_samples.append((coverage_count, float(neutral_share)))
+        contributing_run_count = sum(
+            1 for variance_per_model in run_level_variance.values()
+            if model_id in variance_per_model
+        )
 
         repeat_coverage_breadth = (
             len(repeated_condition_ids & planned_condition_set)
