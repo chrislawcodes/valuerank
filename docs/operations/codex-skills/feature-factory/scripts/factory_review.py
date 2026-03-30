@@ -92,7 +92,14 @@ def required_reviews(
     large_structural: bool,
     performance_sensitive: bool,
     extra_gemini: list[str],
+    fast: bool = False,
 ) -> list[dict[str, str]]:
+    if fast:
+        return [
+            {"reviewer": "gemini", "lens": "regression-adversarial", "model": DEFAULT_GEMINI_MODEL},
+            {"reviewer": "codex", "lens": "correctness-adversarial", "model": DEFAULT_CODEX_MODEL},
+        ]
+
     primary_gemini = ""
     secondary_default = ""
     codex_lens = ""
