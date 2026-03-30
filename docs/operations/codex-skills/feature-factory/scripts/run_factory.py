@@ -184,15 +184,21 @@ def command_init(args: argparse.Namespace) -> int:
 
 
 def command_checkpoint(args: argparse.Namespace) -> int:
+    fast = getattr(args, "fast", False)
+    if fast and args.stage != "diff":
+        raise SystemExit("--fast requires --stage diff")
+
     ensure_sync()
     root = workflow_dir(args.slug)
     reviews = reviews_dir(args.slug)
     root.mkdir(parents=True, exist_ok=True)
     reviews.mkdir(parents=True, exist_ok=True)
-    prereq_error = prerequisite_failure(args.slug, args.stage)
-    if prereq_error:
-        raise SystemExit(prereq_error)
-    if args.stage == "spec":
+
+    if not fast:
+        prereq_error = prerequisite_failure(args.slug, args.stage)
+        if prereq_error:
+            raise SystemExit(prereq_error)
+    if not fast and args.stage == "spec":
         discovery = discovery_state(args.slug)
         blocking = blocking_unresolved_items(discovery)
         if blocking:
@@ -358,6 +364,7 @@ def command_checkpoint(args: argparse.Namespace) -> int:
             policy["large_structural"],
             policy["performance_sensitive"],
             policy["extra_gemini_lenses"],
+            fast=fast,
         )
 
     manifest = checkpoint_manifest(
@@ -1375,6 +1382,8 @@ def build_parser() -> argparse.ArgumentParser:
     checkpoint_parser.add_argument("--repair-timeout-seconds", type=int, default=300)
     checkpoint_parser.add_argument("--allow-large-diff-rerun", action="store_true")
     checkpoint_parser.add_argument("--fallback", action="store_true")
+    checkpoint_parser.add_argument("--fast", action="store_true",
+        help="Fast path: skip prerequisites, run 1 Gemini + 1 Codex review. Requires --stage diff.")
     checkpoint_parser.set_defaults(func=command_checkpoint)
 
     reconcile_parser = subparsers.add_parser("reconcile")
