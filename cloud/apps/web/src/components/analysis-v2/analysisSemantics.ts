@@ -289,12 +289,12 @@ function parseRawPreferenceSummaryEntry(value: unknown): RawModelPreferenceSumma
     return null;
   }
 
-  const overallSignedCenter = preferenceDirection.overallSignedCenter;
+  const overallSignedCenter = preferenceDirection.overallSignedCenter ?? null;
   if (overallSignedCenter !== null && !isFiniteNumber(overallSignedCenter)) {
     return null;
   }
 
-  const preferenceStrength = value.preferenceStrength;
+  const preferenceStrength = value.preferenceStrength ?? null;
   if (preferenceStrength !== null && !isNonNegativeNumber(preferenceStrength)) {
     return null;
   }

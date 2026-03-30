@@ -454,8 +454,8 @@ class TestAnalyzeBasicIntegration:
         direction = summary["preferenceDirection"]
 
         assert direction["overallLean"] == "A"
-        assert "overallSignedCenter" not in direction
-        assert "preferenceStrength" not in summary
+        assert direction["overallSignedCenter"] is not None
+        assert summary["preferenceStrength"] is not None
 
     def test_reliability_summary_is_unavailable_without_repeats(self):
         """Single-sample runs should not expose reliability from cross-scenario spread."""
@@ -627,7 +627,7 @@ class TestAnalyzeBasicIntegration:
         aggregate_semantics = analysis["aggregateSemantics"]
 
         assert preference["preferenceDirection"]["overallLean"] is not None
-        assert "preferenceStrength" not in preference
+        assert preference["preferenceStrength"] is not None
         assert reliability["coverageCount"] == 0
         assert reliability["baselineReliability"] is None
         assert reliability["baselineNoise"] is None
