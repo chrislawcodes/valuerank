@@ -3,6 +3,7 @@ import concurrent.futures
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -191,6 +192,39 @@ def command_init(args: argparse.Namespace) -> int:
     return 0
 
 
+def _extract_file_paths_from_artifact(artifact_path: Path, repo_root: Path) -> list[str]:
+    """
+    Parse a spec or plan artifact and return repo-relative paths for any files
+    explicitly listed in scope sections (Files to modify, Files to create, etc.).
+    Only includes paths that exist on disk — skips files not yet created.
+    """
+    if not artifact_path.exists():
+        return []
+    text = artifact_path.read_text(encoding="utf-8")
+    # Match backtick-quoted paths or bare paths that look like repo files:
+    # - contain at least one slash
+    # - end with a recognised source extension
+    _EXTENSIONS = re.compile(r"\.(tsx?|jsx?|py|prisma|sql|json|yaml|yml|md|sh|toml)$", re.IGNORECASE)
+    _PATH_RE = re.compile(r"`([^`\n]+)`|(?<!\w)((?:cloud|docs|specs|scripts)/\S+)")
+    found: list[str] = []
+    seen: set[str] = set()
+    for match in _PATH_RE.finditer(text):
+        raw = (match.group(1) or match.group(2) or "").strip().rstrip(".,;)")
+        if not raw or "/" not in raw:
+            continue
+        if not _EXTENSIONS.search(raw):
+            continue
+        # Resolve to absolute, then back to repo-relative
+        candidate = (repo_root / raw).resolve()
+        if not candidate.exists():
+            continue
+        rel = str(candidate.relative_to(repo_root))
+        if rel not in seen:
+            seen.add(rel)
+            found.append(rel)
+    return found
+
+
 def command_checkpoint(args: argparse.Namespace) -> int:
     fast = getattr(args, "fast", False)
     if fast and args.stage != "diff":
@@ -226,6 +260,14 @@ def command_checkpoint(args: argparse.Namespace) -> int:
             )
     policy = resolved_review_policy(args.slug, args)
     context_paths = [normalized_repo_path(path, "context path") for path in args.context]
+
+    # Auto-add files mentioned in the spec/artifact as context so reviewers
+    # can verify assumptions against real code rather than generating unfounded findings.
+    if args.stage in ("spec", "plan") and not getattr(args, "no_auto_context", False):
+        auto_context = _extract_file_paths_from_artifact(artifact_path, REPO_ROOT)
+        for p in auto_context:
+            if p not in context_paths:
+                context_paths.append(p)
     allow_dirty_paths = [normalized_repo_path(path, "allow-dirty path") for path in args.allow_dirty_path]
     prior_diff_budget = diff_review_budget_state(args.slug) if args.stage == "diff" else None
 
@@ -1600,6 +1642,8 @@ def build_parser() -> argparse.ArgumentParser:
     checkpoint_parser.add_argument("--large-structural", action="store_true")
     checkpoint_parser.add_argument("--performance-sensitive", action="store_true")
     checkpoint_parser.add_argument("--use-existing-artifact", action="store_true")
+    checkpoint_parser.add_argument("--no-auto-context", action="store_true",
+                                   help="Disable automatic context file extraction from the artifact")
     checkpoint_parser.add_argument("--allow-dirty-path", action="append", default=[])
     checkpoint_parser.add_argument("--max-artifact-chars", type=int)
     checkpoint_parser.add_argument("--max-context-chars", type=int)
