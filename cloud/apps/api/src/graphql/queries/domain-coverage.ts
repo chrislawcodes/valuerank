@@ -186,6 +186,7 @@ builder.queryField('domainValueCoverage', (t) =>
       const definitionIds = Array.from(pairByDefinitionId.keys());
       const batchCountByDefinitionId = new Map<string, number>();
       const latestMatchingRunIdByDefinitionId = new Map<string, string>();
+      const latestAggregateRunIdByDefinitionId = new Map<string, string>();
       const signatureScopedRunsByDefinitionId = new Map<string, Array<{
         id: string;
         definitionId: string;
@@ -222,9 +223,15 @@ builder.queryField('domainValueCoverage', (t) =>
           signatureScopedRunsByDefinitionId.set(run.definitionId, existingRuns);
 
           const isAggregateRun = (run.config as { isAggregate?: boolean } | null)?.isAggregate === true;
+          if (isAggregateRun) {
+            if (!latestAggregateRunIdByDefinitionId.has(run.definitionId)) {
+              latestAggregateRunIdByDefinitionId.set(run.definitionId, run.id);
+            }
+            continue;
+          }
           const matchesModelFilter = filterModelIds.length === 0
             || run.transcripts.some((transcript) => filterModelIds.includes(transcript.modelId));
-          if (!matchesModelFilter || isAggregateRun) continue;
+          if (!matchesModelFilter) continue;
 
           if (!latestMatchingRunIdByDefinitionId.has(run.definitionId)) {
             latestMatchingRunIdByDefinitionId.set(run.definitionId, run.id);
@@ -297,7 +304,9 @@ builder.queryField('domainValueCoverage', (t) =>
             const primaryPair = pairByDefinitionId.get(primaryDefId);
             const aggregateRunId = primaryDefId === ''
               ? null
-              : (latestMatchingRunIdByDefinitionId.get(primaryDefId) ?? null);
+              : (latestAggregateRunIdByDefinitionId.get(primaryDefId)
+                ?? latestMatchingRunIdByDefinitionId.get(primaryDefId)
+                ?? null);
             cells.push({
               valueA,
               valueB,
