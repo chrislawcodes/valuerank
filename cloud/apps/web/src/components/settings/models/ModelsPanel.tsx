@@ -23,6 +23,7 @@ import {
   SET_DEFAULT_LLM_MODEL_MUTATION,
   UNSET_DEFAULT_LLM_MODEL_MUTATION,
   UPDATE_LLM_PROVIDER_MUTATION,
+  SYNC_PROVIDER_BALANCE_MUTATION,
 } from '../../../api/operations/llm';
 
 export function ModelsPanel() {
@@ -43,6 +44,7 @@ export function ModelsPanel() {
   const [, setDefaultModel] = useMutation(SET_DEFAULT_LLM_MODEL_MUTATION);
   const [, unsetDefaultModel] = useMutation(UNSET_DEFAULT_LLM_MODEL_MUTATION);
   const [, updateProvider] = useMutation(UPDATE_LLM_PROVIDER_MUTATION);
+  const [, syncBalance] = useMutation(SYNC_PROVIDER_BALANCE_MUTATION);
 
   const toggleProvider = (providerId: string) => {
     setExpandedProviders((prev) => {
@@ -91,9 +93,19 @@ export function ModelsPanel() {
 
   const handleUpdateProvider = async (
     id: string,
-    input: { requestsPerMinute?: number; maxParallelRequests?: number }
+    input: { requestsPerMinute?: number; maxParallelRequests?: number; syncBalance?: number }
   ) => {
-    await updateProvider({ id, input });
+    // Always update rate limit settings
+    await updateProvider({ id, input: {
+      requestsPerMinute: input.requestsPerMinute,
+      maxParallelRequests: input.maxParallelRequests,
+    }});
+
+    // If a balance sync was requested, call it separately
+    if (input.syncBalance !== undefined) {
+      await syncBalance({ id, balance: input.syncBalance });
+    }
+
     setEditingProvider(null);
     reexecuteQuery({ requestPolicy: 'network-only' });
   };

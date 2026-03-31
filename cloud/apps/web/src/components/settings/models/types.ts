@@ -38,5 +38,5 @@ export type ModelFormModalProps = {
 export type ProviderSettingsModalProps = {
   provider: LlmProvider;
   onClose: () => void;
-  onSave: (input: { requestsPerMinute?: number; maxParallelRequests?: number }) => Promise<void>;
+  onSave: (input: { requestsPerMinute?: number; maxParallelRequests?: number; syncBalance?: number }) => Promise<void>;
 };

@@ -46,6 +46,21 @@ export function ProviderSection({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {provider.balance !== null && provider.balance !== undefined ? (
+            <span className={`px-2 py-1 text-xs rounded-full ${
+              provider.balance < 0
+                ? 'bg-red-100 text-red-700'
+                : provider.balance < 5
+                ? 'bg-yellow-100 text-yellow-700'
+                : 'bg-blue-50 text-blue-700'
+            }`}>
+              Balance: ${provider.balance.toFixed(2)}
+            </span>
+          ) : (
+            <span className="px-2 py-1 text-xs rounded-full bg-gray-50 text-gray-400">
+              Balance: —
+            </span>
+          )}
           <span
             className={`px-2 py-1 text-xs rounded-full ${
               provider.isEnabled
