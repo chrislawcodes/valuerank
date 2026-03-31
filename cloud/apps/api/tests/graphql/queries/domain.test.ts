@@ -9,6 +9,9 @@ const app = createServer();
 describe('GraphQL Domain Query Registration', () => {
   const createdDomainIds: string[] = [];
   const createdDefinitionIds: string[] = [];
+  const createdScenarioIds: string[] = [];
+  const createdRunIds: string[] = [];
+  const createdAnalysisIds: string[] = [];
   const createdLevelPresetIds: string[] = [];
   const createdLevelPresetVersionIds: string[] = [];
   const createdProviderIds: string[] = [];
@@ -31,6 +34,19 @@ describe('GraphQL Domain Query Registration', () => {
     if (createdStatsIds.length > 0) {
       await db.modelTokenStatistics.deleteMany({ where: { id: { in: createdStatsIds } } });
       createdStatsIds.length = 0;
+    }
+    if (createdAnalysisIds.length > 0) {
+      await db.analysisResult.deleteMany({ where: { id: { in: createdAnalysisIds } } });
+      createdAnalysisIds.length = 0;
+    }
+    if (createdRunIds.length > 0) {
+      await db.runScenarioSelection.deleteMany({ where: { runId: { in: createdRunIds } } });
+      await db.run.deleteMany({ where: { id: { in: createdRunIds } } });
+      createdRunIds.length = 0;
+    }
+    if (createdScenarioIds.length > 0) {
+      await db.scenario.deleteMany({ where: { id: { in: createdScenarioIds } } });
+      createdScenarioIds.length = 0;
     }
     if (createdDefinitionIds.length > 0) {
       await db.definition.deleteMany({ where: { id: { in: createdDefinitionIds } } });
@@ -232,6 +248,76 @@ describe('GraphQL Domain Query Registration', () => {
     });
     createdDefinitionIds.push(definition.id);
 
+    const scenario = await db.scenario.create({
+      data: {
+        definitionId: definition.id,
+        name: 'Status Scenario',
+        content: {
+          schema_version: 1,
+          prompt: 'Status scenario body',
+          dimension_values: { mode: 'status' },
+        },
+      },
+    });
+    createdScenarioIds.push(scenario.id);
+
+    const liveUpdatedAt = new Date();
+    const analyzedUpdatedAt = new Date();
+
+    const liveRun = await db.run.create({
+      data: {
+        definitionId: definition.id,
+        status: 'SUMMARIZING',
+        runCategory: 'PRODUCTION',
+        config: { models: ['test-domain-model'], samplesPerScenario: 2 },
+        progress: { total: 1, completed: 1, failed: 0 },
+        createdByUserId: TEST_USER.id,
+        startedAt: new Date(),
+        updatedAt: liveUpdatedAt,
+        stalledModels: ['test-domain-model'],
+      },
+    });
+    createdRunIds.push(liveRun.id);
+    await db.runScenarioSelection.create({
+      data: {
+        runId: liveRun.id,
+        scenarioId: scenario.id,
+      },
+    });
+
+    const analyzedRun = await db.run.create({
+      data: {
+        definitionId: definition.id,
+        status: 'COMPLETED',
+        runCategory: 'PRODUCTION',
+        config: { models: ['test-domain-model'], samplesPerScenario: 2 },
+        progress: { total: 1, completed: 1, failed: 0 },
+        createdByUserId: TEST_USER.id,
+        startedAt: new Date(),
+        completedAt: analyzedUpdatedAt,
+        updatedAt: analyzedUpdatedAt,
+        stalledModels: [],
+      },
+    });
+    createdRunIds.push(analyzedRun.id);
+    await db.runScenarioSelection.create({
+      data: {
+        runId: analyzedRun.id,
+        scenarioId: scenario.id,
+      },
+    });
+    const analysis = await db.analysisResult.create({
+      data: {
+        runId: analyzedRun.id,
+        analysisType: 'basic',
+        inputHash: `status-test-${Date.now()}`,
+        codeVersion: '1.0.0',
+        status: 'CURRENT',
+        output: { perModel: {} },
+      },
+    });
+    createdAnalysisIds.push(analysis.id);
+
     const run = await db.run.create({
       data: {
         definitionId: definition.id,
@@ -313,7 +399,7 @@ describe('GraphQL Domain Query Registration', () => {
     });
 
     const query = `
-      query DomainEvaluations($domainId: ID!, $evaluationId: ID!) {
+      query DomainEvaluations($domainId: ID!, $evaluationId: ID!, $runIds: [ID!]!) {
         domainEvaluations(domainId: $domainId) {
           id
           domainId
@@ -357,6 +443,24 @@ describe('GraphQL Domain Query Registration', () => {
           failedRuns
           cancelledRuns
         }
+        domainTrialRunsStatus(runIds: $runIds) {
+          runId
+          definitionId
+          status
+          updatedAt
+          stalledModels
+          analysisStatus
+          modelStatuses {
+            modelId
+            generationCompleted
+            generationFailed
+            generationTotal
+            summarizationCompleted
+            summarizationFailed
+            summarizationTotal
+            latestErrorMessage
+          }
+        }
         domainRunSummary(domainId: $domainId) {
           domainId
           totalEvaluations
@@ -391,6 +495,7 @@ describe('GraphQL Domain Query Registration', () => {
         variables: {
           domainId: domain.id,
           evaluationId: evaluation.id,
+          runIds: [liveRun.id, analyzedRun.id],
         },
       })
       .expect(200);
@@ -454,6 +559,53 @@ describe('GraphQL Domain Query Registration', () => {
     expect(validationSummary.validationEvaluations).toBe(1);
     expect(validationSummary.totalMemberRuns).toBe(1);
     expect(validationSummary.completedMemberRuns).toBe(1);
+
+    const runStatuses = response.body.data.domainTrialRunsStatus as Array<Record<string, unknown>>;
+    expect(runStatuses).toHaveLength(2);
+    expect(runStatuses[0]).toEqual(
+      expect.objectContaining({
+        runId: liveRun.id,
+        definitionId: definition.id,
+        status: 'SUMMARIZING',
+        updatedAt: liveUpdatedAt.toISOString(),
+        stalledModels: ['test-domain-model'],
+        analysisStatus: null,
+      }),
+    );
+    expect(runStatuses[0]?.modelStatuses).toEqual([
+      expect.objectContaining({
+        modelId: 'test-domain-model',
+        generationCompleted: 0,
+        generationFailed: 0,
+        generationTotal: 2,
+        summarizationCompleted: 0,
+        summarizationFailed: 0,
+        summarizationTotal: 0,
+        latestErrorMessage: null,
+      }),
+    ]);
+    expect(runStatuses[1]).toEqual(
+      expect.objectContaining({
+        runId: analyzedRun.id,
+        definitionId: definition.id,
+        status: 'COMPLETED',
+        updatedAt: analyzedUpdatedAt.toISOString(),
+        stalledModels: [],
+        analysisStatus: 'completed',
+      }),
+    );
+    expect(runStatuses[1]?.modelStatuses).toEqual([
+      expect.objectContaining({
+        modelId: 'test-domain-model',
+        generationCompleted: 0,
+        generationFailed: 0,
+        generationTotal: 2,
+        summarizationCompleted: 0,
+        summarizationFailed: 0,
+        summarizationTotal: 0,
+        latestErrorMessage: null,
+      }),
+    ]);
   });
 
   it('returns a conservative findings-eligibility result for domain findings', async () => {

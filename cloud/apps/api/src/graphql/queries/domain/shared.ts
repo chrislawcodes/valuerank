@@ -229,6 +229,9 @@ export type DomainTrialRunStatus = {
   runId: string;
   definitionId: string;
   status: string;
+  updatedAt: Date;
+  stalledModels: string[];
+  analysisStatus: string | null;
   modelStatuses: DomainTrialModelStatus[];
 };
 
