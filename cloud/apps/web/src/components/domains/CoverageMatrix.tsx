@@ -1,5 +1,5 @@
 import { forwardRef, type SVGProps, useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useQuery } from 'urql';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
 import { ErrorMessage } from '../ui/ErrorMessage';
@@ -28,14 +28,12 @@ function CoverageCell({
   batchCount,
   definitionId,
   aggregateRunId,
-  domainId,
 }: {
   valueA: string;
   valueB: string;
   batchCount: number;
   definitionId: string | null;
   aggregateRunId: string | null;
-  domainId: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const isDiagonal = valueA === valueB;
@@ -131,7 +129,7 @@ function CoverageCell({
                 to={`/definitions/${definitionId}/start-paired-batch`}
                 state={{
                   returnLabel: 'Back to Value coverage',
-                  returnTo: `${location.pathname}${location.search}`,
+                  returnTo: `${window.location.pathname}${window.location.search}`,
                 }}
                 className="flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-sm w-full text-left"
                 onClick={() => setIsOpen(false)}
@@ -208,7 +206,6 @@ type CategoryGroup = {
  */
 export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
   function CoverageMatrix({ domainId }, ref) {
-  const location = useLocation();
   const [selectedSignature, setSelectedSignature] = useState<string>('');
   const [allowAllSignatures, setAllowAllSignatures] = useState(false);
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
@@ -465,7 +462,6 @@ export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
                           <CoverageCell
                             valueA={rowVal}
                             valueB={colVal}
-                            domainId={domainId}
                             batchCount={cell?.batchCount ?? 0}
                             definitionId={cell?.definitionId ?? null}
                             aggregateRunId={cell?.aggregateRunId ?? null}

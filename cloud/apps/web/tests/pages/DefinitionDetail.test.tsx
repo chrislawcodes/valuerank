@@ -416,7 +416,12 @@ describe('DefinitionDetail', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /start paired batch/i }));
 
-      expect(mockNavigate).toHaveBeenCalledWith('/definitions/job-choice-2/start-paired-batch');
+      expect(mockNavigate).toHaveBeenCalledWith('/definitions/job-choice-2/start-paired-batch', {
+        state: {
+          returnLabel: 'Back to Vignette',
+          returnTo: '/definitions/job-choice-2',
+        },
+      });
     });
 
     it('opens the trial modal for standard vignettes', async () => {
