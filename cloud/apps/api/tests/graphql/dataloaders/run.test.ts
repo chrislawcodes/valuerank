@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRunLoader } from '../../../src/graphql/dataloaders/run.js';
+import { createRunAnalysisStatusLoader } from '../../../src/graphql/dataloaders/run-analysis-status.js';
 import { createTranscriptLoader, createTranscriptsByRunLoader } from '../../../src/graphql/dataloaders/transcript.js';
 import { createScenarioLoader } from '../../../src/graphql/dataloaders/scenario.js';
 import { db } from '@valuerank/db';
+import { resolveRunAnalysisStatuses } from '../../../src/services/run/analysis-status.js';
 
 // Mock Prisma client
 vi.mock('@valuerank/db', () => ({
@@ -17,6 +19,10 @@ vi.mock('@valuerank/db', () => ({
       findMany: vi.fn(),
     },
   },
+}));
+
+vi.mock('../../../src/services/run/analysis-status.js', () => ({
+  resolveRunAnalysisStatuses: vi.fn(),
 }));
 
 describe('Run DataLoader', () => {
@@ -91,6 +97,37 @@ describe('Run DataLoader', () => {
       expect(result1?.id).toBe('run1');
       expect(result2).toBeNull();
       expect(result3?.id).toBe('run3');
+    });
+  });
+
+  describe('createRunAnalysisStatusLoader', () => {
+    it('batches multiple load calls into a single status resolution', async () => {
+      vi.mocked(db.run.findMany).mockResolvedValue([
+        { id: 'run1', definitionId: 'def1', status: 'COMPLETED', completedAt: null, config: {} },
+        { id: 'run2', definitionId: 'def2', status: 'RUNNING', completedAt: null, config: {} },
+      ] as never);
+      vi.mocked(resolveRunAnalysisStatuses).mockResolvedValue(
+        new Map([
+          ['run1', 'completed'],
+          ['run2', 'pending'],
+        ]),
+      );
+
+      const loader = createRunAnalysisStatusLoader();
+
+      const [status1, status2] = await Promise.all([
+        loader.load('run1'),
+        loader.load('run2'),
+      ]);
+
+      expect(status1).toBe('completed');
+      expect(status2).toBe('pending');
+      expect(db.run.findMany).toHaveBeenCalledTimes(1);
+      expect(resolveRunAnalysisStatuses).toHaveBeenCalledTimes(1);
+      expect(resolveRunAnalysisStatuses).toHaveBeenCalledWith([
+        { id: 'run1', definitionId: 'def1', status: 'COMPLETED', completedAt: null, config: {} },
+        { id: 'run2', definitionId: 'def2', status: 'RUNNING', completedAt: null, config: {} },
+      ]);
     });
   });
 });

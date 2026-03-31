@@ -20,6 +20,7 @@ import {
 import type { DomainTrialPlanCellEstimate } from './shared.js';
 import { formatTrialSignature } from '@valuerank/shared/trial-signature';
 import { parseTemperature } from '../../../utils/temperature.js';
+import { resolveRunAnalysisStatuses } from '../../../services/run/analysis-status.js';
 
 const DOMAIN_TRIAL_PLAN_COST_CHUNK_SIZE = 5;
 const DOMAIN_ESTIMATE_KNOWN_EXCLUSIONS = [
@@ -432,6 +433,9 @@ builder.queryField('domainTrialRunsStatus', (t) =>
           id: true,
           definitionId: true,
           status: true,
+          updatedAt: true,
+          stalledModels: true,
+          completedAt: true,
           config: true,
         },
       });
@@ -519,8 +523,23 @@ builder.queryField('domainTrialRunsStatus', (t) =>
       const scenarioCountByRun = new Map(
         selectedScenarioCounts.map((row) => [row.runId, row._count._all]),
       );
+      const analysisStatusByRunId = await resolveRunAnalysisStatuses(
+        runs.map((run) => ({
+          id: run.id,
+          definitionId: run.definitionId,
+          status: run.status,
+          completedAt: run.completedAt,
+          config: run.config,
+        })),
+      );
 
-      return runs.map((run) => {
+      const runById = new Map(runs.map((run) => [run.id, run]));
+
+      return Promise.all(runIds.map(async (runId) => {
+        const run = runById.get(runId);
+        if (run === undefined) {
+          return null;
+        }
         const runConfig = run.config as { models?: unknown; samplesPerScenario?: unknown } | null;
         const models = Array.isArray(runConfig?.models)
           ? runConfig.models.filter((model): model is string => typeof model === 'string')
@@ -550,9 +569,12 @@ builder.queryField('domainTrialRunsStatus', (t) =>
           runId: run.id,
           definitionId: run.definitionId,
           status: run.status,
+          updatedAt: run.updatedAt,
+          stalledModels: run.stalledModels,
+          analysisStatus: analysisStatusByRunId.get(run.id) ?? null,
           modelStatuses,
         };
-      });
+      })).then((rows) => rows.filter((row): row is NonNullable<typeof row> => row !== null));
     },
   }),
 );

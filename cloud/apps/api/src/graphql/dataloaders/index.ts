@@ -3,6 +3,8 @@ import type { Definition, Run, Transcript, Scenario, Experiment, Tag, LlmProvide
 import { createDefinitionLoader } from './definition.js';
 import { createDefinitionTrialSummaryLoader, type DefinitionTrialSummary } from './definition-trial-summary.js';
 import { createRunLoader } from './run.js';
+import { createRunAnalysisStatusLoader } from './run-analysis-status.js';
+import type { RunAnalysisStatus } from '../../services/run/analysis-status.js';
 import {
   createTranscriptLoader,
   createTranscriptsByRunLoader,
@@ -20,6 +22,7 @@ export interface DataLoaders {
   definition: DataLoader<string, Definition | null>;
   definitionTrialSummary: DataLoader<string, DefinitionTrialSummary>;
   run: DataLoader<string, Run | null>;
+  runAnalysisStatus: DataLoader<string, RunAnalysisStatus>;
   transcript: DataLoader<string, Transcript | null>;
   transcriptsByRun: DataLoader<string, Transcript[]>;
   transcriptsByAggregateRuns: DataLoader<AggregateTranscriptsKey, Transcript[], string>;
@@ -40,6 +43,7 @@ export function createDataLoaders(): DataLoaders {
     definition: createDefinitionLoader(),
     definitionTrialSummary: createDefinitionTrialSummaryLoader(),
     run: createRunLoader(),
+    runAnalysisStatus: createRunAnalysisStatusLoader(),
     transcript: createTranscriptLoader(),
     transcriptsByRun: createTranscriptsByRunLoader(),
     transcriptsByAggregateRuns: createTranscriptsByAggregateRunsLoader(),

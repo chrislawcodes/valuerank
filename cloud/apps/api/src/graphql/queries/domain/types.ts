@@ -484,6 +484,9 @@ builder.objectType(DomainTrialRunStatusRef, {
     runId: t.exposeID('runId'),
     definitionId: t.exposeID('definitionId'),
     status: t.exposeString('status'),
+    updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
+    stalledModels: t.exposeStringList('stalledModels'),
+    analysisStatus: t.exposeString('analysisStatus', { nullable: true }),
     modelStatuses: t.field({
       type: [DomainTrialModelStatusRef],
       resolve: (parent) => parent.modelStatuses,
