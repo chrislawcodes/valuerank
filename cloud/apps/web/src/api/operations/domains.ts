@@ -807,3 +807,120 @@ export type RetryDomainTrialCellMutationVariables = {
   temperature?: number;
   scopeCategory?: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION';
 };
+
+// ============================================================================
+// Domain Settings (T025)
+// ============================================================================
+
+export type ValueStatementWithVersions = {
+  id: string;
+  token: string;
+  currentContent: string;
+  previousContent: string | null;
+};
+
+export type DomainSettings = {
+  domainId: string;
+  preambleVersionId: string | null;
+  levelPresetVersionId: string | null;
+  contextId: string | null;
+  valueStatements: ValueStatementWithVersions[];
+};
+
+export type DomainConfigSnapshotSummary = {
+  id: string;
+  createdAt: string;
+  preambleLabel: string | null;
+  levelPresetLabel: string | null;
+  contextLabel: string | null;
+  valueStatementCount: number;
+};
+
+export const DOMAIN_SETTINGS_QUERY = `
+  query DomainSettings($domainId: ID!) {
+    domainSettings(domainId: $domainId) {
+      domainId
+      preambleVersionId
+      levelPresetVersionId
+      contextId
+      valueStatements {
+        id
+        token
+        currentContent
+        previousContent
+      }
+    }
+  }
+`;
+
+export type DomainSettingsQueryResult = {
+  domainSettings: DomainSettings | null;
+};
+
+export type DomainSettingsQueryVariables = {
+  domainId: string;
+};
+
+export const DOMAIN_CONFIG_SNAPSHOTS_QUERY = `
+  query DomainConfigSnapshots($domainId: ID!, $limit: Int) {
+    domainConfigSnapshots(domainId: $domainId, limit: $limit) {
+      id
+      createdAt
+      preambleLabel
+      levelPresetLabel
+      contextLabel
+      valueStatementCount
+    }
+  }
+`;
+
+export type DomainConfigSnapshotsQueryResult = {
+  domainConfigSnapshots: DomainConfigSnapshotSummary[];
+};
+
+export type DomainConfigSnapshotsQueryVariables = {
+  domainId: string;
+  limit?: number;
+};
+
+export const SET_DOMAIN_SETTINGS_MUTATION = `
+  mutation SetDomainSettings(
+    $domainId: ID!
+    $preambleVersionId: ID
+    $levelPresetVersionId: ID
+    $contextId: ID
+    $valueStatements: [ValueStatementInput!]!
+  ) {
+    setDomainSettings(
+      domainId: $domainId
+      preambleVersionId: $preambleVersionId
+      levelPresetVersionId: $levelPresetVersionId
+      contextId: $contextId
+      valueStatements: $valueStatements
+    ) {
+      id
+      name
+      defaultPreambleVersionId
+      defaultLevelPresetVersionId
+      defaultContextId
+    }
+  }
+`;
+
+export type SetDomainSettingsMutationResult = {
+  setDomainSettings: {
+    id: string;
+    name: string;
+    defaultPreambleVersionId: string | null;
+    defaultLevelPresetVersionId: string | null;
+    defaultContextId: string | null;
+  };
+};
+
+export type SetDomainSettingsMutationVariables = {
+  domainId: string;
+  preambleVersionId?: string | null;
+  levelPresetVersionId?: string | null;
+  contextId?: string | null;
+  valueStatements: Array<{ token: string; content: string }>;
+};

@@ -1,7 +1,8 @@
 import { builder } from '../builder.js';
 import { db, Prisma } from '@valuerank/db';
-import { AuthenticationError } from '@valuerank/shared';
+import { AuthenticationError, createLogger } from '@valuerank/shared';
 import { DomainRef } from '../types/domain.js';
+import { ensureDomainConfigSnapshot } from '../../services/domain-config/snapshot.js';
 import { createAuditLog } from '../../services/audit/index.js';
 import { normalizeDomainName } from '../../utils/domain-name.js';
 import { buildDefinitionWhere } from '../utils/definition-filters.js';
@@ -1164,6 +1165,99 @@ builder.mutationField('retryDomainTrialCell', (t) =>
         runId: run.run.id,
         message: null,
       };
+    },
+  })
+);
+
+// ============================================================================
+// T020: ValueStatementInput + T021: setDomainSettings mutation
+// ============================================================================
+
+const log = createLogger('graphql:mutations:domain-settings');
+
+const ValueStatementInput = builder.inputType('ValueStatementInput', {
+  fields: (t) => ({
+    token: t.string({ required: true }),
+    content: t.string({ required: true }),
+  }),
+});
+
+builder.mutationField('setDomainSettings', (t) =>
+  t.field({
+    type: DomainRef,
+    args: {
+      domainId: t.arg.id({ required: true }),
+      preambleVersionId: t.arg.id({ required: false }),
+      levelPresetVersionId: t.arg.id({ required: false }),
+      contextId: t.arg.id({ required: false }),
+      valueStatements: t.arg({ type: [ValueStatementInput], required: true }),
+    },
+    resolve: async (_root, args) => {
+      const domainId = args.domainId as string;
+
+      const updatedDomain = await db.$transaction(async (tx) => {
+        // Step (a): Fetch all current value statements + their latest version
+        const currentStatements = await tx.valueStatement.findMany({
+          where: { domainId },
+          select: {
+            id: true,
+            token: true,
+            versions: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: { id: true, content: true },
+            },
+          },
+        });
+
+        const statementByToken = new Map(currentStatements.map((s) => [s.token, s]));
+
+        // Step (b): For each changed statement, bulk-create new ValueStatementVersion rows
+        const changedVersions: { statementId: string; content: string }[] = [];
+
+        for (const input of args.valueStatements) {
+          const existing = statementByToken.get(input.token);
+          if (!existing) {
+            log.warn('setDomainSettings: unknown token, skipping', { token: input.token });
+            continue;
+          }
+
+          const latestContent = existing.versions[0]?.content ?? '';
+          if (input.content !== latestContent) {
+            changedVersions.push({ statementId: existing.id, content: input.content });
+          }
+        }
+
+        if (changedVersions.length > 0) {
+          await tx.valueStatementVersion.createMany({
+            data: changedVersions.map((v) => ({
+              statementId: v.statementId,
+              content: v.content,
+            })),
+          });
+        }
+
+        // Step (c): Upsert DomainConfigSnapshot by (domainId, fingerprint)
+        // NOTE: ensureDomainConfigSnapshot reads the domain FK defaults, so we must update
+        // them AFTER computing the snapshot. Instead, we compute snapshot based on new FKs
+        // by temporarily passing them. Since ensureDomainConfigSnapshot reads from DB,
+        // we first update domain FKs, then call ensureDomainConfigSnapshot.
+        await tx.domain.update({
+          where: { id: domainId },
+          data: {
+            defaultPreambleVersionId: args.preambleVersionId != null ? String(args.preambleVersionId) : null,
+            defaultLevelPresetVersionId: args.levelPresetVersionId != null ? String(args.levelPresetVersionId) : null,
+            defaultContextId: args.contextId != null ? String(args.contextId) : null,
+          },
+        });
+
+        await ensureDomainConfigSnapshot(domainId, tx);
+
+        // Return updated domain
+        return tx.domain.findUniqueOrThrow({ where: { id: domainId } });
+      });
+
+      return updatedDomain;
     },
   })
 );
