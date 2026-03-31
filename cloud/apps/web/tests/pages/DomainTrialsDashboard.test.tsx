@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { DomainTrialsDashboard } from '../../src/pages/DomainTrialsDashboard';
@@ -7,16 +7,19 @@ import {
   DOMAIN_EVALUATIONS_QUERY,
   DOMAIN_EVALUATION_QUERY,
   DOMAIN_EVALUATION_STATUS_QUERY,
-  DOMAIN_RUN_SUMMARY_QUERY,
   DOMAIN_TRIAL_RUNS_STATUS_QUERY,
   DOMAIN_TRIALS_PLAN_QUERY,
   ESTIMATE_DOMAIN_EVALUATION_COST_QUERY,
   START_DOMAIN_EVALUATION_MUTATION,
 } from '../../src/api/operations/domains';
+import { PROVIDER_HEALTH_QUERY } from '../../src/api/operations/health';
+import { LLM_MODELS_QUERY } from '../../src/api/operations/llm';
 
 const useQueryMock = vi.fn();
 const useMutationMock = vi.fn();
+const useRunMock = vi.fn();
 const startDomainEvaluationMock = vi.fn();
+const NOW = new Date().toISOString();
 
 vi.mock('urql', async () => {
   const actual = await vi.importActual<typeof import('urql')>('urql');
@@ -27,9 +30,17 @@ vi.mock('urql', async () => {
   };
 });
 
-function renderDomainTrialsDashboard() {
+vi.mock('../../src/hooks/useRun', () => ({
+  useRun: (...args: unknown[]) => useRunMock(...args),
+}));
+
+vi.mock('../../src/components/runs/RunProgress', () => ({
+  RunProgress: () => <div>Run progress mock</div>,
+}));
+
+function renderDomainTrialsDashboard(initialEntries: string[] = ['/domains/domain-a/run-trials']) {
   return render(
-    <MemoryRouter initialEntries={['/domains/domain-a/run-trials?evaluationId=eval-1']}>
+    <MemoryRouter initialEntries={initialEntries}>
       <Routes>
         <Route path="/domains/:domainId/run-trials" element={<DomainTrialsDashboard />} />
       </Routes>
@@ -37,10 +48,483 @@ function renderDomainTrialsDashboard() {
   );
 }
 
+function makeRunDetails(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'run-1',
+    definitionId: 'def-1',
+    experimentId: null,
+    status: 'RUNNING',
+    config: {
+      models: ['model-1', 'model-2'],
+      samplePercentage: 100,
+    },
+    runProgress: { total: 25, completed: 10, failed: 0, percentComplete: 40 },
+    summarizeProgress: null,
+    executionMetrics: null,
+    startedAt: '2026-03-15T12:01:00.000Z',
+    completedAt: null,
+    createdAt: '2026-03-15T12:00:00.000Z',
+    updatedAt: '2026-03-15T12:03:00.000Z',
+    lastAccessedAt: null,
+    transcripts: [],
+    transcriptCount: 0,
+    recentTasks: [],
+    definition: {
+      id: 'def-1',
+      name: 'Jobs A',
+    },
+    runCategory: 'PRODUCTION',
+    analysisStatus: 'computing',
+    stalledModels: [],
+    ...overrides,
+  };
+}
+
+function mockSetupQueries() {
+  useQueryMock.mockImplementation((args: { query: unknown }) => {
+    if (args.query === DOMAIN_TRIALS_PLAN_QUERY) {
+      return [{
+        data: {
+          domainTrialsPlan: {
+            domainId: 'domain-a',
+            domainName: 'Job domain',
+            vignettes: [
+              { definitionId: 'def-1', definitionName: 'Jobs A', definitionVersion: 1, signature: 'sig-a', scenarioCount: 25, existingBatchCount: 0 },
+              { definitionId: 'def-2', definitionName: 'Jobs B', definitionVersion: 1, signature: 'sig-b', scenarioCount: 25, existingBatchCount: 0 },
+            ],
+            models: [
+              { modelId: 'model-1', label: 'Model One', isDefault: true, supportsTemperature: true },
+              { modelId: 'model-2', label: 'Model Two', isDefault: false, supportsTemperature: true },
+            ],
+            cellEstimates: [],
+            totalEstimatedCost: 84,
+            existingTemperatures: [],
+            defaultTemperature: null,
+            temperatureWarning: null,
+          },
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === ESTIMATE_DOMAIN_EVALUATION_COST_QUERY) {
+      return [{
+        data: {
+          estimateDomainEvaluationCost: {
+            domainId: 'domain-a',
+            domainName: 'Job domain',
+            scopeCategory: 'PRODUCTION',
+            targetedDefinitions: 2,
+            totalScenarioCount: 50,
+            totalEstimatedCost: 84,
+            basedOnSampleCount: 50,
+            isUsingFallback: false,
+            fallbackReason: null,
+            estimateConfidence: 'HIGH',
+            knownExclusions: [],
+            models: [
+              { modelId: 'model-1', label: 'Model One', isDefault: true, supportsTemperature: true, estimatedCost: 42, basedOnSampleCount: 50, isUsingFallback: false },
+              { modelId: 'model-2', label: 'Model Two', isDefault: false, supportsTemperature: true, estimatedCost: 42, basedOnSampleCount: 50, isUsingFallback: false },
+            ],
+            definitions: [],
+            existingTemperatures: [],
+            defaultTemperature: null,
+            temperatureWarning: null,
+          },
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === PROVIDER_HEALTH_QUERY) {
+      return [{
+        data: {
+          providerHealth: {
+            checkedAt: NOW,
+            providers: [
+              { id: 'openai', name: 'openai', configured: true, connected: true, error: null, remainingBudgetUsd: 100, lastChecked: NOW },
+              { id: 'anthropic', name: 'anthropic', configured: true, connected: true, error: null, remainingBudgetUsd: 100, lastChecked: NOW },
+            ],
+          },
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === LLM_MODELS_QUERY) {
+      return [{
+        data: {
+          llmModels: [
+            {
+              id: 'model-1-id',
+              providerId: 'openai',
+              modelId: 'model-1',
+              displayName: 'Model One',
+              costInputPerMillion: 1,
+              costOutputPerMillion: 2,
+              status: 'ACTIVE',
+              isDefault: true,
+              isAvailable: true,
+              apiConfig: null,
+              createdAt: '2026-03-01T00:00:00.000Z',
+              updatedAt: '2026-03-01T00:00:00.000Z',
+              provider: {
+                id: 'openai',
+                name: 'openai',
+                displayName: 'OpenAI',
+                maxParallelRequests: 5,
+                requestsPerMinute: 100,
+                isEnabled: true,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+                models: [],
+              },
+            },
+            {
+              id: 'model-2-id',
+              providerId: 'anthropic',
+              modelId: 'model-2',
+              displayName: 'Model Two',
+              costInputPerMillion: 1,
+              costOutputPerMillion: 2,
+              status: 'ACTIVE',
+              isDefault: false,
+              isAvailable: true,
+              apiConfig: null,
+              createdAt: '2026-03-01T00:00:00.000Z',
+              updatedAt: '2026-03-01T00:00:00.000Z',
+              provider: {
+                id: 'anthropic',
+                name: 'anthropic',
+                displayName: 'Anthropic',
+                maxParallelRequests: 5,
+                requestsPerMinute: 100,
+                isEnabled: true,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+                models: [],
+              },
+            },
+          ],
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === DOMAIN_EVALUATIONS_QUERY) {
+      return [{ data: { domainEvaluations: [] }, fetching: false, error: undefined }, vi.fn()];
+    }
+    if (args.query === DOMAIN_EVALUATION_QUERY) {
+      return [{
+        data: {
+          domainEvaluation: null,
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === DOMAIN_EVALUATION_STATUS_QUERY) {
+      return [{
+        data: {
+          domainEvaluationStatus: null,
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === DOMAIN_TRIAL_RUNS_STATUS_QUERY) {
+      return [{ data: { domainTrialRunsStatus: [] }, fetching: false, error: undefined }, vi.fn()];
+    }
+    return [{ data: undefined, fetching: false, error: undefined }, vi.fn()];
+  });
+}
+
+function mockActiveLaunchQueries() {
+  useQueryMock.mockImplementation((args: { query: unknown }) => {
+    if (args.query === DOMAIN_TRIALS_PLAN_QUERY) {
+      return [{
+        data: {
+          domainTrialsPlan: {
+            domainId: 'domain-a',
+            domainName: 'Job domain',
+            vignettes: [
+              { definitionId: 'def-1', definitionName: 'Jobs A', definitionVersion: 1, signature: 'sig-a', scenarioCount: 25, existingBatchCount: 0 },
+              { definitionId: 'def-2', definitionName: 'Jobs B', definitionVersion: 1, signature: 'sig-b', scenarioCount: 25, existingBatchCount: 0 },
+            ],
+            models: [
+              { modelId: 'model-1', label: 'Model One', isDefault: true, supportsTemperature: true },
+              { modelId: 'model-2', label: 'Model Two', isDefault: false, supportsTemperature: true },
+            ],
+            cellEstimates: [],
+            totalEstimatedCost: 84,
+            existingTemperatures: [],
+            defaultTemperature: null,
+            temperatureWarning: null,
+          },
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === ESTIMATE_DOMAIN_EVALUATION_COST_QUERY) {
+      return [{
+        data: {
+          estimateDomainEvaluationCost: {
+            domainId: 'domain-a',
+            domainName: 'Job domain',
+            scopeCategory: 'PRODUCTION',
+            targetedDefinitions: 2,
+            totalScenarioCount: 50,
+            totalEstimatedCost: 84,
+            basedOnSampleCount: 50,
+            isUsingFallback: false,
+            fallbackReason: null,
+            estimateConfidence: 'HIGH',
+            knownExclusions: [],
+            models: [
+              { modelId: 'model-1', label: 'Model One', isDefault: true, supportsTemperature: true, estimatedCost: 42, basedOnSampleCount: 50, isUsingFallback: false },
+              { modelId: 'model-2', label: 'Model Two', isDefault: false, supportsTemperature: true, estimatedCost: 42, basedOnSampleCount: 50, isUsingFallback: false },
+            ],
+            definitions: [],
+            existingTemperatures: [],
+            defaultTemperature: null,
+            temperatureWarning: null,
+          },
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === PROVIDER_HEALTH_QUERY) {
+      return [{
+        data: {
+          providerHealth: {
+            checkedAt: NOW,
+            providers: [
+              { id: 'openai', name: 'openai', configured: true, connected: true, error: null, remainingBudgetUsd: 100, lastChecked: NOW },
+              { id: 'anthropic', name: 'anthropic', configured: true, connected: true, error: null, remainingBudgetUsd: 100, lastChecked: NOW },
+            ],
+          },
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === LLM_MODELS_QUERY) {
+      return [{
+        data: {
+          llmModels: [
+            {
+              id: 'model-1-id',
+              providerId: 'openai',
+              modelId: 'model-1',
+              displayName: 'Model One',
+              costInputPerMillion: 1,
+              costOutputPerMillion: 2,
+              status: 'ACTIVE',
+              isDefault: true,
+              isAvailable: true,
+              apiConfig: null,
+              createdAt: '2026-03-01T00:00:00.000Z',
+              updatedAt: '2026-03-01T00:00:00.000Z',
+              provider: {
+                id: 'openai',
+                name: 'openai',
+                displayName: 'OpenAI',
+                maxParallelRequests: 5,
+                requestsPerMinute: 100,
+                isEnabled: true,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+                models: [],
+              },
+            },
+            {
+              id: 'model-2-id',
+              providerId: 'anthropic',
+              modelId: 'model-2',
+              displayName: 'Model Two',
+              costInputPerMillion: 1,
+              costOutputPerMillion: 2,
+              status: 'ACTIVE',
+              isDefault: false,
+              isAvailable: true,
+              apiConfig: null,
+              createdAt: '2026-03-01T00:00:00.000Z',
+              updatedAt: '2026-03-01T00:00:00.000Z',
+              provider: {
+                id: 'anthropic',
+                name: 'anthropic',
+                displayName: 'Anthropic',
+                maxParallelRequests: 5,
+                requestsPerMinute: 100,
+                isEnabled: true,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+                models: [],
+              },
+            },
+          ],
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === DOMAIN_EVALUATIONS_QUERY) {
+      return [{
+        data: {
+          domainEvaluations: [
+            {
+              id: 'eval-1',
+              domainId: 'domain-a',
+              domainNameAtLaunch: 'Job domain',
+              scopeCategory: 'PRODUCTION',
+              status: 'RUNNING',
+              createdAt: '2026-03-15T12:00:00.000Z',
+              startedAt: '2026-03-15T12:01:00.000Z',
+              completedAt: null,
+              startedRuns: 2,
+              failedDefinitions: 0,
+              skippedForBudget: 0,
+              projectedCostUsd: 84,
+              models: ['model-1', 'model-2'],
+              temperature: null,
+              maxBudgetUsd: null,
+              memberCount: 2,
+            },
+          ],
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === DOMAIN_EVALUATION_QUERY) {
+      return [{
+        data: {
+          domainEvaluation: {
+            id: 'eval-1',
+            domainId: 'domain-a',
+            domainNameAtLaunch: 'Job domain',
+            scopeCategory: 'PRODUCTION',
+            status: 'RUNNING',
+            createdAt: '2026-03-15T12:00:00.000Z',
+            startedAt: '2026-03-15T12:01:00.000Z',
+            completedAt: null,
+            startedRuns: 2,
+            failedDefinitions: 0,
+            skippedForBudget: 0,
+            projectedCostUsd: 84,
+            models: ['model-1', 'model-2'],
+            temperature: null,
+            maxBudgetUsd: null,
+            memberCount: 2,
+            members: [
+              {
+                runId: 'run-1',
+                definitionIdAtLaunch: 'def-1',
+                definitionNameAtLaunch: 'Jobs A',
+                domainIdAtLaunch: 'domain-a',
+                createdAt: '2026-03-15T12:01:00.000Z',
+                runStatus: 'RUNNING',
+                runCategory: 'PRODUCTION',
+                runStartedAt: '2026-03-15T12:01:00.000Z',
+                runCompletedAt: null,
+              },
+              {
+                runId: 'run-2',
+                definitionIdAtLaunch: 'def-2',
+                definitionNameAtLaunch: 'Jobs B',
+                domainIdAtLaunch: 'domain-a',
+                createdAt: '2026-03-15T12:01:00.000Z',
+                runStatus: 'FAILED',
+                runCategory: 'PRODUCTION',
+                runStartedAt: '2026-03-15T12:01:00.000Z',
+                runCompletedAt: '2026-03-15T12:04:00.000Z',
+              },
+            ],
+          },
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === DOMAIN_EVALUATION_STATUS_QUERY) {
+      return [{
+        data: {
+          domainEvaluationStatus: {
+            id: 'eval-1',
+            status: 'RUNNING',
+            totalRuns: 2,
+            pendingRuns: 0,
+            runningRuns: 1,
+            completedRuns: 1,
+            failedRuns: 1,
+            cancelledRuns: 0,
+          },
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === DOMAIN_TRIAL_RUNS_STATUS_QUERY) {
+      return [{
+        data: {
+          domainTrialRunsStatus: [
+            {
+              runId: 'run-1',
+              definitionId: 'def-1',
+              status: 'SUMMARIZING',
+              updatedAt: '2026-03-15T12:02:00.000Z',
+              stalledModels: [],
+              analysisStatus: 'computing',
+              modelStatuses: [
+                {
+                  modelId: 'model-1',
+                  generationCompleted: 25,
+                  generationFailed: 0,
+                  generationTotal: 25,
+                  summarizationCompleted: 10,
+                  summarizationFailed: 0,
+                  summarizationTotal: 25,
+                  latestErrorMessage: null,
+                },
+              ],
+            },
+            {
+              runId: 'run-2',
+              definitionId: 'def-2',
+              status: 'FAILED',
+              updatedAt: '2026-03-15T12:05:00.000Z',
+              stalledModels: ['model-2'],
+              analysisStatus: 'failed',
+              modelStatuses: [
+                {
+                  modelId: 'model-2',
+                  generationCompleted: 2,
+                  generationFailed: 1,
+                  generationTotal: 25,
+                  summarizationCompleted: 0,
+                  summarizationFailed: 0,
+                  summarizationTotal: 25,
+                  latestErrorMessage: 'Budget exhausted',
+                },
+              ],
+            },
+          ],
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    return [{ data: undefined, fetching: false, error: undefined }, vi.fn()];
+  });
+}
+
 describe('DomainTrialsDashboard', () => {
   beforeEach(() => {
     useQueryMock.mockReset();
     useMutationMock.mockReset();
+    useRunMock.mockReset();
     startDomainEvaluationMock.mockReset();
 
     useMutationMock.mockImplementation((query: unknown) => {
@@ -50,233 +534,51 @@ describe('DomainTrialsDashboard', () => {
       return [{ fetching: false }, vi.fn()];
     });
 
-    useQueryMock.mockImplementation((args: { query: unknown }) => {
-      if (args.query === DOMAIN_TRIALS_PLAN_QUERY) {
-        return [{
-          data: {
-              domainTrialsPlan: {
-              domainId: 'domain-a',
-              domainName: 'Domain A',
-              vignettes: [
-                { definitionId: 'def-1', definitionName: 'Eval Vignette', definitionVersion: 1, signature: 'v1td', scenarioCount: 25 },
-              ],
-              models: [
-                { modelId: 'model-1', label: 'Model One', isDefault: true, supportsTemperature: true },
-              ],
-              cellEstimates: [
-                { definitionId: 'def-1', modelId: 'model-1', estimatedCost: 1.25 },
-              ],
-              totalEstimatedCost: 1.25,
-              existingTemperatures: [],
-              defaultTemperature: null,
-              temperatureWarning: null,
-            },
-          },
-          fetching: false,
-          error: undefined,
-        }, vi.fn()];
-      }
-      if (args.query === ESTIMATE_DOMAIN_EVALUATION_COST_QUERY) {
-        return [{
-          data: {
-            estimateDomainEvaluationCost: {
-              domainId: 'domain-a',
-              domainName: 'Domain A',
-              scopeCategory: 'PRODUCTION',
-              targetedDefinitions: 1,
-              totalScenarioCount: 25,
-              totalEstimatedCost: 1.4,
-              basedOnSampleCount: 50,
-              isUsingFallback: false,
-              fallbackReason: null,
-              estimateConfidence: 'HIGH',
-              knownExclusions: ['Judge/evaluator passes are not included yet.'],
-              models: [],
-              definitions: [],
-              existingTemperatures: [],
-              defaultTemperature: null,
-              temperatureWarning: null,
-            },
-          },
-          fetching: false,
-          error: undefined,
-        }, vi.fn()];
-      }
-      if (args.query === DOMAIN_RUN_SUMMARY_QUERY) {
-        return [{
-          data: {
-            domainRunSummary: {
-              domainId: 'domain-a',
-              scopeCategory: null,
-              totalEvaluations: 2,
-              pendingEvaluations: 0,
-              runningEvaluations: 1,
-              completedEvaluations: 1,
-              failedEvaluations: 0,
-              cancelledEvaluations: 0,
-              totalMemberRuns: 2,
-              pendingMemberRuns: 0,
-              runningMemberRuns: 1,
-              completedMemberRuns: 1,
-              failedMemberRuns: 0,
-              cancelledMemberRuns: 0,
-              pilotEvaluations: 0,
-              productionEvaluations: 2,
-              replicationEvaluations: 0,
-              validationEvaluations: 0,
-              latestEvaluationId: 'eval-1',
-              latestEvaluationStatus: 'RUNNING',
-              latestScopeCategory: 'PRODUCTION',
-              latestEvaluationCreatedAt: '2026-03-15T12:00:00.000Z',
-            },
-          },
-          fetching: false,
-          error: undefined,
-        }, vi.fn()];
-      }
-      if (args.query === DOMAIN_EVALUATIONS_QUERY) {
-        return [{
-          data: {
-            domainEvaluations: [
-              {
-                id: 'eval-1',
-                domainId: 'domain-a',
-                domainNameAtLaunch: 'Domain A',
-                scopeCategory: 'PRODUCTION',
-                status: 'RUNNING',
-                createdAt: '2026-03-15T12:00:00.000Z',
-                startedAt: '2026-03-15T12:01:00.000Z',
-                completedAt: null,
-                startedRuns: 1,
-                failedDefinitions: 0,
-                skippedForBudget: 0,
-                projectedCostUsd: 1.4,
-                models: ['model-1'],
-                temperature: null,
-                maxBudgetUsd: null,
-                memberCount: 1,
-              },
-            ],
-          },
-          fetching: false,
-          error: undefined,
-        }, vi.fn()];
-      }
-      if (args.query === DOMAIN_EVALUATION_QUERY) {
-        return [{
-          data: {
-            domainEvaluation: {
-              id: 'eval-1',
-              domainId: 'domain-a',
-              domainNameAtLaunch: 'Domain A',
-              scopeCategory: 'PRODUCTION',
-              status: 'RUNNING',
-              createdAt: '2026-03-15T12:00:00.000Z',
-              startedAt: '2026-03-15T12:01:00.000Z',
-              completedAt: null,
-              startedRuns: 1,
-              failedDefinitions: 0,
-              skippedForBudget: 0,
-              projectedCostUsd: 1.4,
-              models: ['model-1'],
-              temperature: null,
-              maxBudgetUsd: null,
-              memberCount: 1,
-              members: [
-                {
-                  runId: 'run-1',
-                  definitionIdAtLaunch: 'def-1',
-                  definitionNameAtLaunch: 'Eval Vignette',
-                  domainIdAtLaunch: 'domain-a',
-                  createdAt: '2026-03-15T12:01:00.000Z',
-                  runStatus: 'RUNNING',
-                  runCategory: 'PRODUCTION',
-                  runStartedAt: '2026-03-15T12:01:00.000Z',
-                  runCompletedAt: null,
-                },
-              ],
-            },
-          },
-          fetching: false,
-          error: undefined,
-        }, vi.fn()];
-      }
-      if (args.query === DOMAIN_EVALUATION_STATUS_QUERY) {
-        return [{
-          data: {
-            domainEvaluationStatus: {
-              id: 'eval-1',
-              status: 'RUNNING',
-              totalRuns: 1,
-              pendingRuns: 0,
-              runningRuns: 1,
-              completedRuns: 0,
-              failedRuns: 0,
-              cancelledRuns: 0,
-            },
-          },
-          fetching: false,
-          error: undefined,
-        }, vi.fn()];
-      }
-      if (args.query === DOMAIN_TRIAL_RUNS_STATUS_QUERY) {
-        return [{
-          data: {
-            domainTrialRunsStatus: [
-              {
-                runId: 'run-1',
-                definitionId: 'def-1',
-                status: 'RUNNING',
-                modelStatuses: [
-                  {
-                    modelId: 'model-1',
-                    generationCompleted: 1,
-                    generationFailed: 0,
-                    generationTotal: 25,
-                    summarizationCompleted: 0,
-                    summarizationFailed: 0,
-                    summarizationTotal: 25,
-                    latestErrorMessage: null,
-                  },
-                ],
-              },
-            ],
-          },
-          fetching: false,
-          error: undefined,
-        }, vi.fn()];
-      }
-      return [{ data: undefined, fetching: false, error: undefined }, vi.fn()];
+    useRunMock.mockReturnValue({
+      run: makeRunDetails(),
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
     });
   });
 
-  it('renders the domain evaluation summary and launch confirmation with scoped wording', async () => {
+  it('renders setup-first copy and launch confirmation math', async () => {
     const user = userEvent.setup();
+    mockSetupQueries();
+
     renderDomainTrialsDashboard();
 
-    expect(screen.getByRole('heading', { name: /domain evaluation summary/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /current cohort summary/i })).toBeInTheDocument();
-    expect(screen.getAllByText(/eval vignette/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/domain evaluation summary is the cohort-level view/i)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /planned batches/i })).toBeInTheDocument();
-    expect(screen.getByText(/each batch runs every configured condition/i)).toBeInTheDocument();
-    expect(screen.getByText(/advanced controls/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /review setup coverage/i })).toHaveAttribute('href', '/domains?domainId=domain-a&tab=setup&setupTab=contexts');
-    expect(screen.getByRole('link', { name: /review vignette overrides/i })).toHaveAttribute('href', '/domains?domainId=domain-a&tab=vignettes');
-    expect(screen.getByRole('link', { name: /open run diagnostics/i })).toHaveAttribute('href', '/runs/run-1');
+    expect(screen.getByRole('heading', { name: /domain evaluation setup/i })).toBeInTheDocument();
+    expect(screen.getByText('Job domain')).toBeInTheDocument();
+    expect(screen.getByLabelText(/paired-batch depth per vignette/i)).toHaveValue(1);
+    expect(screen.getByText('Provider budget readiness')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /review & start domain evaluation/i })).toBeEnabled();
+    });
 
-    await user.selectOptions(screen.getByRole('combobox'), 'PILOT');
-    await user.click(screen.getByText(/advanced controls/i));
-    await user.click(screen.getByRole('radio', { name: /set evaluation temperature/i }));
-    await user.clear(screen.getByLabelText(/^evaluation temperature$/i));
-    await user.type(screen.getByLabelText(/^evaluation temperature$/i), '0');
     await user.click(screen.getByRole('button', { name: /review & start domain evaluation/i }));
 
     expect(screen.getByRole('heading', { name: /confirm domain evaluation/i })).toBeInTheDocument();
-    const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByText(/domain evaluation scope:/i)).toHaveTextContent(/pilot/i);
-    expect(within(dialog).getByText(/review before confirming/i)).toBeInTheDocument();
-    expect(within(dialog).getByText(/judge\/evaluator passes are not included yet/i)).toBeInTheDocument();
-    expect(within(dialog).getByText(/temperature:/i)).toHaveTextContent(/0/);
+    expect(screen.getByText(/target paired batches per vignette:/i)).toHaveTextContent('1');
+    expect(screen.getByText(/total paired batches:/i)).toHaveTextContent('2');
+    expect(screen.getByText(/total individual trial runs:/i)).toHaveTextContent('4');
+  });
+
+  it('shows live status rows and opens a details drawer from a row click', async () => {
+    const user = userEvent.setup();
+    mockActiveLaunchQueries();
+
+    renderDomainTrialsDashboard(['/domains/domain-a/run-trials?evaluationId=eval-1']);
+
+    expect(screen.getByText('Live processing')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /needs attention/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /review & start domain evaluation/i })).toBeDisabled();
+
+    await user.click(screen.getByText('Jobs A'));
+
+    expect(screen.getByText('Run progress mock')).toBeInTheDocument();
+    expect(screen.getByText('Recent task log')).toBeInTheDocument();
+    expect(screen.getByText('Recent transcripts')).toBeInTheDocument();
+    expect(screen.getByText('Open run diagnostics')).toBeInTheDocument();
   });
 });

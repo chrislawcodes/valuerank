@@ -66,10 +66,11 @@ function matchesAggregateJob(jobData: unknown, runDefinitionId: string, runMeta:
       : null;
   const definitionVersion = parseDefinitionVersion(data.definitionVersion);
   const temperature = parseTemperature(data.temperature);
+  const versionMatch = definitionVersion === null ? true : definitionVersion === runMeta.definitionVersion;
 
   return (
     preambleVersionId === runMeta.preambleVersionId &&
-    definitionVersion === runMeta.definitionVersion &&
+    versionMatch &&
     temperature === runMeta.temperatureSetting
   );
 }
@@ -80,7 +81,10 @@ type AnalysisStatusLookup = {
   pendingAggregateJobsByDefinitionId: Map<string, AnalysisQueueJob[]>;
   failedAggregateJobsByDefinitionId: Map<string, AnalysisQueueJob[]>;
   currentAnalysisRunIds: Set<string>;
+  queueUnavailable: boolean;
 };
+
+const ORPHANED_ANALYSIS_TIMEOUT_MS = 5 * 60 * 1000;
 
 async function loadAnalysisStatusLookup(runIds: string[], aggregateDefinitionIds: string[]): Promise<AnalysisStatusLookup> {
   const currentAnalysisRows = await db.analysisResult.findMany({
@@ -142,6 +146,7 @@ async function loadAnalysisStatusLookup(runIds: string[], aggregateDefinitionIds
       pendingAggregateJobsByDefinitionId: new Map(),
       failedAggregateJobsByDefinitionId: new Map(),
       currentAnalysisRunIds,
+      queueUnavailable: true,
     };
   }
 
@@ -185,6 +190,7 @@ async function loadAnalysisStatusLookup(runIds: string[], aggregateDefinitionIds
     pendingAggregateJobsByDefinitionId,
     failedAggregateJobsByDefinitionId,
     currentAnalysisRunIds,
+    queueUnavailable: false,
   };
 }
 
@@ -225,6 +231,16 @@ function resolveSingleRunAnalysisStatus(
     }
   } catch {
     // PgBoss tables may not exist in some tests or local setups.
+  }
+
+  if (lookup.queueUnavailable) {
+    return null;
+  }
+
+  if (run.completedAt) {
+    const completedAt = new Date(run.completedAt);
+    const fiveMinutesAgo = new Date(Date.now() - ORPHANED_ANALYSIS_TIMEOUT_MS);
+    return completedAt < fiveMinutesAgo ? 'failed' : 'pending';
   }
 
   return null;

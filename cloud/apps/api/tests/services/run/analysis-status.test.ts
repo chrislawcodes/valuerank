@@ -135,6 +135,43 @@ describe('analysis status service', () => {
     ).resolves.toBe('failed');
   });
 
+  it('matches legacy aggregate jobs that omit definitionVersion', async () => {
+    vi.spyOn(db.analysisResult as any, 'findMany').mockResolvedValue([]);
+    vi.spyOn(db as any, '$queryRaw')
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          state: 'active',
+          data: {
+            definitionId: 'definition-1',
+            preambleVersionId: 'preamble-1',
+            temperature: 0.7,
+          },
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    await expect(
+      resolveRunAnalysisStatus({
+        id: 'run-1',
+        definitionId: 'definition-1',
+        status: 'COMPLETED',
+        completedAt: null,
+        config: {
+          isAggregate: true,
+          temperature: 0.7,
+          definitionSnapshot: {
+            _meta: {
+              preambleVersionId: 'preamble-1',
+              definitionVersion: 3,
+            },
+          },
+        },
+      }),
+    ).resolves.toBe('computing');
+  });
+
   it('falls back to null when pgboss queries fail for a non-completed run', async () => {
     vi.spyOn(db.analysisResult as any, 'findMany').mockResolvedValue([]);
     vi.spyOn(db as any, '$queryRaw').mockRejectedValue(new Error('pgboss unavailable'));
@@ -150,7 +187,7 @@ describe('analysis status service', () => {
     ).resolves.toBeNull();
   });
 
-  it('falls back to null when a completed run has no matching job or analysis result', async () => {
+  it('falls back to failed when a completed run is older than the orphan timeout', async () => {
     vi.spyOn(db.analysisResult as any, 'findMany').mockResolvedValue([]);
     vi.spyOn(db as any, '$queryRaw')
       .mockResolvedValueOnce([])
@@ -166,6 +203,6 @@ describe('analysis status service', () => {
         completedAt: new Date(now - 6 * 60 * 1000),
         config: { models: ['model-a'] },
       }),
-    ).resolves.toBeNull();
+    ).resolves.toBe('failed');
   });
 });

@@ -1,0 +1,1052 @@
+Reading additional input from stdin...
+OpenAI Codex v0.118.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d4560-41d4-7df1-8986-de0a10b01c38
+--------
+user
+Review this diff artifact using a correctness-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/apps/api/src/graphql/queries/domain/planning.ts b/cloud/apps/api/src/graphql/queries/domain/planning.ts
+index 252ba2d8..4ca994f6 100644
+--- a/cloud/apps/api/src/graphql/queries/domain/planning.ts
++++ b/cloud/apps/api/src/graphql/queries/domain/planning.ts
+@@ -20,6 +20,7 @@ import {
+ import type { DomainTrialPlanCellEstimate } from './shared.js';
+ import { formatTrialSignature } from '@valuerank/shared/trial-signature';
+ import { parseTemperature } from '../../../utils/temperature.js';
++import { resolveRunAnalysisStatuses } from '../../../services/run/analysis-status.js';
+ 
+ const DOMAIN_TRIAL_PLAN_COST_CHUNK_SIZE = 5;
+ const DOMAIN_ESTIMATE_KNOWN_EXCLUSIONS = [
+@@ -432,6 +433,9 @@ builder.queryField('domainTrialRunsStatus', (t) =>
+           id: true,
+           definitionId: true,
+           status: true,
++          updatedAt: true,
++          stalledModels: true,
++          completedAt: true,
+           config: true,
+         },
+       });
+@@ -519,8 +523,23 @@ builder.queryField('domainTrialRunsStatus', (t) =>
+       const scenarioCountByRun = new Map(
+         selectedScenarioCounts.map((row) => [row.runId, row._count._all]),
+       );
++      const analysisStatusByRunId = await resolveRunAnalysisStatuses(
++        runs.map((run) => ({
++          id: run.id,
++          definitionId: run.definitionId,
++          status: run.status,
++          completedAt: run.completedAt,
++          config: run.config,
++        })),
++      );
++
++      const runById = new Map(runs.map((run) => [run.id, run]));
+ 
+-      return runs.map((run) => {
++      return Promise.all(runIds.map(async (runId) => {
++        const run = runById.get(runId);
++        if (run === undefined) {
++          return null;
++        }
+         const runConfig = run.config as { models?: unknown; samplesPerScenario?: unknown } | null;
+         const models = Array.isArray(runConfig?.models)
+           ? runConfig.models.filter((model): model is string => typeof model === 'string')
+@@ -550,9 +569,12 @@ builder.queryField('domainTrialRunsStatus', (t) =>
+           runId: run.id,
+           definitionId: run.definitionId,
+           status: run.status,
++          updatedAt: run.updatedAt,
++          stalledModels: run.stalledModels,
++          analysisStatus: analysisStatusByRunId.get(run.id) ?? null,
+           modelStatuses,
+         };
+-      });
++      })).then((rows) => rows.filter((row): row is NonNullable<typeof row> => row !== null));
+     },
+   }),
+ );
+diff --git a/cloud/apps/api/src/graphql/queries/domain/shared.ts b/cloud/apps/api/src/graphql/queries/domain/shared.ts
+index 69ac54e3..c03fb8ce 100644
+--- a/cloud/apps/api/src/graphql/queries/domain/shared.ts
++++ b/cloud/apps/api/src/graphql/queries/domain/shared.ts
+@@ -229,6 +229,9 @@ export type DomainTrialRunStatus = {
+   runId: string;
+   definitionId: string;
+   status: string;
++  updatedAt: Date;
++  stalledModels: string[];
++  analysisStatus: string | null;
+   modelStatuses: DomainTrialModelStatus[];
+ };
+ 
+diff --git a/cloud/apps/api/src/graphql/queries/domain/types.ts b/cloud/apps/api/src/graphql/queries/domain/types.ts
+index ae32fceb..d403b488 100644
+--- a/cloud/apps/api/src/graphql/queries/domain/types.ts
++++ b/cloud/apps/api/src/graphql/queries/domain/types.ts
+@@ -484,6 +484,9 @@ builder.objectType(DomainTrialRunStatusRef, {
+     runId: t.exposeID('runId'),
+     definitionId: t.exposeID('definitionId'),
+     status: t.exposeString('status'),
++    updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
++    stalledModels: t.exposeStringList('stalledModels'),
++    analysisStatus: t.exposeString('analysisStatus', { nullable: true }),
+     modelStatuses: t.field({
+       type: [DomainTrialModelStatusRef],
+       resolve: (parent) => parent.modelStatuses,
+diff --git a/cloud/apps/api/src/graphql/types/run.ts b/cloud/apps/api/src/graphql/types/run.ts
+index eb621d5b..aa40897c 100644
+--- a/cloud/apps/api/src/graphql/types/run.ts
++++ b/cloud/apps/api/src/graphql/types/run.ts
+@@ -9,7 +9,6 @@ import { calculatePercentComplete } from '../../services/run/index.js';
+ import { AnalysisResultRef } from './analysis.js';
+ import { CostEstimateRef, type CostEstimateShape } from './cost-estimate.js';
+ import { getAllMetrics, getTotals } from '../../services/rate-limiter/index.js';
+-import { parseTemperature } from '../../utils/temperature.js';
+ 
+ // Re-export for backward compatibility
+ export { RunRef, TranscriptRef, ExperimentRef };
+@@ -43,17 +42,6 @@ type AggregateRunConfig = RunConfig & {
+   sourceRunIds?: string[];
+ };
+ 
+-type RunSnapshotMeta = {
+-  preambleVersionId: string | null;
+-  definitionVersion: number | null;
+-  temperatureSetting: number | null;
+-};
+-
+-type QueueJobRow = {
+-  state: string;
+-  data: unknown;
+-};
+-
+ type QueueFailurePayload = {
+   message?: unknown;
+   details?: unknown;
+@@ -61,38 +49,6 @@ type QueueFailurePayload = {
+   value?: unknown;
+ };
+ 
+-function parseDefinitionVersion(value: unknown): number | null {
+-  if (typeof value === 'number' && Number.isFinite(value)) {
+-    return value;
+-  }
+-  if (typeof value !== 'string' || value.trim() === '') {
+-    return null;
+-  }
+-  const parsed = Number.parseInt(value, 10);
+-  return Number.isFinite(parsed) ? parsed : null;
+-}
+-
+-function getSnapshotMeta(config: AggregateRunConfig | null): RunSnapshotMeta {
+-  const snapshot = (config?.definitionSnapshot ?? null) as
+-    | { _meta?: { preambleVersionId?: string; definitionVersion?: number | string }; preambleVersionId?: string; version?: number | string }
+-    | null;
+-
+-  const preambleVersionId =
+-    snapshot?._meta?.preambleVersionId ??
+-    snapshot?.preambleVersionId ??
+-    null;
+-  const definitionVersion =
+-    parseDefinitionVersion(snapshot?._meta?.definitionVersion) ??
+-    parseDefinitionVersion(snapshot?.version);
+-  const temperatureSetting = parseTemperature(config?.temperature);
+-
+-  return { preambleVersionId, definitionVersion, temperatureSetting };
+-}
+-
+-function getJobDataRecord(data: unknown): Record<string, unknown> | null {
+-  return data !== null && typeof data === 'object' ? data as Record<string, unknown> : null;
+-}
+-
+ function normalizeTaskError(output: unknown): string | null {
+   if (output === null || output === undefined) {
+     return null;
+@@ -151,37 +107,6 @@ function normalizeTaskError(output: unknown): string | null {
+   }
+ }
+ 
+-function matchesAggregateJob(jobData: unknown, runDefinitionId: string, runMeta: RunSnapshotMeta): boolean {
+-  const data = getJobDataRecord(jobData);
+-  if (data === null) {
+-    return false;
+-  }
+-  if (data.definitionId !== runDefinitionId) {
+-    return false;
+-  }
+-
+-  const jobPreambleVersionId =
+-    typeof data.preambleVersionId === 'string' && data.preambleVersionId !== ''
+-      ? data.preambleVersionId
+-      : null;
+-  if (jobPreambleVersionId !== runMeta.preambleVersionId) {
+-    return false;
+-  }
+-
+-  const jobDefinitionVersion = parseDefinitionVersion(data.definitionVersion);
+-  if (jobDefinitionVersion !== runMeta.definitionVersion) {
+-    return false;
+-  }
+-
+-  const jobTemperature = parseTemperature(data.temperature);
+-  const runTemperature = runMeta.temperatureSetting;
+-  if (jobTemperature !== runTemperature) {
+-    return false;
+-  }
+-
+-  return true;
+-}
+-
+ builder.objectType(RunRef, {
+   description: 'A saved record of a model evaluation or launch',
+   fields: (t) => ({
+@@ -592,107 +517,7 @@ builder.objectType(RunRef, {
+       type: 'String',
+       nullable: true,
+       description: 'Analysis status: pending, computing, completed, or failed',
+-      resolve: async (run) => {
+-        // Check if analysis exists
+-        const analysis = await db.analysisResult.findFirst({
+-          where: {
+-            runId: run.id,
+-            status: 'CURRENT',
+-          },
+-        });
+-
+-        if (analysis !== null && analysis !== undefined) {
+-          return 'completed';
+-        }
+-
+-        const runConfig = run.config as AggregateRunConfig | null;
+-        const isAggregateRun = runConfig?.isAggregate === true;
+-
+-        // Check if analysis job is pending or active
+-        try {
+-          if (isAggregateRun) {
+-            const runMeta = getSnapshotMeta(runConfig);
+-
+-            const activeJobs = await db.$queryRaw<QueueJobRow[]>`
+-              SELECT state, data FROM pgboss.job
+-              WHERE name = 'aggregate_analysis'
+-                AND data->>'definitionId' = ${run.definitionId}
+-                AND state IN ('created', 'active', 'retry')
+-              ORDER BY created_on DESC
+-              LIMIT 25
+-            `;
+-
+-            const firstActiveMatch = activeJobs.find((job) =>
+-              matchesAggregateJob(job.data, run.definitionId, runMeta)
+-            );
+-            if (firstActiveMatch !== undefined) {
+-              return firstActiveMatch.state === 'active' ? 'computing' : 'pending';
+-            }
+-
+-            const failedJobs = await db.$queryRaw<QueueJobRow[]>`
+-              SELECT state, data FROM pgboss.job
+-              WHERE name = 'aggregate_analysis'
+-                AND data->>'definitionId' = ${run.definitionId}
+-                AND state = 'failed'
+-              ORDER BY completed_on DESC
+-              LIMIT 25
+-            `;
+-
+-            const firstFailedMatch = failedJobs.find((job) =>
+-              matchesAggregateJob(job.data, run.definitionId, runMeta)
+-            );
+-            if (firstFailedMatch !== undefined) {
+-              return 'failed';
+-            }
+-          } else {
+-            // Use raw query to check PgBoss job state
+-            const jobs = await db.$queryRaw<Array<{ state: string }>>`
+-              SELECT state FROM pgboss.job
+-              WHERE name = 'analyze_basic'
+-                AND data->>'runId' = ${run.id}
+-                AND state IN ('created', 'active', 'retry')
+-              LIMIT 1
+-            `;
+-
+-            const firstJob = jobs[0];
+-            if (firstJob !== undefined) {
+-              return firstJob.state === 'active' ? 'computing' : 'pending';
+-            }
+-
+-            // Check for failed jobs in the job table (PgBoss v10+ keeps all jobs in one table)
+-            const failedJobs = await db.$queryRaw<Array<{ state: string }>>`
+-              SELECT state FROM pgboss.job
+-              WHERE name = 'analyze_basic'
+-                AND data->>'runId' = ${run.id}
+-                AND state = 'failed'
+-              ORDER BY completed_on DESC
+-              LIMIT 1
+-            `;
+-
+-            if (failedJobs.length > 0) {
+-              return 'failed';
+-            }
+-          }
+-        } catch {
+-          // PgBoss tables may not exist
+-        }
+-
+-        // No analysis and no recognized job state
+-        // If run is completed and older than 5 minutes, assume analysis failed to start/complete (orphaned)
+-        if (run.completedAt) {
+-          const completedAt = new Date(run.completedAt);
+-          const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+-
+-          if (completedAt < fiveMinutesAgo) {
+-            return 'failed';
+-          }
+-
+-          // Otherwise, it might be just finished and job is about to be queued
+-          return 'pending';
+-        }
+-
+-        return null; // Not completed yet, so no analysis expected
+-      },
++      resolve: async (run, _args, ctx) => ctx.loaders.runAnalysisStatus.load(run.id),
+     }),
+ 
+     // Real-time execution metrics (only populated during RUNNING state)
+diff --git a/cloud/apps/api/src/services/run/analysis-status.ts b/cloud/apps/api/src/services/run/analysis-status.ts
+new file mode 100644
+index 00000000..80dc2db6
+--- /dev/null
++++ b/cloud/apps/api/src/services/run/analysis-status.ts
+@@ -0,0 +1,277 @@
++import { db } from '@valuerank/db';
++import { parseTemperature } from '../../utils/temperature.js';
++
++type AnalysisQueueJob = {
++  state: string;
++  data: unknown;
++};
++
++export type RunAnalysisStatus = 'pending' | 'computing' | 'completed' | 'failed' | null;
++
++type RunAnalysisStatusInput = {
++  id: string;
++  definitionId: string;
++  status: string;
++  completedAt: Date | null;
++  config: unknown;
++};
++
++type AggregateRunConfig = {
++  isAggregate?: boolean;
++  definitionSnapshot?: unknown;
++  temperature?: number | null;
++};
++
++type RunSnapshotMeta = {
++  preambleVersionId: string | null;
++  definitionVersion: number | null;
++  temperatureSetting: number | null;
++};
++
++function parseDefinitionVersion(value: unknown): number | null {
++  if (typeof value === 'number' && Number.isFinite(value)) {
++    return value;
++  }
++  if (typeof value !== 'string' || value.trim() === '') {
++    return null;
++  }
++  const parsed = Number.parseInt(value, 10);
++  return Number.isFinite(parsed) ? parsed : null;
++}
++
++function getSnapshotMeta(config: AggregateRunConfig | null): RunSnapshotMeta {
++  const snapshot = (config?.definitionSnapshot ?? null) as
++    | { _meta?: { preambleVersionId?: string; definitionVersion?: number | string }; preambleVersionId?: string; version?: number | string }
++    | null;
++
++  const preambleVersionId = snapshot?._meta?.preambleVersionId ?? snapshot?.preambleVersionId ?? null;
++  const definitionVersion = parseDefinitionVersion(snapshot?._meta?.definitionVersion) ?? parseDefinitionVersion(snapshot?.version);
++  const temperatureSetting = parseTemperature(config?.temperature);
++
++  return { preambleVersionId, definitionVersion, temperatureSetting };
++}
++
++function getJobDataRecord(data: unknown): Record<string, unknown> | null {
++  return data !== null && typeof data === 'object' ? (data as Record<string, unknown>) : null;
++}
++
++function matchesAggregateJob(jobData: unknown, runDefinitionId: string, runMeta: RunSnapshotMeta): boolean {
++  const data = getJobDataRecord(jobData);
++  if (data === null) return false;
++  if (data.definitionId !== runDefinitionId) return false;
++
++  const preambleVersionId =
++    typeof data.preambleVersionId === 'string' && data.preambleVersionId !== ''
++      ? data.preambleVersionId
++      : null;
++  const definitionVersion = parseDefinitionVersion(data.definitionVersion);
++  const temperature = parseTemperature(data.temperature);
++  const versionMatch = definitionVersion === null ? true : definitionVersion === runMeta.definitionVersion;
++
++  return (
++    preambleVersionId === runMeta.preambleVersionId &&
++    versionMatch &&
++    temperature === runMeta.temperatureSetting
++  );
++}
++
++type AnalysisStatusLookup = {
++  pendingBasicJobs: Map<string, AnalysisQueueJob>;
++  failedBasicJobs: Set<string>;
++  pendingAggregateJobsByDefinitionId: Map<string, AnalysisQueueJob[]>;
++  failedAggregateJobsByDefinitionId: Map<string, AnalysisQueueJob[]>;
++  currentAnalysisRunIds: Set<string>;
++  queueUnavailable: boolean;
++};
++
++const ORPHANED_ANALYSIS_TIMEOUT_MS = 5 * 60 * 1000;
++
++async function loadAnalysisStatusLookup(runIds: string[], aggregateDefinitionIds: string[]): Promise<AnalysisStatusLookup> {
++  const currentAnalysisRows = await db.analysisResult.findMany({
++    where: {
++      runId: { in: runIds },
++      status: 'CURRENT',
++      deletedAt: null,
++    },
++    select: { runId: true },
++  });
++  const currentAnalysisRunIds = new Set(currentAnalysisRows.map((row) => row.runId));
++
++  let pendingBasicRows: AnalysisQueueJob[] = [];
++  let failedBasicRows: AnalysisQueueJob[] = [];
++  let pendingAggregateRows: AnalysisQueueJob[] = [];
++  let failedAggregateRows: AnalysisQueueJob[] = [];
++
++  try {
++    pendingBasicRows = runIds.length > 0
++      ? await db.$queryRaw<AnalysisQueueJob[]>`
++          SELECT state, data FROM pgboss.job
++          WHERE name = 'analyze_basic'
++            AND data->>'runId' = ANY(${runIds}::text[])
++            AND state IN ('created', 'active', 'retry')
++          ORDER BY created_on DESC
++        `
++      : [];
++    failedBasicRows = runIds.length > 0
++      ? await db.$queryRaw<AnalysisQueueJob[]>`
++          SELECT state, data FROM pgboss.job
++          WHERE name = 'analyze_basic'
++            AND data->>'runId' = ANY(${runIds}::text[])
++            AND state = 'failed'
++          ORDER BY completed_on DESC
++        `
++      : [];
++    pendingAggregateRows = aggregateDefinitionIds.length > 0
++      ? await db.$queryRaw<AnalysisQueueJob[]>`
++          SELECT state, data FROM pgboss.job
++          WHERE name = 'aggregate_analysis'
++            AND data->>'definitionId' = ANY(${aggregateDefinitionIds}::text[])
++            AND state IN ('created', 'active', 'retry')
++          ORDER BY created_on DESC
++        `
++      : [];
++    failedAggregateRows = aggregateDefinitionIds.length > 0
++      ? await db.$queryRaw<AnalysisQueueJob[]>`
++          SELECT state, data FROM pgboss.job
++          WHERE name = 'aggregate_analysis'
++            AND data->>'definitionId' = ANY(${aggregateDefinitionIds}::text[])
++            AND state = 'failed'
++          ORDER BY completed_on DESC
++        `
++      : [];
++  } catch {
++    return {
++      pendingBasicJobs: new Map(),
++      failedBasicJobs: new Set(),
++      pendingAggregateJobsByDefinitionId: new Map(),
++      failedAggregateJobsByDefinitionId: new Map(),
++      currentAnalysisRunIds,
++      queueUnavailable: true,
++    };
++  }
++
++  const pendingBasicJobs = new Map<string, AnalysisQueueJob>();
++  for (const job of pendingBasicRows) {
++    const data = getJobDataRecord(job.data);
++    const runId = typeof data?.runId === 'string' ? data.runId : null;
++    if (runId === null || pendingBasicJobs.has(runId)) continue;
++    pendingBasicJobs.set(runId, job);
++  }
++  const failedBasicJobs = new Set<string>();
++  for (const job of failedBasicRows) {
++    const data = getJobDataRecord(job.data);
++    const runId = typeof data?.runId === 'string' ? data.runId : null;
++    if (runId === null) continue;
++    failedBasicJobs.add(runId);
++  }
++
++  const pendingAggregateJobsByDefinitionId = new Map<string, AnalysisQueueJob[]>();
++  for (const job of pendingAggregateRows) {
++    const data = getJobDataRecord(job.data);
++    const definitionId = typeof data?.definitionId === 'string' ? data.definitionId : null;
++    if (definitionId === null) continue;
++    const jobs = pendingAggregateJobsByDefinitionId.get(definitionId) ?? [];
++    jobs.push(job);
++    pendingAggregateJobsByDefinitionId.set(definitionId, jobs);
++  }
++  const failedAggregateJobsByDefinitionId = new Map<string, AnalysisQueueJob[]>();
++  for (const job of failedAggregateRows) {
++    const data = getJobDataRecord(job.data);
++    const definitionId = typeof data?.definitionId === 'string' ? data.definitionId : null;
++    if (definitionId === null) continue;
++    const jobs = failedAggregateJobsByDefinitionId.get(definitionId) ?? [];
++    jobs.push(job);
++    failedAggregateJobsByDefinitionId.set(definitionId, jobs);
++  }
++
++  return {
++    pendingBasicJobs,
++    failedBasicJobs,
++    pendingAggregateJobsByDefinitionId,
++    failedAggregateJobsByDefinitionId,
++    currentAnalysisRunIds,
++    queueUnavailable: false,
++  };
++}
++
++function resolveSingleRunAnalysisStatus(
++  run: RunAnalysisStatusInput,
++  lookup: AnalysisStatusLookup,
++): RunAnalysisStatus {
++  if (lookup.currentAnalysisRunIds.has(run.id)) {
++    return 'completed';
++  }
++
++  const runConfig = run.config as AggregateRunConfig | null;
++  const isAggregateRun = runConfig?.isAggregate === true;
++
++  try {
++    if (isAggregateRun) {
++      const runMeta = getSnapshotMeta(runConfig);
++      const pendingJobs = lookup.pendingAggregateJobsByDefinitionId.get(run.definitionId) ?? [];
++      const pendingJob = pendingJobs.find((job) => matchesAggregateJob(job.data, run.definitionId, runMeta));
++      if (pendingJob !== undefined) {
++        return pendingJob.state === 'active' ? 'computing' : 'pending';
++      }
++
++      const failedJobs = lookup.failedAggregateJobsByDefinitionId.get(run.definitionId) ?? [];
++      const failedJob = failedJobs.find((job) => matchesAggregateJob(job.data, run.definitionId, runMeta));
++      if (failedJob !== undefined) {
++        return 'failed';
++      }
++    } else {
++      const pendingJob = lookup.pendingBasicJobs.get(run.id);
++      if (pendingJob !== undefined) {
++        return pendingJob.state === 'active' ? 'computing' : 'pending';
++      }
++
++      if (lookup.failedBasicJobs.has(run.id)) {
++        return 'failed';
++      }
++    }
++  } catch {
++    // PgBoss tables may not exist in some tests or local setups.
++  }
++
++  if (lookup.queueUnavailable) {
++    return null;
++  }
++
++  if (run.completedAt) {
++    const completedAt = new Date(run.completedAt);
++    const fiveMinutesAgo = new Date(Date.now() - ORPHANED_ANALYSIS_TIMEOUT_MS);
++    return completedAt < fiveMinutesAgo ? 'failed' : 'pending';
++  }
++
++  return null;
++}
++
++export async function resolveRunAnalysisStatuses(
++  runs: RunAnalysisStatusInput[],
++): Promise<Map<string, RunAnalysisStatus>> {
++  const statuses = new Map<string, RunAnalysisStatus>();
++  if (runs.length === 0) return statuses;
++
++  const runIds = Array.from(new Set(runs.map((run) => run.id)));
++  const aggregateDefinitionIds = Array.from(
++    new Set(
++      runs
++        .map((run) => {
++          const runConfig = run.config as AggregateRunConfig | null;
++          return runConfig?.isAggregate === true ? run.definitionId : null;
++        })
++        .filter((definitionId): definitionId is string => definitionId !== null),
++    ),
++  );
++
++  const lookup = await loadAnalysisStatusLookup(runIds, aggregateDefinitionIds);
++  for (const run of runs) {
++    statuses.set(run.id, resolveSingleRunAnalysisStatus(run, lookup));
++  }
++  return statuses;
++}
++
++export async function resolveRunAnalysisStatus(run: RunAnalysisStatusInput): Promise<RunAnalysisStatus> {
++  const statuses = await resolveRunAnalysisStatuses([run]);
++  return statuses.get(run.id) ?? null;
++}
+diff --git a/cloud/apps/api/tests/graphql/queries/domain.test.ts b/cloud/apps/api/tests/graphql/queries/domain.test.ts
+index 307ba0c0..244833b3 100644
+--- a/cloud/apps/api/tests/graphql/queries/domain.test.ts
++++ b/cloud/apps/api/tests/graphql/queries/domain.test.ts
+@@ -9,6 +9,9 @@ const app = createServer();
+ describe('GraphQL Domain Query Registration', () => {
+   const createdDomainIds: string[] = [];
+   const createdDefinitionIds: string[] = [];
++  const createdScenarioIds: string[] = [];
++  const createdRunIds: string[] = [];
++  const createdAnalysisIds: string[] = [];
+   const createdLevelPresetIds: string[] = [];
+   const createdLevelPresetVersionIds: string[] = [];
+   const createdProviderIds: string[] = [];
+@@ -32,6 +35,19 @@ describe('GraphQL Domain Query Registration', () => {
+       await db.modelTokenStatistics.deleteMany({ where: { id: { in: createdStatsIds } } });
+       createdStatsIds.length = 0;
+     }
++    if (createdAnalysisIds.length > 0) {
++      await db.analysisResult.deleteMany({ where: { id: { in: createdAnalysisIds } } });
++      createdAnalysisIds.length = 0;
++    }
++    if (createdRunIds.length > 0) {
++      await db.runScenarioSelection.deleteMany({ where: { runId: { in: createdRunIds } } });
++      await db.run.deleteMany({ where: { id: { in: createdRunIds } } });
++      createdRunIds.length = 0;
++    }
++    if (createdScenarioIds.length > 0) {
++      await db.scenario.deleteMany({ where: { id: { in: createdScenarioIds } } });
++      createdScenarioIds.length = 0;
++    }
+     if (createdDefinitionIds.length > 0) {
+       await db.definition.deleteMany({ where: { id: { in: createdDefinitionIds } } });
+       createdDefinitionIds.length = 0;
+@@ -232,6 +248,76 @@ describe('GraphQL Domain Query Registration', () => {
+     });
+     createdDefinitionIds.push(definition.id);
+ 
++    const scenario = await db.scenario.create({
++      data: {
++        definitionId: definition.id,
++        name: 'Status Scenario',
++        content: {
++          schema_version: 1,
++          prompt: 'Status scenario body',
++          dimension_values: { mode: 'status' },
++        },
++      },
++    });
++    createdScenarioIds.push(scenario.id);
++
++    const liveUpdatedAt = new Date();
++    const analyzedUpdatedAt = new Date();
++
++    const liveRun = await db.run.create({
++      data: {
++        definitionId: definition.id,
++        status: 'SUMMARIZING',
++        runCategory: 'PRODUCTION',
++        config: { models: ['test-domain-model'], samplesPerScenario: 2 },
++        progress: { total: 1, completed: 1, failed: 0 },
++        createdByUserId: TEST_USER.id,
++        startedAt: new Date(),
++        updatedAt: liveUpdatedAt,
++        stalledModels: ['test-domain-model'],
++      },
++    });
++    createdRunIds.push(liveRun.id);
++    await db.runScenarioSelection.create({
++      data: {
++        runId: liveRun.id,
++        scenarioId: scenario.id,
++      },
++    });
++
++    const analyzedRun = await db.run.create({
++      data: {
++        definitionId: definition.id,
++        status: 'COMPLETED',
++        runCategory: 'PRODUCTION',
++        config: { models: ['test-domain-model'], samplesPerScenario: 2 },
++        progress: { total: 1, completed: 1, failed: 0 },
++        createdByUserId: TEST_USER.id,
++        startedAt: new Date(),
++        completedAt: analyzedUpdatedAt,
++        updatedAt: analyzedUpdatedAt,
++        stalledModels: [],
++      },
++    });
++    createdRunIds.push(analyzedRun.id);
++    await db.runScenarioSelection.create({
++      data: {
++        runId: analyzedRun.id,
++        scenarioId: scenario.id,
++      },
++    });
++    const analysis = await db.analysisResult.create({
++      data: {
++        runId: analyzedRun.id,
++        analysisType: 'basic',
++        inputHash: `status-test-${Date.now()}`,
++        codeVersion: '1.0.0',
++        status: 'CURRENT',
++        output: { perModel: {} },
++      },
++    });
++    createdAnalysisIds.push(analysis.id);
++
+     const run = await db.run.create({
+       data: {
+         definitionId: definition.id,
+@@ -313,7 +399,7 @@ describe('GraphQL Domain Query Registration', () => {
+     });
+ 
+     const query = `
+-      query DomainEvaluations($domainId: ID!, $evaluationId: ID!) {
++      query DomainEvaluations($domainId: ID!, $evaluationId: ID!, $runIds: [ID!]!) {
+         domainEvaluations(domainId: $domainId) {
+           id
+           domainId
+@@ -357,6 +443,24 @@ describe('GraphQL Domain Query Registration', () => {
+           failedRuns
+           cancelledRuns
+         }
++        domainTrialRunsStatus(runIds: $runIds) {
++          runId
++          definitionId
++          status
++          updatedAt
++          stalledModels
++          analysisStatus
++          modelStatuses {
++            modelId
++            generationCompleted
++            generationFailed
++            generationTotal
++            summarizationCompleted
++            summarizationFailed
++            summarizationTotal
++            latestErrorMessage
++          }
++        }
+         domainRunSummary(domainId: $domainId) {
+           domainId
+           totalEvaluations
+@@ -391,6 +495,7 @@ describe('GraphQL Domain Query Registration', () => {
+         variables: {
+           domainId: domain.id,
+           evaluationId: evaluation.id,
++          runIds: [liveRun.id, analyzedRun.id],
+         },
+       })
+       .expect(200);
+@@ -454,6 +559,53 @@ describe('GraphQL Domain Query Registration', () => {
+     expect(validationSummary.validationEvaluations).toBe(1);
+     expect(validationSummary.totalMemberRuns).toBe(1);
+     expect(validationSummary.completedMemberRuns).toBe(1);
++
++    const runStatuses = response.body.data.domainTrialRunsStatus as Array<Record<string, unknown>>;
++    expect(runStatuses).toHaveLength(2);
++    expect(runStatuses[0]).toEqual(
++      expect.objectContaining({
++        runId: liveRun.id,
++        definitionId: definition.id,
++        status: 'SUMMARIZING',
++        updatedAt: liveUpdatedAt.toISOString(),
++        stalledModels: ['test-domain-model'],
++        analysisStatus: null,
++      }),
++    );
++    expect(runStatuses[0]?.modelStatuses).toEqual([
++      expect.objectContaining({
++        modelId: 'test-domain-model',
++        generationCompleted: 0,
++        generationFailed: 0,
++        generationTotal: 2,
++        summarizationCompleted: 0,
++        summarizationFailed: 0,
++        summarizationTotal: 0,
++        latestErrorMessage: null,
++      }),
++    ]);
++    expect(runStatuses[1]).toEqual(
++      expect.objectContaining({
++        runId: analyzedRun.id,
++        definitionId: definition.id,
++        status: 'COMPLETED',
++        updatedAt: analyzedUpdatedAt.toISOString(),
++        stalledModels: [],
++        analysisStatus: 'completed',
++      }),
++    );
++    expect(runStatuses[1]?.modelStatuses).toEqual([
++      expect.objectContaining({
++        modelId: 'test-domain-model',
++        generationCompleted: 0,
++        generationFailed: 0,
++        generationTotal: 2,
++        summarizationCompleted: 0,
++        summarizationFailed: 0,
++        summarizationTotal: 0,
++        latestErrorMessage: null,
++      }),
++    ]);
+   });
+ 
+   it('returns a conservative findings-eligibility result for domain findings', async () => {
+diff --git a/cloud/apps/api/tests/services/run/analysis-status.test.ts b/cloud/apps/api/tests/services/run/analysis-status.test.ts
+new file mode 100644
+index 00000000..ae5f44cc
+--- /dev/null
++++ b/cloud/apps/api/tests/services/run/analysis-status.test.ts
+@@ -0,0 +1,208 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import { db } from '@valuerank/db';
++import { resolveRunAnalysisStatus } from '../../../src/services/run/analysis-status.js';
++
++describe('analysis status service', () => {
++  const now = new Date('2026-03-31T12:00:00.000Z').getTime();
++
++  beforeEach(() => {
++    vi.clearAllMocks();
++    vi.spyOn(Date, 'now').mockReturnValue(now);
++  });
++
++  afterEach(() => {
++    vi.restoreAllMocks();
++  });
++
++  it('returns pending for a basic analysis job in created state', async () => {
++    vi.spyOn(db.analysisResult as any, 'findMany').mockResolvedValue([]);
++    vi.spyOn(db as any, '$queryRaw')
++      .mockResolvedValueOnce([
++        { state: 'created', data: { runId: 'run-1' } },
++      ])
++      .mockResolvedValueOnce([])
++      .mockResolvedValueOnce([])
++      .mockResolvedValueOnce([]);
++
++    await expect(
++      resolveRunAnalysisStatus({
++        id: 'run-1',
++        definitionId: 'definition-1',
++        status: 'COMPLETED',
++        completedAt: null,
++        config: { models: ['model-a'] },
++      }),
++    ).resolves.toBe('pending');
++  });
++
++  it('returns pending for a basic analysis job in retry state', async () => {
++    vi.spyOn(db.analysisResult as any, 'findMany').mockResolvedValue([]);
++    vi.spyOn(db as any, '$queryRaw')
++      .mockResolvedValueOnce([
++        { state: 'retry', data: { runId: 'run-1' } },
++      ])
++      .mockResolvedValueOnce([])
++      .mockResolvedValueOnce([])
++      .mockResolvedValueOnce([]);
++
++    await expect(
++      resolveRunAnalysisStatus({
++        id: 'run-1',
++        definitionId: 'definition-1',
++        status: 'COMPLETED',
++        completedAt: null,
++        config: { models: ['model-a'] },
++      }),
++    ).resolves.toBe('pending');
++  });
++
++  it('returns computing for a basic analysis job in active state', async () => {
++    vi.spyOn(db.analysisResult as any, 'findMany').mockResolvedValue([]);
++    vi.spyOn(db as any, '$queryRaw')
++      .mockResolvedValueOnce([
++        { state: 'active', data: { runId: 'run-1' } },
++      ])
++      .mockResolvedValueOnce([])
++      .mockResolvedValueOnce([]);
++
++    await expect(
++      resolveRunAnalysisStatus({
++        id: 'run-1',
++        definitionId: 'definition-1',
++        status: 'COMPLETED',
++        completedAt: null,
++        config: { models: ['model-a'] },
++      }),
++    ).resolves.toBe('computing');
++  });
++
++  it('returns completed when the current analysis result exists', async () => {
++    vi.spyOn(db.analysisResult as any, 'findMany').mockResolvedValue([
++      { runId: 'run-1' },
++    ]);
++    vi.spyOn(db as any, '$queryRaw')
++      .mockResolvedValueOnce([])
++      .mockResolvedValueOnce([])
++      .mockResolvedValueOnce([])
++      .mockResolvedValueOnce([]);
++
++    await expect(
++      resolveRunAnalysisStatus({
++        id: 'run-1',
++        definitionId: 'definition-1',
++        status: 'COMPLETED',
++        completedAt: null,
++        config: { models: ['model-a'] },
++      }),
++    ).resolves.toBe('completed');
++  });
++
++  it('returns failed for a matching aggregate analysis job', async () => {
++    vi.spyOn(db.analysisResult as any, 'findMany').mockResolvedValue([]);
++    vi.spyOn(db as any, '$queryRaw')
++      .mockResolvedValueOnce([])
++      .mockResolvedValueOnce([])
++      .mockResolvedValueOnce([])
++      .mockResolvedValueOnce([
++        {
++          state: 'failed',
++          data: {
++            definitionId: 'definition-1',
++            preambleVersionId: 'preamble-1',
++            definitionVersion: 3,
++            temperature: 0.7,
++          },
++        },
++      ]);
++
++    await expect(
++      resolveRunAnalysisStatus({
++        id: 'run-1',
++        definitionId: 'definition-1',
++        status: 'COMPLETED',
++        completedAt: null,
++        config: {
++          isAggregate: true,
++          temperature: 0.7,
++          definitionSnapshot: {
++            _meta: {
++              preambleVersionId: 'preamble-1',
++              definitionVersion: 3,
++            },
++          },
++        },
++      }),
++    ).resolves.toBe('failed');
++  });
++
++  it('matches legacy aggregate jobs that omit definitionVersion', async () => {
++    vi.spyOn(db.analysisResult as any, 'findMany').mockResolvedValue([]);
++    vi.spyOn(db as any, '$queryRaw')
++      .mockResolvedValueOnce([])
++      .mockResolvedValueOnce([])
++      .mockResolvedValueOnce([
++        {
++          state: 'active',
++          data: {
++            definitionId: 'definition-1',
++            preambleVersionId: 'preamble-1',
++            temperature: 0.7,
++          },
++        },
++      ])
++      .mockResolvedValueOnce([]);
++
++    await expect(
++      resolveRunAnalysisStatus({
++        id: 'run-1',
++        definitionId: 'definition-1',
++        status: 'COMPLETED',
++        completedAt: null,
++        config: {
++          isAggregate: true,
++          temperature: 0.7,
++          definitionSnapshot: {
++            _meta: {
++              preambleVersionId: 'preamble-1',
++              definitionVersion: 3,
++            },
++          },
++        },
++      }),
++    ).resolves.toBe('computing');
++  });
++
++  it('falls back to null when pgboss queries fail for a non-completed run', async () => {
++    vi.spyOn(db.analysisResult as any, 'findMany').mockResolvedValue([]);
++    vi.spyOn(db as any, '$queryRaw').mockRejectedValue(new Error('pgboss unavailable'));
++
++    await expect(
++      resolveRunAnalysisStatus({
++        id: 'run-1',
++        definitionId: 'definition-1',
++        status: 'RUNNING',
++        completedAt: null,
++        config: { models: ['model-a'] },
++      }),
++    ).resolves.toBeNull();
++  });
++
++  it('falls back to failed when a completed run is older than the orphan timeout', async () => {
++    vi.spyOn(db.analysisResult as any, 'findMany').mockResolvedValue([]);
++    vi.spyOn(db as any, '$queryRaw')
++      .mockResolvedValueOnce([])
++      .mockResolvedValueOnce([])
++      .mockResolvedValueOnce([])
++      .mockResolvedValueOnce([]);
++
++    await expect(
++      resolveRunAnalysisStatus({
++        id: 'run-1',
++        definitionId: 'definition-1',
++        status: 'COMPLETED',
++        completedAt: new Date(now - 6 * 60 * 1000),
++        config: { models: ['model-a'] },
++      }),
++    ).resolves.toBe('failed');
++  });
++});
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+2026-03-31T19:30:29.534200Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d4560-41d4-7df1-8986-de0a10b01c38.tmp-1774985429471751000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+codex
+I’m reading the patch as if I had to break it in production, not as if it were meant to work. I’m checking the new status service, the GraphQL field wiring, and the tests for places where behavior drifted or edge cases were quietly dropped.
+codex
+## Findings
+- **MEDIUM** `cloud/apps/api/src/services/run/analysis-status.ts` (`resolveSingleRunAnalysisStatus`): when the PgBoss lookup throws, `loadAnalysisStatusLookup` now marks `queueUnavailable`, and the resolver returns `null` immediately instead of doing the old orphaned-run fallback. That is a behavior regression: completed runs that are old enough to be considered orphaned will stop reporting `failed` or `pending` analysis status whenever queue queries fail, even though the previous implementation still surfaced that state.
+- **MEDIUM [UNVERIFIED]** `cloud/apps/api/src/services/run/analysis-status.ts` (`matchesAggregateJob`): the new rule treats a missing or unparsable `definitionVersion` as a wildcard. If legacy aggregate jobs without a version can coexist across snapshots, this can misattribute a job from one snapshot to a different run that happens to share `definitionId`, `preambleVersionId`, and temperature. The old exact version match prevented that collision.
+
+## Residual Risks
+- I did not verify whether legacy versionless aggregate jobs can still exist alongside newer snapshots in this codebase, so the second issue may be less likely if those jobs are no longer present.
+- I also did not verify whether every historical run row guarantees a non-null `stalledModels` array; if not, exposing it directly through GraphQL could still produce a runtime error.
+tokens used
+19,320

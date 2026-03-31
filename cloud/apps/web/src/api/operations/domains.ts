@@ -399,6 +399,9 @@ export const DOMAIN_TRIAL_RUNS_STATUS_QUERY = gql`
       runId
       definitionId
       status
+      updatedAt
+      stalledModels
+      analysisStatus
       modelStatuses {
         modelId
         generationCompleted
@@ -767,6 +770,9 @@ export type DomainTrialRunsStatusQueryResult = {
     runId: string;
     definitionId: string;
     status: string;
+    updatedAt: string;
+    stalledModels: string[];
+    analysisStatus: string | null;
     modelStatuses: Array<{
       modelId: string;
       generationCompleted: number;

@@ -2,11 +2,15 @@ import { Link } from 'react-router-dom';
 import { Button } from '../../ui/Button';
 import { Badge } from '../../ui/Badge';
 import { formatCost } from './helpers';
+import { formatBudgetSnapshotAge, getBudgetFreshnessLabel } from './launch-state';
+import type { ProviderBudgetReadiness } from './launch-state';
 
 type LaunchControlsPanelProps = {
   scopeCategory: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION';
   vignetteCount: number;
   modelCount: number;
+  totalPairedBatches: number | null;
+  totalTrialRuns: number | null;
   totalEstimatedCost: number;
   estimateConfidence?: 'HIGH' | 'MEDIUM' | 'LOW';
   fallbackReason?: string | null;
@@ -17,7 +21,6 @@ type LaunchControlsPanelProps = {
   maxBudgetEnabled: boolean;
   maxBudgetInput: string;
   hasValidBudget: boolean;
-  targetBatchCountEnabled: boolean;
   targetBatchCountInput: string;
   hasValidTargetBatchCount: boolean;
   isStarting: boolean;
@@ -26,12 +29,14 @@ type LaunchControlsPanelProps = {
   reviewSetupHref: string;
   reviewVignettesHref: string;
   excludedRequestedDefinitionCount?: number;
+  providerReadiness: ProviderBudgetReadiness[];
+  launchDisabled?: boolean;
+  launchDisabledReason?: string | null;
   onSetScopeCategory: (value: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION') => void;
   onSetUseDefaultTemperature: (value: boolean) => void;
   onSetTemperatureInput: (value: string) => void;
   onSetMaxBudgetEnabled: (value: boolean) => void;
   onSetMaxBudgetInput: (value: string) => void;
-  onSetTargetBatchCountEnabled: (value: boolean) => void;
   onSetTargetBatchCountInput: (value: string) => void;
   onOpenConfirm: () => void;
 };
@@ -40,6 +45,8 @@ export function LaunchControlsPanel({
   scopeCategory,
   vignetteCount,
   modelCount,
+  totalPairedBatches,
+  totalTrialRuns,
   totalEstimatedCost,
   estimateConfidence,
   fallbackReason,
@@ -50,7 +57,6 @@ export function LaunchControlsPanel({
   maxBudgetEnabled,
   maxBudgetInput,
   hasValidBudget,
-  targetBatchCountEnabled,
   targetBatchCountInput,
   hasValidTargetBatchCount,
   isStarting,
@@ -59,12 +65,14 @@ export function LaunchControlsPanel({
   reviewSetupHref,
   reviewVignettesHref,
   excludedRequestedDefinitionCount = 0,
+  providerReadiness,
+  launchDisabled = false,
+  launchDisabledReason,
   onSetScopeCategory,
   onSetUseDefaultTemperature,
   onSetTemperatureInput,
   onSetMaxBudgetEnabled,
   onSetMaxBudgetInput,
-  onSetTargetBatchCountEnabled,
   onSetTargetBatchCountInput,
   onOpenConfirm,
 }: LaunchControlsPanelProps) {
@@ -75,13 +83,22 @@ export function LaunchControlsPanel({
       : 'error';
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+    <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
+      <div className="space-y-2">
+        <div className="text-sm font-medium text-gray-900">Setup</div>
+        <p className="text-sm text-gray-600">
+          Set the paired-batch depth for each vignette, check provider budgets, and confirm the current launch signature.
+        </p>
+      </div>
+
       <div className="flex flex-wrap items-center gap-3">
-        <Badge variant="neutral" size="count">Domain evaluation scope: {scopeCategory.toLowerCase()}</Badge>
-        <Badge variant="info" size="count">Selected latest vignettes: {vignetteCount}</Badge>
+        <Badge variant="neutral" size="count">Scope: {scopeCategory.toLowerCase()}</Badge>
+        <Badge variant="info" size="count">Vignettes: {vignetteCount}</Badge>
         <Badge variant="info" size="count">Models: {modelCount}</Badge>
-        <Badge variant="success" size="count">Projected evaluation cost: {formatCost(totalEstimatedCost)}</Badge>
-        {estimateConfidence && <Badge variant={confidenceTone} size="count">Estimate confidence: {estimateConfidence.toLowerCase()}</Badge>}
+        <Badge variant="success" size="count">Expected cost: {formatCost(totalEstimatedCost)}</Badge>
+        {totalPairedBatches != null && <Badge variant="info" size="count">Paired batches: {totalPairedBatches}</Badge>}
+        {totalTrialRuns != null && <Badge variant="info" size="count">Trial runs: {totalTrialRuns}</Badge>}
+        {estimateConfidence && <Badge variant={confidenceTone} size="count">Confidence: {estimateConfidence.toLowerCase()}</Badge>}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -112,24 +129,30 @@ export function LaunchControlsPanel({
           disabled={!maxBudgetEnabled}
           className="w-28 px-2 py-1 border border-gray-300 rounded text-sm disabled:bg-gray-100"
         />
-        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-          <input type="checkbox" checked={targetBatchCountEnabled} onChange={(event) => onSetTargetBatchCountEnabled(event.target.checked)} />
-          Target batch count
-        </label>
-        <input
-          aria-label="Target batch count"
-          type="number"
-          min={1}
-          step={1}
-          placeholder="e.g. 5"
-          value={targetBatchCountInput}
-          onChange={(event) => onSetTargetBatchCountInput(event.target.value)}
-          disabled={!targetBatchCountEnabled}
-          className="w-20 px-2 py-1 border border-gray-300 rounded text-sm disabled:bg-gray-100"
-        />
       </div>
-      {targetBatchCountEnabled && !hasValidTargetBatchCount && (
-        <p className="text-xs text-amber-700">Enter a target batch count of 1 or more.</p>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+          Paired-batch depth per vignette
+          <input
+            aria-label="Paired-batch depth per vignette"
+            type="number"
+            min={1}
+            max={100}
+            step={1}
+            placeholder="1"
+            value={targetBatchCountInput}
+            onChange={(event) => onSetTargetBatchCountInput(event.target.value)}
+            className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
+          />
+        </label>
+        <p className="text-xs text-gray-500">
+          This applies to the current launch signature only.
+        </p>
+      </div>
+
+      {!hasValidTargetBatchCount && (
+        <p className="text-xs text-amber-700">Enter a paired-batch depth between 1 and 100.</p>
       )}
 
       <details className="rounded border border-gray-200 bg-gray-50 p-3">
@@ -186,12 +209,88 @@ export function LaunchControlsPanel({
           {excludedRequestedDefinitionCount} requested vignette{excludedRequestedDefinitionCount === 1 ? '' : 's'} are excluded because they are stale, invalid, or no longer the latest version.
         </p>
       )}
-      {maxBudgetEnabled && !hasValidBudget && <p className="text-xs text-amber-700">Enter a budget cap above $0 to enforce launch spend limits.</p>}
+      {maxBudgetEnabled && !hasValidBudget && (
+        <p className="text-xs text-amber-700">Enter a budget cap above $0 to enforce launch spend limits.</p>
+      )}
+
+      {providerReadiness.length > 0 && (
+        <div className="rounded border border-gray-200 overflow-hidden">
+          <div className="border-b border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-900">
+            Provider budget readiness
+          </div>
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="text-left text-gray-500 border-b border-gray-200">
+                <th className="px-3 py-2 font-medium">Provider</th>
+                <th className="px-3 py-2 font-medium">Expected spend</th>
+                <th className="px-3 py-2 font-medium">Available budget</th>
+                <th className="px-3 py-2 font-medium">Snapshot</th>
+                <th className="px-3 py-2 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {providerReadiness.map((provider) => (
+                <tr key={provider.providerId} className="border-b border-gray-100 last:border-b-0">
+                  <td className="px-3 py-2">
+                    <div className="font-medium text-gray-900">{provider.providerDisplayName}</div>
+                    <div className="text-xs text-gray-500">{provider.reason}</div>
+                  </td>
+                  <td className="px-3 py-2 text-gray-700">{formatCost(provider.expectedSpendUsd)}</td>
+                  <td className="px-3 py-2 text-gray-700">
+                    {provider.remainingBudgetUsd == null ? 'Unknown' : formatCost(provider.remainingBudgetUsd)}
+                  </td>
+                  <td className="px-3 py-2 text-gray-700">
+                    <div className="space-y-1">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                        provider.freshness === 'FRESH'
+                          ? 'bg-green-100 text-green-700'
+                          : provider.freshness === 'STALE'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {getBudgetFreshnessLabel(provider.freshness)}
+                      </span>
+                      <div className="text-xs text-gray-500">
+                        {provider.lastChecked ? `Checked ${formatBudgetSnapshotAge(provider.lastChecked)}` : 'No snapshot'}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-gray-700">
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                      provider.status === 'READY'
+                        ? 'bg-green-100 text-green-700'
+                        : provider.status === 'TOP_UP_REQUIRED'
+                          ? 'bg-amber-100 text-amber-700'
+                          : provider.status === 'DISABLED'
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {provider.status.toLowerCase().replace(/_/g, ' ')}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {launchDisabledReason && (
+        <p className="text-xs text-amber-700">{launchDisabledReason}</p>
+      )}
 
       <div className="flex items-center gap-3">
         <Button
           onClick={onOpenConfirm}
-          disabled={isStarting || planFetching || modelCount === 0 || vignetteCount === 0 || (maxBudgetEnabled && !hasValidBudget) || (targetBatchCountEnabled && !hasValidTargetBatchCount)}
+          disabled={
+            isStarting
+            || planFetching
+            || launchDisabled
+            || modelCount === 0
+            || vignetteCount === 0
+            || (maxBudgetEnabled && !hasValidBudget)
+            || !hasValidTargetBatchCount
+          }
         >
           {isStarting ? 'Starting...' : 'Review & Start Domain Evaluation'}
         </Button>

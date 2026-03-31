@@ -1,0 +1,57 @@
+{
+  "session_id": "c747c336-c860-4780-acd9-f172df4af7f4",
+  "response": "## Findings\n\n| Severity | Finding |\n| :--- | :--- |\n| **HIGH** | The plan relies on a client-side preflight check for provider readiness and budget, with a separate authoritative check on the server during the `startDomainEvaluation` mutation. This creates a testable but high-risk race condition. A budget could be consumed between the preflight and the mutation, causing a launch failure that might appear as a UI bug to the user. Testing must exhaustively cover the UI's reaction to the specified failure codes (`INSUFFICIENT_BUDGET`, `STALE_BUDGET`) to ensure they are handled gracefully and don't present as a system error. |\n| **MEDIUM** | The plan states that the status view refreshes every 5 seconds but does not define the behavior for a failed poll. If the client fails to fetch an update, the user will be looking at stale data with no indication of a problem. This makes the system's \"liveness\" untestable; a test cannot confirm the data is current if the mechanism for updating it can fail silently. The UI should have a defined, testable state for \"stale data\" or \"connection error.\" |\n| **MEDIUM** | The confirm modal's behavior is gated on \"large launches,\" but this term is not defined with a specific threshold. This makes the feature's trigger non-deterministic and difficult to test. To be testable, this should be an exact number of trials (e.g., `> 1000`). |\n| **MEDIUM** | The plan states, \"The frontend may warn when a status snapshot is old,\" but it does not specify the threshold for what constitutes \"old.\" Unlike the budget's explicit 10-minute freshness window, this ambiguity makes the warning untestable. A concrete, testable time threshold is required. |\n| **LOW** | **[UNVERIFIED]** The row detail drawer's utility is dependent on an existing `RUN_QUERY` providing \"rich enough\" data. The plan acknowledges this as a risk. From a testability perspective, scenarios where this query returns sparse or empty data must be explicitly tested. The drawer must render gracefully (e.g., show \"No logs available\") rather than failing or showing empty sections without context. |\n| **LOW** | A batch that completes between two polls will \"fall off\" the list and never be seen in a terminal \"completed\" state in the live view. While this may be intended, it's an edge case that could be perceived as a bug where runs disappear without confirmation. Tests should verify this behavior to ensure it matches the explicit design, as it's a non-obvious state transition. |\n\n## Residual Risks\n\n- **User Experience of Race Conditions:** Even if the launch-time failure codes are handled correctly, there is a residual risk that the user experience is poor. A user who sees a \"Ready\" status but is immediately blocked upon clicking \"Launch\" may perceive the system as unreliable, even if it is technically behaving as designed. The plan mitigates the technical risk but not the potential user frustration.\n- **Opacity of Non-Active Work:** The design choice to hide \"pending\" and \"queued\" work from the main table and represent them only as a header count risks user anxiety. If a large number of trials are queued and not yet active, a user might believe the system has lost or dropped work, as there is no row-level detail to confirm acceptance. The correctness of the header copy mentioned in the plan is critical to mitigating this.\n- **Stall Recovery Ambiguity:** The plan notes that a stalled batch can recover and move back to the live table. The residual risk is the lack of a defined feedback loop for *why* a batch stalled or recovered. Without this, testing can confirm the state transition occurs but cannot easily validate the conditions that trigger it, making it difficult to distinguish between a transient issue and a systemic flaw.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 58374
+        },
+        "tokens": {
+          "input": 1619,
+          "prompt": 13195,
+          "candidates": 830,
+          "total": 16552,
+          "cached": 11576,
+          "thoughts": 2527,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 58374,
+            "tokens": {
+              "input": 1619,
+              "prompt": 13195,
+              "candidates": 830,
+              "total": 16552,
+              "cached": 11576,
+              "thoughts": 2527,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}
