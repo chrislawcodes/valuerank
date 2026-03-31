@@ -38,15 +38,16 @@ the real provider dashboard balance.
 
 ### US-3 — Auto-deduct run cost on run completion
 **As** the system,
-**I want** to deduct each run's estimated cost from the relevant provider's balance,
+**I want** to deduct each run's actual cost from the relevant provider's balance,
 **so that** the displayed balance tracks spending automatically.
 
 **Acceptance criteria:**
-- When a run reaches COMPLETED status, the system deducts `run.estimatedCost` from the provider's balance
-- A "run" uses exactly one provider (all models in a run belong to one provider, or we deduct per provider used)
-- If balance is null (not set), no deduction occurs (silent skip)
+- When a run reaches COMPLETED status, the system computes actual cost from transcript token counts (summing `transcript.estimatedCost` across all non-deleted transcripts for the run)
+- For multi-provider runs (models from different providers), costs are split per provider: sum transcript costs grouped by provider via `model → provider` lookup
+- If a provider's balance is null (not set), no deduction occurs (silent skip)
 - Deduction is a non-blocking background operation (failure logged, does not fail the run)
-- `providerBudgetEvents` table records each deduction: `type=DEDUCTION`, `amount`, `runId`, `providerBalanceBefore`, `providerBalanceAfter`, `createdAt`
+- `providerBudgetEvents` table records each deduction: `type=DEDUCTION`, `amount` (negative, as deduction), `runId`, `providerBalanceBefore`, `providerBalanceAfter`, `createdAt`
+- Cost is computed from `transcript.estimatedCost` (already populated by the probe handler)
 
 ---
 
@@ -111,8 +112,15 @@ the real provider dashboard balance.
 - `lastSyncedBalance: Float` (nullable)
 
 ### `UpdateLlmProviderInput` — new optional fields
-- `balance: Float`
-- `syncBalance: Float` (triggers sync event with drift calculation)
+- `balance: Float` — used for initial manual set (creates `MANUAL_SET` event, no drift calculation)
+
+### New mutation: `syncProviderBalance(id: ID!, balance: Float!): LlmProvider`
+- Replaces the `syncBalance` sub-field approach for clarity
+- Triggers a SYNC event with drift = entered_balance − current_system_balance
+- Updates `balance`, `lastSyncedAt`, `lastSyncedBalance`
+
+### Fragment updates
+- `LLM_PROVIDER_FRAGMENT` in `cloud/apps/web/src/api/operations/llm.ts` must include `balance`, `lastSyncedAt`, `lastSyncedBalance`
 
 ### No new queries needed for v1 (budget events table is write-only for now)
 
@@ -124,7 +132,7 @@ the real provider dashboard balance.
 - No per-model budget caps
 - No visualization of budget event history in the UI
 - No hard gate that prevents runs from starting (soft warning only)
-- No multi-provider run cost splitting complexity (each model → one provider; deduct from that provider)
+- No display of drift history (SYNC events are recorded but not shown in v1)
 
 ---
 
