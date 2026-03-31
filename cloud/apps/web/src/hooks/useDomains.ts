@@ -7,6 +7,7 @@ import {
   ASSIGN_DOMAIN_TO_DEFINITIONS_MUTATION,
   ASSIGN_DOMAIN_TO_DEFINITIONS_BY_FILTER_MUTATION,
   RUN_TRIALS_FOR_DOMAIN_MUTATION,
+  SET_DOMAIN_SETTINGS_MUTATION,
   type Domain,
   type DomainMutationResult,
   type DomainsQueryResult,
@@ -23,6 +24,10 @@ import {
   type AssignDomainToDefinitionsByFilterMutationVariables,
   type RunTrialsForDomainMutationResult,
   type RunTrialsForDomainMutationVariables,
+  type SetDomainSettingsMutationResult,
+  type SetDomainSettingsMutationVariables,
+  type DomainConfigSnapshot,
+  type SetDomainSettingsValueStatement,
 } from '../api/operations/domains';
 
 type RunTrialsForDomainResult = RunTrialsForDomainMutationResult['runTrialsForDomain'];
@@ -37,6 +42,7 @@ type UseDomainsResult = {
   assigningByIds: boolean;
   assigningByFilter: boolean;
   runningDomainTrials: boolean;
+  savingSettings: boolean;
   error: Error | null;
   refetch: () => void;
   createDomain: (name: string) => Promise<Domain | null>;
@@ -53,6 +59,13 @@ type UseDomainsResult = {
     withoutDomain?: boolean;
   }) => Promise<DomainMutationResult | null>;
   runTrialsForDomain: (domainId: string, temperature?: number) => Promise<RunTrialsForDomainResult | null>;
+  setDomainSettings: (input: {
+    domainId: string;
+    preambleVersionId?: string | null;
+    levelPresetVersionId?: string | null;
+    contextId?: string | null;
+    valueStatements?: SetDomainSettingsValueStatement[];
+  }) => Promise<DomainConfigSnapshot | null>;
 };
 
 export function useDomains(): UseDomainsResult {
@@ -67,6 +80,7 @@ export function useDomains(): UseDomainsResult {
   const [assignIdsResult, assignIdsMutation] = useMutation<AssignDomainToDefinitionsMutationResult, AssignDomainToDefinitionsMutationVariables>(ASSIGN_DOMAIN_TO_DEFINITIONS_MUTATION);
   const [assignFilterResult, assignFilterMutation] = useMutation<AssignDomainToDefinitionsByFilterMutationResult, AssignDomainToDefinitionsByFilterMutationVariables>(ASSIGN_DOMAIN_TO_DEFINITIONS_BY_FILTER_MUTATION);
   const [runTrialsResult, runTrialsMutation] = useMutation<RunTrialsForDomainMutationResult, RunTrialsForDomainMutationVariables>(RUN_TRIALS_FOR_DOMAIN_MUTATION);
+  const [setSettingsResult, setSettingsMutation] = useMutation<SetDomainSettingsMutationResult, SetDomainSettingsMutationVariables>(SET_DOMAIN_SETTINGS_MUTATION);
 
   const refetch = () => reexecuteQuery({ requestPolicy: 'network-only' });
 
@@ -133,6 +147,19 @@ export function useDomains(): UseDomainsResult {
     return payload;
   };
 
+  const setDomainSettings = async (input: {
+    domainId: string;
+    preambleVersionId?: string | null;
+    levelPresetVersionId?: string | null;
+    contextId?: string | null;
+    valueStatements?: SetDomainSettingsValueStatement[];
+  }): Promise<DomainConfigSnapshot | null> => {
+    const result = await setSettingsMutation({ input });
+    if (result.error) throw new Error(result.error.message);
+    refetch();
+    return result.data?.setDomainSettings ?? null;
+  };
+
   return {
     domains: queryResult.data?.domains ?? [],
     // Aggregate loading flag for simple screens. Prefer granular flags for precise UX control.
@@ -143,7 +170,8 @@ export function useDomains(): UseDomainsResult {
       deleteResult.fetching ||
       assignIdsResult.fetching ||
       assignFilterResult.fetching ||
-      runTrialsResult.fetching,
+      runTrialsResult.fetching ||
+      setSettingsResult.fetching,
     queryLoading: queryResult.fetching,
     creating: createResult.fetching,
     renaming: renameResult.fetching,
@@ -151,6 +179,7 @@ export function useDomains(): UseDomainsResult {
     assigningByIds: assignIdsResult.fetching,
     assigningByFilter: assignFilterResult.fetching,
     runningDomainTrials: runTrialsResult.fetching,
+    savingSettings: setSettingsResult.fetching,
     error: queryResult.error ? new Error(queryResult.error.message) : null,
     refetch,
     createDomain,
@@ -159,5 +188,6 @@ export function useDomains(): UseDomainsResult {
     assignDomainToDefinitions,
     assignDomainToDefinitionsByFilter,
     runTrialsForDomain,
+    setDomainSettings,
   };
 }

@@ -14,6 +14,7 @@ import { getQueueNameForModel } from '../parallelism/index.js';
 import { estimateCost, type CostEstimate } from '../cost/index.js';
 import { signalRunActivity } from './scheduler.js';
 import { getJudgeModel, getSummarizerModel } from '../infra-models.js';
+import { captureOrReuseDomainConfigSnapshot } from '../domain-config-snapshot.js';
 
 const log = createLogger('services:run:start');
 
@@ -774,6 +775,12 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
 
   // Create run in transaction
   const run = await db.$transaction(async (tx) => {
+    // Capture domain config snapshot if the definition belongs to a domain
+    const domainId = definition.domain?.id ?? null;
+    const domainConfigSnapshotId = domainId != null
+      ? await captureOrReuseDomainConfigSnapshot(domainId, tx)
+      : null;
+
     const newRun = await tx.run.create({
       data: {
         name: runName,
@@ -784,6 +791,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
         config,
         progress: initialProgress,
         createdByUserId: userId ?? null,
+        domainConfigSnapshotId,
       },
     });
 

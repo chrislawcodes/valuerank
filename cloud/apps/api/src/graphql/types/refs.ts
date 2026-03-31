@@ -48,10 +48,12 @@ import type { Preamble, PreambleVersion } from '@valuerank/db'; // Will import f
 export const PreambleRef = builder.objectRef<Preamble>('Preamble');
 export const PreambleVersionRef = builder.objectRef<PreambleVersion>('PreambleVersion');
 
-import type { DomainContext, ValueStatement } from '@valuerank/db';
+import type { DomainContext, ValueStatement, ValueStatementVersion, DomainConfigSnapshot } from '@valuerank/db';
 
 export const DomainContextRef = builder.objectRef<DomainContext>('DomainContext');
 export const ValueStatementRef = builder.objectRef<ValueStatement>('ValueStatement');
+export const ValueStatementVersionRef = builder.objectRef<ValueStatementVersion>('ValueStatementVersion');
+export const DomainConfigSnapshotRef = builder.objectRef<DomainConfigSnapshot>('DomainConfigSnapshot');
 
 import type { LevelPreset, LevelPresetVersion } from '@valuerank/db';
 

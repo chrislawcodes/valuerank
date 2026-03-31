@@ -801,3 +801,77 @@ export type RetryDomainTrialCellMutationVariables = {
   temperature?: number;
   scopeCategory?: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION';
 };
+
+// ---------------------------------------------------------------------------
+// Domain Config Snapshot
+// ---------------------------------------------------------------------------
+
+export type DomainConfigSnapshot = {
+  id: string;
+  domainId: string;
+  preambleVersionId: string | null;
+  levelPresetVersionId: string | null;
+  contextId: string | null;
+  valueStatementVersionIds: string[];
+  fingerprint: string;
+  createdAt: string;
+};
+
+export const DOMAIN_CONFIG_SNAPSHOTS_QUERY = gql`
+  query DomainConfigSnapshots($domainId: ID!, $limit: Int, $offset: Int) {
+    domainConfigSnapshots(domainId: $domainId, limit: $limit, offset: $offset) {
+      id
+      domainId
+      preambleVersionId
+      levelPresetVersionId
+      contextId
+      valueStatementVersionIds
+      fingerprint
+      createdAt
+    }
+  }
+`;
+
+export const SET_DOMAIN_SETTINGS_MUTATION = gql`
+  mutation SetDomainSettings($input: SetDomainSettingsInput!) {
+    setDomainSettings(input: $input) {
+      id
+      domainId
+      preambleVersionId
+      levelPresetVersionId
+      contextId
+      valueStatementVersionIds
+      fingerprint
+      createdAt
+    }
+  }
+`;
+
+export type DomainConfigSnapshotsQueryResult = {
+  domainConfigSnapshots: DomainConfigSnapshot[];
+};
+
+export type DomainConfigSnapshotsQueryVariables = {
+  domainId: string;
+  limit?: number;
+  offset?: number;
+};
+
+export type SetDomainSettingsValueStatement = {
+  token: string;
+  body: string;
+};
+
+export type SetDomainSettingsMutationVariables = {
+  input: {
+    domainId: string;
+    preambleVersionId?: string | null;
+    levelPresetVersionId?: string | null;
+    contextId?: string | null;
+    valueStatements?: SetDomainSettingsValueStatement[];
+  };
+};
+
+export type SetDomainSettingsMutationResult = {
+  setDomainSettings: DomainConfigSnapshot;
+};

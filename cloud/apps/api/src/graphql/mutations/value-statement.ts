@@ -14,8 +14,15 @@ builder.mutationFields((t) => ({
         where: { domainId_token: { domainId, token } },
       });
       if (existing != null) throw new Error(`Value statement for token "${token}" already exists in this domain`);
-      return db.valueStatement.create({
-        data: { domainId, token, body },
+      // Create statement and initial version atomically
+      return db.$transaction(async (tx) => {
+        const statement = await tx.valueStatement.create({
+          data: { domainId, token, body },
+        });
+        await tx.valueStatementVersion.create({
+          data: { statementId: statement.id, body, versionNumber: 1 },
+        });
+        return statement;
       });
     },
   }),
@@ -28,11 +35,21 @@ builder.mutationFields((t) => ({
     resolve: async (_root, args, ctx) => {
       const id = String(args.id);
       ctx.log.info({ id }, 'Updating value statement');
-      const existing = await db.valueStatement.findUnique({ where: { id } });
-      if (existing == null) throw new Error(`ValueStatement ${id} not found`);
-      return db.valueStatement.update({
+      const existing = await db.valueStatement.findUnique({
         where: { id },
-        data: { body: args.input.body },
+        include: { versions: { orderBy: { versionNumber: 'desc' }, take: 1 } },
+      });
+      if (existing == null) throw new Error(`ValueStatement ${id} not found`);
+      const nextVersionNumber = (existing.versions[0]?.versionNumber ?? 0) + 1;
+      // Create new version and update denormalized body atomically
+      return db.$transaction(async (tx) => {
+        await tx.valueStatementVersion.create({
+          data: { statementId: id, body: args.input.body, versionNumber: nextVersionNumber },
+        });
+        return tx.valueStatement.update({
+          where: { id },
+          data: { body: args.input.body },
+        });
       });
     },
   }),

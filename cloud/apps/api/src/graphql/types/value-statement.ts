@@ -1,6 +1,17 @@
 import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
-import { DomainRef, ValueStatementRef } from './refs.js';
+import { DomainRef, ValueStatementRef, ValueStatementVersionRef } from './refs.js';
+
+builder.objectType(ValueStatementVersionRef, {
+  description: 'A versioned snapshot of a value statement body',
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    statementId: t.exposeID('statementId'),
+    body: t.exposeString('body'),
+    versionNumber: t.exposeInt('versionNumber'),
+    createdAt: t.expose('createdAt', { type: 'DateTime' }),
+  }),
+});
 
 builder.objectType(ValueStatementRef, {
   description: 'A value statement keyed by (domainId, token), used in Job Choice vignette assembly',
@@ -17,6 +28,15 @@ builder.objectType(ValueStatementRef, {
       resolve: (parent, _args, ctx) => {
         ctx.log.debug({ domainId: parent.domainId }, 'Resolving domain for value statement');
         return db.domain.findUnique({ where: { id: parent.domainId } });
+      },
+    }),
+    versions: t.field({
+      type: [ValueStatementVersionRef],
+      resolve: async (parent) => {
+        return db.valueStatementVersion.findMany({
+          where: { statementId: parent.id },
+          orderBy: { versionNumber: 'desc' },
+        });
       },
     }),
   }),

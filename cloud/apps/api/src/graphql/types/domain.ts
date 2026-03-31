@@ -1,6 +1,22 @@
 import { builder } from '../builder.js';
 import { db, type LevelPresetVersion, type PreambleVersion, type DomainContext } from '@valuerank/db';
-import { DomainRef, DefinitionRef, LevelPresetVersionRef, PreambleVersionRef, DomainContextRef } from './refs.js';
+import { DomainRef, DefinitionRef, LevelPresetVersionRef, PreambleVersionRef, DomainContextRef, DomainConfigSnapshotRef } from './refs.js';
+
+builder.objectType(DomainConfigSnapshotRef, {
+  description: 'A point-in-time snapshot of all domain configuration settings',
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    domainId: t.exposeID('domainId'),
+    preambleVersionId: t.exposeString('preambleVersionId', { nullable: true }),
+    levelPresetVersionId: t.exposeString('levelPresetVersionId', { nullable: true }),
+    contextId: t.exposeString('contextId', { nullable: true }),
+    valueStatementVersionIds: t.exposeStringList('valueStatementVersionIds'),
+    fingerprint: t.exposeString('fingerprint'),
+    createdAt: t.expose('createdAt', { type: 'DateTime' }),
+  }),
+});
+
+export { DomainConfigSnapshotRef };
 
 export { DomainRef };
 

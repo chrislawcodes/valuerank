@@ -1,7 +1,8 @@
 import { builder } from '../builder.js';
 import { db, Prisma } from '@valuerank/db';
 import { AuthenticationError } from '@valuerank/shared';
-import { DomainRef } from '../types/domain.js';
+import { DomainRef, DomainConfigSnapshotRef } from '../types/domain.js';
+import { captureOrReuseDomainConfigSnapshot } from '../../services/domain-config-snapshot.js';
 import { createAuditLog } from '../../services/audit/index.js';
 import { normalizeDomainName } from '../../utils/domain-name.js';
 import { buildDefinitionWhere } from '../utils/definition-filters.js';
@@ -1164,6 +1165,98 @@ builder.mutationField('retryDomainTrialCell', (t) =>
         runId: run.run.id,
         message: null,
       };
+    },
+  })
+);
+
+// ---------------------------------------------------------------------------
+// setDomainSettings — update domain config and capture a snapshot
+// ---------------------------------------------------------------------------
+
+const SetDomainSettingsValueStatementInput = builder.inputType('SetDomainSettingsValueStatementInput', {
+  fields: (t) => ({
+    token: t.string({ required: true }),
+    body: t.string({ required: true }),
+  }),
+});
+
+const SetDomainSettingsInput = builder.inputType('SetDomainSettingsInput', {
+  fields: (t) => ({
+    domainId: t.id({ required: true }),
+    preambleVersionId: t.id({ required: false }),
+    levelPresetVersionId: t.id({ required: false }),
+    contextId: t.id({ required: false }),
+    valueStatements: t.field({ type: [SetDomainSettingsValueStatementInput], required: false }),
+  }),
+});
+
+builder.mutationField('setDomainSettings', (t) =>
+  t.field({
+    type: DomainConfigSnapshotRef,
+    args: { input: t.arg({ type: SetDomainSettingsInput, required: true }) },
+    resolve: async (_root, args, ctx) => {
+      const domainId = String(args.input.domainId);
+      ctx.log.info({ domainId }, 'Setting domain settings');
+
+      const domain = await db.domain.findUnique({ where: { id: domainId } });
+      if (domain == null) throw new Error(`Domain ${domainId} not found`);
+
+      // Normalize nullable args (undefined → keep existing; explicit string → update; explicit null → clear)
+      const preambleVersionId = args.input.preambleVersionId !== undefined
+        ? (args.input.preambleVersionId != null ? String(args.input.preambleVersionId) : null)
+        : domain.defaultPreambleVersionId;
+
+      const levelPresetVersionId = args.input.levelPresetVersionId !== undefined
+        ? (args.input.levelPresetVersionId != null ? String(args.input.levelPresetVersionId) : null)
+        : domain.defaultLevelPresetVersionId;
+
+      const contextId = args.input.contextId !== undefined
+        ? (args.input.contextId != null ? String(args.input.contextId) : null)
+        : domain.defaultContextId;
+
+      const snapshot = await db.$transaction(async (tx) => {
+        // Update domain FK defaults
+        await tx.domain.update({
+          where: { id: domainId },
+          data: {
+            defaultPreambleVersionId: preambleVersionId,
+            defaultLevelPresetVersionId: levelPresetVersionId,
+            defaultContextId: contextId,
+          },
+        });
+
+        // Update value statements: for each changed body, create a new version
+        const valueStatements = args.input.valueStatements ?? [];
+        for (const vs of valueStatements) {
+          const existing = await tx.valueStatement.findUnique({
+            where: { domainId_token: { domainId, token: vs.token } },
+            include: { versions: { orderBy: { versionNumber: 'desc' }, take: 1 } },
+          });
+          if (existing == null) {
+            ctx.log.warn({ domainId, token: vs.token }, 'Value statement token not found — skipping');
+            continue;
+          }
+          if (existing.body === vs.body) continue; // No change
+          const nextVersionNumber = (existing.versions[0]?.versionNumber ?? 0) + 1;
+          await tx.valueStatementVersion.create({
+            data: { statementId: existing.id, body: vs.body, versionNumber: nextVersionNumber },
+          });
+          await tx.valueStatement.update({
+            where: { id: existing.id },
+            data: { body: vs.body },
+          });
+        }
+
+        // Capture snapshot within same transaction
+        const snapshotId = await captureOrReuseDomainConfigSnapshot(domainId, tx);
+        if (snapshotId == null) throw new Error(`Failed to capture snapshot for domain ${domainId}`);
+
+        const result = await tx.domainConfigSnapshot.findUnique({ where: { id: snapshotId } });
+        if (result == null) throw new Error(`Snapshot ${snapshotId} not found after creation`);
+        return result;
+      });
+
+      return snapshot;
     },
   })
 );
