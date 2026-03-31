@@ -114,9 +114,11 @@ from factory_review import (  # noqa: E402
     RUN_CODEX_REVIEW,
     DEFAULT_GEMINI_MODEL,
     DEFAULT_CODEX_MODEL,
+    _AUTO_ACCEPT_NOTE,
     trim_detail,
     pick_secondary_lens,
     required_reviews,
+    SMALL_TASK_SET_THRESHOLD,
     resolved_review_policy,
     checkpoint_manifest,
     repair_checkpoint_args,
@@ -125,6 +127,7 @@ from factory_review import (  # noqa: E402
     record_checkpoint_fallback,
     _advance_checkpoint_progress,
     recommended_next_action,
+    detect_actionable_findings,
 )
 
 from factory_deliver import (  # noqa: E402
@@ -192,27 +195,36 @@ def command_init(args: argparse.Namespace) -> int:
     return 0
 
 
+# Module-level regex for _extract_file_paths_from_artifact — compiled once, reused per call.
+_AUTO_CONTEXT_EXTENSIONS = re.compile(
+    r"\.(tsx?|jsx?|py|prisma|sql|json|yaml|yml|md|sh|toml)$", re.IGNORECASE
+)
+_AUTO_CONTEXT_PATH_RE = re.compile(r"`([^`\n]+)`|(?<!\w)((?:cloud|docs|specs|scripts)/\S+)")
+
+# Maximum number of auto-context files injected from a single artifact. Prevents
+# large specs/plans that reference dozens of files from ballooning the review context.
+_AUTO_CONTEXT_MAX_FILES = 10
+
+
 def _extract_file_paths_from_artifact(artifact_path: Path, repo_root: Path) -> list[str]:
     """
     Parse a spec or plan artifact and return repo-relative paths for any files
     explicitly listed in scope sections (Files to modify, Files to create, etc.).
     Only includes paths that exist on disk — skips files not yet created.
+    Capped at _AUTO_CONTEXT_MAX_FILES to prevent unbounded context growth.
     """
     if not artifact_path.exists():
         return []
     text = artifact_path.read_text(encoding="utf-8")
-    # Match backtick-quoted paths or bare paths that look like repo files:
-    # - contain at least one slash
-    # - end with a recognised source extension
-    _EXTENSIONS = re.compile(r"\.(tsx?|jsx?|py|prisma|sql|json|yaml|yml|md|sh|toml)$", re.IGNORECASE)
-    _PATH_RE = re.compile(r"`([^`\n]+)`|(?<!\w)((?:cloud|docs|specs|scripts)/\S+)")
     found: list[str] = []
     seen: set[str] = set()
-    for match in _PATH_RE.finditer(text):
+    for match in _AUTO_CONTEXT_PATH_RE.finditer(text):
+        if len(found) >= _AUTO_CONTEXT_MAX_FILES:
+            break
         raw = (match.group(1) or match.group(2) or "").strip().rstrip(".,;)")
         if not raw or "/" not in raw:
             continue
-        if not _EXTENSIONS.search(raw):
+        if not _AUTO_CONTEXT_EXTENSIONS.search(raw):
             continue
         # Resolve to absolute, then back to repo-relative
         candidate = (repo_root / raw).resolve()
@@ -266,6 +278,8 @@ def command_checkpoint(args: argparse.Namespace) -> int:
     if args.stage in ("spec", "plan") and not getattr(args, "no_auto_context", False):
         auto_context = _extract_file_paths_from_artifact(artifact_path, REPO_ROOT)
         for p in auto_context:
+            if len(context_paths) >= _AUTO_CONTEXT_MAX_FILES:
+                break
             if p not in context_paths:
                 context_paths.append(p)
     allow_dirty_paths = [normalized_repo_path(path, "allow-dirty path") for path in args.allow_dirty_path]
@@ -408,6 +422,27 @@ def command_checkpoint(args: argparse.Namespace) -> int:
 
     reviews = getattr(args, "required_reviews", None)
     if reviews is None:
+        small_task_set = False
+        if args.stage in ("tasks", "closeout"):
+            # For "tasks": count from the artifact (tasks.md is the artifact).
+            # For "closeout": count from tasks.md in the workflow dir (artifact is closeout.md).
+            tasks_file = artifact_path if args.stage == "tasks" else workflow_dir(args.slug) / "tasks.md"
+            if tasks_file.exists():
+                try:
+                    task_text = tasks_file.read_text(encoding="utf-8")
+                    task_count = sum(
+                        1 for line in task_text.splitlines()
+                        if line.strip().startswith("- [ ]") or line.strip().startswith("- [x]") or line.strip().startswith("- [X]")
+                    )
+                    if task_count < SMALL_TASK_SET_THRESHOLD:
+                        small_task_set = True
+                        print(
+                            f"info: small task set ({task_count} tasks < {SMALL_TASK_SET_THRESHOLD} threshold) — "
+                            f"skipping Gemini reviews for {args.stage} stage, running Codex review only.",
+                            file=sys.stderr,
+                        )
+                except Exception:
+                    pass  # count failed — fall back to full reviews
         reviews = required_reviews(
             args.stage,
             policy["sensitive"],
@@ -415,6 +450,7 @@ def command_checkpoint(args: argparse.Namespace) -> int:
             policy["performance_sensitive"],
             policy["extra_gemini_lenses"],
             fast=fast,
+            small_task_set=small_task_set,
         )
 
     manifest = checkpoint_manifest(
@@ -432,17 +468,24 @@ def command_checkpoint(args: argparse.Namespace) -> int:
     manifest_path = checkpoint_manifest_path(args.slug, args.stage)
     atomic_json_write(manifest_path, manifest)
     if args.stage == "diff":
-        update_workflow_state(
-            args.slug,
-            lambda state: state.__setitem__(
-                DIRTY_OVERRIDE_KEY,
-                {
-                    "allowed_dirty_paths": allow_dirty_paths,
-                    "used": bool(allow_dirty_paths),
-                    "updated_at": int(time.time()),
-                },
-            ),
-        )
+        if allow_dirty_paths:
+            update_workflow_state(
+                args.slug,
+                lambda state: state.__setitem__(
+                    DIRTY_OVERRIDE_KEY,
+                    {
+                        "allowed_dirty_paths": allow_dirty_paths,
+                        "used": True,
+                        "updated_at": int(time.time()),
+                    },
+                ),
+            )
+        else:
+            # No --allow-dirty-path on this run — clear any stale override from a prior run.
+            update_workflow_state(
+                args.slug,
+                lambda state: state.pop(DIRTY_OVERRIDE_KEY, None),
+            )
 
     cmd = [
         sys.executable,
@@ -512,6 +555,74 @@ def command_reconcile(args: argparse.Namespace) -> int:
     run([sys.executable, str(UPDATE_REVIEW), *review_args, "--status", args.status, "--note", args.note])
     run([sys.executable, str(APPEND_RECONCILIATION), "--plan", str(plan_path), *review_args, "--status", args.status, "--note", args.note])
     run([sys.executable, str(VERIFY_RECONCILIATION), "--plan", str(plan_path), *review_args])
+    return 0
+
+
+def command_auto_reconcile(args: argparse.Namespace) -> int:
+    """Auto-accept reviews with no HIGH or MEDIUM severity findings.
+
+    Scans all open (resolution_status == "open") reviews for the given stage.
+    Reviews with only LOW or no findings are accepted automatically.
+    Reviews with actionable findings are left open and listed for human review.
+
+    Prints a summary so the orchestrator knows exactly which reviews still need attention.
+    """
+    ensure_sync()
+    manifest = load_checkpoint_manifest(args.slug, args.stage)
+    if not manifest:
+        raise SystemExit(f"no checkpoint manifest found for {args.slug}/{args.stage} — run checkpoint first")
+
+    plan_path = workflow_dir(args.slug) / "plan.md"
+    required = manifest.get("required_reviews", [])
+
+    auto_accepted: list[str] = []
+    needs_review: list[str] = []
+
+    for spec in required:
+        review_path = Path(resolve_stored_path(spec["path"], REPO_ROOT))
+        if not review_path.exists():
+            needs_review.append(f"{spec['path']} (missing)")
+            continue
+        try:
+            data, _ = parse_review_frontmatter(review_path)
+        except Exception:
+            needs_review.append(f"{spec['path']} (unreadable)")
+            continue
+
+        status = data.get("resolution_status", "open")
+        if status != "open":
+            # Already reconciled — skip.
+            continue
+
+        if detect_actionable_findings(review_path):
+            needs_review.append(spec["path"])
+        else:
+            # Auto-accept: write resolution into file and append to plan reconciliation table.
+            run([
+                sys.executable, str(UPDATE_REVIEW),
+                "--review", str(review_path),
+                "--status", "accepted",
+                "--note", _AUTO_ACCEPT_NOTE,
+            ])
+            run([
+                sys.executable, str(APPEND_RECONCILIATION),
+                "--plan", str(plan_path),
+                "--review", str(review_path),
+                "--status", "accepted",
+                "--note", _AUTO_ACCEPT_NOTE,
+            ])
+            auto_accepted.append(spec["path"])
+
+    if auto_accepted:
+        print(f"auto-accepted ({len(auto_accepted)}):")
+        for path in auto_accepted:
+            print(f"  {path}")
+    if needs_review:
+        print(f"needs-review ({len(needs_review)}):")
+        for path in needs_review:
+            print(f"  {path}")
+    if not auto_accepted and not needs_review:
+        print(f"all reviews for {args.stage} already reconciled")
     return 0
 
 
@@ -1398,13 +1509,13 @@ def _codex_prompt_path(slug: str, i: int) -> Path:
 
 def _build_codex_prompt(slug: str, i: int, tasks: list[str], file_scope: list[str]) -> str:
     root = workflow_dir(slug)
-    spec_path = root / "spec.md"
-    plan_path = root / "plan.md"
-    tasks_path = root / "tasks.md"
+    # Prefer compact summaries — they contain everything Codex needs for implementation
+    # without the full narrative. Fall back to full files when summaries don't exist yet.
+    spec_path = root / "spec-acceptance.md" if (root / "spec-acceptance.md").exists() else root / "spec.md"
+    plan_path = root / "plan-summary.md" if (root / "plan-summary.md").exists() else root / "plan.md"
 
     spec_content = spec_path.read_text(encoding="utf-8") if spec_path.exists() else ""
     plan_content = plan_path.read_text(encoding="utf-8") if plan_path.exists() else ""
-    _ = tasks_path.read_text(encoding="utf-8") if tasks_path.exists() else ""
 
     prompt_path = _codex_prompt_path(slug, i)
     prompt_text = (
@@ -1663,6 +1774,18 @@ def build_parser() -> argparse.ArgumentParser:
     reconcile_parser.add_argument("--status", required=True)
     reconcile_parser.add_argument("--note", required=True)
     reconcile_parser.set_defaults(func=command_reconcile)
+
+    auto_reconcile_parser = subparsers.add_parser(
+        "auto-reconcile",
+        help="Auto-accept reviews with no HIGH or MEDIUM findings; list remaining ones for human review",
+    )
+    auto_reconcile_parser.add_argument("--slug", required=True)
+    auto_reconcile_parser.add_argument(
+        "--stage",
+        required=True,
+        choices=["spec", "plan", "tasks", "diff", "closeout"],
+    )
+    auto_reconcile_parser.set_defaults(func=command_auto_reconcile)
 
     block_parser = subparsers.add_parser("block")
     block_parser.add_argument("--slug", required=True)

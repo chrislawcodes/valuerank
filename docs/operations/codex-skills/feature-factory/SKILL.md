@@ -175,8 +175,8 @@ At each checkpoint:
 
 1. create or update the artifact
 2. run the checkpoint
-3. inspect the required reviews
-4. reconcile blocking findings into the plan or artifact
+3. run `auto-reconcile --slug <slug> --stage <stage>` — auto-accepts reviews with no HIGH or MEDIUM findings and prints which reviews still need attention
+4. read and reconcile only the reviews listed under `needs-review` in the auto-reconcile output
 5. only then move forward
 
 ### Keep Diffs Scoped
