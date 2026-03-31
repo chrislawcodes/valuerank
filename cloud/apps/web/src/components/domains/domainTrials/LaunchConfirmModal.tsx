@@ -57,10 +57,10 @@ export function LaunchConfirmModal({
         aria-labelledby={headingId}
         className="w-full max-w-xl rounded-lg border border-gray-200 bg-white p-5 shadow-xl space-y-4"
         >
-        <h2 id={headingId} className="text-lg font-semibold text-gray-900">Confirm Domain Evaluation</h2>
+        <h2 id={headingId} className="text-lg font-semibold text-gray-900">Confirm launch</h2>
         <div className="space-y-1 text-sm text-gray-700">
           <div>Domain: <span className="font-medium">{domainName}</span></div>
-          <div>Domain evaluation scope: <span className="font-medium">{scopeCategory.toLowerCase()}</span></div>
+          <div>Scope: <span className="font-medium">{scopeCategory.toLowerCase()}</span></div>
           <div>Selected latest vignettes: <span className="font-medium">{vignetteCount}</span></div>
           <div>Target paired batches per vignette: <span className="font-medium">{targetBatchCount}</span></div>
           <div>Total paired batches: <span className="font-medium">{totalPairedBatches ?? 'Not set'}</span></div>
@@ -111,7 +111,7 @@ export function LaunchConfirmModal({
             Cancel
           </Button>
           <Button type="button" onClick={onConfirm} disabled={isStarting}>
-            {isStarting ? 'Starting...' : 'Start Domain Evaluation'}
+            {isStarting ? 'Starting...' : 'Start paired batches'}
           </Button>
         </div>
       </div>
