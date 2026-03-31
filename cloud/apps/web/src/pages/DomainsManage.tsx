@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { useDomains } from '../hooks/useDomains';
+import { DomainSettingsPanel } from '../components/domains/DomainSettingsPanel';
 
 export function DomainsManage() {
   const {
@@ -182,6 +183,13 @@ export function DomainsManage() {
                   Attached vignettes will be moved to unassigned.
                 </p>
               </div>
+
+              <DomainSettingsPanel
+                domainId={selectedDomain.id}
+                onSaved={() => {
+                  setSuccessMessage('Domain settings saved.');
+                }}
+              />
             </div>
           )}
         </div>

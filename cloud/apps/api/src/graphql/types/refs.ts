@@ -63,3 +63,10 @@ import type { ProviderBalanceSyncLog } from '@valuerank/db';
 
 export const ProviderBalanceSyncLogRef =
   builder.objectRef<ProviderBalanceSyncLog>('ProviderBalanceSyncLog');
+
+import type { ValueStatementVersion, DomainConfigSnapshot } from '@valuerank/db';
+
+export const ValueStatementVersionRef =
+  builder.objectRef<ValueStatementVersion>('ValueStatementVersion');
+export const DomainConfigSnapshotRef =
+  builder.objectRef<DomainConfigSnapshot>('DomainConfigSnapshot');
