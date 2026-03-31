@@ -25,8 +25,9 @@
 - [ ] Add `deductFromProviderBalance(providerId: string, amount: number, runId: string): Promise<void>` to `queries/llm.ts`
   - Reads current `balance`
   - If balance is null, return early (no-op)
+  - Uses `db.llmProvider.update({ data: { balance: { decrement: amount } } })` — atomic DB-level decrement (no race condition)
   - Creates `ProviderBudgetEvent` with `type=DEDUCTION`, `amount=-amount`
-  - Decrements `balance` by `amount`
+  - Both DB writes wrapped in `db.$transaction` for atomicity
 - [ ] Export new functions from `cloud/packages/db/src/queries/index.ts`
 - [ ] Export from `cloud/packages/db/src/index.ts`
 
@@ -78,11 +79,12 @@
 - [ ] Update `ProviderSettingsModal.tsx`:
   - Add "Set / Sync Balance ($)" number input (min=0, step=0.01)
   - Show "Last synced: [formatted date]" if `lastSyncedAt` is set
-  - On save: if balance input is filled, call `syncProviderBalance` mutation; pass result back
+  - On save: ALWAYS call `updateProvider` for rate limit / enabled fields (existing behavior); additionally, if balance input is filled AND changed from current value, ALSO call `syncProviderBalance` mutation
+  - These are two separate mutation calls — rate limit save and balance sync are independent
 - [ ] Update `types.ts` — extend `ProviderSettingsModalProps.onSave` to accept `syncBalance?: number`
 - [ ] Update `ModelsPanel.tsx`:
   - Add `syncProviderBalance` useMutation
-  - Handle sync in `handleUpdateProvider`: if `syncBalance` is provided, call `syncProviderBalance` mutation; otherwise call `updateProvider`
+  - `handleUpdateProvider`: call `updateProvider` always; if `syncBalance` provided, also call `syncProviderBalance`
 
 **Commit:** `feat(web): show provider balance + sync UI in settings`
 
