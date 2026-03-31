@@ -186,7 +186,12 @@ export function DefinitionDetail() {
   const handleStartRun = () => {
     if (!definition) return;
     if (methodology?.family === 'job-choice') {
-      navigate(`/definitions/${definition.id}/start-paired-batch`);
+      navigate(`/definitions/${definition.id}/start-paired-batch`, {
+        state: {
+          returnLabel: 'Back to Vignette',
+          returnTo: `/definitions/${definition.id}`,
+        },
+      });
       return;
     }
     setShowRunForm(true);

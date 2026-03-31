@@ -194,7 +194,7 @@ function App() {
             <Route
               path="/definitions/:id/start-paired-batch"
               element={
-                <ProtectedLayout fullWidth>
+                <ProtectedLayout>
                   <StartPairedBatchPage />
                 </ProtectedLayout>
               }

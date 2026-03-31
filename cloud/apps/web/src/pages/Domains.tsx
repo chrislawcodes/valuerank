@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Button } from '../components/ui/Button';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
+import { CopyVisualButton } from '../components/ui/CopyVisualButton';
 import { CoverageMatrix } from '../components/domains/CoverageMatrix';
 import { useDomains } from '../hooks/useDomains';
 
@@ -9,9 +9,9 @@ type FolderKey = string;
 
 export function Domains() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const initialSelectedFolder = searchParams.get('domainId');
   const [selectedFolder, setSelectedFolder] = useState<FolderKey>(initialSelectedFolder ?? '');
+  const coverageRef = useRef<HTMLDivElement>(null);
 
   const {
     domains,
@@ -50,39 +50,44 @@ export function Domains() {
       )}
 
       {domains.length > 0 && (
-        <div className="flex items-center gap-3 flex-wrap">
-          <select
-            value={selectedFolder}
-            onChange={(e) => setSelectedFolder(e.target.value)}
-            className="border border-gray-300 rounded px-3 py-2 text-sm bg-white"
-          >
-            {domains.map((d) => (
-              <option key={d.id} value={d.id}>{d.name} ({d.definitionCount})</option>
-            ))}
-          </select>
-          <Button variant="ghost" size="sm" onClick={() => navigate('/domains/manage')}>
-            Manage Domains
-          </Button>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:flex-1">
+            <select
+              value={selectedFolder}
+              onChange={(e) => setSelectedFolder(e.target.value)}
+              className="min-w-[220px] border border-gray-300 rounded px-3 py-2 text-sm bg-white"
+            >
+              {domains.map((d) => (
+                <option key={d.id} value={d.id}>{d.name} ({d.definitionCount})</option>
+              ))}
+            </select>
+            {selectedDomain != null && (
+              <Link
+                to={`/domains/${selectedDomain.id}/run-trials`}
+                className="inline-flex items-center justify-center rounded-lg border border-teal-600 bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 md:ml-auto"
+              >
+                Add Paired Batches for all Vignettes
+              </Link>
+            )}
+          </div>
         </div>
       )}
 
       <div className="space-y-4">
-        {selectedDomain != null && (
-          <div className="rounded-xl border border-gray-200 bg-white p-5">
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-teal-700">Domain workspace</p>
-            <div className="mt-2">
-              <h2 className="text-2xl font-serif font-medium text-[#1A1A1A]">{selectedDomain.name}</h2>
-            </div>
-          </div>
-        )}
-
         {selectedDomain != null ? (
           <div className="rounded-xl border border-gray-200 bg-white p-5">
-            <h3 className="text-lg font-medium text-[#1A1A1A]">Value coverage</h3>
-            <p className="mt-1 mb-4 text-sm text-gray-600">
-              Batch density across Schwartz value pairs. Green cells (10+ batches) indicate well-covered pairs; red cells (&lt;3) or empty cells show gaps.
-            </p>
-            <CoverageMatrix domainId={selectedDomain.id} />
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <h3 className="text-lg font-medium text-[#1A1A1A]">Value coverage</h3>
+                <p className="text-sm text-gray-600">
+                  Batch density across Schwartz value pairs.
+                </p>
+              </div>
+              <CopyVisualButton targetRef={coverageRef} label="coverage table" />
+            </div>
+            <div className="mt-4">
+              <CoverageMatrix ref={coverageRef} domainId={selectedDomain.id} />
+            </div>
           </div>
         ) : (
           <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
