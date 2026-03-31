@@ -1583,6 +1583,74 @@ class DefaultCodexModelTests(unittest.TestCase):
                 f"codex entry model should be DEFAULT_CODEX_MODEL, got {entry.get('model')!r}",
             )
 
+    def test_required_reviews_tasks_small_task_set_skips_gemini(self) -> None:
+        reviews = MODULE.required_reviews(
+            "tasks",
+            sensitive=False,
+            large_structural=False,
+            performance_sensitive=False,
+            extra_gemini=[],
+            small_task_set=True,
+        )
+        gemini_entries = [r for r in reviews if r.get("reviewer") == "gemini"]
+        codex_entries = [r for r in reviews if r.get("reviewer") == "codex"]
+        self.assertEqual(gemini_entries, [], "small task set should skip all Gemini reviews")
+        self.assertEqual(len(codex_entries), 1, "small task set should keep one Codex review")
+        self.assertEqual(codex_entries[0].get("lens"), "execution-adversarial")
+
+    def test_required_reviews_tasks_large_task_set_includes_gemini(self) -> None:
+        reviews = MODULE.required_reviews(
+            "tasks",
+            sensitive=False,
+            large_structural=False,
+            performance_sensitive=False,
+            extra_gemini=[],
+            small_task_set=False,
+        )
+        gemini_entries = [r for r in reviews if r.get("reviewer") == "gemini"]
+        self.assertEqual(len(gemini_entries), 2, "full task set should include two Gemini reviews")
+
+    def test_required_reviews_tasks_small_task_set_sensitive_still_skips_gemini(self) -> None:
+        # sensitive flag adds risk-adversarial as an extra Gemini candidate, but
+        # small_task_set still wins and skips all Gemini reviews
+        reviews = MODULE.required_reviews(
+            "tasks",
+            sensitive=True,
+            large_structural=False,
+            performance_sensitive=False,
+            extra_gemini=[],
+            small_task_set=True,
+        )
+        gemini_entries = [r for r in reviews if r.get("reviewer") == "gemini"]
+        self.assertEqual(gemini_entries, [], "small_task_set should skip Gemini even when sensitive=True")
+
+    def test_required_reviews_closeout_small_task_set_skips_gemini(self) -> None:
+        reviews = MODULE.required_reviews(
+            "closeout",
+            sensitive=False,
+            large_structural=False,
+            performance_sensitive=False,
+            extra_gemini=[],
+            small_task_set=True,
+        )
+        gemini_entries = [r for r in reviews if r.get("reviewer") == "gemini"]
+        codex_entries = [r for r in reviews if r.get("reviewer") == "codex"]
+        self.assertEqual(gemini_entries, [], "small task set should skip all Gemini closeout reviews")
+        self.assertEqual(len(codex_entries), 1)
+        self.assertEqual(codex_entries[0].get("lens"), "fidelity-adversarial")
+
+    def test_required_reviews_closeout_large_task_set_includes_gemini(self) -> None:
+        reviews = MODULE.required_reviews(
+            "closeout",
+            sensitive=False,
+            large_structural=False,
+            performance_sensitive=False,
+            extra_gemini=[],
+            small_task_set=False,
+        )
+        gemini_entries = [r for r in reviews if r.get("reviewer") == "gemini"]
+        self.assertEqual(len(gemini_entries), 2)
+
 
 class _CapturedBaseRef(Exception):
     """Sentinel exception raised by the preferred_diff_base_ref mock to abort command_checkpoint early."""
