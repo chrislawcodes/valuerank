@@ -46,6 +46,20 @@ export function ProviderSection({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {provider.balance != null ? (
+            <span className="px-2 py-1 text-xs rounded-full bg-yellow-50 text-yellow-700 border border-yellow-200">
+              ${provider.balance.toFixed(2)} remaining
+            </span>
+          ) : (
+            <span className="px-2 py-1 text-xs rounded-full bg-gray-50 text-gray-400 border border-gray-200">
+              No budget set
+            </span>
+          )}
+          {provider.lastSyncedAt != null ? (
+            <span className="text-xs text-gray-400">
+              Last synced: {new Date(provider.lastSyncedAt).toLocaleDateString()}
+            </span>
+          ) : null}
           <span
             className={`px-2 py-1 text-xs rounded-full ${
               provider.isEnabled

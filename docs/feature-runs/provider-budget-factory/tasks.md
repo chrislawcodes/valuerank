@@ -64,13 +64,13 @@
 
 ### Implementation
 
-- [ ] T014 [P: cloud/apps/web/src/api/operations/llm.ts] Update `LlmProvider` TypeScript type in `cloud/apps/web/src/api/operations/llm.ts` to add `balance: number | null` and `lastSyncedAt: string | null` fields
-- [ ] T015 [P: cloud/apps/web/src/api/operations/llm.ts] Update `LLM_PROVIDER_FRAGMENT` in `cloud/apps/web/src/api/operations/llm.ts` to include `balance` and `lastSyncedAt` fields
-- [ ] T016 Add `SetProviderBalance` mutation and `SyncProviderBalance` mutation GQL strings + result types to `cloud/apps/web/src/api/operations/llm.ts`
-- [ ] T017 [US1] [US5] Extend `ProviderSettingsModalProps` in `cloud/apps/web/src/components/settings/models/types.ts` to include `balance: number | null` in the provider prop and `balance: number | null` in `onSave` input
-- [ ] T018 [US5] Add "Budget Balance ($)" `<Input>` field (type="number", min="0", step="0.01") to `ProviderSettingsModal` in `cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx` — pre-populate with current balance, pass balance in onSave, empty string → null
-- [ ] T019 [US1] Show `$X.XX remaining` or `No budget set` badge in `ProviderSection` accordion header in `cloud/apps/web/src/components/settings/models/ProviderSection.tsx`
-- [ ] T020 [US1] Wire `setProviderBalance` mutation call in the ModelsPanel save handler (`cloud/apps/web/src/components/settings/models/ModelsPanel.tsx`) — call when ProviderSettingsModal onSave includes a balance change
+- [X] T014 [P: cloud/apps/web/src/api/operations/llm.ts] Update `LlmProvider` TypeScript type in `cloud/apps/web/src/api/operations/llm.ts` to add `balance: number | null` and `lastSyncedAt: string | null` fields
+- [X] T015 [P: cloud/apps/web/src/api/operations/llm.ts] Update `LLM_PROVIDER_FRAGMENT` in `cloud/apps/web/src/api/operations/llm.ts` to include `balance` and `lastSyncedAt` fields
+- [X] T016 Add `SetProviderBalance` mutation and `SyncProviderBalance` mutation GQL strings + result types to `cloud/apps/web/src/api/operations/llm.ts`
+- [X] T017 [US1] [US5] Extend `ProviderSettingsModalProps` in `cloud/apps/web/src/components/settings/models/types.ts` to include `balance: number | null` in the provider prop and `balance: number | null` in `onSave` input
+- [X] T018 [US5] Add "Budget Balance ($)" `<Input>` field (type="number", min="0", step="0.01") to `ProviderSettingsModal` in `cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx` — pre-populate with current balance, pass balance in onSave, empty string → null
+- [X] T019 [US1] Show `$X.XX remaining` or `No budget set` badge in `ProviderSection` accordion header in `cloud/apps/web/src/components/settings/models/ProviderSection.tsx`
+- [X] T020 [US1] Wire `setProviderBalance` mutation call in the ModelsPanel save handler (`cloud/apps/web/src/components/settings/models/ModelsPanel.tsx`) — call when ProviderSettingsModal onSave includes a balance change
 
 **Checkpoint**: US1 + US5 complete. Balance field visible in modal, displayed in provider header, persists after reload.
 
@@ -84,10 +84,10 @@
 
 ### Implementation
 
-- [ ] T021 [US3] Add "Sync with real balance" section to `ProviderSettingsModal` in `cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx` — a separate input + "Sync" button distinct from the balance set flow
-- [ ] T022 [US3] Wire `syncProviderBalance` mutation in the ModelsPanel/ProviderSection save handler for the sync action in `cloud/apps/web/src/components/settings/models/ModelsPanel.tsx`
-- [ ] T023 [US3] Display `Last synced: [date]` in `ProviderSection.tsx` when `provider.lastSyncedAt` is non-null in `cloud/apps/web/src/components/settings/models/ProviderSection.tsx`
-- [ ] T024 [US3] Add mutation test for `syncProviderBalance` in `cloud/apps/api/tests/graphql/mutations/llm-mutations.test.ts` or a new `provider-balance.test.ts` — covers: correct delta stored, negative value rejected, no existing balance handled gracefully
+- [X] T021 [US3] Add "Sync with real balance" section to `ProviderSettingsModal` in `cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx` — a separate input + "Sync" button distinct from the balance set flow
+- [X] T022 [US3] Wire `syncProviderBalance` mutation in the ModelsPanel/ProviderSection save handler for the sync action in `cloud/apps/web/src/components/settings/models/ModelsPanel.tsx`
+- [X] T023 [US3] Display `Last synced: [date]` in `ProviderSection.tsx` when `provider.lastSyncedAt` is non-null in `cloud/apps/web/src/components/settings/models/ProviderSection.tsx`
+- [X] T024 [US3] Add mutation test for `syncProviderBalance` in `cloud/apps/api/tests/graphql/mutations/llm-mutations.test.ts` or a new `provider-balance.test.ts` — covers: correct delta stored, negative value rejected, no existing balance handled gracefully
 
 **Checkpoint**: US3 complete. Sync field visible. Last-synced date displayed. Negative input rejected.
 
@@ -101,12 +101,12 @@
 
 ### Implementation
 
-- [ ] T025 [P: cloud/apps/web/src/components/runs/BudgetWarningDialog.tsx] [US4] Create `BudgetWarningDialog` component in `cloud/apps/web/src/components/runs/BudgetWarningDialog.tsx` — accepts `overdraftProviders: Array<{name: string, displayName: string, estimatedCost: number, balance: number}>`, `onProceed: () => void`, `onCancel: () => void`; renders per-provider rows with provider name, estimated cost, current balance; "Proceed Anyway" and "Cancel" buttons
-- [ ] T026 [US4] Add `useQuery(LLM_PROVIDERS_QUERY)` to `cloud/apps/web/src/components/runs/useRunForm.ts` (or directly in `RunForm.tsx`) to make provider balance data available in the run form
-- [ ] T027 [US4] Implement `checkBudgetOverdraft(costEstimate, providers)` helper in `RunForm.tsx` or a separate util — groups `costEstimate.perModel` by `modelId.split(':')[0]`, matches provider names, returns overdraft list
-- [ ] T028 [US4] Integrate budget warning gate into `handleStartRun` flow in `cloud/apps/web/src/components/runs/RunForm.tsx` — call `checkBudgetOverdraft`, if overdrafts found: `setState({ showBudgetWarning: true, overdraftProviders })` and return; render `<BudgetWarningDialog>` when `showBudgetWarning` is true
-- [ ] T029 [US4] Write web unit tests for `BudgetWarningDialog` in `cloud/apps/web/src/components/runs/BudgetWarningDialog.test.tsx` — covers: renders rows, Proceed calls onProceed, Cancel calls onCancel
-- [ ] T030 [US4] Write unit tests for `checkBudgetOverdraft` helper — covers: no overdraft → empty array; single overdraft; multi-provider one overdraft; null balance → not included
+- [X] T025 [P: cloud/apps/web/src/components/runs/BudgetWarningDialog.tsx] [US4] Create `BudgetWarningDialog` component in `cloud/apps/web/src/components/runs/BudgetWarningDialog.tsx` — accepts `overdraftProviders: Array<{name: string, displayName: string, estimatedCost: number, balance: number}>`, `onProceed: () => void`, `onCancel: () => void`; renders per-provider rows with provider name, estimated cost, current balance; "Proceed Anyway" and "Cancel" buttons
+- [X] T026 [US4] Add `useQuery(LLM_PROVIDERS_QUERY)` to `cloud/apps/web/src/components/runs/useRunForm.ts` (or directly in `RunForm.tsx`) to make provider balance data available in the run form
+- [X] T027 [US4] Implement `checkBudgetOverdraft(costEstimate, providers)` helper in `RunForm.tsx` or a separate util — groups `costEstimate.perModel` by `modelId.split(':')[0]`, matches provider names, returns overdraft list
+- [X] T028 [US4] Integrate budget warning gate into `handleStartRun` flow in `cloud/apps/web/src/components/runs/RunForm.tsx` — call `checkBudgetOverdraft`, if overdrafts found: `setState({ showBudgetWarning: true, overdraftProviders })` and return; render `<BudgetWarningDialog>` when `showBudgetWarning` is true
+- [X] T029 [US4] Write web unit tests for `BudgetWarningDialog` in `cloud/apps/web/src/components/runs/BudgetWarningDialog.test.tsx` — covers: renders rows, Proceed calls onProceed, Cancel calls onCancel
+- [X] T030 [US4] Write unit tests for `checkBudgetOverdraft` helper — covers: no overdraft → empty array; single overdraft; multi-provider one overdraft; null balance → not included
 
 **Checkpoint**: US4 complete. Warning dialog appears for underfunded providers. Proceed starts run. Cancel stays on form.
 
