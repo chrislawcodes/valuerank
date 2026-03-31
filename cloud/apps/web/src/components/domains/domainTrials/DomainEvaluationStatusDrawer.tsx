@@ -44,7 +44,9 @@ export function DomainEvaluationStatusDrawer({
         aria-label="Close run details"
         className="absolute inset-0 bg-black/40"
         onClick={onClose}
-      />
+      >
+        <span className="sr-only">Close run details</span>
+      </Button>
       <aside className="absolute right-0 top-0 h-full w-full max-w-3xl bg-white shadow-2xl border-l border-gray-200 flex flex-col">
         <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-5 py-4">
           <div className="min-w-0">
