@@ -373,6 +373,8 @@ builder.objectType(DomainTrialPlanVignetteRef, {
     definitionVersion: t.exposeInt('definitionVersion'),
     signature: t.exposeString('signature'),
     scenarioCount: t.exposeInt('scenarioCount'),
+    existingBatchCount: t.exposeInt('existingBatchCount'),
+    topUpCount: t.exposeInt('topUpCount'),
   }),
 });
 

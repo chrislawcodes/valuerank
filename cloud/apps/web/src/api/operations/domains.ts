@@ -152,6 +152,7 @@ export const START_DOMAIN_EVALUATION_MUTATION = gql`
     $scopeCategory: String
     $temperature: Float
     $maxBudgetUsd: Float
+    $targetBatchCount: Int
     $definitionIds: [ID!]
     $modelIds: [String!]
     $samplePercentage: Int
@@ -162,6 +163,7 @@ export const START_DOMAIN_EVALUATION_MUTATION = gql`
       scopeCategory: $scopeCategory
       temperature: $temperature
       maxBudgetUsd: $maxBudgetUsd
+      targetBatchCount: $targetBatchCount
       definitionIds: $definitionIds
       modelIds: $modelIds
       samplePercentage: $samplePercentage
@@ -304,8 +306,8 @@ export const DOMAIN_RUN_SUMMARY_QUERY = gql`
 `;
 
 export const DOMAIN_TRIALS_PLAN_QUERY = gql`
-  query DomainTrialsPlan($domainId: ID!, $temperature: Float, $definitionIds: [ID!]) {
-    domainTrialsPlan(domainId: $domainId, temperature: $temperature, definitionIds: $definitionIds) {
+  query DomainTrialsPlan($domainId: ID!, $temperature: Float, $definitionIds: [ID!], $targetBatchCount: Int, $scopeCategory: String) {
+    domainTrialsPlan(domainId: $domainId, temperature: $temperature, definitionIds: $definitionIds, targetBatchCount: $targetBatchCount, scopeCategory: $scopeCategory) {
       domainId
       domainName
       vignettes {
@@ -314,6 +316,8 @@ export const DOMAIN_TRIALS_PLAN_QUERY = gql`
         definitionVersion
         signature
         scenarioCount
+        existingBatchCount
+        topUpCount
       }
       models {
         modelId
@@ -542,6 +546,7 @@ export type StartDomainEvaluationMutationVariables = {
   scopeCategory?: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION';
   temperature?: number;
   maxBudgetUsd?: number;
+  targetBatchCount?: number;
   definitionIds?: string[];
   modelIds?: string[];
   samplePercentage?: number;
@@ -677,6 +682,8 @@ export type DomainTrialsPlanQueryResult = {
       definitionVersion: number;
       signature: string;
       scenarioCount: number;
+      existingBatchCount: number;
+      topUpCount: number;
     }>;
     models: Array<{
       modelId: string;
@@ -700,6 +707,8 @@ export type DomainTrialsPlanQueryVariables = {
   domainId: string;
   temperature?: number;
   definitionIds?: string[];
+  targetBatchCount?: number;
+  scopeCategory?: string;
 };
 
 export type DomainEvaluationCostEstimateModel = {

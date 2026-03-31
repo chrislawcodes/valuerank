@@ -1,4 +1,4 @@
-import { db, resolveDefinitionContent } from '@valuerank/db';
+import { db, resolveDefinitionContent, type RunCategory } from '@valuerank/db';
 import { formatTrialSignature, formatVnewLabel, formatVnewSignature, isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
 import { DOMAIN_ANALYSIS_VALUE_KEYS, type DomainAnalysisValueKey, extractValuePair } from '../domain-analysis-values.js';
 import { parseTemperature } from '../../../utils/temperature.js';
@@ -151,6 +151,8 @@ export type DomainTrialPlanVignette = {
   definitionVersion: number;
   signature: string;
   scenarioCount: number;
+  existingBatchCount: number;
+  topUpCount: number;
 };
 
 export type DomainTrialPlanCellEstimate = {
@@ -674,4 +676,75 @@ export async function hydrateDefinitionAncestors(definitions: DefinitionRow[]): 
   }
 
   return definitionsById;
+}
+
+// --- Top-up computation ---
+
+export type TopUpCounts = Map<string, number>; // definitionId -> existing run count
+
+function normalizeModelSet(models: unknown): string[] {
+  if (!Array.isArray(models)) return [];
+  return (models as unknown[])
+    .filter((model): model is string => typeof model === 'string')
+    .slice()
+    .sort((left, right) => left.localeCompare(right));
+}
+
+/**
+ * Counts completed + in-flight runs per definition that match the given launch params.
+ * "Matching" means same scopeCategory, normalizedModels, temperature, samplesPerScenario.
+ * Returns a Map of definitionId -> count (0 if no matching runs).
+ */
+export async function computeExistingBatchCounts(
+  definitionIds: string[],
+  scopeCategory: string,
+  normalizedModels: string[],
+  temperature: number | null,
+  samplesPerScenario: number,
+): Promise<Map<string, number>> {
+  if (definitionIds.length === 0) return new Map();
+
+  const runs = await db.run.findMany({
+    where: {
+      definitionId: { in: definitionIds },
+      runCategory: scopeCategory as RunCategory,
+      status: { in: ['COMPLETED', 'PENDING', 'RUNNING', 'SUMMARIZING', 'PAUSED'] },
+      deletedAt: null,
+    },
+    select: { definitionId: true, config: true },
+  });
+
+  const counts = new Map<string, number>(definitionIds.map((id) => [id, 0]));
+
+  for (const run of runs) {
+    const config = run.config as {
+      models?: unknown;
+      temperature?: unknown;
+      samplesPerScenario?: unknown;
+      isAggregate?: unknown;
+    } | null;
+
+    if (config?.isAggregate === true) continue;
+
+    const runModels = normalizeModelSet(config?.models);
+    if (
+      runModels.length !== normalizedModels.length
+      || !runModels.every((id, index) => id === normalizedModels[index])
+    ) {
+      continue;
+    }
+
+    const runTemp = parseTemperature(config?.temperature);
+    if (runTemp !== temperature) continue;
+
+    const runSamplesPerScenarioValue = config?.samplesPerScenario;
+    const runSps = typeof runSamplesPerScenarioValue === 'number' && Number.isFinite(runSamplesPerScenarioValue)
+      ? runSamplesPerScenarioValue
+      : 1;
+    if (runSps !== samplesPerScenario) continue;
+
+    counts.set(run.definitionId, (counts.get(run.definitionId) ?? 0) + 1);
+  }
+
+  return counts;
 }

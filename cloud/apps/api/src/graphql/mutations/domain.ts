@@ -14,6 +14,7 @@ import {
   DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
 } from '../../services/run/config.js';
 import { isValidPair, getComponentTokens } from '../../utils/auto-pair.js';
+import { computeExistingBatchCounts } from '../queries/domain/shared.js';
 
 const MAX_DOMAIN_NAME_LENGTH = 120;
 const MAX_BULK_ASSIGN_IDS = 5000;
@@ -49,6 +50,7 @@ type DomainEvaluationLaunchInput = {
   scopeCategory: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION';
   temperature?: number | null;
   maxBudgetUsd?: number | null;
+  targetBatchCount?: number | null;
   definitionIds?: string[];
   modelIds?: string[];
   samplePercentage: number;
@@ -305,6 +307,7 @@ async function launchDomainEvaluation(input: DomainEvaluationLaunchInput): Promi
     scopeCategory,
     temperature = null,
     maxBudgetUsd = null,
+    targetBatchCount = null,
     definitionIds = [],
     modelIds = [],
     samplePercentage,
@@ -386,38 +389,44 @@ async function launchDomainEvaluation(input: DomainEvaluationLaunchInput): Promi
       config: true,
     },
   });
-  const hasActiveEquivalentRun = activeRuns.some((run) => {
-    const config = run.config as {
-      models?: unknown;
-      temperature?: unknown;
-      samplePercentage?: unknown;
-      samplesPerScenario?: unknown;
-    } | null;
-    const runModels = normalizeModelSet(config?.models);
-    const runTemperature = parseTemperature(config?.temperature);
-    const runSamplePercentage =
-      typeof config?.samplePercentage === 'number' && Number.isFinite(config.samplePercentage)
-        ? config.samplePercentage
-        : null;
-    const runSamplesPerScenario =
-      typeof config?.samplesPerScenario === 'number' && Number.isFinite(config.samplesPerScenario)
-        ? config.samplesPerScenario
-        : null;
+  if (targetBatchCount == null) {
+    const hasActiveEquivalentRun = activeRuns.some((run) => {
+      const config = run.config as {
+        models?: unknown;
+        temperature?: unknown;
+        samplePercentage?: unknown;
+        samplesPerScenario?: unknown;
+      } | null;
+      const runModels = normalizeModelSet(config?.models);
+      const runTemperature = parseTemperature(config?.temperature);
+      const runSamplePercentage =
+        typeof config?.samplePercentage === 'number' && Number.isFinite(config.samplePercentage)
+          ? config.samplePercentage
+          : null;
+      const runSamplesPerScenario =
+        typeof config?.samplesPerScenario === 'number' && Number.isFinite(config.samplesPerScenario)
+          ? config.samplesPerScenario
+          : null;
 
-    return runTemperature === temperature
-      && runModels.length === normalizedModels.length
-      && runModels.every((modelId, index) => modelId === normalizedModels[index])
-      && runSamplePercentage === samplePercentage
-      && runSamplesPerScenario === samplesPerScenario;
-  });
-  if (hasActiveEquivalentRun) {
-    throw new Error('Domain evaluation launch blocked: matching active work already exists for this scope, model selection, and temperature.');
+      return runTemperature === temperature
+        && runModels.length === normalizedModels.length
+        && runModels.every((modelId, index) => modelId === normalizedModels[index])
+        && runSamplePercentage === samplePercentage
+        && runSamplesPerScenario === samplesPerScenario;
+    });
+    if (hasActiveEquivalentRun) {
+      throw new Error('Domain evaluation launch blocked: matching active work already exists for this scope, model selection, and temperature.');
+    }
   }
 
   if (maxBudgetUsd !== undefined && maxBudgetUsd !== null && maxBudgetUsd <= 0) {
     throw new Error('maxBudgetUsd must be greater than 0 when provided.');
   }
   const budgetCap = maxBudgetUsd ?? null;
+  type LaunchGroupRep = {
+    group: LaunchGroup;
+    batchGroupId: string | null;
+  };
 
   const { groups: launchGroups, incompletePairKeys } = groupDefinitionsByPairKey(targetedDefinitions);
   for (const pairKey of incompletePairKeys) {
@@ -427,13 +436,36 @@ async function launchDomainEvaluation(input: DomainEvaluationLaunchInput): Promi
     );
   }
 
-  const launchableDefinitions: DefinitionRow[] = [];
-  const launchableGroups: LaunchGroup[] = [];
   const estimatedCostByDefinitionId = new Map<string, number>();
   let skippedForBudget = 0;
   let projectedCostUsd = 0;
+  let repetitionsByGroup: Map<LaunchGroup, number>;
+  if (targetBatchCount != null && targetBatchCount >= 1) {
+    const existingCounts = await computeExistingBatchCounts(
+      latestDefinitionIds,
+      scopeCategory,
+      normalizedModels,
+      temperature ?? null,
+      samplesPerScenario,
+    );
+    repetitionsByGroup = new Map(launchGroups.map((group) => {
+      const counts = group.definitions.map((definition) => existingCounts.get(definition.id) ?? 0);
+      const pairExisting = group.pairKey !== null
+        ? Math.min(...counts)
+        : (counts[0] ?? 0);
+      return [group, Math.max(0, targetBatchCount - pairExisting)];
+    }));
+  } else {
+    repetitionsByGroup = new Map(launchGroups.map((group) => [group, 1]));
+  }
+
+  const launchGroupReps: LaunchGroupRep[] = [];
+  const launchableDefinitions: DefinitionRow[] = [];
 
   for (const group of launchGroups) {
+    const repetitions = repetitionsByGroup.get(group) ?? 1;
+    if (repetitions === 0) continue;
+
     if (budgetCap !== null) {
       // Estimate cost for each definition in the group, sum them.
       // Accept or reject the whole group atomically to prevent split pairs.
@@ -448,35 +480,35 @@ async function launchDomainEvaluation(input: DomainEvaluationLaunchInput): Promi
         estimatedCostByDefinitionId.set(definition.id, estimate.total);
         groupCost += estimate.total;
       }
-      if (projectedCostUsd + groupCost > budgetCap) {
-        skippedForBudget += group.definitions.length;
+      const totalGroupCost = groupCost * repetitions;
+      if (projectedCostUsd + totalGroupCost > budgetCap) {
+        skippedForBudget += group.definitions.length * repetitions;
         continue;
       }
-      projectedCostUsd += groupCost;
+      projectedCostUsd += totalGroupCost;
     }
-    launchableGroups.push(group);
-    launchableDefinitions.push(...group.definitions);
+    for (let repetition = 0; repetition < repetitions; repetition += 1) {
+      launchGroupReps.push({
+        group,
+        batchGroupId: group.pairKey !== null ? randomUUID() : null,
+      });
+      launchableDefinitions.push(...group.definitions);
+    }
   }
 
-  // Pre-compute configExtras for each definition based on group membership.
-  // Paired groups share a batchGroupId. Singles (including demoted incomplete pairs)
-  // get no configExtras. This avoids re-deriving pairing from content in the launch loop.
-  const definitionConfigExtras = new Map<string, Record<string, unknown> | undefined>();
-  for (const group of launchableGroups) {
-    if (group.pairKey !== null) {
-      const batchGroupId = randomUUID();
-      for (const def of group.definitions) {
+  const launchConfigExtras: Array<Record<string, unknown> | undefined> = [];
+  for (const rep of launchGroupReps) {
+    for (const def of rep.group.definitions) {
+      if (rep.batchGroupId !== null) {
         const tokens = getComponentTokens(def.content);
-        definitionConfigExtras.set(def.id, {
+        launchConfigExtras.push({
           jobChoiceLaunchMode: 'PAIRED_BATCH',
-          jobChoiceBatchGroupId: batchGroupId,
+          jobChoiceBatchGroupId: rep.batchGroupId,
           jobChoiceValueFirst: tokens?.value_first.token,
           methodologySafe: true,
         });
-      }
-    } else {
-      for (const def of group.definitions) {
-        definitionConfigExtras.set(def.id, undefined);
+      } else {
+        launchConfigExtras.push(undefined);
       }
     }
   }
@@ -517,13 +549,14 @@ async function launchDomainEvaluation(input: DomainEvaluationLaunchInput): Promi
 
   for (let offset = 0; offset < launchableDefinitions.length; offset += DOMAIN_TRIAL_RUN_BATCH_SIZE) {
     const batch = launchableDefinitions.slice(offset, offset + DOMAIN_TRIAL_RUN_BATCH_SIZE);
+    const batchExtras = launchConfigExtras.slice(offset, offset + DOMAIN_TRIAL_RUN_BATCH_SIZE);
     if (batch.length === 0) {
       continue;
     }
 
     const runResults = await Promise.allSettled(
-      batch.map(async (definition) => {
-        const configExtras = definitionConfigExtras.get(definition.id);
+      batch.map(async (definition, batchIndex) => {
+        const configExtras = batchExtras[batchIndex];
         return startRunService({
           definitionId: definition.id,
           models: selectedModels,
@@ -967,6 +1000,7 @@ builder.mutationField('startDomainEvaluation', (t) =>
       scopeCategory: t.arg.string({ required: false }),
       temperature: t.arg.float({ required: false }),
       maxBudgetUsd: t.arg.float({ required: false }),
+      targetBatchCount: t.arg.int({ required: false }),
       definitionIds: t.arg.idList({ required: false }),
       modelIds: t.arg.stringList({ required: false }),
       samplePercentage: t.arg.int({ required: false }),
@@ -975,6 +1009,9 @@ builder.mutationField('startDomainEvaluation', (t) =>
     resolve: async (_root, args, ctx) => {
       if (!ctx.user) {
         throw new AuthenticationError('Authentication required');
+      }
+      if (args.targetBatchCount != null && args.targetBatchCount < 1) {
+        throw new Error('targetBatchCount must be at least 1');
       }
 
       const requestedScopeCategory = String(args.scopeCategory ?? 'PRODUCTION').trim().toUpperCase();
@@ -987,6 +1024,7 @@ builder.mutationField('startDomainEvaluation', (t) =>
         scopeCategory,
         temperature: args.temperature ?? null,
         maxBudgetUsd: args.maxBudgetUsd ?? null,
+        targetBatchCount: args.targetBatchCount ?? null,
         definitionIds: args.definitionIds?.map(String) ?? [],
         modelIds: args.modelIds?.map(String) ?? [],
         samplePercentage: args.samplePercentage ?? DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,

@@ -10,6 +10,8 @@ import {
 } from './types.js';
 import {
   type DomainEvaluationCostEstimate,
+  type DomainTrialPlanVignette,
+  computeExistingBatchCounts,
   formatRunSignature,
   formatVnewLabel,
   formatVnewSignature,
@@ -35,19 +37,14 @@ type DomainEstimateInput = {
   samplePercentage?: number;
   samplesPerScenario?: number;
   scopeCategory?: string | null;
+  targetBatchCount?: number | null;
 };
 
 type DomainEstimateInternals = {
   trialPlan: {
     domainId: string;
     domainName: string;
-    vignettes: Array<{
-      definitionId: string;
-      definitionName: string;
-      definitionVersion: number;
-      signature: string;
-      scenarioCount: number;
-    }>;
+    vignettes: DomainTrialPlanVignette[];
     models: Array<{
       modelId: string;
       label: string;
@@ -86,6 +83,7 @@ async function buildDomainEstimate(input: DomainEstimateInput): Promise<DomainEs
     samplePercentage = 100,
     samplesPerScenario = 1,
     scopeCategory = 'PRODUCTION',
+    targetBatchCount = null,
   } = input;
   const effectiveScopeCategory = scopeCategory ?? 'PRODUCTION';
 
@@ -262,18 +260,48 @@ async function buildDomainEstimate(input: DomainEstimateInput): Promise<DomainEs
 
   const fallbackReason = buildFallbackReason(anyUsingFallback, Number.isFinite(basedOnSampleCount) ? basedOnSampleCount : 0);
   const estimateConfidence = buildEstimateConfidence(anyUsingFallback, Number.isFinite(basedOnSampleCount) ? basedOnSampleCount : 0);
+  let vignetteExistingCounts: Map<string, number> | null = null;
+  if (targetBatchCount != null && targetBatchCount >= 1) {
+    const normalizedModelIds = selectedModelIds.slice().sort((a, b) => a.localeCompare(b));
+    vignetteExistingCounts = await computeExistingBatchCounts(
+      latestDefinitionIds,
+      effectiveScopeCategory,
+      normalizedModelIds,
+      temperature,
+      samplesPerScenario,
+    );
+  }
+
+  const vignettesWithCounts: DomainTrialPlanVignette[] = selectedDefinitions.map((definition) => ({
+    definitionId: definition.id,
+    definitionName: definition.name ?? 'Untitled vignette',
+    definitionVersion: definition.version,
+    signature: formatTrialSignature(definition.version, temperature),
+    scenarioCount: scenarioCountByDefinition.get(definition.id) ?? 0,
+    existingBatchCount: vignetteExistingCounts?.get(definition.id) ?? 0,
+    topUpCount: 0,
+  }));
+
+  if (targetBatchCount != null && targetBatchCount >= 1 && vignetteExistingCounts !== null) {
+    for (const vignette of vignettesWithCounts) {
+      const existing = vignetteExistingCounts.get(vignette.definitionId) ?? 0;
+      vignette.topUpCount = Math.max(0, targetBatchCount - existing);
+    }
+  }
+
+  let trialPlanTotalCost = totalEstimatedCost;
+  if (targetBatchCount != null && targetBatchCount >= 1) {
+    trialPlanTotalCost = vignettesWithCounts.reduce((sum, vignette) => {
+      const perBatchCost = perDefinitionTotals.get(vignette.definitionId)?.total ?? 0;
+      return sum + perBatchCost * vignette.topUpCount;
+    }, 0);
+  }
 
   return {
     trialPlan: {
       domainId,
       domainName: domain.name,
-      vignettes: selectedDefinitions.map((definition) => ({
-        definitionId: definition.id,
-        definitionName: definition.name ?? 'Untitled vignette',
-        definitionVersion: definition.version,
-        signature: formatTrialSignature(definition.version, temperature),
-        scenarioCount: scenarioCountByDefinition.get(definition.id) ?? 0,
-      })),
+      vignettes: vignettesWithCounts,
       models: selectedModels.map((model) => ({
         modelId: model.modelId,
         label: model.displayName,
@@ -281,7 +309,7 @@ async function buildDomainEstimate(input: DomainEstimateInput): Promise<DomainEs
         supportsTemperature: supportsTemperature(model.apiConfig),
       })),
       cellEstimates,
-      totalEstimatedCost,
+      totalEstimatedCost: trialPlanTotalCost,
       existingTemperatures,
       defaultTemperature: temperature,
       temperatureWarning,
@@ -340,6 +368,8 @@ builder.queryField('domainTrialsPlan', (t) =>
       domainId: t.arg.id({ required: true }),
       temperature: t.arg.float({ required: false }),
       definitionIds: t.arg.idList({ required: false }),
+      targetBatchCount: t.arg.int({ required: false }),
+      scopeCategory: t.arg.string({ required: false }),
     },
     resolve: async (_root, args, ctx) => {
       if (!ctx.user) {
@@ -349,6 +379,8 @@ builder.queryField('domainTrialsPlan', (t) =>
         domainId: String(args.domainId),
         definitionIds: args.definitionIds?.map(String) ?? [],
         temperature: args.temperature ?? null,
+        targetBatchCount: args.targetBatchCount ?? null,
+        scopeCategory: args.scopeCategory ?? null,
       });
       return estimate.trialPlan;
     },

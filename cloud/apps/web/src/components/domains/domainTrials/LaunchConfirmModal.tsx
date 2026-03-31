@@ -9,6 +9,7 @@ type LaunchConfirmModalProps = {
   vignetteCount: number;
   modelCount: number;
   estimatedTotalCost: number;
+  targetBatchCount?: number;
   estimateConfidence?: 'HIGH' | 'MEDIUM' | 'LOW';
   fallbackReason?: string | null;
   knownExclusions?: string[];
@@ -28,6 +29,7 @@ export function LaunchConfirmModal({
   vignetteCount,
   modelCount,
   estimatedTotalCost,
+  targetBatchCount,
   estimateConfidence,
   fallbackReason,
   knownExclusions = [],
@@ -58,6 +60,9 @@ export function LaunchConfirmModal({
           <div>Selected latest vignettes: <span className="font-medium">{vignetteCount}</span></div>
           <div>Models: <span className="font-medium">{modelCount}</span></div>
           <div>Estimated total cost: <span className="font-medium">{formatCost(estimatedTotalCost)}</span></div>
+          {targetBatchCount != null && (
+            <div>Target batch count: <span className="font-medium">{targetBatchCount}</span></div>
+          )}
           {estimateConfidence && <div>Estimate confidence: <span className="font-medium">{estimateConfidence.toLowerCase()}</span></div>}
           <div>Temperature: <span className="font-medium">{temperatureLabel}</span></div>
           <div>Budget cap: <span className="font-medium">{budgetCap === null ? 'None' : formatCost(budgetCap)}</span></div>

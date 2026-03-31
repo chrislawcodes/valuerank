@@ -79,6 +79,8 @@ export function DomainTrialsDashboard() {
   const [showLaunchConfirm, setShowLaunchConfirm] = useState(false);
   const [maxBudgetEnabled, setMaxBudgetEnabled] = useState(false);
   const [maxBudgetInput, setMaxBudgetInput] = useState('');
+  const [targetBatchCountEnabled, setTargetBatchCountEnabled] = useState(false);
+  const [targetBatchCountInput, setTargetBatchCountInput] = useState('5');
   const [currentEvaluationId, setCurrentEvaluationId] = useState<string | null>(searchParams.get('evaluationId'));
 
   const parsedTemperature = Number.parseFloat(temperatureInput);
@@ -86,6 +88,9 @@ export function DomainTrialsDashboard() {
   const selectedTemperature = !useDefaultTemperature && hasValidTemperature ? parsedTemperature : undefined;
   const parsedBudget = Number.parseFloat(maxBudgetInput);
   const hasValidBudget = Number.isFinite(parsedBudget) && parsedBudget > 0;
+  const parsedTargetBatchCount = Number.parseInt(targetBatchCountInput, 10);
+  const hasValidTargetBatchCount = Number.isInteger(parsedTargetBatchCount) && parsedTargetBatchCount >= 1;
+  const effectiveTargetBatchCount = targetBatchCountEnabled && hasValidTargetBatchCount ? parsedTargetBatchCount : undefined;
   const filteredDefinitionIds = useMemo(() => {
     const raw = searchParams.get('definitionIds');
     if (!raw) return [];
@@ -98,7 +103,13 @@ export function DomainTrialsDashboard() {
 
   const [planResult, refetchPlan] = useQuery<DomainTrialsPlanQueryResult, DomainTrialsPlanQueryVariables>({
     query: DOMAIN_TRIALS_PLAN_QUERY,
-    variables: { domainId: domainId ?? '', temperature: selectedTemperature, definitionIds: filteredDefinitionIds },
+    variables: {
+      domainId: domainId ?? '',
+      temperature: selectedTemperature,
+      definitionIds: filteredDefinitionIds,
+      targetBatchCount: effectiveTargetBatchCount,
+      scopeCategory,
+    },
     pause: !domainId,
     requestPolicy: 'cache-and-network',
   });
@@ -278,9 +289,20 @@ export function DomainTrialsDashboard() {
   const estimate = estimateResult.data?.estimateDomainEvaluationCost;
   const models = plan?.models ?? [];
   const vignettes = plan?.vignettes ?? [];
+  const existingBatchCountByDefinitionId = useMemo(
+    () => new Map(plan?.vignettes.map((vignette) => [vignette.definitionId, vignette.existingBatchCount]) ?? []),
+    [plan?.vignettes],
+  );
+  const topUpCountByDefinitionId = useMemo(
+    () => new Map(plan?.vignettes.map((vignette) => [vignette.definitionId, vignette.topUpCount]) ?? []),
+    [plan?.vignettes],
+  );
   const excludedRequestedDefinitionCount = filteredDefinitionIdCount - vignettes.length;
   const hasNonTemperatureModels = models.some((model) => !model.supportsTemperature);
   const disableTemperatureInput = hasNonTemperatureModels;
+  const displayEstimatedCost = effectiveTargetBatchCount != null
+    ? (plan?.totalEstimatedCost ?? 0)
+    : (estimate?.totalEstimatedCost ?? plan?.totalEstimatedCost ?? 0);
   const cellEstimates = useMemo(() => {
     const next = new Map<string, number>();
     for (const cell of plan?.cellEstimates ?? []) {
@@ -314,12 +336,17 @@ export function DomainTrialsDashboard() {
       setRunError('Budget cap must be a number greater than 0.');
       return;
     }
+    if (targetBatchCountEnabled && !hasValidTargetBatchCount) {
+      setRunError('Target batch count must be a whole number greater than or equal to 1.');
+      return;
+    }
 
     const result = await startDomainEvaluation({
       domainId,
       scopeCategory,
       temperature: useDefaultTemperature || disableTemperatureInput ? undefined : parsedTemperature,
       maxBudgetUsd: maxBudgetEnabled ? parsedBudget : undefined,
+      targetBatchCount: effectiveTargetBatchCount,
       definitionIds: filteredDefinitionIds.length > 0 ? filteredDefinitionIds : undefined,
       samplePercentage: 100,
       samplesPerScenario: 1,
@@ -555,7 +582,7 @@ export function DomainTrialsDashboard() {
         scopeCategory={scopeCategory}
         vignetteCount={vignettes.length}
         modelCount={models.length}
-        totalEstimatedCost={estimate?.totalEstimatedCost ?? plan?.totalEstimatedCost ?? 0}
+        totalEstimatedCost={displayEstimatedCost}
         estimateConfidence={estimate?.estimateConfidence}
         fallbackReason={estimate?.fallbackReason}
         knownExclusions={estimate?.knownExclusions}
@@ -565,6 +592,9 @@ export function DomainTrialsDashboard() {
         maxBudgetEnabled={maxBudgetEnabled}
         maxBudgetInput={maxBudgetInput}
         hasValidBudget={hasValidBudget}
+        targetBatchCountEnabled={targetBatchCountEnabled}
+        targetBatchCountInput={targetBatchCountInput}
+        hasValidTargetBatchCount={hasValidTargetBatchCount}
         isStarting={isStarting}
         planFetching={planResult.fetching || estimateResult.fetching}
         temperatureWarning={estimate?.temperatureWarning ?? plan?.temperatureWarning}
@@ -576,6 +606,8 @@ export function DomainTrialsDashboard() {
         onSetTemperatureInput={setTemperatureInput}
         onSetMaxBudgetEnabled={setMaxBudgetEnabled}
         onSetMaxBudgetInput={setMaxBudgetInput}
+        onSetTargetBatchCountEnabled={setTargetBatchCountEnabled}
+        onSetTargetBatchCountInput={setTargetBatchCountInput}
         onOpenConfirm={() => setShowLaunchConfirm(true)}
       />
 
@@ -670,6 +702,8 @@ export function DomainTrialsDashboard() {
           }))}
           cellEstimates={cellEstimates}
           getCellStatus={getCellStatus}
+          topUpCountByDefinitionId={effectiveTargetBatchCount != null ? topUpCountByDefinitionId : undefined}
+          existingBatchCountByDefinitionId={effectiveTargetBatchCount != null ? existingBatchCountByDefinitionId : undefined}
         />
       </section>
 
@@ -679,7 +713,8 @@ export function DomainTrialsDashboard() {
         scopeCategory={scopeCategory}
         vignetteCount={vignettes.length}
         modelCount={models.length}
-        estimatedTotalCost={estimate?.totalEstimatedCost ?? plan?.totalEstimatedCost ?? 0}
+        estimatedTotalCost={displayEstimatedCost}
+        targetBatchCount={effectiveTargetBatchCount}
         estimateConfidence={estimate?.estimateConfidence}
         fallbackReason={estimate?.fallbackReason}
         knownExclusions={estimate?.knownExclusions}
