@@ -1,4 +1,5 @@
-import { Play, AlertCircle } from 'lucide-react';
+import { Play, AlertCircle, AlertTriangle } from 'lucide-react';
+import { useQuery } from 'urql';
 import { Button } from '../ui/Button';
 import { ModelSelector } from './ModelSelector';
 import { CostBreakdown } from './CostBreakdown';
@@ -10,6 +11,8 @@ import { useCostEstimate } from '../../hooks/useCostEstimate';
 import { useRunConditionGrid } from '../../hooks/useRunConditionGrid';
 import type { StartRunInput } from '../../api/operations/runs';
 import { getDefinitionMethodology } from '../../utils/methodology';
+import { LLM_PROVIDER_BALANCES_QUERY } from '../../api/operations/llm';
+import type { LlmProviderBalancesQueryResult } from '../../api/operations/llm';
 
 type RunFormProps = {
   definitionId: string;
@@ -114,6 +117,38 @@ export function RunForm({
         };
       })()
     : null;
+
+  // Lightweight provider balance query for pre-run warning
+  const [{ data: providerBalancesData }] = useQuery<LlmProviderBalancesQueryResult>({
+    query: LLM_PROVIDER_BALANCES_QUERY,
+    requestPolicy: 'cache-and-network',
+  });
+
+  // Compute per-provider estimated cost using modelId prefix convention
+  const providerBalanceWarnings: Array<{ name: string; balance: number; cost: number }> = (() => {
+    if (!costEstimate || !providerBalancesData?.llmProviders) return [];
+
+    const costByProviderName: Record<string, number> = {};
+    for (const modelCost of costEstimate.perModel) {
+      const colonIdx = modelCost.modelId.indexOf(':');
+      if (colonIdx <= 0) continue;
+      const providerName = modelCost.modelId.slice(0, colonIdx);
+      costByProviderName[providerName] =
+        (costByProviderName[providerName] ?? 0) + modelCost.totalCost;
+    }
+
+    return providerBalancesData.llmProviders
+      .filter((p) => {
+        if (p.balance === null || p.balance === undefined) return false;
+        const estimatedCost = costByProviderName[p.name] ?? 0;
+        return estimatedCost > 0 && p.balance < estimatedCost;
+      })
+      .map((p) => ({
+        name: p.name,
+        balance: p.balance as number,
+        cost: costByProviderName[p.name] ?? 0,
+      }));
+  })();
 
   const totalJobs = estimatedScenarios !== null
     ? estimatedScenarios * formState.selectedModels.length * formState.samplesPerScenario
@@ -237,6 +272,20 @@ export function RunForm({
           error={costError}
           compact
         />
+      )}
+
+      {providerBalanceWarnings.length > 0 && (
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 space-y-1">
+          {providerBalanceWarnings.map((w) => (
+            <div key={w.name} className="flex items-start gap-2 text-sm text-yellow-800">
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-yellow-600" />
+              <span>
+                <strong>Low balance:</strong> {w.name} has ${w.balance.toFixed(2)} remaining,
+                estimated cost ${w.cost.toFixed(4)}. You can still proceed.
+              </span>
+            </div>
+          ))}
+        </div>
       )}
 
       <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
