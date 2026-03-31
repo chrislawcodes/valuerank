@@ -30,6 +30,7 @@ const vignettesMenuItems: MenuItem[] = [
 const domainMenuItems: MenuItem[] = [
   { name: 'Overview', path: '/domains' },
   { name: 'Domain Analysis', path: '/domains/analysis' },
+  { name: 'Manage Domains', path: '/domains/manage' },
 ];
 
 const validationMenuItems = [

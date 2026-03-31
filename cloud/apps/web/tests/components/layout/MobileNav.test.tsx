@@ -32,6 +32,7 @@ describe('MobileNav Component', () => {
 
     expect(screen.getByRole('link', { name: 'Vignettes' })).toHaveAttribute('href', '/definitions');
     expect(screen.getByRole('link', { name: 'Domain Analysis' })).toHaveAttribute('href', '/domains/analysis');
+    expect(screen.getByRole('link', { name: 'Manage Domains' })).toHaveAttribute('href', '/domains/manage');
     expect(screen.queryByRole('link', { name: 'Coverage' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Runs' })).toHaveAttribute('href', '/runs');
     expect(screen.queryByRole('link', { name: 'New Vignette' })).not.toBeInTheDocument();
