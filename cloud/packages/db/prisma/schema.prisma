@@ -348,6 +348,7 @@ model Run {
   comparisonFor   RunComparison[]  @relation("ComparisonRun")
   scenarioSelections RunScenarioSelection[]
   probeResults    ProbeResult[]
+  budgetEvents    ProviderBudgetEvent[]
 
   // Audit relations
   createdBy User? @relation("RunCreator", fields: [createdByUserId], references: [id])
@@ -714,10 +715,15 @@ model LlmProvider {
   maxParallelRequests Int      @default(1) @map("max_parallel_requests")
   requestsPerMinute   Int      @default(60) @map("requests_per_minute")
   isEnabled           Boolean  @default(true) @map("is_enabled")
+  // Budget tracking
+  balance             Decimal? @map("balance") @db.Decimal(12, 2)
+  lastSyncedAt        DateTime? @map("last_synced_at")
+  lastSyncedBalance   Decimal? @map("last_synced_balance") @db.Decimal(12, 2)
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
-  models LlmModel[]
+  models       LlmModel[]
+  budgetEvents ProviderBudgetEvent[]
 
   @@map("llm_providers")
 }
@@ -755,6 +761,31 @@ model LlmModel {
 enum LlmModelStatus {
   ACTIVE
   DEPRECATED
+}
+
+enum ProviderBudgetEventType {
+  MANUAL_SET
+  DEDUCTION
+  SYNC
+}
+
+model ProviderBudgetEvent {
+  id                    String                  @id @default(cuid())
+  providerId            String                  @map("provider_id")
+  type                  ProviderBudgetEventType @map("type")
+  amount                Decimal                 @map("amount") @db.Decimal(12, 2)
+  drift                 Decimal?                @map("drift") @db.Decimal(12, 2)
+  runId                 String?                 @map("run_id")
+  providerBalanceBefore Decimal?                @map("provider_balance_before") @db.Decimal(12, 2)
+  providerBalanceAfter  Decimal?                @map("provider_balance_after") @db.Decimal(12, 2)
+  createdAt             DateTime                @default(now()) @map("created_at")
+
+  provider LlmProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  run      Run?        @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@index([providerId])
+  @@index([runId])
+  @@map("provider_budget_events")
 }
 
 model SystemSetting {
