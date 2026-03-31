@@ -396,38 +396,40 @@ export function DomainTrialsDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-2">
-          <div>
-            <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Domain Evaluation Setup</h1>
-            <p className="text-sm text-gray-600">
-              Set the paired-batch depth for the selected domain, confirm provider budget readiness, and watch the current launch move.
-            </p>
-            {filteredDefinitionIds.length > 0 && (
-              <p className="text-xs text-amber-700">
-                Scoped to {filteredDefinitionIds.length} selected vignette{filteredDefinitionIds.length === 1 ? '' : 's'}.
+      <div className="rounded-2xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-2">
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">Domain evaluation</div>
+            <div>
+              <h1 className="text-3xl font-serif font-medium text-[#1A1A1A]">{domainName}</h1>
+              <p className="mt-1 text-sm text-gray-600">
+                Set the paired-batch depth for the current launch signature, confirm provider budget readiness, and watch the launch move.
               </p>
-            )}
+              {filteredDefinitionIds.length > 0 && (
+                <p className="text-xs text-amber-700">
+                  Scoped to {filteredDefinitionIds.length} selected vignette{filteredDefinitionIds.length === 1 ? '' : 's'}.
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={launchDisabled ? 'warning' : 'success'} size="count">
+                {statusHeader}
+              </Badge>
+              {modelCount > 0 && <Badge variant="info" size="count">Models: {modelCount}</Badge>}
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="neutral" size="count">{domainName}</Badge>
-            <Badge variant={launchDisabled ? 'warning' : 'success'} size="count">
-              {statusHeader}
-            </Badge>
-            {modelCount > 0 && <Badge variant="info" size="count">Models: {modelCount}</Badge>}
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={handleRefresh}>
+              <RefreshCw className="w-4 h-4 mr-1" />
+              Refresh
+            </Button>
+            <Link
+              to="/domains"
+              className="inline-flex h-9 items-center rounded-md border border-gray-200 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Back to Domains
+            </Link>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="ghost" size="sm" onClick={handleRefresh}>
-            <RefreshCw className="w-4 h-4 mr-1" />
-            Refresh
-          </Button>
-          <Link
-            to="/domains"
-            className="inline-flex h-9 items-center rounded-md border border-gray-200 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Back to Domains
-          </Link>
         </div>
       </div>
 

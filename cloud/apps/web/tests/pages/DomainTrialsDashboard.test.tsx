@@ -548,7 +548,7 @@ describe('DomainTrialsDashboard', () => {
 
     renderDomainTrialsDashboard();
 
-    expect(screen.getByRole('heading', { name: /domain evaluation setup/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /job domain/i })).toBeInTheDocument();
     expect(screen.getByText('Job domain')).toBeInTheDocument();
     expect(screen.getByLabelText(/paired-batch depth per vignette/i)).toHaveValue(1);
     expect(screen.getByText('Provider budget readiness')).toBeInTheDocument();
@@ -558,7 +558,7 @@ describe('DomainTrialsDashboard', () => {
 
     await user.click(screen.getByRole('button', { name: /review & start domain evaluation/i }));
 
-    expect(screen.getByRole('heading', { name: /confirm domain evaluation/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /confirm launch/i })).toBeInTheDocument();
     expect(screen.getByText(/target paired batches per vignette:/i)).toHaveTextContent('1');
     expect(screen.getByText(/total paired batches:/i)).toHaveTextContent('2');
     expect(screen.getByText(/total individual trial runs:/i)).toHaveTextContent('4');
