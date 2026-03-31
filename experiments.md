@@ -20,7 +20,7 @@ Tracking whether adversarial reviews (factory pipeline) actually change code vs.
 | Critical catch | Spec: `Run` has no `estimatedCost` (would be runtime bug); Tasks: race condition on deduction → atomic `{ decrement }` | Spec: cost data source clarified (`run.config.estimatedCosts.perModel`); added FR-015/016/017 |
 | Post-implementation bug | None caught | `cache-only` → overdraft check silent in cold session (caught in manual review, fixed before merge) |
 | Tests | 0 new | 2 new test files (mutations + deduct service) |
-| Claude tokens | 158,403 total (306 input, 362k cache write, 32.5M cache read, 73k output) | 269,030 total across 3 agents: spec 74,190 + pipeline 128,728 + fix 66,112 (coordinator only — excludes Gemini/Codex) |
+| Claude tokens | 73,642 (306 input + 73,336 output) | 7,029 (202 input + 6,827 output; coordinator only — excludes Gemini/Codex) |
 | Human interruptions | 0 | 2 (Prisma version conflict, cache-only bug) |
 
 **Verdict:** Factory won on tests — it added 2 test files that direct skipped entirely. Both pipelines caught the same core correctness issues (atomic deduction, cost data source). Factory required 2 human interventions (Prisma version conflict mid-run, cache-only bug missed by Phase 7 cleanup). Direct ran cleanly.
