@@ -6,6 +6,7 @@
  */
 
 import { db, resolveDefinitionContent, type DefinitionContent, type RunCategory } from '@valuerank/db';
+import { ensureDomainConfigSnapshot } from '../domain-config/snapshot.js';
 import { createLogger, NotFoundError, ValidationError } from '@valuerank/shared';
 import { getBoss } from '../../queue/boss.js';
 import type { JobOptions, ProbeScenarioJobData, PriorityLevel } from '../../queue/types.js';
@@ -794,6 +795,20 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
       })),
       skipDuplicates: true, // Safety for overlaps if any
     });
+
+    // Capture domain config snapshot at run creation time
+    if (definition.domain?.id) {
+      try {
+        const snapshotId = await ensureDomainConfigSnapshot(definition.domain.id, tx);
+        await tx.run.update({
+          where: { id: newRun.id },
+          data: { domainConfigSnapshotId: snapshotId },
+        });
+      } catch (err) {
+        // Non-fatal: log warning but don't fail run creation
+        log.warn({ err, domainId: definition.domain.id }, 'Failed to capture domain config snapshot');
+      }
+    }
 
     return newRun;
   });

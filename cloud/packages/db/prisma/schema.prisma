@@ -172,6 +172,7 @@ model Domain {
   contexts        DomainContext[] @relation("DomainContexts")
   valueStatements ValueStatement[]
   evaluations     DomainEvaluation[]
+  configSnapshots DomainConfigSnapshot[]
 
   @@index([defaultLevelPresetVersionId])
   @@index([defaultPreambleVersionId])
@@ -190,6 +191,7 @@ model DomainContext {
   domain          Domain       @relation("DomainContexts", fields: [domainId], references: [id])
   domainsAsDefault Domain[]    @relation("DomainDefaultContext")
   definitions     Definition[]
+  domainConfigSnapshots DomainConfigSnapshot[]
 
   @@map("domain_contexts")
 }
@@ -202,11 +204,45 @@ model ValueStatement {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  domain    Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  domain   Domain                 @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  versions ValueStatementVersion[]
 
   @@unique([domainId, token])
   @@index([domainId])
   @@map("value_statements")
+}
+
+model ValueStatementVersion {
+  id          String   @id @default(cuid())
+  statementId String   @map("statement_id")
+  content     String   @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  statement ValueStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+
+  @@index([statementId, createdAt(sort: Desc)])
+  @@map("value_statement_versions")
+}
+
+model DomainConfigSnapshot {
+  id                       String   @id @default(cuid())
+  domainId                 String   @map("domain_id")
+  preambleVersionId        String?  @map("preamble_version_id")
+  levelPresetVersionId     String?  @map("level_preset_version_id")
+  contextId                String?  @map("context_id")
+  valueStatementVersionIds String[] @map("value_statement_version_ids")
+  fingerprint              String
+  createdAt                DateTime @default(now()) @map("created_at")
+
+  domain               Domain              @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  preambleVersion      PreambleVersion?    @relation(fields: [preambleVersionId], references: [id])
+  levelPresetVersion   LevelPresetVersion? @relation(fields: [levelPresetVersionId], references: [id])
+  context              DomainContext?      @relation(fields: [contextId], references: [id])
+  runs                 Run[]
+
+  @@unique([domainId, fingerprint])
+  @@index([domainId, createdAt(sort: Desc)])
+  @@map("domain_config_snapshots")
 }
 
 model Preamble {
@@ -245,6 +281,7 @@ model LevelPresetVersion {
   levelPreset LevelPreset  @relation(fields: [levelPresetId], references: [id], onDelete: Cascade)
   domains     Domain[]
   definitions Definition[]
+  domainConfigSnapshots DomainConfigSnapshot[]
 
   @@index([levelPresetId])
   @@map("level_preset_versions")
@@ -260,6 +297,7 @@ model PreambleVersion {
   preamble    Preamble     @relation(fields: [preambleId], references: [id], onDelete: Cascade)
   definitions Definition[]
   domains     Domain[]
+  domainConfigSnapshots DomainConfigSnapshot[]
 
   @@index([preambleId])
   @@map("preamble_versions")
@@ -342,6 +380,10 @@ model Run {
   experiment Experiment? @relation(fields: [experimentId], references: [id])
   tags       RunTag[]
 
+  // Domain config snapshot at run creation time
+  domainConfigSnapshotId String?              @map("domain_config_snapshot_id")
+  domainConfigSnapshot   DomainConfigSnapshot? @relation(fields: [domainConfigSnapshotId], references: [id])
+
   transcripts     Transcript[]
   analysisResults AnalysisResult[]
   domainEvaluationMembership DomainEvaluationRun?
@@ -358,6 +400,7 @@ model Run {
   @@index([experimentId])
   @@index([status])
   @@index([runCategory])
+  @@index([domainConfigSnapshotId])
   @@map("runs")
 }
 

@@ -44,6 +44,8 @@ export type {
   LevelPreset,
   LevelPresetVersion,
   ProviderBalanceSyncLog,
+  ValueStatementVersion,
+  DomainConfigSnapshot,
 } from '@prisma/client';
 
 // Audit types
