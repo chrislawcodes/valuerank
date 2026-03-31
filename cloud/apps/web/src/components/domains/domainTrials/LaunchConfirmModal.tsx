@@ -14,6 +14,7 @@ type LaunchConfirmModalProps = {
   knownExclusions?: string[];
   temperatureLabel: string;
   budgetCap: number | null;
+  targetBatchCount?: number;
   reviewSetupHref: string;
   reviewVignettesHref: string;
   isStarting: boolean;
@@ -33,6 +34,7 @@ export function LaunchConfirmModal({
   knownExclusions = [],
   temperatureLabel,
   budgetCap,
+  targetBatchCount,
   reviewSetupHref,
   reviewVignettesHref,
   isStarting,
@@ -61,6 +63,9 @@ export function LaunchConfirmModal({
           {estimateConfidence && <div>Estimate confidence: <span className="font-medium">{estimateConfidence.toLowerCase()}</span></div>}
           <div>Temperature: <span className="font-medium">{temperatureLabel}</span></div>
           <div>Budget cap: <span className="font-medium">{budgetCap === null ? 'None' : formatCost(budgetCap)}</span></div>
+          {targetBatchCount != null && (
+            <div>Target batch count: <span className="font-medium">{targetBatchCount} batches per vignette</span></div>
+          )}
         </div>
         {(fallbackReason || knownExclusions.length > 0) && (
           <div className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-1">

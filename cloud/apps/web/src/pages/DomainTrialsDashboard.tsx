@@ -79,6 +79,8 @@ export function DomainTrialsDashboard() {
   const [showLaunchConfirm, setShowLaunchConfirm] = useState(false);
   const [maxBudgetEnabled, setMaxBudgetEnabled] = useState(false);
   const [maxBudgetInput, setMaxBudgetInput] = useState('');
+  const [targetBatchCountEnabled, setTargetBatchCountEnabled] = useState(false);
+  const [targetBatchCountInput, setTargetBatchCountInput] = useState('5');
   const [currentEvaluationId, setCurrentEvaluationId] = useState<string | null>(searchParams.get('evaluationId'));
 
   const parsedTemperature = Number.parseFloat(temperatureInput);
@@ -86,6 +88,9 @@ export function DomainTrialsDashboard() {
   const selectedTemperature = !useDefaultTemperature && hasValidTemperature ? parsedTemperature : undefined;
   const parsedBudget = Number.parseFloat(maxBudgetInput);
   const hasValidBudget = Number.isFinite(parsedBudget) && parsedBudget > 0;
+  const parsedTargetBatchCount = Number.parseInt(targetBatchCountInput, 10);
+  const hasValidTargetBatchCount = Number.isFinite(parsedTargetBatchCount) && parsedTargetBatchCount >= 1;
+  const targetBatchCount = targetBatchCountEnabled && hasValidTargetBatchCount ? parsedTargetBatchCount : undefined;
   const filteredDefinitionIds = useMemo(() => {
     const raw = searchParams.get('definitionIds');
     if (!raw) return [];
@@ -98,7 +103,7 @@ export function DomainTrialsDashboard() {
 
   const [planResult, refetchPlan] = useQuery<DomainTrialsPlanQueryResult, DomainTrialsPlanQueryVariables>({
     query: DOMAIN_TRIALS_PLAN_QUERY,
-    variables: { domainId: domainId ?? '', temperature: selectedTemperature, definitionIds: filteredDefinitionIds },
+    variables: { domainId: domainId ?? '', temperature: selectedTemperature, definitionIds: filteredDefinitionIds, scopeCategory },
     pause: !domainId,
     requestPolicy: 'cache-and-network',
   });
@@ -288,6 +293,13 @@ export function DomainTrialsDashboard() {
     }
     return next;
   }, [plan?.cellEstimates]);
+  const existingBatchCounts = useMemo(() => {
+    const next = new Map<string, number>();
+    for (const vignette of plan?.vignettes ?? []) {
+      next.set(vignette.definitionId, vignette.existingBatchCount);
+    }
+    return next;
+  }, [plan?.vignettes]);
   const runStatusById = useMemo(() => {
     const map = new Map<string, DomainTrialRunsStatusQueryResult['domainTrialRunsStatus'][number]>();
     for (const status of statusResult.data?.domainTrialRunsStatus ?? []) {
@@ -323,6 +335,7 @@ export function DomainTrialsDashboard() {
       definitionIds: filteredDefinitionIds.length > 0 ? filteredDefinitionIds : undefined,
       samplePercentage: 100,
       samplesPerScenario: 1,
+      targetBatchCount,
     });
     if (result.error) {
       setRunError(result.error.message);
@@ -565,6 +578,9 @@ export function DomainTrialsDashboard() {
         maxBudgetEnabled={maxBudgetEnabled}
         maxBudgetInput={maxBudgetInput}
         hasValidBudget={hasValidBudget}
+        targetBatchCountEnabled={targetBatchCountEnabled}
+        targetBatchCountInput={targetBatchCountInput}
+        hasValidTargetBatchCount={hasValidTargetBatchCount}
         isStarting={isStarting}
         planFetching={planResult.fetching || estimateResult.fetching}
         temperatureWarning={estimate?.temperatureWarning ?? plan?.temperatureWarning}
@@ -576,6 +592,8 @@ export function DomainTrialsDashboard() {
         onSetTemperatureInput={setTemperatureInput}
         onSetMaxBudgetEnabled={setMaxBudgetEnabled}
         onSetMaxBudgetInput={setMaxBudgetInput}
+        onSetTargetBatchCountEnabled={setTargetBatchCountEnabled}
+        onSetTargetBatchCountInput={setTargetBatchCountInput}
         onOpenConfirm={() => setShowLaunchConfirm(true)}
       />
 
@@ -670,6 +688,8 @@ export function DomainTrialsDashboard() {
           }))}
           cellEstimates={cellEstimates}
           getCellStatus={getCellStatus}
+          existingBatchCounts={existingBatchCounts}
+          targetBatchCount={targetBatchCount}
         />
       </section>
 
@@ -685,6 +705,7 @@ export function DomainTrialsDashboard() {
         knownExclusions={estimate?.knownExclusions}
         temperatureLabel={temperatureLabel}
         budgetCap={maxBudgetEnabled && hasValidBudget ? parsedBudget : null}
+        targetBatchCount={targetBatchCount}
         reviewSetupHref={reviewSetupHref}
         reviewVignettesHref={reviewVignettesHref}
         isStarting={isStarting}

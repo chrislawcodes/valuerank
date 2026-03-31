@@ -151,6 +151,7 @@ export type DomainTrialPlanVignette = {
   definitionVersion: number;
   signature: string;
   scenarioCount: number;
+  existingBatchCount: number;
 };
 
 export type DomainTrialPlanCellEstimate = {
