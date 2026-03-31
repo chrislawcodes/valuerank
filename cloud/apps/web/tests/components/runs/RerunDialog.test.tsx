@@ -9,6 +9,16 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { RerunDialog } from '../../../src/components/runs/RerunDialog';
 import type { Run } from '../../../src/api/operations/runs';
 
+// Mock urql to avoid "No client has been specified" errors from RunForm's useQuery
+vi.mock('urql', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('urql')>();
+  return {
+    ...actual,
+    useQuery: () => [{ data: { llmProviders: [] }, fetching: false, error: undefined }],
+    useMutation: () => [{ fetching: false }, vi.fn()],
+  };
+});
+
 // Mock the hooks
 vi.mock('../../../src/hooks/useRunMutations', () => ({
   useRunMutations: () => ({

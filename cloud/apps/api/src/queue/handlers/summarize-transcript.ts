@@ -24,6 +24,7 @@ import { incrementSummarizeCompleted, incrementSummarizeFailed } from '../../ser
 import { schedule as rateLimitSchedule, getLimiterStats, type ScheduleOptions } from '../../services/rate-limiter/index.js';
 import { getMaxParallelSummarizations } from '../../services/summarization-parallelism/index.js';
 import { buildRawDecisionEvidence, resolveTranscriptDecisionModel } from '../../graphql/queries/domain/shared.js';
+import { deductProviderBalancesForRun } from '../../services/budget/deduct.js';
 
 const log = createLogger('queue:summarize-transcript');
 
@@ -350,6 +351,14 @@ async function maybeCompleteRun(runId: string): Promise<void> {
     } catch (error) {
       // Log error but don't fail - stats can be computed manually
       log.error({ runId, err: error }, 'Failed to trigger token stats computation');
+    }
+
+    // Deduct provider balances for the completed run
+    try {
+      await deductProviderBalancesForRun(runId);
+    } catch (error) {
+      // Log error but don't fail - balance deduction is best-effort
+      log.error({ runId, err: error }, 'Failed to deduct provider balances');
     }
   }
 }

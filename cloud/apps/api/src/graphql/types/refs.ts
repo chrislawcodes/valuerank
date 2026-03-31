@@ -57,3 +57,9 @@ import type { LevelPreset, LevelPresetVersion } from '@valuerank/db';
 
 export const LevelPresetRef = builder.objectRef<LevelPreset>('LevelPreset');
 export const LevelPresetVersionRef = builder.objectRef<LevelPresetVersion>('LevelPresetVersion');
+
+// Budget types
+import type { ProviderBalanceSyncLog } from '@valuerank/db';
+
+export const ProviderBalanceSyncLogRef =
+  builder.objectRef<ProviderBalanceSyncLog>('ProviderBalanceSyncLog');

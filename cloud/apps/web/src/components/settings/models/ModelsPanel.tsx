@@ -23,6 +23,8 @@ import {
   SET_DEFAULT_LLM_MODEL_MUTATION,
   UNSET_DEFAULT_LLM_MODEL_MUTATION,
   UPDATE_LLM_PROVIDER_MUTATION,
+  SET_PROVIDER_BALANCE_MUTATION,
+  SYNC_PROVIDER_BALANCE_MUTATION,
 } from '../../../api/operations/llm';
 
 export function ModelsPanel() {
@@ -43,6 +45,8 @@ export function ModelsPanel() {
   const [, setDefaultModel] = useMutation(SET_DEFAULT_LLM_MODEL_MUTATION);
   const [, unsetDefaultModel] = useMutation(UNSET_DEFAULT_LLM_MODEL_MUTATION);
   const [, updateProvider] = useMutation(UPDATE_LLM_PROVIDER_MUTATION);
+  const [, setProviderBalance] = useMutation(SET_PROVIDER_BALANCE_MUTATION);
+  const [, syncProviderBalance] = useMutation(SYNC_PROVIDER_BALANCE_MUTATION);
 
   const toggleProvider = (providerId: string) => {
     setExpandedProviders((prev) => {
@@ -91,10 +95,19 @@ export function ModelsPanel() {
 
   const handleUpdateProvider = async (
     id: string,
-    input: { requestsPerMinute?: number; maxParallelRequests?: number }
+    input: { requestsPerMinute?: number; maxParallelRequests?: number; balance?: number | null }
   ) => {
-    await updateProvider({ id, input });
+    const { balance, ...providerInput } = input;
+    await updateProvider({ id, input: providerInput });
+    if (balance !== undefined) {
+      await setProviderBalance({ providerId: id, balance });
+    }
     setEditingProvider(null);
+    reexecuteQuery({ requestPolicy: 'network-only' });
+  };
+
+  const handleSyncProvider = async (id: string, realBalance: number) => {
+    await syncProviderBalance({ providerId: id, realBalance });
     reexecuteQuery({ requestPolicy: 'network-only' });
   };
 
@@ -169,6 +182,7 @@ export function ModelsPanel() {
           provider={editingProvider}
           onClose={() => setEditingProvider(null)}
           onSave={(input) => handleUpdateProvider(editingProvider.id, input)}
+          onSync={(realBalance) => handleSyncProvider(editingProvider.id, realBalance)}
         />
       )}
     </>
