@@ -26,6 +26,7 @@
 | Feature | Branch | Status | What's Wrong |
 |---------|--------|--------|--------------|
 | **transcript-resummarization-backfill** | — | 🟡 Ready | Script written (`cloud/scripts/backfill-resummarize-existing-transcripts.ts`) but no PR yet — needs review and merge |
+| **provider-budget migration** | — | 🟡 Pending prod apply | PR #483 merged. Migration SQL not yet applied to prod. Run: `psql $DIRECT_URL -f cloud/packages/db/prisma/migrations/20260331000000_add_provider_budget_tracking/migration.sql` then `npx prisma@5 migrate resolve --applied 20260331000000_add_provider_budget_tracking` |
 
 ### Recently Completed
 
@@ -138,7 +139,11 @@ Once the above are resolved:
 
   Factory generated 6 false positives, 0 actionable findings. All HIGH findings were based on assumptions that don't hold (no URL-hash tabs, no RBAC, no shared panel state). Claude-direct caught the real structural issues.
 
-  **Pattern (3 data points):** Factory has an edge on backend/algorithmic work. Claude-direct has an edge on UI/nav work where codebase context eliminates false assumptions. Pattern is holding across 3 experiments — though UI experiments are 2 vs 1 for backend.
+  **Experiment 4 — `cross-run-reliability` (backend/worker fix, PR #472, 2026-03-31):** Factory caught silent wrong-key bug that passed all tests. Worth it.
+
+  **Experiment 5 — `provider-budget` (full-stack, PR #483, 2026-03-31):** Factory enforced tests (2 new files); both paths caught same correctness bugs. Factory required 2 human interventions. Partial win.
+
+  **Pattern (5 data points):** Factory 2/2 on backend/algorithmic work. Claude-direct 2/2 on UI/nav work. Full-stack features are mixed — factory adds test coverage but introduces process friction. See `experiments.md` for full detail.
 
 ---
 
@@ -151,6 +156,7 @@ Once the above are resolved:
 | Feature | Branch | Status | Notes |
 |---------|--------|--------|-------|
 | **domain-coverage-paired-batch-action** | `claude/parallel-reviews-validated-v2` | 🟢 Done | PR #476 merged 2026-03-31 — tightened the domain coverage layout, removed the workspace card, and restored the paired-batch launch/back-link flow. |
+| **provider-budget-tracking** | `factory/provider-budget` | 🟢 Merged (migration pending) | PR #483 squash-merged 2026-03-31 — per-provider balance, auto-deduct on completion, manual sync with drift log, soft pre-run warning gate. Migration must be applied to prod. |
 
 ### Backlog
 - [ ] Identify which vignettes predate flipped-order system
