@@ -21,6 +21,7 @@ import {
   setDefaultModel,
   unsetDefaultModel,
   updateProvider,
+  syncProviderBalance,
   upsertSetting,
 } from '@valuerank/db';
 import { createAuditLog } from '../../services/audit/index.js';
@@ -304,6 +305,7 @@ builder.mutationField('updateLlmProvider', (t) =>
         maxParallelRequests: args.input.maxParallelRequests ?? undefined,
         requestsPerMinute: args.input.requestsPerMinute ?? undefined,
         isEnabled: args.input.isEnabled ?? undefined,
+        balance: args.input.balance !== undefined ? (args.input.balance ?? null) : undefined,
       });
 
       ctx.log.info({ providerId: provider.id }, 'LLM provider updated');
@@ -337,6 +339,37 @@ builder.mutationField('updateLlmProvider', (t) =>
         entityId: provider.id,
         userId: ctx.user?.id ?? null,
         metadata: { name: provider.name },
+      });
+
+      return provider;
+    },
+  })
+);
+
+// Mutation: syncProviderBalance
+builder.mutationField('syncProviderBalance', (t) =>
+  t.field({
+    type: LlmProviderRef,
+    description:
+      'Sync a provider balance with the real balance from the provider dashboard. ' +
+      'Records drift between system-tracked and entered balance. Updates lastSyncedAt.',
+    args: {
+      id: t.arg.string({ required: true, description: 'Provider ID to sync' }),
+      balance: t.arg.float({ required: true, description: 'Real balance from provider dashboard (USD)' }),
+    },
+    resolve: async (_root, args, ctx) => {
+      ctx.log.debug({ id: args.id, balance: args.balance }, 'Syncing provider balance');
+
+      const provider = await syncProviderBalance(args.id, args.balance);
+
+      ctx.log.info({ providerId: provider.id, balance: args.balance }, 'Provider balance synced');
+
+      void createAuditLog({
+        action: 'UPDATE',
+        entityType: 'LlmProvider',
+        entityId: provider.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { action: 'syncBalance', balance: args.balance },
       });
 
       return provider;

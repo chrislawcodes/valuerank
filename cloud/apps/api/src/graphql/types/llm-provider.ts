@@ -26,6 +26,22 @@ LlmProviderRef.implement({
     isEnabled: t.exposeBoolean('isEnabled', {
       description: 'Whether the provider is available for use',
     }),
+    balance: t.float({
+      nullable: true,
+      description: 'Manually tracked budget balance (USD). Null if not set.',
+      resolve: (provider) => (provider.balance !== null ? Number(provider.balance) : null),
+    }),
+    lastSyncedAt: t.expose('lastSyncedAt', {
+      type: 'DateTime',
+      nullable: true,
+      description: 'When the balance was last manually synced from the provider dashboard',
+    }),
+    lastSyncedBalance: t.float({
+      nullable: true,
+      description: 'Balance entered at last sync (USD)',
+      resolve: (provider) =>
+        provider.lastSyncedBalance !== null ? Number(provider.lastSyncedBalance) : null,
+    }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
     updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
 

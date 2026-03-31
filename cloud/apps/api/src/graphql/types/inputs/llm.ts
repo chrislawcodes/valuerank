@@ -83,6 +83,10 @@ export const UpdateLlmProviderInput = builder.inputType('UpdateLlmProviderInput'
       required: false,
       description: 'Whether provider is enabled',
     }),
+    balance: t.float({
+      required: false,
+      description: 'Set the provider budget balance (USD). Creates a MANUAL_SET event.',
+    }),
   }),
 });
 
