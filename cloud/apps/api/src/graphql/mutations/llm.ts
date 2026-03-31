@@ -5,7 +5,7 @@
  */
 
 import { builder } from '../builder.js';
-import { LlmModelRef, LlmProviderRef, SystemSettingRef } from '../types/refs.js';
+import { LlmModelRef, LlmProviderRef, SystemSettingRef, ProviderBalanceSyncLogRef } from '../types/refs.js';
 import {
   CreateLlmModelInput,
   UpdateLlmModelInput,
@@ -13,6 +13,7 @@ import {
   UpdateSystemSettingInput,
 } from '../types/inputs/llm.js';
 import type { LlmModel } from '@valuerank/db';
+import { db, Prisma } from '@valuerank/db';
 import {
   createModel,
   updateModel,
@@ -26,6 +27,7 @@ import {
 import { createAuditLog } from '../../services/audit/index.js';
 import { getBoss, isBossRunning } from '../../queue/boss.js';
 import { reregisterProviderHandler } from '../../queue/handlers/index.js';
+import { NotFoundError, ValidationError } from '@valuerank/shared';
 
 // Result type for model deprecation
 type DeprecateModelResultShape = {
@@ -340,6 +342,111 @@ builder.mutationField('updateLlmProvider', (t) =>
       });
 
       return provider;
+    },
+  })
+);
+
+// Mutation: setProviderBalance
+builder.mutationField('setProviderBalance', (t) =>
+  t.field({
+    type: LlmProviderRef,
+    description: 'Set the budget balance for a provider (null disables budget tracking)',
+    args: {
+      providerId: t.arg.string({ required: true, description: 'Provider ID' }),
+      balance: t.arg.float({ required: false, description: 'New balance in dollars (null = disable)' }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (args.balance !== null && args.balance !== undefined && args.balance < 0) {
+        throw new ValidationError('Balance must be greater than or equal to 0');
+      }
+
+      const existing = await db.llmProvider.findUnique({ where: { id: args.providerId } });
+      if (!existing) {
+        throw new NotFoundError('LlmProvider', args.providerId);
+      }
+
+      const balanceDecimal =
+        args.balance !== null && args.balance !== undefined
+          ? new Prisma.Decimal(args.balance)
+          : null;
+
+      const provider = await db.llmProvider.update({
+        where: { id: args.providerId },
+        data: { balance: balanceDecimal },
+      });
+
+      ctx.log.info({ providerId: provider.id, balance: args.balance }, 'Provider balance set');
+
+      void createAuditLog({
+        action: 'ACTION',
+        entityType: 'LlmProvider',
+        entityId: provider.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { action: 'set_provider_balance', balance: args.balance },
+      });
+
+      return provider;
+    },
+  })
+);
+
+// Mutation: syncProviderBalance
+builder.mutationField('syncProviderBalance', (t) =>
+  t.field({
+    type: ProviderBalanceSyncLogRef,
+    description: 'Sync the provider balance with the real balance from the provider dashboard',
+    args: {
+      providerId: t.arg.string({ required: true, description: 'Provider ID' }),
+      realBalance: t.arg.float({ required: true, description: 'Real balance in dollars from provider dashboard' }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (args.realBalance < 0) {
+        throw new ValidationError('Real balance must be greater than or equal to 0');
+      }
+
+      const provider = await db.llmProvider.findUnique({ where: { id: args.providerId } });
+      if (!provider) {
+        throw new NotFoundError('LlmProvider', args.providerId);
+      }
+
+      const systemBalanceAtSync = provider.balance ?? new Prisma.Decimal(0);
+      const enteredBalance = new Prisma.Decimal(args.realBalance);
+      const delta = enteredBalance.minus(systemBalanceAtSync);
+
+      const [syncLog] = await db.$transaction([
+        db.providerBalanceSyncLog.create({
+          data: {
+            providerId: args.providerId,
+            systemBalanceAtSync,
+            enteredBalance,
+            delta,
+            createdByUserId: ctx.user?.id ?? null,
+          },
+        }),
+        db.llmProvider.update({
+          where: { id: args.providerId },
+          data: { balance: enteredBalance },
+        }),
+      ]);
+
+      ctx.log.info(
+        { providerId: args.providerId, realBalance: args.realBalance, delta: delta.toNumber() },
+        'Provider balance synced'
+      );
+
+      void createAuditLog({
+        action: 'ACTION',
+        entityType: 'LlmProvider',
+        entityId: args.providerId,
+        userId: ctx.user?.id ?? null,
+        metadata: {
+          action: 'sync_provider_balance',
+          realBalance: args.realBalance,
+          delta: delta.toNumber(),
+        },
+      });
+
+      return syncLog;
     },
   })
 );

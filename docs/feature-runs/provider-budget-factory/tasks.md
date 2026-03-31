@@ -30,12 +30,12 @@
 
 ⚠️ **CRITICAL**: Depends on Phase 1 checkpoint.
 
-- [ ] T006 [P: cloud/apps/api/src/services/budget/deduct.ts] Create `cloud/apps/api/src/services/budget/deduct.ts` — export `deductProviderBalancesForRun(runId: string): Promise<void>` with helpers: `extractProviderName(modelId)`, `groupCostByProvider(perModel)`, `atomicDeduct(providerName, cost)` using `db.$executeRaw`
-- [ ] T007 [P: cloud/apps/api/src/graphql/types/refs.ts] Add `ProviderBalanceSyncLogRef` to `cloud/apps/api/src/graphql/types/refs.ts`
-- [ ] T008 [P: cloud/apps/api/src/graphql/types/llm-provider.ts] Add `balance: Float` (nullable, `Decimal.toNumber()`) and `lastSyncedAt: DateTime` (nullable, resolved from most recent sync log) fields to `LlmProvider` GQL type in `cloud/apps/api/src/graphql/types/llm-provider.ts`
-- [ ] T009 Add `ProviderBalanceSyncLog` GQL object type (id, providerId, systemBalanceAtSync, enteredBalance, delta, syncedAt) to `cloud/apps/api/src/graphql/types/llm-provider.ts` (or a new `provider-balance.ts` — whichever keeps files < 400 lines)
-- [ ] T010 [P: cloud/apps/api/src/graphql/mutations/llm.ts] Add `setProviderBalance(providerId: ID!, balance: Float): LlmProvider` mutation to `cloud/apps/api/src/graphql/mutations/llm.ts` — validate balance ≥ 0, set `LlmProvider.balance`, audit log action `'set_provider_balance'`
-- [ ] T011 Add `syncProviderBalance(providerId: ID!, realBalance: Float!): ProviderBalanceSyncLog` mutation to `cloud/apps/api/src/graphql/mutations/llm.ts` — validate realBalance ≥ 0, read current balance, create `ProviderBalanceSyncLog` row with delta, update `LlmProvider.balance` in a single `$transaction`, audit log action `'sync_provider_balance'`
+- [X] T006 [P: cloud/apps/api/src/services/budget/deduct.ts] Create `cloud/apps/api/src/services/budget/deduct.ts` — export `deductProviderBalancesForRun(runId: string): Promise<void>` with helpers: `extractProviderName(modelId)`, `groupCostByProvider(perModel)`, `atomicDeduct(providerName, cost)` using `db.$executeRaw`
+- [X] T007 [P: cloud/apps/api/src/graphql/types/refs.ts] Add `ProviderBalanceSyncLogRef` to `cloud/apps/api/src/graphql/types/refs.ts`
+- [X] T008 [P: cloud/apps/api/src/graphql/types/llm-provider.ts] Add `balance: Float` (nullable, `Decimal.toNumber()`) and `lastSyncedAt: DateTime` (nullable, resolved from most recent sync log) fields to `LlmProvider` GQL type in `cloud/apps/api/src/graphql/types/llm-provider.ts`
+- [X] T009 Add `ProviderBalanceSyncLog` GQL object type (id, providerId, systemBalanceAtSync, enteredBalance, delta, syncedAt) to `cloud/apps/api/src/graphql/types/llm-provider.ts` (or a new `provider-balance.ts` — whichever keeps files < 400 lines)
+- [X] T010 [P: cloud/apps/api/src/graphql/mutations/llm.ts] Add `setProviderBalance(providerId: ID!, balance: Float): LlmProvider` mutation to `cloud/apps/api/src/graphql/mutations/llm.ts` — validate balance ≥ 0, set `LlmProvider.balance`, audit log action `'set_provider_balance'`
+- [X] T011 Add `syncProviderBalance(providerId: ID!, realBalance: Float!): ProviderBalanceSyncLog` mutation to `cloud/apps/api/src/graphql/mutations/llm.ts` — validate realBalance ≥ 0, read current balance, create `ProviderBalanceSyncLog` row with delta, update `LlmProvider.balance` in a single `$transaction`, audit log action `'sync_provider_balance'`
 
 **Checkpoint**: API layer complete. Web tasks and US2 hook can now proceed.
 
@@ -49,8 +49,8 @@
 
 ### Implementation
 
-- [ ] T012 [US2] Wire `deductProviderBalancesForRun(runId)` call inside `maybeCompleteRun()` in `cloud/apps/api/src/queue/handlers/summarize-transcript.ts` — call after `status: 'COMPLETED'` update, inside a try/catch block identical to the existing `triggerBasicAnalysis` try/catch pattern
-- [ ] T013 [US2] Write unit tests for `deductProviderBalancesForRun` in `cloud/apps/api/tests/services/budget/deduct.test.ts` covering: provider with balance → deducted; null balance → skipped; null estimatedCosts → no error; two providers → each deducted; malformed modelId → warn+skip; provider name not in DB → warn+skip
+- [X] T012 [US2] Wire `deductProviderBalancesForRun(runId)` call inside `maybeCompleteRun()` in `cloud/apps/api/src/queue/handlers/summarize-transcript.ts` — call after `status: 'COMPLETED'` update, inside a try/catch block identical to the existing `triggerBasicAnalysis` try/catch pattern
+- [X] T013 [US2] Write unit tests for `deductProviderBalancesForRun` in `cloud/apps/api/tests/services/budget/deduct.test.ts` covering: provider with balance → deducted; null balance → skipped; null estimatedCosts → no error; two providers → each deducted; malformed modelId → warn+skip; provider name not in DB → warn+skip
 
 **Checkpoint**: US2 complete. Set a balance, run a job to COMPLETED, confirm balance decremented.
 
