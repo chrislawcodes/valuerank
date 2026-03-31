@@ -107,6 +107,28 @@ As a settings user, I need to update the provider balance inline from the Settin
 - **Run with no estimated cost**: If estimated cost is null or zero, no deduction and no warning gate.
 - **Provider not found for model**: If a model's provider cannot be resolved at completion time, log a warning and skip deduction for that model.
 - **Balance set to null via sync**: Clearing the balance disables tracking silently. No error, no warning gate for future runs.
+- **Warning gate eventual consistency**: If a run completes between the user loading the run form and clicking Start Run, the balance shown in the gate may be stale. This is acceptable; the gate is soft and always bypassable.
+
+---
+
+## GraphQL API Contract
+
+### Mutations (added to `cloud/apps/api/src/graphql/mutations/llm.ts` or a new `provider-balance.ts`)
+
+| Mutation | Input | Returns | Audited |
+|----------|-------|---------|---------|
+| `setProviderBalance(providerId: ID!, balance: Float)` | `balance` null = clear (disable tracking) | `LlmProvider` | Yes — `createdByUserId` |
+| `syncProviderBalance(providerId: ID!, realBalance: Float!)` | Real balance from provider dashboard | `ProviderBalanceSyncLog` | Yes |
+
+### Type additions
+
+- `LlmProvider` GQL type: add `balance: Float` (nullable) and `lastSyncedAt: DateTime` (nullable, derived from most recent sync log entry)
+- `ProviderBalanceSyncLog` GQL type: new — `id`, `providerId`, `systemBalanceAtSync`, `enteredBalance`, `delta`, `syncedAt`
+
+### Validation (enforced in mutation resolver)
+
+- `balance`: reject negative values with `ValidationError`; round to 2 decimal places before storing
+- `realBalance`: reject negative values with `ValidationError`
 
 ---
 
@@ -126,6 +148,9 @@ As a settings user, I need to update the provider balance inline from the Settin
 - **FR-012**: System MUST expose balance field in the existing ProviderSettingsModal alongside rate limit fields. (Supports US5)
 - **FR-013**: Clearing the balance field and saving MUST set the balance to null (tracking disabled). (Supports US5, edge case)
 - **FR-014**: Balance deduction MUST use an atomic database update to prevent race conditions under concurrent run completions. (Edge case: concurrency)
+- **FR-015**: If a model's `LlmModel` record cannot be found at deduction time (model deprecated or deleted after run start), the system MUST log a warning and skip deduction for that model. Remaining models MUST still be processed. (Edge case: provider not found)
+- **FR-016**: The `ProviderBalanceSyncLog` table MUST have an index on `providerId` to support efficient last-sync queries. (Schema)
+- **FR-017**: The pre-run warning dialog MUST support listing multiple providers (when more than one has insufficient funds), with one row per provider showing: provider display name, estimated cost for that provider, and current balance. (Supports US4 scenario 4)
 
 ---
 
@@ -164,13 +189,16 @@ As a settings user, I need to update the provider balance inline from the Settin
 
 ## Assumptions
 
-1. **Estimate-based deduction, not actuals**: Deduction uses the run's `estimatedCost` field (already populated on run start). Actual cost reconciliation is out of scope for this feature.
+1. **Estimate-based deduction, not actuals**: Deduction uses the run's cost estimate stored in `run.config.estimatedCosts.perModel` (a `CostEstimate` object serialised as JSON at run-start time). Actual cost reconciliation is out of scope for this feature.
 2. **Single currency (USD)**: All balances and costs are USD. No currency conversion.
 3. **No hard block**: The soft gate is always bypassable. There is no admin toggle to make the gate hard.
 4. **Sync log is append-only**: Old sync entries are not deleted. This provides a full drift history.
-5. **Provider determined at deduction time**: When a run completes, the system re-fetches the run's models and their provider relationships to compute per-provider cost (does not rely on a snapshot stored at run start).
+5. **Provider extracted from modelId prefix**: `ModelCostEstimate.modelId` uses the format `"provider:model"` (e.g. `"openai:gpt-4o"`). At deduction time, extract the provider prefix via `modelId.split(':')[0]`, then look up `LlmProvider` where `name = providerPrefix`. No additional join on `LlmModel` is needed for the provider lookup.
 6. **Balance stored on LlmProvider directly**: Not a separate table. Simpler schema; one balance per provider.
 7. **No notifications**: Low balance does not trigger email or push notifications in this version. The warning gate covers the in-app case.
+8. **Warning gate uses client-side aggregation**: The UI has already loaded model-to-provider mapping from the model selector. Per-provider cost aggregation for the warning gate groups `CostEstimate.perModel` entries by their `modelId` prefix — no additional API round-trip required.
+9. **Warning gate is eventually consistent**: If a run completes between the user loading the form and clicking Start Run, the displayed balance may be stale. This is acceptable; the gate is soft and bypassable.
+10. **Deduction trigger location**: `deductProviderBalancesForRun(runId)` is called in `cloud/apps/api/src/services/run/progress.ts` immediately after the `status: 'COMPLETED'` update. It is wrapped in a try/catch — deduction failure MUST NOT prevent run completion from being recorded.
 
 ---
 
