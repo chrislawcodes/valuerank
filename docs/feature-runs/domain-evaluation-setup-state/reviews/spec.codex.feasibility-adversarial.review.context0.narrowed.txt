@@ -1,0 +1,179 @@
+00001: import { useEffect, useMemo, useState } from 'react';
+00002: import { Link, useParams, useSearchParams } from 'react-router-dom';
+00003: import { useMutation, useQuery } from 'urql';
+00004: import { ExternalLink, RefreshCw } from 'lucide-react';
+00005: import { Button } from '../components/ui/Button';
+00006: import { ErrorMessage } from '../components/ui/ErrorMessage';
+00007: import { Badge } from '../components/ui/Badge';
+00008: import { LaunchConfirmModal } from '../components/domains/domainTrials/LaunchConfirmModal';
+00009: import { LaunchStatusPanel } from '../components/domains/domainTrials/LaunchStatusPanel';
+00010: import { LaunchControlsPanel } from '../components/domains/domainTrials/LaunchControlsPanel';
+00011: import { TrialGridTable } from '../components/domains/domainTrials/TrialGridTable';
+00012: import {
+00013:   cellKey,
+00014:   downloadCsv,
+00015:   formatCost,
+00016:   type DomainTrialLaunchSummary,
+00017:   type DomainTrialCellStatus,
+00018: } from '../components/domains/domainTrials/helpers';
+00019: import {
+00020:   DOMAIN_EVALUATIONS_QUERY,
+00021:   DOMAIN_EVALUATION_QUERY,
+00022:   DOMAIN_EVALUATION_STATUS_QUERY,
+00023:   DOMAIN_RUN_SUMMARY_QUERY,
+00024:   DOMAIN_TRIAL_RUNS_STATUS_QUERY,
+00025:   DOMAIN_TRIALS_PLAN_QUERY,
+00026:   ESTIMATE_DOMAIN_EVALUATION_COST_QUERY,
+00027:   START_DOMAIN_EVALUATION_MUTATION,
+00028:   type DomainEvaluationQueryResult,
+00029:   type DomainEvaluationQueryVariables,
+00030:   type DomainEvaluationsQueryResult,
+00031:   type DomainEvaluationsQueryVariables,
+00032:   type DomainEvaluationStatusQueryResult,
+00033:   type DomainEvaluationStatusQueryVariables,
+00034:   type DomainRunSummaryQueryResult,
+00035:   type DomainRunSummaryQueryVariables,
+00036:   type DomainTrialRunsStatusQueryResult,
+00037:   type DomainTrialRunsStatusQueryVariables,
+00038:   type DomainTrialsPlanQueryResult,
+00039:   type DomainTrialsPlanQueryVariables,
+00040:   type EstimateDomainEvaluationCostQueryResult,
+00041:   type EstimateDomainEvaluationCostQueryVariables,
+00042:   type StartDomainEvaluationMutationResult,
+00043:   type StartDomainEvaluationMutationVariables,
+00044: } from '../api/operations/domains';
+00045: 
+00046: const POLL_MS = 3000;
+00047: const EVALUATION_SCOPE_VALUES = ['PILOT', 'PRODUCTION', 'REPLICATION', 'VALIDATION'] as const;
+00048: type EvaluationScopeCategory = (typeof EVALUATION_SCOPE_VALUES)[number];
+00049: 
+00050: function isEvaluationScopeCategory(value: string | null): value is EvaluationScopeCategory {
+00051:   return value != null && EVALUATION_SCOPE_VALUES.includes(value as EvaluationScopeCategory);
+00052: }
+00053: 
+00054: function formatTimestamp(value: string | number | null | undefined): string {
+00055:   if (value == null) return 'Unknown';
+00056:   const date = typeof value === 'number' ? new Date(value) : new Date(value);
+00057:   return Number.isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString();
+00058: }
+00059: 
+00060: export function DomainTrialsDashboard() {
+00061:   const { domainId } = useParams<{ domainId: string }>();
+00062:   const [searchParams, setSearchParams] = useSearchParams();
+00063:   const initialTemperatureParam = searchParams.get('temperature');
+00064:   const initialParsedTemperature = initialTemperatureParam == null ? Number.NaN : Number.parseFloat(initialTemperatureParam);
+00065:   const hasInitialTemperature = Number.isFinite(initialParsedTemperature) && initialParsedTemperature >= 0 && initialParsedTemperature <= 2;
+00066:   const initialScope = isEvaluationScopeCategory(searchParams.get('scopeCategory'))
+00067:     ? (searchParams.get('scopeCategory') as EvaluationScopeCategory)
+00068:     : 'PRODUCTION';
+00069:   const [scopeCategory, setScopeCategory] = useState<EvaluationScopeCategory>(initialScope);
+00070:   const [useDefaultTemperature, setUseDefaultTemperature] = useState(!hasInitialTemperature);
+00071:   const [temperatureInput, setTemperatureInput] = useState(hasInitialTemperature ? String(initialParsedTemperature) : '0.7');
+00072:   const [started, setStarted] = useState(false);
+00073:   const [definitionRunIds, setDefinitionRunIds] = useState<Record<string, string>>({});
+00074:   const [runError, setRunError] = useState<string | null>(null);
+00075:   const [launchSummary, setLaunchSummary] = useState<DomainTrialLaunchSummary | null>(null);
+00076:   const [lastStatusUpdatedAt, setLastStatusUpdatedAt] = useState<number | null>(null);
+00077:   const [planNoContentRetries, setPlanNoContentRetries] = useState(0);
+00078:   const [statusNoContentRetries, setStatusNoContentRetries] = useState(0);
+00079:   const [showLaunchConfirm, setShowLaunchConfirm] = useState(false);
+00080:   const [maxBudgetEnabled, setMaxBudgetEnabled] = useState(false);
+00081:   const [maxBudgetInput, setMaxBudgetInput] = useState('');
+00082:   const [currentEvaluationId, setCurrentEvaluationId] = useState<string | null>(searchParams.get('evaluationId'));
+00083: 
+00084:   const parsedTemperature = Number.parseFloat(temperatureInpu
+
+... [narrowed review slice: middle omitted] ...
+
+>
+00603:                 Member runs below are run-scoped evidence for this one domain evaluation cohort.
+00604:               </p>
+00605:             </div>
+00606:             <div className="flex items-center gap-2">
+00607:               <Badge variant="neutral" size="count">Members: {selectedEvaluation.memberCount}</Badge>
+00608:               <Badge variant="success" size="count">Projected: {formatCost(selectedEvaluation.projectedCostUsd)}</Badge>
+00609:             </div>
+00610:           </div>
+00611: 
+00612:           {currentEvaluation && currentEvaluation.members.length > 0 && (
+00613:             <div className="overflow-x-auto">
+00614:               <table className="min-w-full text-sm">
+00615:                 <thead>
+00616:                   <tr className="border-b border-gray-200 text-left text-gray-600">
+00617:                     <th className="py-2 pr-3">Vignette</th>
+00618:                     <th className="py-2 pr-3">Run</th>
+00619:                     <th className="py-2 pr-3">Status</th>
+00620:                     <th className="py-2 pr-3">Category</th>
+00621:                     <th className="py-2 pr-3">Started</th>
+00622:                     <th className="py-2 pr-3"></th>
+00623:                   </tr>
+00624:                 </thead>
+00625:                 <tbody>
+00626:                   {currentEvaluation.members.map((member) => (
+00627:                     <tr key={member.runId} className="border-b border-gray-100">
+00628:                       <td className="py-2 pr-3">
+00629:                         <div className="font-medium text-gray-900">{member.definitionNameAtLaunch}</div>
+00630:                         <div className="text-xs text-gray-500">{member.definitionIdAtLaunch.slice(-8)}</div>
+00631:                       </td>
+00632:                       <td className="py-2 pr-3 text-gray-700">{member.runId.slice(-8)}</td>
+00633:                       <td className="py-2 pr-3 text-gray-700">{member.runStatus.toLowerCase()}</td>
+00634:                       <td className="py-2 pr-3 text-gray-700">{member.runCategory.toLowerCase()}</td>
+00635:                       <td className="py-2 pr-3 text-gray-500">{formatTimestamp(member.runStartedAt)}</td>
+00636:                       <td className="py-2 pr-3">
+00637:                         <Link
+00638:                           to={`/runs/${member.runId}`}
+00639:                           className="inline-flex items-center gap-1 text-sm font-medium text-teal-700 hover:text-teal-800"
+00640:                         >
+00641:                           Open run diagnostics
+00642:                           <ExternalLink className="h-3.5 w-3.5" />
+00643:                         </Link>
+00644:                       </td>
+00645:                     </tr>
+00646:                   ))}
+00647:                 </tbody>
+00648:               </table>
+00649:             </div>
+00650:           )}
+00651:         </section>
+00652:       )}
+00653: 
+00654:       <section className="rounded-xl border border-gray-200 bg-white p-5 space-y-4">
+00655:         <div>
+00656:           <h2 className="text-lg font-medium text-[#1A1A1A]">Planned batches</h2>
+00657:           <p className="text-sm text-gray-600">
+00658:             Each batch runs every configured condition for a vignette across the selected models.
+00659:           </p>
+00660:         </div>
+00661:         <TrialGridTable
+00662:           loading={planResult.fetching}
+00663:           models={models.map((model) => ({ modelId: model.modelId, label: model.label }))}
+00664:           vignettes={vignettes.map((v) => ({
+00665:             definitionId: v.definitionId,
+00666:             definitionName: v.definitionName,
+00667:             definitionVersion: v.definitionVersion,
+00668:             signature: v.signature,
+00669:             scenarioCount: v.scenarioCount,
+00670:           }))}
+00671:           cellEstimates={cellEstimates}
+00672:           getCellStatus={getCellStatus}
+00673:         />
+00674:       </section>
+00675: 
+00676:       <LaunchConfirmModal
+00677:         open={showLaunchConfirm}
+00678:         domainName={plan?.domainName ?? domainId}
+00679:         scopeCategory={scopeCategory}
+00680:         vignetteCount={vignettes.length}
+00681:         modelCount={models.length}
+00682:         estimatedTotalCost={estimate?.totalEstimatedCost ?? plan?.totalEstimatedCost ?? 0}
+00683:         estimateConfidence={estimate?.estimateConfidence}
+00684:         fallbackReason={estimate?.fallbackReason}
+00685:         knownExclusions={estimate?.knownExclusions}
+00686:         temperatureLabel={temperatureLabel}
+00687:         budgetCap={maxBudgetEnabled && hasValidBudget ? parsedBudget : null}
+00688:         reviewSetupHref={reviewSetupHref}
+00689:         reviewVignettesHref={reviewVignettesHref}
+00690:         isStarting={isStarting}
+00691:         onCancel={() => setShowLaunchConfirm(false)}
+00692:         onConfirm={() => void handleStart()}
+006

@@ -1,0 +1,187 @@
+# Spec
+
+## Feature: Rework the Domain Evaluation page into setup and status states
+
+### Background
+
+The Domain Evaluation page at `/domains/:domainId/run-trials` currently mixes launch planning, recent cohort history, and live monitoring into one surface. That makes the page feel like a generic console even though the user usually reaches it from the Domain overview page with a selected domain already in mind.
+
+The new shape should match the user's actual job:
+
+1. **Setup state**: choose the launch depth for the current domain, confirm provider budget readiness, and review what this launch will cost.
+2. **Status state**: watch only the batches that are actively moving, see the ones that are stalled or failed, and click a row to inspect details and logs.
+
+Important constraint: the current backend contract supports launch depth for the current launch through `samplesPerScenario`. This feature must count against the current launch signature only. It must not promise a historical "top up to target total across all prior launches" workflow unless a later backend feature adds that contract.
+
+The status surface should stay readable when there are many vignettes. A dense matrix is not the right shape for this state. The main status table should only show batches that are currently active or need attention. Completed batches should leave the main list once they are no longer being worked on.
+
+For this feature, the current launch signature is the launch record created by the active `startDomainEvaluation` mutation for the selected domain. The page must scope setup and status counts to that launch record only and must not merge in earlier launches, even if they share the same vignette versions or temperature.
+
+---
+
+## User Stories
+
+### US-1 - Make setup feel like a continuation of the selected domain
+
+**As a** domain owner coming from the Domains overview,
+**I want** the top of the page to read like a domain-specific setup flow,
+**so that** I can see the launch context immediately and stay oriented in the selected domain.
+
+**Acceptance criteria:**
+- The primary setup heading frames the page as setup for the selected domain.
+- The setup copy uses paired-batch language and refers to the current launch, not a historical target total.
+- The setup area appears before history and status-heavy content.
+- Navigation back to the Domains workspace remains available.
+
+### US-2 - Let the user choose paired-batch depth for this launch
+
+**As a** domain owner,
+**I want** to set how many paired batches this launch should run per vignette,
+**so that** I can choose the launch depth deliberately before I spend budget.
+
+**Acceptance criteria:**
+- The setup controls include a required paired-batch count input.
+- The input defaults to `1`.
+- The input is bounded to the backend-supported range of `1` to `100`.
+- Launching with a paired-batch count above `20` requires one extra confirmation step that restates the paired-batch depth, the vignette count, and the total individual trial runs that will be launched.
+- The chosen paired-batch count is passed through cost estimation and launch execution via `samplesPerScenario`.
+- Invalid values are blocked in the UI.
+- The setup copy makes clear that the count applies to the current launch signature only.
+
+### US-3 - Show provider readiness before launch
+
+**As a** domain owner,
+**I want** to see expected spend by provider next to the available budget for that provider,
+**so that** I know whether I need to top up before I launch.
+
+**Acceptance criteria:**
+- The setup state shows expected spend grouped by provider.
+- The setup state shows each provider's available budget using the provider health budget signal.
+- The setup state shows the timestamp or age of the budget snapshot so the user can tell whether the signal is fresh.
+- Providers that do not have enough available budget are flagged clearly and block launch until the user changes the setup or top-ups the provider.
+- If a provider budget signal is missing or the health query is stale, launch stays blocked until a fresh signal is available.
+- The launch action revalidates provider readiness and the cost estimate immediately before the mutation is sent.
+- If budgets changed between the preflight check and the launch mutation, the UI shows the launch failure and keeps the user on the setup state.
+- The provider readiness view stays tied to the current launch controls and estimate.
+
+### US-4 - Show live batch movement and exceptions separately
+
+**As a** domain owner,
+**I want** the status state to show only active batches plus a separate exceptions area,
+**so that** I can see motion and problems without scanning completed work.
+
+**Acceptance criteria:**
+- The main status table shows only batches that are actively being processed or are still in a live state such as summarizing or analyzing.
+- Pending or queued work is not shown in the main live table until it has started communicating with the target model.
+- Completed batches leave the main list once they are no longer active.
+- The status header shows percent complete, done, remaining, currently processing, and failed counts.
+- The main status view polls at a fixed interval while live rows remain visible.
+- The exceptions area at the bottom shows stalled or failed batches and makes the affected vignette and model clear.
+- A batch is considered stalled only when the backend marks one or more of its models as stalled; the UI may show a freshness warning when the snapshot is old, but it must not invent a stall diagnosis on the client.
+- Paired batches are only counted as `done` when both legs have reached terminal generation, summarization, and analysis states.
+The status header counts come from the current launch record and its member-run summary, not from the live table itself, so completed rows can fall off the list without changing the aggregate totals.
+
+### US-5 - Let the user inspect details and logs from a row click
+
+**As a** domain owner,
+**I want** clicking a status row to open details for that batch,
+**so that** I can inspect progress, recent task activity, and the latest error or stall information without leaving the page.
+
+**Acceptance criteria:**
+- Clicking a row opens a detail view for the selected batch.
+- The detail view shows progress, stage, recent task/log-style information, and the latest known error or stall signal.
+- The detail view should reuse existing run data where possible instead of inventing a separate logging system.
+- The page keeps a compact launch diagnostics link for the current launch, and that link opens the existing run detail surface so completed batches remain one click away after they leave the live list.
+
+---
+
+## Requirements
+
+### R-1 - Promote setup as the first-class launch section
+
+`cloud/apps/web/src/pages/DomainTrialsDashboard.tsx` must reorganize the page so the setup experience appears before history and monitoring content.
+
+The setup section must include:
+- a heading that frames the page as domain-specific setup
+- short explanatory copy tied to the selected domain
+- a paired-batch depth control for the current launch
+- provider readiness information
+- launch controls and preflight review links
+
+### R-2 - Back the paired-batch depth control with `samplesPerScenario`
+
+`cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx` must expose a launch-depth input that maps to `samplesPerScenario`.
+
+Requirements for the control:
+- integer-only
+- minimum value `1`
+- initialized to `1`
+- included in both cost estimation and launch execution
+- labeled in paired-batch language
+
+### R-3 - Show provider readiness using existing provider/model data
+
+The setup state must show expected spend by provider and compare it with the provider's available budget signal.
+
+Implementation may reuse existing GraphQL data already available in the web app for:
+- model/provider identity
+- provider health / budget readiness, including `remainingBudgetUsd`
+- cost estimates per model
+
+The setup state must not invent a gap-to-cap column if the remaining budget signal already makes the risk obvious.
+
+### R-4 - Keep the status surface focused on live movement
+
+The status surface must not turn into a completed-history table. It should focus on live movement and exceptions.
+
+At minimum:
+- the main status list shows only active batches
+- the main status list updates on polling
+- the exceptions area only shows stalled or failed batches
+- a row click opens a detail view for the selected batch
+
+For this feature, `done` means completed paired batches for the current launch signature, `remaining` means the target paired-batch depth minus `done`, and `percent complete` is `done / targetBatchCount`.
+
+### R-5 - Add a small backend status augmentation if needed
+
+The backend may be extended only as much as required to support the live status view.
+
+The expected backend augmentation for this slice is limited to exposing additional run status fields that help the UI identify stale or stalled batches, such as:
+- `updatedAt`
+- `stalledModels`
+- `analysisStatus`
+
+No historical top-up contract is required for this slice, and no new launch semantics should be introduced.
+
+The client may use a freshness warning when a live status snapshot is older than the current polling cycle, but the backend stall signal remains authoritative. The UI should not invent a stalled state purely from elapsed time if the backend has not marked the batch or its models as stalled.
+
+### R-6 - Keep the page honest about current-launch counting
+
+All setup and status counts in this slice must be based on the current launch signature only.
+
+The UI must not claim it is counting all historical batches for a vignette if the current backend does not support that contract.
+
+---
+
+## Non-Goals
+
+- Do not add a historical "top up to target total across all prior launches" contract.
+- Do not introduce a dense matrix as the primary status view.
+- Do not add a separate budget-persistence system.
+- Do not remove the route at `/domains/:domainId/run-trials`.
+- Do not change the domain overview page itself beyond any navigation that already exists.
+
+---
+
+## Acceptance Criteria
+
+1. The page opens from the Domains workspace as a setup-first flow.
+2. The paired-batch depth control defaults to `1` and drives `samplesPerScenario`.
+3. Setup shows provider readiness and makes underfunded providers obvious.
+4. The status header shows completion, done, remaining, current processing, and failures.
+5. The main status list only shows live batches, and completed batches fall off the list.
+6. The exceptions area shows stalled or failed batches with clear vignette/model context.
+7. Clicking a row opens a detail view with progress and log-like run details.
+8. `npm run lint --workspace @valuerank/web` passes.
+9. `npm run test --workspace @valuerank/web` passes.
+10. `npm run build --workspace @valuerank/web` passes.

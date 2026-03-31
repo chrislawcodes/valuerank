@@ -1,0 +1,222 @@
+00001: import { beforeEach, describe, expect, it, vi } from 'vitest';
+00002: import { render, screen, within } from '@testing-library/react';
+00003: import userEvent from '@testing-library/user-event';
+00004: import { MemoryRouter, Route, Routes } from 'react-router-dom';
+00005: import { DomainTrialsDashboard } from '../../src/pages/DomainTrialsDashboard';
+00006: import {
+00007:   DOMAIN_EVALUATIONS_QUERY,
+00008:   DOMAIN_EVALUATION_QUERY,
+00009:   DOMAIN_EVALUATION_STATUS_QUERY,
+00010:   DOMAIN_RUN_SUMMARY_QUERY,
+00011:   DOMAIN_TRIAL_RUNS_STATUS_QUERY,
+00012:   DOMAIN_TRIALS_PLAN_QUERY,
+00013:   ESTIMATE_DOMAIN_EVALUATION_COST_QUERY,
+00014:   START_DOMAIN_EVALUATION_MUTATION,
+00015: } from '../../src/api/operations/domains';
+00016: 
+00017: const useQueryMock = vi.fn();
+00018: const useMutationMock = vi.fn();
+00019: const startDomainEvaluationMock = vi.fn();
+00020: 
+00021: vi.mock('urql', async () => {
+00022:   const actual = await vi.importActual<typeof import('urql')>('urql');
+00023:   return {
+00024:     ...actual,
+00025:     useQuery: (args: unknown) => useQueryMock(args),
+00026:     useMutation: (query: unknown) => useMutationMock(query),
+00027:   };
+00028: });
+00029: 
+00030: function renderDomainTrialsDashboard() {
+00031:   return render(
+00032:     <MemoryRouter initialEntries={['/domains/domain-a/run-trials?evaluationId=eval-1']}>
+00033:       <Routes>
+00034:         <Route path="/domains/:domainId/run-trials" element={<DomainTrialsDashboard />} />
+00035:       </Routes>
+00036:     </MemoryRouter>,
+00037:   );
+00038: }
+00039: 
+00040: describe('DomainTrialsDashboard', () => {
+00041:   beforeEach(() => {
+00042:     useQueryMock.mockReset();
+00043:     useMutationMock.mockReset();
+00044:     startDomainEvaluationMock.mockReset();
+00045: 
+00046:     useMutationMock.mockImplementation((query: unknown) => {
+00047:       if (query === START_DOMAIN_EVALUATION_MUTATION) {
+00048:         return [{ fetching: false }, startDomainEvaluationMock];
+00049:       }
+00050:       return [{ fetching: false }, vi.fn()];
+00051:     });
+00052: 
+00053:     useQueryMock.mockImplementation((args: { query: unknown }) => {
+00054:       if (args.query === DOMAIN_TRIALS_PLAN_QUERY) {
+00055:         return [{
+00056:           data: {
+00057:               domainTrialsPlan: {
+00058:               domainId: 'domain-a',
+00059:               domainName: 'Domain A',
+00060:               vignettes: [
+00061:                 { definitionId: 'def-1', definitionName: 'Eval Vignette', definitionVersion: 1, signature: 'v1td', scenarioCount: 25 },
+00062:               ],
+00063:               models: [
+00064:                 { modelId: 'model-1', label: 'Model One', isDefault: true, supportsTemperature: true },
+00065:               ],
+00066:               cellEstimates: [
+00067:                 { definitionId: 'def-1', modelId: 'model-1', estimatedCost: 1.25 },
+00068:               ],
+00069:               totalEstimatedCost: 1.25,
+00070:               existingTemperatures: [],
+00071:               defaultTemperature: null,
+00072:               temperatureWarning: null,
+00073:             },
+00074:           },
+00075:           fetching: false,
+00076:           error: undefined,
+00077:         }, vi.fn()];
+00078:       }
+00079:       if (args.query === ESTIMATE_DOMAIN_EVALUATION_COST_QUERY) {
+00080:         return [{
+00081:           data: {
+00082:             estimateDomainEvaluationCost: {
+00083:               domainId: 'domain-a',
+00084:               domainName: 'Domain A',
+00085:               scopeCategory: 'PRODUCTION',
+00086:               targetedDefinitions: 1,
+00087:               totalScenarioCount: 25,
+00088:               totalEstimatedCost: 1.4,
+00089:               basedOnSampleCount: 50,
+00090:               isUsingFallback: false,
+00091:               fallbackReason: null,
+00092:               estimateConfidence: 'HIGH',
+00093:               knownExclusions: ['Judge/evaluator passes are not included yet.'],
+00094:               models: [],
+00095:               definitions: [],
+00096:               existingTemperatures: [],
+00097:               defaultTemperature: null,
+00098:               temperatureWarning: null,
+00099:             },
+00100:           },
+00101:           fetching: false,
+00102:           error: undefined,
+00103:         }, vi.fn()];
+00104:       }
+00105:       if (args.query === DOMAIN_RUN_SUMMARY_QUERY) {
+00106:         return [{
+00107:           data: {
+00108:             domainRunSummary: {
+00109:               domainId: 'domain-a',
+00110:               scopeCategory: null,
+00111:               totalEvaluations: 2,
+00112:               pendingEvaluations: 0,
+00113:               runningEvaluations: 1,
+00114:               completedEvaluations: 1,
+00115:               failedEvaluations: 0,
+00116:               cancelledEvaluations: 0,
+00117:               totalMemberRuns: 2,
+00118:               pendingMemberRuns: 0,
+00119:               runningMemberRuns: 1,
+00120:               completedMemberRuns: 1,
+00
+
+... [narrowed review slice: middle omitted] ...
+
+maxBudgetUsd: null,
+00184:               memberCount: 1,
+00185:               members: [
+00186:                 {
+00187:                   runId: 'run-1',
+00188:                   definitionIdAtLaunch: 'def-1',
+00189:                   definitionNameAtLaunch: 'Eval Vignette',
+00190:                   domainIdAtLaunch: 'domain-a',
+00191:                   createdAt: '2026-03-15T12:01:00.000Z',
+00192:                   runStatus: 'RUNNING',
+00193:                   runCategory: 'PRODUCTION',
+00194:                   runStartedAt: '2026-03-15T12:01:00.000Z',
+00195:                   runCompletedAt: null,
+00196:                 },
+00197:               ],
+00198:             },
+00199:           },
+00200:           fetching: false,
+00201:           error: undefined,
+00202:         }, vi.fn()];
+00203:       }
+00204:       if (args.query === DOMAIN_EVALUATION_STATUS_QUERY) {
+00205:         return [{
+00206:           data: {
+00207:             domainEvaluationStatus: {
+00208:               id: 'eval-1',
+00209:               status: 'RUNNING',
+00210:               totalRuns: 1,
+00211:               pendingRuns: 0,
+00212:               runningRuns: 1,
+00213:               completedRuns: 0,
+00214:               failedRuns: 0,
+00215:               cancelledRuns: 0,
+00216:             },
+00217:           },
+00218:           fetching: false,
+00219:           error: undefined,
+00220:         }, vi.fn()];
+00221:       }
+00222:       if (args.query === DOMAIN_TRIAL_RUNS_STATUS_QUERY) {
+00223:         return [{
+00224:           data: {
+00225:             domainTrialRunsStatus: [
+00226:               {
+00227:                 runId: 'run-1',
+00228:                 definitionId: 'def-1',
+00229:                 status: 'RUNNING',
+00230:                 modelStatuses: [
+00231:                   {
+00232:                     modelId: 'model-1',
+00233:                     generationCompleted: 1,
+00234:                     generationFailed: 0,
+00235:                     generationTotal: 25,
+00236:                     summarizationCompleted: 0,
+00237:                     summarizationFailed: 0,
+00238:                     summarizationTotal: 25,
+00239:                     latestErrorMessage: null,
+00240:                   },
+00241:                 ],
+00242:               },
+00243:             ],
+00244:           },
+00245:           fetching: false,
+00246:           error: undefined,
+00247:         }, vi.fn()];
+00248:       }
+00249:       return [{ data: undefined, fetching: false, error: undefined }, vi.fn()];
+00250:     });
+00251:   });
+00252: 
+00253:   it('renders the domain evaluation summary and launch confirmation with scoped wording', async () => {
+00254:     const user = userEvent.setup();
+00255:     renderDomainTrialsDashboard();
+00256: 
+00257:     expect(screen.getByRole('heading', { name: /domain evaluation summary/i })).toBeInTheDocument();
+00258:     expect(screen.getByRole('heading', { name: /current cohort summary/i })).toBeInTheDocument();
+00259:     expect(screen.getAllByText(/eval vignette/i).length).toBeGreaterThan(0);
+00260:     expect(screen.getByText(/domain evaluation summary is the cohort-level view/i)).toBeInTheDocument();
+00261:     expect(screen.getByRole('heading', { name: /planned batches/i })).toBeInTheDocument();
+00262:     expect(screen.getByText(/each batch runs every configured condition/i)).toBeInTheDocument();
+00263:     expect(screen.getByText(/advanced controls/i)).toBeInTheDocument();
+00264:     expect(screen.getByRole('link', { name: /review setup coverage/i })).toHaveAttribute('href', '/domains?domainId=domain-a&tab=setup&setupTab=contexts');
+00265:     expect(screen.getByRole('link', { name: /review vignette overrides/i })).toHaveAttribute('href', '/domains?domainId=domain-a&tab=vignettes');
+00266:     expect(screen.getByRole('link', { name: /open run diagnostics/i })).toHaveAttribute('href', '/runs/run-1');
+00267: 
+00268:     await user.selectOptions(screen.getByRole('combobox'), 'PILOT');
+00269:     await user.click(screen.getByText(/advanced controls/i));
+00270:     await user.click(screen.getByRole('radio', { name: /set evaluation temperature/i }));
+00271:     await user.clear(screen.getByLabelText(/^evaluation temperature$/i));
+00272:     await user.type(screen.getByLabelText(/^evaluation temperature$/i), '0');
+00273:     await user.click(screen.getByRole('button', { name: /review & start domain evaluation/i }));
+00274: 
+00275:     expect(screen.getByRole('heading', { name: /confirm domain evaluation/i })).toBeInTheDocument();
+00276:     const dialog = screen.getByRole('dialog');
+00277:     expect(within(dialog).getByText(/domain evaluation scope:/i)).toHaveTextContent(/pilot/i);
+00278:     expect(within(dialog).getByText(/review before confirming/i)).toBeInTheDocument();
+00279:     expect(within(dialog).getByText(/judge\/evaluator passes are not included yet/i)).toBeInTheDocument();
+00280:     expect(within(dialog).getByText(/temperature:/i)

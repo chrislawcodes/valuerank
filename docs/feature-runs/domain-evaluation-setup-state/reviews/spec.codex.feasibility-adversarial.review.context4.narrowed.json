@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx",
+  "source_artifact_sha256": "02e8796c9aa9da2b1eca6728e69b4d4337c7b9c698a6309006a5417acdcdf531",
+  "narrowed_artifact_path": "docs/feature-runs/domain-evaluation-setup-state/reviews/spec.codex.feasibility-adversarial.review.context4.narrowed.txt",
+  "narrowed_artifact_sha256": "0dab236f9ae93d2fff952617804a3ccbe9d18b9de68bc938420d3b5d418844cf",
+  "strategy": "head-tail-numbered-lines"
+}

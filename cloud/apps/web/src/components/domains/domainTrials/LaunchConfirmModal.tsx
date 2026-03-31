@@ -8,6 +8,8 @@ type LaunchConfirmModalProps = {
   scopeCategory: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION';
   vignetteCount: number;
   modelCount: number;
+  totalPairedBatches: number | null;
+  totalTrialRuns: number | null;
   estimatedTotalCost: number;
   estimateConfidence?: 'HIGH' | 'MEDIUM' | 'LOW';
   fallbackReason?: string | null;
@@ -28,6 +30,8 @@ export function LaunchConfirmModal({
   scopeCategory,
   vignetteCount,
   modelCount,
+  totalPairedBatches,
+  totalTrialRuns,
   estimatedTotalCost,
   estimateConfidence,
   fallbackReason,
@@ -52,21 +56,26 @@ export function LaunchConfirmModal({
         aria-modal="true"
         aria-labelledby={headingId}
         className="w-full max-w-xl rounded-lg border border-gray-200 bg-white p-5 shadow-xl space-y-4"
-      >
+        >
         <h2 id={headingId} className="text-lg font-semibold text-gray-900">Confirm Domain Evaluation</h2>
         <div className="space-y-1 text-sm text-gray-700">
           <div>Domain: <span className="font-medium">{domainName}</span></div>
           <div>Domain evaluation scope: <span className="font-medium">{scopeCategory.toLowerCase()}</span></div>
           <div>Selected latest vignettes: <span className="font-medium">{vignetteCount}</span></div>
+          <div>Target paired batches per vignette: <span className="font-medium">{targetBatchCount}</span></div>
+          <div>Total paired batches: <span className="font-medium">{totalPairedBatches ?? 'Not set'}</span></div>
+          <div>Total individual trial runs: <span className="font-medium">{totalTrialRuns ?? 'Not set'}</span></div>
           <div>Models: <span className="font-medium">{modelCount}</span></div>
           <div>Estimated total cost: <span className="font-medium">{formatCost(estimatedTotalCost)}</span></div>
           {estimateConfidence && <div>Estimate confidence: <span className="font-medium">{estimateConfidence.toLowerCase()}</span></div>}
           <div>Temperature: <span className="font-medium">{temperatureLabel}</span></div>
           <div>Budget cap: <span className="font-medium">{budgetCap === null ? 'None' : formatCost(budgetCap)}</span></div>
-          {targetBatchCount != null && (
-            <div>Target batch count: <span className="font-medium">{targetBatchCount} batches per vignette</span></div>
-          )}
         </div>
+        {targetBatchCount != null && targetBatchCount > 20 && (
+          <div className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            Large launches need an extra check. This run will launch {targetBatchCount} paired batches per vignette across {vignetteCount} vignettes, for {totalTrialRuns ?? 'an unknown number of'} total individual trial runs.
+          </div>
+        )}
         {(fallbackReason || knownExclusions.length > 0) && (
           <div className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-1">
             <p className="font-medium">Setup summary and estimate notes</p>
@@ -77,7 +86,7 @@ export function LaunchConfirmModal({
         <div className="rounded border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700 space-y-2">
           <p className="font-medium text-gray-900">Review before confirming</p>
           <p>
-            This starts one domain evaluation cohort. Use these links if you want to inspect setup coverage or vignette configuration before member runs begin.
+            This starts one domain evaluation launch. Use these links if you want to inspect setup coverage or vignette configuration before member runs begin.
           </p>
           <div className="flex flex-wrap gap-2">
             <Link
@@ -95,7 +104,7 @@ export function LaunchConfirmModal({
           </div>
         </div>
         <p className="text-xs text-gray-500">
-          This creates a domain evaluation cohort and incurs model costs. Duplicate active launches with the same scope and sampling are blocked server-side.
+          This creates a domain evaluation launch and incurs model costs. Duplicate active launches with the same scope and sampling are blocked server-side.
         </p>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onCancel} disabled={isStarting}>

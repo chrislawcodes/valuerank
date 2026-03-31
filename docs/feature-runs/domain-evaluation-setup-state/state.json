@@ -1,0 +1,68 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 1774979304
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "The selected domain already comes from the Domain overview page, so the setup state should feel like a continuation of that workflow rather than a standalone launcher.",
+      "This slice owns the setup state only; status-state monitoring remains functionally unchanged except for any labels or wiring needed to keep the page coherent.",
+      "The current GraphQL setup data is sufficient for this slice, so the work should stay in the web app without schema or API changes unless implementation proves otherwise."
+    ],
+    "summary": "Proceeding without discovery questions because the setup-state goals, scope boundary, and likely implementation surface are already clear from the current Domain overview entry point, the Domain Evaluation page, and the user direction to separate setup from status.",
+    "updated_at": 1774971484,
+    "answers": {},
+    "non_goals": [
+      "Do not redesign the live status and cohort-monitoring sections beyond preserving compatibility with the updated setup state."
+    ],
+    "acceptance_criteria": [
+      "The setup state should read as a domain-specific continuation of the Overview page rather than a generic evaluation console."
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {
+    "allowed_dirty_paths": [
+      "cloud/apps/api/src/graphql/dataloaders/index.ts",
+      "cloud/apps/api/src/graphql/dataloaders/run-analysis-status.ts",
+      "cloud/apps/api/src/graphql/types/run.ts",
+      "cloud/apps/api/src/services/run/analysis-status.ts",
+      "cloud/apps/api/tests/graphql/dataloaders/run.test.ts",
+      "cloud/apps/api/tests/graphql/queries/domain.test.ts",
+      "cloud/apps/api/tests/services/run/analysis-status.test.ts",
+      "cloud/apps/api/src/graphql/queries/domain/planning.ts",
+      "cloud/apps/api/src/graphql/queries/domain/shared.ts",
+      "cloud/apps/api/src/graphql/queries/domain/types.ts",
+      "STATUS.md",
+      ".claude",
+      ".worktrees",
+      "docs/feature-runs",
+      "docs/operations",
+      "docs/feature-factory-token-efficiency.md",
+      "cloud/scripts",
+      "specs",
+      "experiments.md"
+    ],
+    "used": true,
+    "updated_at": 1774985305
+  },
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "checkpoint_fallback": {}
+}
