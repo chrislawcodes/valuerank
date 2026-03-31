@@ -420,11 +420,14 @@ def build_pooled_aggregate_reliability(
     """
     Build pooled aggregate reliability and aggregate semantic metadata.
 
-    Repeatability is computed within each source run first, then rolled up
-    across runs using run-level coverage counts as weights.
+    Cross-run repeats (same scenarioId across different source runs) are treated as
+    repeated observations. compute_variance_analysis is called once on all transcripts
+    pooled together, treating cross-run repeats as within-run repeats.
     """
     transcripts_by_run: dict[str, list[dict[str, Any]]] = defaultdict(list)
     pooled_unique_scenarios: dict[str, set[str]] = defaultdict(set)
+    # Track unique scenarioIds per (run_id, model_id) for drift weighting
+    run_model_scenario_ids: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
 
     for transcript in transcripts:
         run_id = transcript.get("runId")
@@ -436,88 +439,59 @@ def build_pooled_aggregate_reliability(
         if isinstance(model_id, str) and model_id != "" and isinstance(scenario_id, str) and scenario_id != "":
             if resolve_transcript_normalized_score(transcript) is not None:
                 pooled_unique_scenarios[model_id].add(scenario_id)
+                run_model_scenario_ids[run_id][model_id].add(scenario_id)
 
-    run_level_reliability: dict[str, dict[str, Any]] = {}
     run_level_preference: dict[str, dict[str, Any]] = {}
-    run_level_variance: dict[str, dict[str, Any]] = {}
+    run_level_per_model: dict[str, dict[str, Any]] = {}
     model_ids: set[str] = set()
 
     for run_id, run_transcripts in transcripts_by_run.items():
         run_per_model = aggregate_transcripts_by_model(run_transcripts)
         run_level_preference[run_id] = build_preference_summary(run_transcripts, run_per_model)["perModel"]
-        run_variance = compute_variance_analysis(run_transcripts)
-        run_level_variance[run_id] = run_variance.get("perModel", {})
-        run_level_reliability[run_id] = build_reliability_summary(run_variance)["perModel"]
+        run_level_per_model[run_id] = run_per_model
         model_ids.update(run_per_model.keys())
 
+    # Pool ALL transcripts: cross-run repeats of same (modelId, scenarioId) become repeated samples
+    pooled_variance = compute_variance_analysis(transcripts)
+    pooled_reliability = build_reliability_summary(pooled_variance)
+    pooled_per_model_reliability = pooled_reliability.get("perModel", {})
+
     planned_condition_count = len(planned_scenario_ids)
-    planned_condition_set = set(planned_scenario_ids)
     reliability_per_model: dict[str, Any] = {}
     per_model_repeat_coverage: dict[str, Any] = {}
     per_model_drift: dict[str, Any] = {}
 
-    pooled_variance = compute_variance_analysis(transcripts)
-    pooled_reliability_per_model = build_reliability_summary(pooled_variance)["perModel"]
-
-    def weighted_average(metric_samples: list[tuple[int, float]]) -> float | None:
-        if not metric_samples:
-            return None
-        total_weight = sum(weight for weight, _ in metric_samples if weight > 0)
-        if total_weight <= 0:
-            return None
-        return round(
-            sum(weight * value for weight, value in metric_samples if weight > 0) / total_weight,
-            6,
-        )
-
     for model_id in sorted(model_ids):
-        # Use pooled cross-batch analysis as the primary reliability signal.
-        # Pooling all transcripts captures both within-run and cross-batch repeats,
-        # correctly handling all cases: all-single-trial batches, mixed batches (some
-        # runs with within-run repeats, some without), and pure within-run repeats.
-        pooled_model_rel = pooled_reliability_per_model.get(model_id, {})
-        pooled_model_variance = pooled_variance.get("perModel", {}).get(model_id, {})
+        # Get pooled reliability metrics for this model
+        pooled_model_rel = pooled_per_model_reliability.get(model_id, {})
 
+        # coverageCount from pooled result = number of scenarios with sampleCount > 1 across all runs
         total_repeat_coverage_count = int(pooled_model_rel.get("coverageCount", 0))
-        repeated_condition_ids: set[str] = {
-            sid
-            for sid, stats in pooled_model_variance.get("perScenario", {}).items()
-            if isinstance(stats, dict) and int(stats.get("sampleCount", 0)) > 1
-        }
-
-        reliability_samples: list[tuple[int, float]] = []
-        noise_samples: list[tuple[int, float]] = []
-        agreement_samples: list[tuple[int, float]] = []
-        neutral_samples: list[tuple[int, float]] = []
-        drift_samples: list[tuple[int, float]] = []
-
-        if total_repeat_coverage_count > 0:
-            if pooled_model_rel.get("baselineReliability") is not None:
-                reliability_samples.append((total_repeat_coverage_count, float(pooled_model_rel["baselineReliability"])))
-            if pooled_model_rel.get("baselineNoise") is not None:
-                noise_samples.append((total_repeat_coverage_count, float(pooled_model_rel["baselineNoise"])))
-            if pooled_model_rel.get("directionalAgreement") is not None:
-                agreement_samples.append((total_repeat_coverage_count, float(pooled_model_rel["directionalAgreement"])))
-            if pooled_model_rel.get("neutralShare") is not None:
-                neutral_samples.append((total_repeat_coverage_count, float(pooled_model_rel["neutralShare"])))
-
-        contributing_run_count = sum(
-            1 for variance_per_model in run_level_variance.values()
-            if model_id in variance_per_model
-        )
-
-        repeat_coverage_breadth = (
-            len(repeated_condition_ids & planned_condition_set)
-            if planned_condition_set
-            else len(repeated_condition_ids)
-        )
         repeat_coverage_share = (
-            round(repeat_coverage_breadth / planned_condition_count, 6)
+            round(total_repeat_coverage_count / planned_condition_count, 6)
             if planned_condition_count > 0
             else 0.0
         )
-        unique_scenarios = repeat_coverage_breadth
-        drift_sd = compute_weighted_standard_deviation(drift_samples)
+
+        # Collect per-run data for contributingRunCount and drift
+        contributing_run_count = 0
+        drift_samples: list[tuple[int, float]] = []
+
+        for run_id, run_per_model in run_level_per_model.items():
+            if model_id not in run_per_model:
+                continue
+            contributing_run_count += 1
+
+            # Collect drift: overallSignedCenter per run, weighted by unique scenarios in that run
+            run_preference = run_level_preference.get(run_id, {}).get(model_id, {})
+            osc = run_preference.get("preferenceDirection", {}).get("overallSignedCenter")
+            unique_scen = len(run_model_scenario_ids.get(run_id, {}).get(model_id, set()))
+            if osc is not None and unique_scen > 0:
+                drift_samples.append((unique_scen, float(osc)))
+
+        # Guard: drift SD requires at least 2 samples to be meaningful
+        drift_sd = compute_weighted_standard_deviation(drift_samples) if len(drift_samples) >= 2 else None
+
         per_model_repeat_coverage[model_id] = {
             "repeatCoverageCount": total_repeat_coverage_count,
             "repeatCoverageShare": repeat_coverage_share,
@@ -531,16 +505,16 @@ def build_pooled_aggregate_reliability(
         publishable = (
             total_repeat_coverage_count >= min_repeat_coverage_count
             and repeat_coverage_share >= min_repeat_coverage_share
-            and len(reliability_samples) > 0
+            and pooled_model_rel.get("baselineReliability") is not None
         )
 
         reliability_per_model[model_id] = {
-            "baselineNoise": weighted_average(noise_samples) if publishable else None,
-            "baselineReliability": weighted_average(reliability_samples) if publishable else None,
-            "directionalAgreement": weighted_average(agreement_samples) if publishable else None,
-            "neutralShare": weighted_average(neutral_samples) if publishable else None,
+            "baselineNoise": pooled_model_rel.get("baselineNoise") if publishable else None,
+            "baselineReliability": pooled_model_rel.get("baselineReliability") if publishable else None,
+            "directionalAgreement": pooled_model_rel.get("directionalAgreement") if publishable else None,
+            "neutralShare": pooled_model_rel.get("neutralShare") if publishable else None,
             "coverageCount": total_repeat_coverage_count,
-            "uniqueScenarios": unique_scenarios,
+            "uniqueScenarios": total_repeat_coverage_count,
         }
 
     return (
