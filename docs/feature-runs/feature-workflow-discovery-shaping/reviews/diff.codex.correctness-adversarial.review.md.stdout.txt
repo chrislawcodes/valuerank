@@ -1,0 +1,8 @@
+## Findings
+1. **High**: The new gate can be bypassed by malformed unresolved entries that already have `deferred: true`. `blocking_unresolved_items()` skips anything marked deferred, even when the entry itself is broken, so `discover --complete`, `discover --force-complete`, and spec checkpointing will all accept corrupted discovery state instead of forcing repair. That means the intended “repair before progress” guarantee is still leaky in `[factory_state.py](/Users/chrislaw/valuerank/docs/operations/codex-skills/feature-factory/scripts/factory_state.py)` and `[run_factory.py](/Users/chrislaw/valuerank/docs/operations/codex-skills/feature-factory/scripts/run_factory.py)`.
+
+2. **Medium**: `discovery_blockers_are_malformed()` decides “malformed” by checking whether the `item` text starts with the sentinel `<malformed...>`. That is brittle: a legitimate unresolved item whose text begins with that prefix will be misclassified as corrupted state, and the code will push users toward `discover --clear`, which can discard valid discovery data. This affects the new checkpoint/discover error paths in `[run_factory.py](/Users/chrislaw/valuerank/docs/operations/codex-skills/feature-factory/scripts/run_factory.py)`.
+
+## Residual Risks
+- The new tests do not cover malformed unresolved entries that are explicitly deferred, so the bypass in finding 1 is still unverified by the suite.
+- There is no coverage for a real unresolved item whose text begins with `<malformed`, so the misclassification in finding 2 could still ship unnoticed.

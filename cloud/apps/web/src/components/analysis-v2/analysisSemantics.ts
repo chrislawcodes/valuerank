@@ -27,11 +27,9 @@ export type AvailabilityState =
 export type PreferenceViewModel = {
   modelId: string;
   overallLean: 'A' | 'B' | 'NEUTRAL' | null;
-  overallSignedCenter: number | null;
-  preferenceStrength: number | null;
-  topPrioritizedValues: string[];
-  topDeprioritizedValues: string[];
-  neutralValues: string[];
+  topPrioritizedValues: Array<{ name: string; winRate: number | null }>;
+  topDeprioritizedValues: Array<{ name: string; winRate: number | null }>;
+  neutralValues: Array<{ name: string; winRate: number | null }>;
   availability: AvailabilityState;
 };
 
@@ -76,6 +74,11 @@ type RawPreferenceValueStats = {
     deprioritized: number;
     neutral: number;
   };
+};
+
+type PreferenceValueSummary = {
+  name: string;
+  winRate: number | null;
 };
 
 type RawModelPreferenceSummary = {
@@ -286,12 +289,12 @@ function parseRawPreferenceSummaryEntry(value: unknown): RawModelPreferenceSumma
     return null;
   }
 
-  const overallSignedCenter = preferenceDirection.overallSignedCenter;
+  const overallSignedCenter = preferenceDirection.overallSignedCenter ?? null;
   if (overallSignedCenter !== null && !isFiniteNumber(overallSignedCenter)) {
     return null;
   }
 
-  const preferenceStrength = value.preferenceStrength;
+  const preferenceStrength = value.preferenceStrength ?? null;
   if (preferenceStrength !== null && !isNonNegativeNumber(preferenceStrength)) {
     return null;
   }
@@ -397,35 +400,39 @@ function parseAggregateMetadata(value: AggregateMetadata | null | undefined): Pa
   return value;
 }
 
-function deriveValueLists(byValue: Record<string, RawPreferenceValueStats>) {
+function deriveValueLists(byValue: Record<string, RawPreferenceValueStats>): {
+  topPrioritizedValues: PreferenceValueSummary[];
+  topDeprioritizedValues: PreferenceValueSummary[];
+  neutralValues: PreferenceValueSummary[];
+} {
   const entries = Object.entries(byValue).map(([valueId, stats]) => ({
-    valueId,
+    name: valueId,
     winRate: stats.winRate,
     distance: Math.abs(stats.winRate - 0.5),
   }));
 
-  const sortByStrength = (left: { valueId: string; distance: number }, right: { valueId: string; distance: number }) => {
+  const sortByStrength = (left: { name: string; distance: number }, right: { name: string; distance: number }) => {
     if (right.distance !== left.distance) {
       return right.distance - left.distance;
     }
-    return left.valueId.localeCompare(right.valueId);
+    return left.name.localeCompare(right.name);
   };
 
   const prioritized = entries
     .filter((entry) => entry.winRate > 0.5 + EPSILON)
     .sort(sortByStrength)
     .slice(0, 3)
-    .map((entry) => entry.valueId);
+    .map((entry) => ({ name: entry.name, winRate: entry.winRate }));
   const deprioritized = entries
     .filter((entry) => entry.winRate < 0.5 - EPSILON)
     .sort(sortByStrength)
     .slice(0, 3)
-    .map((entry) => entry.valueId);
+    .map((entry) => ({ name: entry.name, winRate: entry.winRate }));
   const neutral = entries
     .filter((entry) => Math.abs(entry.winRate - 0.5) <= EPSILON)
     .sort(sortByStrength)
     .slice(0, 3)
-    .map((entry) => entry.valueId);
+    .map((entry) => ({ name: entry.name, winRate: entry.winRate }));
 
   return {
     topPrioritizedValues: prioritized,
@@ -579,8 +586,6 @@ function buildMergedPreferenceModel(
   return {
     modelId,
     overallLean: combineOverallLean(overallSignedCenter),
-    overallSignedCenter,
-    preferenceStrength,
     topPrioritizedValues: valueLists.topPrioritizedValues,
     topDeprioritizedValues: valueLists.topDeprioritizedValues,
     neutralValues: valueLists.neutralValues,
@@ -689,8 +694,6 @@ function buildPreferenceUnavailableModel(modelId: string, reason: SemanticUnavai
   return {
     modelId,
     overallLean: null,
-    overallSignedCenter: null,
-    preferenceStrength: null,
     topPrioritizedValues: [],
     topDeprioritizedValues: [],
     neutralValues: [],
@@ -822,8 +825,6 @@ function buildPreferenceSection(
     byModel[modelId] = {
       modelId,
       overallLean: parsedModel.preferenceDirection.overallLean,
-      overallSignedCenter: parsedModel.preferenceDirection.overallSignedCenter,
-      preferenceStrength: parsedModel.preferenceStrength,
       topPrioritizedValues: valueLists.topPrioritizedValues,
       topDeprioritizedValues: valueLists.topDeprioritizedValues,
       neutralValues: valueLists.neutralValues,

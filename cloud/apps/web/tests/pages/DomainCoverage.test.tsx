@@ -44,36 +44,12 @@ const coverageByDomain = {
     values: ['Self_Direction_Action', 'Achievement'],
     cells: [
       {
-        valueA: 'Self_Direction_Action',
-        valueB: 'Self_Direction_Action',
-        batchCount: 0,
-        definitionId: null,
-        definitionName: null,
-        aggregateRunId: null,
-      },
-      {
         valueA: 'Achievement',
         valueB: 'Self_Direction_Action',
         batchCount: 3,
         definitionId: 'def-1',
         definitionName: 'A vs B',
         aggregateRunId: 'run-1',
-      },
-      {
-        valueA: 'Self_Direction_Action',
-        valueB: 'Achievement',
-        batchCount: 1,
-        definitionId: 'def-2',
-        definitionName: 'B vs A',
-        aggregateRunId: 'run-2',
-      },
-      {
-        valueA: 'Achievement',
-        valueB: 'Achievement',
-        batchCount: 0,
-        definitionId: null,
-        definitionName: null,
-        aggregateRunId: null,
       },
     ],
     availableModels: [
@@ -86,36 +62,12 @@ const coverageByDomain = {
     values: ['Self_Direction_Action', 'Achievement'],
     cells: [
       {
-        valueA: 'Self_Direction_Action',
-        valueB: 'Self_Direction_Action',
-        batchCount: 0,
-        definitionId: null,
-        definitionName: null,
-        aggregateRunId: null,
-      },
-      {
         valueA: 'Achievement',
         valueB: 'Self_Direction_Action',
         batchCount: 4,
         definitionId: 'def-2',
         definitionName: 'B vs A',
         aggregateRunId: 'run-2',
-      },
-      {
-        valueA: 'Self_Direction_Action',
-        valueB: 'Achievement',
-        batchCount: 2,
-        definitionId: 'def-3',
-        definitionName: 'A vs B',
-        aggregateRunId: 'run-3',
-      },
-      {
-        valueA: 'Achievement',
-        valueB: 'Achievement',
-        batchCount: 0,
-        definitionId: null,
-        definitionName: null,
-        aggregateRunId: null,
       },
     ],
     availableModels: [
@@ -184,31 +136,15 @@ describe('DomainCoverage Page', () => {
     });
   });
 
-  it('clears stale model filters after switching to a domain with different available models', async () => {
-    const user = userEvent.setup();
+  it('shows the coverage copy control for the active domain', async () => {
     await act(async () => {
       renderCoveragePage();
     });
 
-    expect(screen.getByRole('button', { name: /select all models/i })).toBeInTheDocument();
-
-    await act(async () => {
-      await user.selectOptions(screen.getByRole('combobox', { name: 'Domain Selection' }), 'domain-b');
-    });
-
     await waitFor(() => {
-      expect(screen.queryByRole('button', { name: /select all models/i })).not.toBeInTheDocument();
-    });
-
-    await waitFor(() => {
-      expect(useQueryMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          variables: expect.objectContaining({
-            domainId: 'domain-b',
-            modelIds: undefined,
-          }),
-        }),
-      );
+      expect(screen.getByRole('button', { name: /copy coverage table as image/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Model A' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Model B' })).not.toBeInTheDocument();
     });
   });
 
@@ -233,7 +169,7 @@ describe('DomainCoverage Page', () => {
       );
     });
 
-    expect(screen.getByRole('button', { name: /copy coverage table as image/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /copy coverage table as image/i }).length).toBeGreaterThan(0);
   });
 
   it('defaults signature to temp 0 when no signature query param is provided', async () => {
@@ -248,29 +184,6 @@ describe('DomainCoverage Page', () => {
           variables: expect.objectContaining({
             domainId: 'domain-a',
             signature: 'vnewt0',
-          }),
-        }),
-      );
-    });
-  });
-
-  it('defaults to all models selected when no modelIds query param is provided', async () => {
-    initialSearchParams = 'domainId=domain-a';
-    const user = userEvent.setup();
-    await act(async () => {
-      renderCoveragePage();
-    });
-
-    await act(async () => {
-      await user.click(screen.getByRole('button', { name: 'Model A' }));
-    });
-
-    await waitFor(() => {
-      expect(useQueryMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          variables: expect.objectContaining({
-            domainId: 'domain-a',
-            modelIds: ['model-b'],
           }),
         }),
       );
@@ -332,12 +245,15 @@ describe('DomainCoverage Page', () => {
 
     await act(async () => {
       await user.click(
-        screen.getByRole('button', { name: /self-direction versus achievement.*1 batch/i })
+        screen.getByRole('button', { name: /self-direction versus achievement.*3 batch/i })
       );
     });
 
+    const pairedBatchLink = await screen.findByRole('link', { name: /start paired batch/i });
+    expect(pairedBatchLink).toHaveAttribute('href', '/definitions/def-1/start-paired-batch');
+
     const vignetteAnalysisLink = await screen.findByRole('link', { name: /view vignette analysis/i });
-    expect(vignetteAnalysisLink).toHaveAttribute('href', '/analysis/run-2');
+    expect(vignetteAnalysisLink).toHaveAttribute('href', '/analysis/run-1');
     expect(screen.queryByRole('link', { name: /view domain analysis/i })).not.toBeInTheDocument();
   });
 });

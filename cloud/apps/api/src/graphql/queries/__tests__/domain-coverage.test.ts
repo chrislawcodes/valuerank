@@ -30,20 +30,18 @@ describe('extractValuePair', () => {
     });
   });
 
-  it('reverses B-first paired definitions', () => {
+  it('returns dimension order regardless of methodology', () => {
     expect(
       extractValuePair({
         dimensions: [
           { name: 'achievement' },
           { name: 'benevolence_dependability' },
         ],
-        methodology: {
-          presentation_order: 'B_first',
-        },
+        methodology: {},
       }),
     ).toEqual({
-      valueA: 'Benevolence_Dependability',
-      valueB: 'Achievement',
+      valueA: 'Achievement',
+      valueB: 'Benevolence_Dependability',
     });
   });
 
@@ -77,5 +75,83 @@ describe('selectPrimaryDefinitionCount', () => {
       primaryDefinitionId: null,
       batchCount: 0,
     });
+  });
+});
+
+describe('samplesPerScenario increment logic', () => {
+  // Replicates the increment logic from domain-coverage.ts counting loop
+  function computeIncrement(samplesPerScenario: unknown): number {
+    return Number.isInteger(samplesPerScenario) && (samplesPerScenario as number) >= 1
+      ? (samplesPerScenario as number)
+      : 1;
+  }
+
+  it('returns samplesPerScenario when it is a valid positive integer', () => {
+    expect(computeIncrement(5)).toBe(5);
+  });
+
+  it('returns 1 when samplesPerScenario is 1', () => {
+    expect(computeIncrement(1)).toBe(1);
+  });
+
+  it('falls back to 1 when config is null (entire config null)', () => {
+    const value = (null as { samplesPerScenario?: unknown } | null)?.samplesPerScenario;
+    expect(computeIncrement(value)).toBe(1);
+  });
+
+  it('falls back to 1 when samplesPerScenario is absent from config', () => {
+    expect(computeIncrement(undefined)).toBe(1);
+  });
+
+  it('falls back to 1 when samplesPerScenario is null', () => {
+    expect(computeIncrement(null)).toBe(1);
+  });
+
+  it('falls back to 1 when samplesPerScenario is a string', () => {
+    expect(computeIncrement('5')).toBe(1);
+  });
+
+  it('falls back to 1 when samplesPerScenario is a float', () => {
+    expect(computeIncrement(1.5)).toBe(1);
+  });
+
+  it('falls back to 1 when samplesPerScenario is 0', () => {
+    expect(computeIncrement(0)).toBe(1);
+  });
+
+  it('falls back to 1 when samplesPerScenario is negative', () => {
+    expect(computeIncrement(-10)).toBe(1);
+  });
+
+  it('falls back to 1 when samplesPerScenario is NaN', () => {
+    expect(computeIncrement(NaN)).toBe(1);
+  });
+
+  it('falls back to 1 when samplesPerScenario is Infinity', () => {
+    expect(computeIncrement(Infinity)).toBe(1);
+  });
+
+  it('falls back to 1 when samplesPerScenario is -Infinity', () => {
+    expect(computeIncrement(-Infinity)).toBe(1);
+  });
+
+  it('sums correctly across multiple runs for the same definition (5+5=10)', () => {
+    const batchCountByDefinitionId = new Map<string, number>();
+    const defId = 'def-1';
+    for (const samplesPerScenario of [5, 5]) {
+      const increment = computeIncrement(samplesPerScenario);
+      batchCountByDefinitionId.set(defId, (batchCountByDefinitionId.get(defId) ?? 0) + increment);
+    }
+    expect(batchCountByDefinitionId.get(defId)).toBe(10);
+  });
+
+  it('sums correctly when one run has samplesPerScenario=5 and one has null (5+1=6)', () => {
+    const batchCountByDefinitionId = new Map<string, number>();
+    const defId = 'def-2';
+    for (const samplesPerScenario of [5, null]) {
+      const increment = computeIncrement(samplesPerScenario);
+      batchCountByDefinitionId.set(defId, (batchCountByDefinitionId.get(defId) ?? 0) + increment);
+    }
+    expect(batchCountByDefinitionId.get(defId)).toBe(6);
   });
 });

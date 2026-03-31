@@ -1,0 +1,193 @@
+2026-03-23T22:03:55.908259Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T22:03:55.909057Z  WARN codex_core::state_db: failed to initialize state runtime at /Users/chrislaw/.codex: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T22:03:55.917140Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d1cb9-dc7c-72c0-b5e2-863b0a34c637
+--------
+user
+Review this tasks artifact using a execution-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: tasks.md
+# Vignette Analysis Decision Model Phase 1 — Tasks
+
+## Slice 1 [CHECKPOINT] Docs, config hook, and shared adapter boundary
+
+Estimated diff: ~220 lines
+
+Dependencies:
+- spec and plan checkpointed
+- no consumer migration yet
+
+Work:
+1. Update `docs/canonical-glossary.md` so score-first language is clearly legacy for
+   vignette-analysis decision meaning and the active contract language points at
+   `direction + strength`.
+2. Update `docs/valuerank_prd.yaml` to stop teaching the summarize worker as score-first for
+   the vignette-analysis path.
+3. Update `docs/README.md` to replace the decision-code summary copy with canonical decision
+   language.
+4. Add a default-off `DECISION_MODEL_V2` hook in `cloud/apps/api/src/config.ts`.
+5. Create `cloud/apps/api/src/graphql/queries/domain/decision-model.ts` as a pure module
+   exporting:
+   - `RawDecisionEvidence`
+   - `CanonicalDecision`
+   - `LegacyDecisionCompat`
+   - the deterministic adapter helpers needed by tests
+6. Re-export the new module from `cloud/apps/api/src/graphql/queries/domain/shared.ts`
+   without changing existing consumer behavior.
+7. Run a repo-wide consumer scan for `shared.ts` imports and wildcard imports so the new
+   barrel symbols do not accidentally alter downstream usage patterns.
+
+Verification:
+- `npm run typecheck --workspace=@valuerank/api`
+- `npm run build --workspace=@valuerank/api`
+- `npm run typecheck --workspace=@valuerank/web`
+- `rg -n "score-first|decision codes|explicit numerical decision|direction \\+ strength" docs/canonical-glossary.md docs/valuerank_prd.yaml docs/README.md`
+- `rg -n "graphql/queries/domain/shared|from ['\"]\\.\\./.*shared['\"]|from ['\"].*/shared['\"]" cloud/apps/api cloud/apps/web`
+- Manually spot-check any `shared.ts` consumer hits for import form compatibility before the slice is marked done.
+
+## Slice 2 [CHECKPOINT] Decision adapter tests and config coverage
+
+Estimated diff: ~260 lines
+
+Dependencies:
+- Slice 1 complete
+- new adapter module compiles
+
+Work:
+1. Add `cloud/apps/api/tests/graphql/queries/decision-model.test.ts`.
+2. Cover the deterministic adapter cases from the phase-1 spec:
+   - exact first-side strong decision
+   - exact second-side lean decision
+   - neutral decision
+   - orientation-flipped exact decision
+   - fallback-resolved decision
+   - ambiguous response
+   - unparseable response
+   - manual override replacing an ambiguous response
+   - manual override replacing an exact response
+   - missing pair metadata forcing `unknown`
+   - malformed pair metadata forcing `unknown`
+   - invalid manual override forcing `error`
+   - one mixed-precedence case where a valid manual override wins over conflicting raw
+     legacy metadata
+3. Build the raw decision fixtures directly inside the test file so the edge-case inputs are
+   self-contained and do not depend on hidden shared fixtures.
+4. Add explicit compatibility mapping assertions for the canonical-to-legacy score table.
+5. Add a `cloud/apps/api/tests/config.test.ts` assertion that `DECISION_MODEL_V2` defaults
+   off and one assertion that it can be set to `true`.
+6. Keep the existing domain-analysis query tests untouched so they remain the regression
+   baseline for live output.
+7. Add a narrow import-compatibility assertion that the new adapter symbols can be reached
+   through the shared domain barrel without introducing a circular import.
+8. Include at least one combined adverse case in the adapter matrix, such as ambiguous raw
+   evidence paired with malformed metadata, so the precedence rules stay deterministic under
+   multiple failure signals.
+
+Verification:
+- `npm run test --workspace=@valuerank/api -- tests/graphql/queries/decision-model.test.ts tests/config.test.ts`
+- `npm run test --workspace=@valuerank/api -- tests/graphql/queries/domain-analysis.test.ts`
+- `npm run typecheck --workspace=@valuerank/api`
+
+## Slice 3 [CHECKPOINT] Regression pass and final phase-1 validation
+
+Estimated diff: ~80 lines
+
+Dependencies:
+- Slice 2 complete
+
+Work:
+1. Tighten any adapter edge cases exposed by Slice 2 test failures.
+2. For every adapter fix, add or update a regression test in `decision-model.test.ts`
+   before changing the implementation so the repaired case cannot regress silently.
+3. Keep the phase-1 adapter pure and fail-closed.
+4. Make sure the docs, config hook, adapter module, and tests all agree on the same
+   contract language.
+5. Record any residual phase-1 limitations in the plan only, not in the implementation
+   path.
+6. If the new adapter exposes any edge-case ambiguity, add a regression test for that exact
+   failure before moving on.
+7. Do a broader docs sanity pass than a single `grep`: inspect updated terminology in the
+   glossary, PRD, README, and any nearby code comments or examples that still mention the
+   old score-first wording.
+
+Verification:
+- `npm run test --workspace=@valuerank/api -- tests/graphql/queries/decision-model.test.ts tests/config.test.ts tests/graphql/queries/domain-analysis.test.ts`
+- `npm run build --workspace=@valuerank/api`
+- `npm run lint --workspace=@valuerank/api`
+
+## Review Reconciliation
+
+- review: reviews/tasks.gemini.dependency-order-adversarial.review.md | status: accepted | note: Added inline fixture creation to Slice 2, explicit mixed-precedence coverage, and a broader docs/repo sanity check so the task list is self-contained enough to implement safely.
+- review: reviews/tasks.gemini.coverage-adversarial.review.md | status: accepted | note: Added a web typecheck sanity check for the shared export boundary, explicit true-path config coverage, mixed-precedence precedence coverage, and a narrow import-compatibility check for the shared barrel.
+- review: reviews/tasks.codex.execution-adversarial.review.md | status: accepted | note: Added a regression-test-on-edge-case clause to Slice 3 and clarified that valid overrides can coexist with conflicting raw metadata without ambiguity.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+2026-03-23T22:03:55.943150Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T22:03:55.946273Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T22:03:55.969628Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T22:03:55.970628Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T22:03:55.972825Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d1cb9-dc7c-72c0-b5e2-863b0a34c637.tmp-1774303435910543000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-03-23T22:03:55.995630Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T22:03:55.996524Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T22:03:56.021093Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T22:03:56.022084Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T22:03:56.047126Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T22:03:56.048047Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T22:03:56.071680Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T22:03:56.072491Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T22:03:56.093514Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T22:03:56.094420Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T22:03:56.119438Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T22:03:56.120341Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T22:03:56.144849Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T22:03:56.145957Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T22:03:56.170662Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T22:03:56.171647Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T22:03:56.195910Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T22:03:56.197012Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T22:03:56.220130Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T22:03:56.221021Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T22:03:56.243497Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T22:03:56.244384Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T22:03:56.269513Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T22:03:56.274530Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T22:03:56.299367Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T22:03:56.302860Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T22:03:56.326020Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+codex
+I’m reviewing the task artifact as a plan, not the implementation, and I’m looking for places where it can fail in execution even if each individual item sounds reasonable. I’ll focus on missing edge cases, weak assumptions, and anything that could make the phase look complete while still leaving the adapter path unsafe.
+codex
+## Findings
+- High: Slice 2 only names representative adapter cases for `first-side strong` and `second-side lean`, but it does not require the complementary symmetric combinations. That leaves room for left/right or strong/lean asymmetry bugs to slip through in a `direction + strength` adapter, which is exactly the kind of bug this phase is supposed to catch.
+- Medium-High: The artifact omits the repo-required `MEMORY.md` and `STATUS.md` updates. That means the feature can be implemented and verified in code while still violating the project’s closeout process and losing the symbol/history tracking future work depends on.
+- Medium: The `DECISION_MODEL_V2` work only checks default-off and that the flag can be set `true`; it does not require any assertion that the flag actually changes a runtime path. A dead or unthreaded feature flag could still satisfy this plan.
+- Medium: The “repo-wide consumer scan” is not actually repo-wide. The verification only scans `cloud/apps/api` and `cloud/apps/web`, so any other package, test harness, or generated consumer of `shared.ts` could break from the new barrel export without being caught.
+
+## Residual Risks
+- Hidden consumers or wildcard imports outside the scanned paths can still be affected by the new `shared.ts` export.
+- The adapter may still have uncovered precedence gaps around null-ish metadata, malformed legacy fields, or other non-symmetric value combinations.
+- Docs can still drift from implementation if Slice 3 does not explicitly reconcile nearby code comments and examples, not just the main docs files.
+tokens used
+7,885

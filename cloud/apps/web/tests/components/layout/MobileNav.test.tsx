@@ -24,7 +24,7 @@ describe('MobileNav Component', () => {
     expect(screen.getByRole('link', { name: 'Validation' })).toHaveAttribute('href', '/validation');
     expect(screen.getByRole('link', { name: 'Archive' })).toHaveAttribute('href', '/archive');
     expect(screen.getByRole('link', { name: 'Compare' })).toHaveAttribute('href', '/compare');
-    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings/account');
   });
 
   it('keeps the domain compatibility links nested under Domains', async () => {
@@ -32,14 +32,11 @@ describe('MobileNav Component', () => {
 
     expect(screen.getByRole('link', { name: 'Vignettes' })).toHaveAttribute('href', '/definitions');
     expect(screen.getByRole('link', { name: 'Domain Analysis' })).toHaveAttribute('href', '/domains/analysis');
-    expect(screen.getByRole('link', { name: 'Coverage' })).toHaveAttribute('href', '/domains/coverage');
+    expect(screen.getByRole('link', { name: 'Manage Domains' })).toHaveAttribute('href', '/domains/manage');
+    expect(screen.queryByRole('link', { name: 'Coverage' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Runs' })).toHaveAttribute('href', '/runs');
     expect(screen.queryByRole('link', { name: 'New Vignette' })).not.toBeInTheDocument();
-    expect(screen.getByText('Domain Setup')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Preamble' })).toHaveAttribute('href', '/preambles');
-    expect(screen.getByRole('link', { name: 'Context' })).toHaveAttribute('href', '/domain-contexts');
-    expect(screen.getByRole('link', { name: 'Value Statements' })).toHaveAttribute('href', '/value-statements');
-    expect(screen.getByRole('link', { name: 'Level Presets' })).toHaveAttribute('href', '/level-presets');
+    expect(screen.queryByText('Domain Setup')).not.toBeInTheDocument();
   });
 
   it('keeps the validation compatibility links nested under Validation', async () => {
@@ -73,10 +70,10 @@ describe('MobileNav Component', () => {
     expect(screen.getByRole('link', { name: 'Legacy Survey Work' }).className).toContain('border-teal-500');
   });
 
-  it('highlights the nested domain setup route on domain setup compatibility routes', async () => {
-    await renderMobileNav('/domain-contexts');
+  it('highlights the nested settings route on settings sub-routes', async () => {
+    await renderMobileNav('/settings/models');
 
-    expect(screen.getByRole('link', { name: 'Domains' }).className).not.toContain('border-teal-500');
-    expect(screen.getByRole('link', { name: 'Context' }).className).toContain('border-teal-500');
+    expect(screen.getByRole('link', { name: 'Settings' }).className).not.toContain('border-teal-500');
+    expect(screen.getByRole('link', { name: 'Models' }).className).toContain('border-teal-500');
   });
 });

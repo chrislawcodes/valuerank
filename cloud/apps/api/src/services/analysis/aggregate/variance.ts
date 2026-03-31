@@ -6,6 +6,12 @@ import type {
   ScenarioVarianceStats,
   VarianceStats,
 } from './contracts.js';
+import { resolveTranscriptDecisionModel } from '../../../graphql/queries/domain/decision-model.js';
+
+type DecisionAwareAggregateTranscript = AggregateTranscriptInput & {
+  decisionMetadata?: unknown;
+  definitionSnapshot?: unknown;
+};
 
 function computeVarianceStats(scores: number[]): VarianceStats {
   if (scores.length === 0) {
@@ -83,9 +89,11 @@ export function computeVarianceAnalysis(
   });
 
   const grouped = new Map<string, number[]>();
+  const groupedCanonicalScores = new Map<string, number[]>();
   const correctedScenarioIds = new Set<string>();
 
-  transcripts.forEach((transcript) => {
+  transcripts.forEach((rawTranscript) => {
+    const transcript = rawTranscript as DecisionAwareAggregateTranscript;
     if (
       transcript.scenarioId == null ||
       transcript.scenarioId === '' ||
@@ -97,11 +105,16 @@ export function computeVarianceAnalysis(
       return;
     }
 
-    const rawScore = parseFloat(transcript.decisionCode);
-    if (isNaN(rawScore)) return;
-
     const orientationFlipped = transcript.scenario?.orientationFlipped ?? false;
-    const score = orientationFlipped ? 6 - rawScore : rawScore;
+    const resolved = resolveTranscriptDecisionModel({
+      decisionCode: transcript.decisionCode,
+      decisionMetadata: transcript.decisionMetadata,
+      definitionSnapshot: transcript.definitionSnapshot,
+      orientationFlipped,
+    });
+    const canonicalScore = resolved.legacy.canonicalScore;
+    if (canonicalScore == null) return;
+    const score = Math.abs(canonicalScore - 3);
     if (orientationFlipped) {
       correctedScenarioIds.add(transcript.scenarioId);
     }
@@ -110,6 +123,10 @@ export function computeVarianceAnalysis(
     const current = grouped.get(key) || [];
     current.push(score);
     grouped.set(key, current);
+
+    const currentCanonicalScores = groupedCanonicalScores.get(key) || [];
+    currentCanonicalScores.push(canonicalScore);
+    groupedCanonicalScores.set(key, currentCanonicalScores);
   });
 
   let maxSamples = 1;
@@ -140,9 +157,10 @@ export function computeVarianceAnalysis(
 
     scenarioMap.forEach((scores, scenarioId) => {
       const stats = computeVarianceStats(scores);
+      const canonicalScores = groupedCanonicalScores.get(`${scenarioId}||${modelId}`) ?? [];
 
-      if (scores.length > 0) {
-        const signed = scores.map((score) => score - 3);
+      if (scores.length > 0 && canonicalScores.length > 0) {
+        const signed = canonicalScores.map((score) => score - 3);
         const medianSd = computeMedian(signed);
 
         const direction: 'A' | 'B' | 'NEUTRAL' =
@@ -155,11 +173,11 @@ export function computeVarianceAnalysis(
         ).length;
 
         const n = scores.length;
-        const neutralCount = scores.filter((score) => score === 3).length;
+        const neutralCount = canonicalScores.filter((score) => score === 3).length;
 
         const scoreCounts: Record<string, number> = {};
         for (const scoreValue of [1, 2, 3, 4, 5]) {
-          scoreCounts[String(scoreValue)] = scores.filter((score) => score === scoreValue).length;
+          scoreCounts[String(scoreValue)] = canonicalScores.filter((score) => score === scoreValue).length;
         }
 
         const iqrVal = n >= 2 ? computeIQR(signed) : undefined;

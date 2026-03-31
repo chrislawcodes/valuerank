@@ -1,4 +1,5 @@
 import { db, type RunCategory } from '@valuerank/db';
+import type { Prisma } from '@valuerank/db';
 import { AuthenticationError, NotFoundError, ValidationError } from '@valuerank/shared';
 import { builder } from '../../builder.js';
 import type { Context } from '../../context.js';
@@ -17,6 +18,7 @@ import {
 } from '../../../services/models/aliases.js';
 import { parseRunCategory } from '../../../services/run/query.js';
 import { StartRunPayload } from './payloads.js';
+import { findPairedCompanion, getComponentTokens } from '../../../utils/auto-pair.js';
 
 type StartRunArgs = {
   definitionId: string | number;
@@ -36,9 +38,12 @@ type StartRunArgs = {
 type DefinitionMethodology = {
   family?: string;
   response_scale?: string;
-  presentation_order?: 'A_first' | 'B_first';
   pair_key?: string;
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
 
 function getDefinitionMethodology(content: unknown): DefinitionMethodology | null {
   if (!content || typeof content !== 'object' || Array.isArray(content)) {
@@ -54,17 +59,81 @@ function getDefinitionMethodology(content: unknown): DefinitionMethodology | nul
   return {
     family: typeof record.family === 'string' ? record.family : undefined,
     response_scale: typeof record.response_scale === 'string' ? record.response_scale : undefined,
-    presentation_order:
-      record.presentation_order === 'A_first' || record.presentation_order === 'B_first'
-        ? record.presentation_order
-        : undefined,
     pair_key: typeof record.pair_key === 'string' ? record.pair_key : undefined,
   };
 }
 
+function mergeCompanionRunId(config: unknown, companionRunId: string): Prisma.InputJsonValue {
+  return {
+    ...(isRecord(config) ? config : {}),
+    companionRunId,
+  };
+}
+
+function getConfiguredCompanionRunId(config: unknown): string | null {
+  if (!isRecord(config)) {
+    return null;
+  }
+
+  const raw = config.companionRunId;
+  return typeof raw === 'string' && raw.trim().length > 0 ? raw : null;
+}
+
+export async function persistPairedCompanionRunIds(primaryRunId: string, companionRunId: string): Promise<void> {
+  await db.$transaction(async (tx) => {
+    const [primaryRun, companionRun] = await Promise.all([
+      tx.run.findUnique({
+        where: { id: primaryRunId },
+        select: { id: true, config: true },
+      }),
+      tx.run.findUnique({
+        where: { id: companionRunId },
+        select: { id: true, config: true },
+      }),
+    ]);
+
+    if (!primaryRun) {
+      throw new NotFoundError('Run', primaryRunId);
+    }
+    if (!companionRun) {
+      throw new NotFoundError('Run', companionRunId);
+    }
+
+    const primaryConfiguredCompanionRunId = getConfiguredCompanionRunId(primaryRun.config);
+    if (primaryConfiguredCompanionRunId !== null && primaryConfiguredCompanionRunId !== companionRunId) {
+      throw new ValidationError(`Run ${primaryRunId} is already paired with a different companion run.`);
+    }
+
+    const companionConfiguredCompanionRunId = getConfiguredCompanionRunId(companionRun.config);
+    if (companionConfiguredCompanionRunId !== null && companionConfiguredCompanionRunId !== primaryRunId) {
+      throw new ValidationError(`Run ${companionRunId} is already paired with a different companion run.`);
+    }
+
+    const primaryNeedsUpdate = primaryConfiguredCompanionRunId !== companionRunId;
+    const companionNeedsUpdate = companionConfiguredCompanionRunId !== primaryRunId;
+    if (!primaryNeedsUpdate && !companionNeedsUpdate) {
+      return;
+    }
+
+    await tx.run.update({
+      where: { id: primaryRunId },
+      data: {
+        config: mergeCompanionRunId(primaryRun.config, companionRunId),
+      },
+    });
+
+    await tx.run.update({
+      where: { id: companionRunId },
+      data: {
+        config: mergeCompanionRunId(companionRun.config, primaryRunId),
+      },
+    });
+  });
+}
+
 async function resolvePairedJobChoiceDefinition(
   definitionId: string,
-): Promise<{ primary: { id: string; content: unknown }; companionId: string; presentationOrder: 'A_first' | 'B_first' }> {
+): Promise<{ primary: { id: string; content: unknown }; companionId: string; companionContent: unknown; primaryValueFirst: string; companionValueFirst: string }> {
   const definition = await db.definition.findUnique({
     where: { id: definitionId },
     select: {
@@ -80,52 +149,55 @@ async function resolvePairedJobChoiceDefinition(
   }
 
   const methodology = getDefinitionMethodology(definition.content);
-  if (methodology?.family !== 'job-choice' || !methodology.pair_key || !methodology.presentation_order) {
-    throw new ValidationError('Paired batches require a Job Choice vignette with paired-order metadata.');
+  if (methodology?.family !== 'job-choice' || !methodology.pair_key) {
+    throw new ValidationError('Paired batches require a Job Choice vignette with a pair_key.');
   }
 
-  const companionOrder = methodology.presentation_order === 'A_first' ? 'B_first' : 'A_first';
-  const companion = await db.definition.findFirst({
+  const candidates = await db.definition.findMany({
     where: {
       id: { not: definition.id },
       deletedAt: null,
       domainId: definition.domainId,
       content: {
-        path: ['methodology', 'family'],
-        equals: 'job-choice',
+        path: ['methodology', 'pair_key'],
+        equals: methodology.pair_key,
       },
-      AND: [
-        {
-          content: {
-            path: ['methodology', 'pair_key'],
-            equals: methodology.pair_key,
-          },
-        },
-        {
-          content: {
-            path: ['methodology', 'presentation_order'],
-            equals: companionOrder,
-          },
-        },
-      ],
     },
-    select: { id: true },
+    select: { id: true, content: true },
   });
+
+  const companion = findPairedCompanion(
+    { id: definition.id, content: definition.content },
+    candidates,
+  );
 
   if (!companion) {
     throw new ValidationError(
-      'Paired batch launch requires both A-first and B-first Job Choice definitions. Generate both companion definitions first.'
+      'Paired batch launch requires a companion Job Choice definition with mirrored value tokens. Generate the companion definition first.'
+    );
+  }
+
+  const primaryTokens = getComponentTokens(definition.content);
+  const companionTokens = getComponentTokens(companion.content);
+
+  if (!primaryTokens || !companionTokens) {
+    throw new ValidationError(
+      'Paired batch launch requires both definitions to have value_first and value_second component tokens.'
     );
   }
 
   return {
     primary: { id: definition.id, content: definition.content },
     companionId: companion.id,
-    presentationOrder: methodology.presentation_order,
+    companionContent: companion.content,
+    primaryValueFirst: primaryTokens.value_first.token,
+    companionValueFirst: companionTokens.value_first.token,
   };
 }
 
-async function loadRunForResult(runId: string, ctx: Context) {
+type LoadedRun = NonNullable<Awaited<ReturnType<Context['loaders']['run']['load']>>>;
+
+async function loadRunForResult(runId: string, ctx: Context): Promise<LoadedRun> {
   const run = await ctx.loaders.run.load(runId);
   if (run == null) {
     throw new Error(`Run not found: ${runId}`);
@@ -217,7 +289,7 @@ builder.mutationField('startRun', (t) =>
           configExtras: {
             jobChoiceLaunchMode: launchMode,
             jobChoiceBatchGroupId: batchGroupId,
-            jobChoicePresentationOrder: pair.presentationOrder,
+            jobChoiceValueFirst: pair.primaryValueFirst,
             methodologySafe: true,
           },
         });
@@ -228,13 +300,21 @@ builder.mutationField('startRun', (t) =>
           configExtras: {
             jobChoiceLaunchMode: launchMode,
             jobChoiceBatchGroupId: batchGroupId,
-            jobChoicePresentationOrder: pair.presentationOrder === 'A_first' ? 'B_first' : 'A_first',
+            jobChoiceValueFirst: pair.companionValueFirst,
             methodologySafe: true,
           },
         });
 
+        await persistPairedCompanionRunIds(primaryRun.run.id, companionRun.run.id);
+
         result = {
-          run: primaryRun.run,
+          run: {
+            ...primaryRun.run,
+            config: {
+              ...(isRecord(primaryRun.run.config) ? primaryRun.run.config : {}),
+              companionRunId: companionRun.run.id,
+            },
+          },
           jobCount: primaryRun.jobCount + companionRun.jobCount,
         };
         pairedRunIds = [companionRun.run.id];

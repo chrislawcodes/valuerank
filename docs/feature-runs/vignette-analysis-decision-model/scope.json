@@ -1,0 +1,11 @@
+{
+  "paths": [
+    "cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx",
+    "cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx",
+    "cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx",
+    "docs/feature-runs/vignette-analysis-decision-model"
+  ]
+}

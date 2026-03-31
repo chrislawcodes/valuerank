@@ -32,6 +32,8 @@ export type PivotTableConfig = {
   valueField: string;
   /** Display name for the value field */
   valueFieldLabel?: string;
+  /** Optional explicit field ordering for pivot cache values */
+  fieldValueOrder?: Record<string, string[]>;
 };
 
 type FieldInfo = {
@@ -334,7 +336,10 @@ export function addPivotTable(
 
   // Build field info with unique values
   const fields: FieldInfo[] = headers.map((name, index) => {
-    const uniqueValues = [...new Set(dataRows.map((row) => row[index] ?? ''))].sort();
+    const explicitOrder = config.fieldValueOrder?.[name];
+    const uniqueValues = explicitOrder !== undefined
+      ? [...explicitOrder]
+      : [...new Set(dataRows.map((row) => row[index] ?? ''))].sort();
     return { name, index, uniqueValues };
   });
 

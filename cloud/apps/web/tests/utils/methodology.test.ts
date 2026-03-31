@@ -23,7 +23,7 @@ describe('getPairedOrientationLabels', () => {
     expect(labels.current).toBe('Freedom -> Benevolence Dependability');
   });
 
-  it('recovers the canonical order from a B-first definition', () => {
+  it('uses component order as canonical for a B-first legacy definition (no canonical_value_order)', () => {
     const labels = getPairedOrientationLabels({
       methodology: {
         family: 'job-choice',
@@ -39,8 +39,8 @@ describe('getPairedOrientationLabels', () => {
       ],
     });
 
-    expect(labels.canonical).toBe('Freedom -> Benevolence Dependability');
-    expect(labels.flipped).toBe('Benevolence Dependability -> Freedom');
+    expect(labels.canonical).toBe('Benevolence Dependability -> Freedom');
+    expect(labels.flipped).toBe('Freedom -> Benevolence Dependability');
     expect(labels.current).toBe('Benevolence Dependability -> Freedom');
   });
 });

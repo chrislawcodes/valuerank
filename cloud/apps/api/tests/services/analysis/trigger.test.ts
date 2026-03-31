@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, afterEach, vi, beforeEach } from 'vitest';
-import { db } from '@valuerank/db';
+import { db, Prisma } from '@valuerank/db';
 import {
   triggerBasicAnalysis,
   hasCurrentAnalysis,
@@ -113,10 +113,11 @@ describe('analysis trigger service', () => {
     scenarioId: string,
     options: {
       summarized?: boolean;
-      decisionCode?: string;
+      decisionMetadata?: unknown;
     } = {}
   ) {
-    const { summarized = true, decisionCode = 'prioritize_A' } = options;
+    const { summarized = true, decisionMetadata = { rawDecisionEvidence: { matchedLabel: 'Achievement' } } } = options;
+    const resolvedDecisionMetadata = decisionMetadata === null ? Prisma.DbNull : decisionMetadata;
 
     const transcript = await db.transcript.create({
       data: {
@@ -127,8 +128,8 @@ describe('analysis trigger service', () => {
         turnCount: 3,
         tokenCount: 100,
         durationMs: 1000,
-        decisionCode: summarized ? decisionCode : null,
         summarizedAt: summarized ? new Date() : null,
+        decisionMetadata: summarized ? resolvedDecisionMetadata : null,
       },
     });
     createdTranscriptIds.push(transcript.id);
@@ -222,10 +223,10 @@ describe('analysis trigger service', () => {
       const run = await createTestRun(definition.id);
 
       const successful = await createTestTranscript(run.id, 'gpt-4', scenario.id, {
-        decisionCode: 'prioritize_A',
+        decisionMetadata: { rawDecisionEvidence: { matchedLabel: 'Achievement' } },
       });
       await createTestTranscript(run.id, 'claude-3', scenario.id, {
-        decisionCode: 'error',
+        decisionMetadata: null,
       });
 
       await triggerBasicAnalysis(run.id);
@@ -241,10 +242,10 @@ describe('analysis trigger service', () => {
       const run = await createTestRun(definition.id);
 
       await createTestTranscript(run.id, 'gpt-4', scenario.id, {
-        decisionCode: 'error',
+        decisionMetadata: null,
       });
       await createTestTranscript(run.id, 'claude-3', scenario.id, {
-        decisionCode: 'error',
+        decisionMetadata: null,
       });
 
       const result = await triggerBasicAnalysis(run.id);

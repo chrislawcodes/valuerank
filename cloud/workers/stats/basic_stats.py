@@ -10,6 +10,7 @@ from typing import Any, TypedDict
 import numpy as np
 
 from stats.confidence import wilson_score_ci, ConfidenceInterval
+from stats.decision_model import resolve_transcript_normalized_score
 
 
 class ValueCounts(TypedDict):
@@ -165,9 +166,7 @@ def compute_visualization_data(
     for t in transcripts:
         model_id = t.get("modelId", "unknown")
         scenario_id = t.get("scenarioId", "unknown")
-        summary = t.get("summary", {})
-        score = summary.get("score")
-
+        score = resolve_transcript_normalized_score(t)
         if score is None:
             continue
 
@@ -250,8 +249,10 @@ def aggregate_transcripts_by_model(
                     value_counts[value_id]["neutral"] += 1
 
             # Collect overall score if present and not null
-            if "score" in summary and summary["score"] is not None:
-                scores.append(float(summary["score"]))
+            score = resolve_transcript_normalized_score(t)
+            if score is None:
+                continue
+            scores.append(float(score))
 
         # Compute value stats
         values: dict[str, ValueStats] = {}

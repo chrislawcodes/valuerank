@@ -9,6 +9,7 @@ import request from 'supertest';
 import { createServer } from '../../../src/server.js';
 import { db } from '@valuerank/db';
 import { getAuthHeader, TEST_USER } from '../../test-utils.js';
+import { persistPairedCompanionRunIds } from '../../../src/graphql/mutations/run/lifecycle.js';
 
 // Mock PgBoss
 vi.mock('../../../src/queue/boss.js', () => ({
@@ -571,8 +572,11 @@ describe('GraphQL Run Mutations', () => {
             methodology: {
               family: 'job-choice',
               response_scale: 'option_text_short',
-              presentation_order: 'A_first',
               pair_key: pairKey,
+            },
+            components: {
+              value_first: { token: 'career' },
+              value_second: { token: 'family' },
             },
           },
         },
@@ -586,8 +590,11 @@ describe('GraphQL Run Mutations', () => {
             methodology: {
               family: 'job-choice',
               response_scale: 'option_text_short',
-              presentation_order: 'B_first',
               pair_key: pairKey,
+            },
+            components: {
+              value_first: { token: 'family' },
+              value_second: { token: 'career' },
             },
           },
         },
@@ -609,6 +616,7 @@ describe('GraphQL Run Mutations', () => {
             run {
               id
               runCategory
+              companionRunId
               config
               definition {
                 id
@@ -642,6 +650,7 @@ describe('GraphQL Run Mutations', () => {
 
       expect(result.run.definition.id).toBe(aFirstDefinition.id);
       expect(result.run.runCategory).toBe('PRODUCTION');
+      expect(result.run.companionRunId).toBe(result.pairedRunIds[0]);
       expect(result.jobCount).toBe(4);
       expect(result.pairedRunIds).toHaveLength(1);
 
@@ -672,11 +681,60 @@ describe('GraphQL Run Mutations', () => {
       expect((bRun?.config as Record<string, unknown>).jobChoiceLaunchMode).toBe('PAIRED_BATCH');
       expect((aRun?.config as Record<string, unknown>).methodologySafe).toBe(true);
       expect((bRun?.config as Record<string, unknown>).methodologySafe).toBe(true);
-      expect((aRun?.config as Record<string, unknown>).jobChoicePresentationOrder).toBe('A_first');
-      expect((bRun?.config as Record<string, unknown>).jobChoicePresentationOrder).toBe('B_first');
+      expect((aRun?.config as Record<string, unknown>).jobChoiceValueFirst).toBe('career');
+      expect((bRun?.config as Record<string, unknown>).jobChoiceValueFirst).toBe('family');
       expect((aRun?.config as Record<string, unknown>).jobChoiceBatchGroupId).toBe(
         (bRun?.config as Record<string, unknown>).jobChoiceBatchGroupId
       );
+      expect((aRun?.config as Record<string, unknown>).companionRunId).toBe(bRun?.id);
+      expect((bRun?.config as Record<string, unknown>).companionRunId).toBe(aRun?.id);
+      expect((aRun?.config as Record<string, unknown>).models).toEqual(['gpt-4']);
+      expect((bRun?.config as Record<string, unknown>).models).toEqual(['gpt-4']);
+    });
+
+    it('rejects overwriting an existing companion link with a different run', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Test Definition for Companion Link Guard',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      const primaryRun = await db.run.create({
+        data: {
+          definitionId: definition.id,
+          status: 'PENDING',
+          config: {
+            models: ['gpt-4'],
+            companionRunId: 'run-existing-companion',
+          },
+          progress: { total: 0, completed: 0, failed: 0 },
+        },
+      });
+      const companionRun = await db.run.create({
+        data: {
+          definitionId: definition.id,
+          status: 'PENDING',
+          config: {
+            models: ['gpt-4'],
+          },
+          progress: { total: 0, completed: 0, failed: 0 },
+        },
+      });
+      createdRunIds.push(primaryRun.id, companionRun.id);
+
+      await expect(
+        persistPairedCompanionRunIds(primaryRun.id, companionRun.id),
+      ).rejects.toThrow('already paired with a different companion run');
+
+      const [reloadedPrimaryRun, reloadedCompanionRun] = await Promise.all([
+        db.run.findUnique({ where: { id: primaryRun.id } }),
+        db.run.findUnique({ where: { id: companionRun.id } }),
+      ]);
+
+      expect((reloadedPrimaryRun?.config as Record<string, unknown>).companionRunId).toBe('run-existing-companion');
+      expect((reloadedCompanionRun?.config as Record<string, unknown>).companionRunId).toBeUndefined();
     });
   });
 
@@ -713,6 +771,28 @@ describe('GraphQL Run Mutations', () => {
           runId: run.id,
           scenarioId: scenario.id,
           modelId: 'gpt-4',
+          definitionSnapshot: {
+            dimensions: [
+              { name: 'Achievement' },
+              { name: 'Benevolence_Dependability' },
+            ],
+            methodology: {
+              presentation_order: 'A_first',
+            },
+          },
+          decisionMetadata: {
+            manualOverride: {
+              appliedDecision: {
+                favoredValueKey: 'Achievement',
+                opposedValueKey: 'Benevolence_Dependability',
+                direction: 'favor_first',
+                strength: 'strong',
+              },
+              previousValue: 'other',
+              overriddenAt: '2026-03-29T00:00:00.000Z',
+              overriddenByUserId: TEST_USER.id,
+            },
+          },
           content: { turns: [] },
           decisionCode: 'other',
           turnCount: 1,
@@ -726,7 +806,7 @@ describe('GraphQL Run Mutations', () => {
         mutation UpdateTranscriptDecision($transcriptId: ID!, $decisionCode: String!) {
           updateTranscriptDecision(transcriptId: $transcriptId, decisionCode: $decisionCode) {
             id
-            decisionCode
+            decisionMetadata
             runId
           }
         }
@@ -745,13 +825,34 @@ describe('GraphQL Run Mutations', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.errors).toBeUndefined();
-      expect(response.body.data.updateTranscriptDecision.decisionCode).toBe('4');
+      expect(response.body.data.updateTranscriptDecision.decisionMetadata).toMatchObject({
+        manualOverride: {
+          previousValue: 'other',
+          overriddenByUserId: expect.any(String),
+          appliedDecision: {
+            favoredValueKey: 'Achievement',
+            opposedValueKey: 'Benevolence_Dependability',
+            direction: 'favor_first',
+            strength: 'strong',
+          },
+        },
+      });
       expect(response.body.data.updateTranscriptDecision.runId).toBe(run.id);
 
       const updated = await db.transcript.findUnique({
         where: { id: transcript.id },
       });
-      expect(updated?.decisionCode).toBe('4');
+      expect(updated?.decisionMetadata).toMatchObject({
+        manualOverride: {
+          previousValue: 'other',
+          appliedDecision: {
+            favoredValueKey: 'Achievement',
+            opposedValueKey: 'Benevolence_Dependability',
+            direction: 'favor_first',
+            strength: 'strong',
+          },
+        },
+      });
     });
 
     it('returns validation error for unsupported decision code', async () => {

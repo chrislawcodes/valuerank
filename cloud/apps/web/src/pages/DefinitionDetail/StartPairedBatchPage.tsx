@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { ErrorMessage } from '../../components/ui/ErrorMessage';
@@ -16,6 +16,11 @@ import { useExpandedScenarios } from '../../hooks/useExpandedScenarios';
 import { useRunMutations } from '../../hooks/useRunMutations';
 import type { StartRunInput } from '../../api/operations/runs';
 import { getDefinitionMethodology, getDefinitionMethodologyLabel } from '../../utils/methodology';
+
+type StartPairedBatchRouteState = {
+  returnLabel?: string;
+  returnTo?: string;
+};
 
 function renderFailure(
   title: string,
@@ -38,9 +43,11 @@ function renderFailure(
 
 export function StartPairedBatchPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams<{ id?: string }>();
   const definitionId = id ?? '';
   const [runError, setRunError] = useState<string | null>(null);
+  const routeState = location.state as StartPairedBatchRouteState | null;
 
   const isRouteInvalid = definitionId === '' || definitionId === 'new';
 
@@ -63,6 +70,8 @@ export function StartPairedBatchPage() {
     [definition?.domain?.name, resolvedContent]
   );
   const isPairedBatchEligible = methodology?.family === 'job-choice';
+  const backTo = routeState?.returnTo ?? (definition ? `/definitions/${definition.id}` : '/definitions');
+  const backLabel = routeState?.returnLabel ?? 'Back to Vignette';
 
   const {
     totalCount: scenarioCount,
@@ -96,8 +105,8 @@ export function StartPairedBatchPage() {
     return renderFailure(
       'Invalid vignette',
       'This route needs a valid vignette ID to start a paired batch.',
-      'Back to Vignettes',
-      () => navigate('/definitions')
+      routeState?.returnLabel ?? 'Back to Vignettes',
+      () => navigate(routeState?.returnTo ?? '/definitions')
     );
   }
 
@@ -109,8 +118,8 @@ export function StartPairedBatchPage() {
     return renderFailure(
       'Failed to load vignette',
       definitionError.message,
-      'Back to Vignettes',
-      () => navigate('/definitions')
+      backLabel,
+      () => navigate(backTo)
     );
   }
 
@@ -118,8 +127,8 @@ export function StartPairedBatchPage() {
     return renderFailure(
       'Vignette not found',
       'The selected vignette could not be loaded.',
-      'Back to Vignettes',
-      () => navigate('/definitions')
+      backLabel,
+      () => navigate(backTo)
     );
   }
 
@@ -127,17 +136,17 @@ export function StartPairedBatchPage() {
     return renderFailure(
       'Paired batch unavailable',
       'This vignette is not configured for paired-batch launches.',
-      'Back to Vignette',
-      () => navigate(`/definitions/${definition.id}`)
+      backLabel,
+      () => navigate(backTo)
     );
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate(`/definitions/${definition.id}`)}>
+        <Button variant="ghost" size="sm" onClick={() => navigate(backTo)}>
           <ArrowLeft className="w-4 h-4 mr-1" />
-          Back to Vignette
+          {backLabel}
         </Button>
       </div>
 

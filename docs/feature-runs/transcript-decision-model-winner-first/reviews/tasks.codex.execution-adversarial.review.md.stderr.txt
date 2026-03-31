@@ -1,0 +1,193 @@
+OpenAI Codex v0.117.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d305b-1d27-7222-a801-8a850eccd298
+--------
+user
+Review this tasks artifact using a execution-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: tasks.md
+# Transcript Decision Model: Winner-First Storage - Tasks
+
+## Slice 1 [CHECKPOINT]
+
+**Goal:** Persist a winner-first cache in the transcript summary metadata and
+teach the resolver to use it when available.
+
+**Files**
+
+- `cloud/packages/db/src/types.ts`
+- `cloud/apps/api/src/queue/handlers/summarize-transcript.ts`
+- `cloud/apps/api/src/graphql/queries/domain/decision-model.ts`
+- `cloud/apps/api/tests/queue/handlers/summarize-transcript.test.ts`
+- `cloud/apps/api/tests/graphql/types/transcript-decision-model-v2.test.ts`
+- `cloud/packages/db/package.json`
+
+**Work**
+
+1. Extend the summary cache types so `summaryCache.summary` can hold a compact
+   winner-first cache with:
+   - `favoredValueKey`
+   - `strength`
+   - `presentationOrder`
+   - `decisionState`
+   - freshness keys (`responseSha256`, `parserVersion`, `modelId`)
+2. Update the summarize handler so a freshly summarized transcript stores the
+   winner-first cache inside the existing `decisionMetadata.summaryCache.summary`
+   JSON payload.
+3. Keep neutral outcomes explicit:
+   - `favoredValueKey = null`
+   - `strength = neutral`
+   - `direction = neutral`
+4. Keep unresolved responses explicit:
+   - ambiguous / unparseable responses stay `unknown`
+   - they do not get collapsed into neutral
+5. Update the transcript decision resolver so it can read the cached
+   winner-first metadata when it exists, but still falls back to the current
+   parse path for older rows.
+6. Keep `methodology.pair_key` and the definition `dimensions` order as the
+   canonical frame used to derive direction.
+7. Add regression tests proving:
+   - the summary cache includes the new winner-first fields
+   - neutral remains neutral
+   - unresolved transcripts remain unknown
+   - cached and computed transcripts still resolve to the same canonical
+     envelope
+   - malformed cached metadata falls back to the computed path
+   - stale but syntactically valid cached metadata falls back to the computed
+     path
+   - missing or corrupt definition metadata still resolves safely as unknown
+   - the summarize handler to GraphQL transcript query path still returns the
+     same canonical envelope for a B-first transcript
+
+**Estimated diff**
+
+- About 220-280 lines
+
+**Verification**
+
+- `cd cloud && npm run lint --workspace @valuerank/api`
+- `cd cloud && npm run test --workspace @valuerank/api -- tests/queue/handlers/summarize-transcript.test.ts tests/graphql/types/transcript-decision-model-v2.test.ts tests/graphql/queries/decision-model.test.ts`
+- `cd cloud && npm run build --workspace @valuerank/db`
+- `cd cloud && npm run test --workspace @valuerank/db`
+- `cd cloud && npm run test --workspace @valuerank/web -- tests/utils/transcriptDecisionModel.test.ts`
+
+**Exit rule**
+
+- Newly summarized transcripts carry the winner-first cache in existing
+  metadata, and old transcripts still resolve through the compatibility path
+  without a backfill.
+
+## Slice 2 [CHECKPOINT]
+
+**Goal:** Fix the paired comparison B-first mapping without changing the
+visible report labels.
+
+**Files**
+
+- `cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx`
+- `cloud/apps/web/tests/components/analysis/PairedRunComparisonCard.test.tsx`
+
+**Work**
+
+1. Swap the B-first value key mapping so the first/second values stay in
+   canonical order.
+2. Leave the visible layout, labels, and report structure unchanged.
+3. Add a regression test that fails if the B-first row is inverted again.
+
+**Estimated diff**
+
+- About 80-140 lines
+
+**Verification**
+
+- `cd cloud && npm run lint --workspace @valuerank/web`
+- `cd cloud && npm run test --workspace @valuerank/web -- tests/components/analysis/PairedRunComparisonCard.test.tsx tests/utils/transcriptDecisionModel.test.ts`
+
+**Exit rule**
+
+- The paired comparison card shows the same labels as before, but the B-first
+  row no longer swaps the first and second value counts.
+
+## Final Validation
+
+After both slices:
+
+- run `cd cloud && npm run lint --workspace @valuerank/api`
+- run `cd cloud && npm run lint --workspace @valuerank/web`
+- run `cd cloud && npm run test --workspace @valuerank/api`
+- run `cd cloud && npm run test --workspace @valuerank/web`
+- run `cd cloud && npm run build --workspace @valuerank/api`
+- run `cd cloud && npm run build --workspace @valuerank/web`
+
+## Review Reconciliation
+
+- review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: Slice 1 now has explicit neutral and unknown handling, a defined canonical frame, and a no-backfill migration boundary.
+- review: reviews/spec.gemini.edge-cases-adversarial.review.md | status: accepted | note: Slice 1 keeps unresolved responses distinct from neutral outcomes and uses the existing pair_key as the pair identity.
+- review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: Slice 1 keeps the backend cache optional, uses the definition order as the canonical frame, and avoids a schema migration.
+- review: reviews/tasks.gemini.dependency-order-adversarial.review.md | status: accepted | note: The implementation is sequenced in two slices but will only ship after both are complete; slice 1 now includes the handler-to-GraphQL integration test, and slice 2 stays tightly focused on the B-first display bug.
+- review: reviews/tasks.gemini.coverage-adversarial.review.md | status: accepted | note: Slice 1 now validates the db package, malformed and stale cache rows, and the handler-to-GraphQL path; slice 2 keeps the component regression test narrow; and the export blast radius is called out in the plan.
+- review: reviews/tasks.codex.execution-adversarial.review.md | status: accepted | note: The cache now carries an explicit decisionState plus freshness keys, the canonical frame is anchored to the transcript snapshot, and stale-looking rows fall back instead of silently masquerading as valid data.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+2026-03-27T17:32:50.903737Z  WARN codex_core::plugins::manager: failed to warm featured plugin ids cache error=remote plugin sync request to https://chatgpt.com/backend-api/plugins/featured failed with status 403 Forbidden: <html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style global>body{font-family:Arial,Helvetica,sans-serif}.container{align-items:center;display:flex;flex-direction:column;gap:2rem;height:100%;justify-content:center;width:100%}@keyframes enlarge-appear{0%{opacity:0;transform:scale(75%) rotate(-90deg)}to{opacity:1;transform:scale(100%) rotate(0deg)}}.logo{color:#8e8ea0}.scale-appear{animation:enlarge-appear .4s ease-out}@media (min-width:768px){.scale-appear{height:48px;width:48px}}.data:empty{display:none}.data{border-radius:5px;color:#8e8ea0;text-align:center}@media (prefers-color-scheme:dark){body{background-color:#343541}.logo{color:#acacbe}}</style>
+  <meta http-equiv="refresh" content="360"></head>
+  <body>
+    <div class="container">
+      <div class="logo">
+        <svg
+          width="41"
+          height="41"
+          viewBox="0 0 41 41"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          strokeWidth="2"
+          class="scale-appear"
+        >
+          <path
+            d="M37.5324 16.8707C37.9808 15.5241 38.1363 14.0974 37.9886 12.6859C37.8409 11.2744 37.3934 9.91076 36.676 8.68622C35.6126 6.83404 33.9882 5.3676 32.0373 4.4985C30.0864 3.62941 27.9098 3.40259 25.8215 3.85078C24.8796 2.7893 23.7219 1.94125 22.4257 1.36341C21.1295 0.785575 19.7249 0.491269 18.3058 0.500197C16.1708 0.495044 14.0893 1.16803 12.3614 2.42214C10.6335 3.67624 9.34853 5.44666 8.6917 7.47815C7.30085 7.76286 5.98686 8.3414 4.8377 9.17505C3.68854 10.0087 2.73073 11.0782 2.02839 12.312C0.956464 14.1591 0.498905 16.2988 0.721698 18.4228C0.944492 20.5467 1.83612 22.5449 3.268 24.1293C2.81966 25.4759 2.66413 26.9026 2.81182 28.3141C2.95951 29.7256 3.40701 31.0892 4.12437 32.3138C5.18791 34.1659 6.8123 35.6322 8.76321 36.5013C10.7141 37.3704 12.8907 37.5973 14.9789 37.1492C15.9208 38.2107 17.0786 39.0587 18.3747 39.6366C19.6709 40.2144 21.0755 40.5087 22.4946 40.4998C24.6307 40.5054 26.7133 39.8321 28.4418 38.5772C30.1704 37.3223 31.4556 35.5506 32.1119 33.5179C33.5027 33.2332 34.8167 32.6547 35.9659 31.821C37.115 30.9874 38.0728 29.9178 38.7752 28.684C39.8458 26.8371 40.3023 24.6979 40.0789 22.5748C39.8556 20.4517 38.9639 18.4544 37.5324 16.8707ZM22.4978 37.8849C20.7443 37.8874 19.0459 37.2733 17.6994 36.1501C17.7601 36.117 17.8666 36.0586 17.936 36.0161L25.9004 31.4156C26.1003 31.3019 26.2663 31.137 26.3813 30.9378C26.4964 30.7386 26.5563 30.5124 26.5549 30.2825V19.0542L29.9213 20.998C29.9389 21.0068 29.9541 21.0198 29.9656 21.0359C29.977 21.052 29.9842 21.0707 29.9867 21.0902V30.3889C29.9842 32.375 29.1946 34.2791 27.7909 35.6841C26.3872 37.0892 24.4838 37.8806 22.4978 37.8849ZM6.39227 31.0064C5.51397 29.4888 5.19742 27.7107 5.49804 25.9832C5.55718 26.0187 5.66048 26.0818 5.73461 26.1244L13.699 30.7248C13.8975 30.8408 14.1233 30.902 14.3532 30.902C14.583 30.902 14.8088 30.8408 15.0073 30.7248L24.731 25.1103V28.9979C24.7321 29.0177 24.7283 29.0376 24.7199 29.0556C24.7115 29.0736 24.6988 29.0893 24.6829 29.1012L16.6317 33.7497C14.9096 34.7416 12.8643 35.0097 10.9447 34.4954C9.02506 33.9811 7.38785 32.7263 6.39227 31.0064ZM4.29707 13.6194C5.17156 12.0998 6.55279 10.9364 8.19885 10.3327C8.19885 10.4013 8.19491 10.5228 8.19491 10.6071V19.808C8.19351 20.0378 8.25334 20.2638 8.36823 20.4629C8.48312 20.6619 8.64893 20.8267 8.84863 20.9404L18.5723 26.5542L15.206 28.4979C15.1894 28.5089 15.1703 28.5155 15.1505 28.5173C15.1307 28.5191 15.1107 28.516 15.0924 28.5082L7.04046 23.8557C5.32135 22.8601 4.06716 21.2235 3.55289 19.3046C3.03862 17.3858 3.30624 15.3413 4.29707 13.6194ZM31.955 20.0556L22.2312 14.4411L25.5976 12.4981C25.6142 12.4872 25.6333 12.4805 25.6531 12.4787C25.6729 12.4769 25.6928 12.4801 25.7111 12.4879L33.7631 17.1364C34.9967 17.849 36.0017 18.8982 36.6606 20.1613C37.3194 21.4244 37.6047 22.849 37.4832 24.2684C37.3617 25.6878 36.8382 27.0432 35.9743 28.1759C35.1103 29.3086 33.9415 30.1717 32.6047 30.6641C32.6047 30.5947 32.6047 30.4733 32.6047 30.3889V21.188C32.6066 20.9586 32.5474 20.7328 32.4332 20.5338C32.319 20.3348 32.154 20.1698 31.955 20.0556ZM35.3055 15.0128C35.2464 14.9765 35.1431 14.9142 35.069 14.8717L27.1045 10.2712C26.906 10.1554 26.6803 10.0943 26.4504 10.0943C26.2206 10.0943 25.9948 10.1554 25.7963 10.2712L16.0726 15.8858V11.9982C16.0715 11.9783 16.0753 11.9585 16.0837 11.9405C16.0921 11.9225 16.1048 11.9068 16.1207 11.8949L24.1719 7.25025C25.4053 6.53903 26.8158 6.19376 28.2383 6.25482C29.6608 6.31589 31.0364 6.78077 32.2044 7.59508C33.3723 8.40939 34.2842 9.53945 34.8334 10.8531C35.3826 12.1667 35.5464 13.6095 35.3055 15.0128ZM14.2424 21.9419L10.8752 19.9981C10.8576 19.9893 10.8423 19.9763 10.8309 19.9602C10.8195 19.9441 10.8122 19.9254 10.8098 19.9058V10.6071C10.8107 9.18295 11.2173 7.78848 11.9819 6.58696C12.7466 5.38544 13.8377 4.42659 15.1275 3.82264C16.4173 3.21869 17.8524 2.99464 19.2649 3.1767C20.6775 3.35876 22.0089 3.93941 23.1034 4.85067C23.0427 4.88379 22.937 4.94215 22.8668 4.98473L14.9024 9.58517C14.7025 9.69878 14.5366 9.86356 14.4215 10.0626C14.3065 10.2616 14.2466 10.4877 14.2479 10.7175L14.2424 21.9419ZM16.071 17.9991L20.4018 15.4978L24.7325 17.9975V22.9985L20.4018 25.4983L16.071 22.9985V17.9991Z"
+            fill="currentColor"
+          />
+        </svg>
+      </div>
+      <div class="data"><div class="main-wrapper" role="main"><div class="main-content"><noscript><div class="h2"><span id="challenge-error-text">Enable JavaScript and cookies to continue</span></div></noscript></div></div><script>(function(){window._cf_chl_opt = {cvId: '3',cZone: 'chatgpt.com',cType: 'managed',cRay: '9e3023021839939b',cH: 'XVmcPhL.kJT1Ld9JMMsQay6o5NxCncSdJPawhyiA7bM-1774632770-1.2.1.1-evo5CdOnQO5MBB6VBDaP4JuQZKEMu6WKinZftKGQNC2hPQHOyfKY8eVrusaC2GGg',cUPMDTk:"/backend-api/plugins/featured?platform=codex&__cf_chl_tk=_eazxeIzyvd9asufoZKT2.giK3ucq0t_y3EqwUMYxSg-1774632770-1.0.1.1-K4QybLujIGwodfAwfCLSe_tCRESJB.5UaGLTEOpmLyE",cFPWv: 'g',cITimeS: '1774632770',cTplC:1,cTplO:0,cTplV:5,cTplB: '0',fa:"/backend-api/plugins/featured?platform=codex&__cf_chl_f_tk=_eazxeIzyvd9asufoZKT2.giK3ucq0t_y3EqwUMYxSg-1774632770-1.0.1.1-K4QybLujIGwodfAwfCLSe_tCRESJB.5UaGLTEOpmLyE",md: '9auJ5AuYl5yBhzJWbnp_Ti6BCholtcYoEWEt.ziFnMg-1774632770-1.2.1.1-YrYpHpqjSED0Ockr.VwUd3t8hGpP8ouapC1nn1Aey9x09lp_mcANL2C.lYPEjpup_KaslifudhO6GV2dvW6b313S_hOFXe4HB_XmNLnEmHAnpc6kbl8ouySe7bfofUUTo7nQDLCVqj_OkggqFYF4DD1h2iJBvunDiow.ZVUuMEI1KuKhx76PAr8fPCzYQImCndWJf3FiW2D76TP8qQ0E4KspWOKfK8b164jOz.l1Cpvv1oCcwP3FP.4FLrOQTXejFuk2dPwmRxrTCQqXZ2Z88FJtJ6azTIwMf_sbqbw_zLzU0esq1mFv8lA.UHu_bmprF5HylNdusfQO11ZHYCsPFVAApTJy.bftqaves9CzHaWK6XBAbOBVnRU_LrAuyXqY2HUk8HeW5kT1SGr.rOa0wI.PXvp6IAlRJuAxxVpBBzehX2pDGwtKr3ELQWFZxRHlaWpj94ZsFvhOQHmM1DS0BwHwRzsUNcmGZbqq.RKExio2xORxpihSGFfP4Nt6TxsK5QrtJsxCeWXxMFt4OMNtEgfenIP974p.ZU2UXT6jd0JY7dIkAnvArQwKlGz.z.Fgq.BKdm7iB8TuXSqI2RaxaJm8S1XyXY7kYfqyIacU993NmXsSGnQhng9yTKW696LYGoQIbL_LCTCePj6Nw7yLKX2MvNA6EgoLklEwP7F2qNO2rwOFBS4UZafW.ejHTC3AYV8H449isXnWkVbbzzAEkEr6TWzpxz_lKUXB7qDrFbHt9rOYECCZBEKFtcjdsdoiBtP_NT9.cv141KTnlT7coMKnoJ29WRn8_CLR6CEcO7Sa8nafqcGYyD57WN3Z9XidZIMKcW6sPOcw2YIt1SsdwsJGNQKTFO7yOnviJ0yWjgSwChUPGJTrJg2DJXXofl4UwDyFPq0YocufLEg2UX5sWcpMdKsiMgF7Ee5AydBwbdUE0XLa6usMg4W61554bA_zVHBvrUbOSZj7dcMq77T2GrEtVcQjAhkp2h_MCE65MD5OLXIHIDxafRZgxooI.9N.3Qm0.3y33XL4aaaiHf4i9LMDgE9H8WW1_1ZKB3QYS4M',mdrd: 'SNKIIjyDTNSQvFH88uZryaWg_pnBL.Q0NH76PF8AAZ8-1774632770-1.2.1.1-KuqgXvyWKGm3UvLL4vi8rCysIzsJpPrRwTjsfTJCGQMBPRmVaMJrxFpBUJq6uadgDW8re3bjnMFRHe0lC8dyLTUo8vmIrzFvct5ZAfTUaZEvW3KN5gipekomUXVkjf4rJynwsBB_IygU.bqZilOBQJeltw52iyujlMHnJIOb0.l4Nn1Qpm0_pNVbCUqZO98TA0kngSIAh0zUngxdblwE.IE9NMSuAM2fkhHigelF4XjWfrkKxBwKVmBh._cC0mmGoNAUyDbyQW0iLCpn97zW0oF_AmqV7XVsLmLGwyFRGw3SEsFeG0DatIPPakAyXR9UH.iswP0r7m85YEc1MauP.J_Y4TaO1A7ywbG1zzA2NbVpPsNoJh7gYfa_F6FCsF3lh8pOOLyBN5Vo3tnn65y2o_6_q9rFtRuAFn2d3wBzoHzx0oxSrHFtQlgcQ_K3PdZ2VujO6GF_jD7Wc65rW6jql1u8v8VYQL6SKQuLwvlbsK2FAde1JDLaR9P8j61mu7wxdlK3YlhJue0.09u4P5X2X_n_3.JnRX5mT4Cc_YoZd.r0yS7yBm8XGxbNoO4IChGjPRW6Z9WV9NpHdBYgx7qgmJSZk0PIEjO.KaL0VQmumilWxr4QqUVsiNFkFltqhotTmlf.Vcv0vAAd.HZYBA31Lv3WmBo5_hwMCNrmq7rXBFTzXQ1JI36iPiXwKCzxxrKr0cjojiGrX.emf.l_P0cVO_zjNIXg9Ofh3.VGZAixsfSx2mms0vd2TGsVOyaHTphJUPDD6VWMtNritHx5vzGkui.kth63M6F5trsfENN1Z8BXV9JWEJi2KtcsnDMAPx6W_urIC0zDP_q942AsZLsz9G3G.nSrxoLZZoWYiAgcp7pnflLjfXDEx6OPLCuaV_xvteR4YI83QNw.Jx6qqUR9Sk6HWD.F1NZSLhV_eZH0ymUn7S3rstzQ6RSXKR7BWVGLvcZUFdjo1BybfuooL4IRQ.DpWxHeayl3k0cv7PbHBYK1ZwpHBjuTJptCzBizSRwQbqRnKT2e__ksbqoCGLETA1Mc5K_VhUrDx225McbLwdHXikXYQqj4ElxjUBlx4ayOeNUM9eKzV1lj5Gz_1aBewTnKuAnIkwb63Za5jHWEQl_v7HjIOS7BLoIzL1pGsNwGPdOHZXtLSXpbw3CBMwfsNAJtSE9CxDcRDICrHs1ibbiEIvDH1nLRvEBkXZXGmRqQWHdkySKpVWMR58mDWvgHavYHKJWo6jaxbbdO2ty82ko5JbmVczY2AvENTkwjdo.0rCI2OpRrBYskuoZwzT8xjjA.4NVLW4xwA7UeML4S52Vn4rFVgiwr_9kyYq9FYXac7G1n7hMlLMN1d6rBQmFj91SmpCfXvwA69IghkMQ2jWchZI_GK1a5lZMRYShijs6UarGKOcitHunjBAezho3yfDEywMc5OSwD3g.85MzgAAt4SbTY.Ho0F0c2wzLtw.NCeUcnakhnXrqEYxZqzpr8RR_.l1SGiPjDV.8LiFPlPfb0H9PS5dwo9f12kZwwOdaJRAQ6XCNbEW05p9_196cCmbNsn1gmUcGcwWyu7C_r192orCPqxUO0rFghKZk_61BperKuo4raIkozXTt0oPRdqeZ3kTUzE_N2F2HwK6Ct4RRnhWtGw9O4Ph6kjInJdMfwvvAowVf07p8zUNKn0ht6TgOcWj8H0Zd0ZnpdJVpzH3jcFn604hQQS3Lc_7eSA1Iaq_X1E6UvvgUyWsqrBprDhyIJ4H6GqbEw1yDfO3gHt_9HiVS08fxCFn9kUvcWMFRPBpoTi9wnVBZ3hKFkxQSaE_OhU..Ue9.yFTkbHm0OuGCn1A7CzvfwYYtogZRLEhS46CLhnEWQzTDRfBlH1p76dZ.waSuW4XchzzFZbkqkrlxTzH3iv5FZh2jUcu2AdMoT9sSAXHVWdpTe_fHVtBOCB.uTGkI.mF4dro57125OFRiWbndwy8zkWDMinm7svUamGiMsVaHSbPkorSNJOflynr4QnyGyh_NIya8M_PEQHjiY86XXKZKg2Jkju1XIP53HCb1nd42XPLNkSmFyw3w2TXAQEjou9GrNpYRlHXtIzklj97Ra2pkR1JrtIq9iSwi7XBk9Ibsa81G4rKl1.DBGhabeL0IsUi2PzST0YjJl_aY91ka6hDIbFKFq162dFh_mEEjXvfVlPRKDhHsHqSyfAdR88EuSbTaCRfX7VqEKDM8D1LF2WHMmmfXckvhuFCovwHQ1DWEVVdUwAMeUEB4CAsMlugc.hh9pCgDrdZIpx01Mgxzh.c6YkVUp0Za0iBa1',};var a = document.createElement('script');a.src = '/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1?ray=9e3023021839939b';window._cf_chl_opt.cOgUHash = location.hash === '' && location.href.indexOf('#') !== -1 ? '#' : location.hash;window._cf_chl_opt.cOgUQuery = location.search === '' && location.href.slice(0, location.href.length - window._cf_chl_opt.cOgUHash.length).indexOf('?') !== -1 ? '?' : location.search;if (window.history && window.history.replaceState) {var ogU = location.pathname + window._cf_chl_opt.cOgUQuery + window._cf_chl_opt.cOgUHash;history.replaceState(null, null,"/backend-api/plugins/featured?platform=codex&__cf_chl_rt_tk=_eazxeIzyvd9asufoZKT2.giK3ucq0t_y3EqwUMYxSg-1774632770-1.0.1.1-K4QybLujIGwodfAwfCLSe_tCRESJB.5UaGLTEOpmLyE"+ window._cf_chl_opt.cOgUHash);a.onload = function() {history.replaceState(null, null, ogU);}}document.getElementsByTagName('head')[0].appendChild(a);}());</script></div>
+    </div>
+  </body>
+</html>
+
+2026-03-27T17:32:50.936492Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d305b-1d27-7222-a801-8a850eccd298.tmp-1774632770857064000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+codex
+I’m reviewing the task plan itself for execution gaps and bad assumptions, not the code. I’ll focus on where the slice boundaries, fallback rules, and verification are too loose to safely ship.
+codex
+## Findings
+- **High** - Slice 1’s cache validity contract is too weak. The only freshness keys are `responseSha256`, `parserVersion`, and `modelId`, but the resolver’s canonical frame also depends on `methodology.pair_key` and the transcript’s definition `dimensions` order. That means a cache can be syntactically valid and still map the wrong winner after a definition snapshot change or pair-order change. The task needs an explicit transcript/definition fingerprint in the cache contract, not just parser-level freshness.
+- **High** - The plan allows “malformed” and “stale” caches to fall back, but it never requires semantic validation of the cached fields themselves. A JSON object can be valid and fresh yet contradictory, for example `decisionState=unknown` with a populated `favoredValueKey`, or `decisionState=neutral` with a non-neutral `strength` or `presentationOrder`. That would silently accept a bad envelope instead of rejecting it.
+- **Medium** - Slice 2 is under-scoped if the B-first inversion lives in shared transcript-decision mapping rather than the card component. The artifact itself keeps `tests/utils/transcriptDecisionModel.test.ts` in the verification set, which signals a shared contract, but the file list only names `PairedRunComparisonCard.tsx` and its test. If the bug is in the shared utility, this slice will patch the display while leaving other consumers wrong.
+
+## Residual Risks
+- The backfill-free rollout still depends on every old-row shape being handled forever by the compatibility path. Any future cleanup that narrows that parser would re-break existing transcripts.
+- The task does not call for an explicit compatibility audit of other readers of `decisionMetadata.summaryCache.summary`. If any exist outside the API resolver, they may still assume the old shape.
+- There is no explicit smoke test against real persisted rows after the cache format change, so any gap between the unit tests and production JSON shapes could still slip through.
+tokens used
+10,045

@@ -23,10 +23,8 @@ function createSemantics(): AnalysisSemanticsView {
         model1: {
           modelId: 'model1',
           overallLean: 'A',
-          overallSignedCenter: 1.2,
-          preferenceStrength: 1.1,
-          topPrioritizedValues: ['Fairness'],
-          topDeprioritizedValues: ['Loyalty'],
+          topPrioritizedValues: [{ name: 'Fairness', winRate: 1 }],
+          topDeprioritizedValues: [{ name: 'Loyalty', winRate: 0 }],
           neutralValues: [],
           availability: { status: 'available' },
         },
@@ -325,9 +323,9 @@ describe('OverviewTab', () => {
     expect(screen.getByText('Overview Summary')).toBeInTheDocument();
     expect(screen.getByText('Run-level evidence: 3 completed batches')).toBeInTheDocument();
     expect(screen.getByText('Preferred Value')).toBeInTheDocument();
-    expect(screen.getByText('Preference Strength')).toBeInTheDocument();
+    expect(screen.getByText('Win Rate')).toBeInTheDocument();
     expect(screen.getByText('Fairness')).toBeInTheDocument();
-    expect(screen.getByText('Strong (+1.20)')).toBeInTheDocument();
+    expect(screen.getByText('100%')).toBeInTheDocument();
     expect(screen.getByText('Value Agreement')).toBeInTheDocument();
     expect(screen.getByText('Soft Lean %')).toBeInTheDocument();
     expect(screen.queryByText('Decision Consistency')).not.toBeInTheDocument();
@@ -335,6 +333,44 @@ describe('OverviewTab', () => {
     expect(screen.getByRole('button', { name: /copy overview summary as image/i })).toBeInTheDocument();
 
     expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
+  });
+
+  it('renders an em dash when the preferred value win rate is missing', () => {
+    const semantics = createSemantics();
+    semantics.preference.byModel.model1.topPrioritizedValues = [{ name: 'Fairness', winRate: null }];
+
+    render(
+      <MemoryRouter>
+        <OverviewTab
+          runId="run-1"
+          semantics={semantics}
+          completedBatches={3}
+          aggregateSourceRunCount={null}
+          isAggregate={false}
+          analysisMode="single"
+          perModel={{
+            model1: {
+              sampleSize: 3,
+              values: {},
+              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+            },
+          }}
+          visualizationData={{
+            decisionDistribution: {},
+            scenarioDimensions: {
+              s1: { Freedom: 'a1', Harmony: 'b1' },
+            },
+            modelScenarioMatrix: {
+              model1: { s1: 5 },
+            },
+          }}
+          varianceAnalysis={createVarianceAnalysis()}
+        />
+      </MemoryRouter>
+    );
+
+    const winRateCells = screen.getAllByText('—');
+    expect(winRateCells.length).toBeGreaterThan(0);
   });
 
   it('keeps the paired comparison section visible with a single-mode note', () => {
@@ -762,7 +798,8 @@ describe('OverviewTab', () => {
 
     expect(screen.getByText('Run-level evidence: pooled across 2 companion runs')).toBeInTheDocument();
     expect(screen.getByText('62.5%')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /stable: 5 of 8 repeated conditions/i })).not.toBeInTheDocument();
+    // Paired mode now enables drilldown — the stable cell should be a clickable button
+    expect(screen.getByRole('button', { name: /stable: 5 of 8 repeated conditions/i })).toBeInTheDocument();
   });
 
   it('does not show the old paired scope note in overview', () => {

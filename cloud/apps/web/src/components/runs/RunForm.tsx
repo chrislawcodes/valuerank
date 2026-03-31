@@ -1,15 +1,56 @@
+import { useState } from 'react';
 import { Play, AlertCircle } from 'lucide-react';
+import { useQuery } from 'urql';
 import { Button } from '../ui/Button';
 import { ModelSelector } from './ModelSelector';
 import { CostBreakdown } from './CostBreakdown';
 import { DefinitionPicker } from './DefinitionPicker';
 import { RunConfigPanel } from './RunConfigPanel';
+import { BudgetWarningDialog, type OverdraftProvider } from './BudgetWarningDialog';
 import { useRunForm } from './useRunForm';
 import { useAvailableModels } from '../../hooks/useAvailableModels';
 import { useCostEstimate } from '../../hooks/useCostEstimate';
 import { useRunConditionGrid } from '../../hooks/useRunConditionGrid';
 import type { StartRunInput } from '../../api/operations/runs';
-import { getDefinitionMethodology, getPairedOrientationLabels } from '../../utils/methodology';
+import { LLM_PROVIDERS_QUERY } from '../../api/operations/llm';
+import type { LlmProvidersQueryResult } from '../../api/operations/llm';
+import { getDefinitionMethodology } from '../../utils/methodology';
+import type { CostEstimate } from '../../api/operations/costs';
+
+/**
+ * Check if a run's cost estimate would overdraw any provider's budget.
+ * Only providers with a non-null balance are considered.
+ */
+export function checkBudgetOverdraft(
+  costEstimate: CostEstimate | null,
+  providers: LlmProvidersQueryResult['llmProviders']
+): OverdraftProvider[] {
+  if (!costEstimate?.perModel || costEstimate.perModel.length === 0) return [];
+
+  // Group estimated cost by provider prefix
+  const costByProvider = new Map<string, number>();
+  for (const item of costEstimate.perModel) {
+    const colonIdx = item.modelId.indexOf(':');
+    if (colonIdx < 0) continue;
+    const providerName = item.modelId.slice(0, colonIdx);
+    costByProvider.set(providerName, (costByProvider.get(providerName) ?? 0) + item.totalCost);
+  }
+
+  const overdrafts: OverdraftProvider[] = [];
+  for (const provider of providers) {
+    if (provider.balance === null) continue;
+    const estimatedCost = costByProvider.get(provider.name) ?? 0;
+    if (estimatedCost > provider.balance) {
+      overdrafts.push({
+        name: provider.name,
+        displayName: provider.displayName,
+        estimatedCost,
+        balance: provider.balance,
+      });
+    }
+  }
+  return overdrafts;
+}
 
 type RunFormProps = {
   definitionId: string;
@@ -32,8 +73,14 @@ export function RunForm({
   onCancel,
   isSubmitting = false,
 }: RunFormProps) {
+  const [budgetOverdrafts, setBudgetOverdrafts] = useState<OverdraftProvider[]>([]);
+
+  const [{ data: providersData }] = useQuery<LlmProvidersQueryResult>({
+    query: LLM_PROVIDERS_QUERY,
+    requestPolicy: 'cache-and-network',
+  });
+
   const methodology = getDefinitionMethodology(definitionContent);
-  const orientationLabels = getPairedOrientationLabels(definitionContent);
   const isJobChoiceDefinition = methodology?.family === 'job-choice';
   const { models, loading: loadingModels, error: modelsError } = useAvailableModels({
     onlyAvailable: false,
@@ -116,12 +163,40 @@ export function RunForm({
       })()
     : null;
 
+  // Budget-aware form submit handler: intercepts to show warning if overdraft detected
+  const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    const providers = providersData?.llmProviders ?? [];
+    const overdrafts = checkBudgetOverdraft(costEstimate, providers);
+    if (overdrafts.length > 0) {
+      e.preventDefault();
+      setBudgetOverdrafts(overdrafts);
+      return;
+    }
+    await handleSubmit(e);
+  };
+
+  const handleBudgetProceed = async () => {
+    setBudgetOverdrafts([]);
+    // Re-submit using the captured form submit callback
+    // We trigger handleSubmit with a synthetic event
+    const syntheticEvent = { preventDefault: () => {} } as React.FormEvent<HTMLFormElement>;
+    await handleSubmit(syntheticEvent);
+  };
+
   const totalJobs = estimatedScenarios !== null
     ? estimatedScenarios * formState.selectedModels.length * formState.samplesPerScenario
     : null;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <>
+    {budgetOverdrafts.length > 0 && (
+      <BudgetWarningDialog
+        overdraftProviders={budgetOverdrafts}
+        onProceed={() => { void handleBudgetProceed(); }}
+        onCancel={() => { setBudgetOverdrafts([]); }}
+      />
+    )}
+    <form onSubmit={handleFormSubmit} className="space-y-6">
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Target Models
@@ -190,15 +265,6 @@ export function RunForm({
               })}
             </div>
           </div>
-          {methodology?.presentation_order && (
-            <p className="text-xs text-gray-500">
-              This vignette is currently configured as{' '}
-              <span className="font-medium">
-                {orientationLabels.current}
-              </span>
-              . Paired batches use the matching companion definition to balance the order.
-            </p>
-          )}
         </div>
       )}
 
@@ -288,5 +354,6 @@ export function RunForm({
         </Button>
       </div>
     </form>
+    </>
   );
 }

@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Pure path helpers, atomic I/O primitives, and state constants for the feature workflow.
+"""Path helpers, atomic I/O primitives, state constants, and workflow state
+management for the feature factory.
 
-Nothing in this module calls external processes or performs I/O beyond reading
-Path metadata.  Every public symbol is safe to import in tests without side
-effects.
+No subprocess calls.  All I/O is file-based JSON read/write.
+Every public symbol is safe to import in tests without side effects.
 """
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 
 
@@ -200,3 +201,162 @@ def migrate_discovery_state(d: dict) -> dict:
                 d["unresolved"].append({"item": text, "deferred": False})
                 existing_items.add(text)
     return d
+
+
+def blocking_unresolved_items(discovery: dict) -> list[dict]:
+    """Return unresolved discovery entries that still block spec progress."""
+    unresolved = discovery.get("unresolved", [])
+    if not isinstance(unresolved, list):
+        return [{"item": "<malformed discovery state>", "deferred": False, "malformed": True}]
+    blocking: list[dict] = []
+    for item in unresolved:
+        if not isinstance(item, dict):
+            blocking.append({"item": "<malformed unresolved item>", "deferred": False, "malformed": True})
+            continue
+        value = item.get("item")
+        if not isinstance(value, str) or not value.strip():
+            blocking.append({"item": "<malformed unresolved item>", "deferred": False, "malformed": True})
+            continue
+        if item.get("deferred") is True:
+            continue
+        blocking.append(item)
+    return blocking
+
+
+def discovery_blockers_are_malformed(discovery: dict) -> bool:
+    """Return True when blocking discovery items include malformed state."""
+    unresolved = discovery.get("unresolved", [])
+    if not isinstance(unresolved, list):
+        return True
+    return any(isinstance(item, dict) and item.get("malformed") is True for item in blocking_unresolved_items(discovery))
+
+
+# ---------------------------------------------------------------------------
+# Workflow state I/O — load / save / update patterns
+# ---------------------------------------------------------------------------
+
+
+def parse_review_frontmatter(path: Path) -> tuple[dict[str, str], str]:
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("---\n"):
+        raise ValueError(f"{path} is missing frontmatter")
+    _, rest = text.split("---\n", 1)
+    fm_text, body = rest.split("\n---\n", 1)
+    data: dict[str, str] = {}
+    for line in fm_text.splitlines():
+        if not line.strip():
+            continue
+        key, value = line.split(":", 1)
+        data[key.strip()] = value.strip().strip('"')
+    return data, body
+
+
+def load_scope_manifest(slug: str) -> dict:
+    path = scope_manifest_path(slug)
+    if not path.exists():
+        return {"paths": [], "allowed_dirty_paths": []}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def save_scope_manifest(slug: str, paths: list[str]) -> Path:
+    safe_slug = validated_slug(slug)
+    normalized_paths = {normalized_repo_path(path, "scope path").rstrip("/") for path in paths if path.strip()}
+    manifest = {
+        "paths": sorted(normalized_paths),
+        "allowed_dirty_paths": sorted(
+            {
+                *normalized_paths,
+                f"docs/feature-runs/{safe_slug}",
+            }
+        ),
+    }
+    path = scope_manifest_path(slug)
+    atomic_json_write(path, manifest)
+    return path
+
+
+def load_workflow_state(slug: str) -> dict:
+    path = factory_state_path(slug)
+    if not path.exists():
+        return {
+            "review_policy": {
+                "sensitive": False,
+                "large_structural": False,
+                "performance_sensitive": False,
+                "extra_gemini_lenses": [],
+            },
+            BLOCKED_KEY: {
+                "active": False,
+                "reason": "",
+                "updated_at": 0,
+            },
+            DISCOVERY_KEY: default_discovery_state(),
+            DELIVERY_KEY: {},
+            DIRTY_OVERRIDE_KEY: {},
+        }
+    state = json.loads(path.read_text(encoding="utf-8"))
+    state.setdefault(
+        "review_policy",
+        {
+            "sensitive": False,
+            "large_structural": False,
+            "performance_sensitive": False,
+            "extra_gemini_lenses": [],
+        },
+    )
+    state.setdefault(
+        BLOCKED_KEY,
+        {
+            "active": False,
+            "reason": "",
+            "updated_at": 0,
+        },
+    )
+    state.setdefault(DISCOVERY_KEY, default_discovery_state())
+    state.setdefault(DELIVERY_KEY, {})
+    state.setdefault(DIRTY_OVERRIDE_KEY, {})
+    state.setdefault(CHECKPOINT_FALLBACK_KEY, {})
+    return state
+
+
+def save_workflow_state(slug: str, state: dict) -> Path:
+    path = factory_state_path(slug)
+    atomic_json_write(path, state)
+    return path
+
+
+def update_workflow_state(slug: str, mutate) -> dict:
+    state = load_workflow_state(slug)
+    mutate(state)
+    save_workflow_state(slug, state)
+    return state
+
+
+def discovery_state(slug: str) -> dict:
+    state = load_workflow_state(slug).get(DISCOVERY_KEY, {})
+    merged = default_discovery_state()
+    merged.update(state if isinstance(state, dict) else {})
+    def _safe_list(val) -> list:
+        return list(val) if isinstance(val, list) else []
+    merged["questions"] = _safe_list(merged.get("questions"))
+    merged["assumptions"] = _safe_list(merged.get("assumptions"))
+    merged["unresolved"] = _safe_list(merged.get("unresolved"))
+    merged["non_goals"] = _safe_list(merged.get("non_goals"))
+    merged["acceptance_criteria"] = _safe_list(merged.get("acceptance_criteria"))
+    merged = migrate_discovery_state(merged)
+    return merged
+
+
+def update_discovery_state(slug: str, mutate) -> dict:
+    def _migrated_mutate(state: dict):
+        discovery = state.setdefault(DISCOVERY_KEY, default_discovery_state())
+        migrated = migrate_discovery_state(discovery)
+        state[DISCOVERY_KEY] = migrated
+        return mutate(migrated)
+    return update_workflow_state(slug, _migrated_mutate)
+
+
+def load_checkpoint_manifest(slug: str, stage: str) -> dict | None:
+    path = checkpoint_manifest_path(slug, stage)
+    manifest, _ = read_json_file(path)
+    return manifest

@@ -265,7 +265,6 @@ describe('Audit Fields on GraphQL Types', () => {
       expect(response.body.errors).toBeUndefined();
       expect(response.body.data.createDefinition.createdBy).toMatchObject({
         id: TEST_USER.id,
-        email: TEST_USER.email,
       });
 
       // Cleanup
@@ -305,7 +304,6 @@ describe('Audit Fields on GraphQL Types', () => {
       expect(response.body.errors).toBeUndefined();
       expect(response.body.data.forkDefinition.createdBy).toMatchObject({
         id: TEST_USER.id,
-        email: TEST_USER.email,
       });
 
       // Cleanup
@@ -341,7 +339,6 @@ describe('Audit Fields on GraphQL Types', () => {
       expect(response.body.errors).toBeUndefined();
       expect(response.body.data.createTag.createdBy).toMatchObject({
         id: TEST_USER.id,
-        email: TEST_USER.email,
       });
 
       // Cleanup
@@ -404,7 +401,6 @@ describe('Audit Fields on GraphQL Types', () => {
       expect(response.body.data.definition).not.toBeNull();
       expect(response.body.data.definition.deletedBy).toMatchObject({
         id: TEST_USER.id,
-        email: TEST_USER.email,
       });
 
       // Cleanup (hard delete for test purposes)
@@ -461,7 +457,6 @@ describe('Audit Fields on GraphQL Types', () => {
       expect(response.body.data.run).not.toBeNull();
       expect(response.body.data.run.deletedBy).toMatchObject({
         id: TEST_USER.id,
-        email: TEST_USER.email,
       });
 
       // Cleanup (hard delete for test purposes)

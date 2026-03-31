@@ -90,7 +90,11 @@ function createDefinition(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
-function renderPage(initialEntry = '/definitions/def-1/start-paired-batch') {
+function renderPage(
+  initialEntry:
+    | string
+    | { pathname: string; state?: { returnLabel?: string; returnTo?: string } } = '/definitions/def-1/start-paired-batch'
+) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
@@ -136,6 +140,24 @@ describe('StartPairedBatchPage', () => {
       screen.getByText('Configure and start a paired batch for "Test Definition"')
     ).toBeInTheDocument();
     expect(screen.getByText('RunForm Stub: paired-batch')).toBeInTheDocument();
+  });
+
+  it('returns to the source page when launched from coverage', async () => {
+    const user = userEvent.setup();
+
+    renderPage({
+      pathname: '/definitions/def-1/start-paired-batch',
+      state: {
+        returnLabel: 'Back to Value coverage',
+        returnTo: '/domains?domainId=domain-a',
+      },
+    });
+
+    expect(screen.getByRole('button', { name: 'Back to Value coverage' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Back to Value coverage' }));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/domains?domainId=domain-a');
   });
 
   it('shows an invalid vignette state for the bad route', () => {

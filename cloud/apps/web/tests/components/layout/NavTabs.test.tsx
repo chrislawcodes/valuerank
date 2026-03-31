@@ -26,7 +26,7 @@ describe('NavTabs Component', () => {
     expect(screen.getByRole('link', { name: 'Validation' })).toHaveAttribute('href', '/validation');
     expect(screen.getByRole('link', { name: 'Archive' })).toHaveAttribute('href', '/archive');
     expect(screen.getByRole('link', { name: 'Compare' })).toHaveAttribute('href', '/compare');
-    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings/account');
   });
 
   it('keeps the vignettes menu links available from the vignettes menu', async () => {
@@ -47,14 +47,10 @@ describe('NavTabs Component', () => {
       screen.getAllByRole('link', { name: 'Overview' }).some((link) => link.getAttribute('href') === '/domains')
     ).toBe(true);
     expect(screen.getByRole('link', { name: 'Domain Analysis' })).toHaveAttribute('href', '/domains/analysis');
-    expect(screen.getByRole('link', { name: 'Coverage' })).toHaveAttribute('href', '/domains/coverage');
+    expect(screen.getByRole('link', { name: 'Manage Domains' })).toHaveAttribute('href', '/domains/manage');
+    expect(screen.queryByRole('link', { name: 'Coverage' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'New Vignette' })).not.toBeInTheDocument();
-
-    // Domain Setup is a hover flyout — children are always in the DOM
-    expect(screen.getByRole('link', { name: 'Preamble', hidden: true })).toHaveAttribute('href', '/preambles');
-    expect(screen.getByRole('link', { name: 'Context', hidden: true })).toHaveAttribute('href', '/domain-contexts');
-    expect(screen.getByRole('link', { name: 'Value Statements', hidden: true })).toHaveAttribute('href', '/value-statements');
-    expect(screen.getByRole('link', { name: 'Level Presets', hidden: true })).toHaveAttribute('href', '/level-presets');
+    expect(screen.queryByText('Domain Setup')).not.toBeInTheDocument();
   });
 
   it('keeps the validation compatibility links available from the validation menu', async () => {

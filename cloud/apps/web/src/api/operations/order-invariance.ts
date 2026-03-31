@@ -472,8 +472,6 @@ export const ORDER_INVARIANCE_TRANSCRIPTS_QUERY = gql`
         modelId
         modelVersion
         content
-        decisionCode
-        decisionCodeSource
         turnCount
         tokenCount
         durationMs

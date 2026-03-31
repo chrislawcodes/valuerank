@@ -17,93 +17,30 @@ import {
   buildAnalysisTranscriptsPath,
   parseConditionKey,
 } from '../utils/analysisRouting';
-import { deriveDecisionDimensionLabels } from '../utils/decisionLabels';
 import { formatDisplayLabel } from '../utils/displayLabels';
-import { getPairedOrientationLabels } from '../utils/methodology';
+import { requireRenderableTranscriptDecisionModelV2 } from '../utils/transcriptDecisionModel';
 import { filterTranscriptsForPivotCell } from '../utils/scenarioUtils';
+import {
+  summarizeConditionDecisionBuckets,
+} from '../utils/conditionDecisionSummary';
 
 type AnalysisDetailMode = 'single' | 'paired';
-type JobChoicePresentationOrder = 'A_first' | 'B_first';
-type DecisionCode = '1' | '2' | '3' | '4' | '5';
-type OrientationBucket = 'canonical' | 'flipped';
-
-type DecisionSummary = {
-  counts: Record<DecisionCode, number>;
-  resolvedCount: number;
-  unresolvedCount: number;
-  mean: number | null;
-};
+type PairedConditionSource = 'current' | 'companion' | 'pooled';
 
 type DetailRow = {
   id: string;
   label: string;
-  summary: DecisionSummary;
+  summary: ReturnType<typeof summarizeConditionDecisionBuckets>;
   baseSearchParams: URLSearchParams;
 };
 
-const DECISION_CODES: DecisionCode[] = ['1', '2', '3', '4', '5'];
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
+const CONDITION_COPY = {
+  countSummary: 'Canonical transcript counts by decision label. Click any non-zero count to open the matching transcripts.',
+  unresolvedSummary: 'Unknown transcripts are shown in the final column. Known counts use only transcripts with canonical decision data.',
+} as const;
 
 function parseAnalysisDetailMode(value: string | null): AnalysisDetailMode {
   return value === 'paired' ? 'paired' : 'single';
-}
-
-function getRunPresentationOrder(run: Run | null | undefined): JobChoicePresentationOrder | null {
-  const fromConfig = run?.config?.jobChoicePresentationOrder;
-  if (fromConfig === 'A_first' || fromConfig === 'B_first') {
-    return fromConfig;
-  }
-
-  const content = run?.definition?.content;
-  if (!isRecord(content) || !isRecord(content.methodology)) {
-    return null;
-  }
-
-  const value = content.methodology.presentation_order;
-  return value === 'A_first' || value === 'B_first' ? value : null;
-}
-
-function isDecisionCode(value: string | null | undefined): value is DecisionCode {
-  return value === '1' || value === '2' || value === '3' || value === '4' || value === '5';
-}
-
-function summarizeDecisionCounts(transcripts: Transcript[]): DecisionSummary {
-  const counts: Record<DecisionCode, number> = {
-    '1': 0,
-    '2': 0,
-    '3': 0,
-    '4': 0,
-    '5': 0,
-  };
-
-  let resolvedCount = 0;
-  let unresolvedCount = 0;
-  let weightedSum = 0;
-
-  transcripts.forEach((transcript) => {
-    if (!isDecisionCode(transcript.decisionCode)) {
-      unresolvedCount += 1;
-      return;
-    }
-
-    counts[transcript.decisionCode] += 1;
-    resolvedCount += 1;
-    weightedSum += Number(transcript.decisionCode);
-  });
-
-  return {
-    counts,
-    resolvedCount,
-    unresolvedCount,
-    mean: resolvedCount > 0 ? weightedSum / resolvedCount : null,
-  };
-}
-
-function formatMean(value: number | null): string {
-  return value === null ? '—' : value.toFixed(2);
 }
 
 function filterConditionTranscripts(
@@ -139,10 +76,14 @@ function buildDetailRow(
   transcripts: Transcript[],
   baseSearchParams: URLSearchParams,
 ): DetailRow {
+  const renderableTranscripts = transcripts.map((transcript) => (
+    requireRenderableTranscriptDecisionModelV2(transcript, 'AnalysisConditionDetail page')
+  ));
+
   return {
     id,
     label,
-    summary: summarizeDecisionCounts(transcripts),
+    summary: summarizeConditionDecisionBuckets(renderableTranscripts),
     baseSearchParams,
   };
 }
@@ -155,6 +96,7 @@ export function AnalysisConditionDetail() {
   const selectedModel = searchParams.get('modelId') ?? searchParams.get('model') ?? '';
   const rowDim = searchParams.get('rowDim') ?? '';
   const colDim = searchParams.get('colDim') ?? '';
+  const companionRunIdHint = searchParams.get('companionRunId') ?? null;
   const parsedCondition = parseConditionKey(conditionKey ?? '');
 
   const { run, loading, error } = useRun({
@@ -170,24 +112,32 @@ export function AnalysisConditionDetail() {
     analysisStatus: run?.analysisStatus ?? null,
   });
 
+  // Prefer: URL hint → direct companionRunId on the run → legacy heuristic search.
+  const directCompanionRunId = run?.companionRunId ?? null;
+  const hasResolvedCompanionId = companionRunIdHint != null || directCompanionRunId != null;
+
+  // Only load the full runs list when neither a URL hint nor a direct link is available.
   const { runs: candidatePairedRuns } = useRuns({
     limit: 1000,
-    pause: analysisMode !== 'paired' || !run,
+    pause: analysisMode !== 'paired' || !run || hasResolvedCompanionId,
   });
 
-  const companionRunSummary = run == null
-    ? null
-    : findCompanionPairedRun(run, candidatePairedRuns);
+  const companionRunSummary = useMemo(
+    () => (run == null ? null : findCompanionPairedRun(run, candidatePairedRuns)),
+    [run, candidatePairedRuns],
+  );
+
+  const resolvedCompanionRunId = companionRunIdHint ?? directCompanionRunId ?? companionRunSummary?.id ?? null;
 
   const { run: companionRun } = useRun({
-    id: companionRunSummary?.id ?? '',
-    pause: analysisMode !== 'paired' || companionRunSummary == null,
+    id: resolvedCompanionRunId ?? '',
+    pause: analysisMode !== 'paired' || resolvedCompanionRunId == null,
     enablePolling: true,
   });
 
   const { analysis: companionAnalysis } = useAnalysis({
-    runId: companionRunSummary?.id ?? '',
-    pause: analysisMode !== 'paired' || companionRunSummary == null,
+    runId: resolvedCompanionRunId ?? '',
+    pause: analysisMode !== 'paired' || resolvedCompanionRunId == null,
     enablePolling: false,
     analysisStatus: companionRun?.analysisStatus ?? companionRunSummary?.analysisStatus ?? null,
   });
@@ -216,6 +166,7 @@ export function AnalysisConditionDetail() {
     if (rowDim) detailSearch.set('rowDim', rowDim);
     if (colDim) detailSearch.set('colDim', colDim);
     if (selectedModel) detailSearch.set('modelId', selectedModel);
+    if (resolvedCompanionRunId) detailSearch.set('companionRunId', resolvedCompanionRunId);
 
     return buildAnalysisConditionDetailPath(
       ANALYSIS_BASE_PATH,
@@ -224,49 +175,8 @@ export function AnalysisConditionDetail() {
       detailSearch,
       new URLSearchParams(`mode=${analysisMode}`),
     );
-  }, [analysisMode, analysisPath, colDim, conditionKey, id, rowDim, selectedModel]);
-
-  const currentOrder = getRunPresentationOrder(run);
-  const companionOrder = getRunPresentationOrder(companionRun);
-
-  const aFirstRun = currentOrder === 'A_first'
-    ? run
-    : companionOrder === 'A_first'
-      ? companionRun
-      : null;
-  const bFirstRun = currentOrder === 'B_first'
-    ? run
-    : companionOrder === 'B_first'
-      ? companionRun
-      : null;
-  const aFirstAnalysis = currentOrder === 'A_first'
-    ? analysis
-    : companionOrder === 'A_first'
-      ? companionAnalysis
-      : null;
-  const bFirstAnalysis = currentOrder === 'B_first'
-    ? analysis
-    : companionOrder === 'B_first'
-      ? companionAnalysis
-      : null;
-
-  const orientationLabels = useMemo(
-    () => getPairedOrientationLabels(
-      aFirstRun?.definition?.content ?? bFirstRun?.definition?.content ?? run?.definition?.content ?? null,
-    ),
-    [aFirstRun?.definition?.content, bFirstRun?.definition?.content, run?.definition?.content],
-  );
-
-  const scoreLabels = useMemo(() => {
-    const labels = deriveDecisionDimensionLabels(
-      aFirstRun?.definition?.content ?? run?.definition?.content ?? null,
-    );
-
-    return DECISION_CODES.map((code) => ({
-      code,
-      label: labels?.[code] ?? `Decision ${code}`,
-    }));
-  }, [aFirstRun?.definition?.content, run?.definition?.content]);
+  }, [analysisMode, analysisPath, colDim, conditionKey, id, resolvedCompanionRunId, rowDim, selectedModel]);
+  const companionRunId = companionRun?.id;
 
   const detailRows = useMemo(() => {
     if (!parsedCondition || !rowDim || !colDim || !selectedModel || !run || !analysis) {
@@ -280,7 +190,7 @@ export function AnalysisConditionDetail() {
       extras?: {
         companionRunId?: string;
         pairView?: 'condition-blended' | 'condition-split';
-        orientationBucket?: OrientationBucket;
+        sourceRun?: PairedConditionSource;
       },
     ) => {
       const params = new URLSearchParams({
@@ -293,14 +203,16 @@ export function AnalysisConditionDetail() {
       params.set('mode', analysisMode);
       if (extras?.companionRunId) params.set('companionRunId', extras.companionRunId);
       if (extras?.pairView) params.set('pairView', extras.pairView);
-      if (extras?.orientationBucket) params.set('orientationBucket', extras.orientationBucket);
+      if (extras?.sourceRun) params.set('sourceRun', extras.sourceRun);
       return params;
     };
 
     if (analysisMode === 'paired' && companionRun && companionAnalysis) {
+      const currentTranscripts = filterConditionTranscripts(run, analysis, rowDim, colDim, row, col, selectedModel);
+      const companionTranscripts = filterConditionTranscripts(companionRun, companionAnalysis, rowDim, colDim, row, col, selectedModel);
       const pooledTranscripts = [
-        ...filterConditionTranscripts(run, analysis, rowDim, colDim, row, col, selectedModel),
-        ...filterConditionTranscripts(companionRun, companionAnalysis, rowDim, colDim, row, col, selectedModel),
+        ...currentTranscripts,
+        ...companionTranscripts,
       ];
 
       rows.push(buildDetailRow(
@@ -308,70 +220,76 @@ export function AnalysisConditionDetail() {
         'Pooled',
         pooledTranscripts,
         makeBaseSearch({
-          companionRunId: companionRun.id,
+          companionRunId,
           pairView: 'condition-blended',
+          sourceRun: 'pooled',
         }),
       ));
 
-      if (aFirstRun && aFirstAnalysis) {
-        rows.push(buildDetailRow(
-          'canonical',
-          aFirstRun.definition?.name ?? orientationLabels.canonical,
-          filterConditionTranscripts(aFirstRun, aFirstAnalysis, rowDim, colDim, row, col, selectedModel),
-          makeBaseSearch({
-            companionRunId: companionRun.id,
-            pairView: 'condition-split',
-            orientationBucket: 'canonical',
-          }),
-        ));
-      }
+      rows.push(buildDetailRow(
+        'current',
+        run?.definition?.name ?? 'Current vignette',
+        currentTranscripts,
+        makeBaseSearch({
+          companionRunId,
+          pairView: 'condition-split',
+          sourceRun: 'current',
+        }),
+      ));
 
-      if (bFirstRun && bFirstAnalysis) {
-        rows.push(buildDetailRow(
-          'flipped',
-          bFirstRun.definition?.name ?? orientationLabels.flipped,
-          filterConditionTranscripts(bFirstRun, bFirstAnalysis, rowDim, colDim, row, col, selectedModel),
-          makeBaseSearch({
-            companionRunId: companionRun.id,
-            pairView: 'condition-split',
-            orientationBucket: 'flipped',
-          }),
-        ));
-      }
+      rows.push(buildDetailRow(
+        'companion',
+        companionRun?.definition?.name ?? 'Companion vignette',
+        companionTranscripts,
+        makeBaseSearch({
+          companionRunId,
+          pairView: 'condition-split',
+          sourceRun: 'companion',
+        }),
+      ));
 
       return rows;
     }
 
     rows.push(buildDetailRow(
       'single',
-      run.definition?.name ?? orientationLabels.current,
+      run?.definition?.name ?? 'Current vignette',
       filterConditionTranscripts(run, analysis, rowDim, colDim, parsedCondition.row, parsedCondition.col, selectedModel),
-      makeBaseSearch(),
+      makeBaseSearch({
+        sourceRun: 'current',
+      }),
     ));
 
     return rows;
   }, [
-    aFirstAnalysis,
-    aFirstRun,
     analysis,
     analysisMode,
-    bFirstAnalysis,
-    bFirstRun,
-    bFirstRun?.definition?.name,
     colDim,
     companionAnalysis,
     companionRun,
-    companionRun?.id,
-    aFirstRun?.definition?.name,
-    orientationLabels,
+    companionRunId,
     parsedCondition,
     rowDim,
     run,
-    run?.definition?.name,
     selectedModel,
   ]);
 
-  const hasUnresolvedTranscripts = detailRows.some((row) => row.summary.unresolvedCount > 0);
+  const decisionSummaryBuckets = useMemo(() => {
+    const preferredRowIds = analysisMode === 'paired'
+      ? ['current', 'single', 'companion', 'pooled']
+      : ['single', 'current', 'companion', 'pooled'];
+
+    for (const rowId of preferredRowIds) {
+      const row = detailRows.find((candidate) => candidate.id === rowId);
+      if (row?.summary.labelPair) {
+        return row.summary.buckets;
+      }
+    }
+
+    return detailRows[0]?.summary.buckets ?? [];
+  }, [analysisMode, detailRows]);
+
+  const hasUnresolvedTranscripts = detailRows.some((row) => row.summary.unknownCount > 0);
 
   if (loading && !run) {
     return <Loading size="lg" text="Loading condition detail..." />;
@@ -404,13 +322,18 @@ export function AnalysisConditionDetail() {
     );
   }
 
-  const handleBucketClick = (row: DetailRow, decisionCode: DecisionCode) => {
-    if (row.summary.counts[decisionCode] === 0) {
+  const handleBucketClick = (row: DetailRow, bucketIndex: number) => {
+    const bucket = row.summary.buckets[bucketIndex];
+    if (!bucket || bucket.count === 0 || !bucket.filterParams) {
       return;
     }
 
     const params = new URLSearchParams(row.baseSearchParams);
-    params.set('decisionCode', decisionCode);
+    params.set('decisionStrength', bucket.filterParams.decisionStrength);
+    if (bucket.filterParams.favoredValueKey) {
+      params.set('favoredValueKey', bucket.filterParams.favoredValueKey);
+    }
+
     navigate(buildAnalysisTranscriptsPath(ANALYSIS_BASE_PATH, run.id, params));
   };
 
@@ -441,14 +364,14 @@ export function AnalysisConditionDetail() {
             Model: <span className="font-medium text-gray-900">{selectedModel}</span>
           </p>
           <p className="text-sm text-gray-500">
-            Raw transcript counts by normalized 1-5 decision score. Click any non-zero count to open the matching transcripts.
+            {CONDITION_COPY.countSummary}
           </p>
         </div>
       </div>
 
       {analysisMode === 'paired' && (!companionRun || !companionAnalysis) && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          Paired companion data is not available yet, so this detail view is showing the current vignette order only.
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          Paired companion data is not available yet, so this detail view is showing the current vignette only.
         </div>
       )}
 
@@ -457,18 +380,15 @@ export function AnalysisConditionDetail() {
           <thead>
             <tr>
               <th className="border-b border-gray-200 bg-gray-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
-                Vignette Order
+                Vignette Scope
               </th>
-              {scoreLabels.map(({ code, label }) => (
+              {decisionSummaryBuckets.map((bucket, index) => (
                 <th
-                  key={code}
+                  key={`${index}-${bucket.label}`}
                   className="border-b border-gray-200 bg-gray-50 px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-600"
                 >
                   <div className="mx-auto flex max-w-[8rem] flex-col items-center gap-1 whitespace-normal leading-tight">
-                    <span className="rounded bg-gray-200 px-1.5 py-0.5 text-[11px] font-bold text-gray-700">
-                      {code}
-                    </span>
-                    <span>{label}</span>
+                    <span>{bucket.label}</span>
                   </div>
                 </th>
               ))}
@@ -476,7 +396,7 @@ export function AnalysisConditionDetail() {
                 n
               </th>
               <th className="border-b border-gray-200 bg-gray-50 px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-600">
-                Mean
+                Unknown Count
               </th>
             </tr>
           </thead>
@@ -486,16 +406,16 @@ export function AnalysisConditionDetail() {
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">
                   {row.label}
                 </td>
-                {DECISION_CODES.map((code) => {
-                  const count = row.summary.counts[code];
+                {row.summary.buckets.map((bucket, index) => {
+                  const count = bucket.count;
                   return (
-                    <td key={`${row.id}-${code}`} className="px-3 py-3 text-center text-sm text-gray-700">
+                    <td key={`${row.id}-${index}`} className="px-3 py-3 text-center text-sm text-gray-700">
                       {count > 0 ? (
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleBucketClick(row, code)}
+                          onClick={() => handleBucketClick(row, index)}
                           className="h-auto min-h-0 px-1 py-0 font-medium text-teal-700 hover:bg-transparent hover:text-teal-800"
                         >
                           {count}
@@ -507,10 +427,10 @@ export function AnalysisConditionDetail() {
                   );
                 })}
                 <td className="px-3 py-3 text-center text-sm text-gray-700">
-                  {row.summary.resolvedCount}
+                  {row.summary.knownCount}
                 </td>
                 <td className="px-3 py-3 text-center text-sm text-gray-700">
-                  {formatMean(row.summary.mean)}
+                  {row.summary.unknownCount}
                 </td>
               </tr>
             ))}
@@ -520,7 +440,7 @@ export function AnalysisConditionDetail() {
 
       {hasUnresolvedTranscripts && (
         <p className="text-xs text-gray-500">
-          Counts and means use only transcripts with normalized 1-5 decision scores. Unresolved transcripts for this condition are excluded.
+          {CONDITION_COPY.unresolvedSummary}
         </p>
       )}
 

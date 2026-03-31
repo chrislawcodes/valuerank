@@ -43,6 +43,7 @@ export type {
   ValueStatement,
   LevelPreset,
   LevelPresetVersion,
+  ProviderBalanceSyncLog,
 } from '@prisma/client';
 
 // Audit types

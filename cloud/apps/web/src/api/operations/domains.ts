@@ -156,6 +156,7 @@ export const START_DOMAIN_EVALUATION_MUTATION = gql`
     $modelIds: [String!]
     $samplePercentage: Int
     $samplesPerScenario: Int
+    $targetBatchCount: Int
   ) {
     startDomainEvaluation(
       domainId: $domainId
@@ -166,6 +167,7 @@ export const START_DOMAIN_EVALUATION_MUTATION = gql`
       modelIds: $modelIds
       samplePercentage: $samplePercentage
       samplesPerScenario: $samplesPerScenario
+      targetBatchCount: $targetBatchCount
     ) {
       domainEvaluationId
       scopeCategory
@@ -304,8 +306,8 @@ export const DOMAIN_RUN_SUMMARY_QUERY = gql`
 `;
 
 export const DOMAIN_TRIALS_PLAN_QUERY = gql`
-  query DomainTrialsPlan($domainId: ID!, $temperature: Float, $definitionIds: [ID!]) {
-    domainTrialsPlan(domainId: $domainId, temperature: $temperature, definitionIds: $definitionIds) {
+  query DomainTrialsPlan($domainId: ID!, $temperature: Float, $definitionIds: [ID!], $scopeCategory: String) {
+    domainTrialsPlan(domainId: $domainId, temperature: $temperature, definitionIds: $definitionIds, scopeCategory: $scopeCategory) {
       domainId
       domainName
       vignettes {
@@ -314,6 +316,7 @@ export const DOMAIN_TRIALS_PLAN_QUERY = gql`
         definitionVersion
         signature
         scenarioCount
+        existingBatchCount
       }
       models {
         modelId
@@ -396,6 +399,9 @@ export const DOMAIN_TRIAL_RUNS_STATUS_QUERY = gql`
       runId
       definitionId
       status
+      updatedAt
+      stalledModels
+      analysisStatus
       modelStatuses {
         modelId
         generationCompleted
@@ -546,6 +552,7 @@ export type StartDomainEvaluationMutationVariables = {
   modelIds?: string[];
   samplePercentage?: number;
   samplesPerScenario?: number;
+  targetBatchCount?: number;
 };
 
 export type DomainEvaluation = {
@@ -677,6 +684,7 @@ export type DomainTrialsPlanQueryResult = {
       definitionVersion: number;
       signature: string;
       scenarioCount: number;
+      existingBatchCount: number;
     }>;
     models: Array<{
       modelId: string;
@@ -700,6 +708,7 @@ export type DomainTrialsPlanQueryVariables = {
   domainId: string;
   temperature?: number;
   definitionIds?: string[];
+  scopeCategory?: string;
 };
 
 export type DomainEvaluationCostEstimateModel = {
@@ -761,6 +770,9 @@ export type DomainTrialRunsStatusQueryResult = {
     runId: string;
     definitionId: string;
     status: string;
+    updatedAt: string;
+    stalledModels: string[];
+    analysisStatus: string | null;
     modelStatuses: Array<{
       modelId: string;
       generationCompleted: number;

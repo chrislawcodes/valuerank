@@ -1,0 +1,976 @@
+diff --git a/cloud/apps/web/src/api/operations/domainAnalysis.ts b/cloud/apps/web/src/api/operations/domainAnalysis.ts
+index 77ec933e..4cb348f0 100644
+--- a/cloud/apps/web/src/api/operations/domainAnalysis.ts
++++ b/cloud/apps/web/src/api/operations/domainAnalysis.ts
+@@ -215,6 +215,7 @@ export const DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY = gql`
+       modelId
+       decisionCode
+       decisionCodeSource
++      decisionModelV2
+       turnCount
+       tokenCount
+       durationMs
+@@ -470,6 +471,7 @@ export type DomainAnalysisConditionTranscript = {
+   modelId: string;
+   decisionCode: string | null;
+   decisionCodeSource: string | null;
++  decisionModelV2?: import('./runs').TranscriptDecisionModelV2 | null;
+   turnCount: number;
+   tokenCount: number;
+   durationMs: number;
+diff --git a/cloud/apps/web/src/api/operations/runs.ts b/cloud/apps/web/src/api/operations/runs.ts
+index 9ae66913..6b7b94e3 100644
+--- a/cloud/apps/web/src/api/operations/runs.ts
++++ b/cloud/apps/web/src/api/operations/runs.ts
+@@ -66,6 +66,42 @@ export type Transcript = {
+   createdAt: string;
+   lastAccessedAt: string | null;
+   dimensionValues?: Record<string, string | number> | null;
++  decisionModelV2?: TranscriptDecisionModelV2 | null;
++};
++
++export type TranscriptDecisionModelV2RawEvidence = {
++  matchedText: string | null;
++  matchedLabel: string | null;
++  parseClass: 'exact' | 'fallback_resolved' | 'ambiguous' | 'unparseable' | null;
++  parsePath: string | null;
++  parserVersion: string | null;
++  responseExcerpt: string | null;
++  manualOverride: {
++    previousValue: string | null;
++    overriddenAt: string | null;
++    overriddenByUserId: string | null;
++  } | null;
++};
++
++export type TranscriptDecisionModelV2Canonical = {
++  favoredValueKey: string | null;
++  opposedValueKey: string | null;
++  direction: 'favor_first' | 'favor_second' | 'neutral' | 'unknown';
++  strength: 'strong' | 'lean' | 'neutral' | 'unknown';
++  normalizationApplied: boolean;
++  normalizationReason: 'orientation_flipped' | null;
++  source: 'deterministic' | 'manual' | 'error' | 'unknown';
++};
++
++export type TranscriptDecisionModelV2LegacyCompat = {
++  rawScore: 1 | 2 | 3 | 4 | 5 | null;
++  canonicalScore: 1 | 2 | 3 | 4 | 5 | null;
++};
++
++export type TranscriptDecisionModelV2 = {
++  raw: TranscriptDecisionModelV2RawEvidence;
++  canonical: TranscriptDecisionModelV2Canonical;
++  legacy: TranscriptDecisionModelV2LegacyCompat;
+ };
+ 
+ export type RunConfig = {
+@@ -257,6 +293,7 @@ export const RUN_WITH_TRANSCRIPTS_FRAGMENT = gql`
+       createdAt
+       lastAccessedAt
+       dimensionValues
++      decisionModelV2
+     }
+     analysis {
+       actualCost {
+@@ -511,6 +548,7 @@ export const UPDATE_TRANSCRIPT_DECISION_MUTATION = gql`
+       decisionCode
+       decisionCodeSource
+       decisionMetadata
++      decisionModelV2
+       turnCount
+       tokenCount
+       durationMs
+diff --git a/cloud/apps/web/src/components/runs/TranscriptList.tsx b/cloud/apps/web/src/components/runs/TranscriptList.tsx
+index 79c63985..ac2cde5e 100644
+--- a/cloud/apps/web/src/components/runs/TranscriptList.tsx
++++ b/cloud/apps/web/src/components/runs/TranscriptList.tsx
+@@ -14,6 +14,10 @@ import {
+   normalizeScenarioId,
+ } from '../../utils/scenarioUtils';
+ import { formatDisplayLabel } from '../../utils/displayLabels';
++import {
++  getTranscriptDecisionSortValue,
++  type TranscriptDecisionDisplayMode,
++} from '../../utils/transcriptDecisionModel';
+ import { Tooltip } from '../ui/Tooltip';
+ import { TranscriptRow, type TranscriptScenarioHighlight } from './TranscriptRow';
+ 
+@@ -29,6 +33,7 @@ type TranscriptListProps = {
+   decisionColumnTooltip?: string;
+   normalizedDecisionTranscriptIds?: Set<string>;
+   normalizationBadgeTitle?: string;
++  decisionDisplayMode?: TranscriptDecisionDisplayMode;
+ };
+ 
+ type GroupedTranscripts = Record<string, Transcript[]>;
+@@ -188,31 +193,21 @@ function isSameSortColumn(a: SortColumn, b: SortColumn): boolean {
+ 
+ function getTranscriptDecisionValue(
+   transcript: Transcript,
++  displayMode: TranscriptDecisionDisplayMode,
+   normalizedDecisionTranscriptIds?: Set<string>,
+ ): string | number {
+-  const fallbackCandidates = [
+-    transcript.decisionCode,
+-    (transcript.content as { decisionCode?: unknown } | null)?.decisionCode,
+-    (transcript.content as { decision?: unknown } | null)?.decision,
+-    (transcript.content as { score?: unknown } | null)?.score,
+-    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.decisionCode,
+-    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.decision,
+-    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.score,
+-  ];
+-
+-  for (const candidate of fallbackCandidates) {
+-    if (typeof candidate === 'number' || typeof candidate === 'string') {
+-      if (
+-        normalizedDecisionTranscriptIds?.has(transcript.id)
+-        && ['1', '2', '3', '4', '5'].includes(String(candidate))
+-      ) {
+-        return 6 - Number(candidate);
+-      }
+-      return candidate;
+-    }
++  if (displayMode === 'audit') {
++    return getTranscriptDecisionSortValue(transcript, displayMode);
+   }
+ 
+-  return '';
++  const sortValue = getTranscriptDecisionSortValue(transcript, displayMode);
++  if (
++    normalizedDecisionTranscriptIds?.has(transcript.id)
++    && ['1', '2', '3', '4', '5'].includes(String(sortValue))
++  ) {
++    return 6 - Number(sortValue);
++  }
++  return sortValue;
+ }
+ 
+ function SortHeaderButton({
+@@ -293,6 +288,7 @@ export function TranscriptList({
+   decisionColumnTooltip,
+   normalizedDecisionTranscriptIds,
+   normalizationBadgeTitle,
++  decisionDisplayMode = 'legacy',
+ }: TranscriptListProps) {
+   const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set());
+   const [filter, setFilter] = useState('');
+@@ -367,8 +363,8 @@ export function TranscriptList({
+       }
+       case 'decision':
+         return compareDimensionValues(
+-          getTranscriptDecisionValue(a, normalizedDecisionTranscriptIds),
+-          getTranscriptDecisionValue(b, normalizedDecisionTranscriptIds),
++          getTranscriptDecisionValue(a, decisionDisplayMode, normalizedDecisionTranscriptIds),
++          getTranscriptDecisionValue(b, decisionDisplayMode, normalizedDecisionTranscriptIds),
+         );
+       case 'tokens':
+         return a.tokenCount - b.tokenCount;
+@@ -377,7 +373,7 @@ export function TranscriptList({
+       default:
+         return 0;
+     }
+-  }, [getScenarioDimensions, normalizedDecisionTranscriptIds]);
++  }, [decisionDisplayMode, getScenarioDimensions, normalizedDecisionTranscriptIds]);
+ 
+   const sortTranscripts = useCallback((items: Transcript[]): Transcript[] => {
+     const fallbackColumns: SortColumn[] = [];
+@@ -637,6 +633,7 @@ export function TranscriptList({
+               scenarioHighlight={getScenarioHighlight(transcript.scenarioId)}
+               normalizeDecision={normalizedDecisionTranscriptIds?.has(transcript.id) ?? false}
+               normalizationBadgeTitle={normalizationBadgeTitle}
++              decisionDisplayMode={decisionDisplayMode}
+             />
+           ))}
+         </div>
+@@ -749,6 +746,7 @@ export function TranscriptList({
+                     scenarioHighlight={getScenarioHighlight(transcript.scenarioId)}
+                     normalizeDecision={normalizedDecisionTranscriptIds?.has(transcript.id) ?? false}
+                     normalizationBadgeTitle={normalizationBadgeTitle}
++                    decisionDisplayMode={decisionDisplayMode}
+                   />
+                 ))}
+               </div>
+diff --git a/cloud/apps/web/src/components/runs/TranscriptRow.tsx b/cloud/apps/web/src/components/runs/TranscriptRow.tsx
+index 5fd97326..0842830f 100644
+--- a/cloud/apps/web/src/components/runs/TranscriptRow.tsx
++++ b/cloud/apps/web/src/components/runs/TranscriptRow.tsx
+@@ -3,6 +3,11 @@ import type { ChangeEvent } from 'react';
+ import type { Transcript } from '../../api/operations/runs';
+ import { formatDisplayLabel } from '../../utils/displayLabels';
+ import { getDecisionMetadata } from '../../utils/methodology';
++import {
++  formatCanonicalDecisionHeadline,
++  formatCanonicalDecisionSubtitle,
++  type TranscriptDecisionDisplayMode,
++} from '../../utils/transcriptDecisionModel';
+ 
+ export type TranscriptScenarioHighlight = {
+   label: string;
+@@ -24,6 +29,7 @@ type TranscriptRowProps = {
+   scenarioHighlight?: TranscriptScenarioHighlight | null;
+   normalizeDecision?: boolean;
+   normalizationBadgeTitle?: string;
++  decisionDisplayMode?: TranscriptDecisionDisplayMode;
+ };
+ 
+ function formatDate(dateString: string): string {
+@@ -96,6 +102,35 @@ function normalizeDecisionCode(decision: string, normalizeDecision: boolean): st
+   return String(6 - Number(decision));
+ }
+ 
++function getLegacyDecisionDisplay(
++  transcript: Transcript,
++  decision: string,
++  normalizeDecision: boolean,
++  dimensions?: Record<string, string | number> | null,
++): string {
++  const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
++  const decisionScaleLabels = decisionMetadata?.scaleLabels ?? [];
++  const normalizedDecision = normalizeDecisionCode(decision, normalizeDecision);
++  const decisionScaleEntry = decisionScaleLabels.find((entry) => entry.code === String(normalizedDecision));
++  const rawMatchedLabel = (decisionMetadata as Record<string, unknown> | null)?.['matchedLabel'] as string | null;
++  const labelText = normalizeDecision
++    ? (decisionScaleEntry?.label ?? null)
++    : (rawMatchedLabel ?? decisionScaleEntry?.label ?? null);
++  const shortDirection = labelText != null ? extractShortDirection(labelText) : null;
++  const primaryDimKey = dimensions != null ? (Object.keys(dimensions)[0] ?? null) : null;
++  const jobWithMarker = ' taking the job with ';
++  const jobWithIdx = labelText?.toLowerCase().indexOf(jobWithMarker) ?? -1;
++  const jobSubject = jobWithIdx >= 0 && labelText != null
++    ? formatDisplayLabel(labelText.slice(jobWithIdx + jobWithMarker.length))
++    : null;
++
++  return shortDirection != null
++    ? (jobSubject != null
++        ? `${normalizedDecision} - ${shortDirection} (${jobSubject})`
++        : (primaryDimKey != null ? `${normalizedDecision} - ${shortDirection} ${formatDisplayLabel(primaryDimKey)}` : `${normalizedDecision} - ${shortDirection}`))
++    : String(normalizedDecision);
++}
++
+ export function TranscriptRow({
+   transcript,
+   onSelect,
+@@ -110,38 +145,24 @@ export function TranscriptRow({
+   scenarioHighlight = null,
+   normalizeDecision = false,
+   normalizationBadgeTitle,
++  decisionDisplayMode = 'legacy',
+ }: TranscriptRowProps) {
+   const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
+   const showGrid = !compact && Boolean(gridTemplateColumns);
+   const rawDecision = transcript.decisionCode ?? extractDecision(transcript.content);
+-  const decision = normalizeDecisionCode(rawDecision, normalizeDecision);
+   const decisionScaleLabels = decisionMetadata?.scaleLabels ?? [];
+-
+-  // Build enriched decision label: "{code} - {Short direction} ({job subject})"
+-  // e.g. "2 - Somewhat support (trust from other people)"
+-  // For non-job-choice labels, falls back to "{code} - {Short direction} {primary_dim_key}"
+-  const decisionScaleEntry = decisionScaleLabels.find((e) => e.code === String(decision));
+-  const rawMatchedLabel = (decisionMetadata as Record<string, unknown> | null)?.['matchedLabel'] as string | null;
+-  const labelText = normalizeDecision
+-    ? (decisionScaleEntry?.label ?? null)
+-    : (rawMatchedLabel ?? decisionScaleEntry?.label ?? null);
+-  const shortDirection = labelText != null ? extractShortDirection(labelText) : null;
+-  const primaryDimKey = dimensions != null ? (Object.keys(dimensions)[0] ?? null) : null;
+-  // For job-choice scale labels ("... taking the job with X"), extract the subject X.
+-  // This correctly reflects orientation (A-first vs B-first) unlike primaryDimKey which is
+-  // always the alphabetically-first dimension key due to PostgreSQL JSONB key ordering.
+-  const jobWithMarker = ' taking the job with ';
+-  const jobWithIdx = labelText?.toLowerCase().indexOf(jobWithMarker) ?? -1;
+-  const jobSubject = jobWithIdx >= 0 && labelText != null
+-    ? formatDisplayLabel(labelText.slice(jobWithIdx + jobWithMarker.length))
+-    : null;
+-  const decisionCore = shortDirection != null
+-    ? (jobSubject != null
+-        ? `${decision} - ${shortDirection} (${jobSubject})`
+-        : (primaryDimKey != null ? `${decision} - ${shortDirection} ${formatDisplayLabel(primaryDimKey)}` : `${decision} - ${shortDirection}`))
+-    : String(decision);
+-  const decisionDisplay = transcript.decisionCodeSource === 'llm' ? `${decisionCore}*` : decisionCore;
+-  const isAnalyzableDecision = ['1', '2', '3', '4', '5'].includes(String(decision));
++  const legacyDecisionDisplay = getLegacyDecisionDisplay(transcript, rawDecision, normalizeDecision, dimensions);
++  const canonicalDecision = transcript.decisionModelV2?.canonical ?? null;
++  const canonicalDecisionDisplay = canonicalDecision
++    ? formatCanonicalDecisionHeadline(transcript)
++    : '-';
++  const canonicalDecisionSubtitle = canonicalDecision
++    ? formatCanonicalDecisionSubtitle(transcript)
++    : '';
++  const decisionDisplay = decisionDisplayMode === 'audit'
++    ? canonicalDecisionDisplay
++    : legacyDecisionDisplay;
++  const isAnalyzableDecision = ['1', '2', '3', '4', '5'].includes(String(rawDecision));
+   const isDecisionOverrideAllowed = Boolean(onDecisionChange) && (
+     decisionMetadata?.parseClass === 'ambiguous'
+     || !isAnalyzableDecision
+@@ -238,7 +259,10 @@ export function TranscriptRow({
+             {isDecisionOverrideAllowed ? (
+               <div className="flex items-center gap-2">
+                 <span className="text-gray-700">{decisionDisplay}</span>
+-                {normalizeDecision && (
++                {decisionDisplayMode === 'audit' && canonicalDecisionSubtitle && (
++                  <span className="text-xs text-gray-500">{canonicalDecisionSubtitle}</span>
++                )}
++                {decisionDisplayMode === 'legacy' && normalizeDecision && (
+                   <span
+                     className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-800"
+                     title={normalizationBadgeTitle}
+@@ -246,6 +270,16 @@ export function TranscriptRow({
+                     Norm
+                   </span>
+                 )}
++                {decisionDisplayMode === 'audit' && canonicalDecision?.normalizationApplied && (
++                  <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-800">
++                    Norm
++                  </span>
++                )}
++                {decisionDisplayMode === 'audit' && canonicalDecision?.source && (
++                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700">
++                    {canonicalDecision.source}
++                  </span>
++                )}
+                 <select
+                   aria-label={`Set decision for transcript ${transcript.id}`}
+                   className="border border-gray-300 rounded px-2 py-1 text-xs bg-white"
+@@ -267,7 +301,10 @@ export function TranscriptRow({
+             ) : (
+               <div className="flex items-center gap-2">
+                 <span>{decisionDisplay}</span>
+-                {normalizeDecision && (
++                {decisionDisplayMode === 'audit' && canonicalDecisionSubtitle && (
++                  <span className="text-xs text-gray-500">{canonicalDecisionSubtitle}</span>
++                )}
++                {decisionDisplayMode === 'legacy' && normalizeDecision && (
+                   <span
+                     className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-800"
+                     title={normalizationBadgeTitle}
+@@ -275,6 +312,16 @@ export function TranscriptRow({
+                     Norm
+                   </span>
+                 )}
++                {decisionDisplayMode === 'audit' && canonicalDecision?.normalizationApplied && (
++                  <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-800">
++                    Norm
++                  </span>
++                )}
++                {decisionDisplayMode === 'audit' && canonicalDecision?.source && (
++                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700">
++                    {canonicalDecision.source}
++                  </span>
++                )}
+                 {decisionMetadata?.parseClass === 'ambiguous' && (
+                   <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                     Ambiguous
+@@ -329,10 +376,17 @@ export function TranscriptRow({
+           <div className="flex items-center gap-4 text-sm text-gray-500 flex-shrink-0">
+             <span
+               className="flex items-center gap-2"
+-              title={transcript.decisionCodeSource === 'llm' ? 'Decision (LLM-classified)' : 'Decision'}
++              title={decisionDisplayMode === 'audit'
++                ? 'Canonical decision'
++                : transcript.decisionCodeSource === 'llm'
++                  ? 'Decision (LLM-classified)'
++                  : 'Decision'}
+             >
+               <span>{decisionDisplay}</span>
+-              {normalizeDecision && (
++              {decisionDisplayMode === 'audit' && canonicalDecisionSubtitle && (
++                <span className="text-xs text-gray-500">{canonicalDecisionSubtitle}</span>
++              )}
++              {decisionDisplayMode === 'legacy' && normalizeDecision && (
+                 <span
+                   className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-800"
+                   title={normalizationBadgeTitle}
+@@ -340,21 +394,31 @@ export function TranscriptRow({
+                   Norm
+                 </span>
+               )}
+-              {decisionMetadata?.parseClass === 'ambiguous' && (
++              {decisionDisplayMode === 'legacy' && decisionMetadata?.parseClass === 'ambiguous' && (
+                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                   Ambiguous
+                 </span>
+               )}
+-              {decisionMetadata?.parseClass === 'fallback_resolved' && (
++              {decisionDisplayMode === 'legacy' && decisionMetadata?.parseClass === 'fallback_resolved' && (
+                 <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">
+                   Fallback
+                 </span>
+               )}
+-              {transcript.decisionCodeSource === 'manual' && (
++              {decisionDisplayMode === 'legacy' && transcript.decisionCodeSource === 'manual' && (
+                 <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
+                   Manual
+                 </span>
+               )}
++              {decisionDisplayMode === 'audit' && canonicalDecision?.normalizationApplied && (
++                <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-800">
++                  Norm
++                </span>
++              )}
++              {decisionDisplayMode === 'audit' && canonicalDecision?.source && (
++                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700">
++                  {canonicalDecision.source}
++                </span>
++              )}
+             </span>
+             <span className="flex items-center gap-1" title="Tokens">
+               <Zap className="w-3 h-3" />
+
+... [narrowed diff slice: middle omitted] ...
+
+diff --git a/cloud/apps/web/src/pages/AnalysisTranscripts.tsx b/cloud/apps/web/src/pages/AnalysisTranscripts.tsx
+index 5151a013..018981ab 100644
+--- a/cloud/apps/web/src/pages/AnalysisTranscripts.tsx
++++ b/cloud/apps/web/src/pages/AnalysisTranscripts.tsx
+@@ -595,8 +595,9 @@ export function AnalysisTranscripts() {
+   const normalizedDecisionTranscriptIds = useMemo(() => {
+     const shouldNormalizePairedScores = analysisMode === 'paired'
+       && (
+-        (hasPairedConditionFilterParams && pairView === 'condition-blended')
+-        || hasPairedValueFilterParams
++        hasPairedValueFilterParams
++        || hasPairedConditionFilterParams
++        || hasBucketFilterParams
+       );
+ 
+     if (!shouldNormalizePairedScores) {
+@@ -622,21 +623,31 @@ export function AnalysisTranscripts() {
+     companionRun?.id,
+     definitionContent,
+     filteredTranscripts,
++    hasBucketFilterParams,
+     hasPairedConditionFilterParams,
+     hasPairedValueFilterParams,
+     pairView,
+     run?.id,
+   ]);
+ 
+-  const decisionColumnLabel = normalizedDecisionTranscriptIds.size > 0
+-    ? 'Normalized decision score'
+-    : 'Decision';
+-  const decisionColumnTooltip = normalizedDecisionTranscriptIds.size > 0
+-    ? 'In this paired view, some prompts showed the two options in a different order. We adjust those scores so they all use the same scale. That way, the same number means the same choice direction across every transcript.'
+-    : undefined;
+-  const normalizationBadgeTitle = normalizedDecisionTranscriptIds.size > 0
+-    ? 'This score was adjusted because this transcript showed the options in the opposite order.'
+-    : undefined;
++  const transcriptDisplayMode = filteredTranscripts.some((transcript) => transcript.decisionModelV2 != null)
++    ? 'audit'
++    : 'legacy';
++  const decisionColumnLabel = transcriptDisplayMode === 'audit'
++    ? 'Canonical decision'
++    : normalizedDecisionTranscriptIds.size > 0
++      ? 'Normalized decision score'
++      : 'Decision';
++  const decisionColumnTooltip = transcriptDisplayMode === 'audit'
++    ? 'Shows the favored value and strength from the V2 canonical decision model.'
++    : normalizedDecisionTranscriptIds.size > 0
++      ? 'In this paired view, some prompts showed the two options in a different order. We adjust those scores so they all use the same scale. That way, the same number means the same choice direction across every transcript.'
++      : undefined;
++  const normalizationBadgeTitle = transcriptDisplayMode === 'audit'
++    ? 'Canonical orientation was normalized in the V2 decision model.'
++    : normalizedDecisionTranscriptIds.size > 0
++      ? 'This score was adjusted because this transcript showed the options in the opposite order.'
++      : undefined;
+ 
+   useEffect(() => {
+     if (!hasDirectTranscriptParam) {
+@@ -649,25 +660,43 @@ export function AnalysisTranscripts() {
+   const transcriptCoverage = useMemo(() => {
+     return filteredTranscripts.reduce(
+       (acc, transcript) => {
+-        const metadata = getDecisionMetadata(transcript.decisionMetadata);
+-        if (transcript.decisionCodeSource === 'manual') {
+-          acc.manual += 1;
+-        }
+-        if (metadata?.parseClass === 'exact') {
+-          acc.exact += 1;
+-        } else if (metadata?.parseClass === 'fallback_resolved') {
+-          acc.fallback += 1;
+-        } else if (metadata?.parseClass === 'ambiguous') {
+-          acc.ambiguous += 1;
+-        }
+-        if (!['1', '2', '3', '4', '5'].includes(transcript.decisionCode ?? '')) {
+-          acc.unresolved += 1;
++        const metadata = transcriptDisplayMode === 'audit'
++          ? transcript.decisionModelV2?.raw
++          : getDecisionMetadata(transcript.decisionMetadata);
++        if (transcriptDisplayMode === 'audit') {
++          if (transcript.decisionModelV2?.raw.manualOverride) {
++            acc.manual += 1;
++          }
++          if (metadata?.parseClass === 'exact') {
++            acc.exact += 1;
++          } else if (metadata?.parseClass === 'fallback_resolved') {
++            acc.fallback += 1;
++          } else if (metadata?.parseClass === 'ambiguous') {
++            acc.ambiguous += 1;
++          }
++          if (transcript.decisionModelV2?.canonical.direction === 'unknown') {
++            acc.unresolved += 1;
++          }
++        } else {
++          if (transcript.decisionCodeSource === 'manual') {
++            acc.manual += 1;
++          }
++          if (metadata?.parseClass === 'exact') {
++            acc.exact += 1;
++          } else if (metadata?.parseClass === 'fallback_resolved') {
++            acc.fallback += 1;
++          } else if (metadata?.parseClass === 'ambiguous') {
++            acc.ambiguous += 1;
++          }
++          if (!['1', '2', '3', '4', '5'].includes(transcript.decisionCode ?? '')) {
++            acc.unresolved += 1;
++          }
+         }
+         return acc;
+       },
+       { exact: 0, fallback: 0, ambiguous: 0, manual: 0, unresolved: 0 }
+     );
+-  }, [filteredTranscripts]);
++  }, [filteredTranscripts, transcriptDisplayMode]);
+ 
+   if (loading && !run) {
+     return (
+@@ -855,7 +884,9 @@ export function AnalysisTranscripts() {
+       {filteredTranscripts.length > 0 && (
+         <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700">
+           <div className="flex flex-wrap items-center gap-2">
+-            <span className="font-medium text-gray-900">Parse coverage</span>
++            <span className="font-medium text-gray-900">
++              {transcriptDisplayMode === 'audit' ? 'Canonical coverage' : 'Parse coverage'}
++            </span>
+             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+               Exact {transcriptCoverage.exact}
+             </span>
+@@ -871,8 +902,8 @@ export function AnalysisTranscripts() {
+           </div>
+           {transcriptCoverage.unresolved > 0 && (
+             <p className="mt-2 text-xs text-amber-700">
+-              {transcriptCoverage.unresolved} transcript{transcriptCoverage.unresolved === 1 ? '' : 's'} in this view still do not have an analyzable 1-5 decision.
+-              Open those transcripts to review and relabel them manually when needed.
++              {transcriptCoverage.unresolved} transcript{transcriptCoverage.unresolved === 1 ? '' : 's'} in this view still do not have an analyzable canonical decision.
++              Open those transcripts to review the raw evidence and relabel them manually when needed.
+             </p>
+           )}
+         </div>
+@@ -898,6 +929,7 @@ export function AnalysisTranscripts() {
+           decisionColumnTooltip={decisionColumnTooltip}
+           normalizedDecisionTranscriptIds={normalizedDecisionTranscriptIds}
+           normalizationBadgeTitle={normalizationBadgeTitle}
++          decisionDisplayMode={transcriptDisplayMode}
+         />
+       )}
+ 
+@@ -907,6 +939,9 @@ export function AnalysisTranscripts() {
+           onClose={() => setSelectedTranscript(null)}
+           onDecisionChange={handleDecisionChange}
+           decisionUpdating={updatingTranscriptIds.has(selectedTranscript.id)}
++          normalizeDecision={normalizedDecisionTranscriptIds.has(selectedTranscript.id)}
++          normalizationBadgeTitle={normalizationBadgeTitle}
++          decisionDisplayMode={transcriptDisplayMode}
+         />
+       )}
+     </div>
+diff --git a/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx b/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx
+index c87e2c2a..a368e52e 100644
+--- a/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx
++++ b/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx
+@@ -275,6 +275,7 @@ export function DomainAnalysisValueDetail() {
+     content: transcript.content,
+     decisionCode: transcript.decisionCode,
+     decisionCodeSource: transcript.decisionCodeSource,
++    decisionModelV2: transcript.decisionModelV2 ?? null,
+     turnCount: transcript.turnCount,
+     tokenCount: transcript.tokenCount,
+     durationMs: transcript.durationMs,
+@@ -490,7 +491,11 @@ export function DomainAnalysisValueDetail() {
+         </div>
+       </section>
+       {selectedTranscript !== null && (
+-        <TranscriptViewer transcript={selectedTranscript} onClose={() => setSelectedTranscript(null)} />
++        <TranscriptViewer
++          transcript={selectedTranscript}
++          onClose={() => setSelectedTranscript(null)}
++          decisionDisplayMode="audit"
++        />
+       )}
+     </div>
+   );
+diff --git a/cloud/apps/web/tests/components/runs/TranscriptList.test.tsx b/cloud/apps/web/tests/components/runs/TranscriptList.test.tsx
+index fb0a4c44..a5edc4c6 100644
+--- a/cloud/apps/web/tests/components/runs/TranscriptList.test.tsx
++++ b/cloud/apps/web/tests/components/runs/TranscriptList.test.tsx
+@@ -177,6 +177,51 @@ describe('TranscriptList', () => {
+     expect(screen.getByText('3')).toBeInTheDocument();
+   });
+ 
++  it('shows canonical decision details in audit mode', async () => {
++    const transcript = createMockTranscript({
++      decisionCode: '1',
++      decisionModelV2: {
++        raw: {
++          matchedText: 'Achievement',
++          matchedLabel: 'Achievement',
++          parseClass: 'exact',
++          parsePath: 'exact.favor_second.strong',
++          parserVersion: 'v1',
++          responseExcerpt: 'Achievement',
++          manualOverride: null,
++        },
++        canonical: {
++          favoredValueKey: 'Benevolence_Dependability',
++          opposedValueKey: 'Achievement',
++          direction: 'favor_second',
++          strength: 'strong',
++          normalizationApplied: true,
++          normalizationReason: 'orientation_flipped',
++          source: 'deterministic',
++        },
++        legacy: {
++          rawScore: null,
++          canonicalScore: 1,
++        },
++      },
++    });
++
++    render(
++      <TranscriptList
++        transcripts={[transcript]}
++        onSelect={mockOnSelect}
++        groupByModel={false}
++        decisionDisplayMode="audit"
++        decisionColumnLabel="Canonical decision"
++      />
++    );
++
++    expect(screen.getByText('Benevolence Dependability > Achievement')).toBeInTheDocument();
++    expect(screen.getByText(/Favors second value · strong/i)).toBeInTheDocument();
++    expect(screen.getByText('Norm')).toBeInTheDocument();
++    expect(screen.getByText('deterministic')).toBeInTheDocument();
++  });
++
+   it('shows token count in transcript row', async () => {
+     const user = userEvent.setup();
+     const transcripts = [createMockTranscript({ tokenCount: 1234 })];
+diff --git a/cloud/apps/web/tests/pages/AnalysisTranscripts.test.tsx b/cloud/apps/web/tests/pages/AnalysisTranscripts.test.tsx
+index e3dee276..ae77a88e 100644
+--- a/cloud/apps/web/tests/pages/AnalysisTranscripts.test.tsx
++++ b/cloud/apps/web/tests/pages/AnalysisTranscripts.test.tsx
+@@ -1,5 +1,5 @@
+ import { beforeEach, describe, expect, it, vi } from 'vitest';
+-import { fireEvent, render, screen } from '@testing-library/react';
++import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+ import { MemoryRouter, Route, Routes } from 'react-router-dom';
+ import { AnalysisTranscripts } from '../../src/pages/AnalysisTranscripts';
+ 
+@@ -8,6 +8,16 @@ const mockUseRun = vi.fn();
+ const mockUseRuns = vi.fn();
+ const mockUseAnalysis = vi.fn();
+ const mockUpdateTranscriptDecision = vi.fn();
++let lastTranscriptListProps: {
++  transcripts: Array<{ id: string }>;
++  decisionColumnLabel?: string;
++  normalizedDecisionTranscriptIds?: Set<string>;
++  decisionDisplayMode?: string;
++} | null = null;
++let lastTranscriptViewerProps: {
++  transcript: { id: string };
++  decisionDisplayMode?: string;
++} | null = null;
+ 
+ vi.mock('react-router-dom', async () => {
+   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+@@ -36,15 +46,24 @@ vi.mock('../../src/hooks/useRunMutations', () => ({
+ }));
+ 
+ vi.mock('../../src/components/runs/TranscriptList', () => ({
+-  TranscriptList: ({ transcripts }: { transcripts: Array<{ id: string }> }) => (
+-    <div data-testid="transcript-list">Transcript count: {transcripts.length}</div>
+-  ),
++  TranscriptList: (props: {
++    transcripts: Array<{ id: string }>;
++    decisionColumnLabel?: string;
++    normalizedDecisionTranscriptIds?: Set<string>;
++    decisionDisplayMode?: string;
++  }) => {
++    lastTranscriptListProps = props;
++    return (
++      <div data-testid="transcript-list">Transcript count: {props.transcripts.length}</div>
++    );
++  },
+ }));
+ 
+ vi.mock('../../src/components/runs/TranscriptViewer', () => ({
+-  TranscriptViewer: ({ transcript }: { transcript: { id: string } }) => (
+-    <div data-testid="transcript-viewer">Viewer transcript: {transcript.id}</div>
+-  ),
++  TranscriptViewer: (props: { transcript: { id: string }; decisionDisplayMode?: string }) => {
++    lastTranscriptViewerProps = props;
++    return <div data-testid="transcript-viewer">Viewer transcript: {props.transcript.id}</div>;
++  },
+ }));
+ 
+ function createRun(id: string, definitionVersion: number, overrides: Record<string, unknown> = {}) {
+@@ -180,6 +199,8 @@ describe('AnalysisTranscripts', () => {
+     mockUseRuns.mockReset();
+     mockUseAnalysis.mockReset();
+     mockUpdateTranscriptDecision.mockReset();
++    lastTranscriptListProps = null;
++    lastTranscriptViewerProps = null;
+ 
+     mockUseRun.mockReturnValue({
+       run: createRun('run-1', 1),
+@@ -624,8 +645,8 @@ describe('AnalysisTranscripts', () => {
+           },
+         },
+         transcripts: [
+-          { id: 'tx-4', modelId: 'model1', scenarioId: 's4', decisionCode: 'A' },
+-          { id: 'tx-5', modelId: 'model1', scenarioId: 's5', decisionCode: 'A' },
++          { id: 'tx-4', runId: 'run-2', modelId: 'model1', scenarioId: 's4', decisionCode: 'A' },
++          { id: 'tx-5', runId: 'run-2', modelId: 'model1', scenarioId: 's5', decisionCode: 'A' },
+         ],
+       }),
+       loading: false,
+@@ -649,6 +670,68 @@ describe('AnalysisTranscripts', () => {
+ 
+     expect(screen.getByText(/Split inspection is active/i)).toBeInTheDocument();
+     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 1');
++    expect(lastTranscriptListProps?.decisionColumnLabel).toBe('Normalized decision score');
++    expect(lastTranscriptListProps?.normalizedDecisionTranscriptIds).toEqual(new Set(['tx-4']));
++  });
++
++  it('switches transcript audit surfaces to canonical decision mode when V2 data is present', async () => {
++    mockUseRun.mockReturnValue({
++      run: createRun('run-3', 1, {
++        transcripts: [
++          {
++            id: 'tx-10',
++            runId: 'run-3',
++            modelId: 'model1',
++            scenarioId: 's10',
++            decisionCode: '1',
++            decisionModelV2: {
++              raw: {
++                matchedText: 'Achievement',
++                matchedLabel: 'Achievement',
++                parseClass: 'exact',
++                parsePath: 'exact.favor_second.strong',
++                parserVersion: 'v1',
++                responseExcerpt: 'Achievement',
++                manualOverride: null,
++              },
++              canonical: {
++                favoredValueKey: 'Benevolence_Dependability',
++                opposedValueKey: 'Achievement',
++                direction: 'favor_second',
++                strength: 'strong',
++                normalizationApplied: true,
++                normalizationReason: 'orientation_flipped',
++                source: 'deterministic',
++              },
++              legacy: {
++                rawScore: null,
++                canonicalScore: 1,
++              },
++            },
++          },
++        ],
++      }),
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++    });
++
++    mockUseAnalysis.mockReturnValue({
++      analysis: createPairedAnalysis([{ id: 's10', row: 'High', col: 'Low', score: 1 }], ['s10']),
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    renderPage('/analysis/run-3/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&modelId=model1&transcriptId=tx-10');
++
++    await waitFor(() => {
++      expect(lastTranscriptListProps?.decisionColumnLabel).toBe('Canonical decision');
++      expect(lastTranscriptListProps?.decisionDisplayMode).toBe('audit');
++      expect(lastTranscriptViewerProps?.decisionDisplayMode).toBe('audit');
++    });
+   });
+ 
+   it('keeps repeat-pattern query params when aggregate signature switching changes runs', () => {
+
+diff --git acloud/apps/web/src/utils/transcriptDecisionModel.ts bcloud/apps/web/src/utils/transcriptDecisionModel.ts
+new file mode 100644
+index 00000000..273e45d3
+--- /dev/null
++++ bcloud/apps/web/src/utils/transcriptDecisionModel.ts
+@@ -0,0 +1,83 @@
++import type { Transcript } from '../api/operations/runs';
++import { formatDisplayLabel } from './displayLabels';
++
++export type TranscriptDecisionDisplayMode = 'legacy' | 'audit';
++
++function isRecord(value: unknown): value is Record<string, unknown> {
++  return value !== null && typeof value === 'object' && !Array.isArray(value);
++}
++
++export function hasTranscriptDecisionModelV2(
++  transcript: Transcript,
++): transcript is Transcript & { decisionModelV2: NonNullable<Transcript['decisionModelV2']> } {
++  return transcript.decisionModelV2 != null;
++}
++
++export function formatCanonicalDecisionHeadline(transcript: Transcript): string {
++  const canonical = transcript.decisionModelV2?.canonical;
++  if (!canonical) return '-';
++
++  if (canonical.direction === 'neutral') {
++    return 'Neutral';
++  }
++
++  if (
++    canonical.favoredValueKey == null
++    || canonical.opposedValueKey == null
++    || canonical.direction === 'unknown'
++    || canonical.strength === 'unknown'
++  ) {
++    return 'Unknown';
++  }
++
++  return `${formatDisplayLabel(canonical.favoredValueKey)} > ${formatDisplayLabel(canonical.opposedValueKey)}`;
++}
++
++export function formatCanonicalDecisionSubtitle(transcript: Transcript): string {
++  const canonical = transcript.decisionModelV2?.canonical;
++  if (!canonical) return '';
++
++  if (canonical.direction === 'unknown' || canonical.strength === 'unknown') {
++    return 'Unknown decision';
++  }
++
++  if (canonical.direction === 'neutral') {
++    return 'Neutral';
++  }
++
++  const directionLabel = canonical.direction === 'favor_first'
++    ? 'Favors first value'
++    : 'Favors second value';
++  return `${directionLabel} · ${canonical.strength}`;
++}
++
++export function getTranscriptDecisionSortValue(
++  transcript: Transcript,
++  displayMode: TranscriptDecisionDisplayMode,
++): string | number {
++  if (displayMode === 'audit' && transcript.decisionModelV2?.legacy.canonicalScore != null) {
++    return transcript.decisionModelV2.legacy.canonicalScore;
++  }
++
++  const fallbackCandidates = [
++    transcript.decisionCode,
++    (transcript.content as { decisionCode?: unknown } | null)?.decisionCode,
++    (transcript.content as { decision?: unknown } | null)?.decision,
++    (transcript.content as { score?: unknown } | null)?.score,
++    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.decisionCode,
++    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.decision,
++    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.score,
++  ];
++
++  for (const candidate of fallbackCandidates) {
++    if (typeof candidate === 'number' || typeof candidate === 'string') {
++      return candidate;
++    }
++  }
++
++  return '';
++}
++
++export function isTranscriptDecisionMetadata(value: unknown): value is Record<string, unknown> {
++  return isRecord(value);
++}
+
+diff --git acloud/apps/web/tests/components/runs/TranscriptViewer.test.tsx bcloud/apps/web/tests/components/runs/TranscriptViewer.test.tsx
+new file mode 100644
+index 00000000..5d7e72f9
+--- /dev/null
++++ bcloud/apps/web/tests/components/runs/TranscriptViewer.test.tsx
+@@ -0,0 +1,74 @@
++import { describe, expect, it, vi } from 'vitest';
++import { render, screen } from '@testing-library/react';
++import { TranscriptViewer } from '../../../src/components/runs/TranscriptViewer';
++import type { Transcript } from '../../../src/api/operations/runs';
++
++function createTranscript(overrides: Partial<Transcript> = {}): Transcript {
++  return {
++    id: 'transcript-1',
++    runId: 'run-1',
++    scenarioId: 'scenario-1',
++    modelId: 'gpt-4',
++    modelVersion: 'gpt-4-0125-preview',
++    content: { turns: [{ role: 'user', content: 'Hello' }] },
++    decisionCode: '1',
++    decisionCodeSource: 'manual',
++    decisionMetadata: null,
++    turnCount: 1,
++    tokenCount: 42,
++    durationMs: 1000,
++    estimatedCost: null,
++    createdAt: '2024-01-15T10:00:00Z',
++    lastAccessedAt: null,
++    decisionModelV2: {
++      raw: {
++        matchedText: 'Achievement',
++        matchedLabel: 'Achievement',
++        parseClass: 'exact',
++        parsePath: 'exact.favor_second.strong',
++        parserVersion: 'v1',
++        responseExcerpt: 'Achievement',
++        manualOverride: {
++          previousValue: '5',
++          overriddenAt: '2024-01-15T12:00:00Z',
++          overriddenByUserId: 'user-1',
++        },
++      },
++      canonical: {
++        favoredValueKey: 'Benevolence_Dependability',
++        opposedValueKey: 'Achievement',
++        direction: 'favor_second',
++        strength: 'strong',
++        normalizationApplied: true,
++        normalizationReason: 'orientation_flipped',
++        source: 'deterministic',
++      },
++      legacy: {
++        rawScore: 5,
++        canonicalScore: 1,
++      },
++    },
++    ...overrides,
++  };
++}
++
++describe('TranscriptViewer', () => {
++  it('renders the audit surface with canonical decision and raw evidence', () => {
++    render(
++      <TranscriptViewer
++        transcript={createTranscript()}
++        onClose={vi.fn()}
++        onDecisionChange={vi.fn()}
++        decisionDisplayMode="audit"
++      />
++    );
++
++    expect(screen.getByText('Canonical decision:')).toBeInTheDocument();
++    expect(screen.getByText('Benevolence Dependability > Achievement')).toBeInTheDocument();
++    expect(screen.getByText(/Favors second value · strong/i)).toBeInTheDocument();
++    expect(screen.getByText('Raw Evidence')).toBeInTheDocument();
++    expect(screen.getByText('exact')).toBeInTheDocument();
++    expect(screen.getByText(/Manual override previous value:/i).parentElement).toHaveTextContent('5');
++    expect(screen.getByText('Compatibility Decision Code')).toBeInTheDocument();
++  });
++});

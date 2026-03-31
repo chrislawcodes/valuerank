@@ -5,8 +5,11 @@
   ],
   "tasks": {
     "build": {
-      "dependsOn": ["^build", "lint"],
+      "dependsOn": ["^build", "^generate", "lint"],
       "outputs": ["dist/**", ".next/**"]
+    },
+    "generate": {
+      "cache": false
     },
     "dev": {
       "cache": false,

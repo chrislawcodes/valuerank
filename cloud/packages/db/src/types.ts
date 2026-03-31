@@ -49,7 +49,6 @@ export type DefinitionMethodology = {
   response_scale?: 'numeric' | 'option_text' | 'value_labels';
   legacy_label?: string;
   canonical_value_order?: string[];
-  presentation_order?: 'A_first' | 'B_first';
   pair_key?: string;
 };
 
@@ -176,6 +175,26 @@ export type DecisionManualOverride = {
   overriddenByUserId?: string | null;
 };
 
+export type SummaryCacheSummary = {
+  decisionCode?: string;
+  decisionCodeSource?: string;
+  decisionText: string | null;
+  decisionMetadata: Record<string, unknown> | null;
+  canonicalDecision?: {
+    cacheVersion: 1;
+    decisionState: 'resolved' | 'neutral' | 'unknown';
+    favoredValueKey: string | null;
+    strength: 'strong' | 'lean' | 'neutral' | 'unknown';
+  };
+};
+
+export type SummaryCache = {
+  responseSha256: string;
+  parserVersion: string;
+  modelId: string;
+  summary: SummaryCacheSummary;
+};
+
 export type DecisionMetadata = {
   parserVersion: string;
   parseClass: 'exact' | 'fallback_resolved' | 'ambiguous';
@@ -185,6 +204,7 @@ export type DecisionMetadata = {
   matchedLabel?: string | null;
   scaleLabels?: DecisionScaleLabel[];
   manualOverride?: DecisionManualOverride;
+  summaryCache?: SummaryCache;
 };
 
 // ============================================================================

@@ -1,4 +1,4 @@
-import { db } from '@valuerank/db';
+import { db, Prisma } from '@valuerank/db';
 import { AuthenticationError } from '@valuerank/shared';
 import { builder } from '../../builder.js';
 import { estimateCost as estimateCostService } from '../../../services/cost/estimate.js';
@@ -20,6 +20,7 @@ import {
 import type { DomainTrialPlanCellEstimate } from './shared.js';
 import { formatTrialSignature } from '@valuerank/shared/trial-signature';
 import { parseTemperature } from '../../../utils/temperature.js';
+import { resolveRunAnalysisStatuses } from '../../../services/run/analysis-status.js';
 
 const DOMAIN_TRIAL_PLAN_COST_CHUNK_SIZE = 5;
 const DOMAIN_ESTIMATE_KNOWN_EXCLUSIONS = [
@@ -47,6 +48,7 @@ type DomainEstimateInternals = {
       definitionVersion: number;
       signature: string;
       scenarioCount: number;
+      existingBatchCount: number;
     }>;
     models: Array<{
       modelId: string;
@@ -153,7 +155,7 @@ async function buildDomainEstimate(input: DomainEstimateInput): Promise<DomainEs
     where: { definitionId: { in: latestDefinitionIds }, deletedAt: null },
     _count: { _all: true },
   });
-  const scenarioCountByDefinition = new Map(
+  const scenarioCountByDefinition = new Map<string, number>(
     scenarioCounts.map((row) => [row.definitionId, row._count._all]),
   );
 
@@ -239,7 +241,7 @@ async function buildDomainEstimate(input: DomainEstimateInput): Promise<DomainEs
       definitionId: { in: latestDefinitionIds },
       deletedAt: null,
     },
-    select: { config: true },
+    select: { definitionId: true, status: true, runCategory: true, config: true },
   });
   const existingTemperatureSet = new Set<number>();
   for (const run of existingRuns) {
@@ -250,6 +252,21 @@ async function buildDomainEstimate(input: DomainEstimateInput): Promise<DomainEs
     }
   }
   const existingTemperatures = Array.from(existingTemperatureSet.values()).sort((a, b) => a - b);
+
+  // Build per-definition existing batch counts for the current scope + temperature.
+  // A batch counts if it's completed or in-flight (PENDING/RUNNING/PAUSED/SUMMARIZING)
+  // and its temperature matches the current launch temperature and runCategory matches.
+  const COUNTABLE_STATUSES = new Set(['COMPLETED', 'PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING']);
+  const existingBatchCountByDefinitionId = new Map<string, number>();
+  for (const run of existingRuns) {
+    if (!COUNTABLE_STATUSES.has(run.status)) continue;
+    if (run.runCategory !== effectiveScopeCategory) continue;
+    const runConfig = run.config as { temperature?: unknown } | null;
+    const runTemperature = parseTemperature(runConfig?.temperature);
+    if (runTemperature !== temperature) continue;
+    const prev = existingBatchCountByDefinitionId.get(run.definitionId) ?? 0;
+    existingBatchCountByDefinitionId.set(run.definitionId, prev + 1);
+  }
 
   let temperatureWarning: string | null = null;
   if (existingTemperatures.length > 0) {
@@ -273,6 +290,7 @@ async function buildDomainEstimate(input: DomainEstimateInput): Promise<DomainEs
         definitionVersion: definition.version,
         signature: formatTrialSignature(definition.version, temperature),
         scenarioCount: scenarioCountByDefinition.get(definition.id) ?? 0,
+        existingBatchCount: existingBatchCountByDefinitionId.get(definition.id) ?? 0,
       })),
       models: selectedModels.map((model) => ({
         modelId: model.modelId,
@@ -340,15 +358,21 @@ builder.queryField('domainTrialsPlan', (t) =>
       domainId: t.arg.id({ required: true }),
       temperature: t.arg.float({ required: false }),
       definitionIds: t.arg.idList({ required: false }),
+      scopeCategory: t.arg.string({ required: false }),
     },
     resolve: async (_root, args, ctx) => {
       if (!ctx.user) {
         throw new AuthenticationError('Authentication required');
       }
+      const requestedScope = String(args.scopeCategory ?? 'PRODUCTION').trim().toUpperCase();
+      const scopeCategory = ['PILOT', 'PRODUCTION', 'REPLICATION', 'VALIDATION'].includes(requestedScope)
+        ? requestedScope
+        : 'PRODUCTION';
       const estimate = await buildDomainEstimate({
         domainId: String(args.domainId),
         definitionIds: args.definitionIds?.map(String) ?? [],
         temperature: args.temperature ?? null,
+        scopeCategory,
       });
       return estimate.trialPlan;
     },
@@ -409,6 +433,9 @@ builder.queryField('domainTrialRunsStatus', (t) =>
           id: true,
           definitionId: true,
           status: true,
+          updatedAt: true,
+          stalledModels: true,
+          completedAt: true,
           config: true,
         },
       });
@@ -430,7 +457,12 @@ builder.queryField('domainTrialRunsStatus', (t) =>
       });
       const summarizeFailedRows = await db.transcript.groupBy({
         by: ['runId', 'modelId'],
-        where: { runId: { in: runIds }, deletedAt: null, decisionCode: 'error' },
+        where: {
+          runId: { in: runIds },
+          deletedAt: null,
+          summarizedAt: { not: null },
+          decisionMetadata: { equals: Prisma.DbNull },
+        },
         _count: { _all: true },
       });
       const selectedScenarioCounts = await db.runScenarioSelection.groupBy({
@@ -491,8 +523,23 @@ builder.queryField('domainTrialRunsStatus', (t) =>
       const scenarioCountByRun = new Map(
         selectedScenarioCounts.map((row) => [row.runId, row._count._all]),
       );
+      const analysisStatusByRunId = await resolveRunAnalysisStatuses(
+        runs.map((run) => ({
+          id: run.id,
+          definitionId: run.definitionId,
+          status: run.status,
+          completedAt: run.completedAt,
+          config: run.config,
+        })),
+      );
 
-      return runs.map((run) => {
+      const runById = new Map(runs.map((run) => [run.id, run]));
+
+      return Promise.all(runIds.map(async (runId) => {
+        const run = runById.get(runId);
+        if (run === undefined) {
+          return null;
+        }
         const runConfig = run.config as { models?: unknown; samplesPerScenario?: unknown } | null;
         const models = Array.isArray(runConfig?.models)
           ? runConfig.models.filter((model): model is string => typeof model === 'string')
@@ -522,9 +569,12 @@ builder.queryField('domainTrialRunsStatus', (t) =>
           runId: run.id,
           definitionId: run.definitionId,
           status: run.status,
+          updatedAt: run.updatedAt,
+          stalledModels: run.stalledModels,
+          analysisStatus: analysisStatusByRunId.get(run.id) ?? null,
           modelStatuses,
         };
-      });
+      })).then((rows) => rows.filter((row): row is NonNullable<typeof row> => row !== null));
     },
   }),
 );

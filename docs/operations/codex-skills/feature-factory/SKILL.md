@@ -117,6 +117,9 @@ If the answers are already clear from the repo context or user instructions:
 - do not invent extra questions
 - briefly state the assumptions you are carrying into the spec
 
+If discovery has unresolved items, do not mark discovery complete or checkpoint spec until
+each item is either resolved or explicitly deferred.
+
 **Discovery is not optional.** Before authoring the spec, always either ask the clarifying questions or explicitly state the assumptions you are carrying in. Do not silently proceed to spec authoring without one of these two. If the request arrives with enough context to make the spec stable, a one-sentence "here are the assumptions I'm carrying in" satisfies this requirement — but the step must not be skipped entirely.
 
 Do not start implementation until the answers are good enough to make the spec and plan stable.
@@ -172,8 +175,8 @@ At each checkpoint:
 
 1. create or update the artifact
 2. run the checkpoint
-3. inspect the required reviews
-4. reconcile blocking findings into the plan or artifact
+3. run `auto-reconcile --slug <slug> --stage <stage>` — auto-accepts reviews with no HIGH or MEDIUM findings and prints which reviews still need attention
+4. read and reconcile only the reviews listed under `needs-review` in the auto-reconcile output
 5. only then move forward
 
 ### Keep Diffs Scoped

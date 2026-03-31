@@ -1,0 +1,114 @@
+2026-03-23T17:30:21.544024Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T17:30:21.544043Z  WARN codex_core::state_db: failed to initialize state runtime at /Users/chrislaw/.codex: migration 2 was previously applied but is missing in the resolved migrations
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d1bbf-65e6-7d40-bf89-d99706e99e16
+--------
+user
+Review this spec artifact using a feasibility-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: spec.md
+# Spec
+# Spec: Discovery Enforcement
+
+## Problem
+
+Discovery in the feature-factory workflow is currently advisory in practice. The runner
+already stores structured discovery data, but a state can still be treated as "complete"
+even when unresolved items remain. That creates a false sense of readiness and lets spec
+checkpointing proceed too early.
+
+## Goal
+
+Make discovery enforceable so unresolved discovery items must be resolved or explicitly
+deferred before discovery can complete, spec can checkpoint, or the workflow can move
+forward automatically.
+
+## Requirements
+
+- Discovery must keep using the existing structured `state.json` schema.
+- Unresolved discovery items that are not deferred must block discovery completion.
+- Explicit deferral uses `discover --defer <item>`, and deferred items remain visible in
+  status as non-blocking debt.
+- Spec checkpointing must stop if unresolved discovery items remain.
+- `status` must surface blocking unresolved discovery items clearly.
+- `recommended_next_action` must prefer `discover` while blocking unresolved items exist.
+- `discover --clear` is the break-glass recovery path for bad or stale discovery state.
+- The change must be non-destructive and should not introduce new external dependencies.
+
+## Non-goals
+
+- New product-discovery questions
+- Session handoff tracking
+- Deterministic test/build/lint validation gates
+- Runner modularization
+
+## Acceptance Criteria
+
+- `discover --complete` fails when unresolved items remain, including `--force-complete`.
+- Legacy discovery states without explicit unresolved entries remain grandfathered and do
+  not become newly blocking.
+- `checkpoint --stage spec` fails when unresolved items remain.
+- `status` shows unresolved open items and makes the blocking action visible.
+- `next-action` points to `discover` while unresolved items remain.
+- Existing structured discovery migration behavior remains intact.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+2026-03-23T17:30:21.546765Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T17:30:21.569323Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T17:30:21.571676Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T17:30:21.596413Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T17:30:21.598684Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T17:30:21.602872Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d1bbf-65e6-7d40-bf89-d99706e99e16.tmp-1774287021544297000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-03-23T17:30:21.621807Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T17:30:21.622814Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T17:30:21.647840Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T17:30:21.648842Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T17:30:21.672798Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T17:30:21.673822Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T17:30:21.696890Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T17:30:21.697854Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T17:30:21.721888Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T17:30:21.722826Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T17:30:21.746352Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T17:30:21.747329Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T17:30:21.771808Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T17:30:21.772789Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T17:30:21.797840Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-23T17:30:21.798876Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-23T17:30:21.822840Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+codex
+## Findings
+- High: The spec relies on the existing `state.json` schema, but it never defines how to distinguish legacy grandfathered discovery states from newly blocking unresolved items. Without an explicit versioning or discriminator rule, an implementation has no reliable way to know whether “no explicit unresolved entries” means “safe legacy state” or “corrupt/incomplete state,” so the blocking logic will either be too strict or too permissive.
+- High: `discover --defer <item>` is underspecified because it does not define what an `<item>` is or how it is matched. If discovery items can be renamed, duplicated, reordered, or regenerated, deferral can become ambiguous and fragile across reloads, which makes the new enforcement easy to bypass or break.
+- High: `discover --clear` is described as a break-glass recovery path, but the spec does not say exactly what state is cleared, what is preserved, or whether the operation is audited or guarded. That makes it easy to implement a destructive reset that violates the non-destructive requirement or silently wipes valid discovery debt.
+- Medium: The spec uses both `recommended_next_action` and `next-action` without defining whether they are the same surface, aliases, or separate outputs. That creates a likely split-brain bug where one UI/path says `discover` while the other does not, and only one of them may get updated.
+- Medium: The blocking rules are incomplete outside the named commands. The goal says unresolved items should prevent the workflow from moving forward automatically, but the spec only explicitly blocks `discover --complete` and `checkpoint --stage spec`. Any other forward-moving command or override path remains a likely bypass unless it is explicitly covered.
+- Medium: The requirement that deferred items remain visible as non-blocking debt is not actually enforced by the acceptance criteria. A minimal implementation could hide deferred items from `status` and still satisfy the current checks as long as unresolved items block.
+
+## Residual Risks
+- Concurrency remains a risk: if discovery state changes between `status`, `discover`, and `checkpoint`, the spec does not require atomic checks or conflict handling.
+- The grandfathering rule for legacy states may still hide bad historical data if the legacy shape is mixed or partially corrupted.
+- If the existing schema cannot represent stable item identity plus deferred state cleanly, the implementation may need a compatibility shim that the spec does not currently define.
+tokens used
+2,806

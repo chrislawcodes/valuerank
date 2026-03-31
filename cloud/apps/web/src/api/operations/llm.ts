@@ -13,6 +13,8 @@ export type LlmProvider = {
   maxParallelRequests: number;
   requestsPerMinute: number;
   isEnabled: boolean;
+  balance: number | null;
+  lastSyncedAt: string | null;
   createdAt: string;
   updatedAt: string;
   models: LlmModel[];
@@ -70,6 +72,8 @@ export const LLM_PROVIDER_FRAGMENT = gql`
     maxParallelRequests
     requestsPerMinute
     isEnabled
+    balance
+    lastSyncedAt
     createdAt
     updatedAt
   }
@@ -217,6 +221,28 @@ export const UPDATE_SYSTEM_SETTING_MUTATION = gql`
   }
 `;
 
+export const SET_PROVIDER_BALANCE_MUTATION = gql`
+  mutation SetProviderBalance($providerId: ID!, $balance: Float) {
+    setProviderBalance(providerId: $providerId, balance: $balance) {
+      ...LlmProviderFields
+    }
+  }
+  ${LLM_PROVIDER_FRAGMENT}
+`;
+
+export const SYNC_PROVIDER_BALANCE_MUTATION = gql`
+  mutation SyncProviderBalance($providerId: ID!, $realBalance: Float!) {
+    syncProviderBalance(providerId: $providerId, realBalance: $realBalance) {
+      id
+      providerId
+      systemBalanceAtSync
+      enteredBalance
+      delta
+      syncedAt
+    }
+  }
+`;
+
 // ============================================================================
 // RESULT TYPES
 // ============================================================================
@@ -273,6 +299,23 @@ export type UpdateLlmProviderMutationResult = {
 
 export type UpdateSystemSettingMutationResult = {
   updateSystemSetting: SystemSetting;
+};
+
+export type ProviderBalanceSyncLog = {
+  id: string;
+  providerId: string;
+  systemBalanceAtSync: number;
+  enteredBalance: number;
+  delta: number;
+  syncedAt: string;
+};
+
+export type SetProviderBalanceMutationResult = {
+  setProviderBalance: LlmProvider;
+};
+
+export type SyncProviderBalanceMutationResult = {
+  syncProviderBalance: ProviderBalanceSyncLog;
 };
 
 // ============================================================================

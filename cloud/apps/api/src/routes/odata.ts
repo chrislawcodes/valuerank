@@ -179,7 +179,6 @@ odataRouter.get(
         <Property Name="scenarioId" Type="Edm.String" Nullable="false"/>
         <Property Name="scenarioName" Type="Edm.String"/>
         <Property Name="sampleIndex" Type="Edm.Int32" Nullable="false"/>
-        <Property Name="decisionCode" Type="Edm.String"/>
         <Property Name="decisionText" Type="Edm.String"/>
         <Property Name="turnCount" Type="Edm.Int32"/>
         <Property Name="tokenCount" Type="Edm.Int32"/>
@@ -312,7 +311,6 @@ odataRouter.get(
           scenarioId: t.scenarioId,
           scenarioName: t.scenario?.name ?? null,
           sampleIndex: t.sampleIndex ?? 0,
-          decisionCode: t.decisionCode,
           decisionText: t.decisionText,
           turnCount: t.turnCount,
           tokenCount: t.tokenCount,

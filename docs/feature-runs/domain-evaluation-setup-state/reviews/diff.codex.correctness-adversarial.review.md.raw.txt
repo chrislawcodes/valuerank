@@ -1,0 +1,7 @@
+## Findings
+- **MEDIUM** `cloud/apps/api/src/services/run/analysis-status.ts` (`resolveSingleRunAnalysisStatus`): when the PgBoss lookup throws, `loadAnalysisStatusLookup` now marks `queueUnavailable`, and the resolver returns `null` immediately instead of doing the old orphaned-run fallback. That is a behavior regression: completed runs that are old enough to be considered orphaned will stop reporting `failed` or `pending` analysis status whenever queue queries fail, even though the previous implementation still surfaced that state.
+- **MEDIUM [UNVERIFIED]** `cloud/apps/api/src/services/run/analysis-status.ts` (`matchesAggregateJob`): the new rule treats a missing or unparsable `definitionVersion` as a wildcard. If legacy aggregate jobs without a version can coexist across snapshots, this can misattribute a job from one snapshot to a different run that happens to share `definitionId`, `preambleVersionId`, and temperature. The old exact version match prevented that collision.
+
+## Residual Risks
+- I did not verify whether legacy versionless aggregate jobs can still exist alongside newer snapshots in this codebase, so the second issue may be less likely if those jobs are no longer present.
+- I also did not verify whether every historical run row guarantees a non-null `stalledModels` array; if not, exposing it directly through GraphQL could still produce a runtime error.

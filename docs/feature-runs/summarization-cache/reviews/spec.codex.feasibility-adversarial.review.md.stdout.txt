@@ -1,0 +1,14 @@
+## Findings
+1. High: The cache key is underspecified, so false hits are possible. `responseSha256`, `parserVersion`, and `modelId` only work if `parserVersion` is guaranteed to encode every parser dependency, prompt/template change, normalization rule, and post-processing rule that affects the summary. The spec does not prove that, and it also does not define a canonical `modelId` format. If handler and worker derive these values differently, the cache can silently reuse the wrong summary.
+
+2. High: The spec omits concurrency and atomicity rules. Two summarize jobs for the same transcript can both miss the cache, both spawn workers, and then race to write `decisionMetadata.summaryCache` and the summary fields. Without a lock, compare-and-set write, or explicit last-write-wins policy, retries and recovery paths can still do duplicate work and leave the cache in an inconsistent state.
+
+3. Medium: Storing the full summary inside `decisionMetadata` is risky without a size bound or pruning rule. `summary.decisionMetadata` is an unconstrained `Record<string, unknown>`, so a large worker payload can bloat the transcript row, slow reads and writes, or hit JSON/row-size limits. The “no schema migration” constraint does not remove that risk.
+
+4. Medium: Cache-hit semantics are incomplete around timestamp and legacy state handling. The spec says a hit restores “prior summary fields,” but it does not say whether `summarizedAt` should be updated, preserved, or ignored on a cache hit. It also does not define what downstream code should see if `forceSummarize` bypasses the cache and the rerun fails. That leaves room for inconsistent legacy short-circuiting and stale summaries that are hard to diagnose.
+
+## Residual Risks
+- If `parserVersion` does not truly capture every parser and post-processing dependency, stale cache hits will still happen after code or prompt changes.
+- If the handler must recompute the transcript hash from raw responses, the “before worker spawn” optimization still requires a nontrivial read and normalization pass.
+- Blue-green or staggered deploys can temporarily desynchronize the shared parser-version value between services, which can make cache behavior inconsistent during rollout.
+- Very large or malformed legacy `decisionMetadata` payloads can still make cache reads and writes expensive even when the cache logic itself is correct.

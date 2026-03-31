@@ -1,5 +1,7 @@
 import { gql } from 'urql';
 
+import type { TranscriptDecisionModelV2 } from './runs';
+
 export const DOMAIN_ANALYSIS_QUERY = gql`
   query DomainAnalysis($domainId: ID!, $scoreMethod: String, $signature: String) {
     domainAnalysis(domainId: $domainId, scoreMethod: $scoreMethod, signature: $signature) {
@@ -142,48 +144,11 @@ export const DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY = gql`
           neutral
           totalTrials
           selectedValueWinRate
-          meanDecisionScore
-        }
-      }
-    }
-  }
-`;
-
-export const DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY_LEGACY = gql`
-  query DomainAnalysisValueDetailLegacy($domainId: ID!, $modelId: String!, $valueKey: String!) {
-    domainAnalysisValueDetail(domainId: $domainId, modelId: $modelId, valueKey: $valueKey) {
-      domainId
-      domainName
-      modelId
-      modelLabel
-      valueKey
-      score
-      prioritized
-      deprioritized
-      neutral
-      totalTrials
-      generatedAt
-      vignettes {
-        definitionId
-        definitionName
-        definitionVersion
-        aggregateRunId
-        otherValueKey
-        prioritized
-        deprioritized
-        neutral
-        totalTrials
-        selectedValueWinRate
-        conditions {
-          scenarioId
-          conditionName
-          dimensions
-          prioritized
-          deprioritized
-          neutral
-          totalTrials
-          selectedValueWinRate
-          meanDecisionScore
+          strongly
+          somewhat
+          opponentSomewhat
+          opponentStrongly
+          unknownCount
         }
       }
     }
@@ -213,8 +178,7 @@ export const DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY = gql`
       runId
       scenarioId
       modelId
-      decisionCode
-      decisionCodeSource
+      decisionModelV2
       turnCount
       tokenCount
       durationMs
@@ -401,7 +365,11 @@ export type DomainAnalysisValueDetailCondition = {
   neutral: number;
   totalTrials: number;
   selectedValueWinRate: number | null;
-  meanDecisionScore: number | null;
+  strongly: number;
+  somewhat: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+  unknownCount: number;
 };
 
 export type DomainAnalysisValueDetailVignette = {
@@ -470,6 +438,7 @@ export type DomainAnalysisConditionTranscript = {
   modelId: string;
   decisionCode: string | null;
   decisionCodeSource: string | null;
+  decisionModelV2?: TranscriptDecisionModelV2 | null;
   turnCount: number;
   tokenCount: number;
   durationMs: number;

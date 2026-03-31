@@ -5,7 +5,7 @@ import sys
 import unittest
 from pathlib import Path
 import tempfile
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -17,12 +17,12 @@ MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 
-# Import factory_state directly for migration tests
-_FS_PATH = Path(__file__).resolve().parents[1] / "scripts" / "factory_state.py"
-_FS_SPEC = importlib.util.spec_from_file_location("factory_state", _FS_PATH)
-assert _FS_SPEC and _FS_SPEC.loader
-FACTORY_STATE = importlib.util.module_from_spec(_FS_SPEC)
-_FS_SPEC.loader.exec_module(FACTORY_STATE)
+# Use the modules that run_factory actually imported (same object identity)
+# so that unittest.mock.patch.object targets the right namespace.
+FACTORY_STATE = sys.modules["factory_state"]
+STAGES_MODULE = sys.modules["factory_stages"]
+REVIEW_MODULE = sys.modules["factory_review"]
+FACTORY_GIT = sys.modules["factory_git"]
 
 
 def stage_state(
@@ -58,8 +58,8 @@ class RepairDecisionTests(unittest.TestCase):
             "git_base_ref": "origin/main",
             "max_artifact_chars": 123,
         }
-        with patch.object(MODULE, "load_checkpoint_manifest", return_value=manifest), patch.object(
-            MODULE, "load_workflow_state", return_value={"dirty_overrides": {}}
+        with patch.object(REVIEW_MODULE, "load_checkpoint_manifest", return_value=manifest), patch.object(
+            REVIEW_MODULE, "load_workflow_state", return_value={"dirty_overrides": {}}
         ):
             args = MODULE.repair_checkpoint_args(
                 "feature-workflow-repair",
@@ -136,6 +136,78 @@ class RepairDecisionTests(unittest.TestCase):
             True,
         )
         self.assertEqual(action, "discover")
+
+    def test_recommended_next_action_blocks_spec_when_unresolved_items_remain(self) -> None:
+        stages = {
+            "spec": stage_state(),
+            "plan": stage_state(),
+            "tasks": stage_state(),
+            "diff": stage_state(),
+            "closeout": stage_state(),
+        }
+        action = MODULE.recommended_next_action(
+            "feature-workflow-repair",
+            {
+                "blocked": {"active": False},
+                "delivery": {},
+                "discovery": {
+                    "required": False,
+                    "complete": True,
+                    "unresolved": [{"item": "Decide API shape", "deferred": False}],
+                },
+            },
+            stages,
+            True,
+        )
+        self.assertEqual(action, "discover")
+
+    def test_blocking_unresolved_items_treats_malformed_entries_as_blocking(self) -> None:
+        self.assertEqual(
+            MODULE.blocking_unresolved_items({"unresolved": ["bad", {"no_item": "x"}, {"item": " "}]}),
+            [
+                {"item": "<malformed unresolved item>", "deferred": False, "malformed": True},
+                {"item": "<malformed unresolved item>", "deferred": False, "malformed": True},
+                {"item": "<malformed unresolved item>", "deferred": False, "malformed": True},
+            ],
+        )
+        self.assertEqual(
+            MODULE.blocking_unresolved_items({"unresolved": None}),
+            [{"item": "<malformed discovery state>", "deferred": False, "malformed": True}],
+        )
+
+    def test_blocking_unresolved_items_requires_boolean_true_for_deferred(self) -> None:
+        self.assertEqual(
+            MODULE.blocking_unresolved_items(
+                {
+                    "unresolved": [
+                        {"item": "Decide API shape", "deferred": "false"},
+                        {"item": "Confirm rollout", "deferred": 1},
+                    ]
+                }
+            ),
+            [
+                {"item": "Decide API shape", "deferred": "false"},
+                {"item": "Confirm rollout", "deferred": 1},
+            ],
+        )
+
+    def test_blocking_unresolved_items_blocks_malformed_entries_even_if_deferred(self) -> None:
+        self.assertEqual(
+            MODULE.blocking_unresolved_items(
+                {
+                    "unresolved": [
+                        {"item": None, "deferred": True},
+                        {"item": " ", "deferred": True},
+                        {"no_item": "x", "deferred": True},
+                    ]
+                }
+            ),
+            [
+                {"item": "<malformed unresolved item>", "deferred": False, "malformed": True},
+                {"item": "<malformed unresolved item>", "deferred": False, "malformed": True},
+                {"item": "<malformed unresolved item>", "deferred": False, "malformed": True},
+            ],
+        )
 
     def test_recommended_next_action_keeps_blocked_state_ahead_of_discovery(self) -> None:
         stages = {
@@ -214,7 +286,7 @@ class RepairDecisionTests(unittest.TestCase):
             "closeout": stage_state(),
         }
         with patch.object(
-            MODULE,
+            REVIEW_MODULE,
             "diff_review_budget_state",
             return_value={"head_mismatch": True, "recorded_head_sha": "abc123", "current_head_sha": "def456"},
         ):
@@ -228,7 +300,7 @@ class RepairDecisionTests(unittest.TestCase):
 
     def test_preferred_diff_base_ref_uses_last_reviewed_head_for_resumed_slice(self) -> None:
         with patch.object(
-            MODULE,
+            STAGES_MODULE,
             "diff_review_budget_state",
             return_value={
                 "artifact_exists": True,
@@ -240,7 +312,7 @@ class RepairDecisionTests(unittest.TestCase):
             self.assertEqual(MODULE.preferred_diff_base_ref("feature-workflow-repair"), "abc123def456")
 
     def test_preferred_diff_base_ref_keeps_explicit_request(self) -> None:
-        with patch.object(MODULE, "diff_review_budget_state", return_value={"suggested_base_ref": "abc123def456"}):
+        with patch.object(STAGES_MODULE, "diff_review_budget_state", return_value={"suggested_base_ref": "abc123def456"}):
             self.assertEqual(MODULE.preferred_diff_base_ref("feature-workflow-repair", "origin/main"), "origin/main")
 
     def test_status_reports_resumed_diff_scope_basis(self) -> None:
@@ -337,6 +409,95 @@ class RepairDecisionTests(unittest.TestCase):
         self.assertIn("- asked-count: 2", output)
         self.assertIn("- remaining: 3", output)
 
+    def test_status_reports_blocking_unresolved_discovery_items(self) -> None:
+        stages = {
+            stage: stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True)
+            for stage in ("spec", "plan", "tasks", "diff")
+        }
+        stages["closeout"] = stage_state()
+        buffer = io.StringIO()
+        discovery = {
+            "required": True,
+            "complete": True,
+            "question_count": 2,
+            "asked_count": 2,
+            "questions": [],
+            "assumptions": [],
+            "summary": "",
+            "updated_at": 1,
+            "answers": {},
+            "unresolved": [
+                {"item": "Decide API shape", "deferred": False},
+                {"item": "Confirm rollout plan", "deferred": True},
+            ],
+            "non_goals": [],
+            "acceptance_criteria": [],
+        }
+        with patch.object(MODULE, "ensure_sync"), patch.object(
+            MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}, "discovery": discovery}
+        ), patch.object(
+            MODULE, "stage_manifest_state", side_effect=lambda _slug, stage: stages[stage]
+        ), patch.object(
+            MODULE, "reconciliation_state", return_value=(True, "")
+        ), patch.object(
+            MODULE, "current_branch_name", return_value="feature-branch"
+        ), patch.object(
+            MODULE, "upstream_branch_name", return_value="origin/feature-branch"
+        ), patch.object(
+            MODULE, "diff_review_budget_state", return_value={"artifact_exists": False}
+        ), patch.object(
+            MODULE, "discovery_state", return_value=discovery
+        ), redirect_stdout(buffer):
+            MODULE.command_status(SimpleNamespace(slug="feature-workflow-discovery-shaping"))
+
+        output = buffer.getvalue()
+        self.assertIn("- unresolved-open: 1", output)
+        self.assertIn("- unresolved-deferred: 1", output)
+        self.assertIn("- action: resolve or defer unresolved items before spec", output)
+        self.assertIn("next-action: discover", output)
+
+    def test_status_handles_malformed_unresolved_state_as_blocking(self) -> None:
+        stages = {
+            stage: stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True)
+            for stage in ("spec", "plan", "tasks", "diff")
+        }
+        stages["closeout"] = stage_state()
+        buffer = io.StringIO()
+        discovery = {
+            "required": True,
+            "complete": True,
+            "question_count": 0,
+            "asked_count": 0,
+            "questions": [],
+            "assumptions": [],
+            "summary": "",
+            "updated_at": 1,
+            "answers": {},
+            "unresolved": None,
+            "non_goals": [],
+            "acceptance_criteria": [],
+        }
+        with patch.object(MODULE, "ensure_sync"), patch.object(
+            MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}, "discovery": discovery}
+        ), patch.object(
+            MODULE, "stage_manifest_state", side_effect=lambda _slug, stage: stages[stage]
+        ), patch.object(
+            MODULE, "reconciliation_state", return_value=(True, "")
+        ), patch.object(
+            MODULE, "current_branch_name", return_value="feature-branch"
+        ), patch.object(
+            MODULE, "upstream_branch_name", return_value="origin/feature-branch"
+        ), patch.object(
+            MODULE, "diff_review_budget_state", return_value={"artifact_exists": False}
+        ), patch.object(
+            MODULE, "discovery_state", return_value=discovery
+        ), redirect_stdout(buffer):
+            MODULE.command_status(SimpleNamespace(slug="feature-workflow-discovery-shaping"))
+
+        output = buffer.getvalue()
+        self.assertIn("- unresolved-open: 1", output)
+        self.assertIn("- action: use discover --clear to repair malformed discovery state", output)
+
     def test_recommended_next_action_blocks_closeout_on_stale_delivery_head(self) -> None:
         stages = {
             stage: stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True)
@@ -405,6 +566,7 @@ class RepairDecisionTests(unittest.TestCase):
             "diff": stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True),
             "closeout": stage_state(),
         }
+        diff_budget = {"head_mismatch": True, "recorded_head_sha": "abc123", "current_head_sha": "def456"}
         args = SimpleNamespace(slug="feature-workflow-repair")
         with patch.object(MODULE, "ensure_sync"), patch.object(
             MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}, "checkpoint_fallback": {}}
@@ -413,7 +575,9 @@ class RepairDecisionTests(unittest.TestCase):
         ), patch.object(
             MODULE, "stage_review_inventory", return_value=([], [])
         ), patch.object(
-            MODULE, "diff_review_budget_state", return_value={"head_mismatch": True, "recorded_head_sha": "abc123", "current_head_sha": "def456"}
+            MODULE, "diff_review_budget_state", return_value=diff_budget
+        ), patch.object(
+            STAGES_MODULE, "diff_review_budget_state", return_value=diff_budget
         ), patch.object(
             MODULE, "repair_checkpoint_args", return_value=SimpleNamespace(slug="feature-workflow-repair", stage="diff")
         ), patch.object(
@@ -467,6 +631,47 @@ class RepairDecisionTests(unittest.TestCase):
 
         self.assertIn("discovery", str(ctx.exception))
 
+    def test_command_checkpoint_blocks_spec_until_unresolved_items_are_cleared(self) -> None:
+        args = SimpleNamespace(
+            slug="feature-workflow-discovery-shaping",
+            stage="spec",
+            path=[],
+            artifact="",
+            base_ref=None,
+            context=[],
+            allow_dirty_path=[],
+            max_artifact_chars=None,
+            max_context_chars=None,
+            max_total_chars=None,
+            gemini_timeout_seconds=120,
+            gemini_retries=1,
+            repair_timeout_seconds=30,
+            fallback=False,
+            use_existing_artifact=False,
+            allow_large_diff_rerun=False,
+            required_reviews=None,
+        )
+        with patch.object(MODULE, "ensure_sync"), patch.object(
+            MODULE, "prerequisite_failure", return_value=None
+        ), patch.object(
+            MODULE,
+            "discovery_state",
+            return_value={
+                "required": True,
+                "complete": True,
+                "question_count": 5,
+                "asked_count": 5,
+                "answers": {},
+                "unresolved": [{"item": "Decide API shape", "deferred": False}],
+                "non_goals": [],
+                "acceptance_criteria": [],
+            },
+        ):
+            with self.assertRaises(SystemExit) as ctx:
+                MODULE.command_checkpoint(args)
+
+        self.assertIn("unresolved", str(ctx.exception))
+
     def test_command_discover_records_state(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
@@ -483,7 +688,7 @@ class RepairDecisionTests(unittest.TestCase):
                 complete=False,
             )
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 exit_code = MODULE.command_discover(args)
 
@@ -498,6 +703,110 @@ class RepairDecisionTests(unittest.TestCase):
             self.assertIn("Keep the first slice small.", discovery["assumptions"])
             self.assertIn("Five questions are expected", discovery["summary"])
             self.assertEqual(discovery["version"], 2)
+
+    def test_command_discover_rejects_force_complete_with_unresolved_items(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "state.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "discovery": {
+                            "version": 2,
+                            "required": True,
+                            "complete": False,
+                            "question_count": 2,
+                            "asked_count": 1,
+                            "questions": [],
+                            "assumptions": [],
+                            "summary": "",
+                            "updated_at": 1,
+                            "answers": {},
+                            "unresolved": [{"item": "Decide API shape", "deferred": False}],
+                            "non_goals": [],
+                            "acceptance_criteria": [],
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = self._discover_args(force_complete=True)
+            with patch.object(MODULE, "ensure_sync"), patch.object(
+                FACTORY_STATE, "factory_state_path", return_value=state_path
+            ):
+                with self.assertRaises(SystemExit) as ctx:
+                    MODULE.command_discover(args)
+
+        self.assertIn("unresolved", str(ctx.exception))
+
+    def test_command_discover_can_resolve_then_complete_in_same_invocation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "state.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "discovery": {
+                            "version": 2,
+                            "required": True,
+                            "complete": False,
+                            "question_count": 2,
+                            "asked_count": 2,
+                            "questions": [],
+                            "assumptions": [],
+                            "summary": "",
+                            "updated_at": 1,
+                            "answers": {},
+                            "unresolved": [{"item": "Decide API shape", "deferred": False}],
+                            "non_goals": [],
+                            "acceptance_criteria": [],
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = self._discover_args(resolve="Decide API shape", complete=True)
+            with patch.object(MODULE, "ensure_sync"), patch.object(
+                FACTORY_STATE, "factory_state_path", return_value=state_path
+            ):
+                exit_code = MODULE.command_discover(args)
+
+            self.assertEqual(exit_code, 0)
+            saved = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertTrue(saved["discovery"]["complete"])
+            self.assertEqual(saved["discovery"]["unresolved"], [])
+
+    def test_command_discover_rejects_malformed_state_with_clear_guidance(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "state.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "discovery": {
+                            "version": 2,
+                            "required": True,
+                            "complete": False,
+                            "question_count": 2,
+                            "asked_count": 2,
+                            "questions": [],
+                            "assumptions": [],
+                            "summary": "",
+                            "updated_at": 1,
+                            "answers": {},
+                            "unresolved": None,
+                            "non_goals": [],
+                            "acceptance_criteria": [],
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = self._discover_args(complete=True)
+            with patch.object(MODULE, "ensure_sync"), patch.object(
+                FACTORY_STATE, "factory_state_path", return_value=state_path
+            ):
+                with self.assertRaises(SystemExit) as ctx:
+                    MODULE.command_discover(args)
+
+        self.assertIn("discover --clear", str(ctx.exception))
 
     def test_command_discover_clear_resets_state(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -539,19 +848,24 @@ class RepairDecisionTests(unittest.TestCase):
                 clear=True,
             )
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 exit_code = MODULE.command_discover(args)
 
             self.assertEqual(exit_code, 0)
             saved = json.loads(state_path.read_text(encoding="utf-8"))
             discovery = saved["discovery"]
-            self.assertFalse(discovery["required"])
-            self.assertTrue(discovery["complete"])
-            self.assertEqual(discovery["question_count"], 0)
-            self.assertEqual(discovery["asked_count"], 0)
-            self.assertEqual(discovery["questions"], [])
-            self.assertEqual(discovery["assumptions"], [])
+            self.assertTrue(discovery["required"])
+            self.assertFalse(discovery["complete"])
+            self.assertEqual(discovery["question_count"], 5)
+            self.assertEqual(discovery["asked_count"], 3)
+            self.assertEqual(discovery["questions"], [{"question": "a", "recommendation": "b", "rationale": "c"}])
+            self.assertEqual(discovery["assumptions"], ["x"])
+            self.assertEqual(discovery["summary"], "old")
+            self.assertEqual(discovery["answers"], {})
+            self.assertEqual(discovery["non_goals"], [])
+            self.assertEqual(discovery["acceptance_criteria"], [])
+            self.assertEqual(discovery["unresolved"], [])
 
     def test_command_discover_rejects_premature_completion_without_force(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -593,7 +907,7 @@ class RepairDecisionTests(unittest.TestCase):
                 clear=False,
             )
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 with self.assertRaises(SystemExit) as ctx:
                     MODULE.command_discover(args)
@@ -633,7 +947,7 @@ class RepairDecisionTests(unittest.TestCase):
             state_path = Path(temp_dir) / "state.json"
             args = self._discover_args(unresolved="Need API contract")
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 exit_code = MODULE.command_discover(args)
 
@@ -658,7 +972,7 @@ class RepairDecisionTests(unittest.TestCase):
             )
             args = self._discover_args(resolve="Remove this")
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 exit_code = MODULE.command_discover(args)
 
@@ -677,7 +991,7 @@ class RepairDecisionTests(unittest.TestCase):
             )
             args = self._discover_args(resolve="Missing item")
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 exit_code = MODULE.command_discover(args)
 
@@ -696,7 +1010,7 @@ class RepairDecisionTests(unittest.TestCase):
             )
             args = self._discover_args(defer="Need follow-up")
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 exit_code = MODULE.command_discover(args)
 
@@ -712,7 +1026,7 @@ class RepairDecisionTests(unittest.TestCase):
             state_path = Path(temp_dir) / "state.json"
             args = self._discover_args(non_goal="Avoid broad scope")
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 first_exit = MODULE.command_discover(args)
                 second_exit = MODULE.command_discover(args)
@@ -727,7 +1041,7 @@ class RepairDecisionTests(unittest.TestCase):
             state_path = Path(temp_dir) / "state.json"
             args = self._discover_args(acceptance_criteria="Clear owner for each decision")
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 first_exit = MODULE.command_discover(args)
                 second_exit = MODULE.command_discover(args)
@@ -742,7 +1056,7 @@ class RepairDecisionTests(unittest.TestCase):
             state_path = Path(temp_dir) / "state.json"
             args = self._discover_args(answer=("What is the goal?", "Ship the first slice"))
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "factory_state_path", return_value=state_path
+                FACTORY_STATE, "factory_state_path", return_value=state_path
             ):
                 exit_code = MODULE.command_discover(args)
 
@@ -1086,6 +1400,21 @@ class RepairDecisionTests(unittest.TestCase):
                     "artifact_changed_since_codex": False,
                 },
             ), patch.object(
+                STAGES_MODULE, "diff_review_budget_state",
+                return_value={
+                    "artifact_exists": True,
+                    "artifact_bytes": 20,
+                    "large_artifact": False,
+                    "recorded_base_ref": "origin/main",
+                    "recorded_base_sha": "d3335ded7c643eda3d4ad7c2ac730325ff394d2c",
+                    "recorded_head_sha": "abc123def4567890",
+                    "current_head_sha": "fed456cba9876543",
+                    "head_mismatch": True,
+                    "scope_basis": "last-reviewed-head",
+                    "suggested_base_ref": "abc123def4567890",
+                    "artifact_changed_since_codex": False,
+                },
+            ), patch.object(
                 MODULE, "required_reviews", return_value=[]
             ), patch.object(
                 MODULE, "update_workflow_state", return_value={}
@@ -1108,7 +1437,7 @@ class CheckpointMarkerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tasks = Path(tmp) / "tasks.md"
             tasks.write_text("# Tasks\n\n- [ ] Do something\n- [ ] Do something else\n")
-            with patch.object(MODULE, "workflow_dir", return_value=Path(tmp)):
+            with patch.object(STAGES_MODULE, "workflow_dir", return_value=Path(tmp)):
                 count, sha = MODULE.parse_checkpoint_markers("slug")
         self.assertEqual(count, 0)
         self.assertEqual(sha, "")
@@ -1126,7 +1455,7 @@ class CheckpointMarkerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tasks = Path(tmp) / "tasks.md"
             tasks.write_text(content)
-            with patch.object(MODULE, "workflow_dir", return_value=Path(tmp)):
+            with patch.object(STAGES_MODULE, "workflow_dir", return_value=Path(tmp)):
                 count, sha = MODULE.parse_checkpoint_markers("slug")
         self.assertEqual(count, 6)
         self.assertNotEqual(sha, "")
@@ -1141,7 +1470,7 @@ class CheckpointMarkerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tasks = Path(tmp) / "tasks.md"
             tasks.write_text(content)
-            with patch.object(MODULE, "workflow_dir", return_value=Path(tmp)):
+            with patch.object(STAGES_MODULE, "workflow_dir", return_value=Path(tmp)):
                 count, sha = MODULE.parse_checkpoint_markers("slug")
         self.assertEqual(count, 1)
 
@@ -1151,19 +1480,19 @@ class CheckpointMarkerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tasks = Path(tmp) / "tasks.md"
             tasks.write_text(content)
-            with patch.object(MODULE, "workflow_dir", return_value=Path(tmp)):
+            with patch.object(STAGES_MODULE, "workflow_dir", return_value=Path(tmp)):
                 count, _ = MODULE.parse_checkpoint_markers("slug")
         self.assertEqual(count, 0)
 
     def test_parse_checkpoint_markers_returns_zero_when_file_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(MODULE, "workflow_dir", return_value=Path(tmp)):
+            with patch.object(STAGES_MODULE, "workflow_dir", return_value=Path(tmp)):
                 count, sha = MODULE.parse_checkpoint_markers("slug")
         self.assertEqual(count, 0)
         self.assertEqual(sha, "")
 
     def test_checkpoint_progress_defaults_when_absent(self) -> None:
-        with patch.object(MODULE, "load_workflow_state", return_value={}):
+        with patch.object(STAGES_MODULE, "load_workflow_state", return_value={}):
             progress = MODULE.checkpoint_progress_state("slug")
         self.assertEqual(progress["index"], 0)
         self.assertEqual(progress["markers_sha"], "")
@@ -1171,7 +1500,7 @@ class CheckpointMarkerTests(unittest.TestCase):
 
     def test_checkpoint_progress_normalizes_partial_state(self) -> None:
         partial = {MODULE.CHECKPOINT_PROGRESS_KEY: {"index": 2}}
-        with patch.object(MODULE, "load_workflow_state", return_value=partial):
+        with patch.object(STAGES_MODULE, "load_workflow_state", return_value=partial):
             progress = MODULE.checkpoint_progress_state("slug")
         self.assertEqual(progress["index"], 2)
         self.assertEqual(progress["markers_sha"], "")
@@ -1188,10 +1517,10 @@ class CheckpointMarkerTests(unittest.TestCase):
             captured.append(state[MODULE.CHECKPOINT_PROGRESS_KEY])
 
         with (
-            patch.object(MODULE, "load_workflow_state", return_value={MODULE.CHECKPOINT_PROGRESS_KEY: initial}),
-            patch.object(MODULE, "parse_checkpoint_markers", return_value=(3, "newsha")),
-            patch.object(MODULE, "checkpoint_progress_state", return_value=initial),
-            patch.object(MODULE, "update_workflow_state", side_effect=fake_update),
+            patch.object(REVIEW_MODULE, "load_workflow_state", return_value={MODULE.CHECKPOINT_PROGRESS_KEY: initial}),
+            patch.object(REVIEW_MODULE, "parse_checkpoint_markers", return_value=(3, "newsha")),
+            patch.object(REVIEW_MODULE, "checkpoint_progress_state", return_value=initial),
+            patch.object(REVIEW_MODULE, "update_workflow_state", side_effect=fake_update),
         ):
             MODULE._advance_checkpoint_progress("slug", "diff", "newhead")
 
@@ -1253,6 +1582,74 @@ class DefaultCodexModelTests(unittest.TestCase):
                 MODULE.DEFAULT_CODEX_MODEL,
                 f"codex entry model should be DEFAULT_CODEX_MODEL, got {entry.get('model')!r}",
             )
+
+    def test_required_reviews_tasks_small_task_set_skips_gemini(self) -> None:
+        reviews = MODULE.required_reviews(
+            "tasks",
+            sensitive=False,
+            large_structural=False,
+            performance_sensitive=False,
+            extra_gemini=[],
+            small_task_set=True,
+        )
+        gemini_entries = [r for r in reviews if r.get("reviewer") == "gemini"]
+        codex_entries = [r for r in reviews if r.get("reviewer") == "codex"]
+        self.assertEqual(gemini_entries, [], "small task set should skip all Gemini reviews")
+        self.assertEqual(len(codex_entries), 1, "small task set should keep one Codex review")
+        self.assertEqual(codex_entries[0].get("lens"), "execution-adversarial")
+
+    def test_required_reviews_tasks_large_task_set_includes_gemini(self) -> None:
+        reviews = MODULE.required_reviews(
+            "tasks",
+            sensitive=False,
+            large_structural=False,
+            performance_sensitive=False,
+            extra_gemini=[],
+            small_task_set=False,
+        )
+        gemini_entries = [r for r in reviews if r.get("reviewer") == "gemini"]
+        self.assertEqual(len(gemini_entries), 2, "full task set should include two Gemini reviews")
+
+    def test_required_reviews_tasks_small_task_set_sensitive_still_skips_gemini(self) -> None:
+        # sensitive flag adds risk-adversarial as an extra Gemini candidate, but
+        # small_task_set still wins and skips all Gemini reviews
+        reviews = MODULE.required_reviews(
+            "tasks",
+            sensitive=True,
+            large_structural=False,
+            performance_sensitive=False,
+            extra_gemini=[],
+            small_task_set=True,
+        )
+        gemini_entries = [r for r in reviews if r.get("reviewer") == "gemini"]
+        self.assertEqual(gemini_entries, [], "small_task_set should skip Gemini even when sensitive=True")
+
+    def test_required_reviews_closeout_small_task_set_skips_gemini(self) -> None:
+        reviews = MODULE.required_reviews(
+            "closeout",
+            sensitive=False,
+            large_structural=False,
+            performance_sensitive=False,
+            extra_gemini=[],
+            small_task_set=True,
+        )
+        gemini_entries = [r for r in reviews if r.get("reviewer") == "gemini"]
+        codex_entries = [r for r in reviews if r.get("reviewer") == "codex"]
+        self.assertEqual(gemini_entries, [], "small task set should skip all Gemini closeout reviews")
+        self.assertEqual(len(codex_entries), 1)
+        self.assertEqual(codex_entries[0].get("lens"), "fidelity-adversarial")
+
+    def test_required_reviews_closeout_large_task_set_includes_gemini(self) -> None:
+        reviews = MODULE.required_reviews(
+            "closeout",
+            sensitive=False,
+            large_structural=False,
+            performance_sensitive=False,
+            extra_gemini=[],
+            small_task_set=False,
+        )
+        gemini_entries = [r for r in reviews if r.get("reviewer") == "gemini"]
+        self.assertEqual(len(gemini_entries), 2)
 
 
 class _CapturedBaseRef(Exception):
@@ -1850,3 +2247,368 @@ class TestMigrateDiscoveryState(unittest.TestCase):
         }
         result = FACTORY_STATE.migrate_discovery_state(v1)
         self.assertEqual(result["unresolved"], [])
+
+
+class TestParsePAnnotation(unittest.TestCase):
+    def test_valid_single_file(self) -> None:
+        line = "- [ ] T001 [P: src/foo.ts] do thing"
+        self.assertEqual(STAGES_MODULE.parse_p_annotation(line), ["src/foo.ts"])
+
+    def test_valid_multiple_files(self) -> None:
+        line = "- [ ] T001 [P: src/foo.ts, src/bar.ts] do thing"
+        self.assertEqual(STAGES_MODULE.parse_p_annotation(line), ["src/foo.ts", "src/bar.ts"])
+
+    def test_empty_list(self) -> None:
+        line = "- [ ] T001 [P:] do thing"
+        self.assertEqual(STAGES_MODULE.parse_p_annotation(line), [])
+
+    def test_bare_p_no_colon(self) -> None:
+        line = "- [ ] T001 [P] do thing"
+        self.assertEqual(STAGES_MODULE.parse_p_annotation(line), [])
+
+    def test_no_annotation(self) -> None:
+        line = "- [ ] T001 do thing"
+        self.assertEqual(STAGES_MODULE.parse_p_annotation(line), [])
+
+    def test_dot_slash_prefix_normalized(self) -> None:
+        line = "- [ ] T001 [P: ./src/foo.ts] do thing"
+        self.assertEqual(STAGES_MODULE.parse_p_annotation(line), ["src/foo.ts"])
+
+    def test_duplicate_paths_deduped(self) -> None:
+        line = "- [ ] T001 [P: src/foo.ts, src/foo.ts] do thing"
+        self.assertEqual(STAGES_MODULE.parse_p_annotation(line), ["src/foo.ts"])
+
+    def test_absolute_path_rejected(self) -> None:
+        line = "- [ ] T001 [P: /etc/passwd] do thing"
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = STAGES_MODULE.parse_p_annotation(line)
+        self.assertEqual(result, [])
+        self.assertIn("rejecting absolute path", stderr.getvalue())
+
+    def test_dotdot_escape_rejected(self) -> None:
+        line = "- [ ] T001 [P: ../outside/repo.ts] do thing"
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = STAGES_MODULE.parse_p_annotation(line)
+        self.assertEqual(result, [])
+        self.assertIn("rejecting path outside repository", stderr.getvalue())
+
+    def test_paths_with_subdirs(self) -> None:
+        line = "- [ ] T001 [P: src/services/foo.ts, cloud/apps/api/src/index.ts] do thing"
+        self.assertEqual(
+            STAGES_MODULE.parse_p_annotation(line),
+            ["src/services/foo.ts", "cloud/apps/api/src/index.ts"],
+        )
+
+
+class TestParseParallelTaskGroups(unittest.TestCase):
+    def _groups(self, tasks_md: str) -> list[dict]:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "tasks.md").write_text(tasks_md, encoding="utf-8")
+            with patch.object(STAGES_MODULE, "workflow_dir", return_value=root):
+                return STAGES_MODULE.parse_parallel_task_groups("slug")
+
+    def test_no_p_tasks_returns_serial_group(self) -> None:
+        groups = self._groups(
+            "- [ ] T001 do thing\n"
+            "- [ ] T002 do other\n"
+        )
+        self.assertEqual(len(groups), 1)
+        self.assertFalse(groups[0]["parallel"])
+        self.assertIsNone(groups[0]["overlap_warning"])
+        self.assertEqual(groups[0]["files"], [])
+        self.assertEqual(len(groups[0]["tasks"]), 2)
+
+    def test_two_nonoverlapping_p_tasks_returns_parallel_group(self) -> None:
+        groups = self._groups(
+            "- [ ] T001 [P: src/a.ts] do thing\n"
+            "- [ ] T002 [P: src/b.ts] do thing\n"
+        )
+        self.assertEqual(len(groups), 1)
+        self.assertTrue(groups[0]["parallel"])
+        self.assertIsNone(groups[0]["overlap_warning"])
+        self.assertEqual(groups[0]["files"], ["src/a.ts", "src/b.ts"])
+        self.assertEqual(len(groups[0]["tasks"]), 2)
+
+    def test_two_overlapping_p_tasks_returns_serial_with_warning(self) -> None:
+        groups = self._groups(
+            "- [ ] T001 [P: src/same-file.ts] do thing\n"
+            "- [ ] T002 [P: src/same-file.ts] do thing\n"
+        )
+        self.assertEqual(len(groups), 1)
+        self.assertFalse(groups[0]["parallel"])
+        self.assertIn("same-file.ts", groups[0]["overlap_warning"])
+        self.assertEqual(len(groups[0]["tasks"]), 2)
+
+    def test_single_p_task_returns_serial(self) -> None:
+        groups = self._groups("- [ ] T001 [P: src/file.ts] do thing\n")
+        self.assertEqual(len(groups), 1)
+        self.assertFalse(groups[0]["parallel"])
+        self.assertIsNone(groups[0]["overlap_warning"])
+        self.assertEqual(len(groups[0]["tasks"]), 1)
+
+    def test_bare_p_without_file_list_treated_as_unannotated(self) -> None:
+        groups = self._groups(
+            "- [ ] T001 [P] do thing\n"
+            "- [ ] T002 [P: src/file.ts] do thing\n"
+        )
+        self.assertEqual(len(groups), 1)
+        self.assertFalse(groups[0]["parallel"])
+        self.assertIsNone(groups[0]["overlap_warning"])
+        self.assertEqual(len(groups[0]["tasks"]), 2)
+
+    def test_tasks_after_checkpoint_not_included(self) -> None:
+        groups = self._groups(
+            "- [ ] T001 do thing\n"
+            "- [ ] T002 [CHECKPOINT]\n"
+            "- [ ] T003 do later\n"
+        )
+        self.assertEqual(len(groups), 1)
+        self.assertFalse(groups[0]["parallel"])
+        self.assertEqual(len(groups[0]["tasks"]), 1)
+
+    def test_all_tasks_checked_returns_empty(self) -> None:
+        groups = self._groups(
+            "- [x] T001 do thing\n"
+            "- [x] T002 do other\n"
+        )
+        self.assertEqual(groups, [])
+
+    def test_dot_slash_and_bare_path_overlap_detected(self) -> None:
+        groups = self._groups(
+            "- [ ] T001 [P: ./src/a.ts] do thing\n"
+            "- [ ] T002 [P: src/a.ts] do thing\n"
+        )
+        self.assertEqual(len(groups), 1)
+        self.assertFalse(groups[0]["parallel"])
+        self.assertIn("src/a.ts", groups[0]["overlap_warning"])
+
+
+class TestWorktreeHelpers(unittest.TestCase):
+    def test_create_worktree_calls_correct_git_commands(self) -> None:
+        calls: list[list[str]] = []
+
+        def mock_run(cmd, **kwargs):
+            calls.append(cmd)
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
+
+        with patch.object(Path, "exists", return_value=False):
+            path = FACTORY_GIT.create_worktree("my-slug", 0, run_fn=mock_run)
+
+        self.assertIn("my-slug", str(path))
+        self.assertEqual(
+            calls[-1],
+            ["git", "-C", str(FACTORY_GIT.REPO_ROOT), "worktree", "add", str(path), "HEAD"],
+        )
+
+    def test_create_worktree_removes_stale_before_add(self) -> None:
+        calls: list[list[str]] = []
+
+        def mock_run(cmd, **kwargs):
+            calls.append(cmd)
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
+
+        with patch.object(Path, "exists", return_value=True):
+            path = FACTORY_GIT.create_worktree("my-slug", 1, run_fn=mock_run)
+
+        remove_index = next(
+            i for i, cmd in enumerate(calls) if cmd[3:6] == ["worktree", "remove", "--force"]
+        )
+        add_index = next(i for i, cmd in enumerate(calls) if cmd[3:5] == ["worktree", "add"])
+        self.assertLess(remove_index, add_index)
+        self.assertIn(str(path), calls[remove_index])
+        self.assertTrue(any(cmd == ["git", "-C", str(FACTORY_GIT.REPO_ROOT), "worktree", "prune"] for cmd in calls))
+
+    def test_remove_worktree_silent_if_path_absent(self) -> None:
+        calls: list[list[str]] = []
+
+        def mock_run(cmd, **kwargs):
+            calls.append(cmd)
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
+
+        with patch.object(Path, "exists", return_value=False):
+            FACTORY_GIT.remove_worktree(Path("/tmp/nonexistent_12345"), run_fn=mock_run)
+
+        self.assertEqual(calls, [])
+
+    def test_stage_and_commit_if_dirty_returns_sha_when_dirty(self) -> None:
+        calls: list[list[str]] = []
+
+        def mock_run(cmd, **kwargs):
+            calls.append(cmd)
+            result = MagicMock()
+            result.returncode = 0
+            result.stderr = ""
+            if cmd[-2:] == ["status", "--porcelain"]:
+                result.stdout = "M foo.ts\n"
+            elif cmd[-2:] == ["rev-parse", "HEAD"]:
+                result.stdout = "abc123\n"
+            else:
+                result.stdout = ""
+            return result
+
+        result = FACTORY_GIT.stage_and_commit_if_dirty(Path("/tmp/wt-test"), "commit message", run_fn=mock_run)
+        self.assertEqual(result, "abc123")
+        self.assertGreaterEqual(len(calls), 4)
+
+    def test_stage_and_commit_if_dirty_returns_none_when_clean(self) -> None:
+        calls: list[list[str]] = []
+
+        def mock_run(cmd, **kwargs):
+            calls.append(cmd)
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
+
+        result = FACTORY_GIT.stage_and_commit_if_dirty(Path("/tmp/wt-test"), "commit message", run_fn=mock_run)
+        self.assertIsNone(result)
+        self.assertEqual(len(calls), 1)
+
+    def test_stage_and_commit_with_deleted_file_returns_sha(self) -> None:
+        def mock_run(cmd, **kwargs):
+            result = MagicMock()
+            result.returncode = 0
+            result.stderr = ""
+            if cmd[-2:] == ["status", "--porcelain"]:
+                result.stdout = "D deleted.ts\n"
+            elif cmd[-2:] == ["rev-parse", "HEAD"]:
+                result.stdout = "deadbeef\n"
+            else:
+                result.stdout = ""
+            return result
+
+        result = FACTORY_GIT.stage_and_commit_if_dirty(Path("/tmp/wt-test"), "commit message", run_fn=mock_run)
+        self.assertIsNotNone(result)
+        self.assertEqual(result, "deadbeef")
+
+    def test_cherry_pick_commits_returns_true_on_success(self) -> None:
+        calls: list[list[str]] = []
+
+        def mock_run(cmd, **kwargs):
+            calls.append(cmd)
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
+
+        result = FACTORY_GIT.cherry_pick_commits(["sha1", "sha2"], run_fn=mock_run)
+        self.assertEqual(result, (True, ""))
+        self.assertEqual(len(calls), 2)
+
+    def test_cherry_pick_commits_returns_false_and_calls_abort_on_failure(self) -> None:
+        calls: list[list[str]] = []
+
+        def mock_run(cmd, **kwargs):
+            calls.append(cmd)
+            if cmd[-2:] == ["cherry-pick", "sha1"]:
+                raise FACTORY_GIT.subprocess.CalledProcessError(1, cmd, output="", stderr="conflict")
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
+
+        result = FACTORY_GIT.cherry_pick_commits(["sha1", "sha2"], run_fn=mock_run)
+        self.assertFalse(result[0])
+        self.assertIn("sha1", result[1])
+        self.assertTrue(any(cmd[-1] == "--abort" for cmd in calls))
+
+
+class TestCommandImplement(unittest.TestCase):
+    def _args(self, slug: str = "test-slug", max_workers: int = 4):
+        return SimpleNamespace(slug=slug, max_workers=max_workers)
+
+    def _clean_status(self) -> MagicMock:
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    def test_serial_path_calls_run_serial(self) -> None:
+        with patch.object(MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
+            MODULE,
+            "parse_parallel_task_groups",
+            return_value=[{"tasks": ["T001"], "parallel": False, "files": [], "overlap_warning": None}],
+        ) as mock_parse, patch.object(MODULE, "_run_serial", return_value=0) as mock_run_serial:
+            result = MODULE.command_implement(self._args())
+
+        self.assertEqual(result, 0)
+        mock_parse.assert_called_once_with("test-slug")
+        mock_run_serial.assert_called_once_with("test-slug", ["T001"])
+
+    def test_parallel_path_calls_run_parallel(self) -> None:
+        group = {"tasks": ["T001", "T002"], "parallel": True, "files": ["a.ts", "b.ts"], "overlap_warning": None}
+        with patch.object(MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
+            MODULE, "parse_parallel_task_groups", return_value=[group]
+        ), patch.object(MODULE, "_run_parallel", return_value=0) as mock_run_parallel:
+            result = MODULE.command_implement(self._args())
+
+        self.assertEqual(result, 0)
+        mock_run_parallel.assert_called_once()
+        self.assertEqual(mock_run_parallel.call_args.args[0], "test-slug")
+        self.assertEqual(mock_run_parallel.call_args.args[1], group)
+        self.assertEqual(mock_run_parallel.call_args.kwargs["max_workers"], 4)
+
+    def test_overlap_warning_printed_and_runs_serial(self) -> None:
+        group = {
+            "tasks": ["T001", "T002"],
+            "parallel": False,
+            "files": [],
+            "overlap_warning": "tasks 1,2 share file foo.ts",
+        }
+        stderr = io.StringIO()
+        with patch.object(MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
+            MODULE, "parse_parallel_task_groups", return_value=[group]
+        ), patch.object(MODULE, "_run_serial", return_value=0) as mock_run_serial, redirect_stderr(stderr):
+            result = MODULE.command_implement(self._args())
+
+        self.assertEqual(result, 0)
+        self.assertIn("tasks 1,2 share file foo.ts", stderr.getvalue())
+        mock_run_serial.assert_called_once_with("test-slug", ["T001", "T002"])
+
+    def test_dirty_working_tree_exits_1_without_codex(self) -> None:
+        dirty_status = MagicMock(returncode=0, stdout="M foo.ts\n", stderr="")
+        with patch.object(MODULE.subprocess, "run", return_value=dirty_status), patch.object(
+            MODULE, "_run_serial", return_value=0
+        ) as mock_run_serial:
+            result = MODULE.command_implement(self._args())
+
+        self.assertEqual(result, 1)
+        mock_run_serial.assert_not_called()
+
+    def test_empty_groups_prints_nothing_to_implement_and_exits_0(self) -> None:
+        stdout = io.StringIO()
+        with patch.object(MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
+            MODULE, "parse_parallel_task_groups", return_value=[]
+        ), redirect_stdout(stdout):
+            result = MODULE.command_implement(self._args())
+
+        self.assertEqual(result, 0)
+        self.assertIn("nothing to implement", stdout.getvalue())
+
+    def test_nonzero_rc_propagated_immediately(self) -> None:
+        groups = [
+            {"tasks": ["T001"], "parallel": False, "files": [], "overlap_warning": None},
+            {"tasks": ["T002"], "parallel": False, "files": [], "overlap_warning": None},
+        ]
+        with patch.object(MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
+            MODULE, "parse_parallel_task_groups", return_value=groups
+        ), patch.object(MODULE, "_run_serial", side_effect=[1, 0]) as mock_run_serial:
+            result = MODULE.command_implement(self._args())
+
+        self.assertEqual(result, 1)
+        self.assertEqual(mock_run_serial.call_count, 1)

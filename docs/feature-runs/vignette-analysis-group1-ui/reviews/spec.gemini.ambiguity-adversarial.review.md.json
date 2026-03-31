@@ -1,0 +1,57 @@
+{
+  "session_id": "33d454ff-5f3a-4737-ad4c-8bcea473919d",
+  "response": "## Findings\n\n1.  **High Severity: Undefined Mixed-Data Detection Mechanism.** The spec mandates that a UI surface must fall back to \"legacy mode\" if it is not \"fully V2-backed,\" but it fails to define how the frontend should detect this state. This is the most critical ambiguity. It leaves core implementation questions unanswered:\n    *   How does a page like `AnalysisTranscripts.tsx` determine if a list of transcripts is \"fully V2-backed\"?\n    *   Is there a summary flag on the parent data object, or must the client fetch and iterate through all transcript records to check their version? The latter approach could create significant performance bottlenecks for large data sets.\n    *   What specific field, flag, or data shape distinguishes a \"V2-backed\" transcript from a legacy one? Without this, the primary logical condition of the feature is based on an assumption.\n\n2.  **Medium Severity: Incomplete Specification of Decision Wording.** The spec requires showing \"plain-language decision summaries\" and provides three examples (`Strongly favors X`, `Somewhat favors X`, `Neutral`). This is insufficient.\n    *   It omits the full enumeration of possible decision types. The implementation will be fragile if the backend can return other states (e.g., `Slightly favors`, `Strongly disfavors`, `Indifferent`) that are not accounted for.\n    *   It does not specify the source data field(s) from which these strings are derived. It's unclear if the frontend is mapping an enum (e.g., `decision: 'STRONGLY_FAVORS'`) to a string or if the backend provides these strings directly. Since backend changes are out of scope, the source field must already exist, but it is not identified.\n\n3.  **Medium Severity: Ambiguous Condition for \"Fallback\" Badge.** The spec requires a \"deterministic/fallback badge\" to appear \"only when the transcript was not summarized deterministically.\" This condition is ambiguous.\n    *   It fails to name the specific data field and value (e.g., `summaryMethod: 'fallback'`, `isDeterministic: false`) that should trigger the badge's visibility. This leaves the trigger condition open to interpretation.\n    *   The phrase \"only when it is useful\" is subjective and should be replaced with the precise data-driven rule.\n\n4.  **Low Severity: Subjective Definition of \"Score-First Language.\"** The goal to \"stop teaching score-first language\" is not grounded in concrete examples. The spec does not provide a single \"before and after\" example of a label or piece of helper text. This ambiguity makes the scope of copywriting changes unclear and risks an inconsistent or incomplete implementation.\n\n5.  **Low Severity: Missing Explicit Test Case for Mixed Data.** The acceptance criteria correctly state that mixed data should trigger legacy mode, but this critical edge case is not explicitly called out as a required scenario in the testing scope. This increases the risk that the \"all-or-nothing\" legacy mode fallback for mixed lists will not be tested properly.\n\n## Residual Risks\n\n1.  **Performance Risk.** The lack of a defined mixed-data detection strategy may lead to a naive client-side implementation that iterates over large lists of transcripts, causing UI latency on pages intended for analysis.\n2.  **Fragile UI Risk.** If the backend returns a decision enum value not anticipated by the examples in the spec, the UI may fail to render the decision, display a broken string, or even crash. The mapping from data to presentation is brittle.\n3.  **Scope Creep / Incomplete Work Risk.** The ambiguous definition of \"score-first language\" may cause developers to either under-deliver by only changing the most obvious labels or over-deliver by refactoring copy that was not intended to be changed, leading to wasted effort and review churn.\n4.  **Regression Risk.** The \"mixed-data\" scenario is a non-obvious business rule. Without a dedicated, explicit test case, it is at high risk of being broken by future changes to the transcript components or data-fetching logic.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 30837
+        },
+        "tokens": {
+          "input": 1596,
+          "prompt": 13159,
+          "candidates": 867,
+          "total": 15880,
+          "cached": 11563,
+          "thoughts": 1854,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 30837,
+            "tokens": {
+              "input": 1596,
+              "prompt": 13159,
+              "candidates": 867,
+              "total": 15880,
+              "cached": 11563,
+              "thoughts": 1854,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

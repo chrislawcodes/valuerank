@@ -1,0 +1,535 @@
+diff --git a/docs/operations/codex-skills/feature-factory/SKILL.md b/docs/operations/codex-skills/feature-factory/SKILL.md
+index da643fe2..a1f474e0 100644
+--- a/docs/operations/codex-skills/feature-factory/SKILL.md
++++ b/docs/operations/codex-skills/feature-factory/SKILL.md
+@@ -117,6 +117,9 @@ If the answers are already clear from the repo context or user instructions:
+ - do not invent extra questions
+ - briefly state the assumptions you are carrying into the spec
+ 
++If discovery has unresolved items, do not mark discovery complete or checkpoint spec until
++each item is either resolved or explicitly deferred.
++
+ **Discovery is not optional.** Before authoring the spec, always either ask the clarifying questions or explicitly state the assumptions you are carrying in. Do not silently proceed to spec authoring without one of these two. If the request arrives with enough context to make the spec stable, a one-sentence "here are the assumptions I'm carrying in" satisfies this requirement — but the step must not be skipped entirely.
+ 
+ Do not start implementation until the answers are good enough to make the spec and plan stable.
+diff --git a/docs/operations/codex-skills/feature-factory/scripts/factory_state.py b/docs/operations/codex-skills/feature-factory/scripts/factory_state.py
+index 93540359..f52b7fc2 100644
+--- a/docs/operations/codex-skills/feature-factory/scripts/factory_state.py
++++ b/docs/operations/codex-skills/feature-factory/scripts/factory_state.py
+@@ -200,3 +200,34 @@ def migrate_discovery_state(d: dict) -> dict:
+                 d["unresolved"].append({"item": text, "deferred": False})
+                 existing_items.add(text)
+     return d
++
++
++def blocking_unresolved_items(discovery: dict) -> list[dict]:
++    """Return unresolved discovery entries that still block spec progress."""
++    unresolved = discovery.get("unresolved", [])
++    if not isinstance(unresolved, list):
++        return [{"item": "<malformed discovery state>", "deferred": False}]
++    blocking: list[dict] = []
++    for item in unresolved:
++        if not isinstance(item, dict):
++            blocking.append({"item": "<malformed unresolved item>", "deferred": False})
++            continue
++        if item.get("deferred") is True:
++            continue
++        value = item.get("item")
++        if not isinstance(value, str) or not value.strip():
++            blocking.append({"item": "<malformed unresolved item>", "deferred": False})
++            continue
++        blocking.append(item)
++    return blocking
++
++
++def discovery_blockers_are_malformed(discovery: dict) -> bool:
++    """Return True when blocking discovery items include malformed state."""
++    unresolved = discovery.get("unresolved", [])
++    if not isinstance(unresolved, list):
++        return True
++    return any(
++        isinstance(item, dict) and str(item.get("item", "")).startswith("<malformed")
++        for item in blocking_unresolved_items(discovery)
++    )
+diff --git a/docs/operations/codex-skills/feature-factory/scripts/run_factory.py b/docs/operations/codex-skills/feature-factory/scripts/run_factory.py
+index fc923128..7f116894 100644
+--- a/docs/operations/codex-skills/feature-factory/scripts/run_factory.py
++++ b/docs/operations/codex-skills/feature-factory/scripts/run_factory.py
+@@ -35,6 +35,8 @@ from factory_state import (  # noqa: E402
+     checkpoint_manifest_path,
+     default_artifact_path,
+     default_discovery_state,
++    blocking_unresolved_items,
++    discovery_blockers_are_malformed,
+     migrate_discovery_state,
+ )
+ 
+@@ -1050,6 +1052,17 @@ def command_checkpoint(args: argparse.Namespace) -> int:
+         raise SystemExit(prereq_error)
+     if args.stage == "spec":
+         discovery = discovery_state(args.slug)
++        blocking = blocking_unresolved_items(discovery)
++        if blocking:
++            if discovery_blockers_are_malformed(discovery):
++                raise SystemExit(
++                    "spec checkpoint requires discovery state to be repaired first; "
++                    "use discover --clear to reset malformed discovery state"
++                )
++            raise SystemExit(
++                "spec checkpoint requires discovery unresolved items to be resolved or deferred first; "
++                "use discover --resolve or discover --defer before checkpointing spec"
++            )
+         if discovery.get("required") and not discovery.get("complete"):
+             raise SystemExit(
+                 "spec checkpoint requires discovery to be complete first; "
+@@ -1460,7 +1473,18 @@ def command_discover(args: argparse.Namespace) -> int:
+             ac = discovery.setdefault("acceptance_criteria", [])
+             if args.acceptance_criteria not in ac:
+                 ac.append(args.acceptance_criteria)
++        blocking = blocking_unresolved_items(discovery)
+         if args.complete:
++            if blocking:
++                if discovery_blockers_are_malformed(discovery):
++                    raise SystemExit(
++                        "discover cannot mark discovery complete while discovery state is malformed; "
++                        "use discover --clear to reset malformed discovery state"
++                    )
++                raise SystemExit(
++                    "discover cannot mark discovery complete while unresolved items remain; "
++                    "resolve or defer each item first"
++                )
+             if not force_complete and int(discovery.get("asked_count", 0)) < int(discovery.get("question_count", 0)):
+                 raise SystemExit(
+                     "discover cannot mark discovery complete before the planned questions are recorded; "
+@@ -1482,6 +1506,11 @@ def command_discover(args: argparse.Namespace) -> int:
+         ):
+             discovery["complete"] = False
+         if force_complete:
++            if blocking:
++                raise SystemExit(
++                    "discover cannot force discovery complete while unresolved items remain; "
++                    "resolve or defer each item first"
++                )
+             discovery["complete"] = True
+         discovery["updated_at"] = int(time.time())
+ 
+@@ -1530,7 +1559,7 @@ def recommended_next_action(
+     if blocked.get("active"):
+         return "mark_blocked"
+     discovery = state.get(DISCOVERY_KEY, {})
+-    if discovery.get("required") and not discovery.get("complete"):
++    if blocking_unresolved_items(discovery) or (discovery.get("required") and not discovery.get("complete")):
+         return "discover"
+     if not stages["spec"]["artifact_exists"] or not stages["spec"]["artifact_meaningful"]:
+         if later_progress_exists(stages, "spec")[0]:
+@@ -1620,7 +1649,9 @@ def command_status(args: argparse.Namespace) -> int:
+     else:
+         print("- inactive")
+ 
+-    if discovery.get("required") or not discovery.get("complete") or discovery.get("asked_count") or discovery.get("assumptions") or discovery.get("summary"):
++    blocking = blocking_unresolved_items(discovery)
++    unresolved = discovery.get("unresolved", [])
++    if discovery.get("required") or not discovery.get("complete") or discovery.get("asked_count") or discovery.get("assumptions") or discovery.get("summary") or blocking or (isinstance(unresolved, list) and unresolved):
+         print("")
+         print("discovery:")
+         print(f"- required: {'yes' if discovery.get('required') else 'no'}")
+@@ -1633,6 +1664,20 @@ def command_status(args: argparse.Namespace) -> int:
+             print(f"- assumptions: {len(discovery.get('assumptions', []))}")
+         if discovery.get("summary"):
+             print(f"- summary: {trim_detail(str(discovery.get('summary', '')))}")
++        if isinstance(unresolved, list) and unresolved:
++            print(f"- unresolved-open: {len(blocking)}")
++            print(f"- unresolved-deferred: {len(unresolved) - len(blocking)}")
++            if blocking:
++                if discovery_blockers_are_malformed(discovery):
++                    print("- action: use discover --clear to repair malformed discovery state")
++                else:
++                    print("- action: resolve or defer unresolved items before spec")
++        elif blocking:
++            print(f"- unresolved-open: {len(blocking)}")
++            if discovery_blockers_are_malformed(discovery):
++                print("- action: use discover --clear to repair malformed discovery state")
++            else:
++                print("- action: resolve or defer unresolved items before spec")
+ 
+     cp = checkpoint_progress_state(args.slug)
+     if cp["index"] > 0:
+diff --git a/docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py b/docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py
+index 5c0618a7..c2988ec4 100644
+--- a/docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py
++++ b/docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py
+@@ -137,6 +137,60 @@ class RepairDecisionTests(unittest.TestCase):
+         )
+         self.assertEqual(action, "discover")
+ 
++    def test_recommended_next_action_blocks_spec_when_unresolved_items_remain(self) -> None:
++        stages = {
++            "spec": stage_state(),
++            "plan": stage_state(),
++            "tasks": stage_state(),
++            "diff": stage_state(),
++            "closeout": stage_state(),
++        }
++        action = MODULE.recommended_next_action(
++            "feature-workflow-repair",
++            {
++                "blocked": {"active": False},
++                "delivery": {},
++                "discovery": {
++                    "required": False,
++                    "complete": True,
++                    "unresolved": [{"item": "Decide API shape", "deferred": False}],
++                },
++            },
++            stages,
++            True,
++        )
++        self.assertEqual(action, "discover")
++
++    def test_blocking_unresolved_items_treats_malformed_entries_as_blocking(self) -> None:
++        self.assertEqual(
++            MODULE.blocking_unresolved_items({"unresolved": ["bad", {"no_item": "x"}, {"item": " "}]}),
++            [
++                {"item": "<malformed unresolved item>", "deferred": False},
++                {"item": "<malformed unresolved item>", "deferred": False},
++                {"item": "<malformed unresolved item>", "deferred": False},
++            ],
++        )
++        self.assertEqual(
++            MODULE.blocking_unresolved_items({"unresolved": None}),
++            [{"item": "<malformed discovery state>", "deferred": False}],
++        )
++
++    def test_blocking_unresolved_items_requires_boolean_true_for_deferred(self) -> None:
++        self.assertEqual(
++            MODULE.blocking_unresolved_items(
++                {
++                    "unresolved": [
++                        {"item": "Decide API shape", "deferred": "false"},
++                        {"item": "Confirm rollout", "deferred": 1},
++                    ]
++                }
++            ),
++            [
++                {"item": "Decide API shape", "deferred": "false"},
++                {"item": "Confirm rollout", "deferred": 1},
++            ],
++        )
++
+     def test_recommended_next_action_keeps_blocked_state_ahead_of_discovery(self) -> None:
+         stages = {
+             "spec": stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True),
+@@ -337,6 +391,95 @@ class RepairDecisionTests(unittest.TestCase):
+         self.assertIn("- asked-count: 2", output)
+         self.assertIn("- remaining: 3", output)
+ 
++    def test_status_reports_blocking_unresolved_discovery_items(self) -> None:
++        stages = {
++            stage: stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True)
++            for stage in ("spec", "plan", "tasks", "diff")
++        }
++        stages["closeout"] = stage_state()
++        buffer = io.StringIO()
++        discovery = {
++            "required": True,
++            "complete": True,
++            "question_count": 2,
++            "asked_count": 2,
++            "questions": [],
++            "assumptions": [],
++            "summary": "",
++            "updated_at": 1,
++            "answers": {},
++            "unresolved": [
++                {"item": "Decide API shape", "deferred": False},
++                {"item": "Confirm rollout plan", "deferred": True},
++            ],
++            "non_goals": [],
++            "acceptance_criteria": [],
++        }
++        with patch.object(MODULE, "ensure_sync"), patch.object(
++            MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}, "discovery": discovery}
++        ), patch.object(
++            MODULE, "stage_manifest_state", side_effect=lambda _slug, stage: stages[stage]
++        ), patch.object(
++            MODULE, "reconciliation_state", return_value=(True, "")
++        ), patch.object(
++            MODULE, "current_branch_name", return_value="feature-branch"
++        ), patch.object(
++            MODULE, "upstream_branch_name", return_value="origin/feature-branch"
++        ), patch.object(
++            MODULE, "diff_review_budget_state", return_value={"artifact_exists": False}
++        ), patch.object(
++            MODULE, "discovery_state", return_value=discovery
++        ), redirect_stdout(buffer):
++            MODULE.command_status(SimpleNamespace(slug="feature-workflow-discovery-shaping"))
++
++        output = buffer.getvalue()
++        self.assertIn("- unresolved-open: 1", output)
++        self.assertIn("- unresolved-deferred: 1", output)
++        self.assertIn("- action: resolve or defer unresolved items before spec", output)
++        self.assertIn("next-action: discover", output)
++
++    def test_status_handles_malformed_unresolved_state_as_blocking(self) -> None:
++        stages = {
++            stage: stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True)
++            for stage in ("spec", "plan", "tasks", "diff")
++        }
++        stages["closeout"] = stage_state()
++        buffer = io.StringIO()
++        discovery = {
++            "required": True,
++            "complete": True,
++            "question_count": 0,
++            "asked_count": 0,
++            "questions": [],
++            "assumptions": [],
++            "summary": "",
++            "updated_at": 1,
++            "answers": {},
++            "unresolved": None,
++            "non_goals": [],
++            "acceptance_criteria": [],
++        }
++        with patch.object(MODULE, "ensure_sync"), patch.object(
++            MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}, "discovery": discovery}
++        ), patch.object(
++            MODULE, "stage_manifest_state", side_effect=lambda _slug, stage: stages[stage]
++        ), patch.object(
++            MODULE, "reconciliation_state", return_value=(True, "")
++        ), patch.object(
++            MODULE, "current_branch_name", return_value="feature-branch"
++        ), patch.object(
++            MODULE, "upstream_branch_name", return_value="origin/feature-branch"
++        ), patch.object(
++            MODULE, "diff_review_budget_state", return_value={"artifact_exists": False}
++        ), patch.object(
++            MODULE, "discovery_state", return_value=discovery
++        ), redirect_stdout(buffer):
++            MODULE.command_status(SimpleNamespace(slug="feature-workflow-discovery-shaping"))
++
++        output = buffer.getvalue()
++        self.assertIn("- unresolved-open: 1", output)
++        self.assertIn("- action: use discover --clear to repair malformed discovery state", output)
++
+     def test_recommended_next_action_blocks_closeout_on_stale_delivery_head(self) -> None:
+         stages = {
+             stage: stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True)
+@@ -467,6 +610,47 @@ class RepairDecisionTests(unittest.TestCase):
+ 
+         self.assertIn("discovery", str(ctx.exception))
+ 
++    def test_command_checkpoint_blocks_spec_until_unresolved_items_are_cleared(self) -> None:
++        args = SimpleNamespace(
++            slug="feature-workflow-discovery-shaping",
++            stage="spec",
++            path=[],
++            artifact="",
++            base_ref=None,
++            context=[],
++            allow_dirty_path=[],
++            max_artifact_chars=None,
++            max_context_chars=None,
++            max_total_chars=None,
++            gemini_timeout_seconds=120,
++            gemini_retries=1,
++            repair_timeout_seconds=30,
++            fallback=False,
++            use_existing_artifact=False,
++            allow_large_diff_rerun=False,
++            required_reviews=None,
++        )
++        with patch.object(MODULE, "ensure_sync"), patch.object(
++            MODULE, "prerequisite_failure", return_value=None
++        ), patch.object(
++            MODULE,
++            "discovery_state",
++            return_value={
++                "required": True,
++                "complete": True,
++                "question_count": 5,
++                "asked_count": 5,
++                "answers": {},
++                "unresolved": [{"item": "Decide API shape", "deferred": False}],
++                "non_goals": [],
++                "acceptance_criteria": [],
++            },
++        ):
++            with self.assertRaises(SystemExit) as ctx:
++                MODULE.command_checkpoint(args)
++
++        self.assertIn("unresolved", str(ctx.exception))
++
+     def test_command_discover_records_state(self) -> None:
+         with tempfile.TemporaryDirectory() as temp_dir:
+             temp_root = Path(temp_dir)
+@@ -499,6 +683,110 @@ class RepairDecisionTests(unittest.TestCase):
+             self.assertIn("Five questions are expected", discovery["summary"])
+             self.assertEqual(discovery["version"], 2)
+ 
++    def test_command_discover_rejects_force_complete_with_unresolved_items(self) -> None:
++        with tempfile.TemporaryDirectory() as temp_dir:
++            state_path = Path(temp_dir) / "state.json"
++            state_path.write_text(
++                json.dumps(
++                    {
++                        "discovery": {
++                            "version": 2,
++                            "required": True,
++                            "complete": False,
++                            "question_count": 2,
++                            "asked_count": 1,
++                            "questions": [],
++                            "assumptions": [],
++                            "summary": "",
++                            "updated_at": 1,
++                            "answers": {},
++                            "unresolved": [{"item": "Decide API shape", "deferred": False}],
++                            "non_goals": [],
++                            "acceptance_criteria": [],
++                        }
++                    }
++                ),
++                encoding="utf-8",
++            )
++            args = self._discover_args(force_complete=True)
++            with patch.object(MODULE, "ensure_sync"), patch.object(
++                MODULE, "factory_state_path", return_value=state_path
++            ):
++                with self.assertRaises(SystemExit) as ctx:
++                    MODULE.command_discover(args)
++
++        self.assertIn("unresolved", str(ctx.exception))
++
++    def test_command_discover_can_resolve_then_complete_in_same_invocation(self) -> None:
++        with tempfile.TemporaryDirectory() as temp_dir:
++            state_path = Path(temp_dir) / "state.json"
++            state_path.write_text(
++                json.dumps(
++                    {
++                        "discovery": {
++                            "version": 2,
++                            "required": True,
++                            "complete": False,
++                            "question_count": 2,
++                            "asked_count": 2,
++                            "questions": [],
++                            "assumptions": [],
++                            "summary": "",
++                            "updated_at": 1,
++                            "answers": {},
++                            "unresolved": [{"item": "Decide API shape", "deferred": False}],
++                            "non_goals": [],
++                            "acceptance_criteria": [],
++                        }
++                    }
++                ),
++                encoding="utf-8",
++            )
++            args = self._discover_args(resolve="Decide API shape", complete=True)
++            with patch.object(MODULE, "ensure_sync"), patch.object(
++                MODULE, "factory_state_path", return_value=state_path
++            ):
++                exit_code = MODULE.command_discover(args)
++
++            self.assertEqual(exit_code, 0)
++            saved = json.loads(state_path.read_text(encoding="utf-8"))
++            self.assertTrue(saved["discovery"]["complete"])
++            self.assertEqual(saved["discovery"]["unresolved"], [])
++
++    def test_command_discover_rejects_malformed_state_with_clear_guidance(self) -> None:
++        with tempfile.TemporaryDirectory() as temp_dir:
++            state_path = Path(temp_dir) / "state.json"
++            state_path.write_text(
++                json.dumps(
++                    {
++                        "discovery": {
++                            "version": 2,
++                            "required": True,
++                            "complete": False,
++                            "question_count": 2,
++                            "asked_count": 2,
++                            "questions": [],
++                            "assumptions": [],
++                            "summary": "",
++                            "updated_at": 1,
++                            "answers": {},
++                            "unresolved": None,
++                            "non_goals": [],
++                            "acceptance_criteria": [],
++                        }
++                    }
++                ),
++                encoding="utf-8",
++            )
++            args = self._discover_args(complete=True)
++            with patch.object(MODULE, "ensure_sync"), patch.object(
++                MODULE, "factory_state_path", return_value=state_path
++            ):
++                with self.assertRaises(SystemExit) as ctx:
++                    MODULE.command_discover(args)
++
++        self.assertIn("discover --clear", str(ctx.exception))
++
+     def test_command_discover_clear_resets_state(self) -> None:
+         with tempfile.TemporaryDirectory() as temp_dir:
+             temp_root = Path(temp_dir)
+diff --git a/docs/plans/feature-workflow-plan.md b/docs/plans/feature-workflow-plan.md
+index 4a572feb..a01d525a 100644
+--- a/docs/plans/feature-workflow-plan.md
++++ b/docs/plans/feature-workflow-plan.md
+@@ -65,7 +65,7 @@ interface is clear.
+ ---
+ 
+ ### I-7: Structured discovery state
+-**Status:** Planned
++**Status:** In progress
+ **Priority:** 1
+ **Source:** 2026-03-22 adversarial evaluation (Codex + Claude)
+ **What:** Replace the current free-text discovery fields with structured, machine-readable
+@@ -80,6 +80,10 @@ state in `state.json`:
+ Make `unresolved` a first-class status: if any item is unresolved, `status` surfaces it
+ prominently and `spec` is blocked from progressing until the human clears or defers each one.
+ 
++First enforcement slice landed: blocking unresolved items now surface in status, prevent
++discovery from being marked complete, and block spec checkpointing until they are cleared or
++explicitly deferred.
++
+ **Why:** The pipeline currently validates artifact consistency, not product intent. A wrong
+ spec sails through every gate. This is where wrong-product failures are born. Discovery is
+ already mandatory (I-1) — this makes it enforceable.
+@@ -274,6 +278,29 @@ keeping the execution surface small, and validating truth outside the artifact c
+ - Source-of-truth ambiguity: unclear which workflow files were authoritative (→ I-3, shipped)
+ - No upfront requirements clarification (→ I-1, shipped)
+ 
++### 2026-03-23 — Feature-factory retro from job-choice analysis fix
++
++**What worked:**
++- The staged artifact chain still kept the work understandable: spec, plan, tasks, implementation, diff review, and closeout were all traceable.
++- The review gates helped catch a stale plan/testability mismatch before delivery.
++- The diff checkpoint made it obvious when unrelated dirty paths would have polluted the reviewed slice.
++
++**What hurt:**
++- Review reconciliation was too text-sensitive. We had to mirror review notes very closely in `plan.md`, and small wording drift caused repeated mismatches.
++- Delivery state could lag behind reality. Closeout blocked on stale check status even after the PR had passing checks.
++- Production rollout confirmation was separate from merge confirmation. Railway could still show `BUILDING` after the PR was merged, so “merged” did not always mean “live.”
++- Cleanup was manual. Removing the finished workflow tree was awkward after merge.
++
++**Plan updates to carry forward:**
++- Make review reconciliation structured by review ID and terminal status, with the note treated as descriptive metadata instead of a strict match string.
++- Refresh PR/check state automatically before closeout, or have closeout call the delivery refresh path itself.
++- Add a live deploy verification step before closing out so we do not assume production has the fix just because GitHub merged it.
++- Add a first-class cleanup/archive command for completed feature runs.
++- Improve dirty-scope messaging so the user can see which files are outside the feature slice and why.
++- Keep the runner naming consistent across docs, scripts, and help text so the feature-factory path is obvious.
++
++**Net:** the workflow is useful, but it needs less string matching and more machine-readable state before it will feel truly low-friction.
++
+ ---
+ 
+ ## Change Log
+@@ -286,3 +313,4 @@ keeping the execution surface small, and validating truth outside the artifact c
+ | 2026-03-22 | feature-factory rename | Shipped (#387); updated all references |
+ | 2026-03-22 | I-7 through I-10 | Added from adversarial evaluation; replaced prior backlog |
+ | 2026-03-22 | I-6 | Deferred status reinforced by evaluation |
++| 2026-03-23 | Feature-factory retro | Added concrete plan updates from the job-choice analysis fix run |

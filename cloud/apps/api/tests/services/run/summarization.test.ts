@@ -94,7 +94,7 @@ describe('summarization service', () => {
           tokenCount: 100,
           durationMs: 1000,
           summarizedAt: i < summarizedCount ? new Date() : null,
-          decisionCode: i < summarizedCount ? '3' : null,
+          decisionMetadata: i < summarizedCount ? { summaryCache: {} } : null,
         },
       });
     }
@@ -304,6 +304,23 @@ describe('summarization service', () => {
       expect(jobData).toHaveProperty('runId', run.id);
       expect(jobData).toHaveProperty('transcriptId');
       expect(jobOptions).toHaveProperty('retryLimit', 3);
+      expect(jobData).not.toHaveProperty('forceSummarize');
+    });
+
+    it('sets forceSummarize when force mode is enabled', async () => {
+      const { run } = await createTestRun({
+        status: 'COMPLETED',
+        transcriptCount: 1,
+        summarizedCount: 1,
+      });
+
+      mockSend.mockClear();
+      await restartSummarization(run.id, true);
+
+      expect(mockSend).toHaveBeenCalledTimes(1);
+      const [, jobData] = mockSend.mock.calls[0];
+
+      expect(jobData).toHaveProperty('forceSummarize', true);
     });
   });
 });

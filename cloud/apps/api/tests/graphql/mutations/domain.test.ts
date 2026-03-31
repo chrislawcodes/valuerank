@@ -127,6 +127,7 @@ describe('GraphQL Domain Mutations', () => {
             temperature: input.temperature ?? null,
             samplePercentage: input.samplePercentage ?? null,
             samplesPerScenario: input.samplesPerScenario ?? null,
+            ...(input.configExtras as Record<string, unknown> | undefined ?? {}),
           },
           progress: {
             total: 1,
@@ -487,5 +488,140 @@ describe('GraphQL Domain Mutations', () => {
     expect(response.body.data.retryDomainTrialCell.success).toBe(true);
     expect(startRunMock).toHaveBeenCalledTimes(1);
     expect(startRunMock.mock.calls[0]?.[0]?.runCategory).toBe('VALIDATION');
+  });
+
+  describe('Paired Job Choice Domain Evaluation', () => {
+    it('launches two paired definitions as a single paired batch with a shared batchGroupId', async () => {
+      const domain = await db.domain.create({
+        data: { name: 'Paired Batch Test', normalizedName: `paired-batch-test-${Date.now()}` },
+      });
+      createdDomainIds.push(domain.id);
+
+      const defA = await db.definition.create({
+        data: {
+          name: 'Job A',
+          domainId: domain.id,
+          version: 1,
+          content: {
+            methodology: { family: 'job-choice', pair_key: 'pair1' },
+            components: { value_first: { token: 'career' }, value_second: { token: 'family' } },
+          },
+          createdByUserId: TEST_USER.id,
+        },
+      });
+      const defB = await db.definition.create({
+        data: {
+          name: 'Job B',
+          domainId: domain.id,
+          version: 1,
+          content: {
+            methodology: { family: 'job-choice', pair_key: 'pair1' },
+            components: { value_first: { token: 'family' }, value_second: { token: 'career' } },
+          },
+          createdByUserId: TEST_USER.id,
+        },
+      });
+      createdDefinitionIds.push(defA.id, defB.id);
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query: START_DOMAIN_EVALUATION_MUTATION, variables: { domainId: domain.id } });
+
+      expect(response.status).toBe(200);
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.startDomainEvaluation.startedRuns).toBe(2);
+      expect(startRunMock).toHaveBeenCalledTimes(2);
+
+      const calls = startRunMock.mock.calls.map((call) => call[0]);
+      const callA = calls.find((c) => c.definitionId === defA.id);
+      const callB = calls.find((c) => c.definitionId === defB.id);
+
+      expect(callA?.configExtras?.jobChoiceLaunchMode).toBe('PAIRED_BATCH');
+      expect(callB?.configExtras?.jobChoiceLaunchMode).toBe('PAIRED_BATCH');
+      expect(callA?.configExtras?.jobChoiceBatchGroupId).toBeTruthy();
+      expect(callA?.configExtras?.jobChoiceBatchGroupId).toBe(callB?.configExtras?.jobChoiceBatchGroupId);
+      expect(callA?.configExtras?.jobChoiceValueFirst).toBe('career');
+      expect(callB?.configExtras?.jobChoiceValueFirst).toBe('family');
+    });
+
+    it('launches two distinct pairs as two batches with different batchGroupIds', async () => {
+      const domain = await db.domain.create({
+        data: { name: 'Multi-Paired Test', normalizedName: `multi-paired-test-${Date.now()}` },
+      });
+      createdDomainIds.push(domain.id);
+
+      const [p1a, p1b, p2a, p2b] = await Promise.all([
+        db.definition.create({ data: { name: 'Pair1 A', domainId: domain.id, version: 1, content: { methodology: { family: 'job-choice', pair_key: 'p1', presentation_order: 'A_first' }, components: { value_first: { token: 'career' }, value_second: { token: 'family' } } }, createdByUserId: TEST_USER.id } }),
+        db.definition.create({ data: { name: 'Pair1 B', domainId: domain.id, version: 1, content: { methodology: { family: 'job-choice', pair_key: 'p1', presentation_order: 'B_first' }, components: { value_first: { token: 'family' }, value_second: { token: 'career' } } }, createdByUserId: TEST_USER.id } }),
+        db.definition.create({ data: { name: 'Pair2 A', domainId: domain.id, version: 1, content: { methodology: { family: 'job-choice', pair_key: 'p2', presentation_order: 'A_first' }, components: { value_first: { token: 'freedom' }, value_second: { token: 'safety' } } }, createdByUserId: TEST_USER.id } }),
+        db.definition.create({ data: { name: 'Pair2 B', domainId: domain.id, version: 1, content: { methodology: { family: 'job-choice', pair_key: 'p2', presentation_order: 'B_first' }, components: { value_first: { token: 'safety' }, value_second: { token: 'freedom' } } }, createdByUserId: TEST_USER.id } }),
+      ]);
+      createdDefinitionIds.push(p1a.id, p1b.id, p2a.id, p2b.id);
+
+      await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query: START_DOMAIN_EVALUATION_MUTATION, variables: { domainId: domain.id } });
+
+      expect(startRunMock).toHaveBeenCalledTimes(4);
+      const calls = startRunMock.mock.calls.map((c) => c[0]);
+      const groupId1 = calls.find((c) => c.definitionId === p1a.id)?.configExtras?.jobChoiceBatchGroupId;
+      const groupId2 = calls.find((c) => c.definitionId === p2a.id)?.configExtras?.jobChoiceBatchGroupId;
+
+      expect(groupId1).toBeTruthy();
+      expect(groupId2).toBeTruthy();
+      expect(groupId1).not.toBe(groupId2);
+      expect(calls.find((c) => c.definitionId === p1b.id)?.configExtras?.jobChoiceBatchGroupId).toBe(groupId1);
+      expect(calls.find((c) => c.definitionId === p2b.id)?.configExtras?.jobChoiceBatchGroupId).toBe(groupId2);
+    });
+
+    it('launches a non-paired definition as an individual run with no batch configExtras', async () => {
+      const domain = await db.domain.create({
+        data: { name: 'Single Def Test', normalizedName: `single-def-test-${Date.now()}` },
+      });
+      createdDomainIds.push(domain.id);
+      const def = await db.definition.create({
+        data: { name: 'Single', domainId: domain.id, version: 1, content: { preamble: 'test' }, createdByUserId: TEST_USER.id },
+      });
+      createdDefinitionIds.push(def.id);
+
+      await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query: START_DOMAIN_EVALUATION_MUTATION, variables: { domainId: domain.id } });
+
+      expect(startRunMock).toHaveBeenCalledTimes(1);
+      const call = startRunMock.mock.calls[0]?.[0];
+      expect(call?.definitionId).toBe(def.id);
+      expect(call?.configExtras).toBeUndefined();
+    });
+
+    it('launches an incomplete pair as an individual run with no batch configExtras', async () => {
+      const domain = await db.domain.create({
+        data: { name: 'Incomplete Pair Test', normalizedName: `incomplete-pair-test-${Date.now()}` },
+      });
+      createdDomainIds.push(domain.id);
+      const def = await db.definition.create({
+        data: {
+          name: 'Orphan A',
+          domainId: domain.id,
+          version: 1,
+          content: { methodology: { family: 'job-choice', pair_key: 'orphan', presentation_order: 'A_first' } },
+          createdByUserId: TEST_USER.id,
+        },
+      });
+      createdDefinitionIds.push(def.id);
+
+      await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query: START_DOMAIN_EVALUATION_MUTATION, variables: { domainId: domain.id } });
+
+      expect(startRunMock).toHaveBeenCalledTimes(1);
+      const call = startRunMock.mock.calls[0]?.[0];
+      expect(call?.definitionId).toBe(def.id);
+      expect(call?.configExtras).toBeUndefined();
+    });
   });
 });

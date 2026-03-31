@@ -81,24 +81,32 @@ function getMethodology(content: unknown): {
   family: string | null;
   responseScale: string | null;
   pairKey: string | null;
-  presentationOrder: string | null;
+  valueFirst: string | null;
 } {
   if (!content || typeof content !== 'object' || Array.isArray(content)) {
-    return { family: null, responseScale: null, pairKey: null, presentationOrder: null };
+    return { family: null, responseScale: null, pairKey: null, valueFirst: null };
   }
 
   const record = content as Record<string, unknown>;
   const methodology = record.methodology;
   if (!methodology || typeof methodology !== 'object' || Array.isArray(methodology)) {
-    return { family: null, responseScale: null, pairKey: null, presentationOrder: null };
+    return { family: null, responseScale: null, pairKey: null, valueFirst: null };
   }
 
   const parsed = methodology as Record<string, unknown>;
+  const components = record.components;
+  const valueFirst = components && typeof components === 'object' && !Array.isArray(components)
+    ? (components as Record<string, unknown>).value_first
+    : null;
+  const valueFirstToken = valueFirst && typeof valueFirst === 'object' && !Array.isArray(valueFirst)
+    ? (valueFirst as Record<string, unknown>).token
+    : null;
+
   return {
     family: typeof parsed.family === 'string' ? parsed.family : null,
     responseScale: typeof parsed.response_scale === 'string' ? parsed.response_scale : null,
     pairKey: typeof parsed.pair_key === 'string' ? parsed.pair_key : null,
-    presentationOrder: typeof parsed.presentation_order === 'string' ? parsed.presentation_order : null,
+    valueFirst: typeof valueFirstToken === 'string' ? valueFirstToken : null,
   };
 }
 
@@ -212,7 +220,7 @@ async function loadRuns(runIds: string[]): Promise<BridgeRunInput[]> {
       responseScale: methodology.responseScale,
       family: methodology.family,
       pairKey: methodology.pairKey,
-      presentationOrder: methodology.presentationOrder,
+      valueFirst: methodology.valueFirst,
       trialSignature: extractTrialSignature(run),
       transcripts: run.transcripts.map((transcript) => {
         const metadata = getDecisionMetadata(transcript.decisionMetadata);

@@ -389,12 +389,25 @@ def prompt_for(stage: str, lens: str, artifact_label: str, artifact_text: str, e
     def safe_label(value: str) -> str:
         return value.replace("`", "'").replace("\r", " ").replace("\n", " ")
 
+    has_context = len(extra_context) > 0
+    context_instruction = (
+        "Code context files are provided above. Before asserting any finding, check whether it is "
+        "confirmed or refuted by the provided code. Each finding must include an evidence tag:\n"
+        "  [CODE-CONFIRMED] — the code directly supports this finding\n"
+        "  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)\n"
+        "  [UNVERIFIED] — relevant code was not provided; treat as lower confidence\n"
+        "Only assign HIGH severity to CODE-CONFIRMED findings."
+        if has_context else
+        "No code context files were provided. Flag any finding that depends on an assumption about "
+        "the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower."
+    )
+
     parts = [
         f"Review this {stage} artifact using a {lens} lens.",
         "Stay scoped to that lens.",
         "Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.",
+        context_instruction,
         "The full review artifact text is included below in this prompt.",
-        "Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.",
         "Return markdown using exactly these sections:",
         "## Findings",
         "## Residual Risks",
@@ -428,6 +441,13 @@ def main() -> int:
     parser.add_argument("--max-context-chars", type=int, default=10000)
     parser.add_argument("--max-total-chars", type=int, default=70000)
     parser.add_argument("--retries", type=int, default=1)
+    parser.add_argument(
+        "--no-gemini-lock",
+        action="store_true",
+        default=False,
+        help="Skip the Gemini concurrency lock. Used for staggered-parallel experiments where the "
+        "caller manages launch timing instead of relying on the lock for serialization.",
+    )
     args = parser.parse_args()
 
     try:
@@ -531,7 +551,8 @@ def main() -> int:
     lock_path = None
     owner_pid = None
     try:
-        lock_path, owner_pid = acquire_gemini_lock(workspace_root, args.timeout_seconds)
+        if not args.no_gemini_lock:
+            lock_path, owner_pid = acquire_gemini_lock(workspace_root, args.timeout_seconds)
         for _ in range(args.retries + 1):
             try:
                 if run_cwd is None:

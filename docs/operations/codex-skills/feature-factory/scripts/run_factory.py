@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
+import concurrent.futures
 import argparse
-import hashlib
 import json
+import os
 import re
-import shutil
 import subprocess
 import sys
 import time
@@ -35,7 +35,18 @@ from factory_state import (  # noqa: E402
     checkpoint_manifest_path,
     default_artifact_path,
     default_discovery_state,
+    blocking_unresolved_items,
+    discovery_blockers_are_malformed,
     migrate_discovery_state,
+    parse_review_frontmatter,
+    load_scope_manifest,
+    save_scope_manifest,
+    load_workflow_state,
+    save_workflow_state,
+    update_workflow_state,
+    discovery_state,
+    update_discovery_state,
+    load_checkpoint_manifest,
 )
 
 REVIEW_SCRIPTS = REPO_ROOT / "docs" / "operations" / "codex-skills" / "review-lens" / "scripts"
@@ -44,966 +55,111 @@ if str(REVIEW_SCRIPTS) not in sys.path:
 
 from workflow_utils import normalized_artifact_hash, repo_relative_path, resolve_stored_path  # noqa: E402
 
-SYNC_SCRIPT = REPO_ROOT / "scripts" / "sync-codex-skills.py"
-WRITE_DIFF = REVIEW_SCRIPTS / "write_canonical_diff.py"
-REPAIR = REVIEW_SCRIPTS / "repair_review_checkpoint.py"
-UPDATE_REVIEW = REVIEW_SCRIPTS / "update_review_resolution.py"
-APPEND_RECONCILIATION = REVIEW_SCRIPTS / "append_reconciliation_entry.py"
-VERIFY_RECONCILIATION = REVIEW_SCRIPTS / "verify_reconciliation.py"
-VERIFY_CHECKPOINT = REVIEW_SCRIPTS / "verify_review_checkpoint.py"
-RUN_GEMINI_REVIEW = REVIEW_SCRIPTS / "run_gemini_review.py"
-RUN_CODEX_REVIEW = REVIEW_SCRIPTS / "run_codex_review.py"
-HARD_DIFF_ARTIFACT_MAX_CHARS = 150000
-LARGE_DIFF_RERUN_WARN_CHARS = 80000
-DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"
-DEFAULT_CODEX_MODEL = "gpt-5.4-mini"
-CHECKPOINT_STAGES = ["spec", "plan", "tasks", "diff", "closeout"]
-VERIFY_ON_CLOSEOUT_STAGES = ["spec", "plan", "tasks", "diff"]
-REQUIRED_PREDELIVERY_STAGES = ["spec", "plan", "tasks", "diff"]
-STAGE_PREREQUISITES = {
-    "plan": ["spec"],
-    "tasks": ["plan"],
-    "diff": ["tasks"],
-}
-STAGE_ARTIFACT_HEADINGS = {
-    "spec": "# Spec",
-    "plan": "# Plan",
-    "tasks": "# Tasks",
-}
+from factory_git import (  # noqa: E402
+    SYNC_SCRIPT,
+    run,
+    git_output,
+    _sha_is_valid_ancestor,
+    _git_head_sha,
+    current_branch_name,
+    upstream_branch_name,
+    commits_behind_upstream,
+    repo_remote_url,
+    command_path,
+    ensure_sync,
+    ensure_file,
+    create_worktree,
+    remove_all_worktrees,
+    get_new_commits,
+    stage_and_commit_if_dirty,
+    cherry_pick_commits,
+    revert_protected_files,
+)
 
-# Matches [CHECKPOINT] as a marker on any list-item line (unordered, ordered, checkbox).
-# Anchored to end-of-line to avoid matching [CHECKPOINT] mid-sentence.
-_CHECKPOINT_MARKER_RE = re.compile(
-    r"^\s*(?:[-*]|\d+\.|-\s+\[[ xX]\])\s+.*\[CHECKPOINT\]\s*$",
-    re.MULTILINE,
+from factory_stages import (  # noqa: E402
+    VERIFY_CHECKPOINT,
+    VERIFY_RECONCILIATION,
+    HARD_DIFF_ARTIFACT_MAX_CHARS,
+    LARGE_DIFF_RERUN_WARN_CHARS,
+    CHECKPOINT_STAGES,
+    VERIFY_ON_CLOSEOUT_STAGES,
+    REQUIRED_PREDELIVERY_STAGES,
+    STAGE_PREREQUISITES,
+    STAGE_ARTIFACT_HEADINGS,
+    _CHECKPOINT_MARKER_RE,
+    parse_checkpoint_markers,
+    parse_parallel_task_groups,
+    checkpoint_progress_state,
+    _default_checkpoint_progress,
+    artifact_has_meaningful_content,
+    verify_checkpoint_manifest,
+    diff_review_budget_state,
+    preferred_diff_base_ref,
+    stage_manifest_state,
+    stage_review_inventory,
+    stage_drift_class,
+    stage_repairable,
+    stage_status_label,
+    later_progress_exists,
+    reconciliation_state,
+    prerequisite_failure,
+)
+
+from factory_review import (  # noqa: E402
+    WRITE_DIFF,
+    REPAIR,
+    UPDATE_REVIEW,
+    APPEND_RECONCILIATION,
+    RUN_GEMINI_REVIEW,
+    RUN_CODEX_REVIEW,
+    DEFAULT_GEMINI_MODEL,
+    DEFAULT_CODEX_MODEL,
+    _AUTO_ACCEPT_NOTE,
+    trim_detail,
+    pick_secondary_lens,
+    required_reviews,
+    SMALL_TASK_SET_THRESHOLD,
+    resolved_review_policy,
+    checkpoint_manifest,
+    repair_checkpoint_args,
+    fallback_review_command,
+    run_checkpoint_fallback,
+    record_checkpoint_fallback,
+    _advance_checkpoint_progress,
+    recommended_next_action,
+    detect_actionable_findings,
+)
+
+from factory_deliver import (  # noqa: E402
+    gh_json,
+    current_pr_payload,
+    required_check_summary,
+    build_delivery_record,
+    gather_all_review_paths,
+    refresh_delivery_snapshot,
+    closeout_inventory_text,
+    compose_closeout_text,
 )
 
 
-def parse_checkpoint_markers(slug: str) -> tuple[int, str]:
-    """Return (count, markers_sha) for [CHECKPOINT] markers in tasks.md.
 
-    markers_sha is sha256 of only the matched marker lines (normalised to LF,
-    stripped of leading/trailing whitespace) — routine edits to non-marker
-    lines do not change the hash.  Returns (0, '') if tasks.md is missing or
-    has no markers.
-    """
-    tasks_path = workflow_dir(slug) / "tasks.md"
-    if not tasks_path.exists():
-        return 0, ""
-    text = tasks_path.read_text(encoding="utf-8")
-    matches = _CHECKPOINT_MARKER_RE.findall(text)
-    if not matches:
-        return 0, ""
-    # Normalise: strip individual lines and join with LF to avoid CRLF drift.
-    normalised = "\n".join(line.strip() for line in matches)
-    sha = hashlib.sha256(normalised.encode("utf-8")).hexdigest()
-    return len(matches), sha
 
 
-def checkpoint_progress_state(slug: str) -> dict:
-    """Return checkpoint_progress from workflow state, filling missing keys with defaults."""
-    state = load_workflow_state(slug)
-    raw = state.get(CHECKPOINT_PROGRESS_KEY, {})
-    return {
-        "index": int(raw.get("index", 0)),
-        "markers_sha": str(raw.get("markers_sha", "")),
-        "last_diff_head_sha": str(raw.get("last_diff_head_sha", "")),
-    }
 
 
-def _default_checkpoint_progress() -> dict:
-    return {"index": 0, "markers_sha": "", "last_diff_head_sha": ""}
 
 
-def _sha_is_valid_ancestor(sha: str) -> bool:
-    """Return True iff sha exists in the repo AND is an ancestor of HEAD."""
-    if not sha:
-        return False
-    # Check existence first.
-    try:
-        subprocess.run(
-            ["git", "-C", str(REPO_ROOT), "cat-file", "-t", sha],
-            check=True, capture_output=True, timeout=10,
-        )
-    except Exception:
-        return False
-    # Check ancestry.
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(REPO_ROOT), "merge-base", "--is-ancestor", sha, "HEAD"],
-            capture_output=True, timeout=10,
-        )
-        return result.returncode == 0
-    except Exception:
-        return False
 
 
-def run(cmd: list[str]) -> None:
-    subprocess.run(cmd, check=True, text=True)
 
 
-def git_output(*args: str) -> str | None:
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(REPO_ROOT), *args],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=20,
-        )
-        return result.stdout.strip()
-    except Exception:
-        return None
 
 
-def _git_head_sha(repo: Path) -> str | None:
-    """Return the current HEAD SHA for repo, or None if unavailable."""
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(repo), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        return result.stdout.strip()
-    except Exception:
-        return None
 
 
-def current_branch_name() -> str | None:
-    branch = git_output("rev-parse", "--abbrev-ref", "HEAD")
-    if not branch or branch == "HEAD":
-        return None
-    return branch
 
 
-def upstream_branch_name() -> str | None:
-    return git_output("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
 
-
-def commits_behind_upstream() -> int | None:
-    """Return how many commits HEAD is behind its upstream, or None if unknown."""
-    result = git_output("rev-list", "--count", "HEAD..@{upstream}")
-    if result is None:
-        return None
-    try:
-        return int(result)
-    except ValueError:
-        return None
-
-
-def repo_remote_url(remote_name: str) -> str | None:
-    return git_output("remote", "get-url", remote_name)
-
-
-def command_path(name: str) -> str | None:
-    return shutil.which(name)
-
-
-def parse_review_frontmatter(path: Path) -> tuple[dict[str, str], str]:
-    text = path.read_text(encoding="utf-8")
-    if not text.startswith("---\n"):
-        raise ValueError(f"{path} is missing frontmatter")
-    _, rest = text.split("---\n", 1)
-    fm_text, body = rest.split("\n---\n", 1)
-    data: dict[str, str] = {}
-    for line in fm_text.splitlines():
-        if not line.strip():
-            continue
-        key, value = line.split(":", 1)
-        data[key.strip()] = value.strip().strip('"')
-    return data, body
-
-
-def ensure_sync() -> None:
-    run([sys.executable, str(SYNC_SCRIPT), "--sync-if-needed"])
-
-
-def ensure_file(path: Path, heading: str) -> None:
-    if not path.exists():
-        path.write_text(f"# {heading}\n", encoding="utf-8")
-
-
-def load_scope_manifest(slug: str) -> dict:
-    path = scope_manifest_path(slug)
-    if not path.exists():
-        return {"paths": [], "allowed_dirty_paths": []}
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def load_workflow_state(slug: str) -> dict:
-    path = factory_state_path(slug)
-    if not path.exists():
-        return {
-            "review_policy": {
-                "sensitive": False,
-                "large_structural": False,
-                "performance_sensitive": False,
-                "extra_gemini_lenses": [],
-            },
-            BLOCKED_KEY: {
-                "active": False,
-                "reason": "",
-                "updated_at": 0,
-            },
-            DISCOVERY_KEY: default_discovery_state(),
-            DELIVERY_KEY: {},
-            DIRTY_OVERRIDE_KEY: {},
-        }
-    state = json.loads(path.read_text(encoding="utf-8"))
-    state.setdefault(
-        "review_policy",
-        {
-            "sensitive": False,
-            "large_structural": False,
-            "performance_sensitive": False,
-            "extra_gemini_lenses": [],
-        },
-    )
-    state.setdefault(
-        BLOCKED_KEY,
-        {
-            "active": False,
-            "reason": "",
-            "updated_at": 0,
-        },
-    )
-    state.setdefault(DISCOVERY_KEY, default_discovery_state())
-    state.setdefault(DELIVERY_KEY, {})
-    state.setdefault(DIRTY_OVERRIDE_KEY, {})
-    state.setdefault(CHECKPOINT_FALLBACK_KEY, {})
-    return state
-
-
-def save_workflow_state(slug: str, state: dict) -> Path:
-    path = factory_state_path(slug)
-    atomic_json_write(path, state)
-    return path
-
-
-def discovery_state(slug: str) -> dict:
-    state = load_workflow_state(slug).get(DISCOVERY_KEY, {})
-    merged = default_discovery_state()
-    merged.update(state if isinstance(state, dict) else {})
-    def _safe_list(val) -> list:
-        return list(val) if isinstance(val, list) else []
-    merged["questions"] = _safe_list(merged.get("questions"))
-    merged["assumptions"] = _safe_list(merged.get("assumptions"))
-    merged["unresolved"] = _safe_list(merged.get("unresolved"))
-    merged["non_goals"] = _safe_list(merged.get("non_goals"))
-    merged["acceptance_criteria"] = _safe_list(merged.get("acceptance_criteria"))
-    merged = migrate_discovery_state(merged)
-    return merged
-
-
-def update_discovery_state(slug: str, mutate) -> dict:
-    def _migrated_mutate(state: dict):
-        discovery = state.setdefault(DISCOVERY_KEY, default_discovery_state())
-        migrated = migrate_discovery_state(discovery)
-        state[DISCOVERY_KEY] = migrated
-        return mutate(migrated)
-    return update_workflow_state(slug, _migrated_mutate)
-
-
-def save_scope_manifest(slug: str, paths: list[str]) -> Path:
-    safe_slug = validated_slug(slug)
-    normalized_paths = {normalized_repo_path(path, "scope path").rstrip("/") for path in paths if path.strip()}
-    manifest = {
-        "paths": sorted(normalized_paths),
-        "allowed_dirty_paths": sorted(
-            {
-                *normalized_paths,
-                f"docs/feature-runs/{safe_slug}",
-            }
-        ),
-    }
-    path = scope_manifest_path(slug)
-    atomic_json_write(path, manifest)
-    return path
-
-
-def artifact_has_meaningful_content(stage: str, path: Path) -> bool:
-    if not path.exists():
-        return False
-    text = path.read_text(encoding="utf-8").strip()
-    heading = STAGE_ARTIFACT_HEADINGS.get(stage)
-    if not text:
-        return False
-    if heading and text == heading:
-        return False
-    return True
-
-
-def verify_checkpoint_manifest(manifest_path: Path) -> tuple[bool, str]:
-    result = subprocess.run(
-        [sys.executable, str(VERIFY_CHECKPOINT), "--checkpoint-manifest", str(manifest_path)],
-        text=True,
-        capture_output=True,
-    )
-    detail = (result.stdout or result.stderr or "").strip()
-    return result.returncode == 0, detail
-
-
-def load_checkpoint_manifest(slug: str, stage: str) -> dict | None:
-    path = checkpoint_manifest_path(slug, stage)
-    manifest, _ = read_json_file(path)
-    return manifest
-
-
-def diff_review_budget_state(slug: str) -> dict[str, object]:
-    artifact_path = default_artifact_path(slug, "diff")
-    state: dict[str, object] = {
-        "artifact_path": artifact_path,
-        "artifact_exists": artifact_path.exists(),
-        "artifact_bytes": artifact_path.stat().st_size if artifact_path.exists() else 0,
-        "large_artifact": artifact_path.exists() and artifact_path.stat().st_size >= LARGE_DIFF_RERUN_WARN_CHARS,
-        "recorded_base_ref": "",
-        "recorded_base_sha": "",
-        "recorded_head_sha": "",
-        "current_head_sha": _git_head_sha(REPO_ROOT) or "",
-        "head_mismatch": False,
-        "scope_basis": "branch-merge-base",
-        "suggested_base_ref": "",
-        "codex_review_path": None,
-        "codex_review_present": False,
-        "artifact_changed_since_codex": False,
-    }
-    meta_path = artifact_path.with_suffix(artifact_path.suffix + ".json")
-    if meta_path.exists():
-        try:
-            meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            state["recorded_base_ref"] = meta.get("git_base_ref", "")
-            state["recorded_base_sha"] = meta.get("git_base_sha", "")
-            state["recorded_head_sha"] = meta.get("git_head_sha", "")
-        except Exception:
-            state["recorded_base_ref"] = ""
-            state["recorded_base_sha"] = ""
-            state["recorded_head_sha"] = ""
-    recorded_head = str(state["recorded_head_sha"])
-    current_head = str(state["current_head_sha"])
-    state["head_mismatch"] = bool(recorded_head and current_head and recorded_head != current_head)
-    if state["head_mismatch"] and recorded_head:
-        state["scope_basis"] = "last-reviewed-head"
-        state["suggested_base_ref"] = recorded_head
-    elif state["recorded_base_ref"]:
-        state["scope_basis"] = "recorded-base"
-        state["suggested_base_ref"] = str(state["recorded_base_ref"])
-
-    manifest = load_checkpoint_manifest(slug, "diff")
-    if not manifest:
-        return state
-    for review in manifest.get("required_reviews", []):
-        if review.get("reviewer") != "codex":
-            continue
-        review_path = resolve_stored_path(review["path"], REPO_ROOT)
-        state["codex_review_path"] = review_path
-        state["codex_review_present"] = review_path.exists()
-        if not review_path.exists() or not artifact_path.exists():
-            return state
-        try:
-            data, _ = parse_review_frontmatter(review_path)
-        except Exception:
-            return state
-        state["artifact_changed_since_codex"] = (
-            data.get("artifact_sha256", "") != normalized_artifact_hash("diff", artifact_path)
-        )
-        return state
-    return state
-
-
-def preferred_diff_base_ref(slug: str, requested: str | None = None) -> str | None:
-    if requested:
-        return requested
-    diff_budget = diff_review_budget_state(slug)
-    suggested = str(diff_budget.get("suggested_base_ref", ""))
-    return suggested or None
-
-
-def stage_manifest_state(slug: str, stage: str) -> dict[str, object]:
-    artifact_path = default_artifact_path(slug, stage)
-    manifest_path = checkpoint_manifest_path(slug, stage)
-    artifact_exists = artifact_path.exists()
-    meaningful = artifact_has_meaningful_content(stage, artifact_path) if stage in STAGE_ARTIFACT_HEADINGS else artifact_exists
-    state: dict[str, object] = {
-        "artifact_path": artifact_path,
-        "artifact_exists": artifact_exists,
-        "artifact_meaningful": meaningful,
-        "manifest_path": manifest_path,
-        "manifest_exists": manifest_path.exists(),
-        "healthy": False,
-        "detail": "",
-    }
-    if manifest_path.exists():
-        healthy, detail = verify_checkpoint_manifest(manifest_path)
-        state["healthy"] = healthy
-        state["detail"] = detail
-    return state
-
-
-def stage_review_inventory(slug: str, stage: str) -> tuple[list[Path], list[Path]]:
-    manifest = load_checkpoint_manifest(slug, stage) or {}
-    active_reviews: set[Path] = set()
-    for review in manifest.get("required_reviews", []):
-        active_reviews.add(resolve_stored_path(review["path"], REPO_ROOT).resolve())
-    review_files = sorted(reviews_dir(slug).glob(f"{stage}.*.review.md"))
-    orphaned = [path for path in review_files if path.resolve() not in active_reviews]
-    return review_files, orphaned
-
-
-def stage_drift_class(stage: str, state: dict[str, object]) -> str:
-    if stage in STAGE_ARTIFACT_HEADINGS:
-        if not state["artifact_exists"]:
-            return "missing-artifact"
-        if not state["artifact_meaningful"]:
-            return "stub-artifact"
-    if not state["manifest_exists"]:
-        if stage == "diff" and not state["artifact_exists"]:
-            return "not-started"
-        if stage == "diff" and state["artifact_exists"]:
-            return "missing-manifest"
-        if stage in STAGE_ARTIFACT_HEADINGS and state["artifact_meaningful"]:
-            return "missing-manifest"
-        return "not-started"
-    if state["healthy"]:
-        return "healthy"
-    if stage == "diff" and not state["artifact_exists"]:
-        return "missing-artifact"
-    return "unhealthy-manifest"
-
-
-def stage_repairable(slug: str, stage: str, state: dict[str, object]) -> bool:
-    if stage in STAGE_ARTIFACT_HEADINGS:
-        return bool(state["artifact_meaningful"]) and (not state["manifest_exists"] or not state["healthy"])
-    if stage == "diff":
-        return bool(state["artifact_exists"]) and (
-            not state["manifest_exists"]
-            or not state["healthy"]
-            or bool(diff_review_budget_state(slug).get("head_mismatch"))
-        )
-    return False
-
-
-def stage_status_label(slug: str, stage: str, state: dict[str, object]) -> str:
-    drift = stage_drift_class(stage, state)
-    if stage == "diff" and stage_repairable(slug, stage, state):
-        return "repairable"
-    if drift == "healthy":
-        return "healthy"
-    if stage_repairable(slug, stage, state):
-        return "repairable"
-    if drift == "not-started":
-        return "not-checkpointed"
-    return drift
-
-
-def later_progress_exists(stages: dict[str, dict[str, object]], current_stage: str) -> tuple[bool, str]:
-    index = CHECKPOINT_STAGES.index(current_stage)
-    for later_stage in CHECKPOINT_STAGES[index + 1 : CHECKPOINT_STAGES.index("diff") + 1]:
-        later_state = stages[later_stage]
-        if later_state["artifact_exists"] or later_state["manifest_exists"]:
-            return True, later_stage
-    return False, ""
-
-
-def repair_checkpoint_args(slug: str, stage: str, state: dict[str, object]) -> argparse.Namespace:
-    manifest = load_checkpoint_manifest(slug, stage) or {}
-    workflow_state = load_workflow_state(slug)
-    context_paths: list[str] = []
-    for review in manifest.get("required_reviews", []):
-        for context_path in review.get("context_paths", []):
-            if context_path not in context_paths:
-                context_paths.append(context_path)
-    allow_dirty_paths = list(dict.fromkeys(manifest.get("allowed_dirty_paths", [])))
-    base_ref = manifest.get("git_base_ref") or ""
-    use_existing_artifact = True
-    diff_budget: dict[str, object] = {}
-    if stage == "diff" and not base_ref:
-        meta_path = Path(state["artifact_path"]).with_suffix(Path(state["artifact_path"]).suffix + ".json")
-        meta_manifest, _ = read_json_file(meta_path)
-        if meta_manifest:
-            base_ref = meta_manifest.get("git_base_ref") or base_ref
-            if not allow_dirty_paths:
-                allow_dirty_paths = list(meta_manifest.get("allowed_dirty_paths", []))
-    if stage == "diff":
-        diff_budget = diff_review_budget_state(slug)
-        if diff_budget.get("head_mismatch"):
-            base_ref = str(diff_budget.get("suggested_base_ref", "")) or base_ref
-            use_existing_artifact = False
-    if stage == "diff" and not allow_dirty_paths:
-        dirty_override = workflow_state.get(DIRTY_OVERRIDE_KEY, {})
-        allow_dirty_paths = list(dict.fromkeys(dirty_override.get("allowed_dirty_paths", [])))
-    return argparse.Namespace(
-        slug=slug,
-        stage=stage,
-        artifact=str(state["artifact_path"]),
-        base_ref=base_ref or None,
-        context=context_paths,
-        path=[],
-        required_reviews=manifest.get("required_reviews"),
-        extra_gemini_lens=[],
-        sensitive=False,
-        large_structural=False,
-        performance_sensitive=False,
-        use_existing_artifact=use_existing_artifact,
-        allow_dirty_path=allow_dirty_paths,
-        max_artifact_chars=manifest.get("max_artifact_chars"),
-        max_context_chars=manifest.get("max_context_chars"),
-        max_total_chars=manifest.get("max_total_chars"),
-        gemini_timeout_seconds=120,
-        gemini_retries=1,
-        repair_timeout_seconds=300,
-        allow_large_diff_rerun=bool(diff_budget.get("artifact_changed_since_codex")),
-        fallback=False,
-    )
-
-
-def reconciliation_state(slug: str) -> tuple[bool, str]:
-    reviews: list[Path] = []
-    for manifest in sorted(reviews_dir(slug).glob("*.checkpoint.json")):
-        payload, error = read_json_file(manifest)
-        if error:
-            return False, f"{manifest} is invalid: {error}"
-        if not payload:
-            continue
-        if payload.get("stage") == "closeout":
-            continue
-        healthy, _ = verify_checkpoint_manifest(manifest)
-        if not healthy:
-            continue
-        for review in payload.get("required_reviews", []):
-            reviews.append(resolve_stored_path(review["path"], REPO_ROOT))
-    if not reviews:
-        return True, ""
-    plan_path = workflow_dir(slug) / "plan.md"
-    cmd = [sys.executable, str(VERIFY_RECONCILIATION), "--plan", str(plan_path), "--require-terminal"]
-    for review in reviews:
-        cmd.extend(["--review", str(review)])
-    result = subprocess.run(cmd, text=True, capture_output=True)
-    detail = (result.stdout or result.stderr or "").strip()
-    return result.returncode == 0, detail
-
-
-def prerequisite_failure(slug: str, stage: str) -> str | None:
-    for prereq in STAGE_PREREQUISITES.get(stage, []):
-        prereq_state = stage_manifest_state(slug, prereq)
-        if not prereq_state["manifest_exists"]:
-            return f"{stage} checkpoint requires completed {prereq} checkpoint first"
-        if not prereq_state["healthy"]:
-            return f"{stage} checkpoint requires a healthy {prereq} checkpoint first"
-    return None
-
-
-def trim_detail(text: str, limit: int = 240) -> str:
-    stripped = " ".join(text.split())
-    if len(stripped) <= limit:
-        return stripped
-    return stripped[: limit - 3] + "..."
-
-
-def update_workflow_state(slug: str, mutate) -> dict:
-    state = load_workflow_state(slug)
-    mutate(state)
-    save_workflow_state(slug, state)
-    return state
-
-
-def pick_secondary_lens(primary: str, default: str, candidates: list[str]) -> str:
-    ordered = [*candidates, default]
-    seen: set[str] = set()
-    for lens in ordered:
-        if not lens or lens in seen:
-            continue
-        seen.add(lens)
-        if lens != primary:
-            return lens
-    return default if default != primary else f"{primary}-secondary"
-
-
-def required_reviews(
-    stage: str,
-    sensitive: bool,
-    large_structural: bool,
-    performance_sensitive: bool,
-    extra_gemini: list[str],
-) -> list[dict[str, str]]:
-    primary_gemini = ""
-    secondary_default = ""
-    codex_lens = ""
-    extra_candidates = list(extra_gemini)
-
-    if stage == "spec":
-        primary_gemini = "requirements-adversarial"
-        secondary_default = "edge-cases-adversarial"
-        codex_lens = "feasibility-adversarial"
-        if sensitive:
-            extra_candidates.insert(0, "risk-adversarial")
-    elif stage == "plan":
-        primary_gemini = "architecture-adversarial"
-        secondary_default = "testability-adversarial"
-        codex_lens = "implementation-adversarial"
-        if sensitive:
-            extra_candidates.insert(0, "risk-adversarial")
-    elif stage == "tasks":
-        primary_gemini = "dependency-order-adversarial"
-        secondary_default = "coverage-adversarial"
-        codex_lens = "execution-adversarial"
-        if sensitive:
-            extra_candidates.insert(0, "risk-adversarial")
-    elif stage == "diff":
-        primary_gemini = "regression-adversarial"
-        secondary_default = "quality-adversarial"
-        codex_lens = "correctness-adversarial"
-        if sensitive:
-            extra_candidates.insert(0, "security-adversarial")
-        if performance_sensitive:
-            extra_candidates.insert(0, "performance-adversarial")
-        if large_structural:
-            extra_candidates.append("quality-adversarial")
-    elif stage == "closeout":
-        primary_gemini = "completeness-adversarial"
-        secondary_default = "residual-risk-adversarial"
-        codex_lens = "fidelity-adversarial"
-        if sensitive:
-            extra_candidates.insert(0, "rollout-risk-adversarial")
-    else:
-        raise ValueError(f"Unsupported stage: {stage}")
-
-    secondary_gemini = pick_secondary_lens(primary_gemini, secondary_default, extra_candidates)
-    return [
-        {
-            "reviewer": "gemini",
-            "lens": primary_gemini,
-            "model": DEFAULT_GEMINI_MODEL,
-        },
-        {
-            "reviewer": "gemini",
-            "lens": secondary_gemini,
-            "model": DEFAULT_GEMINI_MODEL,
-        },
-        {
-            "reviewer": "codex",
-            "lens": codex_lens,
-            "model": DEFAULT_CODEX_MODEL,
-        },
-    ]
-
-
-def resolved_review_policy(slug: str, args: argparse.Namespace) -> dict:
-    state = load_workflow_state(slug)
-    policy = state.setdefault(
-        "review_policy",
-        {
-            "sensitive": False,
-            "large_structural": False,
-            "performance_sensitive": False,
-            "extra_gemini_lenses": [],
-        },
-    )
-    if args.sensitive:
-        policy["sensitive"] = True
-    if args.large_structural:
-        policy["large_structural"] = True
-    if args.performance_sensitive:
-        policy["performance_sensitive"] = True
-    if args.extra_gemini_lens:
-        policy["extra_gemini_lenses"] = list(args.extra_gemini_lens)
-    save_workflow_state(slug, state)
-    return policy
-
-
-def checkpoint_manifest(
-    slug: str,
-    stage: str,
-    artifact_path: Path,
-    base_ref: str | None,
-    extra_context: list[str],
-    reviews: list[dict[str, str]],
-    max_artifact_chars: int | None,
-    max_context_chars: int | None,
-    max_total_chars: int | None,
-    allow_dirty_paths: list[str] | None = None,
-) -> dict:
-    manifest_reviews = []
-    for spec in reviews:
-        output = reviews_dir(slug) / f"{stage}.{spec['reviewer']}.{spec['lens']}.review.md"
-        manifest_reviews.append(
-            {
-                "reviewer": spec["reviewer"],
-                "lens": spec["lens"],
-                "stage": stage,
-                "path": repo_relative_path(output, REPO_ROOT),
-                "context_paths": [repo_relative_path(resolve_stored_path(path, REPO_ROOT), REPO_ROOT) for path in extra_context],
-                **({"model": spec["model"]} if spec.get("model") else {}),
-            }
-        )
-    return {
-        "feature_slug": slug,
-        "stage": stage,
-        "artifact_path": repo_relative_path(artifact_path, REPO_ROOT),
-        "git_base_ref": base_ref or "",
-        "allowed_dirty_paths": list(allow_dirty_paths or []),
-        "required_reviews": manifest_reviews,
-        "max_artifact_chars": max_artifact_chars,
-        "max_context_chars": max_context_chars,
-        "max_total_chars": max_total_chars,
-    }
-
-
-def fallback_review_command(spec: dict, artifact_path: Path, checkpoint: dict, workspace_dir: Path | None, timeout_seconds: int, retries: int) -> list[str]:
-    cmd = [
-        sys.executable,
-        str(RUN_GEMINI_REVIEW if spec.get("reviewer") == "gemini" else RUN_CODEX_REVIEW),
-        "--artifact",
-        str(artifact_path),
-        "--lens",
-        spec["lens"],
-        "--stage",
-        checkpoint["stage"],
-        "--output",
-        spec["path"],
-    ]
-    for context_path in spec.get("context_paths", []):
-        cmd.extend(["--context", context_path])
-    if checkpoint.get("git_base_ref"):
-        cmd.extend(["--git-base-ref", checkpoint["git_base_ref"]])
-    if spec.get("model"):
-        cmd.extend(["--model", spec["model"]])
-    if checkpoint.get("max_artifact_chars"):
-        cmd.extend(["--max-artifact-chars", str(checkpoint["max_artifact_chars"])])
-    if checkpoint.get("max_context_chars"):
-        cmd.extend(["--max-context-chars", str(checkpoint["max_context_chars"])])
-    if checkpoint.get("max_total_chars"):
-        cmd.extend(["--max-total-chars", str(checkpoint["max_total_chars"])])
-    if workspace_dir:
-        cmd.extend(["--workspace-dir", str(workspace_dir)])
-    if spec.get("reviewer") == "gemini":
-        cmd.extend(["--timeout-seconds", str(timeout_seconds), "--retries", str(retries)])
-    return cmd
-
-
-def run_checkpoint_fallback(manifest_path: Path, workspace_root: Path, gemini_timeout_seconds: int, gemini_retries: int) -> tuple[bool, str]:
-    checkpoint = json.loads(manifest_path.read_text(encoding="utf-8"))
-    artifact_path = resolve_stored_path(checkpoint["artifact_path"], REPO_ROOT)
-    workspace_dir = workspace_root.resolve()
-    failed: list[str] = []
-
-    for spec in checkpoint.get("required_reviews", []):
-        review_path = resolve_stored_path(spec["path"], REPO_ROOT)
-        if review_path.exists():
-            try:
-                data, _ = parse_review_frontmatter(review_path)
-            except Exception:
-                data = {}
-            if data.get("artifact_sha256") == normalized_artifact_hash(checkpoint.get("stage", ""), artifact_path):
-                continue
-        cmd = fallback_review_command(spec, artifact_path, checkpoint, workspace_dir, gemini_timeout_seconds, gemini_retries)
-        timeout = gemini_timeout_seconds + 30 if spec.get("reviewer") == "gemini" else 210
-        result = subprocess.run(cmd, text=True, capture_output=True, timeout=timeout)
-        if result.returncode != 0:
-            failed.append(f"{spec['path']}: {trim_detail(result.stderr or result.stdout or 'review failed')}")
-
-    verify = subprocess.run(
-        [sys.executable, str(VERIFY_CHECKPOINT), "--checkpoint-manifest", str(manifest_path)],
-        text=True,
-        capture_output=True,
-    )
-    detail = (verify.stdout or verify.stderr or "").strip()
-    if failed:
-        detail = "; ".join([detail] + failed if detail else failed)
-    return verify.returncode == 0 and not failed, detail
-
-
-def closeout_inventory_text(
-    slug: str,
-    root: Path,
-    plan_path: Path,
-    reviews: list[Path],
-    delivery: dict,
-    dirty_override: dict,
-    fallback: dict,
-) -> str:
-    lines = [
-        f"# Closeout: {slug}",
-        "",
-        "## Outputs",
-        f"- spec: `{root / 'spec.md'}`",
-        f"- plan: `{plan_path}`",
-        f"- tasks: `{root / 'tasks.md'}`",
-        "",
-        "## Reviews",
-    ]
-    for review in reviews:
-        lines.append(f"- `{review}`")
-    lines.extend(
-        [
-            "",
-            "## Delivery",
-            f"- branch: `{delivery.get('branch', current_branch_name() or '')}`",
-            f"- pr: `{delivery.get('pr_url', '') or 'not-created'}`",
-            f"- checks: `{delivery.get('checks_summary', 'unknown')}`",
-            f"- merge-state: `{delivery.get('merge_state_status', '') or 'unknown'}`",
-        ]
-    )
-    if dirty_override.get("used"):
-        lines.append("- dirty-override: used")
-        for path in dirty_override.get("allowed_dirty_paths", []):
-            lines.append(f"- allow-dirty-path: `{path}`")
-    if fallback.get("used"):
-        lines.extend(
-            [
-                "",
-                "## Fallback",
-                f"- stage: `{fallback.get('stage', '')}`",
-                f"- reason: `{fallback.get('reason', '')}`",
-            ]
-        )
-    lines.extend(
-        [
-            "",
-            "## Next Action",
-            "- Share the closeout summary with the user and call out any deferred or open risks.",
-        ]
-    )
-    return "\n".join(lines) + "\n"
-
-
-def compose_closeout_text(existing_text: str, inventory_text: str) -> str:
-    if not existing_text.strip():
-        return inventory_text
-    if "## Workflow Inventory" in existing_text:
-        before, _ = existing_text.split("## Workflow Inventory", 1)
-        return before.rstrip() + "\n\n" + inventory_text
-    return existing_text.rstrip() + "\n\n" + inventory_text
-
-
-def record_checkpoint_fallback(slug: str, stage: str, reason: str) -> dict:
-    def mutate(state: dict) -> None:
-        state[CHECKPOINT_FALLBACK_KEY] = {
-            "used": True,
-            "stage": stage,
-            "reason": reason,
-            "updated_at": int(time.time()),
-        }
-
-    return update_workflow_state(slug, mutate)
-
-
-def gh_json(args: list[str]) -> dict | list:
-    result = subprocess.run(["gh", *args], text=True, capture_output=True)
-    if result.returncode != 0:
-        message = (result.stderr or result.stdout or "gh command failed").strip()
-        raise SystemExit(message)
-    output = result.stdout.strip() or "{}"
-    return json.loads(output)
-
-
-def current_pr_payload(pr_number: int | None = None) -> dict | None:
-    cmd = [
-        "gh",
-        "pr",
-        "view",
-    ]
-    if pr_number is not None:
-        cmd.append(str(pr_number))
-    cmd.extend(
-        [
-            "--json",
-            "number,url,state,isDraft,headRefName,headRefOid,baseRefName,mergeable,mergeStateStatus,statusCheckRollup",
-        ]
-    )
-    result = subprocess.run(
-        cmd,
-        text=True,
-        capture_output=True,
-    )
-    if result.returncode != 0:
-        return None
-    return json.loads(result.stdout)
-
-
-def required_check_summary(pr_number: int | None = None, watch: bool = False, interval: int = 10) -> tuple[str, list[dict], str]:
-    cmd = ["gh", "pr", "checks"]
-    if pr_number is not None:
-        cmd.append(str(pr_number))
-    cmd.extend(["--required", "--json", "name,state,bucket,link,workflow"])
-    if watch:
-        cmd.extend(["--watch", "--interval", str(interval)])
-    result = subprocess.run(cmd, text=True, capture_output=True)
-    if result.returncode not in {0, 8}:
-        message = (result.stderr or result.stdout or "gh pr checks failed").strip()
-        raise SystemExit(message)
-    stdout = result.stdout.strip() or "[]"
-    checks = json.loads(stdout)
-    buckets = {item.get("bucket", "") for item in checks}
-    if not checks:
-        summary = "unknown"
-    elif "fail" in buckets or "cancel" in buckets:
-        summary = "fail"
-    elif "pending" in buckets:
-        summary = "pending"
-    elif buckets <= {"pass", "skipping"}:
-        summary = "pass"
-    else:
-        summary = "unknown"
-    detail = (result.stderr or "").strip()
-    return summary, checks, detail
-
-
-def build_delivery_record(pr: dict | None, checks_summary: str, checks: list[dict], branch: str, head_sha: str) -> dict:
-    return {
-        "branch": branch,
-        "head_sha": head_sha,
-        "updated_at": int(time.time()),
-        "pr_number": pr.get("number") if pr else None,
-        "pr_url": pr.get("url") if pr else "",
-        "pr_state": pr.get("state") if pr else "",
-        "pr_is_draft": bool(pr.get("isDraft")) if pr else False,
-        "pr_head_branch": pr.get("headRefName") if pr else "",
-        "pr_head_sha": pr.get("headRefOid") if pr else "",
-        "pr_base_branch": pr.get("baseRefName") if pr else "",
-        "mergeable": pr.get("mergeable") if pr else "",
-        "merge_state_status": pr.get("mergeStateStatus") if pr else "",
-        "checks_summary": checks_summary,
-        "required_checks": checks,
-    }
-
-
-def gather_all_review_paths(slug: str, include_closeout: bool = True) -> list[Path]:
-    stages = list(VERIFY_ON_CLOSEOUT_STAGES)
-    if include_closeout:
-        stages.append("closeout")
-    paths: list[Path] = []
-    for stage in stages:
-        manifest = load_checkpoint_manifest(slug, stage) or {}
-        for review in manifest.get("required_reviews", []):
-            paths.append(resolve_stored_path(review["path"], REPO_ROOT))
-    return paths
-
-
-def refresh_delivery_snapshot(delivery: dict) -> dict:
-    pr_number = delivery.get("pr_number")
-    if not pr_number or not command_path("gh"):
-        return delivery
-    try:
-        pr = current_pr_payload(int(pr_number))
-    except Exception:
-        return delivery
-    if not pr:
-        return delivery
-
-    branch = str(delivery.get("branch", "") or pr.get("headRefName", ""))
-    head_sha = str(delivery.get("head_sha", "") or pr.get("headRefOid", "") or "")
-    try:
-        checks_summary, checks, checks_detail = required_check_summary(int(pr_number), watch=False)
-    except SystemExit:
-        return delivery
-
-    refreshed = build_delivery_record(pr, checks_summary, checks, branch, head_sha)
-    refreshed["upstream"] = delivery.get("upstream", "")
-    refreshed["checks_detail"] = checks_detail
-    refreshed["head_mismatch"] = bool(pr.get("headRefOid")) and bool(head_sha) and pr.get("headRefOid") != head_sha
-    return refreshed
 
 
 def command_init(args: argparse.Namespace) -> int:
@@ -1039,17 +195,76 @@ def command_init(args: argparse.Namespace) -> int:
     return 0
 
 
+# Module-level regex for _extract_file_paths_from_artifact — compiled once, reused per call.
+_AUTO_CONTEXT_EXTENSIONS = re.compile(
+    r"\.(tsx?|jsx?|py|prisma|sql|json|yaml|yml|md|sh|toml)$", re.IGNORECASE
+)
+_AUTO_CONTEXT_PATH_RE = re.compile(r"`([^`\n]+)`|(?<!\w)((?:cloud|docs|specs|scripts)/\S+)")
+
+# Maximum number of auto-context files injected from a single artifact. Prevents
+# large specs/plans that reference dozens of files from ballooning the review context.
+_AUTO_CONTEXT_MAX_FILES = 10
+
+
+def _extract_file_paths_from_artifact(artifact_path: Path, repo_root: Path) -> list[str]:
+    """
+    Parse a spec or plan artifact and return repo-relative paths for any files
+    explicitly listed in scope sections (Files to modify, Files to create, etc.).
+    Only includes paths that exist on disk — skips files not yet created.
+    Capped at _AUTO_CONTEXT_MAX_FILES to prevent unbounded context growth.
+    """
+    if not artifact_path.exists():
+        return []
+    text = artifact_path.read_text(encoding="utf-8")
+    found: list[str] = []
+    seen: set[str] = set()
+    for match in _AUTO_CONTEXT_PATH_RE.finditer(text):
+        if len(found) >= _AUTO_CONTEXT_MAX_FILES:
+            break
+        raw = (match.group(1) or match.group(2) or "").strip().rstrip(".,;)")
+        if not raw or "/" not in raw:
+            continue
+        if not _AUTO_CONTEXT_EXTENSIONS.search(raw):
+            continue
+        # Resolve to absolute, then back to repo-relative
+        candidate = (repo_root / raw).resolve()
+        if not candidate.exists():
+            continue
+        rel = str(candidate.relative_to(repo_root))
+        if rel not in seen:
+            seen.add(rel)
+            found.append(rel)
+    return found
+
+
 def command_checkpoint(args: argparse.Namespace) -> int:
+    fast = getattr(args, "fast", False)
+    if fast and args.stage != "diff":
+        raise SystemExit("--fast requires --stage diff")
+
     ensure_sync()
     root = workflow_dir(args.slug)
     reviews = reviews_dir(args.slug)
     root.mkdir(parents=True, exist_ok=True)
     reviews.mkdir(parents=True, exist_ok=True)
-    prereq_error = prerequisite_failure(args.slug, args.stage)
-    if prereq_error:
-        raise SystemExit(prereq_error)
-    if args.stage == "spec":
+
+    if not fast:
+        prereq_error = prerequisite_failure(args.slug, args.stage)
+        if prereq_error:
+            raise SystemExit(prereq_error)
+    if not fast and args.stage == "spec":
         discovery = discovery_state(args.slug)
+        blocking = blocking_unresolved_items(discovery)
+        if blocking:
+            if discovery_blockers_are_malformed(discovery):
+                raise SystemExit(
+                    "spec checkpoint requires discovery state to be repaired first; "
+                    "use discover --clear to reset malformed discovery state"
+                )
+            raise SystemExit(
+                "spec checkpoint requires discovery unresolved items to be resolved or deferred first; "
+                "use discover --resolve or discover --defer before checkpointing spec"
+            )
         if discovery.get("required") and not discovery.get("complete"):
             raise SystemExit(
                 "spec checkpoint requires discovery to be complete first; "
@@ -1057,6 +272,16 @@ def command_checkpoint(args: argparse.Namespace) -> int:
             )
     policy = resolved_review_policy(args.slug, args)
     context_paths = [normalized_repo_path(path, "context path") for path in args.context]
+
+    # Auto-add files mentioned in the spec/artifact as context so reviewers
+    # can verify assumptions against real code rather than generating unfounded findings.
+    if args.stage in ("spec", "plan") and not getattr(args, "no_auto_context", False):
+        auto_context = _extract_file_paths_from_artifact(artifact_path, REPO_ROOT)
+        for p in auto_context:
+            if len(context_paths) >= _AUTO_CONTEXT_MAX_FILES:
+                break
+            if p not in context_paths:
+                context_paths.append(p)
     allow_dirty_paths = [normalized_repo_path(path, "allow-dirty path") for path in args.allow_dirty_path]
     prior_diff_budget = diff_review_budget_state(args.slug) if args.stage == "diff" else None
 
@@ -1197,12 +422,35 @@ def command_checkpoint(args: argparse.Namespace) -> int:
 
     reviews = getattr(args, "required_reviews", None)
     if reviews is None:
+        small_task_set = False
+        if args.stage in ("tasks", "closeout"):
+            # For "tasks": count from the artifact (tasks.md is the artifact).
+            # For "closeout": count from tasks.md in the workflow dir (artifact is closeout.md).
+            tasks_file = artifact_path if args.stage == "tasks" else workflow_dir(args.slug) / "tasks.md"
+            if tasks_file.exists():
+                try:
+                    task_text = tasks_file.read_text(encoding="utf-8")
+                    task_count = sum(
+                        1 for line in task_text.splitlines()
+                        if line.strip().startswith("- [ ]") or line.strip().startswith("- [x]") or line.strip().startswith("- [X]")
+                    )
+                    if task_count < SMALL_TASK_SET_THRESHOLD:
+                        small_task_set = True
+                        print(
+                            f"info: small task set ({task_count} tasks < {SMALL_TASK_SET_THRESHOLD} threshold) — "
+                            f"skipping Gemini reviews for {args.stage} stage, running Codex review only.",
+                            file=sys.stderr,
+                        )
+                except Exception:
+                    pass  # count failed — fall back to full reviews
         reviews = required_reviews(
             args.stage,
             policy["sensitive"],
             policy["large_structural"],
             policy["performance_sensitive"],
             policy["extra_gemini_lenses"],
+            fast=fast,
+            small_task_set=small_task_set,
         )
 
     manifest = checkpoint_manifest(
@@ -1220,17 +468,24 @@ def command_checkpoint(args: argparse.Namespace) -> int:
     manifest_path = checkpoint_manifest_path(args.slug, args.stage)
     atomic_json_write(manifest_path, manifest)
     if args.stage == "diff":
-        update_workflow_state(
-            args.slug,
-            lambda state: state.__setitem__(
-                DIRTY_OVERRIDE_KEY,
-                {
-                    "allowed_dirty_paths": allow_dirty_paths,
-                    "used": bool(allow_dirty_paths),
-                    "updated_at": int(time.time()),
-                },
-            ),
-        )
+        if allow_dirty_paths:
+            update_workflow_state(
+                args.slug,
+                lambda state: state.__setitem__(
+                    DIRTY_OVERRIDE_KEY,
+                    {
+                        "allowed_dirty_paths": allow_dirty_paths,
+                        "used": True,
+                        "updated_at": int(time.time()),
+                    },
+                ),
+            )
+        else:
+            # No --allow-dirty-path on this run — clear any stale override from a prior run.
+            update_workflow_state(
+                args.slug,
+                lambda state: state.pop(DIRTY_OVERRIDE_KEY, None),
+            )
 
     cmd = [
         sys.executable,
@@ -1261,6 +516,9 @@ def command_checkpoint(args: argparse.Namespace) -> int:
         fallback_reason = f"repair exceeded {args.repair_timeout_seconds}s"
     else:
         if result.returncode == 0:
+            reverted = revert_protected_files()
+            if reverted:
+                print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
             _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
             return 0
         if not args.fallback:
@@ -1276,29 +534,15 @@ def command_checkpoint(args: argparse.Namespace) -> int:
     if not fallback_ok:
         print(f"checkpoint blocked: fallback review path failed for {args.stage} on {args.slug}: {trim_detail(fallback_detail)}", file=sys.stderr)
         return 1
+    reverted = revert_protected_files()
+    if reverted:
+        print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
     record_checkpoint_fallback(args.slug, args.stage, fallback_reason)
     _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
     print(f"warning: fallback checkpoint path used for {args.stage} on {args.slug}: {fallback_reason}", file=sys.stderr)
     return 0
 
 
-def _advance_checkpoint_progress(slug: str, stage: str, pending_head_sha: str) -> None:
-    """After a successful diff checkpoint, advance index and record the HEAD SHA."""
-    if stage != "diff":
-        return
-    marker_count, current_markers_sha = parse_checkpoint_markers(slug)
-    if marker_count == 0:
-        return  # no markers — nothing to track
-    progress = checkpoint_progress_state(slug)
-    new_progress = {
-        "index": progress["index"] + 1,
-        "markers_sha": current_markers_sha,
-        "last_diff_head_sha": pending_head_sha,
-    }
-    update_workflow_state(
-        slug,
-        lambda s: s.__setitem__(CHECKPOINT_PROGRESS_KEY, new_progress),
-    )
 
 
 def command_reconcile(args: argparse.Namespace) -> int:
@@ -1311,6 +555,74 @@ def command_reconcile(args: argparse.Namespace) -> int:
     run([sys.executable, str(UPDATE_REVIEW), *review_args, "--status", args.status, "--note", args.note])
     run([sys.executable, str(APPEND_RECONCILIATION), "--plan", str(plan_path), *review_args, "--status", args.status, "--note", args.note])
     run([sys.executable, str(VERIFY_RECONCILIATION), "--plan", str(plan_path), *review_args])
+    return 0
+
+
+def command_auto_reconcile(args: argparse.Namespace) -> int:
+    """Auto-accept reviews with no HIGH or MEDIUM severity findings.
+
+    Scans all open (resolution_status == "open") reviews for the given stage.
+    Reviews with only LOW or no findings are accepted automatically.
+    Reviews with actionable findings are left open and listed for human review.
+
+    Prints a summary so the orchestrator knows exactly which reviews still need attention.
+    """
+    ensure_sync()
+    manifest = load_checkpoint_manifest(args.slug, args.stage)
+    if not manifest:
+        raise SystemExit(f"no checkpoint manifest found for {args.slug}/{args.stage} — run checkpoint first")
+
+    plan_path = workflow_dir(args.slug) / "plan.md"
+    required = manifest.get("required_reviews", [])
+
+    auto_accepted: list[str] = []
+    needs_review: list[str] = []
+
+    for spec in required:
+        review_path = Path(resolve_stored_path(spec["path"], REPO_ROOT))
+        if not review_path.exists():
+            needs_review.append(f"{spec['path']} (missing)")
+            continue
+        try:
+            data, _ = parse_review_frontmatter(review_path)
+        except Exception:
+            needs_review.append(f"{spec['path']} (unreadable)")
+            continue
+
+        status = data.get("resolution_status", "open")
+        if status != "open":
+            # Already reconciled — skip.
+            continue
+
+        if detect_actionable_findings(review_path):
+            needs_review.append(spec["path"])
+        else:
+            # Auto-accept: write resolution into file and append to plan reconciliation table.
+            run([
+                sys.executable, str(UPDATE_REVIEW),
+                "--review", str(review_path),
+                "--status", "accepted",
+                "--note", _AUTO_ACCEPT_NOTE,
+            ])
+            run([
+                sys.executable, str(APPEND_RECONCILIATION),
+                "--plan", str(plan_path),
+                "--review", str(review_path),
+                "--status", "accepted",
+                "--note", _AUTO_ACCEPT_NOTE,
+            ])
+            auto_accepted.append(spec["path"])
+
+    if auto_accepted:
+        print(f"auto-accepted ({len(auto_accepted)}):")
+        for path in auto_accepted:
+            print(f"  {path}")
+    if needs_review:
+        print(f"needs-review ({len(needs_review)}):")
+        for path in needs_review:
+            print(f"  {path}")
+    if not auto_accepted and not needs_review:
+        print(f"all reviews for {args.stage} already reconciled")
     return 0
 
 
@@ -1393,8 +705,50 @@ def command_discover(args: argparse.Namespace) -> int:
 
     def mutate(discovery: dict) -> None:
         if clear:
+            preserved_required = bool(discovery.get("required"))
+            preserved_question_count = discovery.get("question_count", 0)
+            if not isinstance(preserved_question_count, int):
+                preserved_question_count = 0
+            preserved_asked_count = discovery.get("asked_count", 0)
+            if not isinstance(preserved_asked_count, int):
+                preserved_asked_count = 0
+            preserved_questions = discovery.get("questions", [])
+            if not isinstance(preserved_questions, list):
+                preserved_questions = []
+            preserved_assumptions = discovery.get("assumptions", [])
+            if not isinstance(preserved_assumptions, list):
+                preserved_assumptions = []
+            preserved_summary = discovery.get("summary", "")
+            if not isinstance(preserved_summary, str):
+                preserved_summary = ""
+            preserved_answers = discovery.get("answers", {})
+            if not isinstance(preserved_answers, dict):
+                preserved_answers = {}
+            preserved_non_goals = discovery.get("non_goals", [])
+            if not isinstance(preserved_non_goals, list):
+                preserved_non_goals = []
+            preserved_acceptance = discovery.get("acceptance_criteria", [])
+            if not isinstance(preserved_acceptance, list):
+                preserved_acceptance = []
             discovery.clear()
             discovery.update(default_discovery_state())
+            discovery["required"] = (
+                preserved_required
+                or bool(preserved_question_count)
+                or bool(preserved_questions)
+                or bool(preserved_assumptions)
+            )
+            discovery["question_count"] = preserved_question_count
+            discovery["asked_count"] = preserved_asked_count
+            discovery["questions"] = preserved_questions
+            discovery["assumptions"] = preserved_assumptions
+            discovery["summary"] = preserved_summary
+            discovery["answers"] = preserved_answers
+            discovery["non_goals"] = preserved_non_goals
+            discovery["acceptance_criteria"] = preserved_acceptance
+            discovery["unresolved"] = []
+            discovery["complete"] = False
+            discovery["updated_at"] = int(time.time())
             return
         if args.required:
             discovery["required"] = True
@@ -1460,7 +814,18 @@ def command_discover(args: argparse.Namespace) -> int:
             ac = discovery.setdefault("acceptance_criteria", [])
             if args.acceptance_criteria not in ac:
                 ac.append(args.acceptance_criteria)
+        blocking = blocking_unresolved_items(discovery)
         if args.complete:
+            if blocking:
+                if discovery_blockers_are_malformed(discovery):
+                    raise SystemExit(
+                        "discover cannot mark discovery complete while discovery state is malformed; "
+                        "use discover --clear to reset malformed discovery state"
+                    )
+                raise SystemExit(
+                    "discover cannot mark discovery complete while unresolved items remain; "
+                    "resolve or defer each item first"
+                )
             if not force_complete and int(discovery.get("asked_count", 0)) < int(discovery.get("question_count", 0)):
                 raise SystemExit(
                     "discover cannot mark discovery complete before the planned questions are recorded; "
@@ -1482,6 +847,11 @@ def command_discover(args: argparse.Namespace) -> int:
         ):
             discovery["complete"] = False
         if force_complete:
+            if blocking:
+                raise SystemExit(
+                    "discover cannot force discovery complete while unresolved items remain; "
+                    "resolve or defer each item first"
+                )
             discovery["complete"] = True
         discovery["updated_at"] = int(time.time())
 
@@ -1520,56 +890,6 @@ def command_discover(args: argparse.Namespace) -> int:
     return 0
 
 
-def recommended_next_action(
-    slug: str,
-    state: dict,
-    stages: dict[str, dict[str, object]],
-    reconciliation_ok: bool,
-) -> str:
-    blocked = state.get(BLOCKED_KEY, {})
-    if blocked.get("active"):
-        return "mark_blocked"
-    discovery = state.get(DISCOVERY_KEY, {})
-    if discovery.get("required") and not discovery.get("complete"):
-        return "discover"
-    if not stages["spec"]["artifact_exists"] or not stages["spec"]["artifact_meaningful"]:
-        if later_progress_exists(stages, "spec")[0]:
-            return "mark_blocked"
-        return "author_spec"
-    if not stages["spec"]["manifest_exists"] or not stages["spec"]["healthy"]:
-        return "repair_spec_checkpoint"
-    if not stages["plan"]["artifact_exists"] or not stages["plan"]["artifact_meaningful"]:
-        if later_progress_exists(stages, "plan")[0]:
-            return "mark_blocked"
-        return "author_plan"
-    if not stages["plan"]["manifest_exists"] or not stages["plan"]["healthy"]:
-        return "repair_plan_checkpoint"
-    if not stages["tasks"]["artifact_exists"] or not stages["tasks"]["artifact_meaningful"]:
-        if later_progress_exists(stages, "tasks")[0]:
-            return "mark_blocked"
-        return "author_tasks"
-    if not stages["tasks"]["manifest_exists"] or not stages["tasks"]["healthy"]:
-        return "repair_tasks_checkpoint"
-    if not stages["diff"]["artifact_exists"]:
-        return "implement_next_slice"
-    if not stages["diff"]["manifest_exists"] or not stages["diff"]["healthy"]:
-        return "repair_diff_checkpoint"
-    if diff_review_budget_state(slug).get("head_mismatch"):
-        return "repair_diff_checkpoint"
-    if not reconciliation_ok:
-        return "reconcile_reviews"
-    delivery = refresh_delivery_snapshot(state.get(DELIVERY_KEY, {}))
-    if not delivery.get("pr_url"):
-        return "deliver"
-    if delivery.get("head_mismatch"):
-        return "deliver"
-    if delivery.get("checks_summary") in {"pending", "fail", "unknown"}:
-        return "deliver"
-    if not stages["closeout"]["manifest_exists"]:
-        return "closeout"
-    if not stages["closeout"]["healthy"]:
-        return "repair_closeout_checkpoint"
-    return "done"
 
 
 def command_status(args: argparse.Namespace) -> int:
@@ -1620,7 +940,9 @@ def command_status(args: argparse.Namespace) -> int:
     else:
         print("- inactive")
 
-    if discovery.get("required") or not discovery.get("complete") or discovery.get("asked_count") or discovery.get("assumptions") or discovery.get("summary"):
+    blocking = blocking_unresolved_items(discovery)
+    unresolved = discovery.get("unresolved", [])
+    if discovery.get("required") or not discovery.get("complete") or discovery.get("asked_count") or discovery.get("assumptions") or discovery.get("summary") or blocking or (isinstance(unresolved, list) and unresolved):
         print("")
         print("discovery:")
         print(f"- required: {'yes' if discovery.get('required') else 'no'}")
@@ -1633,6 +955,20 @@ def command_status(args: argparse.Namespace) -> int:
             print(f"- assumptions: {len(discovery.get('assumptions', []))}")
         if discovery.get("summary"):
             print(f"- summary: {trim_detail(str(discovery.get('summary', '')))}")
+        if isinstance(unresolved, list) and unresolved:
+            print(f"- unresolved-open: {len(blocking)}")
+            print(f"- unresolved-deferred: {len(unresolved) - len(blocking)}")
+            if blocking:
+                if discovery_blockers_are_malformed(discovery):
+                    print("- action: use discover --clear to repair malformed discovery state")
+                else:
+                    print("- action: resolve or defer unresolved items before spec")
+        elif blocking:
+            print(f"- unresolved-open: {len(blocking)}")
+            if discovery_blockers_are_malformed(discovery):
+                print("- action: use discover --clear to repair malformed discovery state")
+            else:
+                print("- action: resolve or defer unresolved items before spec")
 
     cp = checkpoint_progress_state(args.slug)
     if cp["index"] > 0:
@@ -2166,6 +1502,225 @@ def command_closeout(args: argparse.Namespace) -> int:
     return 0
 
 
+def _codex_prompt_path(slug: str, i: int) -> Path:
+    safe_slug = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in slug)
+    return Path(f"/tmp/codex-impl-{safe_slug}-{os.getpid()}-{i}.txt")
+
+
+def _build_codex_prompt(slug: str, i: int, tasks: list[str], file_scope: list[str]) -> str:
+    root = workflow_dir(slug)
+    # Prefer compact summaries — they contain everything Codex needs for implementation
+    # without the full narrative. Fall back to full files when summaries don't exist yet.
+    spec_path = root / "spec-acceptance.md" if (root / "spec-acceptance.md").exists() else root / "spec.md"
+    plan_path = root / "plan-summary.md" if (root / "plan-summary.md").exists() else root / "plan.md"
+
+    spec_content = spec_path.read_text(encoding="utf-8") if spec_path.exists() else ""
+    plan_content = plan_path.read_text(encoding="utf-8") if plan_path.exists() else ""
+
+    prompt_path = _codex_prompt_path(slug, i)
+    prompt_text = (
+        "# Implementation Task\n\n"
+        "## Context\n"
+        f"{spec_content}\n\n"
+        "## Plan\n"
+        f"{plan_content}\n\n"
+        "## Tasks to implement (your scope)\n"
+        f"{chr(10).join(map(str, tasks))}\n\n"
+        "## File scope\n"
+        f"{chr(10).join(map(str, file_scope)) if file_scope else '(no specific scope — implement all tasks)'}\n\n"
+        "Implement the tasks above. Commit your changes when done.\n"
+        "DO NOT MODIFY: CLAUDE.md, AGENTS.md, MEMORY.md, or any file not in your file scope.\n"
+    )
+    prompt_path.write_text(prompt_text, encoding="utf-8")
+    return prompt_text
+
+
+def _run_serial(slug: str, tasks: list[str]) -> int:
+    prompt_path = _codex_prompt_path(slug, 0)
+    prompt_text = _build_codex_prompt(slug, 0, tasks, [])
+    rc = 1
+    try:
+        result = subprocess.run(
+            ["codex", "exec", "-m", "gpt-5.4-mini", "-s", "workspace-write", prompt_text],
+            cwd=str(REPO_ROOT),
+            timeout=3600,
+        )
+        rc = result.returncode
+    except subprocess.TimeoutExpired:
+        print("[error] codex execution timed out after 3600 seconds", file=sys.stderr)
+        rc = 1
+    finally:
+        revert_protected_files()
+        prompt_path.unlink(missing_ok=True)
+    return rc
+
+
+def _run_parallel(slug: str, group: dict, max_workers: int = 4) -> int:
+    status = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+    )
+    if status.returncode != 0:
+        print(
+            f"[error] unable to check working tree status: {status.stderr.strip() or status.stdout.strip() or 'git status failed'}",
+            file=sys.stderr,
+        )
+        return 1
+    if status.stdout.strip():
+        print("[error] working tree must be clean before implement", file=sys.stderr)
+        return 1
+
+    head_result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    if head_result.returncode != 0:
+        print(
+            f"[error] unable to capture base commit: {head_result.stderr.strip() or head_result.stdout.strip() or 'git rev-parse failed'}",
+            file=sys.stderr,
+        )
+        return 1
+    base_sha = head_result.stdout.strip()
+
+    worktree_paths: list[Path] = []
+    prompt_paths: list[Path] = []
+    failure_message = ""
+    failure = False
+    commits_by_task: dict[int, list[str]] = {}
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
+    try:
+        futures: dict[concurrent.futures.Future, int] = {}
+        tasks = list(group.get("tasks") or [])
+        file_scope = list(group.get("files") or [])
+        for i, task in enumerate(tasks):
+            try:
+                worktree_path = create_worktree(slug, i)
+                worktree_paths.append(worktree_path)
+                prompt_path = _codex_prompt_path(slug, i)
+                prompt_paths.append(prompt_path)
+                prompt_text = _build_codex_prompt(slug, i, [task], file_scope)
+                futures[
+                    executor.submit(
+                        subprocess.run,
+                        ["codex", "exec", "-m", "gpt-5.4-mini", "-s", "workspace-write", prompt_text],
+                        cwd=str(worktree_path),
+                        timeout=3600,
+                    )
+                ] = i
+            except Exception as exc:
+                failure = True
+                if not failure_message:
+                    failure_message = f"[error] failed to prepare codex worker {i}: {exc}"
+                break
+
+        try:
+            for future in concurrent.futures.as_completed(futures):
+                i = futures[future]
+                try:
+                    result = future.result()
+                    if result.returncode != 0 and not failure:
+                        failure = True
+                        failure_message = f"[error] codex worker {i} failed with return code {result.returncode}"
+                except Exception as exc:
+                    if not failure:
+                        failure = True
+                        failure_message = f"[error] codex worker {i} failed: {exc}"
+        finally:
+            executor.shutdown(wait=True, cancel_futures=True)
+
+        if failure:
+            reset_result = subprocess.run(
+                ["git", "-C", str(REPO_ROOT), "reset", "--hard", base_sha],
+                capture_output=True,
+                text=True,
+            )
+            if reset_result.returncode != 0:
+                print(
+                    f"[warn] failed to reset repository to {base_sha[:12]}: {reset_result.stderr.strip() or reset_result.stdout.strip() or 'git reset failed'}",
+                    file=sys.stderr,
+                )
+            print(failure_message, file=sys.stderr)
+            return 1
+
+        try:
+            for i in range(len(tasks)):
+                worktree_path = worktree_paths[i]
+                stage_and_commit_if_dirty(worktree_path, f"task {i}: auto-commit")
+                commits_by_task[i] = get_new_commits(worktree_path, base_sha)
+        except Exception as exc:
+            reset_result = subprocess.run(
+                ["git", "-C", str(REPO_ROOT), "reset", "--hard", base_sha],
+                capture_output=True,
+                text=True,
+            )
+            if reset_result.returncode != 0:
+                print(
+                    f"[warn] failed to reset repository to {base_sha[:12]}: {reset_result.stderr.strip() or reset_result.stdout.strip() or 'git reset failed'}",
+                    file=sys.stderr,
+                )
+            print(f"[error] failed to collect commits from worker worktrees: {exc}", file=sys.stderr)
+            return 1
+
+        all_commits = [c for i in sorted(commits_by_task) for c in commits_by_task[i]]
+        cherry_pick_ok, cherry_pick_detail = cherry_pick_commits(all_commits)
+        if not cherry_pick_ok:
+            reset_result = subprocess.run(
+                ["git", "-C", str(REPO_ROOT), "reset", "--hard", base_sha],
+                capture_output=True,
+                text=True,
+            )
+            if reset_result.returncode != 0:
+                print(
+                    f"[warn] failed to reset repository to {base_sha[:12]}: {reset_result.stderr.strip() or reset_result.stdout.strip() or 'git reset failed'}",
+                    file=sys.stderr,
+                )
+            print(f"[error] cherry-pick conflict: {cherry_pick_detail}", file=sys.stderr)
+            return 1
+
+        revert_protected_files()
+        return 0
+    finally:
+        remove_all_worktrees(worktree_paths)
+        for prompt_path in prompt_paths:
+            prompt_path.unlink(missing_ok=True)
+
+
+def command_implement(args: argparse.Namespace) -> int:
+    status = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+    )
+    if status.returncode != 0:
+        print(
+            f"[error] unable to check working tree status: {status.stderr.strip() or status.stdout.strip() or 'git status failed'}",
+            file=sys.stderr,
+        )
+        return 1
+    if status.stdout.strip():
+        print("[error] working tree must be clean before implement", file=sys.stderr)
+        return 1
+
+    groups = parse_parallel_task_groups(args.slug)
+    if not groups:
+        print("nothing to implement — all tasks complete or no tasks.md")
+        return 0
+
+    for group in groups:
+        if not group["parallel"]:
+            if group.get("overlap_warning"):
+                print(f"[warn] {group['overlap_warning']} — running serially", file=sys.stderr)
+            rc = _run_serial(args.slug, group["tasks"])
+        else:
+            print(f"[implement] dispatching {len(group['tasks'])} parallel Codex workers...")
+            rc = _run_parallel(args.slug, group, max_workers=args.max_workers)
+        if rc != 0:
+            return rc
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -2198,6 +1753,8 @@ def build_parser() -> argparse.ArgumentParser:
     checkpoint_parser.add_argument("--large-structural", action="store_true")
     checkpoint_parser.add_argument("--performance-sensitive", action="store_true")
     checkpoint_parser.add_argument("--use-existing-artifact", action="store_true")
+    checkpoint_parser.add_argument("--no-auto-context", action="store_true",
+                                   help="Disable automatic context file extraction from the artifact")
     checkpoint_parser.add_argument("--allow-dirty-path", action="append", default=[])
     checkpoint_parser.add_argument("--max-artifact-chars", type=int)
     checkpoint_parser.add_argument("--max-context-chars", type=int)
@@ -2207,6 +1764,8 @@ def build_parser() -> argparse.ArgumentParser:
     checkpoint_parser.add_argument("--repair-timeout-seconds", type=int, default=300)
     checkpoint_parser.add_argument("--allow-large-diff-rerun", action="store_true")
     checkpoint_parser.add_argument("--fallback", action="store_true")
+    checkpoint_parser.add_argument("--fast", action="store_true",
+        help="Fast path: skip prerequisites, run 1 Gemini + 1 Codex review. Requires --stage diff.")
     checkpoint_parser.set_defaults(func=command_checkpoint)
 
     reconcile_parser = subparsers.add_parser("reconcile")
@@ -2215,6 +1774,18 @@ def build_parser() -> argparse.ArgumentParser:
     reconcile_parser.add_argument("--status", required=True)
     reconcile_parser.add_argument("--note", required=True)
     reconcile_parser.set_defaults(func=command_reconcile)
+
+    auto_reconcile_parser = subparsers.add_parser(
+        "auto-reconcile",
+        help="Auto-accept reviews with no HIGH or MEDIUM findings; list remaining ones for human review",
+    )
+    auto_reconcile_parser.add_argument("--slug", required=True)
+    auto_reconcile_parser.add_argument(
+        "--stage",
+        required=True,
+        choices=["spec", "plan", "tasks", "diff", "closeout"],
+    )
+    auto_reconcile_parser.set_defaults(func=command_auto_reconcile)
 
     block_parser = subparsers.add_parser("block")
     block_parser.add_argument("--slug", required=True)
@@ -2247,6 +1818,17 @@ def build_parser() -> argparse.ArgumentParser:
     discover_parser.add_argument("--force-complete", action="store_true")
     discover_parser.add_argument("--clear", action="store_true")
     discover_parser.set_defaults(func=command_discover)
+
+    implement_parser = subparsers.add_parser("implement", help="dispatch Codex for next checkpoint slice")
+    implement_parser.add_argument("--slug", required=True, help="workflow slug")
+    implement_parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=4,
+        dest="max_workers",
+        help="max concurrent Codex workers (default: 4)",
+    )
+    implement_parser.set_defaults(func=command_implement)
 
     deliver_parser = subparsers.add_parser("deliver")
     deliver_parser.add_argument("--slug", required=True)

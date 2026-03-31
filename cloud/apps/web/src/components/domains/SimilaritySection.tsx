@@ -102,14 +102,12 @@ export function SimilaritySection({ models, clusterAnalysis }: SimilaritySection
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-4">
       <div className="mb-3">
-        <h2 className="text-base font-medium text-gray-900">3. Similarity and Differences</h2>
-        <p className="text-sm text-gray-600">Pairwise similarity of model value profiles (cosine similarity).</p>
+        <h2 className="text-base font-medium text-gray-900">Similarities and Differences</h2>
       </div>
 
       <div ref={matrixRef} className="rounded border border-gray-100 bg-white p-2">
         <div className="mb-2 flex items-center justify-between">
           <div className="flex flex-wrap items-center gap-1.5">
-            <h3 className="text-sm font-medium text-gray-800">Pairwise Similarity Matrix</h3>
             <Button
               variant="ghost"
               size="icon"
@@ -132,6 +130,7 @@ export function SimilaritySection({ models, clusterAnalysis }: SimilaritySection
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-xs">
+            <caption className="sr-only">Pairwise similarity matrix</caption>
             <thead>
               <tr className="border-b border-gray-200 text-gray-600">
                 <th scope="col" className="px-2 py-2 text-left font-medium">Model</th>

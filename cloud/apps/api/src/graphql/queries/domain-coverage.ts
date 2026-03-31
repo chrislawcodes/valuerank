@@ -114,8 +114,8 @@ builder.queryField('domainValueCoverage', (t) =>
       that tests that pair of values in conflict. Optionally filtered to count only
       runs that included the specified model IDs.
 
-      The matrix is directional: cell (col=X, row=Y) shows runs where X was presented first.
-      Diagonal cells are returned as batchCount=0 with no definitionId.
+      The matrix is symmetric: each unique value pair appears once, with the cell key
+      sorted alphabetically (valueA < valueB). Diagonal cells are omitted.
     `,
     args: {
       domainId: t.arg.id({
@@ -186,6 +186,7 @@ builder.queryField('domainValueCoverage', (t) =>
       const definitionIds = Array.from(pairByDefinitionId.keys());
       const batchCountByDefinitionId = new Map<string, number>();
       const latestMatchingRunIdByDefinitionId = new Map<string, string>();
+      const latestAggregateRunIdByDefinitionId = new Map<string, string>();
       const signatureScopedRunsByDefinitionId = new Map<string, Array<{
         id: string;
         definitionId: string;
@@ -222,16 +223,28 @@ builder.queryField('domainValueCoverage', (t) =>
           signatureScopedRunsByDefinitionId.set(run.definitionId, existingRuns);
 
           const isAggregateRun = (run.config as { isAggregate?: boolean } | null)?.isAggregate === true;
+          if (isAggregateRun) {
+            if (!latestAggregateRunIdByDefinitionId.has(run.definitionId)) {
+              latestAggregateRunIdByDefinitionId.set(run.definitionId, run.id);
+            }
+            continue;
+          }
           const matchesModelFilter = filterModelIds.length === 0
             || run.transcripts.some((transcript) => filterModelIds.includes(transcript.modelId));
-          if (!matchesModelFilter || isAggregateRun) continue;
+          if (!matchesModelFilter) continue;
 
           if (!latestMatchingRunIdByDefinitionId.has(run.definitionId)) {
             latestMatchingRunIdByDefinitionId.set(run.definitionId, run.id);
           }
+          const samplesPerScenario =
+            (run.config as { samplesPerScenario?: unknown } | null)?.samplesPerScenario;
+          const increment =
+            Number.isInteger(samplesPerScenario) && (samplesPerScenario as number) >= 1
+              ? (samplesPerScenario as number)
+              : 1;
           batchCountByDefinitionId.set(
             run.definitionId,
-            (batchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+            (batchCountByDefinitionId.get(run.definitionId) ?? 0) + increment,
           );
         }
       }
@@ -259,24 +272,14 @@ builder.queryField('domainValueCoverage', (t) =>
         label: m.displayName,
       }));
 
-      // Build the full directional 10×10 matrix
+      // Build the symmetric 45-cell matrix (one cell per unique sorted pair)
       const values = [...COVERAGE_VALUE_KEYS] as string[];
       const cells: DomainValueCoverageCell[] = [];
 
       for (const valueA of COVERAGE_VALUE_KEYS) {
         for (const valueB of COVERAGE_VALUE_KEYS) {
-          if (valueA === valueB) {
-            // Diagonal — no vignette tests a value against itself
-            cells.push({
-              valueA,
-              valueB,
-              batchCount: 0,
-              definitionId: null,
-              definitionName: null,
-              aggregateRunId: null,
-            });
-            continue;
-          }
+          // Only emit sorted pairs: skip diagonal and reversed pairs
+          if (valueA.localeCompare(valueB) >= 0) continue;
 
           const key = `${valueA}::${valueB}`;
           const defIdsForPair = definitionsByPairKey.get(key) ?? [];
@@ -301,7 +304,9 @@ builder.queryField('domainValueCoverage', (t) =>
             const primaryPair = pairByDefinitionId.get(primaryDefId);
             const aggregateRunId = primaryDefId === ''
               ? null
-              : (latestMatchingRunIdByDefinitionId.get(primaryDefId) ?? null);
+              : (latestAggregateRunIdByDefinitionId.get(primaryDefId)
+                ?? latestMatchingRunIdByDefinitionId.get(primaryDefId)
+                ?? null);
             cells.push({
               valueA,
               valueB,

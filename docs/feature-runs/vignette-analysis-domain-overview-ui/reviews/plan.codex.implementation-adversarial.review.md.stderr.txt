@@ -1,0 +1,242 @@
+2026-03-25T22:11:05.154824Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.155367Z  WARN codex_core::state_db: failed to initialize state runtime at /Users/chrislaw/.codex: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.164268Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d270d-213b-7772-91d1-9880416af068
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Domain Analysis Overview UX Plan
+
+## Summary
+
+Refactor the `/domains/analysis` page so it reads as a cleaner report without changing the analysis data itself. The work is UI-only:
+
+- collapse the evidence-scope callout into a compact disclosure chip
+- remove section numbering from headings
+- reorder the visible report blocks
+- make `Similarities and Differences` the visible section title
+- remove the nested visible `Pairwise Similarity Matrix` heading
+
+## Architecture Choices
+
+### 1. Keep the data contract unchanged
+
+The page already receives the data it needs from the existing `DomainAnalysis` query and the findings-eligibility query.
+This slice will only change how the page renders that data.
+
+`DomainAnalysis.tsx` owns the JSX order of the top-level report blocks. Slice 1 will update that composition point so the visible order matches the new report flow.
+
+### 2. Keep `ValuePrioritiesSection.tsx` as one shared component
+
+The `Model Groups` and `Value Priorities` blocks stay inside one component for this slice.
+They should use the same payload that the page already passes down.
+
+Rationale:
+
+- it keeps the diff small
+- it avoids introducing a new wrapper or context layer
+- it keeps the shared loading and error behavior in one place
+
+### 3. Use the existing findings-eligibility query for the disclosure
+
+`DomainAnalysis.tsx` already loads `domainFindingsEligibility`.
+The compact evidence-scope chip should be derived from that query and the disclosure should stay local to the page.
+The expanded panel should use the existing fields already returned by that query: `eligible`, `status`, `summary`, `reasons`, `recommendedActions`, `consideredScopeCategories`, `completedEligibleEvaluationCount`, `latestEligibleEvaluationId`, `latestEligibleScopeCategory`, and `latestEligibleCompletedAt`.
+
+### 4. Keep the similarity matrix accessible with a semantic caption
+
+The visible title should be `Similarities and Differences`.
+The matrix itself should use a semantic `<caption>` that is visually hidden with the app’s standard sr-only treatment so screen readers still have a clear name for the table without creating a second visible title.
+
+## Proposed Implementation Slices
+
+### Slice 1: Page shell and evidence-scope disclosure
+
+Files:
+
+- `cloud/apps/web/src/pages/DomainAnalysis.tsx`
+- `cloud/apps/web/tests/pages/DomainAnalysis.test.tsx`
+
+Work:
+
+- add the compact evidence-scope disclosure state
+- render the collapsed chip by default
+- expand to the full details panel on click
+- keep the loading placeholder stable while data loads
+- define the disclosure states explicitly:
+  - loading: `Loading scope...` placeholder chip, disclosure content hidden
+  - eligible: green auditable chip or amber diagnostic chip with full details
+  - unavailable: gray warning chip with the unavailable explanation
+  - query failure: gray warning chip with a short `Eligibility data could not load` note while the report stays visible
+- add tests for the new disclosure behavior and the top-level section order
+- verify keyboard activation, `aria-expanded`, and `aria-controls` for the disclosure
+- verify the disclosure stays focused on its toggle when collapsed again
+
+Expected size:
+
+- about 200 to 260 lines changed
+
+[CHECKPOINT]
+
+### Slice 2: Value priorities and section order
+
+Files:
+
+- `cloud/apps/web/src/components/domains/ValuePrioritiesSection.tsx`
+- `cloud/apps/web/src/components/domains/DominanceSection.tsx`
+- `cloud/apps/web/tests/components/ValuePrioritiesSection.test.tsx` if needed
+- `cloud/apps/web/tests/components/DominanceSection.test.tsx`
+
+Work:
+
+- remove the visible `1.` prefix from the heading
+- render `Model Groups` before `Value Priorities`
+- keep the existing `Cluster analysis not available` message inside the model-groups block
+- keep the value table visible when cluster analysis is unavailable
+- keep the shared loading and error behavior for the component
+- remove the visible numbering from `Ranking and Cycles`
+
+Expected size:
+
+- about 180 to 240 lines changed
+
+[CHECKPOINT]
+
+### Slice 3: Similarities section cleanup
+
+Files:
+
+- `cloud/apps/web/src/components/domains/SimilaritySection.tsx`
+- `cloud/apps/web/tests/components/SimilaritySection.test.tsx`
+
+Work:
+
+- remove the visible `3.` prefix from the heading
+- change the visible title to `Similarities and Differences`
+- add the short explanatory subtitle `Pairwise similarity matrix.`
+- remove the nested visible `Pairwise Similarity Matrix` heading
+- keep the semantic table caption for accessibility, but hide it visually with the standard sr-only treatment
+
+Expected size:
+
+- about 120 to 180 lines changed
+
+[CHECKPOINT]
+
+## Testing Plan
+
+For each slice:
+
+- run the focused web tests for the files touched by that slice
+- run `npm run typecheck --workspace=@valuerank/web`
+- if the page shell changes, do a localhost smoke check on `/domains/analysis`
+- run a narrow-viewport smoke check for the disclosure and section wrapping
+- capture before/after screenshots at desktop and mobile widths and compare the page layout by eye
+- add DOM-level assertions for heading order, the disclosure toggle state, and the matrix caption count
+
+For the final combined diff:
+
+- run the relevant web test subset again
+- verify the exported CSV button still works
+- compare the exported CSV output against the pre-change fixture to confirm headers and row content are unchanged
+- verify the report order in the browser
+
+## Risks and Mitigations
+
+| Risk | Mitigation |
+|---|---|
+| The compact evidence-scope chip becomes too subtle | Keep the status text visible and use the existing badge styling pattern already used in the page |
+| The expanded details panel becomes too tall on smaller screens | Give it a vertical scroll cap so the page layout stays stable |
+| The value-priorities reordering becomes a component refactor | Keep the component shared and avoid new wrapper or context layers |
+| The similarity matrix title removal confuses screen readers | Keep a semantic table caption with the accessible name `Pairwise similarity matrix` |
+
+## Acceptance Notes
+
+- The visible report order is `Model Groups`, `Value Priorities`, `Ranking and Cycles`, then `Similarities and Differences`
+- The compact evidence-scope chip is visible by default
+- The evidence-scope disclosure expands and collapses cleanly
+- The page does not add any new backend fields or any new analysis math
+- The CSV export behavior stays unchanged
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+2026-03-25T22:11:05.188229Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.190736Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.213991Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.214933Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.221465Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d270d-213b-7772-91d1-9880416af068.tmp-1774476665157763000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-03-25T22:11:05.239207Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.239904Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.264062Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.264797Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.289839Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.290516Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.311630Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.312306Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.336985Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.337690Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.359702Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.360497Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.385229Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.386070Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.409892Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.410799Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.434850Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.435611Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.458659Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.459583Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.483295Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.484073Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.507080Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.507970Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.531737Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.532498Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.555933Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.556823Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.581834Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.582506Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.606853Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.607545Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.632603Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.633813Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.658434Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T22:11:05.659310Z  WARN codex_state::runtime: failed to open state db at /Users/chrislaw/.codex/state_5.sqlite: migration 21 was previously applied but is missing in the resolved migrations
+2026-03-25T22:11:05.684421Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+codex
+## Findings
+1. **High:** The plan assumes the existing `domainFindingsEligibility` query already exposes every field listed for the disclosure panel. If any of `summary`, `reasons`, `recommendedActions`, `consideredScopeCategories`, or the latest-evaluation fields are missing or shaped differently, this stops being a UI-only change. The plan gives no fallback path or contingency for that dependency.
+
+2. **High:** The disclosure state model is underspecified for real query behavior. It covers loading, success, unavailable, and failure, but not refetches, stale cached data, or partial data. Without a precedence rule, the chip can flicker between states or let the toggle open an empty panel after a transient failure.
+
+3. **Medium:** Slice 2 assumes `ValuePrioritiesSection` can be reordered internally while keeping shared loading and error behavior, but it does not define what happens if `Model Groups` and `Value Priorities` do not fail together. A single shared error state could hide the value table when cluster analysis is unavailable, which conflicts with the stated acceptance criteria.
+
+## Residual Risks
+- The accessibility strategy for `Similarities and Differences` plus a visually hidden table caption could still produce awkward screen-reader output if the table markup changes or if the caption is not the only label source.
+- Removing visible numbering from headings may still leave heading-depth or landmark quirks that the current test plan does not catch, especially for keyboard and screen-reader navigation.
+- Manual screenshot comparison can miss narrow-viewport wrapping and spacing regressions.
+- The CSV export is called out as unchanged, but the plan does not pin an automated assertion directly to the export wiring, so a render-only refactor could still accidentally couple into it.
+tokens used
+7,882

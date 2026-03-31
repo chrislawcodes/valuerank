@@ -1,0 +1,57 @@
+{
+  "session_id": "37d88c79-3c46-4d3e-92be-b6f7b313f7ac",
+  "response": "## Findings\n\n| Severity | Finding |\n| :--- | :--- |\n| **CRITICAL** | The plan creates a significant observability gap by only showing \"live\" or \"failed\" batches in tables. A batch that is accepted by the `startDomainEvaluation` mutation but fails to get picked up from the queue (e.g., due to a misconfiguration or a silent failure in the queuing system) will never appear in the live table or the exceptions table. It will only exist as part of the \"pending/queued\" header count, giving the user no indication that a specific part of their launch is stuck in a pre-execution state and will never run. This defeats the core purpose of a live monitoring view. |\n| **HIGH** | The transition from \"live status\" to a final, historical report is not defined. The plan states that completed rows \"fall off the live list,\" but it omits what happens after an evaluation is fully complete. This leaves a gap in the user journey, as there is no specified mechanism to view the results, aggregates, or exceptions of a finished launch once it is no longer \"live.\" |\n| **HIGH** | The plan introduces a hardcoded 10-minute threshold for budget \"freshness,\" which is a brittle and arbitrary constraint. It assumes that provider budget data cannot be legitimately delayed by more than 10 minutes. This could block valid launches if a provider's API is slow to respond or if the budget update process is delayed for any reason. The system will fail closed, but it will be a false-negative failure that generates user friction and support load, without a clear justification for this specific duration. |\n| **MEDIUM** | `[UNVERIFIED]` The utility of the entire exceptions-handling flow is contingent on an \"existing no-progress threshold\" that is not defined in the plan. The plan defers the critical logic of what constitutes a \"stalled\" batch to an assumed, pre-existing mechanism. If this existing mechanism is not sufficiently sensitive, is flawed, or does not exist, the \"Exceptions\" table will be ineffective, and stalled batches will not be correctly reported. |\n| **MEDIUM** | `[UNVERIFIED]` The row detail drawer's functionality is wholly dependent on the data richness of an existing, undefined `RUN_QUERY`. The plan notes this as a risk but doesn't specify a fallback or verification step. If the existing query cannot provide meaningful \"progress, stage, recent task/log-style data,\" this feature will either be useless or will require unplanned backend work to augment the query, expanding the project's scope. |\n| **MEDIUM** | The proposed set of structured error codes for launch failures (`INSUFFICIENT_BUDGET`, `STALE_BUDGET`, `PROVIDER_DISABLED`) is incomplete. It does not account for other foreseeable server-side failures, such as race conditions with concurrent launches, invalid input parameters not caught by the client, or transient backend errors (e.g., database unavailability). Without a comprehensive set of failure codes, the client will be forced to handle generic errors, leading to a less informative and less resilient user experience. |\n| **LOW** | The design appears scoped to a single \"current launch\" for the entire status view. The plan does not address the scenario where a user might have multiple domain evaluations running concurrently. This could be a limiting design if users need to monitor parallel launches, as it's unclear how they would switch context between them. |\n\n## Residual Risks\n\n- **Silent Pre-Execution Failures:** Even if implemented as written, the plan carries the risk that parts of a launch can fail before becoming \"live\" without any specific alert or visibility to the user. The aggregate \"pending\" count will decrease, but the corresponding work item will never appear, creating a \"lost work\" scenario that is difficult to debug from the UI alone.\n- **Race Condition Frustration:** While the plan correctly identifies and handles the race condition between the client-side budget preview and the server-side launch confirmation, it doesn't address the user experience if this happens frequently. In a volatile budget environment, users may be repeatedly blocked from launching, leading to frustration. The system is safe, but not necessarily usable.\n- **Inherited Blind Spots:** The plan's heavy reliance on unverified, existing components for stall detection (`no-progress threshold`) and status detail (`RUN_QUERY`) means it will inherit any flaws or blind spots in those systems. The new UI may provide a false sense of comprehensive monitoring if the underlying data sources are incomplete or inaccurate.\n- **Polling Under Duress:** The 5-second polling interval is a simple solution but may prove fragile under load. If the backend experiences issues, the repeated polling from all active clients could exacerbate the problem (a thundering herd), and the UI will lack a clear way to indicate to the user that the data they are seeing is stale because a poll request failed.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 46758
+        },
+        "tokens": {
+          "input": 13194,
+          "prompt": 13194,
+          "candidates": 1031,
+          "total": 16700,
+          "cached": 0,
+          "thoughts": 2475,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 46758,
+            "tokens": {
+              "input": 13194,
+              "prompt": 13194,
+              "candidates": 1031,
+              "total": 16700,
+              "cached": 0,
+              "thoughts": 2475,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

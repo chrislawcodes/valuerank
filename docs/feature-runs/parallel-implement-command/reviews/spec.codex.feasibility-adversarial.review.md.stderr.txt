@@ -1,0 +1,189 @@
+OpenAI Codex v0.117.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d3d42-dca2-76b1-b846-7240711a6c00
+--------
+user
+Review this spec artifact using a feasibility-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: spec.md
+# Feature 001: Parallel Implementation via Codex Agent Teams
+
+**Status**: Revised after spec checkpoint reviews
+**Created**: 2026-03-29
+**Feature branch**: `claude/parallel-implement-command`
+
+---
+
+## Overview
+
+The feature factory runner currently recommends `next-action: implement_next_slice` but has no command to act on it — implementation is done manually. This feature adds a `run_factory.py implement --slug <slug>` command that reads the next `[CHECKPOINT]`-bounded slice from `tasks.md`, detects parallelizable tasks annotated with `[P: file1, file2]`, and dispatches one Codex worker per task in an isolated git worktree when their file sets do not overlap.
+
+---
+
+## User Scenarios & Testing
+
+### User Story 1 — Run a parallel implementation slice (Priority: P1)
+
+As a developer running the feature factory, I need `run_factory.py implement --slug <slug>` to automatically dispatch parallel Codex workers for `[P]`-annotated tasks so that implementation of non-conflicting work happens concurrently without manual orchestration.
+
+**Why this priority**: Core value of the feature — without this, nothing is parallel.
+
+**Independent Test**: Given a `tasks.md` with two `[P]`-annotated tasks touching disjoint files and a `[CHECKPOINT]` boundary, running `implement` spawns two Codex processes in separate worktrees, merges both back, and the working tree contains both changes.
+
+**Acceptance Scenarios**:
+
+1. **Given** the next slice has two tasks both annotated `[P: fileA]` and `[P: fileB]` with no shared files and a clean working tree, **When** `implement --slug foo` runs, **Then** two Codex workers execute concurrently in uniquely-named worktrees, all their commits are cherry-picked back to the main branch in task-index order, and worktrees are cleaned up.
+
+2. **Given** Codex completes in its worktree with no commit and with file changes, **When** the runner processes that worktree, **Then** it stages all changes and creates a commit before cherry-picking. **Given** Codex produces no changes at all, **Then** that worktree is silently skipped (no empty commit created).
+
+3. **Given** a cherry-pick fails due to a conflict, **When** the failure is detected, **Then** the runner resets the main branch HEAD to the pre-dispatch sha (undoing any already-applied commits), removes all worktrees, and exits non-zero with a message identifying the conflicting tasks.
+
+4. **Given** the `implement` command is run with `--max-workers 2`, **When** there are 4 non-overlapping `[P]` tasks, **Then** at most 2 Codex workers run concurrently at any time.
+
+---
+
+### User Story 2 — Serial fallback for non-parallel or overlapping tasks (Priority: P1)
+
+As a developer, I need the `implement` command to fall back gracefully to a single serial Codex call when tasks don't have `[P]` annotations or when their file sets overlap, so I can use one command for all slices regardless of whether parallel work is possible.
+
+**Why this priority**: Without serial fallback the command is unusable on most slices (the common case is serial).
+
+**Independent Test**: Given a `tasks.md` where the next slice has no `[P]` tasks, running `implement` dispatches a single Codex call covering all tasks in the slice.
+
+**Acceptance Scenarios**:
+
+1. **Given** the next slice has tasks with no `[P]` annotations, **When** `implement --slug foo` runs, **Then** a single Codex process is dispatched with all tasks in the slice as its prompt.
+
+2. **Given** two tasks are both annotated `[P]` but share a file path, **When** `implement` runs, **Then** the runner prints a warning identifying the overlapping file and task indices, and runs all tasks in the slice as a single serial Codex call.
+
+3. **Given** a mix of `[P]`-annotated and non-annotated tasks in the same slice, **When** `implement` runs, **Then** the `[P]` tasks are evaluated for parallelism and any non-`[P]` tasks are always included in the serial group; the serial group runs after the parallel group completes.
+
+---
+
+### User Story 3 — Task annotation format enforced in SKILL.md (Priority: P2)
+
+As a developer using the feature-tasks skill to generate `tasks.md`, I need Gemini to include `[P: file-scope]` annotations whenever it marks a task `[P]` so that the overlap detector has the information it needs.
+
+**Why this priority**: Parallel dispatch is useless if tasks are marked `[P]` without file scopes.
+
+**Independent Test**: The `.claude/skills/feature-tasks/SKILL.md` states that `[P]` tasks MUST include a comma-separated file list, and provides an example in the correct format.
+
+**Acceptance Scenarios**:
+
+1. **Given** the updated SKILL.md, **When** Gemini generates tasks for a parallelizable feature, **Then** all `[P]` tasks include a `[P: path/to/file.ts]`-style annotation.
+
+2. **Given** a `[P]` task without a file annotation in `tasks.md`, **When** `implement` runs, **Then** the runner treats it as unannotated and includes it in the serial group.
+
+---
+
+### User Story 4 — Worktree lifecycle management (Priority: P1)
+
+As a developer, I need worktrees to be created, used, and removed cleanly so that failed or partial runs don't leave orphaned worktrees or leave the branch in a partially-modified state.
+
+**Why this priority**: Orphaned worktrees and partial branch state are both hard to recover from manually.
+
+**Independent Test**: After a successful parallel run no worktrees remain. After a failed run no worktrees remain and the branch HEAD is identical to what it was before the command ran.
+
+**Acceptance Scenarios**:
+
+1. **Given** a successful parallel run, **When** it completes, **Then** all worktrees for that run no longer exist.
+
+2. **Given** an existing stale worktree from a previous partial run, **When** `implement` starts, **Then** it removes the stale worktree before creating a fresh one.
+
+3. **Given** Codex fails (non-zero exit) in one worktree, **When** the failure is detected, **Then** the branch is reset to the pre-dispatch HEAD sha, all worktrees are removed, and the command exits non-zero.
+
+4. **Given** the working tree has uncommitted changes, **When** `implement` is invoked, **Then** the command refuses to run and exits non-zero with a message instructing the user to stash or commit their changes first.
+
+---
+
+## Edge Cases
+
+- What if `tasks.md` has no `[CHECKPOINT]` boundaries? → Run all remaining unchecked tasks as a single slice.
+- What if all tasks in the slice are already checked off? → Print "nothing to implement" and exit 0.
+- What if Codex produces changes to a file not listed in the `[P]` annotation? → Cherry-pick proceeds; the annotation is advisory for overlap detection only. Post-hoc file-scope validation is deferred to a future wave.
+- What if only one `[P]` task exists in the slice (no partner to parallelize with)? → Run it as serial; no worktree overhead.
+- What if `/tmp` lacks space for a worktree? → `git worktree add` fails; command exits non-zero with the git error, no state change.
+- What if Codex produces multiple commits in a worktree? → Cherry-pick each individually in commit order.
+- What if Codex produces zero changes and zero commits? → Skip that worktree silently; no empty commit.
+- What if two concurrent `implement` runs use the same slug? → Worktree paths include the process PID to prevent collision.
+- What if a parallel slice has more tasks than `--max-workers`? → Use a worker pool; no more than `--max-workers` Codex processes run at once (default: 4).
+
+---
+
+## Functional Requirements
+
+- **FR-001**: The runner MUST expose an `implement` subcommand accepting `--slug <slug>` and optional `--max-workers N` (default 4).
+- **FR-002**: The command MUST refuse to run if the working tree has uncommitted changes and exit non-zero.
+- **FR-003**: The command MUST read `tasks.md` and identify the next `[CHECKPOINT]`-bounded slice (all unchecked tasks up to and including the next `[CHECKPOINT]` line, or all unchecked tasks if no `[CHECKPOINT]` exists).
+- **FR-004**: The command MUST parse `[P: file1, file2, ...]` annotations from task lines. A task line with `[P]` but no file list MUST be treated as unannotated (serial).
+- **FR-005**: The command MUST detect file overlap: if any two `[P]` tasks in the slice share a normalised repo-relative file path, all tasks in the slice MUST be run as a single serial call with a warning printed identifying the overlapping file and task indices.
+- **FR-006**: When no overlap exists and at least two `[P]` tasks are present, the command MUST record the current HEAD sha, then create one git worktree per `[P]` task at `/tmp/wt-{slug}-{pid}-{index}`, removing any pre-existing worktree at that path first.
+- **FR-007**: Each Codex worker MUST be invoked as `codex exec -m gpt-5.4-mini -s workspace-write` with a prompt describing only that task's scope (including relevant context from `spec.md`, `plan.md`, `tasks.md`), run inside its dedicated worktree.
+- **FR-008**: Codex workers MUST execute concurrently up to `--max-workers` at a time using a worker pool.
+- **FR-009**: If a Codex worker produces file changes but no commit, the runner MUST stage all changes and create a commit. If a worker produces no changes at all, the worktree is skipped (no empty commit).
+- **FR-010**: The runner MUST cherry-pick each worktree's commits back to the main branch in deterministic order (by task index, then by commit order within a task).
+- **FR-011**: If any cherry-pick fails, the runner MUST: abort the cherry-pick, reset main branch HEAD to the pre-dispatch sha, remove all worktrees, print which tasks caused the conflict, and exit non-zero.
+- **FR-012**: All worktrees MUST be removed on both success and failure paths.
+- **FR-013**: Non-`[P]` tasks (serial group) in a mixed slice MUST run after the parallel group completes, as a single Codex call.
+- **FR-014**: The `.claude/skills/feature-tasks/SKILL.md` MUST be updated to require `[P: file-scope]` annotations whenever a task is marked `[P]`.
+- **FR-015**: New logic MUST respect the acyclic import graph: parsing/overlap in `factory_stages.py`, worktree helpers in `factory_git.py`, dispatch orchestration in `run_factory.py`.
+
+---
+
+## Success Criteria
+
+- **SC-001**: A slice with two non-overlapping `[P]` tasks completes faster than the equivalent serial run (verified by wall-clock timing in tests using mocked Codex).
+- **SC-002**: A slice with overlapping `[P]` tasks runs serially with a human-readable warning — zero errors, zero orphaned worktrees, branch HEAD unchanged from before the command ran.
+- **SC-003**: A slice with no `[P]` tasks behaves identically to the current manual Codex invocation.
+- **SC-004**: All 84 existing tests continue to pass after the change.
+- **SC-005**: `run_factory.py doctor` continues to pass.
+- **SC-006**: On cherry-pick failure, branch HEAD is identical to the pre-dispatch sha (verified in tests).
+
+---
+
+## Assumptions
+
+- Codex workers are trusted to only modify files in the listed scope; the annotation is advisory for overlap detection, not a security boundary. Post-hoc file-scope validation is deferred.
+- Semantic conflicts (two workers modify different files in logically incompatible ways) are inherent to parallel work and outside the scope of this feature.
+- Tasks within a parallel group are considered independent if their file scopes are disjoint; explicit task-level dependency declarations are not in scope for v1.
+- The spec generation for each Codex worker is composed by `run_factory.py implement` from the task text and context files (`spec.md`, `plan.md`, `tasks.md`).
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m reviewing the spec purely for feasibility and failure modes, not proposing implementation details. I’m checking for places where the feature would break down in real use, especially around ordering, conflicts, and recovery behavior.
+codex
+## Findings
+1. **High** - The spec never defines a persistence step for task completion or checkpoint advancement. FR-003 only reads the next unchecked slice, but nothing writes back checked state or advances the workflow. As written, the same slice will be selected again on the next invocation unless some external manual process updates `tasks.md`.
+
+2. **High** - Failure recovery is not safe enough for parallel execution. FR-011 and FR-012 require resetting HEAD and removing worktrees, but they do not require canceling in-flight Codex processes, waiting for them to exit, or guaranteeing a hard reset of the main worktree and index. A slow worker can keep writing while cleanup starts, and a plain ref reset can still leave the repo in an inconsistent state.
+
+3. **High** - The parallel safety model is advisory, not enforced. FR-004 and FR-005 explicitly treat `[P]` scopes as hints and defer post-hoc validation, so a worker can modify files outside its declared list and the runner will still cherry-pick those edits. That means the overlap detector cannot actually guarantee non-conflicting execution, which weakens the core premise of the feature.
+
+4. **Medium** - Slice parsing and boundary handling are underdefined. FR-003 does not say how to handle multiple checkpoints, malformed task lines, or already-checked tasks mixed into the next slice. A small parsing mistake changes which tasks are launched, and there is no validation gate before worktrees are created.
+
+## Residual Risks
+- Semantic dependencies can still exist even when file scopes are disjoint, so “safe by path overlap” does not guarantee the combined edits are correct.
+- Prompt construction may become too large or too noisy if `spec.md`, `plan.md`, and `tasks.md` are injected verbatim for every worker.
+- PID-based worktree names reduce collisions, but stale-path cleanup still has a small risk if PIDs are reused after a crash.
+- Serial fallback for non-`[P]` tasks means one misannotated slice can silently lose most of the intended parallel speedup.
+tokens used
+34,354

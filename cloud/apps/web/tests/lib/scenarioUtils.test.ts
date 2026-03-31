@@ -73,26 +73,183 @@ describe('scenarioUtils', () => {
     expect(filtered.map((t) => t.id)).toEqual(['t-1', 't-2']);
   });
 
-  it('filters transcripts by decisionCode when provided', () => {
+  it('filters transcripts by favoredValueKey and decisionStrength when provided', () => {
     const transcripts = [
-      makeTranscript({ id: 't-1', scenarioId: 'scenario-a', modelId: 'claude-sonnet-4-5', decisionCode: 'other' }),
-      makeTranscript({ id: 't-2', scenarioId: 'scenario-a', modelId: 'claude-sonnet-4-5', decisionCode: '3' }),
+      makeTranscript({
+        id: 'strong-first',
+        scenarioId: 'scenario-a',
+        modelId: 'claude-sonnet-4-5',
+        decisionCode: '5',
+        decisionModelV2: {
+          raw: {
+            matchedText: null,
+            matchedLabel: null,
+            parseClass: 'exact',
+            parsePath: null,
+            parserVersion: null,
+            responseExcerpt: null,
+            manualOverride: null,
+          },
+          canonical: {
+            favoredValueKey: 'conformity_interpersonal',
+            opposedValueKey: 'achievement',
+            direction: 'favor_first',
+            strength: 'strong',
+            normalizationApplied: false,
+            normalizationReason: null,
+            source: 'deterministic',
+          },
+          legacy: { rawScore: 5, canonicalScore: 5 },
+        },
+      }),
+      makeTranscript({
+        id: 'strong-second',
+        scenarioId: 'scenario-a',
+        modelId: 'claude-sonnet-4-5',
+        decisionCode: '1', // raw score matches canonical score (no flip)
+        decisionModelV2: {
+          raw: {
+            matchedText: null,
+            matchedLabel: null,
+            parseClass: 'exact',
+            parsePath: null,
+            parserVersion: null,
+            responseExcerpt: null,
+            manualOverride: null,
+          },
+          canonical: {
+            favoredValueKey: 'achievement',
+            opposedValueKey: 'conformity_interpersonal',
+            direction: 'favor_second',
+            strength: 'strong',
+            normalizationApplied: false,
+            normalizationReason: null,
+            source: 'deterministic',
+          },
+          legacy: { rawScore: 1, canonicalScore: 1 },
+        },
+      }),
+      makeTranscript({
+        id: 'lean-first',
+        scenarioId: 'scenario-a',
+        modelId: 'claude-sonnet-4-5',
+        decisionCode: '4',
+        decisionModelV2: {
+          raw: {
+            matchedText: null,
+            matchedLabel: null,
+            parseClass: 'exact',
+            parsePath: null,
+            parserVersion: null,
+            responseExcerpt: null,
+            manualOverride: null,
+          },
+          canonical: {
+            favoredValueKey: 'conformity_interpersonal',
+            opposedValueKey: 'achievement',
+            direction: 'favor_first',
+            strength: 'lean',
+            normalizationApplied: false,
+            normalizationReason: null,
+            source: 'deterministic',
+          },
+          legacy: { rawScore: 4, canonicalScore: 4 },
+        },
+      }),
     ];
 
     const filtered = filterTranscriptsForPivotCell({
       transcripts,
-      scenarioDimensions: {
-        'scenario-a': { power: '1', conformity: '1' },
-      },
+      scenarioDimensions: { 'scenario-a': { power: '1', conformity: '1' } },
       rowDim: 'power',
       colDim: 'conformity',
       row: '1',
       col: '1',
       selectedModel: 'claude-sonnet-4-5',
-      decisionCode: 'other',
+      favoredValueKey: 'conformity_interpersonal',
+      decisionStrength: 'strong',
     });
 
-    expect(filtered.map((t) => t.id)).toEqual(['t-1']);
+    expect(filtered.map((t) => t.id)).toEqual(['strong-first']);
+  });
+
+  it('matches unknown transcripts when decisionStrength is unknown', () => {
+    const transcripts = [
+      makeTranscript({
+        id: 'known',
+        scenarioId: 'scenario-a',
+        modelId: 'claude-sonnet-4-5',
+        decisionCode: '5',
+        decisionModelV2: {
+          raw: {
+            matchedText: null,
+            matchedLabel: null,
+            parseClass: 'exact',
+            parsePath: null,
+            parserVersion: null,
+            responseExcerpt: null,
+            manualOverride: null,
+          },
+          canonical: {
+            favoredValueKey: 'conformity_interpersonal',
+            opposedValueKey: 'achievement',
+            direction: 'favor_first',
+            strength: 'strong',
+            normalizationApplied: false,
+            normalizationReason: null,
+            source: 'deterministic',
+          },
+          legacy: { rawScore: 5, canonicalScore: 5 },
+        },
+      }),
+      makeTranscript({
+        id: 'unresolved-v2',
+        scenarioId: 'scenario-a',
+        modelId: 'claude-sonnet-4-5',
+        decisionCode: 'other',
+        decisionModelV2: null,
+      }),
+      makeTranscript({
+        id: 'unknown-canonical',
+        scenarioId: 'scenario-a',
+        modelId: 'claude-sonnet-4-5',
+        decisionCode: '3',
+        decisionModelV2: {
+          raw: {
+            matchedText: null,
+            matchedLabel: null,
+            parseClass: 'unparseable',
+            parsePath: null,
+            parserVersion: null,
+            responseExcerpt: null,
+            manualOverride: null,
+          },
+          canonical: {
+            favoredValueKey: null,
+            opposedValueKey: null,
+            direction: 'unknown',
+            strength: 'unknown',
+            normalizationApplied: false,
+            normalizationReason: null,
+            source: 'unknown',
+          },
+          legacy: { rawScore: null, canonicalScore: null },
+        },
+      }),
+    ];
+
+    const filtered = filterTranscriptsForPivotCell({
+      transcripts,
+      scenarioDimensions: { 'scenario-a': { power: '1', conformity: '1' } },
+      rowDim: 'power',
+      colDim: 'conformity',
+      row: '1',
+      col: '1',
+      selectedModel: 'claude-sonnet-4-5',
+      decisionStrength: 'unknown',
+    });
+
+    expect(filtered.map((t) => t.id)).toEqual(['unresolved-v2', 'unknown-canonical']);
   });
 
   it('returns empty when required pivot parameters are missing', () => {

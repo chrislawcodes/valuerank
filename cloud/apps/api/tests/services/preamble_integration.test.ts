@@ -1,5 +1,5 @@
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { db } from '@valuerank/db';
 import { startRun } from '../../src/services/run/start';
 import { createPreamble } from '../../src/services/preamble';
@@ -26,7 +26,7 @@ vi.mock('../../src/services/run/scheduler', () => ({
 }));
 
 describe('Preamble Integration', () => {
-    const userId = 'test-user-id';
+    const userId = 'preamble-test-user-id';
 
     beforeEach(async () => {
         await db.runComparison.deleteMany();
@@ -68,6 +68,10 @@ describe('Preamble Integration', () => {
             create: { id: userId, email: 'preamble-test@example.com', passwordHash: 'hash' },
             update: {},
         });
+    });
+
+    afterEach(async () => {
+        await db.user.deleteMany({ where: { id: userId } });
     });
 
     it('injects preamble content into run snapshot', async () => {

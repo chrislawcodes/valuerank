@@ -1,0 +1,9 @@
+## Findings
+- High: The cache key is incomplete. It only keys off transcript content hash, parser version, and model, but it does not include the summarization worker/prompt/version itself or any other input that can change the output. That means a code or prompt change can silently reuse stale summaries until someone remembers to bump `SUMMARIZE_PARSER_VERSION`.
+- High: The plan does not guard against stale writes after the transcript changes while a summarize job is in flight. A worker can finish for an old transcript snapshot and then persist its cache record into a now-updated transcript, poisoning later cache hits unless the write is validated against the same hash snapshot used at queue time.
+- Medium: `forceSummarize` is only wired through `restartSummarization(..., true)`. Any other forced rerun path, direct job enqueue, or future retry path will still hit the cache or the existing `summarizedAt` short-circuit unless it is updated separately, so the bypass semantics are easy to break unevenly.
+
+## Residual Risks
+- Duplicate summarize jobs are still possible because the plan explicitly does not add locking or in-progress cache records, so concurrent workers can still race on the same transcript.
+- The design still depends on manual version bumps to invalidate cache entries when output changes for reasons other than the parser env var.
+- Malformed cache payload fallback helps with shape errors, but not with semantically wrong payloads that still look valid enough to pass basic checks.

@@ -14,12 +14,25 @@ export function ProviderSettingsModal({
   provider,
   onClose,
   onSave,
+  onSync,
 }: ProviderSettingsModalProps) {
   const [requestsPerMinute, setRequestsPerMinute] = useState(provider.requestsPerMinute.toString());
   const [maxParallelRequests, setMaxParallelRequests] = useState(
     provider.maxParallelRequests.toString()
   );
+  // Budget balance: empty string = no budget set (null); numeric string = tracked balance
+  const [balanceInput, setBalanceInput] = useState(
+    provider.balance != null ? provider.balance.toFixed(2) : ''
+  );
+  // Sync section: separate input for entering the real provider balance
+  const [syncInput, setSyncInput] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  const parsedBalance = balanceInput.trim() === '' ? null : parseFloat(balanceInput);
+  const balanceIsValid =
+    balanceInput.trim() === '' || (!isNaN(parsedBalance!) && parsedBalance! >= 0);
+  const balanceChanged = parsedBalance !== provider.balance;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,20 +41,34 @@ export function ProviderSettingsModal({
     await onSave({
       requestsPerMinute: parseInt(requestsPerMinute, 10),
       maxParallelRequests: parseInt(maxParallelRequests, 10),
+      balance: parsedBalance,
     });
 
     setIsSaving(false);
   };
 
+  const parsedSyncBalance = syncInput.trim() === '' ? null : parseFloat(syncInput);
+  const syncIsValid = parsedSyncBalance !== null && !isNaN(parsedSyncBalance) && parsedSyncBalance >= 0;
+
+  const handleSync = async () => {
+    if (!onSync || !syncIsValid || parsedSyncBalance === null) return;
+    setIsSyncing(true);
+    await onSync(parsedSyncBalance);
+    setSyncInput('');
+    setIsSyncing(false);
+  };
+
   const hasChanges =
     parseInt(requestsPerMinute, 10) !== provider.requestsPerMinute ||
-    parseInt(maxParallelRequests, 10) !== provider.maxParallelRequests;
+    parseInt(maxParallelRequests, 10) !== provider.maxParallelRequests ||
+    balanceChanged;
 
   const isValid =
-    requestsPerMinute &&
-    maxParallelRequests &&
+    !!requestsPerMinute &&
+    !!maxParallelRequests &&
     parseInt(requestsPerMinute, 10) > 0 &&
-    parseInt(maxParallelRequests, 10) > 0;
+    parseInt(maxParallelRequests, 10) > 0 &&
+    balanceIsValid;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
@@ -82,6 +109,53 @@ export function ProviderSettingsModal({
             required
           />
 
+          <Input
+            label="Budget Balance ($)"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Leave empty to disable budget tracking"
+            value={balanceInput}
+            onChange={(e) => setBalanceInput(e.target.value)}
+          />
+
+          {onSync && provider.balance != null && (
+            <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+              <p className="text-sm font-medium text-gray-700">Sync with real balance</p>
+              <p className="text-xs text-gray-500">
+                Enter the actual balance shown on your {provider.displayName} dashboard to correct drift.
+              </p>
+              {provider.lastSyncedAt && (
+                <p className="text-xs text-gray-400">
+                  Last synced: {new Date(provider.lastSyncedAt).toLocaleString()}
+                </p>
+              )}
+              <div className="flex gap-2 items-end">
+                <div className="flex-1">
+                  <Input
+                    label=""
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Real balance ($)"
+                    value={syncInput}
+                    onChange={(e) => setSyncInput(e.target.value)}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={!syncIsValid || isSyncing}
+                  isLoading={isSyncing}
+                  onClick={handleSync}
+                >
+                  Sync
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
             <p>
               <strong>Rate Limit:</strong> Maximum API calls per minute to this provider.
@@ -89,6 +163,10 @@ export function ProviderSettingsModal({
             <p className="mt-1">
               <strong>Parallel Requests:</strong> Maximum concurrent API calls. Set to 1 for
               conservative usage that avoids rate limit errors.
+            </p>
+            <p className="mt-1">
+              <strong>Budget Balance:</strong> Track remaining spend for this provider.
+              Leave empty to disable tracking. Balance is automatically decremented when runs complete.
             </p>
           </div>
 

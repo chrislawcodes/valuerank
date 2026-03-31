@@ -1,0 +1,50 @@
+---
+reviewer: "gemini"
+lens: "requirements-adversarial"
+stage: "spec"
+artifact_path: "docs/feature-runs/domain-evaluation-setup-state/spec.md"
+artifact_sha256: "443bdd887c0e025aab9f72c52991c4402e160badafe6d076d0e92f069b82b799"
+repo_root: "."
+git_head_sha: "97662ecffedb936831ed31b60c6d66186679077d"
+git_base_ref: "origin/claude/parallel-reviews-validated-v2"
+git_base_sha: "97662ecffedb936831ed31b60c6d66186679077d"
+generation_method: "gemini-cli"
+resolution_status: "accepted"
+resolution_note: "Spec now blocks stale or missing budget data, revalidates readiness immediately before launch, defines completion and current-launch scoping, and gives completed work a clear diagnostics path."
+raw_output_path: "docs/feature-runs/domain-evaluation-setup-state/reviews/spec.gemini.requirements-adversarial.review.md.json"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: spec requirements-adversarial
+
+## Findings
+
+| Severity | Finding | Recommendation |
+| :--- | :--- | :--- |
+| **HIGH** | **Silent-failure risk on launch.** US-4 states "Pending or queued work is not shown in the main live table until it has started communicating with the target model." A user will click "Launch," the setup UI will disappear, and the status UI will be empty. This mimics a system failure and will likely lead to confusion, repeat clicks on "Launch," and duplicate, costly runs. The user has no feedback that their action was successful. | The status state must immediately show an acknowledgment of the launch. Add a "Queued" or "Initializing" state to the status header counts and potentially show these newly-created-but-not-yet-running batches in a specific section until they become active. |
+| **HIGH** | **Potential for significant, undetected budget overspend.** US-2 and US-3 describe a pre-flight budget check, which is good. However, US-3 also notes the check is re-validated just before the mutation. If this final server-side check fails, "the UI shows the launch failure and keeps the user on the setup state." This is insufficient. The user may have navigated away or closed the tab, assuming the launch was successful. There is no guarantee the user will see this transient UI state. | A failed launch due to a last-minute budget change should be treated as a critical exception. It should create a persistent, user-visible notification (e.g., a "failed launch" entry in a history table, a toast/alert that persists across sessions) rather than relying on a transient UI update that the user might miss. |
+| **MEDIUM** | **The definition of a "stale" signal is ambiguous and critical.** US-3 requires blocking launch if a provider budget signal is stale, and R-5 allows the UI to show a "freshness warning" if a status snapshot is old. The definition of "stale" or "old" is never defined. Is it 10 seconds? 5 minutes? This ambiguity leaves a critical check open to interpretation, which could lead to launches being blocked unnecessarily or, worse, proceeding on dangerously old data. | The spec should define the exact time threshold for staleness for both budget and status signals (e.g., "A budget signal is considered stale if older than 60 seconds."). This threshold should be a documented part of the contract between the frontend and backend. |
+| **MEDIUM** | **[UNVERIFIED] The lifecycle of a "completed" batch is unclear.** US-4 states "Completed batches leave the main list," and a paired batch is `done` only when both legs reach "terminal generation, summarization, and analysis states." In a distributed system, a downstream analysis process can fail long after generation is complete. It is unclear if such a failure would cause a "completed" batch to reappear in the exceptions list. If not, failures could be missed entirely. | The spec should clarify the terminality of "completed." Define whether a batch, once it leaves the live view, can ever re-enter an exception state. If it can, the UI must have a way to handle this (e.g., persistent notifications, a separate "Attention Required" list). |
+| **MEDIUM** | **[UNVERIFIED] Performance at scale is not addressed.** The spec requires replacing a "dense matrix" with a list of active/exception batches. However, it does not specify limits or UI behavior for a large number of active batches. A domain with thousands of vignettes could still produce a list of thousands of "active" items, leading to UI performance degradation and information overload, recreating the problem the spec aims to solve. | The spec should include requirements for handling high-volume active/exception lists. Consider adding pagination, virtualization, or summarization (e.g., "25 batches for model X are processing") for the live status view when the number of active rows exceeds a certain threshold (e.g., 100). |
+| **LOW** | **The `>20` confirmation threshold is arbitrary.** US-2 requires an extra confirmation for a paired-batch count over 20. Why 20? This number feels arbitrary and lacks a rationale. A user running 19 batches on a 1000-vignette domain is still a massive launch. The confirmation is tied to the batch count, not the more important metric of total expected cost. | The confirmation dialog should be triggered by a cost threshold, not a batch count. For example, "Require explicit confirmation for any launch estimated to exceed $100." This directly addresses the risk (budget) instead of relying on a proxy (batch count). |
+| **LOW** | **[UNVERIFIED] Reusing existing run data may be insufficient.** US-5 and R-3 encourage reusing existing data structures for the detail view and provider readiness. While efficient, this assumes the existing data is sufficient for the new UX. If the existing "run data" lacks the granularity to be a useful "log-like" view, the feature will fail to meet user needs for inspection and debugging. | Change the requirement from "reuse existing run data" to "The detail view must show X, Y, and Z," where X, Y, and Z are the specific pieces of information needed for debugging. This specifies the desired outcome and leaves the implementation decision (reuse vs. augment) to the engineering team. |
+
+## Residual Risks
+
+-   **User Experience Gap:** The period between the user clicking "Launch" and the first batches becoming "active" remains a significant risk. Even with an "Initializing" state, if this period is long due to queueing, users may perceive the system as slow or broken. The spec does not address how to manage user expectations during this unavoidable delay.
+-   **Race Conditions:** The spec addresses the budget-check race condition, but others may exist. For example, if the user can change the batch-depth input while a cost estimate for the previous value is being calculated, the UI could display an inconsistent state. The spec does not require controls to be disabled during dependent backend operations.
+-   **Contract Brittleness:** The feature's success is tightly coupled to assumptions about backend capabilities (provider health signals, `startDomainEvaluation` behavior, run status fields). While R-5 allows for minimal backend changes, any inaccuracies in the [UNVERIFIED] assumptions could require significant, unplanned backend work, jeopardizing the project timeline. The strong language in R-6 about sticking to the current contract is good, but it also means the UI is being built on a foundation it cannot control.
+
+## Token Stats
+
+- total_input=2662
+- total_output=1399
+- total_tokens=17381
+- `gemini-2.5-pro`: input=2662, output=1399, total=17381
+
+## Resolution
+- status: accepted
+- note: Spec now blocks stale or missing budget data, revalidates readiness immediately before launch, defines completion and current-launch scoping, and gives completed work a clear diagnostics path.

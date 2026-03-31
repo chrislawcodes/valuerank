@@ -1,0 +1,8 @@
+## Findings
+1. **`AnalysisTranscripts.tsx` now shows an aggregate summary where the page previously showed the selected transcript’s own decision code.**  
+   The new `Decision summary: {decisionSummary.headline}` line is derived from `filteredTranscripts`, not the currently focused transcript. In any view with more than one transcript, this can replace a precise per-transcript value with `Mixed`, `Unknown`, or a list-wide majority label, which is a correctness regression for the detail header. The old `Decision: {decisionCode}` at least described the selected row; the new text can contradict the item on screen.  
+   File: [`cloud/apps/web/src/pages/AnalysisTranscripts.tsx`](/Users/chrislaw/valuerank/cloud/apps/web/src/pages/AnalysisTranscripts.tsx)
+
+## Residual Risks
+- `reportDecisionDisplay.ts` classifies headlines by exact string shape: `Neutral`, `Strongly favors ...`, or everything else as `lean`. If `formatCanonicalDecisionHeadline` ever changes its wording, the bucketization will silently drift.
+- The new summary UI still collapses `unknownCount` into a single `Unknown` headline in the places shown here, so a mostly-unclassified slice can still read as if it has a confident decision summary.

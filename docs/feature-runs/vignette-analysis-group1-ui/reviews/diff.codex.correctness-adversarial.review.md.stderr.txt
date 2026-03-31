@@ -1,0 +1,568 @@
+2026-03-25T05:47:13.991837Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:13.992689Z  WARN codex_core::state_db: failed to initialize state runtime at /Users/chrislaw/.codex: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:14.000114Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d2388-62c0-7b81-80fc-8cc740a808fc
+--------
+user
+Review this diff artifact using a correctness-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/apps/web/src/components/runs/TranscriptList.tsx b/cloud/apps/web/src/components/runs/TranscriptList.tsx
+index cd7fd9d5..950efd11 100644
+--- a/cloud/apps/web/src/components/runs/TranscriptList.tsx
++++ b/cloud/apps/web/src/components/runs/TranscriptList.tsx
+@@ -14,6 +14,7 @@ import {
+ } from '../../utils/scenarioUtils';
+ import { formatDisplayLabel } from '../../utils/displayLabels';
+ import {
++  hasRenderableTranscriptDecisionModelV2,
+   getTranscriptDecisionSortValue,
+   normalizeLegacyDecisionCode,
+   type TranscriptDecisionDisplayMode,
+@@ -167,6 +168,9 @@ function getTranscriptDecisionValue(
+   normalizedDecisionTranscriptIds?: Set<string>,
+ ): string | number {
+   if (displayMode === 'audit') {
++    if (!hasRenderableTranscriptDecisionModelV2(transcript)) {
++      return getTranscriptDecisionSortValue(transcript, 'legacy');
++    }
+     return getTranscriptDecisionSortValue(transcript, displayMode);
+   }
+ 
+@@ -372,7 +376,11 @@ export function TranscriptList({
+         }
+       }
+ 
+-      return 0;
++      if (a.createdAt !== b.createdAt) {
++        return a.createdAt.localeCompare(b.createdAt);
++      }
++
++      return a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' });
+     });
+   }, [compareByColumn, sortKeys.primary, sortKeys.secondary, sortState.column, sortState.direction]);
+ 
+diff --git a/cloud/apps/web/src/components/runs/TranscriptRow.tsx b/cloud/apps/web/src/components/runs/TranscriptRow.tsx
+index 6bd2aa21..3b6d8be5 100644
+--- a/cloud/apps/web/src/components/runs/TranscriptRow.tsx
++++ b/cloud/apps/web/src/components/runs/TranscriptRow.tsx
+@@ -6,6 +6,7 @@ import { getDecisionMetadata } from '../../utils/methodology';
+ import {
+   formatCanonicalDecisionHeadline,
+   getTranscriptDecisionAuditBadge,
++  hasRenderableTranscriptDecisionModelV2,
+   normalizeLegacyDecisionCode,
+   type TranscriptDecisionDisplayMode,
+ } from '../../utils/transcriptDecisionModel';
+@@ -130,13 +131,16 @@ export function TranscriptRow({
+   const showGrid = !compact && Boolean(gridTemplateColumns);
+   const rawDecision = transcript.decisionCode ?? extractDecision(transcript.content);
+   const decisionScaleLabels = decisionMetadata?.scaleLabels ?? [];
+-  const rowDecisionDisplayMode = decisionDisplayMode ?? 'legacy';
++  const rowDecisionDisplayMode = hasRenderableTranscriptDecisionModelV2(transcript)
++    ? (decisionDisplayMode ?? 'audit')
++    : 'legacy';
+   const legacyDecisionDisplay = getLegacyDecisionDisplay(transcript, rawDecision, normalizeDecision, dimensions);
+   const canonicalDecision = transcript.decisionModelV2?.canonical ?? null;
+   const canonicalDecisionDisplay = canonicalDecision
+     ? formatCanonicalDecisionHeadline(transcript)
+     : '-';
+   const auditDecisionBadge = rowDecisionDisplayMode === 'audit'
++    && hasRenderableTranscriptDecisionModelV2(transcript)
+     ? getTranscriptDecisionAuditBadge(transcript)
+     : null;
+   const decisionDisplay = rowDecisionDisplayMode === 'audit'
+@@ -293,7 +297,7 @@ export function TranscriptRow({
+             <span
+               className="flex items-center gap-2"
+               title={rowDecisionDisplayMode === 'audit'
+-                ? 'Canonical decision'
++                ? 'Decision summary'
+                 : transcript.decisionCodeSource === 'llm'
+                   ? 'Decision (LLM-classified)'
+                   : 'Decision'}
+diff --git a/cloud/apps/web/src/components/runs/TranscriptViewer.tsx b/cloud/apps/web/src/components/runs/TranscriptViewer.tsx
+index 0c9df8c7..d1cd9c0b 100644
+--- a/cloud/apps/web/src/components/runs/TranscriptViewer.tsx
++++ b/cloud/apps/web/src/components/runs/TranscriptViewer.tsx
+@@ -12,6 +12,7 @@ import { getDecisionMetadata } from '../../utils/methodology';
+ import {
+   formatCanonicalDecisionHeadline,
+   getTranscriptDecisionAuditBadge,
++  hasRenderableTranscriptDecisionModelV2,
+   normalizeLegacyDecisionCode,
+   type TranscriptDecisionDisplayMode,
+ } from '../../utils/transcriptDecisionModel';
+@@ -115,8 +116,10 @@ export function TranscriptViewer({
+   const rawDecision = transcript.decisionCode ?? '-';
+   const legacyDecision = normalizeLegacyDecisionCode(rawDecision, normalizeDecision);
+   const legacyDecisionDisplay = transcript.decisionCodeSource === 'llm' ? `${legacyDecision}*` : legacyDecision;
+-  const viewMode = decisionDisplayMode ?? (transcript.decisionModelV2 ? 'audit' : 'legacy');
+-  const isAuditMode = viewMode === 'audit' && transcript.decisionModelV2 != null;
++  const viewMode = decisionDisplayMode ?? (
++    hasRenderableTranscriptDecisionModelV2(transcript) ? 'audit' : 'legacy'
++  );
++  const isAuditMode = viewMode === 'audit' && hasRenderableTranscriptDecisionModelV2(transcript);
+   const canonicalDecision = transcript.decisionModelV2?.canonical ?? null;
+   const rawEvidence = transcript.decisionModelV2?.raw ?? null;
+   const canonicalDecisionHeadline = isAuditMode ? formatCanonicalDecisionHeadline(transcript) : '-';
+@@ -171,9 +174,6 @@ export function TranscriptViewer({
+             <Hash className="w-4 h-4" />
+             {transcript.turnCount} turn{transcript.turnCount !== 1 ? 's' : ''}
+           </span>
+-          <span className="flex items-center gap-1">
+-            {transcript.tokenCount.toLocaleString()} tokens
+-          </span>
+           <span className="flex items-center gap-1">
+             <Clock className="w-4 h-4" />
+             {formatDuration(transcript.durationMs)}
+@@ -185,7 +185,7 @@ export function TranscriptViewer({
+                   {auditDecisionBadge}
+                 </span>
+               )}
+-              <span className="text-gray-500">Canonical decision:</span>
++              <span className="text-gray-500">Decision summary:</span>
+               <span className="font-medium text-gray-800">{canonicalDecisionHeadline}</span>
+             </span>
+           ) : (
+diff --git a/cloud/apps/web/src/pages/AnalysisConditionDetail.tsx b/cloud/apps/web/src/pages/AnalysisConditionDetail.tsx
+index 23da199b..7a75c0a4 100644
+--- a/cloud/apps/web/src/pages/AnalysisConditionDetail.tsx
++++ b/cloud/apps/web/src/pages/AnalysisConditionDetail.tsx
+@@ -41,6 +41,11 @@ type DetailRow = {
+   baseSearchParams: URLSearchParams;
+ };
+ 
++const CONDITION_COPY = {
++  countSummary: 'Raw transcript counts by canonical decision summary. Click any non-zero count to open the matching transcripts.',
++  unresolvedSummary: 'Counts and means use only transcripts with canonical decision data. Unresolved transcripts for this condition are excluded.',
++} as const;
++
+ const DECISION_CODES: DecisionCode[] = ['1', '2', '3', '4', '5'];
+ 
+ function isRecord(value: unknown): value is Record<string, unknown> {
+@@ -257,7 +262,7 @@ export function AnalysisConditionDetail() {
+     [aFirstRun?.definition?.content, bFirstRun?.definition?.content, run?.definition?.content],
+   );
+ 
+-  const scoreLabels = useMemo(() => {
++  const decisionSummaryLabels = useMemo(() => {
+     const labels = deriveDecisionDimensionLabels(
+       aFirstRun?.definition?.content ?? run?.definition?.content ?? null,
+     );
+@@ -441,7 +446,7 @@ export function AnalysisConditionDetail() {
+             Model: <span className="font-medium text-gray-900">{selectedModel}</span>
+           </p>
+           <p className="text-sm text-gray-500">
+-            Raw transcript counts by normalized 1-5 decision score. Click any non-zero count to open the matching transcripts.
++            {CONDITION_COPY.countSummary}
+           </p>
+         </div>
+       </div>
+@@ -459,15 +464,12 @@ export function AnalysisConditionDetail() {
+               <th className="border-b border-gray-200 bg-gray-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
+                 Vignette Order
+               </th>
+-              {scoreLabels.map(({ code, label }) => (
++              {decisionSummaryLabels.map(({ label }) => (
+                 <th
+-                  key={code}
++                  key={label}
+                   className="border-b border-gray-200 bg-gray-50 px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-600"
+                 >
+                   <div className="mx-auto flex max-w-[8rem] flex-col items-center gap-1 whitespace-normal leading-tight">
+-                    <span className="rounded bg-gray-200 px-1.5 py-0.5 text-[11px] font-bold text-gray-700">
+-                      {code}
+-                    </span>
+                     <span>{label}</span>
+                   </div>
+                 </th>
+@@ -520,7 +522,7 @@ export function AnalysisConditionDetail() {
+ 
+       {hasUnresolvedTranscripts && (
+         <p className="text-xs text-gray-500">
+-          Counts and means use only transcripts with normalized 1-5 decision scores. Unresolved transcripts for this condition are excluded.
++          {CONDITION_COPY.unresolvedSummary}
+         </p>
+       )}
+ 
+diff --git a/cloud/apps/web/src/pages/AnalysisTranscripts.tsx b/cloud/apps/web/src/pages/AnalysisTranscripts.tsx
+index 357ec418..484ff64c 100644
+--- a/cloud/apps/web/src/pages/AnalysisTranscripts.tsx
++++ b/cloud/apps/web/src/pages/AnalysisTranscripts.tsx
+@@ -36,7 +36,7 @@ import {
+ } from '../utils/decisionLabels';
+ import { formatDisplayLabel } from '../utils/displayLabels';
+ import { getRunDefinitionContent } from '../utils/runDefinitionContent';
+-import { hasTranscriptDecisionModelV2 } from '../utils/transcriptDecisionModel';
++import { getTranscriptDecisionDisplayMode } from '../utils/transcriptDecisionModel';
+ import {
+   ANALYSIS_BASE_PATH,
+   buildAnalysisTranscriptsPath,
+@@ -630,12 +630,9 @@ export function AnalysisTranscripts() {
+     run?.id,
+   ]);
+ 
+-  const listDisplayMode = filteredTranscripts.length > 0
+-    && filteredTranscripts.every(hasTranscriptDecisionModelV2)
+-    ? 'audit'
+-    : 'legacy';
+-  const viewerDisplayMode = selectedTranscript?.decisionModelV2 != null
+-    ? 'audit'
++  const listDisplayMode = getTranscriptDecisionDisplayMode(filteredTranscripts);
++  const viewerDisplayMode = selectedTranscript
++    ? getTranscriptDecisionDisplayMode([selectedTranscript])
+     : listDisplayMode;
+   const decisionColumnLabel = listDisplayMode === 'audit'
+     ? 'Decision summary'
+diff --git a/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx b/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx
+index 51ebb390..e946a9a0 100644
+--- a/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx
++++ b/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx
+@@ -18,10 +18,15 @@ import {
+ import { VALUE_LABELS, type ValueKey } from '../data/domainAnalysisData';
+ import {
+   formatCanonicalDecisionHeadline,
+-  hasTranscriptDecisionModelV2,
++  getTranscriptDecisionDisplayMode,
+   type TranscriptDecisionDisplayMode,
+ } from '../utils/transcriptDecisionModel';
+ 
++const VALUE_DETAIL_COPY = {
++  decisionColumnLabel: 'Decision summary',
++  legacyDecisionColumnLabel: 'Decision',
++} as const;
++
+ function toPercent(value: number | null): string {
+   if (value === null || Number.isNaN(value)) return '-';
+   return `${(value * 100).toFixed(1)}%`;
+@@ -288,11 +293,10 @@ export function DomainAnalysisValueDetail() {
+     createdAt: transcript.createdAt,
+     lastAccessedAt: null,
+   }));
+-  const reportDecisionDisplayMode: TranscriptDecisionDisplayMode = normalizedTranscripts.length > 0
+-    && normalizedTranscripts.every(hasTranscriptDecisionModelV2)
+-    ? 'audit'
+-    : 'legacy';
+-  const decisionColumnLabel = reportDecisionDisplayMode === 'audit' ? 'Canonical decision' : 'Decision';
++  const reportDecisionDisplayMode: TranscriptDecisionDisplayMode = getTranscriptDecisionDisplayMode(normalizedTranscripts);
++  const decisionColumnLabel = reportDecisionDisplayMode === 'audit'
++    ? VALUE_DETAIL_COPY.decisionColumnLabel
++    : VALUE_DETAIL_COPY.legacyDecisionColumnLabel;
+ 
+   const handleConditionClick = (definitionId: string, conditionName: string, scenarioId: string | null) => {
+     const clickedKey = `${definitionId}:${scenarioId ?? '__unknown__'}`;
+@@ -451,7 +455,6 @@ export function DomainAnalysisValueDetail() {
+                             <th className="px-2 py-2 text-left font-medium">Transcript</th>
+                             <th className="px-2 py-2 text-right font-medium">{decisionColumnLabel}</th>
+                             <th className="px-2 py-2 text-right font-medium">Turns</th>
+-                            <th className="px-2 py-2 text-right font-medium">Tokens</th>
+                             <th className="px-2 py-2 text-right font-medium">Duration</th>
+                             <th className="px-2 py-2 text-right font-medium">Created</th>
+                             <th className="px-2 py-2 text-right font-medium">Run</th>
+@@ -477,7 +480,6 @@ export function DomainAnalysisValueDetail() {
+                                   : (transcript.decisionCode ?? '-')}
+                               </td>
+                               <td className="px-2 py-2 text-right text-gray-800">{transcript.turnCount}</td>
+-                              <td className="px-2 py-2 text-right text-gray-800">{transcript.tokenCount.toLocaleString()}</td>
+                               <td className="px-2 py-2 text-right text-gray-800">{Math.round(transcript.durationMs / 100) / 10}s</td>
+                               <td className="px-2 py-2 text-right text-gray-800">
+                                 {new Date(transcript.createdAt).toLocaleString('en-US', {
+diff --git a/cloud/apps/web/tests/components/runs/TranscriptList.test.tsx b/cloud/apps/web/tests/components/runs/TranscriptList.test.tsx
+index 83e47342..a29a412d 100644
+--- a/cloud/apps/web/tests/components/runs/TranscriptList.test.tsx
++++ b/cloud/apps/web/tests/components/runs/TranscriptList.test.tsx
+@@ -212,7 +212,7 @@ describe('TranscriptList', () => {
+         onSelect={mockOnSelect}
+         groupByModel={false}
+         decisionDisplayMode="audit"
+-        decisionColumnLabel="Canonical decision"
++        decisionColumnLabel="Decision summary"
+       />
+     );
+ 
+@@ -255,7 +255,7 @@ describe('TranscriptList', () => {
+         onSelect={mockOnSelect}
+         groupByModel={false}
+         decisionDisplayMode="audit"
+-        decisionColumnLabel="Canonical decision"
++        decisionColumnLabel="Decision summary"
+       />
+     );
+ 
+@@ -402,6 +402,26 @@ describe('TranscriptList', () => {
+     expect(rowIds).toEqual(['t1', 't3', 't2']);
+   });
+ 
++  it('uses a stable id tie-breaker when the primary sort values are equal', () => {
++    const transcripts = [
++      createMockTranscript({ id: 't2', modelId: 'gpt-4', createdAt: '2024-01-15T10:00:00Z' }),
++      createMockTranscript({ id: 't1', modelId: 'gpt-4', createdAt: '2024-01-15T10:00:00Z' }),
++    ];
++
++    const { container } = render(
++      <TranscriptList
++        transcripts={transcripts}
++        onSelect={mockOnSelect}
++        groupByModel={false}
++      />
++    );
++
++    const rowIds = Array.from(container.querySelectorAll('[data-transcript-id]'))
++      .map((element) => element.getAttribute('data-transcript-id'));
++
++    expect(rowIds).toEqual(['t1', 't2']);
++  });
++
+   it('sorts dimension columns by numeric tier when values are stored as words', async () => {
+     const transcripts = [
+       createMockTranscript({ id: 't1', scenarioId: 'scenario-1' }),
+diff --git a/cloud/apps/web/tests/components/runs/TranscriptViewer.test.tsx b/cloud/apps/web/tests/components/runs/TranscriptViewer.test.tsx
+index aeef0337..8df767d1 100644
+--- a/cloud/apps/web/tests/components/runs/TranscriptViewer.test.tsx
++++ b/cloud/apps/web/tests/components/runs/TranscriptViewer.test.tsx
+@@ -63,10 +63,11 @@ describe('TranscriptViewer', () => {
+       />
+     );
+ 
+-    expect(screen.getByText('Canonical decision:')).toBeInTheDocument();
++    expect(screen.getByText('Decision summary:')).toBeInTheDocument();
+     expect(screen.getByText('Strongly favors Benevolence Dependability')).toBeInTheDocument();
+     expect(screen.getByText('Raw Evidence')).toBeInTheDocument();
+     expect(screen.getByText('exact')).toBeInTheDocument();
++    expect(screen.queryByText('42 tokens')).not.toBeInTheDocument();
+     expect(screen.getByText(/Manual override previous value:/i).parentElement).toHaveTextContent('5');
+     expect(screen.queryByText('Compatibility Decision Code')).not.toBeInTheDocument();
+     expect(screen.queryByLabelText(/Set decision for transcript transcript-1/i)).not.toBeInTheDocument();
+diff --git a/cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx b/cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx
+index c3f49520..06a3b853 100644
+--- a/cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx
++++ b/cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx
+@@ -174,6 +174,7 @@ describe('AnalysisConditionDetail', () => {
+     expect(screen.getByText('Harmony -> Freedom')).toBeInTheDocument();
+     expect(screen.getByText('Strongly Support Harmony')).toBeInTheDocument();
+     expect(screen.getByText('Strongly Support Freedom')).toBeInTheDocument();
++    expect(screen.getByText('Raw transcript counts by canonical decision summary. Click any non-zero count to open the matching transcripts.')).toBeInTheDocument();
+   });
+ 
+   it('routes a paired row count click to the matching transcript slice', () => {
+diff --git a/cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx b/cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx
+index 54040b2d..003ca51c 100644
+--- a/cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx
++++ b/cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx
+@@ -170,7 +170,7 @@ describe('DomainAnalysisValueDetail', () => {
+     fireEvent.click(screen.getByTitle('Condition A'));
+ 
+     await waitFor(() => {
+-      expect(screen.getByText('Canonical decision')).toBeInTheDocument();
++      expect(screen.getByText('Decision summary')).toBeInTheDocument();
+     });
+ 
+     expect(screen.getByText('Strongly favors Benevolence Dependability')).toBeInTheDocument();
+@@ -180,6 +180,7 @@ describe('DomainAnalysisValueDetail', () => {
+     const viewer = await screen.findByTestId('transcript-viewer');
+     expect(within(viewer).getByText('transcript-v2')).toBeInTheDocument();
+     expect(within(viewer).getByText('audit')).toBeInTheDocument();
++    expect(screen.queryByText('Tokens')).not.toBeInTheDocument();
+   });
+ 
+   it('keeps the report surface in legacy mode when mixed V1/V2 transcripts are present', async () => {
+@@ -310,5 +311,6 @@ describe('DomainAnalysisValueDetail', () => {
+     const legacyViewer = await screen.findByTestId('transcript-viewer');
+     expect(within(legacyViewer).getByText('transcript-legacy')).toBeInTheDocument();
+     expect(within(legacyViewer).getByText('legacy')).toBeInTheDocument();
++    expect(screen.queryByText('Tokens')).not.toBeInTheDocument();
+   });
+ });
+
+diff --git acloud/apps/web/tests/utils/transcriptDecisionModel.test.ts bcloud/apps/web/tests/utils/transcriptDecisionModel.test.ts
+new file mode 100644
+index 00000000..6825dc64
+--- /dev/null
++++ bcloud/apps/web/tests/utils/transcriptDecisionModel.test.ts
+@@ -0,0 +1,113 @@
++import { describe, expect, it } from 'vitest';
++import type { Transcript } from '../../src/api/operations/runs';
++import {
++  formatCanonicalDecisionHeadline,
++  getTranscriptDecisionAuditBadge,
++  getTranscriptDecisionDisplayMode,
++  hasTranscriptDecisionModelV2,
++} from '../../src/utils/transcriptDecisionModel';
++
++function createTranscript(overrides: Partial<Transcript> = {}): Transcript {
++  return {
++    id: 'transcript-1',
++    runId: 'run-1',
++    scenarioId: 'scenario-1',
++    modelId: 'gpt-4',
++    modelVersion: 'gpt-4-0125-preview',
++    content: { turns: [] },
++    decisionCode: '3',
++    decisionCodeSource: 'llm',
++    decisionMetadata: null,
++    turnCount: 2,
++    tokenCount: 100,
++    durationMs: 1500,
++    estimatedCost: null,
++    createdAt: '2024-01-15T10:00:00Z',
++    lastAccessedAt: null,
++    ...overrides,
++  };
++}
++
++function createRenderableV2Transcript(
++  overrides: Partial<Transcript['decisionModelV2']> = {},
++): NonNullable<Transcript['decisionModelV2']> {
++  return {
++    raw: {
++      matchedText: 'Achievement',
++      matchedLabel: 'Achievement',
++      parseClass: 'exact',
++      parsePath: 'exact.favor_second.strong',
++      parserVersion: 'v1',
++      responseExcerpt: 'Achievement',
++      manualOverride: null,
++      ...overrides.raw,
++    },
++    canonical: {
++      favoredValueKey: 'Benevolence_Dependability',
++      opposedValueKey: 'Achievement',
++      direction: 'favor_second',
++      strength: 'strong',
++      normalizationApplied: true,
++      normalizationReason: 'orientation_flipped',
++      source: 'deterministic',
++      ...overrides.canonical,
++    },
++    legacy: {
++      rawScore: null,
++      canonicalScore: 1,
++      ...overrides.legacy,
++    },
++  };
++}
++
++describe('transcriptDecisionModel', () => {
++  it('treats empty transcript sets as legacy', () => {
++    expect(getTranscriptDecisionDisplayMode([])).toBe('legacy');
++  });
++
++  it('treats partial or empty V2 envelopes as legacy', () => {
++    const transcript = createTranscript({
++      decisionModelV2: {
++        raw: { parseClass: 'exact' } as NonNullable<Transcript['decisionModelV2']>['raw'],
++        canonical: null,
++        legacy: null,
++      } as NonNullable<Transcript['decisionModelV2']>,
++    });
++
++    expect(hasTranscriptDecisionModelV2(transcript)).toBe(false);
++    expect(getTranscriptDecisionDisplayMode([transcript])).toBe('legacy');
++  });
++
++  it('switches to audit mode only when every transcript has a renderable V2 envelope', () => {
++    const renderable = createTranscript({ decisionModelV2: createRenderableV2Transcript() });
++    const legacy = createTranscript({ id: 'transcript-2', decisionModelV2: null });
++
++    expect(hasTranscriptDecisionModelV2(renderable)).toBe(true);
++    expect(getTranscriptDecisionDisplayMode([renderable])).toBe('audit');
++    expect(getTranscriptDecisionDisplayMode([renderable, legacy])).toBe('legacy');
++  });
++
++  it('prefers the manual badge over fallback metadata', () => {
++    const transcript = createTranscript({
++      decisionModelV2: createRenderableV2Transcript({
++        raw: {
++          parseClass: 'fallback_resolved',
++          manualOverride: {
++            previousValue: '1',
++            overriddenAt: '2024-01-15T12:00:00Z',
++            overriddenByUserId: 'user-1',
++          },
++        },
++      }),
++    });
++
++    expect(getTranscriptDecisionAuditBadge(transcript)).toBe('Manual');
++  });
++
++  it('hides the badge for exact deterministic transcripts', () => {
++    const transcript = createTranscript({ decisionModelV2: createRenderableV2Transcript() });
++
++    expect(getTranscriptDecisionAuditBadge(transcript)).toBeNull();
++    expect(formatCanonicalDecisionHeadline(transcript)).toBe('Strongly favors Benevolence Dependability');
++  });
++});
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+2026-03-25T05:47:14.025599Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:47:14.028663Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:14.054349Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:47:14.055623Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:14.058400Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d2388-62c0-7b81-80fc-8cc740a808fc.tmp-1774417633994277000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-03-25T05:47:14.079086Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:47:14.080180Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:14.102656Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:47:14.103697Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:14.127580Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:47:14.128523Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:14.153405Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:47:14.154487Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:14.178051Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:47:14.179045Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:14.202202Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:47:14.203284Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:14.228082Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:47:14.229157Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:14.252933Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:47:14.253938Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:14.278983Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:47:14.280013Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:14.302984Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:47:14.303922Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:14.329000Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:47:14.330171Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:14.354938Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:47:14.355980Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:14.378980Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:47:14.380059Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:14.404372Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:47:14.405354Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:14.428387Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:47:14.429598Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:14.452957Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:47:14.454005Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:47:14.477134Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+codex
+## Findings
+- **Medium** `cloud/apps/web/src/components/runs/TranscriptList.tsx:376` adds an unconditional tie-break on `createdAt` and then `id`, but it ignores the active sort direction. For any sort where the primary values compare equal, descending sorts will still resolve ties in ascending time/id order, so the visible ordering can change in ways the user did not ask for. That makes the new "stable" behavior direction-blind rather than consistent with the selected sort.
+- **Medium** `cloud/apps/web/src/pages/AnalysisConditionDetail.tsx:464` switches the table header React key from the numeric `code` to the visible `label`. The code was the only guaranteed-unique identifier; labels are derived text and are not guaranteed unique. If two labels collide, React will reconcile the wrong header cells and the decision matrix can render incorrectly.
+
+## Residual Risks
+- I did not verify the implementation of `getTranscriptDecisionDisplayMode` and `hasRenderableTranscriptDecisionModelV2`, so any edge cases in the new audit/legacy gating outside the shown call sites remain unreviewed.
+- The removal of token-count displays looks intentional, but I did not assess whether any downstream workflow still depends on that metadata being visible in these surfaces.
+tokens used
+20,377

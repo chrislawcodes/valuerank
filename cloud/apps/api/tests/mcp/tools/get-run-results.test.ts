@@ -24,6 +24,33 @@ describe('get_run_results tool', () => {
     extra: Record<string, unknown>
   ) => Promise<unknown>;
 
+  function buildDecisionTranscript() {
+    return {
+      decisionMetadata: {
+        manualOverride: {
+          appliedDecision: {
+            favoredValueKey: 'Achievement',
+            opposedValueKey: 'Benevolence_Dependability',
+            direction: 'favor_first',
+            strength: 'strong',
+          },
+          previousValue: '4',
+          overriddenAt: '2026-01-01T00:00:00.000Z',
+          overriddenByUserId: 'test-user',
+        },
+      },
+      definitionSnapshot: {
+        dimensions: [
+          { name: 'Achievement' },
+          { name: 'Benevolence_Dependability' },
+        ],
+        methodology: {
+          presentation_order: 'A_first',
+        },
+      },
+    };
+  }
+
   const mockServer = {
     registerTool: vi.fn((name, _config, handler) => {
       if (name === 'get_run_results') {
@@ -88,8 +115,8 @@ describe('get_run_results tool', () => {
     vi.mocked(db.transcript.findMany).mockResolvedValue([
       {
         id: 'tx-1',
-        decisionCode: '4',
         decisionText: 'Chose option four',
+        ...buildDecisionTranscript(),
       },
     ] as never);
 
@@ -105,7 +132,11 @@ describe('get_run_results tool', () => {
     expect(response.data.progress.pending).toBe(6);
     expect(response.data.pagination.totalAvailable).toBe(2);
     expect(response.data.results).toHaveLength(2);
-    expect(response.data.results[0].decisionCode).toBe('4');
+    expect(response.data.results[0].decision).toEqual({
+      direction: 'favor_first',
+      strength: 'strong',
+      favoredValueKey: 'Achievement',
+    });
     expect(response.data.results[1].errorCode).toBe('PROBE_FAILED');
   });
 
@@ -154,8 +185,8 @@ describe('get_run_results tool', () => {
     vi.mocked(db.transcript.findMany).mockResolvedValue([
       {
         id: 'tx-1',
-        decisionCode: '4',
         decisionText: longText,
+        ...buildDecisionTranscript(),
       },
     ] as never);
 

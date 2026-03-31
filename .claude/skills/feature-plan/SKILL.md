@@ -437,6 +437,95 @@ endpoints:
 
 ---
 
+### Step 7.5: Generate spec-acceptance.md
+
+**Always generated** — compact downstream context for tasks and implement stages.
+
+This file distills the parts of spec.md that downstream stages actually need: acceptance criteria and key constraints. It lets tasks and implement stages skip loading the full spec (~5KB narrative) while retaining the signal they use.
+
+**File**: `<feature-dir>/spec-acceptance.md`
+
+**Structure** (extract directly from spec.md — no paraphrasing):
+```markdown
+# Acceptance Criteria: [FEATURE NAME]
+
+## User Stories
+| ID | Title | Priority |
+|----|-------|----------|
+| US-1 | [Title] | P1 |
+| US-2 | [Title] | P2 |
+
+## Acceptance Scenarios
+
+### US-1: [Title]
+- Given [...] When [...] Then [...]
+- Given [...] When [...] Then [...]
+
+### US-2: [Title]
+- Given [...] When [...] Then [...]
+
+## Success Criteria
+- SC-001: [From spec — measurable outcome]
+- SC-002: [...]
+
+## Key Constraints
+- [Constraint]: [Rationale — one sentence explaining why]
+- [Constraint]: [Rationale]
+```
+
+**Rules**:
+- Copy acceptance scenarios verbatim from spec.md — do not summarize
+- For each constraint, include its rationale (the "why") — downstream review stages need this to make correct judgment calls without falling back to the full plan
+- Omit: user story narrative, background, FR-NNN requirement lists, non-goal sections
+
+---
+
+### Step 7.6: Generate plan-summary.md
+
+**Always generated** — compact downstream context for tasks and implement stages.
+
+This file distills the parts of plan.md that downstream stages actually need: file paths, migration steps, key constraints with their rationale, and data model shape. It lets tasks and implement stages skip loading the full plan (~12KB with rationale, options, and background) while retaining all the signal they use for implementation decisions.
+
+**File**: `<feature-dir>/plan-summary.md`
+
+**Structure**:
+```markdown
+# Plan Summary: [FEATURE NAME]
+
+## Files In Scope
+
+| File | Change | Notes |
+|------|--------|-------|
+| `path/to/file.ext` | create/modify | [one-line purpose] |
+
+## Migration Steps
+
+[If no migrations: "None"]
+
+1. [Migration step with command or SQL]
+2. [Step]
+
+## Data Model
+
+[If no schema changes: "None"]
+
+**[Entity]**: `[table]` — [key fields and relationships, one line per entity]
+
+## Key Constraints
+
+- **[Constraint name]**: [What it requires] — *Why: [rationale — one sentence explaining the motivation, e.g., "prevents N+1 queries at scale" or "required by auth middleware ordering"]*
+- **[Constraint name]**: [What it requires] — *Why: [rationale]*
+```
+
+**Rules**:
+- Extract file paths from the "Project Structure" section of plan.md — list every file that will be created or modified
+- For migrations: copy steps verbatim from data-model.md if it exists, otherwise extract from plan.md
+- For data model: one line per entity — name, table name, and the 2–3 most important fields or relationships
+- For constraints: copy each constraint from plan.md's architecture decisions, and include its rationale (the "why") so downstream review stages can make correct judgment calls without loading the full plan
+- Keep total file under 3KB — omit rationale prose, alternatives considered, and background sections
+
+---
+
 ### Step 8: Constitution Validation
 
 **If constitution exists:**
@@ -472,6 +561,8 @@ endpoints:
 
 Generated Files:
 - plan.md (architecture decisions, tech stack, constitution check)
+- plan-summary.md (file paths, migration steps, constraints + rationale — for downstream stages)
+- spec-acceptance.md (acceptance criteria + constraints for downstream stages)
 [If generated:] - data-model.md ([N] entities, migrations, type definitions)
 [If generated:] - contracts/ ([N] API contracts)
 [If generated:] - research.md ([N] technical decisions)
@@ -500,6 +591,7 @@ To continue: Simply say "use feature-tasks skill" or "generate the tasks"
 
 **Always Generate**:
 - ✅ `plan.md` (required for all features)
+- ✅ `plan-summary.md` (compact downstream context: file paths, migrations, constraints + rationale)
 - ✅ `quickstart.md` (testing scenarios)
 
 **Conditionally Generate**:
@@ -538,108 +630,9 @@ This plan follows constitutional requirements:
 
 ---
 
-## Examples
+## Reference
 
-### Example 1: Simple UI-Only Feature
-
-**Input**: Spec for "Dark mode toggle in settings"
-
-**Detected**:
-- Tech: React + TypeScript (from package.json)
-- Structure: Monolithic `src/` (no services/)
-- No database changes
-
-**Output**:
-- `plan.md` - Frontend only, CSS custom properties approach
-- `quickstart.md` - Manual testing steps
-- NO data-model.md (no entities)
-- NO contracts/ (no API changes)
-- NO research.md (straightforward implementation)
-
----
-
-### Example 2: Full-Stack Feature with Database
-
-**Input**: Spec for "Email notifications for critique responses"
-
-**Detected**:
-- Tech: Node.js + PostgreSQL (from package.json + docs)
-- Structure: Multi-service `services/` (4 services detected)
-- Database changes required
-
-**Output**:
-- `plan.md` - Full architecture (Frontend + API + Database + job queue)
-- `data-model.md` - Notification entity, migration, indexes
-- `contracts/notifications-api.graphql` - 4 queries/mutations (GraphQL detected)
-- `quickstart.md` - Testing all 3 user stories
-- `research.md` - Decision: job queue library selection
-
----
-
-### Example 3: API-Only Feature (Python)
-
-**Input**: Spec for "Batch update API endpoint"
-
-**Detected**:
-- Tech: Python + FastAPI (from requirements.txt)
-- Structure: Monolithic `app/`
-- Uses existing database models
-
-**Output**:
-- `plan.md` - API service only, batch processing strategy
-- `contracts/batch-api.yaml` - OpenAPI schema for new endpoint
-- `quickstart.md` - API testing examples
-- NO data-model.md (uses existing models)
-- NO research.md (clear implementation path)
-
----
-
-## Error Handling
-
-### Spec Not Found
-
-```
-ERROR: No specification found
-
-Searched: specs/074-critique-notifications/spec.md
-         features/074-critique-notifications/spec.md
-
-Please run `feature-spec` skill first to create the feature specification.
-```
-
-### Cannot Detect Tech Stack
-
-```
-WARNING: Could not detect technology stack
-
-Searched:
-- CLAUDE.md (not found)
-- README.md (no "Stack" section)
-- package.json (not found)
-
-Please specify tech stack manually:
-- Language: [?]
-- Framework: [?]
-- Database: [?]
-
-Or create CLAUDE.md with "### Stack" section documenting your technologies.
-```
-
-### Constitution Violation
-
-```
-CRITICAL: Constitution violation detected
-
-Found section: "API Design Patterns"
-Requirement: "All write operations must use [pattern] per § X.Y.Z"
-
-Issue: Plan specifies [different pattern]
-
-Action Required:
-1. Update plan.md to use constitutional pattern
-2. Document reason if exception needed
-3. Re-run constitution validation
-```
+For output format examples (UI-only, full-stack, API-only features) and error message templates (spec not found, tech stack detection failure, constitution violations), see `feature-plan-reference.md` in this directory. Load it on demand when you need to match a specific scenario or diagnose an error — it is not needed on every invocation.
 
 ---
 

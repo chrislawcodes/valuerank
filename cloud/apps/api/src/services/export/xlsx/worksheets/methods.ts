@@ -32,15 +32,15 @@ export function buildMethodsSheet(workbook: ExcelJS.Workbook, warnings: string[]
   // Statistics explanation
   const sections = [
     {
-      title: 'Mean Score Calculation',
+      title: 'Canonical Preference Score Calculation',
       content:
-        'The mean score is calculated as the arithmetic average of all numeric decision codes for each model. ' +
-        'Decision codes are typically on a 1-5 scale where 1 indicates one value priority and 5 indicates the opposite.',
+        'The canonical preference score is the arithmetic average of resolved transcript buckets for each model. ' +
+        'Strong buckets count as 2, lean buckets count as 1, neutral counts as 0, and unresolved transcripts are excluded from the mean.',
     },
     {
       title: 'Standard Deviation',
       content:
-        'Standard deviation measures the spread of decision codes around the mean. ' +
+        'Standard deviation measures the spread of resolved canonical preference scores around the mean. ' +
         'Higher values indicate more variable responses. Calculated using the sample standard deviation formula (n-1 denominator).',
     },
     {

@@ -2,10 +2,10 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { VisualizationData } from '../../api/operations/analysis';
+import type { Transcript } from '../../api/operations/runs';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { Button } from '../ui/Button';
 import {
-    getDecisionSideNames,
     mapDecisionSidesToScenarioAttributes,
     resolveScenarioAttributes,
 } from '../../utils/decisionLabels';
@@ -16,44 +16,27 @@ import {
     buildAnalysisConditionDetailPath,
     buildConditionKey,
 } from '../../utils/analysisRouting';
+import {
+    buildCanonicalTranscriptIndex,
+    collectCanonicalConditionTranscripts,
+    summarizeCanonicalConditionTranscripts,
+    getCanonicalConditionBackground,
+    getCanonicalConditionTextColor,
+    type CanonicalConditionSummary,
+} from '../../utils/canonicalConditionSummary';
+import { compareConditionLevels } from '../../utils/conditionOrdering';
+import { resolveConditionDecisionLabelPair } from '../../utils/conditionDecisionSummary';
 
 type PivotAnalysisTableProps = {
     runId: string;
     analysisBasePath?: AnalysisBasePath;
     analysisSearchParams?: URLSearchParams | string;
+    analysisMode?: 'single' | 'paired';
     visualizationData: VisualizationData;
-    dimensionLabels?: Record<string, string>;
+    transcripts?: Transcript[];
     expectedAttributes?: string[];
+    companionRunId?: string | null;
 };
-
-// Start color: Green 50 (bg-emerald-50)
-// End color: Red 50 (bg-red-50)
-// 1 (Blue) -> 3 (Grey) -> 5 (Orange)
-function getHeatmapColor(value: number): string {
-    if (value < 1 || value > 5) return 'bg-gray-50'; // Out of bounds or 0
-
-    // Normalize to 0..1 for two scales
-    if (value <= 2.5) {
-        // Blueish (1.0 = Strong Blue, 2.5 = Weak Blue)
-        const intensity = Math.max(0.1, (3 - value) / 2); // 1->1.0, 3->0
-        // Blue-500 is rgb(59, 130, 246)
-        return `rgba(59, 130, 246, ${intensity * 0.3})`;
-    } else if (value >= 3.5) {
-        // Orangeish (3.5 = Weak Orange, 5.0 = Strong Orange)
-        const intensity = Math.max(0.1, (value - 3) / 2); // 3->0, 5->1.0
-        // Orange-500 is rgb(249, 115, 22)
-        return `rgba(249, 115, 22, ${intensity * 0.3})`;
-    } else {
-        // Neutral/Grey
-        return `rgba(156, 163, 175, 0.15)`;
-    }
-}
-
-function getScoreTextColor(value: number): string {
-    if (value <= 2.5) return 'text-blue-700';
-    if (value >= 3.5) return 'text-orange-700';
-    return 'text-gray-600';
-}
 
 type LegendCounts = {
     low: number;
@@ -85,8 +68,9 @@ export function PivotAnalysisTable({
     analysisBasePath = ANALYSIS_BASE_PATH,
     analysisSearchParams,
     visualizationData,
-    dimensionLabels,
+    transcripts,
     expectedAttributes = [],
+    companionRunId,
 }: PivotAnalysisTableProps) {
     const tableRef = useRef<HTMLDivElement>(null);
     const navigate = useNavigate();
@@ -106,7 +90,28 @@ export function PivotAnalysisTable({
     // Default to first alphabetical model if available
     const [selectedModel, setSelectedModel] = useState<string>(models[0] || '');
     const [showDetails, setShowDetails] = useState<boolean>(false);
-    const decisionSideNames = useMemo(() => getDecisionSideNames(dimensionLabels), [dimensionLabels]);
+    const decisionSideNames = useMemo(() => {
+        const modelTranscripts = (transcripts ?? []).filter((transcript) => transcript.modelId === selectedModel);
+        if (modelTranscripts.length === 0) {
+            return {
+                aName: 'Canonical first value',
+                bName: 'Canonical second value',
+            };
+        }
+
+        const labelPair = resolveConditionDecisionLabelPair(modelTranscripts);
+        if (!labelPair) {
+            return {
+                aName: 'Canonical first value',
+                bName: 'Canonical second value',
+            };
+        }
+
+        return {
+            aName: labelPair.firstValueLabel,
+            bName: labelPair.secondValueLabel,
+        };
+    }, [selectedModel, transcripts]);
     const sideAttributeMap = useMemo(
         () => mapDecisionSidesToScenarioAttributes(decisionSideNames.aName, decisionSideNames.bName, [rowDim, colDim].filter((d) => d !== '')),
         [colDim, decisionSideNames.aName, decisionSideNames.bName, rowDim]
@@ -144,16 +149,22 @@ export function PivotAnalysisTable({
         }
     }, [models, selectedModel]);
 
-    // 2. Aggregate Data based on selection
+    // 2. Build canonical transcript index
+    const transcriptIndex = useMemo(
+        () => buildCanonicalTranscriptIndex(transcripts),
+        [transcripts],
+    );
+
+    // 3. Aggregate Data based on selection using canonical scoring
     const pivotData = useMemo(() => {
         if (!scenarioDimensions || !modelScenarioMatrix) return null;
         if (!rowDim || !colDim || !selectedModel) return null;
 
-        const grid: Record<string, Record<string, { sum: number, count: number }>> = {};
+        // Collect scenario IDs per cell
+        const scenarioIdsByCell: Record<string, Record<string, string[]>> = {};
         const rowValues = new Set<string>();
         const colValues = new Set<string>();
 
-        // Iterate all scenarios
         Object.entries(scenarioDimensions).forEach(([scenarioId, dims]) => {
             const rVal = String(dims[rowDim] ?? 'N/A');
             const cVal = String(dims[colDim] ?? 'N/A');
@@ -161,49 +172,56 @@ export function PivotAnalysisTable({
             rowValues.add(rVal);
             colValues.add(cVal);
 
-            if (!grid[rVal]) grid[rVal] = {};
-            if (!grid[rVal][cVal]) grid[rVal][cVal] = { sum: 0, count: 0 };
+            if (!scenarioIdsByCell[rVal]) scenarioIdsByCell[rVal] = {};
+            if (!scenarioIdsByCell[rVal][cVal]) scenarioIdsByCell[rVal][cVal] = [];
+            scenarioIdsByCell[rVal][cVal].push(scenarioId);
+        });
 
-            // Get score for selected model
-            const score = modelScenarioMatrix[selectedModel]?.[scenarioId];
-            if (score) {
-                grid[rVal][cVal].sum += score;
-                grid[rVal][cVal].count += 1;
-            }
+        // Compute canonical summary per cell
+        const grid: Record<string, Record<string, CanonicalConditionSummary>> = {};
+
+        Object.entries(scenarioIdsByCell).forEach(([rVal, cols]) => {
+            const rowGrid: Record<string, CanonicalConditionSummary> = {};
+            grid[rVal] = rowGrid;
+            Object.entries(cols).forEach(([cVal, scenarioIds]) => {
+                const cellTranscripts = collectCanonicalConditionTranscripts(transcriptIndex, selectedModel, scenarioIds);
+                rowGrid[cVal] = summarizeCanonicalConditionTranscripts(cellTranscripts);
+            });
         });
 
         return {
             grid,
-            rows: Array.from(rowValues).sort(),
-            cols: Array.from(colValues).sort()
+            rows: Array.from(rowValues).sort(compareConditionLevels),
+            cols: Array.from(colValues).sort(compareConditionLevels),
         };
 
-    }, [scenarioDimensions, modelScenarioMatrix, rowDim, colDim, selectedModel]);
+    }, [scenarioDimensions, modelScenarioMatrix, rowDim, colDim, selectedModel, transcriptIndex]);
 
     const legendCounts = useMemo<LegendCounts>(() => {
-        if (!scenarioDimensions || !modelScenarioMatrix || !selectedModel) {
+        if (!scenarioDimensions || !selectedModel) {
             return { low: 0, neutral: 0, high: 0 };
         }
-
-        const byScenario = modelScenarioMatrix[selectedModel] ?? {};
 
         let low = 0;
         let neutral = 0;
         let high = 0;
 
-        // Count scenario-level decisions for this model (used as a proxy for trial counts in pivot).
         for (const scenarioId of Object.keys(scenarioDimensions)) {
-            const score = byScenario[scenarioId];
-            if (typeof score !== 'number' || !Number.isFinite(score)) continue;
-            if (score < 1 || score > 5) continue;
+            const cellTranscripts = collectCanonicalConditionTranscripts(transcriptIndex, selectedModel, [scenarioId]);
+            const summary = summarizeCanonicalConditionTranscripts(cellTranscripts);
+            if (summary.totalTrials === 0) continue;
 
-            if (score <= 2.5) low += 1;
-            else if (score >= 3.5) high += 1;
-            else neutral += 1;
+            if (summary.isOpponent) {
+                high += 1;
+            } else if (summary.neutral > 0 && summary.strongly === 0 && summary.somewhat === 0) {
+                neutral += 1;
+            } else {
+                low += 1;
+            }
         }
 
         return { low, neutral, high };
-    }, [scenarioDimensions, modelScenarioMatrix, selectedModel]);
+    }, [scenarioDimensions, selectedModel, transcriptIndex]);
 
     const handleCellClick = (row: string, col: string) => {
         const params = new URLSearchParams({
@@ -211,6 +229,9 @@ export function PivotAnalysisTable({
             colDim,
             modelId: selectedModel || '',
         });
+        if (companionRunId != null && companionRunId !== '') {
+            params.set('companionRunId', companionRunId);
+        }
         navigate(
             buildAnalysisConditionDetailPath(
                 analysisBasePath,
@@ -259,7 +280,7 @@ export function PivotAnalysisTable({
             {showDetails && (
                 <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
                     <p className="text-sm text-gray-600">
-                        Pick the two condition axes you want to compare. Each box in the table shows the model&apos;s average score for that pair of condition levels.
+                        Pick the two condition axes you want to compare. Each box in the table shows the model&apos;s average preference score (0–2) for that pair of condition levels.
                     </p>
                     <div className="flex flex-wrap gap-4">
                         <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
@@ -336,22 +357,25 @@ export function PivotAnalysisTable({
                                         {formatDisplayLabel(row)}
                                     </td>
                                     {pivotData.cols.map(col => {
-                                        const cell = pivotData.grid[row]?.[col];
-                                        const mean = cell && cell.count > 0 ? cell.sum / cell.count : null;
-                                        const canOpen = true;
+                                        const summary = pivotData.grid[row]?.[col];
+                                        const hasScore = summary != null && summary.winnerScore != null && summary.totalTrials > 0;
 
                                         return (
                                             <td
                                                 key={`${row}-${col}`}
-                                                className={`p-4 border border-gray-100 text-center text-sm transition-colors ${canOpen ? 'cursor-pointer hover:ring-1 hover:ring-teal-300' : ''}`}
-                                                style={{ backgroundColor: mean ? getHeatmapColor(mean) : undefined }}
+                                                className="p-4 border border-gray-100 text-center text-sm transition-colors cursor-pointer hover:ring-1 hover:ring-teal-300"
+                                                style={{
+                                                    backgroundColor: hasScore && summary != null
+                                                        ? getCanonicalConditionBackground(summary.winnerScore ?? 0, summary.isOpponent)
+                                                        : undefined,
+                                                }}
                                                 onClick={() => handleCellClick(row, col)}
                                             >
-                                                {mean ? (
-                                                    <span className={`font-semibold ${getScoreTextColor(mean)}`}>
-                                                        {mean.toFixed(2)}
+                                                {hasScore && summary != null ? (
+                                                    <span className={`font-semibold ${getCanonicalConditionTextColor(summary.isOpponent)}`}>
+                                                        {summary.winnerScore == null ? '—' : summary.winnerScore.toFixed(1)}
                                                     </span>
-                                                ) : <span className="text-gray-500">-</span>}
+                                                ) : <span className="text-gray-500">—</span>}
                                             </td>
                                         );
                                     })}

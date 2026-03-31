@@ -1,31 +1,41 @@
 import { db, resolveDefinitionContent } from '@valuerank/db';
 import { formatTrialSignature, formatVnewLabel, formatVnewSignature, isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
+import { DOMAIN_ANALYSIS_VALUE_KEYS, type DomainAnalysisValueKey, extractValuePair } from '../domain-analysis-values.js';
 import { parseTemperature } from '../../../utils/temperature.js';
 import { parseDefinitionVersion } from '../../../utils/definition-version.js';
+import { resolveTranscriptDecisionModel } from './decision-model.js';
+import type { TranscriptDecisionModelResult } from './decision-model.js';
+export {
+  buildRawDecisionEvidence,
+  DECISION_MODEL_READ_RULES,
+  canonicalDecisionToLegacyScore,
+  resolveCanonicalDecision,
+  resolveDecisionModel,
+  resolveLegacyDecisionCompat,
+  resolveTranscriptDecisionModel,
+} from './decision-model.js';
+export type {
+  CanonicalDecision,
+  DecisionDirection,
+  DecisionReadMode,
+  DecisionReadRule,
+  DecisionReadSurface,
+  DecisionModelInput,
+  DecisionModelResult,
+  DecisionPair,
+  DecisionSource,
+  DecisionStrength,
+  LegacyDecisionCompat,
+  RawDecisionEvidence,
+  TranscriptDecisionModelInput,
+  TranscriptDecisionModelResult,
+} from './decision-model.js';
 
 export { formatVnewLabel, formatVnewSignature };
 
 export const MAX_LIMIT = 500;
 export const DEFAULT_LIMIT = 50;
 const VALUE_PAIR_RESOLVE_CHUNK_SIZE = 20;
-
-// Domain analysis visualizations are intentionally scoped to the 10-value set used by
-// the current product experience. Keep this aligned with web `VALUES` and do not
-// expand to all Schwartz values without corresponding UI/product updates.
-export const DOMAIN_ANALYSIS_VALUE_KEYS = [
-  'Self_Direction_Action',
-  'Universalism_Nature',
-  'Benevolence_Dependability',
-  'Security_Personal',
-  'Power_Dominance',
-  'Achievement',
-  'Tradition',
-  'Stimulation',
-  'Hedonism',
-  'Conformity_Interpersonal',
-] as const;
-
-export type DomainAnalysisValueKey = (typeof DOMAIN_ANALYSIS_VALUE_KEYS)[number];
 export type DomainAnalysisScoreMethod = 'LOG_ODDS' | 'FULL_BT';
 
 export type DefinitionRow = {
@@ -82,7 +92,11 @@ export type DomainAnalysisConditionDetail = {
   neutral: number;
   totalTrials: number;
   selectedValueWinRate: number | null;
-  meanDecisionScore: number | null;
+  strongly: number;
+  somewhat: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+  unknownCount: number;
 };
 
 export type DomainAnalysisVignetteDetail = {
@@ -137,6 +151,7 @@ export type DomainTrialPlanVignette = {
   definitionVersion: number;
   signature: string;
   scenarioCount: number;
+  existingBatchCount: number;
 };
 
 export type DomainTrialPlanCellEstimate = {
@@ -214,6 +229,9 @@ export type DomainTrialRunStatus = {
   runId: string;
   definitionId: string;
   status: string;
+  updatedAt: Date;
+  stalledModels: string[];
+  analysisStatus: string | null;
   modelStatuses: DomainTrialModelStatus[];
 };
 
@@ -224,6 +242,9 @@ export type DomainAnalysisConditionTranscript = {
   modelId: string;
   decisionCode: string | null;
   decisionCodeSource: string | null;
+  decisionMetadata: unknown;
+  definitionSnapshot: unknown;
+  decisionModelV2?: TranscriptDecisionModelResult | null;
   turnCount: number;
   tokenCount: number;
   durationMs: number;
@@ -498,11 +519,9 @@ export async function resolveValuePairsInChunks(
     const settled = await Promise.allSettled(
       batch.map(async (definitionId) => {
         const resolved = await resolveDefinitionContent(definitionId);
-        const valueA = resolved.resolvedContent.dimensions[0]?.name;
-        const valueB = resolved.resolvedContent.dimensions[1]?.name;
-        if (valueA == null || valueA === '' || valueB == null || valueB === '') return;
-        if (!isDomainAnalysisValueKey(valueA) || !isDomainAnalysisValueKey(valueB)) return;
-        valuePairByDefinition.set(definitionId, { valueA, valueB });
+        const pair = extractValuePair(resolved.resolvedContent);
+        if (!pair) return;
+        valuePairByDefinition.set(definitionId, pair);
       }),
     );
     settled.forEach(() => undefined);
@@ -511,17 +530,17 @@ export async function resolveValuePairsInChunks(
   return valuePairByDefinition;
 }
 
-export function classifyDecisionForSelectedValue(
-  decision: number,
-  selectedIsValueA: boolean,
-): 'prioritized' | 'deprioritized' | 'neutral' {
-  if (decision >= 4) return selectedIsValueA ? 'prioritized' : 'deprioritized';
-  if (decision <= 2) return selectedIsValueA ? 'deprioritized' : 'prioritized';
-  return 'neutral';
-}
+
 
 export function aggregateValueCountsFromTranscripts(
-  transcripts: Array<{ runId: string; modelId: string; decisionCode: string | null }>,
+  transcripts: Array<{
+    runId: string;
+    modelId: string;
+    decisionCode: string | null;
+    decisionMetadata: unknown;
+    definitionSnapshot: unknown;
+    scenario: { orientationFlipped: boolean | null } | null;
+  }>,
   sourceRunDefinitionById: Map<string, string>,
   valuePairByDefinition: Map<string, DomainAnalysisValuePair>,
 ): {
@@ -538,9 +557,15 @@ export function aggregateValueCountsFromTranscripts(
     if (definitionId == null || definitionId === '') continue;
     const pair = valuePairByDefinition.get(definitionId);
     if (!pair) continue;
-    if (transcript.decisionCode == null || transcript.decisionCode === '') continue;
-    const decision = Number.parseInt(transcript.decisionCode, 10);
-    if (!Number.isFinite(decision)) continue;
+
+    const resolved = resolveTranscriptDecisionModel({
+      decisionCode: transcript.decisionCode,
+      decisionMetadata: transcript.decisionMetadata,
+      definitionSnapshot: transcript.definitionSnapshot,
+      orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+    });
+    const canonical = resolved.canonical;
+    if (canonical.direction === 'unknown') continue;
 
     let valueMap = aggregatedByModel.get(transcript.modelId);
     if (!valueMap) {
@@ -554,14 +579,14 @@ export function aggregateValueCountsFromTranscripts(
       pairwiseWinsByModel.set(transcript.modelId, pairwiseWins);
     }
 
-    if (decision >= 4) {
-      incrementValueCount(valueMap, pair.valueA, 'prioritized');
-      incrementValueCount(valueMap, pair.valueB, 'deprioritized');
-      incrementPairwiseWin(pairwiseWins, pair.valueA, pair.valueB);
-    } else if (decision <= 2) {
-      incrementValueCount(valueMap, pair.valueA, 'deprioritized');
-      incrementValueCount(valueMap, pair.valueB, 'prioritized');
-      incrementPairwiseWin(pairwiseWins, pair.valueB, pair.valueA);
+    if (
+      canonical.direction !== 'neutral'
+      && canonical.favoredValueKey != null
+      && canonical.opposedValueKey != null
+    ) {
+      incrementValueCount(valueMap, canonical.favoredValueKey, 'prioritized');
+      incrementValueCount(valueMap, canonical.opposedValueKey, 'deprioritized');
+      incrementPairwiseWin(pairwiseWins, canonical.favoredValueKey, canonical.opposedValueKey);
     } else {
       incrementValueCount(valueMap, pair.valueA, 'neutral');
       incrementValueCount(valueMap, pair.valueB, 'neutral');

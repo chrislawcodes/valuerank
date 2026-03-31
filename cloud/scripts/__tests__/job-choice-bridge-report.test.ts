@@ -19,7 +19,7 @@ const sampleRuns: BridgeRunInput[] = [
     responseScale: 'option_text',
     family: 'job-choice',
     pairKey: 'job-choice:def-a',
-    presentationOrder: 'A_first',
+    valueFirst: 'achievement',
     trialSignature: 'v1t0',
     transcripts: [
       {
@@ -60,7 +60,7 @@ const sampleRuns: BridgeRunInput[] = [
     responseScale: 'option_text',
     family: 'job-choice',
     pairKey: 'job-choice:def-a',
-    presentationOrder: 'B_first',
+    valueFirst: 'hedonism',
     trialSignature: 'v1t0',
     transcripts: [
       {

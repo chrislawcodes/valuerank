@@ -34,7 +34,8 @@ model User {
   createdDomainEvaluations DomainEvaluation[] @relation("DomainEvaluationCreator")
   deletedRuns        Run[]        @relation("RunDeleter")
   createdTags        Tag[]        @relation("TagCreator")
-  createdLlmModels   LlmModel[]   @relation("LlmModelCreator")
+  createdLlmModels         LlmModel[]               @relation("LlmModelCreator")
+  createdBalanceSyncLogs   ProviderBalanceSyncLog[] @relation("ProviderBalanceSyncLogCreator")
 
   @@map("users")
 }
@@ -322,6 +323,7 @@ model Run {
   config             Json      @db.JsonB
   progress           Json?     @db.JsonB
   summarizeProgress  Json?     @map("summarize_progress") @db.JsonB
+  stalledModels      String[]  @default([]) @map("stalled_models")
   startedAt          DateTime? @map("started_at")
   completedAt        DateTime? @map("completed_at")
   createdAt          DateTime  @default(now()) @map("created_at")
@@ -713,12 +715,30 @@ model LlmProvider {
   maxParallelRequests Int      @default(1) @map("max_parallel_requests")
   requestsPerMinute   Int      @default(60) @map("requests_per_minute")
   isEnabled           Boolean  @default(true) @map("is_enabled")
+  balance             Decimal? @db.Decimal(10, 4)
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
-  models LlmModel[]
+  models          LlmModel[]
+  balanceSyncLogs ProviderBalanceSyncLog[]
 
   @@map("llm_providers")
+}
+
+model ProviderBalanceSyncLog {
+  id                  String   @id @default(cuid())
+  providerId          String   @map("provider_id")
+  systemBalanceAtSync Decimal  @map("system_balance_at_sync") @db.Decimal(10, 4)
+  enteredBalance      Decimal  @map("entered_balance") @db.Decimal(10, 4)
+  delta               Decimal  @db.Decimal(10, 4)
+  syncedAt            DateTime @default(now()) @map("synced_at")
+  createdByUserId     String?  @map("created_by_user_id")
+
+  provider  LlmProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  createdBy User?       @relation("ProviderBalanceSyncLogCreator", fields: [createdByUserId], references: [id])
+
+  @@index([providerId])
+  @@map("provider_balance_sync_logs")
 }
 
 model LlmModel {

@@ -9,7 +9,6 @@ import {
   labelFromBody,
 } from '@valuerank/shared';
 
-export type JobChoicePresentationOrder = 'A_first' | 'B_first';
 
 const OPTION_PATTERN =
   /If they work as (?<role>.+?), they gain (?<article>a |an )?\[(?<token>[^\]]+)\] (?<rest>.+?)\./;
@@ -24,7 +23,8 @@ export type JobChoiceTransformResult = {
 };
 
 type TransformOptions = {
-  presentationOrder?: JobChoicePresentationOrder;
+  /** If true, swap the token order so value B appears first. Defaults to false (A first). */
+  swapped?: boolean;
   pairKey?: string;
   contextId?: string;
 };
@@ -44,12 +44,12 @@ export function transformJobChoiceDefinition(
   const roleB = match.groups.roleB.trim();
   const tokenA = match.groups.tokenA.trim();
   const tokenB = match.groups.tokenB.trim();
-  const presentationOrder = options.presentationOrder ?? 'A_first';
+  const swapped = options.swapped ?? false;
 
-  const firstToken = presentationOrder === 'A_first' ? tokenA : tokenB;
-  const secondToken = presentationOrder === 'A_first' ? tokenB : tokenA;
-  const firstRole = presentationOrder === 'A_first' ? roleA : roleB;
-  const secondRole = presentationOrder === 'A_first' ? roleB : roleA;
+  const firstToken = swapped ? tokenB : tokenA;
+  const secondToken = swapped ? tokenA : tokenB;
+  const firstRole = swapped ? roleB : roleA;
+  const secondRole = swapped ? roleA : roleB;
 
   const firstBody = getJobChoiceValueStatementBody(firstToken);
   if (firstBody == null) {
@@ -76,7 +76,6 @@ export function transformJobChoiceDefinition(
     response_scale: 'option_text',
     legacy_label: 'Old V1',
     canonical_value_order: content.dimensions.map((dimension) => dimension.name),
-    presentation_order: presentationOrder,
     pair_key: options.pairKey,
   };
 

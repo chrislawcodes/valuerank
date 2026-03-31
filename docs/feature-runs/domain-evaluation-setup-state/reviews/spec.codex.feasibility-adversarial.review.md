@@ -1,0 +1,44 @@
+---
+reviewer: "codex"
+lens: "feasibility-adversarial"
+stage: "spec"
+artifact_path: "docs/feature-runs/domain-evaluation-setup-state/spec.md"
+artifact_sha256: "443bdd887c0e025aab9f72c52991c4402e160badafe6d076d0e92f069b82b799"
+repo_root: "."
+git_head_sha: "97662ecffedb936831ed31b60c6d66186679077d"
+git_base_ref: "origin/claude/parallel-reviews-validated-v2"
+git_base_sha: "97662ecffedb936831ed31b60c6d66186679077d"
+generation_method: "codex-runner"
+resolution_status: "accepted"
+resolution_note: "Spec now makes current-launch aggregation explicit, excludes pending work from the live table until it is actually moving, and keeps completed work inspectable through launch diagnostics or run detail."
+raw_output_path: "docs/feature-runs/domain-evaluation-setup-state/reviews/spec.codex.feasibility-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: spec feasibility-adversarial
+
+## Findings
+
+- **Medium**: The spec does not define the arithmetic for paired-batch counting versus individual trial runs, so implementations can easily drift on off-by-two or off-by-leg errors. `samplesPerScenario`, `done`, `remaining`, and `percent complete` are all described in different units, but the conversion formula is never stated. The extra confirmation step also asks for “total individual trial runs,” which needs an exact formula to avoid inconsistent UI and launch validation.
+- **Medium**: The launch gate is overly brittle because it blocks whenever the provider budget signal is missing or stale, but the spec does not define any refresh, retry, or fallback path. If the health signal is slow, temporarily unavailable, or never populates for a provider, the user can be locked out of launching even when the actual budget is fine.
+- **Medium [UNVERIFIED]**: The row-detail requirement assumes the page can show “recent task/log-style information” and the latest error or stall signal from existing run data, but the only backend augmentation explicitly allowed is `updatedAt`, `stalledModels`, and `analysisStatus`. If the current data model does not already expose per-batch progress events or log excerpts, this requirement cannot be met without more backend work. This depends on the existing codebase.
+- **Medium**: The spec mixes a pre-launch setup flow with a “current launch signature” that is defined as the launch record created by `startDomainEvaluation`, but it never defines the transition between the draft setup state and the post-launch status state. That leaves a gap in how the page should behave before the mutation exists, how estimates are keyed, and when the current-launch scoping begins.
+- **Low**: The live status rules say pending or queued work should not appear in the main table until it starts communicating with the target model, but the spec does not define what the status header should show when there are queued batches and no live rows yet. That creates an easy zero-state ambiguity that can make the monitoring section look broken or empty even though work is in flight.
+
+## Residual Risks
+
+- The spec is still dependent on unknown backend and GraphQL shapes, so feasibility of the setup panel and row-detail drawer may change once the actual data model is inspected.
+- Empty-state behavior is underspecified for several important cases, including no active launch, all batches completed, and all providers blocked on stale budget data.
+- The wording around “paired batches” is consistent at a high level, but it still leaves room for interpretation unless the product team pins down the exact unit conversions in the UI copy and validation logic.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: accepted
+- note: Spec now makes current-launch aggregation explicit, excludes pending work from the live table until it is actually moving, and keeps completed work inspectable through launch diagnostics or run detail.

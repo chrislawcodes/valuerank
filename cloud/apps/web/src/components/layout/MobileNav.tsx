@@ -30,17 +30,7 @@ const navItems: NavItem[] = [
     icon: FolderTree,
     children: [
       { name: 'Domain Analysis', path: '/domains/analysis', icon: BarChart2 },
-      { name: 'Coverage', path: '/domains/coverage', icon: BarChart2 },
-      {
-        name: 'Domain Setup',
-        icon: FileText,
-        children: [
-          { name: 'Preamble', path: '/preambles', icon: FileText },
-          { name: 'Context', path: '/domain-contexts', icon: FileText },
-          { name: 'Value Statements', path: '/value-statements', icon: FileText },
-          { name: 'Level Presets', path: '/level-presets', icon: FileText },
-        ],
-      },
+      { name: 'Manage Domains', path: '/domains/manage', icon: FolderTree },
     ],
   },
   {
@@ -63,7 +53,22 @@ const navItems: NavItem[] = [
     ],
   },
   { name: 'Compare', path: '/compare', icon: GitCompare },
-  { name: 'Settings', path: '/settings', icon: Settings },
+  {
+    name: 'Settings',
+    path: '/settings/account',
+    icon: Settings,
+    children: [
+      { name: 'Research Setup', icon: FileText, children: [
+        { name: 'Preambles', path: '/preambles', icon: FileText },
+        { name: 'Level Presets', path: '/level-presets', icon: FileText },
+      ]},
+      { name: 'Account', path: '/settings/account', icon: Settings },
+      { name: 'System Health', path: '/settings/system-health', icon: Settings },
+      { name: 'Models', path: '/settings/models', icon: Settings },
+      { name: 'Infrastructure', path: '/settings/infrastructure', icon: Settings },
+      { name: 'API Keys', path: '/settings/api-keys', icon: Settings },
+    ],
+  },
 ];
 
 function matchesNavPath(pathname: string, item: NavItem) {

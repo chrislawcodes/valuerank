@@ -1,6 +1,7 @@
 import { db } from '@valuerank/db';
 import { AuthenticationError } from '@valuerank/shared';
 import { builder } from '../builder.js';
+import { resolveTranscriptDecisionModel } from './domain/decision-model.js';
 
 type TempZeroModelVerification = {
   modelId: string;
@@ -23,6 +24,9 @@ type TranscriptRecord = {
   modelId: string;
   scenarioId: string | null;
   decisionCode: string | null;
+  decisionMetadata: unknown;
+  definitionSnapshot: unknown;
+  scenario: { orientationFlipped: boolean | null } | null;
   content: unknown;
   createdAt: Date;
 };
@@ -39,6 +43,29 @@ function getNestedString(value: unknown, path: string[]): string | null {
 function calculatePct(numerator: number, denominator: number): number | null {
   if (denominator === 0) return null;
   return (numerator / denominator) * 100;
+}
+
+function resolveDecisionKey(transcript: TranscriptRecord): string | null {
+  const resolved = resolveTranscriptDecisionModel({
+    decisionCode: transcript.decisionCode,
+    decisionMetadata: transcript.decisionMetadata,
+    definitionSnapshot: transcript.definitionSnapshot,
+    orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+  });
+
+  if (resolved.canonical.direction === 'unknown') {
+    return null;
+  }
+
+  if (resolved.canonical.direction === 'neutral') {
+    return 'neutral';
+  }
+
+  if (resolved.canonical.favoredValueKey == null) {
+    return null;
+  }
+
+  return `${resolved.canonical.direction}:${resolved.canonical.strength}:${resolved.canonical.favoredValueKey}`;
 }
 
 const TempZeroModelVerificationRef = builder.objectRef<TempZeroModelVerification>('TempZeroModelVerification');
@@ -130,6 +157,13 @@ builder.queryField('tempZeroVerificationReport', (t) =>
           modelId: true,
           scenarioId: true,
           decisionCode: true,
+          decisionMetadata: true,
+          definitionSnapshot: true,
+          scenario: {
+            select: {
+              orientationFlipped: true,
+            },
+          },
           content: true,
           createdAt: true,
         },
@@ -192,10 +226,10 @@ builder.queryField('tempZeroVerificationReport', (t) =>
 
             const recentTranscripts = scenarioTranscripts.slice(0, 3);
             if (recentTranscripts.length === 3) {
-              const decisionCodes = recentTranscripts.map((transcript) => transcript.decisionCode);
-              if (decisionCodes.every((value): value is string => value !== null)) {
+              const decisions = recentTranscripts.map(resolveDecisionKey);
+              if (decisions.every((value): value is string => value !== null)) {
                 decisionEligibleGroups += 1;
-                if (decisionCodes.every((value) => value === decisionCodes[0])) {
+                if (decisions.every((value) => value === decisions[0])) {
                   decisionMatchedGroups += 1;
                 }
               }

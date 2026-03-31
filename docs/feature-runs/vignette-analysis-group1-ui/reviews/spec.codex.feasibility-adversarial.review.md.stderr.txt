@@ -1,0 +1,198 @@
+2026-03-25T05:22:04.602300Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:04.603093Z  WARN codex_core::state_db: failed to initialize state runtime at /Users/chrislaw/.codex: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:04.610817Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d2371-5ab3-72b2-8c33-9ee7aaf0fc4a
+--------
+user
+Review this spec artifact using a feasibility-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: spec.md
+# Vignette Analysis Group 1 UI Phase 1 - Spec
+
+## Context
+
+Group 1 is the presentation-only transcript review surface for vignette analysis.
+The backend already has a canonical decision envelope for V2-backed transcripts,
+but these pages still mix legacy score-first wording, old table labels, and
+presentation clutter in a few places.
+
+This slice is about making the transcript-facing pages read like a review tool
+for survey researchers, not a score dashboard.
+
+## Problem
+
+The current UI is inconsistent:
+
+- some pages show canonical decision wording while others still lead with old
+  score-style labels
+- some transcript tables still show presentation clutter like token columns,
+  scenario columns, or normalization badges
+- shared transcript components can still drift between legacy and canonical
+  modes if the parent page does not pass the right display mode
+- the condition and report detail pages still teach score-first language in a
+  few headings and helper texts
+
+We need one small UI-only feature slice that makes the group 1 surfaces consistent
+without changing backend contracts, worker behavior, export math, or analysis math.
+
+## What We Are Building
+
+This phase upgrades the group 1 transcript presentation surfaces:
+
+- `cloud/apps/web/src/pages/AnalysisTranscripts.tsx`
+- `cloud/apps/web/src/pages/AnalysisConditionDetail.tsx`
+- `cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx`
+- `cloud/apps/web/src/components/runs/TranscriptList.tsx`
+- `cloud/apps/web/src/components/runs/TranscriptRow.tsx`
+- `cloud/apps/web/src/components/runs/TranscriptViewer.tsx`
+
+The matching tests in scope must be updated as well:
+
+- `cloud/apps/web/tests/components/runs/RunResults.test.tsx`
+- `cloud/apps/web/tests/components/runs/TranscriptList.test.tsx`
+- `cloud/apps/web/tests/components/runs/TranscriptViewer.test.tsx`
+- `cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx`
+- `cloud/apps/web/tests/pages/AnalysisTranscripts.test.tsx`
+- `cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx`
+
+### User-facing behavior
+
+- Canonical V2-backed transcript views should show plain-language decision
+  summaries such as `Strongly favors X`, `Somewhat favors X`, or `Neutral`.
+- The shared transcript list, row, and viewer should all agree on the same
+  decision mode for a page.
+- The deterministic/fallback badge should only appear when the transcript was
+  not summarized deterministically, and it should appear first in the decision
+  summary area so the user notices it immediately.
+- Presentation-only transcript tables should not show extra clutter like token
+  columns, scenario columns, or normalization badges.
+- The condition and report detail pages should keep their current layout and
+  navigation, but the transcript-facing labels and helper text should stop
+  teaching score-first language.
+
+## Phase Boundary
+
+This phase stops at presentation-only UI changes.
+
+### In scope
+
+- transcript list, row, and viewer presentation updates
+- condition detail transcript-facing label updates
+- report detail transcript table label updates
+- page-level display mode wiring for V2-backed transcript views
+- tests for the upgraded transcript surfaces
+- copy and label cleanup that removes score-first wording from these pages
+
+### Out of scope
+
+- backend adapter or contract changes
+- worker or export changes
+- analytics math or aggregation changes
+- AME or other new report metrics
+- changes to the meaning of any existing transcript fields
+- redesigning the report layouts or navigation structure
+- cleanup of legacy numeric fields outside these presentation surfaces
+
+## Acceptance Criteria
+
+- Fully V2-backed transcript surfaces show canonical decision wording in the
+  list, row, and viewer.
+- Mixed or legacy-only data stays in legacy display mode instead of mixing
+  semantics on one surface.
+- The deterministic/fallback badge is visible only when it is useful and is
+  placed at the front of the decision summary.
+- The transcript tables in this slice no longer show the removed clutter
+  columns or badge styles.
+- The condition and report detail pages still navigate the same way, but their
+  transcript-facing text no longer teaches score-first semantics.
+- Existing legacy-only behavior stays intact.
+
+## Notes
+
+- The shared transcript components already know how to render legacy versus
+  canonical decision modes. This feature is about finishing the page wiring and
+  presentation cleanup, not inventing a new contract.
+- If a surface is not fully V2-backed, it should stay in legacy mode for the
+  whole surface rather than mixing old and new meaning in the same table.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+2026-03-25T05:22:04.634394Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:22:04.637360Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:04.662433Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:22:04.663509Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:04.666312Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d2371-5ab3-72b2-8c33-9ee7aaf0fc4a.tmp-1774416124604644000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-03-25T05:22:04.688180Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:22:04.689136Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:04.714187Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:22:04.715177Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:04.740198Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:22:04.741074Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:04.766113Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:22:04.767163Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:04.791506Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:22:04.792403Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:04.815869Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:22:04.817011Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:04.840074Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:22:04.841271Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:04.864202Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:22:04.865311Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:04.886496Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:22:04.887607Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:04.911418Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:22:04.912476Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:04.937207Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:22:04.938438Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:04.961445Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:22:04.962732Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:04.986974Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:22:04.988056Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:05.012792Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:22:05.014069Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:05.036717Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:22:05.037622Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:05.061934Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:22:05.063031Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:05.088066Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T05:22:05.089025Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T05:22:05.112546Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+codex
+I’m reviewing this as a feasibility check, not a design critique: I’m looking for places where the spec may be hard to implement cleanly, under-specified, or likely to create inconsistent behavior across the targeted pages.
+codex
+## Findings
+1. High: The spec does not define a concrete rule for deciding when a surface is “fully V2-backed,” especially for pages that can render heterogeneous transcript rows. That makes the core mode-wiring requirement ambiguous and risky: an implementation could either mix legacy and canonical semantics on the same page or fall back to legacy mode too broadly. The spec needs a deterministic gating rule per page, not just a general “stay in legacy mode if not fully V2-backed” statement.
+
+2. High: The spec asks to remove token columns, scenario columns, and normalization badges from presentation-only transcript tables, but it does not say what replaces those fields or how the table should behave when width, sorting, or row density changes. On a dense transcript surface, hiding columns without a replacement layout rule can easily break readability or responsive behavior. This is a feasibility gap, not a cosmetic one.
+
+3. Medium: The copy cleanup requirement is too underspecified to be reliably implemented or tested. “Stop teaching score-first language” is broad, but the spec does not enumerate the exact headings, helper texts, tooltips, or accessibility labels that must change across the three pages and shared components. That leaves room for partial cleanup where some score-first language still leaks through.
+
+4. Medium: The deterministic/fallback badge rule is incomplete. The spec says it should appear only when the transcript was not summarized deterministically and should be first in the decision summary area, but it does not define how that interacts with missing summaries, neutral outcomes, or multiple status badges. Without explicit precedence rules, the UI can end up showing misleading or inconsistent summary states.
+
+## Residual Risks
+- Even with correct page-level mode gating, any unlisted transcript-facing copy in empty states, hover text, or aria labels can still preserve score-first framing.
+- If the data model allows partially migrated pages, the safest implementation may need to stay in legacy mode more often than product intent expects.
+- Removing columns from transcript tables can still cause subtle regressions in layout, wrapping, and test snapshots on real datasets that the spec does not explicitly cover.
+tokens used
+6,062

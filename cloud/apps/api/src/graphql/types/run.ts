@@ -9,7 +9,6 @@ import { calculatePercentComplete } from '../../services/run/index.js';
 import { AnalysisResultRef } from './analysis.js';
 import { CostEstimateRef, type CostEstimateShape } from './cost-estimate.js';
 import { getAllMetrics, getTotals } from '../../services/rate-limiter/index.js';
-import { parseTemperature } from '../../utils/temperature.js';
 
 // Re-export for backward compatibility
 export { RunRef, TranscriptRef, ExperimentRef };
@@ -31,8 +30,9 @@ type RunConfig = {
   priority?: string;
   definitionSnapshot?: unknown;
   estimatedCosts?: CostEstimateShape;
+  companionRunId?: string | null;
   jobChoiceBatchGroupId?: string | null;
-  jobChoicePresentationOrder?: 'A_first' | 'B_first' | null;
+  jobChoiceValueFirst?: string | null;
   isAggregate?: boolean;
   sourceRunIds?: string[];
 };
@@ -42,55 +42,12 @@ type AggregateRunConfig = RunConfig & {
   sourceRunIds?: string[];
 };
 
-type RunSnapshotMeta = {
-  preambleVersionId: string | null;
-  definitionVersion: number | null;
-  temperatureSetting: number | null;
-};
-
-type QueueJobRow = {
-  state: string;
-  data: unknown;
-};
-
 type QueueFailurePayload = {
   message?: unknown;
   details?: unknown;
   error?: unknown;
   value?: unknown;
 };
-
-function parseDefinitionVersion(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value !== 'string' || value.trim() === '') {
-    return null;
-  }
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function getSnapshotMeta(config: AggregateRunConfig | null): RunSnapshotMeta {
-  const snapshot = (config?.definitionSnapshot ?? null) as
-    | { _meta?: { preambleVersionId?: string; definitionVersion?: number | string }; preambleVersionId?: string; version?: number | string }
-    | null;
-
-  const preambleVersionId =
-    snapshot?._meta?.preambleVersionId ??
-    snapshot?.preambleVersionId ??
-    null;
-  const definitionVersion =
-    parseDefinitionVersion(snapshot?._meta?.definitionVersion) ??
-    parseDefinitionVersion(snapshot?.version);
-  const temperatureSetting = parseTemperature(config?.temperature);
-
-  return { preambleVersionId, definitionVersion, temperatureSetting };
-}
-
-function getJobDataRecord(data: unknown): Record<string, unknown> | null {
-  return data !== null && typeof data === 'object' ? data as Record<string, unknown> : null;
-}
 
 function normalizeTaskError(output: unknown): string | null {
   if (output === null || output === undefined) {
@@ -148,37 +105,6 @@ function normalizeTaskError(output: unknown): string | null {
   } catch {
     return String(output);
   }
-}
-
-function matchesAggregateJob(jobData: unknown, runDefinitionId: string, runMeta: RunSnapshotMeta): boolean {
-  const data = getJobDataRecord(jobData);
-  if (data === null) {
-    return false;
-  }
-  if (data.definitionId !== runDefinitionId) {
-    return false;
-  }
-
-  const jobPreambleVersionId =
-    typeof data.preambleVersionId === 'string' && data.preambleVersionId !== ''
-      ? data.preambleVersionId
-      : null;
-  if (jobPreambleVersionId !== runMeta.preambleVersionId) {
-    return false;
-  }
-
-  const jobDefinitionVersion = parseDefinitionVersion(data.definitionVersion);
-  if (jobDefinitionVersion !== runMeta.definitionVersion) {
-    return false;
-  }
-
-  const jobTemperature = parseTemperature(data.temperature);
-  const runTemperature = runMeta.temperatureSetting;
-  if (jobTemperature !== runTemperature) {
-    return false;
-  }
-
-  return true;
 }
 
 builder.objectType(RunRef, {
@@ -248,6 +174,16 @@ builder.objectType(RunRef, {
       description: 'Workflow category assigned to the run',
     }),
     config: t.expose('config', { type: 'JSON' }),
+    companionRunId: t.string({
+      nullable: true,
+      description: 'Direct companion run ID for paired launches',
+      resolve: (run) => {
+        const config = run.config as RunConfig | null;
+        return typeof config?.companionRunId === 'string' && config.companionRunId.trim() !== ''
+          ? config.companionRunId
+          : null;
+      },
+    }),
     batchCount: t.int({
       description: 'Number of batches represented by this saved record',
       resolve: (run) => {
@@ -276,6 +212,9 @@ builder.objectType(RunRef, {
     }),
     // Keep raw progress as JSON for backward compatibility
     progress: t.expose('progress', { type: 'JSON', nullable: true }),
+    stalledModels: t.exposeStringList('stalledModels', {
+      description: 'Model IDs currently detected as stalled (no successful probe completion for 3+ minutes while jobs are pending)',
+    }),
     startedAt: t.expose('startedAt', { type: 'DateTime', nullable: true }),
     completedAt: t.expose('completedAt', { type: 'DateTime', nullable: true }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
@@ -578,107 +517,7 @@ builder.objectType(RunRef, {
       type: 'String',
       nullable: true,
       description: 'Analysis status: pending, computing, completed, or failed',
-      resolve: async (run) => {
-        // Check if analysis exists
-        const analysis = await db.analysisResult.findFirst({
-          where: {
-            runId: run.id,
-            status: 'CURRENT',
-          },
-        });
-
-        if (analysis !== null && analysis !== undefined) {
-          return 'completed';
-        }
-
-        const runConfig = run.config as AggregateRunConfig | null;
-        const isAggregateRun = runConfig?.isAggregate === true;
-
-        // Check if analysis job is pending or active
-        try {
-          if (isAggregateRun) {
-            const runMeta = getSnapshotMeta(runConfig);
-
-            const activeJobs = await db.$queryRaw<QueueJobRow[]>`
-              SELECT state, data FROM pgboss.job
-              WHERE name = 'aggregate_analysis'
-                AND data->>'definitionId' = ${run.definitionId}
-                AND state IN ('created', 'active', 'retry')
-              ORDER BY created_on DESC
-              LIMIT 25
-            `;
-
-            const firstActiveMatch = activeJobs.find((job) =>
-              matchesAggregateJob(job.data, run.definitionId, runMeta)
-            );
-            if (firstActiveMatch !== undefined) {
-              return firstActiveMatch.state === 'active' ? 'computing' : 'pending';
-            }
-
-            const failedJobs = await db.$queryRaw<QueueJobRow[]>`
-              SELECT state, data FROM pgboss.job
-              WHERE name = 'aggregate_analysis'
-                AND data->>'definitionId' = ${run.definitionId}
-                AND state = 'failed'
-              ORDER BY completed_on DESC
-              LIMIT 25
-            `;
-
-            const firstFailedMatch = failedJobs.find((job) =>
-              matchesAggregateJob(job.data, run.definitionId, runMeta)
-            );
-            if (firstFailedMatch !== undefined) {
-              return 'failed';
-            }
-          } else {
-            // Use raw query to check PgBoss job state
-            const jobs = await db.$queryRaw<Array<{ state: string }>>`
-              SELECT state FROM pgboss.job
-              WHERE name = 'analyze_basic'
-                AND data->>'runId' = ${run.id}
-                AND state IN ('created', 'active', 'retry')
-              LIMIT 1
-            `;
-
-            const firstJob = jobs[0];
-            if (firstJob !== undefined) {
-              return firstJob.state === 'active' ? 'computing' : 'pending';
-            }
-
-            // Check for failed jobs in the job table (PgBoss v10+ keeps all jobs in one table)
-            const failedJobs = await db.$queryRaw<Array<{ state: string }>>`
-              SELECT state FROM pgboss.job
-              WHERE name = 'analyze_basic'
-                AND data->>'runId' = ${run.id}
-                AND state = 'failed'
-              ORDER BY completed_on DESC
-              LIMIT 1
-            `;
-
-            if (failedJobs.length > 0) {
-              return 'failed';
-            }
-          }
-        } catch {
-          // PgBoss tables may not exist
-        }
-
-        // No analysis and no recognized job state
-        // If run is completed and older than 5 minutes, assume analysis failed to start/complete (orphaned)
-        if (run.completedAt) {
-          const completedAt = new Date(run.completedAt);
-          const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-
-          if (completedAt < fiveMinutesAgo) {
-            return 'failed';
-          }
-
-          // Otherwise, it might be just finished and job is about to be queued
-          return 'pending';
-        }
-
-        return null; // Not completed yet, so no analysis expected
-      },
+      resolve: async (run, _args, ctx) => ctx.loaders.runAnalysisStatus.load(run.id),
     }),
 
     // Real-time execution metrics (only populated during RUNNING state)

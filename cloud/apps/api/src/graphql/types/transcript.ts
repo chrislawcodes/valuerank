@@ -1,4 +1,6 @@
 import { builder } from '../builder.js';
+import { config } from '../../config.js';
+import { resolveTranscriptDecisionModel } from '../queries/domain/shared.js';
 import { TranscriptRef, RunRef, ScenarioRef } from './refs.js';
 
 // Re-export for backward compatibility
@@ -22,18 +24,32 @@ builder.objectType(TranscriptRef, {
     turnCount: t.exposeInt('turnCount'),
     tokenCount: t.exposeInt('tokenCount'),
     durationMs: t.exposeInt('durationMs'),
-    decisionCode: t.exposeString('decisionCode', {
-      nullable: true,
-      description: 'Decision code assigned during summarization (typically 1-5)',
-    }),
-    decisionCodeSource: t.exposeString('decisionCodeSource', {
-      nullable: true,
-      description: 'How decisionCode was assigned: deterministic, llm, manual, or error',
-    }),
     decisionMetadata: t.expose('decisionMetadata', {
       type: 'JSON',
       nullable: true,
       description: 'Parser and adjudication metadata for the transcript decision',
+    }),
+    decisionModelV2: t.field({
+      type: 'JSON',
+      nullable: true,
+      description: 'Feature-flagged V2 decision envelope with raw evidence and canonical compatibility data',
+      resolve: async (transcript, _args, ctx) => {
+        if (!config.DECISION_MODEL_V2) {
+          return null;
+        }
+
+        const scenario =
+          transcript.scenarioId === null || transcript.scenarioId === undefined || transcript.scenarioId === ''
+            ? null
+            : await ctx.loaders.scenario.load(transcript.scenarioId);
+
+        return resolveTranscriptDecisionModel({
+          decisionCode: transcript.decisionCode,
+          decisionMetadata: transcript.decisionMetadata,
+          definitionSnapshot: transcript.definitionSnapshot,
+          orientationFlipped: scenario?.orientationFlipped ?? null,
+        });
+      },
     }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
     lastAccessedAt: t.expose('lastAccessedAt', { type: 'DateTime', nullable: true }),

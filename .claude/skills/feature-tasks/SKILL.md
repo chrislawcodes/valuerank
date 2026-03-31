@@ -46,16 +46,13 @@ Creates implementation tasks that:
 ### Step 1: Load Context
 
 **Read Required Files**:
-1. `<feature-dir>/spec.md`:
-   - User stories with priorities (P1, P2, P3)
-   - Functional requirements (FR-NNN)
-   - Success criteria
+1. Spec context — load whichever exists (prefer the compact form):
+   - **`<feature-dir>/spec-acceptance.md`** (preferred — acceptance criteria + constraints, ~10 lines): user story titles/priorities, acceptance scenarios, success criteria, key constraints with rationale
+   - **`<feature-dir>/spec.md`** (fallback — load only if spec-acceptance.md does not exist): extract user stories with priorities (P1, P2, P3), functional requirements (FR-NNN), success criteria
 
-2. `<feature-dir>/plan.md`:
-   - Technology stack (detected by feature-plan)
-   - Architecture decisions
-   - Project structure section
-   - Service changes
+2. Plan context — load whichever exists (prefer the compact form):
+   - **`<feature-dir>/plan-summary.md`** (preferred — file paths, migration steps, constraints + rationale, ~3KB): file scope table, migration steps, data model, key constraints
+   - **`<feature-dir>/plan.md`** (fallback — load only if plan-summary.md does not exist): technology stack, architecture decisions, project structure, service changes
 
 **Read Optional Files** (if they exist):
 3. `<feature-dir>/data-model.md`:
@@ -119,7 +116,7 @@ src/
 **Components**:
 - `- [ ]` - Markdown checkbox (unchecked)
 - `T001` - Sequential task ID
-- `[P]` - Optional parallel marker (different files, no dependencies)
+- `[P: path/to/file.ext]` - Optional parallel marker with **required** file scope (comma-separated repo-relative paths). A bare `[P]` without a file list is treated as unannotated (serial) by the runner.
 - `[US1]` - Story label (for user story phases ONLY)
 - Description - Clear action with file path from plan.md
 
@@ -402,9 +399,9 @@ src/
 
 **Prerequisites**: plan.md, spec.md [, data-model.md] [, contracts/]
 
-## Format: `[ID] [P?] [Story] Description`
+## Format: `[ID] [P: file]? [Story]? Description`
 
-- **[P]**: Can run in parallel
+- **[P: repo/relative/file.ext]**: Can run in parallel — file list is **required** (comma-separated). Bare `[P]` without a file list is treated as serial by the runner.
 - **[Story]**: User story (US1, US2, US3)
 - Include exact file paths from plan.md
 
@@ -514,87 +511,33 @@ Every task MUST have:
 
 ### Parallel Marker [P] Rules
 
-Use `[P]` when:
+**Format**: `[P: repo/relative/file.ext]` or `[P: file1.ts, path/to/file2.ts]`
+
+The file list is **required** whenever you mark a task `[P]`. A bare `[P]` without a file list is treated as unannotated (serial) by the `run_factory.py implement` runner. The runner uses the file list for overlap detection — tasks whose file sets are disjoint can run in parallel; tasks whose file sets overlap are forced serial with a warning.
+
+**Correct format example**:
+```
+- [ ] T005 [P: src/services/foo.ts] [US1] Add FooService in src/services/foo.ts
+- [ ] T006 [P: src/components/Bar.tsx] [US1] Add Bar component in src/components/Bar.tsx
+```
+
+Use `[P: ...]` when:
 - ✅ Different file than previous task
 - ✅ No dependency on incomplete tasks
 - ✅ Can run simultaneously with other [P] tasks
+- ✅ You can list all files the task will modify
 
 Do NOT use `[P]` when:
-- ❌ Same file as previous task
+- ❌ Same file as another [P] task in the same slice (use serial instead)
 - ❌ Depends on previous task output
 - ❌ Must run in specific order
+- ❌ You cannot enumerate the files in advance (omit [P] entirely — it will run serially)
 
 ---
 
-## Examples
+## Reference
 
-### Example 1: TypeScript React Feature
-
-**Input**: Plan with React components, spec with 2 user stories
-
-**Output**:
-- tasks.md with 25 tasks organized by user story
-- Paths use plan.md structure: `src/components/`, `src/hooks/`
-- Checklists reference TypeScript/React best practices
-- If constitution exists: References logging, URL construction requirements
-
-### Example 2: Python Django Feature
-
-**Input**: Plan with Django views, spec with 3 user stories
-
-**Output**:
-- tasks.md with 35 tasks
-- Paths use plan.md structure: `app/views/`, `app/models/`, `app/tests/`
-- Checklists reference Django patterns
-- If constitution exists: References testing requirements
-
-### Example 3: Rust Microservice
-
-**Input**: Plan with Axum handlers, spec with 1 user story
-
-**Output**:
-- tasks.md with 15 tasks
-- Paths: `src/handlers/`, `src/models/`, `src/db/`
-- Checklists reference Rust idioms
-- Constitution check for error handling, testing
-
----
-
-## Error Handling
-
-### Missing Prerequisites
-
-```
-ERROR: Missing required files
-
-Expected: <feature-dir>/plan.md
-Found: None
-
-Please run `feature-plan` skill first to generate technical plan.
-```
-
-### Invalid User Stories
-
-```
-ERROR: No user stories found in spec.md
-
-Spec must have at least one user story with priority (P1, P2, or P3).
-
-Please update spec.md or re-run `feature-spec` skill.
-```
-
-### Cannot Extract Paths
-
-```
-WARNING: Could not find "Project Structure" section in plan.md
-
-Using generic placeholder paths:
-- <component-dir>/
-- <service-dir>/
-- <model-dir>/
-
-Recommendation: Update plan.md with specific paths, then regenerate tasks.
-```
+For output format examples (TypeScript React, Python Django, Rust microservice) and error message templates (missing prerequisites, invalid user stories, path extraction failures), see `feature-tasks-reference.md` in this directory. Load it on demand when you need to match a specific scenario or diagnose an error — it is not needed on every invocation.
 
 ---
 
@@ -633,7 +576,7 @@ Defaults:
 ## Next Skill in Workflow
 
 **`feature-implement`** - Execute tasks and track progress
-- Input: Reads tasks.md, plan.md, spec.md, checklists/
+- Input: Reads tasks.md, plan-summary.md (preferred) or plan.md, spec-acceptance.md (preferred) or spec.md, checklists/
 - Output: Implemented code + updated tasks.md with [X] checkboxes
 - Purpose: Build the feature phase by phase
 
