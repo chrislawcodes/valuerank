@@ -91,11 +91,129 @@ export async function updateProvider(
     maxParallelRequests?: number;
     requestsPerMinute?: number;
     isEnabled?: boolean;
+    balance?: number | null;
   }
 ): Promise<LlmProvider> {
   log.info({ id, ...data }, 'Updating provider');
   await getProviderById(id); // Verify exists
-  return db.llmProvider.update({ where: { id }, data });
+
+  const updateData: Prisma.LlmProviderUpdateInput = {
+    maxParallelRequests: data.maxParallelRequests,
+    requestsPerMinute: data.requestsPerMinute,
+    isEnabled: data.isEnabled,
+  };
+
+  if (data.balance !== undefined) {
+    updateData.balance = data.balance === null ? null : new Prisma.Decimal(data.balance);
+    if (data.balance !== null) {
+      // Record a MANUAL_SET event when balance is explicitly set
+      const currentProvider = await db.llmProvider.findUnique({
+        where: { id },
+        select: { balance: true },
+      });
+      await db.providerBudgetEvent.create({
+        data: {
+          providerId: id,
+          type: 'MANUAL_SET',
+          amount: new Prisma.Decimal(data.balance),
+          providerBalanceBefore: currentProvider?.balance ?? null,
+          providerBalanceAfter: new Prisma.Decimal(data.balance),
+        },
+      });
+    }
+  }
+
+  return db.llmProvider.update({ where: { id }, data: updateData });
+}
+
+/**
+ * Sync provider balance — records drift vs system balance.
+ * Creates a SYNC event and updates balance, lastSyncedAt, lastSyncedBalance.
+ */
+export async function syncProviderBalance(
+  id: string,
+  enteredBalance: number
+): Promise<LlmProvider> {
+  log.info({ id, enteredBalance }, 'Syncing provider balance');
+
+  const provider = await getProviderById(id);
+  const balanceBefore = provider.balance;
+  const entered = new Prisma.Decimal(enteredBalance);
+
+  // Compute drift: entered - current_system_balance (null prior = treat as 0)
+  const drift = entered.minus(balanceBefore ?? 0);
+
+  await db.$transaction(async (tx) => {
+    await tx.providerBudgetEvent.create({
+      data: {
+        providerId: id,
+        type: 'SYNC',
+        amount: entered,
+        drift,
+        providerBalanceBefore: balanceBefore ?? null,
+        providerBalanceAfter: entered,
+      },
+    });
+
+    await tx.llmProvider.update({
+      where: { id },
+      data: {
+        balance: entered,
+        lastSyncedAt: new Date(),
+        lastSyncedBalance: entered,
+      },
+    });
+  });
+
+  return getProviderById(id);
+}
+
+/**
+ * Deduct an amount from a provider's balance.
+ * Creates a DEDUCTION event. No-op if balance is null.
+ * Uses atomic DB decrement to prevent race conditions.
+ */
+export async function deductFromProviderBalance(
+  providerId: string,
+  amount: number,
+  runId: string
+): Promise<void> {
+  log.info({ providerId, amount, runId }, 'Deducting from provider balance');
+
+  const provider = await db.llmProvider.findUnique({
+    where: { id: providerId },
+    select: { balance: true },
+  });
+
+  if (!provider || provider.balance === null) {
+    log.debug({ providerId }, 'Provider balance is null, skipping deduction');
+    return;
+  }
+
+  const deductAmount = new Prisma.Decimal(amount);
+  const balanceBefore = provider.balance;
+  const balanceAfter = balanceBefore.minus(deductAmount);
+
+  await db.$transaction(async (tx) => {
+    await tx.providerBudgetEvent.create({
+      data: {
+        providerId,
+        type: 'DEDUCTION',
+        amount: deductAmount.negated(),
+        runId,
+        providerBalanceBefore: balanceBefore,
+        providerBalanceAfter: balanceAfter,
+      },
+    });
+
+    // Atomic decrement — safe against concurrent updates
+    await tx.llmProvider.update({
+      where: { id: providerId },
+      data: { balance: { decrement: amount } },
+    });
+  });
+
+  log.info({ providerId, amount, runId, balanceBefore, balanceAfter }, 'Provider balance deducted');
 }
 
 // ============================================================================
