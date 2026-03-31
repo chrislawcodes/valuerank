@@ -77,7 +77,7 @@ export function RunForm({
 
   const [{ data: providersData }] = useQuery<LlmProvidersQueryResult>({
     query: LLM_PROVIDERS_QUERY,
-    requestPolicy: 'cache-only',
+    requestPolicy: 'cache-and-network',
   });
 
   const methodology = getDefinitionMethodology(definitionContent);
