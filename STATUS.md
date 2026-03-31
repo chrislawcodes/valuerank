@@ -11,7 +11,7 @@
 | [System Validity](#goal-system-validity) | 🔴 Blocking | Pre-AAPOR |
 | [AAPOR Conference](#goal-aapor-conference) | 🟡 In progress | May 11, 2026 |
 | [Feature Factory](#goal-feature-factory) | 🟡 In progress | Ongoing |
-| [Vignette Cleanup](#goal-vignette-cleanup) | ⬜ Not started | — |
+| [Vignette Cleanup](#goal-vignette-cleanup) | 🟡 In progress | — |
 
 > **Scale and Analysis are blocked until System Validity is resolved.**
 
@@ -145,6 +145,12 @@ Once the above are resolved:
 ## Goal: Vignette Cleanup
 
 **Goal:** Clean up older vignettes run before the flipped-order system was introduced
+
+### Recently Completed
+
+| Feature | Branch | Status | Notes |
+|---------|--------|--------|-------|
+| **domain-coverage-paired-batch-action** | `claude/parallel-reviews-validated-v2` | 🟢 Done | PR #476 merged 2026-03-31 — tightened the domain coverage layout, removed the workspace card, and restored the paired-batch launch/back-link flow. |
 
 ### Backlog
 - [ ] Identify which vignettes predate flipped-order system

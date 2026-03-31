@@ -1,0 +1,57 @@
+{
+  "session_id": "84457b4b-6ed7-43ba-a334-ea6ccbdec190",
+  "response": "## Findings\n\n### 1. HIGH: Regression in Orphaned Analysis Detection During Queue Unavailability\nThe refactoring introduced a behavioral change that weakens the detection of orphaned analysis tasks.\n\n-   **Previous Behavior:** The `analysisStatus` resolver wrapped `pgboss` queries in a `try/catch` block. If these queries failed (e.g., queue unavailable), the logic would proceed to the final check, which correctly identified a run as `'failed'` if it was `COMPLETED` and older than 5 minutes. This provided a critical fallback status.\n-   **New Behavior:** In the new `analysis-status.ts` service, the `try/catch` block in `loadAnalysisStatusLookup` now covers all queue-related queries. Upon failure, it sets `queueUnavailable: true`. The `resolveSingleRunAnalysisStatus` function then sees this flag and returns `null` immediately, skipping the orphaned run check entirely.\n\n**Impact:** A run that is completed but whose analysis job failed to queue (an orphan) will now show a `null` analysis status indefinitely if the job queue is experiencing an outage. Previously, it would have correctly been marked as `'failed'`, alerting users to a problem. This is a regression in observability and resilience.\n\n### 2. LOW: Test Coverage Gap for Orphaned Analysis Fallback\nThe new test suite for the `analysis-status` service (`analysis-status.test.ts`) does not cover the specific interaction between queue unavailability and orphaned run detection.\n\nA test case is present to verify that the status is `null` when `pgboss` queries fail for a non-completed run. However, there is no corresponding test to verify what happens when `pgboss` queries fail for a run that *is* old enough to be considered an orphan. Such a test would have exposed the regression described in the High-severity finding above.\n\n**Impact:** The absence of this test case allowed a behavioral regression to be introduced. Adding a test for this edge case would prevent future regressions and confirm the intended logic for this failure scenario.\n\n## Residual Risks\n\n### 1. MEDIUM: [UNVERIFIED] Performance of Queue Inspection Queries\nThe service directly queries the `pgboss.job` table using raw SQL with `WHERE` clauses on JSONB fields (e.g., `data->>'runId' = ...`).\n\n-   While this is functionally correct and parameterized to prevent SQL injection, it carries a performance risk. Queries on JSONB fields can be slow on large tables without specific GIN or B-tree indexes on expressions.\n-   As the `pgboss.job` table grows, the `domainTrialRunsStatus` and `Run.analysisStatus` queries could become a performance bottleneck, leading to slow API responses.\n\n**Impact:** [UNVERIFIED] If appropriate indexes are not already in place on `(name, (data->>'runId'))` and `(name, (data->>'definitionId'))`, the application's performance may degrade over time as the job history accumulates.\n\n### 2. LOW: Brittle Coupling to Internal Job Structure\nThe implementation is tightly coupled to the internal data schema of `pgboss` jobs, making assumptions about the shape of the `data` payload (e.g., presence of `runId`, `definitionId`, `preambleVersionId`, etc.).\n\n-   The logic in `matchesAggregateJob` and the raw queries in `loadAnalysisStatusLookup` depend on these fields having specific names and types.\n-   While unit tests have been added that mock this structure, they are not a substitute for a stable contract. If the worker code that creates these analysis jobs changes the data payload, this status-checking logic will fail silently or return incorrect results.\n\n**Impact:** This creates a maintenance hazard. Future changes to worker jobs could inadvertently break the API's ability to report on analysis status, and the failure might not be immediately obvious.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 46264
+        },
+        "tokens": {
+          "input": 8466,
+          "prompt": 22869,
+          "candidates": 822,
+          "total": 27359,
+          "cached": 14403,
+          "thoughts": 3668,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 46264,
+            "tokens": {
+              "input": 8466,
+              "prompt": 22869,
+              "candidates": 822,
+              "total": 27359,
+              "cached": 14403,
+              "thoughts": 3668,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

@@ -1,0 +1,180 @@
+# Tasks
+
+Each slice is independently committable. Keep each checkpoint slice under roughly 300 changed lines.
+
+## Slice 1 [CHECKPOINT] Backend status contract and live-state shaping
+
+### Scope
+
+- update the domain trial run status GraphQL shape to expose `updatedAt`, `stalledModels`, and `analysisStatus`
+- keep the status resolver focused on live state, summarization, and stall visibility for the current launch record
+- preserve the current generation/summarization totals derived from the run config
+- add API regression coverage for the status query shape and live-state filtering behavior
+
+### Files
+
+- `cloud/apps/api/src/graphql/queries/domain/shared.ts`
+- `cloud/apps/api/src/graphql/queries/domain/types.ts`
+- `cloud/apps/api/src/graphql/queries/domain/planning.ts`
+- `cloud/apps/api/tests/graphql/queries/domain.test.ts`
+
+### Verification Matrix
+
+- `npm run test --workspace @valuerank/api -- tests/graphql/queries/domain.test.ts`
+- `npm run typecheck --workspace @valuerank/api`
+
+### Estimated Diff
+
+180-240 lines.
+
+### Notes
+
+- Do not add new launch semantics in this slice.
+- Keep the backend as the source of truth for stalled state.
+
+## Slice 2 [CHECKPOINT] Backend launch readiness gate and structured failures
+
+### Scope
+
+- add a backend helper that groups selected model cost by provider and compares the sum to `remainingBudgetUsd`
+- treat `remainingBudgetUsd` as the per-provider budget budget signal and only compare it against the selected-model spend for that same provider
+- only include providers used by the selected models in the readiness check and ignore unrelated providers entirely
+- add a shared freshness constant in `cloud/packages/shared` and use it from the backend gate, backend tests, and any backend-derived freshness verdicts so the 10-minute rule cannot drift
+- add a backend freshness verdict per provider (for example `FRESH`, `STALE`, or `MISSING`) so the web preview does not have to infer health from browser time
+- make `startDomainEvaluation` revalidate provider readiness immediately before work starts, but fetch provider health before entering the write transaction so the transaction itself only records the already-fetched snapshot and launch result
+- return structured launch-time failures through a typed `launchFailure` payload with codes for `INSUFFICIENT_BUDGET`, `STALE_BUDGET`, `PROVIDER_DISABLED`, `PROVIDER_HEALTH_UNAVAILABLE`, `COST_METADATA_UNAVAILABLE`, `VALIDATION_ERROR`, `BLOCKED_BY_ACTIVE_LAUNCH`, and `UNKNOWN_ERROR`, plus machine-readable `totalRequiredBudgetUsd`, `totalRemainingBudgetUsd`, `providerFailures[]`, and a persisted snapshot so polling can still show the same failure reason after refresh
+- persist the launchFailure snapshot under the current `domainEvaluationId` / launch-attempt id so a later refresh can discard any older attempt cleanly
+- order the backend gate as: acquire the domain launch lock, refresh provider health, recompute selected-provider budgets, decide block-or-start, then write the launch result using the already-fetched snapshot
+- keep concurrent launch attempts on the same domain blocked by the backend, not by client heuristics; do not add freshness-based age-out logic in this slice
+- fail closed when any provider-health response is missing or older than 10 minutes instead of guessing readiness
+- use the same 10-minute freshness rule in both the backend gate and the client preview, with the backend using server time against `providerHealth.providers[].lastChecked` and the frontend only displaying the backend-provided `lastChecked` timestamp instead of recomputing age locally
+- add mutation regression coverage for sufficient budget, stale budget, missing budget, provider-disabled, missing provider-health response, mixed fresh/stale providers in the same launch, the budget-change race between preflight and final launch check, concurrent active launch, `VALIDATION_ERROR`, `BLOCKED_BY_ACTIVE_LAUNCH`, and `UNKNOWN_ERROR` cases
+
+### Files
+
+- `cloud/apps/api/src/graphql/mutations/domain.ts`
+- `cloud/apps/api/src/services/health/providers.ts`
+- `cloud/packages/shared/src/launch-readiness.ts`
+- `cloud/apps/api/tests/graphql/mutations/domain.test.ts`
+
+### Verification Matrix
+
+- `npm run test --workspace @valuerank/api -- tests/graphql/mutations/domain.test.ts`
+- `npm run build --workspace @valuerank/api`
+
+### Estimated Diff
+
+220-300 lines.
+
+### Notes
+
+- The backend must be authoritative for readiness at launch time.
+- Keep the client-side preview logic advisory only.
+
+## Slice 3 [CHECKPOINT] Web setup readiness and launch copy
+
+### Scope
+
+- update `cloud/apps/web/src/api/operations/domains.ts` so the setup flow can read the new status fields and current-launch snapshot data
+- add a shared `cloud/apps/web/src/components/domains/domainTrials/launch-state.ts` helper so the setup and status views use the same enablement and freshness rules instead of each recomputing them
+- add provider readiness plumbing in `DomainTrialsDashboard.tsx` using `PROVIDER_HEALTH_QUERY` and `LLM_MODELS_QUERY`
+- update `LaunchControlsPanel.tsx` to show paired-batch depth, provider budget readiness, freshness timestamp, and large-launch confirmation copy
+- update `LaunchConfirmModal.tsx` to restate paired-batch depth, vignette count, and total individual trial runs
+- thread structured launch-time failure codes through `DomainTrialsDashboard.tsx` so the setup flow can show distinct budget, provider, and active-launch errors instead of a generic failure
+- render provider-by-provider readiness with the provider name, current budget state, freshness verdict, and the reason it is blocked or healthy instead of collapsing all readiness into one banner
+- render every provider-level blocker in `providerFailures[]` and treat the top-level `code` as the headline only
+- add or update web tests for the setup controls and confirmation copy
+
+### Files
+
+- `cloud/apps/web/src/api/operations/domains.ts`
+- `cloud/apps/web/src/pages/DomainTrialsDashboard.tsx`
+- `cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx`
+- `cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx`
+- `cloud/apps/web/tests/components/domains/domainTrials/LaunchControlsPanel.test.tsx`
+
+### Verification Matrix
+
+- `npm run test --workspace @valuerank/web -- tests/components/domains/domainTrials/LaunchControlsPanel.test.tsx`
+- `npm run typecheck --workspace @valuerank/web`
+- `npm run build --workspace @valuerank/web`
+
+### Estimated Diff
+
+240-300 lines.
+
+### Notes
+
+- Keep the setup flow explicit and safe.
+- Launch must stay blocked when any provider budget is stale or missing.
+- The setup view should render the backend freshness verdict and timestamp directly rather than recomputing age from the browser clock.
+
+## Slice 4 [CHECKPOINT] Web live status panel and row detail drawer
+
+### Scope
+
+- create `DomainEvaluationStatusPanel.tsx` with the live table, exceptions table, queued count header, and polling cadence
+- use current-launch counts from the launch record and status query, not from the visible live rows, and keep that current-launch record as the canonical aggregate source
+- if the launch-record snapshot and live row totals disagree during a refresh, prefer the launch-record snapshot and show a brief refreshing state rather than recomputing from visible rows
+- render a safe empty or partial-data state when the current launch record is missing, stale, or crash-recovered instead of trying to infer counts from the live table
+- wire row click to a detail drawer backed by the existing `RUN_QUERY` / `useRun`
+- show progress, stage, recent task/log-style data, execution metrics, and a link to the run diagnostics route
+- keep the drawer limited to the same blinded fields the existing run detail page already exposes; do not add any new raw model/provider identifiers that would bypass blind judging
+- render missing `updatedAt`, `analysisStatus`, or `stalledModels` values as explicit `unknown` / empty states instead of inferring a stall or completion
+- add component tests for live row visibility, exception movement, and drawer fallback states
+- add a component test for the snapshot-vs-live-row disagreement path so the refreshing-state fallback cannot regress
+- add a component test for the missing-current-launch-record fallback so the panel snaps back to the setup/idle state instead of inventing counts
+- add a component test for the terminal current-launch transition so the snapshot clears when the backend marks the launch completed, failed, or cancelled
+
+### Files
+
+- `cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx`
+- `cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusDrawer.tsx`
+- `cloud/apps/web/tests/components/domains/domainTrials/DomainEvaluationStatusPanel.test.tsx`
+
+### Verification Matrix
+
+- `npm run test --workspace @valuerank/web -- tests/components/domains/domainTrials/DomainEvaluationStatusPanel.test.tsx`
+- `npm run typecheck --workspace @valuerank/web`
+- `npm run build --workspace @valuerank/web`
+
+### Estimated Diff
+
+250-300 lines.
+
+### Notes
+
+- Pending work stays out of the main live table, but the header count should still reveal accepted-but-not-started work.
+- The drawer should reuse the existing run detail data instead of inventing a new logging system.
+- When `domainEvaluationStatus` becomes terminal or disappears, clear only the live snapshot and counts; keep a terminal launch summary tile and its diagnostics link visible until the user starts a new launch.
+
+## Slice 5 [CHECKPOINT] Dashboard integration and cleanup
+
+### Scope
+
+- replace the old launch-status / planned-batches flow in `DomainTrialsDashboard.tsx` with the new setup and live-status sections
+- leave the obsolete summary/table wiring in the repo only as dead compatibility code; do not mount it in the dashboard once the new panel is wired
+- after a missing or stale current-launch snapshot, keep Launch disabled until the next backend recheck confirms no active launch and the snapshot has been refreshed
+- the normal 5-second polling loop should re-enable Launch as soon as the backend returns a fresh, non-conflicting snapshot
+- keep the current launch diagnostics link visible for completed work
+- add a dashboard-level regression test that exercises the setup-first flow, the live-status handoff, structured launch errors, and a partial current-launch snapshot
+- update any import and prop plumbing required by the new panel split
+
+### Files
+
+- `cloud/apps/web/src/pages/DomainTrialsDashboard.tsx`
+- `cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx`
+
+### Verification Matrix
+
+- `npm run test --workspace @valuerank/web`
+- `npm run build --workspace @valuerank/web`
+
+### Estimated Diff
+
+220-300 lines.
+
+### Notes
+
+- Keep the dashboard changes thin and let the new panel own most of the live-state logic.
+- Do not reintroduce a dense matrix as the primary status view.
