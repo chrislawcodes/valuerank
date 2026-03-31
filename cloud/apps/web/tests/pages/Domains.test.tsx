@@ -144,7 +144,6 @@ describe('Domains workspace', () => {
 
     renderDomainsPage();
 
-    await user.click(screen.getByRole('button', { name: /domain a/i }));
     await user.click(screen.getAllByRole('button', { name: /create vignette/i })[0]!);
 
     expect(screen.getByRole('tab', { name: /setup/i })).toHaveAttribute('aria-selected', 'true');
@@ -164,7 +163,6 @@ describe('Domains workspace', () => {
 
     renderDomainsPage();
 
-    await user.click(screen.getByRole('button', { name: /domain a/i }));
     await user.click(screen.getByRole('tab', { name: /runs/i }));
 
     expect(screen.getByRole('heading', { name: /^runs$/i })).toBeInTheDocument();
@@ -204,8 +202,6 @@ describe('Domains workspace', () => {
 
     renderDomainsPage();
 
-    await user.click(screen.getByRole('button', { name: /domain a/i }));
-
     // Overview is now the default tab — verify quick actions are shown
     expect(screen.getByRole('heading', { name: /quick actions/i })).toBeInTheDocument();
 
@@ -226,7 +222,6 @@ describe('Domains workspace', () => {
 
     renderDomainsPage();
 
-    await user.click(screen.getByRole('button', { name: /domain a/i }));
     await user.click(screen.getByRole('tab', { name: /vignettes/i }));
 
     expect(screen.getByRole('columnheader', { name: /vignette/i })).toBeInTheDocument();
@@ -256,7 +251,6 @@ describe('Domains workspace', () => {
 
     renderDomainsPage();
 
-    await user.click(screen.getByRole('button', { name: /domain a/i }));
     await user.click(screen.getByRole('tab', { name: /vignettes/i }));
 
     expect(screen.queryByRole('button', { name: /open domain evaluation/i })).not.toBeInTheDocument();

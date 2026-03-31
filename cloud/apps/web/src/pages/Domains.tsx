@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { gql, useQuery, useMutation } from 'urql';
-import { Folder, FolderOpen, Plus, Pencil, Trash2, Play } from 'lucide-react';
+import { Play, Plus } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
-import { Badge } from '../components/ui/Badge';
 import { DefinitionFilters, type DefinitionFilterState } from '../components/definitions/DefinitionFilters';
 import { DEFINITION_COUNT_QUERY, type DefinitionCountQueryResult, type DefinitionCountQueryVariables } from '../api/operations/definitions';
 import { useDefinitions } from '../hooks/useDefinitions';
@@ -112,30 +111,16 @@ export function Domains() {
       : 'contexts',
   );
 
-  const [createName, setCreateName] = useState('');
-  const [renameName, setRenameName] = useState('');
   const [inlineError, setInlineError] = useState<string | null>(null);
 
   const {
     domains,
     queryLoading: domainQueryLoading,
-    creating,
-    renaming,
-    deleting,
     error: domainError,
-    createDomain,
-    renameDomain,
-    deleteDomain,
   } = useDomains();
 
   const definitionFilterArgs = useMemo(() => {
-    if (selectedFolder === 'all') {
-      return { domainId: undefined, withoutDomain: undefined };
-    }
-    if (selectedFolder === 'none') {
-      return { domainId: undefined, withoutDomain: true };
-    }
-    return { domainId: selectedFolder, withoutDomain: undefined };
+    return { domainId: selectedFolder || undefined, withoutDomain: undefined };
   }, [selectedFolder]);
 
   const { definitions, loading: definitionsLoading, error: definitionsError } = useDefinitions({
@@ -161,20 +146,7 @@ export function Domains() {
   });
   const shownCount = countData?.definitionCount ?? null;
 
-  const [{ data: noneCountData }] = useQuery<DefinitionCountQueryResult, DefinitionCountQueryVariables>({
-    query: DEFINITION_COUNT_QUERY,
-    variables: { withoutDomain: true },
-  });
-  const noneCount = noneCountData?.definitionCount ?? 0;
-
-  const [{ data: allCountData }] = useQuery<DefinitionCountQueryResult, DefinitionCountQueryVariables>({
-    query: DEFINITION_COUNT_QUERY,
-    variables: {},
-  });
-  const allCount = allCountData?.definitionCount ?? null;
-  const selectedDomain = selectedFolder !== 'all' && selectedFolder !== 'none'
-    ? domains.find((d) => d.id === selectedFolder) ?? null
-    : null;
+  const selectedDomain = domains.find((d) => d.id === selectedFolder) ?? null;
 
   const [{ data: selectedDomainContextsData }] = useQuery<
     DomainContextsQueryResult,
@@ -273,16 +245,17 @@ export function Domains() {
   );
 
   useEffect(() => {
-    if (selectedFolder === 'all' || selectedFolder === 'none') {
+    if (selectedFolder === 'all' || selectedFolder === 'none' || selectedDomain == null) {
       if (domains.length > 0 && domains[0] != null) {
         setSelectedFolder(domains[0].id);
       }
     }
-  }, [selectedFolder, domains]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [domains]);
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
-    if (selectedFolder !== 'all' && selectedFolder !== 'none') {
+    if (selectedDomain != null) {
       next.set('domainId', selectedFolder);
       next.set('tab', activeTab);
       if (activeTab === 'setup') {
@@ -298,7 +271,7 @@ export function Domains() {
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true });
     }
-  }, [activeTab, searchParams, selectedFolder, setSearchParams, setupTab]);
+  }, [activeTab, searchParams, selectedDomain, selectedFolder, setSearchParams, setupTab]);
 
   const handleRunDomainTrials = () => {
     if (!selectedDomain) return;
@@ -332,52 +305,6 @@ export function Domains() {
     navigate(`/job-choice/new?domainId=${selectedDomain.id}`);
   };
 
-  const handleCreateDomain = async () => {
-    setInlineError(null);
-    try {
-      if (createName.trim() === '') return;
-      const created = await createDomain(createName);
-      setCreateName('');
-      if (created?.id) {
-        setSelectedFolder(created.id);
-      }
-    } catch (error) {
-      setInlineError(error instanceof Error ? error.message : 'Failed to create domain');
-    }
-  };
-
-  const handleRenameDomain = async () => {
-    if (!selectedDomain) return;
-    setInlineError(null);
-    try {
-      if (renameName.trim() === '') return;
-      await renameDomain(selectedDomain.id, renameName);
-      setRenameName('');
-    } catch (error) {
-      setInlineError(error instanceof Error ? error.message : 'Failed to rename domain');
-    }
-  };
-
-  const handleDeleteDomain = async () => {
-    if (!selectedDomain) return;
-    setInlineError(null);
-    const ok = window.confirm(
-      `Delete domain "${selectedDomain.name}"? Attached vignettes will be moved to None.`
-    );
-    if (!ok) return;
-    try {
-      await deleteDomain(selectedDomain.id);
-      setSelectedFolder('none');
-    } catch (error) {
-      setInlineError(error instanceof Error ? error.message : 'Failed to delete domain');
-    }
-  };
-
-  const folderRows: Array<{ key: FolderKey; name: string; count: number }> = [
-    { key: 'all', name: 'All', count: allCount ?? domains.reduce((sum, d) => sum + d.definitionCount, 0) + noneCount },
-    { key: 'none', name: 'None', count: noneCount },
-    ...domains.map((domain) => ({ key: domain.id, name: domain.name, count: domain.definitionCount })),
-  ];
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Domains</h1>
@@ -386,85 +313,24 @@ export function Domains() {
         <ErrorMessage message={`Failed to load domains: ${(domainError ?? definitionsError)?.message ?? 'Unknown error'}`} />
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)] gap-6">
-        <section className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
-          <h2 className="text-sm font-medium text-gray-700">Folders</h2>
-          <div className="space-y-1">
-            {folderRows.map((folder) => {
-              const isActive = selectedFolder === folder.key;
-              return (
-                <Button
-                  key={folder.key}
-                  type="button"
-                  onClick={() => {
-                    setSelectedFolder(folder.key);
-                    setRenameName('');
-                  }}
-                  variant="ghost"
-                  size="sm"
-                  className={`w-full !justify-between rounded-md px-2 py-2 text-left text-sm ${
-                    isActive ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    {isActive ? <FolderOpen className="w-4 h-4" /> : <Folder className="w-4 h-4" />}
-                    {folder.name}
-                  </span>
-                  <Badge variant={isActive ? 'info' : 'neutral'} size="count">{folder.count}</Badge>
-                </Button>
-              );
-            })}
-          </div>
+      {domains.length > 0 && (
+        <div className="flex items-center gap-3 flex-wrap">
+          <select
+            value={selectedFolder}
+            onChange={(e) => setSelectedFolder(e.target.value)}
+            className="border border-gray-300 rounded px-3 py-2 text-sm bg-white"
+          >
+            {domains.map((d) => (
+              <option key={d.id} value={d.id}>{d.name} ({d.definitionCount})</option>
+            ))}
+          </select>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/domains/manage')}>
+            Manage Domains
+          </Button>
+        </div>
+      )}
 
-          <div className="pt-3 border-t border-gray-200 space-y-2">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={createName}
-                onChange={(e) => setCreateName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    void handleCreateDomain();
-                  }
-                }}
-                placeholder="New domain name"
-                className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm"
-              />
-              <Button onClick={() => void handleCreateDomain()} size="sm" variant="secondary" disabled={creating}>
-                <Plus className="w-4 h-4" />
-              </Button>
-            </div>
-            {selectedDomain && (
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={renameName}
-                    onChange={(e) => setRenameName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        void handleRenameDomain();
-                      }
-                    }}
-                    placeholder={selectedDomain.name}
-                    className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm"
-                  />
-                  <Button onClick={() => void handleRenameDomain()} size="sm" variant="secondary" disabled={renaming}>
-                    <Pencil className="w-4 h-4" />
-                  </Button>
-                </div>
-                <Button onClick={() => void handleDeleteDomain()} size="sm" variant="secondary" className="w-full" disabled={deleting}>
-                  <Trash2 className="w-4 h-4 mr-1" />
-                  Delete Domain
-                </Button>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="space-y-4">
+      <div className="space-y-4">
           {selectedDomain != null && (
             <div className="space-y-4">
               <div className="rounded-xl border border-gray-200 bg-white p-5">
@@ -920,7 +786,6 @@ export function Domains() {
               </div>
             </div>
           )}
-        </section>
       </div>
     </div>
   );

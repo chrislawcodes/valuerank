@@ -11,6 +11,7 @@ import { ValidationHome } from './pages/ValidationHome';
 import { ArchiveHome } from './pages/ArchiveHome';
 import { Definitions } from './pages/Definitions';
 import { Domains } from './pages/Domains';
+import { DomainsManage } from './pages/DomainsManage';
 import { DomainTrialsDashboard } from './pages/DomainTrialsDashboard';
 import { DomainAnalysis } from './pages/DomainAnalysis';
 import { DomainCoverage } from './pages/DomainCoverage';
@@ -87,6 +88,14 @@ function App() {
               element={
                 <ProtectedLayout>
                   <Domains />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/domains/manage"
+              element={
+                <ProtectedLayout>
+                  <DomainsManage />
                 </ProtectedLayout>
               }
             />

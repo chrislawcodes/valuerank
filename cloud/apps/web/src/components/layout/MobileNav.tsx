@@ -30,6 +30,7 @@ const navItems: NavItem[] = [
     icon: FolderTree,
     children: [
       { name: 'Domain Analysis', path: '/domains/analysis', icon: BarChart2 },
+      { name: 'Manage Domains', path: '/domains/manage', icon: FolderTree },
     ],
   },
   {
