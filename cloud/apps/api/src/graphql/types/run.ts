@@ -9,7 +9,6 @@ import { calculatePercentComplete } from '../../services/run/index.js';
 import { AnalysisResultRef } from './analysis.js';
 import { CostEstimateRef, type CostEstimateShape } from './cost-estimate.js';
 import { getAllMetrics, getTotals } from '../../services/rate-limiter/index.js';
-import { parseTemperature } from '../../utils/temperature.js';
 
 // Re-export for backward compatibility
 export { RunRef, TranscriptRef, ExperimentRef };
@@ -43,55 +42,12 @@ type AggregateRunConfig = RunConfig & {
   sourceRunIds?: string[];
 };
 
-type RunSnapshotMeta = {
-  preambleVersionId: string | null;
-  definitionVersion: number | null;
-  temperatureSetting: number | null;
-};
-
-type QueueJobRow = {
-  state: string;
-  data: unknown;
-};
-
 type QueueFailurePayload = {
   message?: unknown;
   details?: unknown;
   error?: unknown;
   value?: unknown;
 };
-
-function parseDefinitionVersion(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value !== 'string' || value.trim() === '') {
-    return null;
-  }
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function getSnapshotMeta(config: AggregateRunConfig | null): RunSnapshotMeta {
-  const snapshot = (config?.definitionSnapshot ?? null) as
-    | { _meta?: { preambleVersionId?: string; definitionVersion?: number | string }; preambleVersionId?: string; version?: number | string }
-    | null;
-
-  const preambleVersionId =
-    snapshot?._meta?.preambleVersionId ??
-    snapshot?.preambleVersionId ??
-    null;
-  const definitionVersion =
-    parseDefinitionVersion(snapshot?._meta?.definitionVersion) ??
-    parseDefinitionVersion(snapshot?.version);
-  const temperatureSetting = parseTemperature(config?.temperature);
-
-  return { preambleVersionId, definitionVersion, temperatureSetting };
-}
-
-function getJobDataRecord(data: unknown): Record<string, unknown> | null {
-  return data !== null && typeof data === 'object' ? data as Record<string, unknown> : null;
-}
 
 function normalizeTaskError(output: unknown): string | null {
   if (output === null || output === undefined) {
@@ -149,37 +105,6 @@ function normalizeTaskError(output: unknown): string | null {
   } catch {
     return String(output);
   }
-}
-
-function matchesAggregateJob(jobData: unknown, runDefinitionId: string, runMeta: RunSnapshotMeta): boolean {
-  const data = getJobDataRecord(jobData);
-  if (data === null) {
-    return false;
-  }
-  if (data.definitionId !== runDefinitionId) {
-    return false;
-  }
-
-  const jobPreambleVersionId =
-    typeof data.preambleVersionId === 'string' && data.preambleVersionId !== ''
-      ? data.preambleVersionId
-      : null;
-  if (jobPreambleVersionId !== runMeta.preambleVersionId) {
-    return false;
-  }
-
-  const jobDefinitionVersion = parseDefinitionVersion(data.definitionVersion);
-  if (jobDefinitionVersion !== runMeta.definitionVersion) {
-    return false;
-  }
-
-  const jobTemperature = parseTemperature(data.temperature);
-  const runTemperature = runMeta.temperatureSetting;
-  if (jobTemperature !== runTemperature) {
-    return false;
-  }
-
-  return true;
 }
 
 builder.objectType(RunRef, {
