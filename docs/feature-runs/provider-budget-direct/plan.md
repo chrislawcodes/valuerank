@@ -67,12 +67,14 @@ This is the single canonical COMPLETED transition point for normal runs. The oth
     - Show balance in the provider header (non-expanded state)
 
 13. **`cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx`**
-    - Add "Balance ($)" input field (updates via updateLlmProvider `balance`)
-    - Add "Sync Balance" section (calls `syncProviderBalance` mutation)
+    - Replace separate "set balance" + "sync balance" with single "Set / Sync Balance ($)" input
+    - Always calls `syncProviderBalance` mutation (first use: drift is null since prior balance is null)
     - Show "Last synced: [date]" if `lastSyncedAt` is set
+    - Remove `balance` field from `UpdateLlmProviderInput` (no longer needed as separate operation)
 
 14. **`cloud/apps/web/src/components/settings/models/ModelsPanel.tsx`**
     - Add `syncProviderBalance` mutation handler + wire to modal
+    - Remove `updateProviderBalance` if it was added (merged into sync)
 
 15. **`cloud/apps/web/src/components/runs/RunForm.tsx`** (or equivalent)
     - After cost estimation, check each provider's balance vs estimated cost
@@ -115,35 +117,54 @@ model ProviderBudgetEvent {
   @@index([runId])
   @@map("provider_budget_events")
 }
+
+// Required: add reverse relations to existing models
+// LlmProvider: budgetEvents ProviderBudgetEvent[]
+// Run: budgetEvents ProviderBudgetEvent[]
 ```
 
 ---
 
 ## Provider Identification from Model ID
 
-Model IDs in runs are stored as `provider:modelId` strings (e.g., `openai:gpt-4o-mini`). The prefix before `:` is the `LlmProvider.name`. We use this to join transcripts → provider without a DB lookup per transcript:
+Model IDs in runs are stored as `provider:modelId` strings (e.g., `openai:gpt-4o-mini`). However, not all model IDs are guaranteed to follow this convention. We query transcripts with a JOIN to `LlmModel → LlmProvider` to get the canonical provider:
 
 ```typescript
-// Group transcript costs by provider name
-const costsByProvider: Record<string, number> = {};
+// In deductProviderBudget(runId):
+const transcripts = await db.transcript.findMany({
+  where: { runId, deletedAt: null },
+  select: {
+    estimatedCost: true,
+    modelId: true,   // e.g., "openai:gpt-4o-mini"
+  },
+});
+
+// Group by provider name using model ID prefix (standard format in this codebase)
+// Fall back to querying DB for unknown format
+const costsByProviderName: Record<string, number> = {};
 for (const t of transcripts) {
-  const providerName = t.modelId.split(':')[0]; // e.g., "openai"
-  costsByProvider[providerName] = (costsByProvider[providerName] ?? 0) + (t.estimatedCost ?? 0);
+  if (!t.estimatedCost) continue;
+  const colonIdx = t.modelId.indexOf(':');
+  if (colonIdx > 0) {
+    const providerName = t.modelId.slice(0, colonIdx);
+    costsByProviderName[providerName] = (costsByProviderName[providerName] ?? 0) + t.estimatedCost;
+  }
+  // No colon: skip (provider unknown, no deduction)
 }
 ```
 
-Then for each provider name, look up provider by name and call `deductProviderBudget`.
+Then for each provider name, look up provider by name and call the DB helper to create a DEDUCTION event and decrement the balance.
 
 ---
 
 ## Pre-Run Warning Logic
 
 In the RunForm, after cost estimation completes:
-1. Fetch provider balances (already available in `LLM_PROVIDERS_QUERY` response once we add the field)
-2. Group estimated costs by provider (same prefix logic)
+1. Use a new lightweight `LLM_PROVIDER_BALANCES_QUERY` that returns only `{ id, name, balance }` — no model list
+2. Group estimated costs by provider (same prefix logic from `perModel` cost breakdown)
 3. For each provider where `balance !== null && balance < estimatedCost`: show warning
 
-The RunForm already calls cost estimate. We need to pass provider data alongside. The `llmProviders` query is already loaded in `ModelsPanel` — but `RunForm` is on a different page. We'll add a lightweight provider balance check inside the existing run start flow by reading from a separate `LLM_PROVIDERS_QUERY` call in `RunForm`.
+The `LLM_PROVIDER_BALANCES_QUERY` is a cheap call — runs alongside cost estimation. It does not replace the existing full `LLM_PROVIDERS_QUERY` in `ModelsPanel`.
 
 ---
 
