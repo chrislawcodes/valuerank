@@ -39,7 +39,7 @@ export function DomainEvaluationStatusDrawer({
 
   const content = (
     <div className="fixed inset-0 z-50">
-      <button
+      <Button
         type="button"
         aria-label="Close run details"
         className="absolute inset-0 bg-black/40"

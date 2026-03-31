@@ -293,7 +293,6 @@ export function DomainTrialsDashboard() {
   if (!domainId) return <ErrorMessage message="Missing domain id." />;
 
   const planErrorMessage = planResult.error?.message ?? '';
-  const estimateErrorMessage = estimateResult.error?.message ?? '';
   const providerHealthErrorMessage = providerHealthResult.error?.message ?? '';
   const statusErrorMessage = statusResult.error?.message ?? '';
   const suppressPlanNoContentError = planErrorMessage.includes('No Content') && planNoContentRetries < 2;
