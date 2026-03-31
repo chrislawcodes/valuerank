@@ -12,6 +12,8 @@ type TrialGridTableProps = {
   }>;
   cellEstimates: Map<string, number>;
   getCellStatus: (definitionId: string, modelId: string) => DomainTrialCellStatus;
+  existingBatchCounts?: Map<string, number>;
+  targetBatchCount?: number;
 };
 
 export function TrialGridTable({
@@ -20,6 +22,8 @@ export function TrialGridTable({
   vignettes,
   cellEstimates,
   getCellStatus,
+  existingBatchCounts,
+  targetBatchCount,
 }: TrialGridTableProps) {
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 overflow-auto">
@@ -61,7 +65,22 @@ export function TrialGridTable({
                       <div className="text-xs text-amber-700">This vignette only has 1 configured condition right now.</div>
                     )}
                   </td>
-                  <td className="py-3 pr-3 text-gray-700">{models.length}</td>
+                  <td className="py-3 pr-3 text-gray-700">
+                    {targetBatchCount != null && existingBatchCounts != null ? (
+                      (() => {
+                        const existing = existingBatchCounts.get(vignette.definitionId) ?? 0;
+                        const toLaunch = Math.max(0, targetBatchCount - existing);
+                        return (
+                          <div>
+                            <div>{existing} existing / {toLaunch} to launch</div>
+                            <div className="text-xs text-gray-500">Target: {targetBatchCount} batches</div>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      models.length
+                    )}
+                  </td>
                   <td className="py-3 pr-3 text-gray-700">{formatCost(projectedBatchCost)}</td>
                   <td className="py-3 pr-3 text-gray-700">
                     <div className="text-xs text-gray-700">{completed} complete · {active} active · {failed} failed · {idle} not started</div>

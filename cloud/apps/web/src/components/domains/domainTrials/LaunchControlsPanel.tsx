@@ -17,6 +17,9 @@ type LaunchControlsPanelProps = {
   maxBudgetEnabled: boolean;
   maxBudgetInput: string;
   hasValidBudget: boolean;
+  targetBatchCountEnabled: boolean;
+  targetBatchCountInput: string;
+  hasValidTargetBatchCount: boolean;
   isStarting: boolean;
   planFetching: boolean;
   temperatureWarning?: string | null;
@@ -28,6 +31,8 @@ type LaunchControlsPanelProps = {
   onSetTemperatureInput: (value: string) => void;
   onSetMaxBudgetEnabled: (value: boolean) => void;
   onSetMaxBudgetInput: (value: string) => void;
+  onSetTargetBatchCountEnabled: (value: boolean) => void;
+  onSetTargetBatchCountInput: (value: string) => void;
   onOpenConfirm: () => void;
 };
 
@@ -45,6 +50,9 @@ export function LaunchControlsPanel({
   maxBudgetEnabled,
   maxBudgetInput,
   hasValidBudget,
+  targetBatchCountEnabled,
+  targetBatchCountInput,
+  hasValidTargetBatchCount,
   isStarting,
   planFetching,
   temperatureWarning,
@@ -56,6 +64,8 @@ export function LaunchControlsPanel({
   onSetTemperatureInput,
   onSetMaxBudgetEnabled,
   onSetMaxBudgetInput,
+  onSetTargetBatchCountEnabled,
+  onSetTargetBatchCountInput,
   onOpenConfirm,
 }: LaunchControlsPanelProps) {
   const confidenceTone = estimateConfidence === 'HIGH'
@@ -102,7 +112,25 @@ export function LaunchControlsPanel({
           disabled={!maxBudgetEnabled}
           className="w-28 px-2 py-1 border border-gray-300 rounded text-sm disabled:bg-gray-100"
         />
+        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={targetBatchCountEnabled} onChange={(event) => onSetTargetBatchCountEnabled(event.target.checked)} />
+          Target batch count
+        </label>
+        <input
+          aria-label="Target batch count"
+          type="number"
+          min={1}
+          step={1}
+          placeholder="e.g. 5"
+          value={targetBatchCountInput}
+          onChange={(event) => onSetTargetBatchCountInput(event.target.value)}
+          disabled={!targetBatchCountEnabled}
+          className="w-20 px-2 py-1 border border-gray-300 rounded text-sm disabled:bg-gray-100"
+        />
       </div>
+      {targetBatchCountEnabled && !hasValidTargetBatchCount && (
+        <p className="text-xs text-amber-700">Enter a target batch count of 1 or more.</p>
+      )}
 
       <details className="rounded border border-gray-200 bg-gray-50 p-3">
         <summary className="cursor-pointer text-sm font-medium text-gray-900">Advanced controls</summary>
@@ -163,7 +191,7 @@ export function LaunchControlsPanel({
       <div className="flex items-center gap-3">
         <Button
           onClick={onOpenConfirm}
-          disabled={isStarting || planFetching || modelCount === 0 || vignetteCount === 0 || (maxBudgetEnabled && !hasValidBudget)}
+          disabled={isStarting || planFetching || modelCount === 0 || vignetteCount === 0 || (maxBudgetEnabled && !hasValidBudget) || (targetBatchCountEnabled && !hasValidTargetBatchCount)}
         >
           {isStarting ? 'Starting...' : 'Review & Start Domain Evaluation'}
         </Button>
