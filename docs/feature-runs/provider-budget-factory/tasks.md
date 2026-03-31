@@ -14,11 +14,11 @@
 
 **Purpose**: Establish schema, DB migration, and exported types. Everything downstream depends on the schema being live.
 
-- [ ] T001 Update Prisma schema — add `balance Decimal? @db.Decimal(10,4)` to `LlmProvider` and add `balanceSyncLogs ProviderBalanceSyncLog[]` relation in `cloud/packages/db/prisma/schema.prisma`
-- [ ] T002 Add `ProviderBalanceSyncLog` model to Prisma schema with all fields, FK to `LlmProvider` and `User`, `@@index([providerId])`, `@@map("provider_balance_sync_logs")` in `cloud/packages/db/prisma/schema.prisma`
-- [ ] T003 Add reverse relation `balanceSyncLogs ProviderBalanceSyncLog[]` to `User` model in `cloud/packages/db/prisma/schema.prisma`
-- [ ] T004 Run `prisma migrate dev --name add_provider_budget_tracking` to generate and apply migration (generates file in `cloud/packages/db/prisma/migrations/`)
-- [ ] T005 Export `ProviderBalanceSyncLog` type from `cloud/packages/db/src/index.ts`
+- [X] T001 Update Prisma schema — add `balance Decimal? @db.Decimal(10,4)` to `LlmProvider` and add `balanceSyncLogs ProviderBalanceSyncLog[]` relation in `cloud/packages/db/prisma/schema.prisma`
+- [X] T002 Add `ProviderBalanceSyncLog` model to Prisma schema with all fields, FK to `LlmProvider` and `User`, `@@index([providerId])`, `@@map("provider_balance_sync_logs")` in `cloud/packages/db/prisma/schema.prisma`
+- [X] T003 Add reverse relation `balanceSyncLogs ProviderBalanceSyncLog[]` to `User` model in `cloud/packages/db/prisma/schema.prisma`
+- [X] T004 Run `prisma migrate dev --name add_provider_budget_tracking` to generate and apply migration (generates file in `cloud/packages/db/prisma/migrations/`)
+- [X] T005 Export `ProviderBalanceSyncLog` type from `cloud/packages/db/src/index.ts`
 
 **Checkpoint**: Schema is live. All API and service tasks can now reference `db.providerBalanceSyncLog` and `LlmProvider.balance`.
 
