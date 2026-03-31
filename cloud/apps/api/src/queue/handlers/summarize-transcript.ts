@@ -19,6 +19,7 @@ import type { SummarizeTranscriptJobData } from '../types.js';
 import { DEFAULT_JOB_OPTIONS } from '../types.js';
 import { spawnPython, type SpawnPythonResult } from '../spawn.js';
 import { triggerBasicAnalysis } from '../../services/analysis/index.js';
+import { deductProviderBudget } from '../../services/run/budget.js';
 import { getSummarizerModel, type InfraModelConfig } from '../../services/infra-models.js';
 import { incrementSummarizeCompleted, incrementSummarizeFailed } from '../../services/run/progress.js';
 import { schedule as rateLimitSchedule, getLimiterStats, type ScheduleOptions } from '../../services/rate-limiter/index.js';
@@ -330,6 +331,9 @@ async function maybeCompleteRun(runId: string): Promise<void> {
       },
     });
     log.info({ runId }, 'Run completed - all transcripts summarized');
+
+    // Deduct run cost from provider budgets (non-blocking, best-effort)
+    void deductProviderBudget(runId);
 
     // Trigger basic analysis for the completed run
     try {
