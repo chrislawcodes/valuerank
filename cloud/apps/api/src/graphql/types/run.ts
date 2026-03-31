@@ -49,7 +49,7 @@ type RunSnapshotMeta = {
   temperatureSetting: number | null;
 };
 
-type QueueJobRow = {
+type _QueueJobRow = {
   state: string;
   data: unknown;
 };
@@ -72,7 +72,7 @@ function parseDefinitionVersion(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function getSnapshotMeta(config: AggregateRunConfig | null): RunSnapshotMeta {
+function _getSnapshotMeta(config: AggregateRunConfig | null): RunSnapshotMeta {
   const snapshot = (config?.definitionSnapshot ?? null) as
     | { _meta?: { preambleVersionId?: string; definitionVersion?: number | string }; preambleVersionId?: string; version?: number | string }
     | null;
@@ -151,7 +151,7 @@ function normalizeTaskError(output: unknown): string | null {
   }
 }
 
-function matchesAggregateJob(jobData: unknown, runDefinitionId: string, runMeta: RunSnapshotMeta): boolean {
+function _matchesAggregateJob(jobData: unknown, runDefinitionId: string, runMeta: RunSnapshotMeta): boolean {
   const data = getJobDataRecord(jobData);
   if (data === null) {
     return false;

@@ -74,7 +74,6 @@ export function RunForm({
   isSubmitting = false,
 }: RunFormProps) {
   const [budgetOverdrafts, setBudgetOverdrafts] = useState<OverdraftProvider[]>([]);
-  const [pendingInput, setPendingInput] = useState<StartRunInput | null>(null);
 
   const [{ data: providersData }] = useQuery<LlmProvidersQueryResult>({
     query: LLM_PROVIDERS_QUERY,
@@ -171,8 +170,6 @@ export function RunForm({
     if (overdrafts.length > 0) {
       e.preventDefault();
       setBudgetOverdrafts(overdrafts);
-      // Capture the native event so Proceed can re-trigger the form
-      setPendingInput(null);
       return;
     }
     await handleSubmit(e);
@@ -196,7 +193,7 @@ export function RunForm({
       <BudgetWarningDialog
         overdraftProviders={budgetOverdrafts}
         onProceed={() => { void handleBudgetProceed(); }}
-        onCancel={() => { setBudgetOverdrafts([]); setPendingInput(null); }}
+        onCancel={() => { setBudgetOverdrafts([]); }}
       />
     )}
     <form onSubmit={handleFormSubmit} className="space-y-6">

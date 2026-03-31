@@ -13,7 +13,7 @@ import { getAuthHeader, TEST_USER } from '../../test-utils.js';
 const app = createServer();
 
 const SET_PROVIDER_BALANCE_MUTATION = `
-  mutation SetProviderBalance($providerId: ID!, $balance: Float) {
+  mutation SetProviderBalance($providerId: String!, $balance: Float) {
     setProviderBalance(providerId: $providerId, balance: $balance) {
       id
       name
@@ -23,7 +23,7 @@ const SET_PROVIDER_BALANCE_MUTATION = `
 `;
 
 const SYNC_PROVIDER_BALANCE_MUTATION = `
-  mutation SyncProviderBalance($providerId: ID!, $realBalance: Float!) {
+  mutation SyncProviderBalance($providerId: String!, $realBalance: Float!) {
     syncProviderBalance(providerId: $providerId, realBalance: $realBalance) {
       id
       providerId
