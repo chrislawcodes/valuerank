@@ -116,12 +116,12 @@
 
 **Purpose**: Validation, edge case handling, and build verification.
 
-- [ ] T031 Verify `run npm run build --workspace @valuerank/api` passes with no TypeScript errors
-- [ ] T032 Verify `npm run build --workspace @valuerank/web` passes with no TypeScript errors
-- [ ] T033 Verify `npm run lint --workspace @valuerank/api` passes
-- [ ] T034 Verify `npm run lint --workspace @valuerank/web` passes
-- [ ] T035 Verify `npm run test --workspace @valuerank/api` passes (all existing tests + new deduct.test.ts + mutation tests)
-- [ ] T036 Verify `npm run test --workspace @valuerank/web` passes (all existing tests + new BudgetWarningDialog.test.tsx)
+- [X] T031 Verify `run npm run build --workspace @valuerank/api` passes with no TypeScript errors
+- [X] T032 Verify `npm run build --workspace @valuerank/web` passes with no TypeScript errors
+- [X] T033 Verify `npm run lint --workspace @valuerank/api` passes
+- [X] T034 Verify `npm run lint --workspace @valuerank/web` passes
+- [X] T035 Verify `npm run test --workspace @valuerank/api` passes (all existing tests + new deduct.test.ts + mutation tests)
+- [X] T036 Verify `npm run test --workspace @valuerank/web` passes (all existing tests + new BudgetWarningDialog.test.tsx)
 - [ ] T037 Manual smoke test using quickstart.md — validate US1 through US4 end-to-end
 
 ---

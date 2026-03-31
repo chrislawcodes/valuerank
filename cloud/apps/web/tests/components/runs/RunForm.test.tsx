@@ -10,6 +10,16 @@ import userEvent from '@testing-library/user-event';
 import { RunForm } from '../../../src/components/runs/RunForm';
 import type { AvailableModel } from '../../../src/api/operations/models';
 
+// Mock urql to avoid "No client has been specified" errors from RunForm's useQuery
+vi.mock('urql', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('urql')>();
+  return {
+    ...actual,
+    useQuery: () => [{ data: { llmProviders: [] }, fetching: false, error: undefined }],
+    useMutation: () => [{ fetching: false }, vi.fn()],
+  };
+});
+
 // Mock the useAvailableModels hook
 vi.mock('../../../src/hooks/useAvailableModels', () => ({
   useAvailableModels: vi.fn(),
