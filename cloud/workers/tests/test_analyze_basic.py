@@ -562,7 +562,7 @@ class TestAnalyzeBasicIntegration:
         assert reliability["neutralShare"] == pytest.approx(0.2, abs=1e-6)
 
     def test_same_signature_aggregate_keeps_preference_but_leaves_reliability_unavailable_without_within_run_repeats(self):
-        """Pooling single-sample runs should not create fake repeatability."""
+        """Cross-run repeats count toward coverage, but min thresholds gate publishability."""
         input_data = {
             "runId": "aggregate-run-preference-only",
             "emitVignetteSemantics": True,
@@ -628,11 +628,13 @@ class TestAnalyzeBasicIntegration:
 
         assert preference["preferenceDirection"]["overallLean"] is not None
         assert preference["preferenceStrength"] is not None
-        assert reliability["coverageCount"] == 0
+        # s1 appears in both runs so the pooled view sees 1 repeated condition.
+        # min_repeat_coverage_count=3 is not met, so reliability is still unpublishable.
+        assert reliability["coverageCount"] == 1
         assert reliability["baselineReliability"] is None
         assert reliability["baselineNoise"] is None
-        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageCount"] == 0
-        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageShare"] == pytest.approx(0.0, abs=1e-6)
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageCount"] == 1
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageShare"] == pytest.approx(1 / 3, abs=1e-6)
 
     def test_same_signature_aggregate_rolls_up_reliability_and_flags_high_drift(self):
         """Aggregate pooling should weight within-run reliability and flag drift separately."""
@@ -676,11 +678,13 @@ class TestAnalyzeBasicIntegration:
         assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageCount"] == 5
         assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageShare"] == pytest.approx(1.0, abs=1e-6)
         assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["contributingRunCount"] == 2
-        assert aggregate_semantics["perModelDrift"]["m1"]["weightedOverallSignedCenterSd"] is None
-        assert aggregate_semantics["perModelDrift"]["m1"]["exceedsWarningThreshold"] is False
+        # Drift is now collected from per-run preference; the two runs have very different
+        # overallSignedCenter values so the SD is high and exceeds the warning threshold.
+        assert aggregate_semantics["perModelDrift"]["m1"]["weightedOverallSignedCenterSd"] is not None
+        assert aggregate_semantics["perModelDrift"]["m1"]["exceedsWarningThreshold"] is True
 
     def test_same_signature_aggregate_sums_repeat_coverage_across_runs_without_treating_runs_as_repeats(self):
-        """Pooled coverage should sum run-level repeat coverage while preserving within-run repeatability."""
+        """Pooled coverage counts distinct repeated conditions; cross-run repeats of s1 count once."""
         input_data = {
             "runId": "aggregate-run-overlapping-repeat-coverage",
             "emitVignetteSemantics": True,
@@ -710,9 +714,10 @@ class TestAnalyzeBasicIntegration:
         reliability = result["analysis"]["reliabilitySummary"]["perModel"]["m1"]
         aggregate_semantics = result["analysis"]["aggregateSemantics"]
 
-        assert reliability["coverageCount"] == 3
+        # Pooled: s1 has 4 samples (repeated), s2 has 2 samples (repeated) → 2 distinct repeated conditions.
+        assert reliability["coverageCount"] == 2
         assert reliability["uniqueScenarios"] == 2
-        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageCount"] == 3
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageCount"] == 2
         assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageShare"] == pytest.approx(0.4, abs=1e-6)
         assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["contributingRunCount"] == 2
 
@@ -834,6 +839,192 @@ class TestAnalyzeBasicIntegration:
         assert "computedAt" in result["analysis"]
         assert "durationMs" in result["analysis"]
         assert result["analysis"]["durationMs"] >= 0
+
+    def test_cross_run_repeats_produce_non_none_reliability_for_consistent_direction(self):
+        """3 source runs × 5 conditions × 1 sample each should yield valid reliability metrics."""
+        transcripts = []
+        for run_idx in range(3):
+            for s_idx in range(5):
+                transcripts.append({
+                    "id": f"r{run_idx}-s{s_idx}",
+                    "runId": f"run-{run_idx}",
+                    "modelId": "m1",
+                    "scenarioId": f"s{s_idx}",
+                    "sampleIndex": 0,
+                    "orientationFlipped": False,
+                    "summary": {"score": 5, "values": {}},
+                    "scenario": {},
+                })
+
+        input_data = {
+            "runId": "aggregate-cross-run-consistent",
+            "emitVignetteSemantics": True,
+            "aggregateSemantics": {
+                "mode": "same_signature_v1",
+                "plannedScenarioIds": [f"s{i}" for i in range(5)],
+                "minRepeatCoverageCount": 3,
+                "minRepeatCoverageShare": 0.3,
+                "lowCoverageCautionThreshold": 5,
+                "driftWarningThreshold": 0.25,
+            },
+            "transcripts": transcripts,
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        reliability = result["analysis"]["reliabilitySummary"]["perModel"]["m1"]
+        assert reliability["baselineReliability"] is not None
+        assert reliability["directionalAgreement"] == pytest.approx(1.0, abs=1e-6)
+        assert reliability["coverageCount"] == 5
+
+    def test_cross_run_repeats_directional_agreement_reflects_majority_direction(self):
+        """2 high-scoring runs vs 1 low-scoring run → directionalAgreement ≈ 0.667."""
+        transcripts = []
+        for run_idx in range(2):
+            for s_idx in range(3):
+                transcripts.append({
+                    "id": f"high-r{run_idx}-s{s_idx}",
+                    "runId": f"run-high-{run_idx}",
+                    "modelId": "m1",
+                    "scenarioId": f"s{s_idx}",
+                    "sampleIndex": 0,
+                    "orientationFlipped": False,
+                    "summary": {"score": 5, "values": {}},
+                    "scenario": {},
+                })
+        for s_idx in range(3):
+            transcripts.append({
+                "id": f"low-r0-s{s_idx}",
+                "runId": "run-low-0",
+                "modelId": "m1",
+                "scenarioId": f"s{s_idx}",
+                "sampleIndex": 0,
+                "orientationFlipped": False,
+                "summary": {"score": 1, "values": {}},
+                "scenario": {},
+            })
+
+        input_data = {
+            "runId": "aggregate-cross-run-mixed-direction",
+            "emitVignetteSemantics": True,
+            "aggregateSemantics": {
+                "mode": "same_signature_v1",
+                "plannedScenarioIds": [f"s{i}" for i in range(3)],
+                "minRepeatCoverageCount": 2,
+                "minRepeatCoverageShare": 0.2,
+                "lowCoverageCautionThreshold": 5,
+                "driftWarningThreshold": 0.25,
+            },
+            "transcripts": transcripts,
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        reliability = result["analysis"]["reliabilitySummary"]["perModel"]["m1"]
+        assert reliability["baselineReliability"] is not None
+        assert reliability["directionalAgreement"] == pytest.approx(0.666667, abs=1e-4)
+
+    def test_cross_run_pooled_reliability_does_not_regress_when_within_run_repeats_exist(self):
+        """Pooled approach still works when some runs already have within-run repeats."""
+        input_data = {
+            "runId": "aggregate-mixed-repeat-types",
+            "emitVignetteSemantics": True,
+            "aggregateSemantics": {
+                "mode": "same_signature_v1",
+                "plannedScenarioIds": ["s1", "s2", "s3", "s4", "s5"],
+                "minRepeatCoverageCount": 2,
+                "minRepeatCoverageShare": 0.2,
+                "lowCoverageCautionThreshold": 5,
+                "driftWarningThreshold": 0.25,
+            },
+            "transcripts": [
+                # Run A: within-run repeats on s1, s2
+                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 4, "values": {}}, "scenario": {}},
+                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 2, "values": {}}, "scenario": {}},
+                {"id": "a4", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
+                # Run B: within-run repeats on s1, s3 (single-sample s1 is now cross-run repeat too)
+                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "b3", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "b4", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+            ],
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        reliability = result["analysis"]["reliabilitySummary"]["perModel"]["m1"]
+        # All 3 repeated conditions (s1, s2, s3) are covered in pooled view
+        assert reliability["baselineReliability"] is not None
+        assert reliability["coverageCount"] == 3
+
+    def test_cross_run_coverage_below_min_thresholds_keeps_reliability_none(self):
+        """When pooled repeat coverage count is below the minimum, reliability stays None."""
+        input_data = {
+            "runId": "aggregate-below-threshold",
+            "emitVignetteSemantics": True,
+            "aggregateSemantics": {
+                "mode": "same_signature_v1",
+                "plannedScenarioIds": ["s1", "s2", "s3", "s4", "s5"],
+                "minRepeatCoverageCount": 5,
+                "minRepeatCoverageShare": 0.5,
+                "lowCoverageCautionThreshold": 5,
+                "driftWarningThreshold": 0.25,
+            },
+            "transcripts": [
+                # Only 1 cross-run repeat (s1), below the min threshold of 5
+                {"id": "t1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "t2", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 4, "values": {}}, "scenario": {}},
+            ],
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        reliability = result["analysis"]["reliabilitySummary"]["perModel"]["m1"]
+        assert reliability["baselineReliability"] is None
+        assert reliability["coverageCount"] == 1  # 1 repeated condition found but not publishable
+
+    def test_cross_run_drift_is_collected_and_reported(self):
+        """3 runs with diverging overallSignedCenter should produce non-None drift sd."""
+        # Run 0: all high (score=5), run 1: neutral (score=3), run 2: all low (score=1)
+        transcripts = []
+        scores = [5, 3, 1]
+        for run_idx, score in enumerate(scores):
+            for s_idx in range(3):
+                transcripts.append({
+                    "id": f"r{run_idx}-s{s_idx}",
+                    "runId": f"run-{run_idx}",
+                    "modelId": "m1",
+                    "scenarioId": f"s{s_idx}",
+                    "sampleIndex": 0,
+                    "orientationFlipped": False,
+                    "summary": {"score": score, "values": {}},
+                    "scenario": {},
+                })
+
+        input_data = {
+            "runId": "aggregate-drift-test",
+            "emitVignetteSemantics": True,
+            "aggregateSemantics": {
+                "mode": "same_signature_v1",
+                "plannedScenarioIds": [f"s{i}" for i in range(3)],
+                "minRepeatCoverageCount": 2,
+                "minRepeatCoverageShare": 0.2,
+                "lowCoverageCautionThreshold": 5,
+                "driftWarningThreshold": 0.25,
+            },
+            "transcripts": transcripts,
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        drift = result["analysis"]["aggregateSemantics"]["perModelDrift"]["m1"]
+        assert drift["weightedOverallSignedCenterSd"] is not None
 
 
 class TestAnalyzeBasicEdgeCases:
