@@ -10,7 +10,9 @@ import {
 } from './types.js';
 import {
   type DomainEvaluationCostEstimate,
+  type DefinitionRow,
   type DomainTrialPlanVignette,
+  type DomainTrialPlanCellEstimate,
   computeExistingBatchCounts,
   formatRunSignature,
   formatVnewLabel,
@@ -19,7 +21,6 @@ import {
   selectLatestDefinitionPerLineage,
   supportsTemperature,
 } from './shared.js';
-import type { DomainTrialPlanCellEstimate } from './shared.js';
 import { formatTrialSignature } from '@valuerank/shared/trial-signature';
 import { parseTemperature } from '../../../utils/temperature.js';
 
@@ -90,7 +91,7 @@ async function buildDomainEstimate(input: DomainEstimateInput): Promise<DomainEs
   const domain = await db.domain.findUnique({ where: { id: domainId } });
   if (!domain) throw new Error(`Domain not found: ${domainId}`);
 
-  const definitions = await db.definition.findMany({
+  const definitionsRaw = await db.definition.findMany({
     where: { domainId, deletedAt: null },
     select: {
       id: true,
@@ -99,8 +100,14 @@ async function buildDomainEstimate(input: DomainEstimateInput): Promise<DomainEs
       parentId: true,
       createdAt: true,
       updatedAt: true,
+      content: true,
     },
   });
+  // Store content separately for pair-key extraction; strip before passing to DefinitionRow helpers
+  const definitionContentById = new Map<string, unknown>(
+    definitionsRaw.map((d) => [d.id, d.content]),
+  );
+  const definitions: DefinitionRow[] = definitionsRaw.map(({ content: _content, ...rest }) => rest);
 
   if (definitions.length === 0) {
     return {
@@ -283,8 +290,35 @@ async function buildDomainEstimate(input: DomainEstimateInput): Promise<DomainEs
   }));
 
   if (targetBatchCount != null && targetBatchCount >= 1 && vignetteExistingCounts !== null) {
+    // Apply paired-min logic: for job-choice pairs sharing a pair_key, use min(countA, countB)
+    // so the display matches the actual launch behavior.
+    const pairKeyToDefinitionIds = new Map<string, string[]>();
+    for (const definition of selectedDefinitions) {
+      const content = definitionContentById.get(definition.id) as { methodology?: { pair_key?: unknown } } | null | undefined;
+      const pairKey = content?.methodology?.pair_key;
+      if (typeof pairKey === 'string' && pairKey.length > 0) {
+        const bucket = pairKeyToDefinitionIds.get(pairKey) ?? [];
+        bucket.push(definition.id);
+        pairKeyToDefinitionIds.set(pairKey, bucket);
+      }
+    }
+    // For paired vignettes with exactly 2 members, use min existing count
+    const pairedMinByDefinitionId = new Map<string, number>();
+    for (const [, defIds] of pairKeyToDefinitionIds) {
+      if (defIds.length === 2) {
+        const countA = vignetteExistingCounts.get(defIds[0] ?? '') ?? 0;
+        const countB = vignetteExistingCounts.get(defIds[1] ?? '') ?? 0;
+        const minCount = Math.min(countA, countB);
+        pairedMinByDefinitionId.set(defIds[0] ?? '', minCount);
+        pairedMinByDefinitionId.set(defIds[1] ?? '', minCount);
+      }
+    }
+
     for (const vignette of vignettesWithCounts) {
-      const existing = vignetteExistingCounts.get(vignette.definitionId) ?? 0;
+      const existing = pairedMinByDefinitionId.has(vignette.definitionId)
+        ? (pairedMinByDefinitionId.get(vignette.definitionId) ?? 0)
+        : (vignetteExistingCounts.get(vignette.definitionId) ?? 0);
+      vignette.existingBatchCount = existing;
       vignette.topUpCount = Math.max(0, targetBatchCount - existing);
     }
   }
