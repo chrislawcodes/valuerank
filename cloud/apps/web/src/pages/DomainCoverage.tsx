@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
+import { CopyVisualButton } from '../components/ui/CopyVisualButton';
 import { useDomains } from '../hooks/useDomains';
 import { CoverageMatrix } from '../components/domains/CoverageMatrix';
 
 export function DomainCoverage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
+  const coverageRef = useRef<HTMLDivElement>(null);
 
   const [selectedDomainId, setSelectedDomainId] = useState<string>(
     searchParams.get('domainId') ?? ''
@@ -71,7 +73,22 @@ export function DomainCoverage() {
         </div>
       </section>
 
-      {selectedDomainId !== '' && <CoverageMatrix domainId={selectedDomainId} />}
+      {selectedDomainId !== '' && (
+        <section className="rounded-lg border border-gray-200 bg-white p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-medium text-gray-900">Value coverage</h2>
+              <p className="mt-1 text-sm text-gray-600">
+                Batch density across Schwartz value pairs for this domain.
+              </p>
+            </div>
+            <CopyVisualButton targetRef={coverageRef} label="coverage table" />
+          </div>
+          <div className="mt-4">
+            <CoverageMatrix ref={coverageRef} domainId={selectedDomainId} />
+          </div>
+        </section>
+      )}
     </div>
   );
 }

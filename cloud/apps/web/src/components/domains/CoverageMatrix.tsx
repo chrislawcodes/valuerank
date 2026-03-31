@@ -1,11 +1,9 @@
-import { type SVGProps, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { forwardRef, type SVGProps, useEffect, useMemo, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from 'urql';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { Loading } from '../ui/Loading';
-import { Button } from '../ui/Button';
-import { CopyVisualButton } from '../ui/CopyVisualButton';
 import {
   DOMAIN_VALUE_COVERAGE_QUERY,
   DOMAIN_VALUE_COVERAGE_QUERY_LEGACY,
@@ -16,7 +14,6 @@ import {
   DOMAIN_AVAILABLE_SIGNATURES_QUERY,
   type DomainAvailableSignature,
   type DomainAvailableSignaturesQueryResult,
-  type DomainAvailableSignaturesQueryVariables,
 } from '../../api/operations/domainAnalysis';
 import { VALUE_LABELS } from './domainAnalysisData';
 import { formatDisplayLabel } from '../../utils/displayLabels';
@@ -131,13 +128,17 @@ function CoverageCell({
 
             {hasVignette && (
               <Link
-                to={`/domains/${domainId}/run-trials?definitionIds=${definitionId}`}
+                to={`/definitions/${definitionId}/start-paired-batch`}
+                state={{
+                  returnLabel: 'Back to Value coverage',
+                  returnTo: `${location.pathname}${location.search}`,
+                }}
                 className="flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-sm w-full text-left"
                 onClick={() => setIsOpen(false)}
               >
                 <span className="flex items-center">
                   <PlayIcon className="w-4 h-4 mr-2 text-teal-600" />
-                  Add Batch for Vignette
+                  Start Paired Batch
                 </span>
                 <ChevronRight className="w-4 h-4 text-gray-400" />
               </Link>
@@ -205,31 +206,16 @@ type CategoryGroup = {
  * Accepts a domainId prop; manages its own signature and model state internally.
  * No URL sync — the parent page owns URL state for domainId.
  */
-export function CoverageMatrix({ domainId }: { domainId: string }) {
-  const tableRef = useRef<HTMLDivElement>(null);
-
+export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
+  function CoverageMatrix({ domainId }, ref) {
+  const location = useLocation();
   const [selectedSignature, setSelectedSignature] = useState<string>('');
   const [allowAllSignatures, setAllowAllSignatures] = useState(false);
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
-  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
-  const [availableModelIds, setAvailableModelIds] = useState<string[]>([]);
-
-  const allModelsSelected = useMemo(
-    () =>
-      availableModelIds.length > 0
-      && selectedModelIds.length === availableModelIds.length
-      && availableModelIds.every((modelId) => selectedModelIds.includes(modelId)),
-    [availableModelIds, selectedModelIds],
-  );
-  const selectedModelIdsForQuery = useMemo(() => {
-    if (selectedModelIds.length === 0) return undefined;
-    if (allModelsSelected) return undefined;
-    return selectedModelIds;
-  }, [allModelsSelected, selectedModelIds]);
 
   const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
     DomainAvailableSignaturesQueryResult,
-    DomainAvailableSignaturesQueryVariables
+    { domainId: string }
   >({
     query: DOMAIN_AVAILABLE_SIGNATURES_QUERY,
     variables: { domainId },
@@ -258,8 +244,6 @@ export function CoverageMatrix({ domainId }: { domainId: string }) {
   useEffect(() => {
     setSelectedSignature('');
     setAllowAllSignatures(false);
-    setSelectedModelIds([]);
-    setAvailableModelIds([]);
     setUseLegacyQuery(false);
   }, [domainId]);
 
@@ -281,7 +265,6 @@ export function CoverageMatrix({ domainId }: { domainId: string }) {
     query: DOMAIN_VALUE_COVERAGE_QUERY,
     variables: {
       domainId,
-      modelIds: selectedModelIdsForQuery,
       signature: selectedSignature === '' ? undefined : selectedSignature,
     },
     pause: domainId === '' || !signatureSelectionReady || useLegacyQuery,
@@ -295,7 +278,6 @@ export function CoverageMatrix({ domainId }: { domainId: string }) {
     query: DOMAIN_VALUE_COVERAGE_QUERY_LEGACY,
     variables: {
       domainId,
-      modelIds: selectedModelIdsForQuery,
     },
     pause: domainId === '' || !signatureSelectionReady || !useLegacyQuery,
     requestPolicy: 'cache-and-network',
@@ -314,33 +296,7 @@ export function CoverageMatrix({ domainId }: { domainId: string }) {
   const fetching = useLegacyQuery ? legacyFetching : scoredFetching;
   const error = useLegacyQuery ? legacyError : scoredError;
 
-  const availableModels = data?.domainValueCoverage?.availableModels ?? [];
   const canonicalValues = data?.domainValueCoverage?.values ?? [];
-
-  useEffect(() => {
-    const coverage = data?.domainValueCoverage;
-    if (!coverage || coverage.domainId !== domainId) return;
-
-    const modelIds = coverage.availableModels.map((model) => model.modelId);
-    setAvailableModelIds((prev) => {
-      if (prev.length === modelIds.length && prev.every((modelId, index) => modelId === modelIds[index])) {
-        return prev;
-      }
-      return modelIds;
-    });
-
-    const allowedModelIds = new Set(modelIds);
-    setSelectedModelIds((prev) => {
-      const next = prev.filter((modelId) => allowedModelIds.has(modelId));
-      if (modelIds.length > 0 && next.length === 0) {
-        return modelIds;
-      }
-      if (next.length === prev.length && next.every((modelId, index) => modelId === prev[index])) {
-        return prev;
-      }
-      return next;
-    });
-  }, [data?.domainValueCoverage, domainId]);
 
   const cellLookup = useMemo(() => {
     const defaultCells = data?.domainValueCoverage?.cells ?? [];
@@ -393,18 +349,6 @@ export function CoverageMatrix({ domainId }: { domainId: string }) {
     [valueGroups],
   );
 
-  const toggleModel = (modelId: string) => {
-    setSelectedModelIds((prev) => {
-      if (prev.includes(modelId)) {
-        if (prev.length <= 1) return prev;
-        return prev.filter((id) => id !== modelId);
-      }
-      const next = new Set(prev);
-      next.add(modelId);
-      return availableModelIds.filter((id) => next.has(id));
-    });
-  };
-
   return (
     <div className="space-y-4">
       {(signaturesError || error) && (
@@ -417,98 +361,37 @@ export function CoverageMatrix({ domainId }: { domainId: string }) {
       )}
 
       {/* Controls */}
-      <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center">
-            <div className="flex items-center justify-between w-full md:w-auto">
-              <h2 className="text-sm font-semibold text-gray-900 min-w-[140px]">Batch Signature</h2>
-              {canonicalValues.length > 0 && (
-                <div className="md:hidden">
-                  <CopyVisualButton targetRef={tableRef} label="coverage table" />
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-3 flex-1">
-              <select
-                aria-label="Batch Signature"
-                className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 flex-1 max-w-sm"
-                value={selectedSignature}
-                onChange={(event) => {
-                  const nextSignature = event.target.value;
-                  setAllowAllSignatures(nextSignature === '');
-                  setSelectedSignature(nextSignature);
-                }}
-                disabled={signaturesLoading}
-              >
-                <option value="">All signatures</option>
-                {signatureOptions.map((signatureOption) => (
-                  <option key={signatureOption.signature} value={signatureOption.signature}>
-                    {signatureOption.label}
-                  </option>
-                ))}
-              </select>
-              {canonicalValues.length > 0 && (
-                <div className="hidden md:block">
-                  <CopyVisualButton targetRef={tableRef} label="coverage table" />
-                </div>
-              )}
-            </div>
-          </div>
-
-          {availableModels.length > 0 && (
-            <div className="flex flex-col gap-2 md:flex-row md:items-start pt-3 border-t border-gray-100">
-              <div className="min-w-[140px]">
-                <h2 className="text-sm font-semibold text-gray-900">Model Filters</h2>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Filter batch counts by model inclusion.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2 flex-1">
-                {availableModels.map((model) => {
-                  const isSelected = selectedModelIds.includes(model.modelId);
-                  return (
-                    <Button
-                      key={model.modelId}
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => toggleModel(model.modelId)}
-                      className={cn(
-                        'h-7 px-2.5 py-1 text-xs rounded-full transition-colors',
-                        isSelected
-                          ? 'bg-teal-50 border-teal-200 text-teal-800 hover:bg-teal-100 hover:text-teal-900'
-                          : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                      )}
-                    >
-                      {model.label}
-                    </Button>
-                  );
-                })}
-                {!allModelsSelected && availableModelIds.length > 0 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedModelIds(availableModelIds)}
-                    className="h-7 px-2.5 py-1 text-xs rounded-full text-gray-500 hover:text-gray-900 underline-offset-2 hover:underline hover:bg-transparent"
-                  >
-                    Select all models
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+        <div className="flex items-center justify-between w-full md:w-auto">
+          <h2 className="text-sm font-semibold text-gray-900 min-w-[140px]">Batch Signature</h2>
         </div>
-      </section>
+        <div className="flex items-center gap-3 flex-1">
+          <select
+            aria-label="Batch Signature"
+            className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 flex-1 max-w-sm"
+            value={selectedSignature}
+            onChange={(event) => {
+              const nextSignature = event.target.value;
+              setAllowAllSignatures(nextSignature === '');
+              setSelectedSignature(nextSignature);
+            }}
+            disabled={signaturesLoading}
+          >
+            <option value="">All signatures</option>
+            {signatureOptions.map((signatureOption) => (
+              <option key={signatureOption.signature} value={signatureOption.signature}>
+                {signatureOption.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
 
       {/* Matrix */}
       {(signaturesLoading || (fetching && canonicalValues.length === 0)) ? (
         <Loading size="lg" text="Loading coverage matrix..." />
       ) : canonicalValues.length > 0 ? (
-        <div
-          ref={tableRef}
-          className="overflow-x-auto border border-gray-200 rounded-lg bg-white shadow-sm"
-        >
+        <div ref={ref} className="overflow-x-auto border border-gray-200 rounded-lg bg-white shadow-sm">
           <table className="w-full min-w-full table-fixed border-collapse">
             <thead>
               <tr>
@@ -518,7 +401,7 @@ export function CoverageMatrix({ domainId }: { domainId: string }) {
                     key={`col-group-${group.name}`}
                     colSpan={group.values.length}
                     className={cn(
-                      'p-1.5 text-[11px] font-semibold text-center border-b border-l border-gray-200 tracking-wider uppercase',
+                      'p-1.5 text-[11px] font-semibold text-center border-b border-l border-gray-200 tracking-normal',
                       group.color
                     )}
                   >
@@ -532,7 +415,7 @@ export function CoverageMatrix({ domainId }: { domainId: string }) {
                     <th
                       key={`col-${val}`}
                       className={cn(
-                        'w-[7.25rem] p-1.5 text-[11px] font-medium text-gray-600 border-b border-gray-200 align-top text-center leading-tight whitespace-normal break-words',
+                        'w-[6.5rem] p-1.5 text-[11px] font-medium text-gray-600 border-b border-gray-200 align-top text-center leading-tight whitespace-normal break-words',
                         valIndex === 0 && 'border-l',
                         groupIndex % 2 === 0 ? 'bg-gray-50/30' : 'bg-white'
                       )}
@@ -553,7 +436,7 @@ export function CoverageMatrix({ domainId }: { domainId: string }) {
                       <th
                         rowSpan={rowGroup.values.length}
                         className={cn(
-                          'w-[4.5rem] p-1.5 text-[10px] font-semibold text-center border-t border-r border-gray-200 tracking-wider uppercase align-middle',
+                          'w-[6.75rem] px-1 py-1.5 text-[11px] font-medium text-center border-t border-r border-gray-200 tracking-normal leading-tight whitespace-normal break-words overflow-hidden align-middle',
                           rowGroup.color
                         )}
                       >
@@ -562,7 +445,7 @@ export function CoverageMatrix({ domainId }: { domainId: string }) {
                     )}
                     <th
                       className={cn(
-                        'w-[9rem] p-2 text-xs font-medium text-gray-600 text-right border-t border-r border-gray-200 whitespace-normal break-words',
+                        'w-[8rem] px-0.5 py-1 text-[11px] font-medium text-gray-600 text-right border-t border-r border-gray-200 whitespace-normal break-words leading-tight',
                         rowGroupIdx % 2 === 0 ? 'bg-gray-50/30' : 'bg-white'
                       )}
                     >
@@ -577,7 +460,7 @@ export function CoverageMatrix({ domainId }: { domainId: string }) {
                       return (
                         <td
                           key={`cell-${rowVal}-${colVal}`}
-                          className="h-12 w-[4.5rem] border border-gray-100 p-0"
+                          className="h-12 w-[3.5rem] border border-gray-100 p-0"
                         >
                           <CoverageCell
                             valueA={rowVal}
@@ -604,29 +487,17 @@ export function CoverageMatrix({ domainId }: { domainId: string }) {
       )}
 
       {!fetching && canonicalValues.length > 0 && (
-        <div className="flex flex-col gap-2 px-1 pt-2 text-xs text-gray-500 lg:flex-row lg:items-center lg:justify-between">
+        <div className="px-1 pt-2 text-xs text-gray-500">
           <p>
-            Cells are <span className="font-medium text-rose-700">red (&lt;3)</span>,{' '}
+            Batches per cell are{' '}
+            <span className="font-medium text-rose-700">red (&lt;3)</span>,{' '}
             <span className="font-medium text-amber-700">yellow (3-9)</span>, or{' '}
             <span className="font-medium text-emerald-700">green (10+)</span>. Click any cell to add a batch.
           </p>
-          <p>Use the copy button above to place this table in docs or slides.</p>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1">
-              <span className="inline-block h-3 w-3 rounded-sm bg-rose-500" />
-              <span>&lt;3</span>
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <span className="inline-block h-3 w-3 rounded-sm bg-amber-500" />
-              <span>3-9</span>
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <span className="inline-block h-3 w-3 rounded-sm bg-emerald-500" />
-              <span>10+</span>
-            </span>
-          </div>
         </div>
       )}
     </div>
   );
-}
+});
+
+CoverageMatrix.displayName = 'CoverageMatrix';

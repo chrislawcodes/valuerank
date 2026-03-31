@@ -136,15 +136,15 @@ describe('DomainCoverage Page', () => {
     });
   });
 
-  it('shows model filter buttons for the active domain after coverage data loads', async () => {
+  it('shows the coverage copy control for the active domain', async () => {
     await act(async () => {
       renderCoveragePage();
     });
 
     await waitFor(() => {
-      // CoverageMatrix auto-selects all available models; individual model buttons should be visible
-      expect(screen.getByRole('button', { name: 'Model A' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Model B' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /copy coverage table as image/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Model A' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Model B' })).not.toBeInTheDocument();
     });
   });
 
@@ -184,29 +184,6 @@ describe('DomainCoverage Page', () => {
           variables: expect.objectContaining({
             domainId: 'domain-a',
             signature: 'vnewt0',
-          }),
-        }),
-      );
-    });
-  });
-
-  it('defaults to all models selected when no modelIds query param is provided', async () => {
-    initialSearchParams = 'domainId=domain-a';
-    const user = userEvent.setup();
-    await act(async () => {
-      renderCoveragePage();
-    });
-
-    await act(async () => {
-      await user.click(screen.getByRole('button', { name: 'Model A' }));
-    });
-
-    await waitFor(() => {
-      expect(useQueryMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          variables: expect.objectContaining({
-            domainId: 'domain-a',
-            modelIds: ['model-b'],
           }),
         }),
       );
@@ -271,6 +248,9 @@ describe('DomainCoverage Page', () => {
         screen.getByRole('button', { name: /self-direction versus achievement.*3 batch/i })
       );
     });
+
+    const pairedBatchLink = await screen.findByRole('link', { name: /start paired batch/i });
+    expect(pairedBatchLink).toHaveAttribute('href', '/definitions/def-1/start-paired-batch');
 
     const vignetteAnalysisLink = await screen.findByRole('link', { name: /view vignette analysis/i });
     expect(vignetteAnalysisLink).toHaveAttribute('href', '/analysis/run-1');
