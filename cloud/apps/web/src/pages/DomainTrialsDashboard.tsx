@@ -314,7 +314,7 @@ export function DomainTrialsDashboard() {
       maxBudgetUsd: maxBudgetEnabled ? parsedBudget : undefined,
       definitionIds: filteredDefinitionIds.length > 0 ? filteredDefinitionIds : undefined,
       samplePercentage: 100,
-      samplesPerScenario: selectedTargetBatchCount,
+      targetBatchCount: selectedTargetBatchCount,
     });
 
     if (result.error) {

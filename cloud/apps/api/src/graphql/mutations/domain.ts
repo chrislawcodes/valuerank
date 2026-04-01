@@ -418,7 +418,19 @@ async function launchDomainEvaluation(input: DomainEvaluationLaunchInput): Promi
         && runSamplesPerScenario === samplesPerScenario;
     });
     if (hasActiveEquivalentRun) {
-      throw new Error('Domain evaluation launch blocked: matching active work already exists for this scope, model selection, and temperature.');
+      return {
+        domainEvaluationId: null,
+        scopeCategory,
+        success: false,
+        totalDefinitions: 0,
+        targetedDefinitions: 0,
+        startedRuns: 0,
+        failedDefinitions: 0,
+        skippedForBudget: 0,
+        projectedCostUsd: 0,
+        blockedByActiveLaunch: true,
+        runs: [],
+      };
     }
   }
 
