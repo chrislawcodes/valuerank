@@ -30,6 +30,7 @@ export type ModelTokenStats = {
  */
 export type ModelCostEstimate = {
   modelId: string;
+  providerName: string;         // Provider name as stored in DB (e.g. 'anthropic', 'openai')
   displayName: string;
   scenarioCount: number;
   inputTokens: number;       // Predicted total input tokens
