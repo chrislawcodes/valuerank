@@ -12,7 +12,6 @@ import {
   ESTIMATE_DOMAIN_EVALUATION_COST_QUERY,
   START_DOMAIN_EVALUATION_MUTATION,
 } from '../../src/api/operations/domains';
-import { PROVIDER_HEALTH_QUERY } from '../../src/api/operations/health';
 import { LLM_MODELS_QUERY } from '../../src/api/operations/llm';
 
 const useQueryMock = vi.fn();
@@ -136,21 +135,6 @@ function mockSetupQueries() {
         error: undefined,
       }, vi.fn()];
     }
-    if (args.query === PROVIDER_HEALTH_QUERY) {
-      return [{
-        data: {
-          providerHealth: {
-            checkedAt: NOW,
-            providers: [
-              { id: 'openai', name: 'openai', configured: true, connected: true, error: null, remainingBudgetUsd: 100, lastChecked: NOW },
-              { id: 'anthropic', name: 'anthropic', configured: true, connected: true, error: null, remainingBudgetUsd: 100, lastChecked: NOW },
-            ],
-          },
-        },
-        fetching: false,
-        error: undefined,
-      }, vi.fn()];
-    }
     if (args.query === LLM_MODELS_QUERY) {
       return [{
         data: {
@@ -175,6 +159,8 @@ function mockSetupQueries() {
                 maxParallelRequests: 5,
                 requestsPerMinute: 100,
                 isEnabled: true,
+                balance: 100,
+                lastSyncedAt: NOW,
                 createdAt: '2026-03-01T00:00:00.000Z',
                 updatedAt: '2026-03-01T00:00:00.000Z',
                 models: [],
@@ -200,6 +186,8 @@ function mockSetupQueries() {
                 maxParallelRequests: 5,
                 requestsPerMinute: 100,
                 isEnabled: true,
+                balance: 100,
+                lastSyncedAt: NOW,
                 createdAt: '2026-03-01T00:00:00.000Z',
                 updatedAt: '2026-03-01T00:00:00.000Z',
                 models: [],
@@ -289,21 +277,6 @@ function mockActiveLaunchQueries() {
             existingTemperatures: [],
             defaultTemperature: null,
             temperatureWarning: null,
-          },
-        },
-        fetching: false,
-        error: undefined,
-      }, vi.fn()];
-    }
-    if (args.query === PROVIDER_HEALTH_QUERY) {
-      return [{
-        data: {
-          providerHealth: {
-            checkedAt: NOW,
-            providers: [
-              { id: 'openai', name: 'openai', configured: true, connected: true, error: null, remainingBudgetUsd: 100, lastChecked: NOW },
-              { id: 'anthropic', name: 'anthropic', configured: true, connected: true, error: null, remainingBudgetUsd: 100, lastChecked: NOW },
-            ],
           },
         },
         fetching: false,
@@ -548,17 +521,18 @@ describe('DomainTrialsDashboard', () => {
 
     renderDomainTrialsDashboard();
 
+    expect(screen.getByText('Domain Level Batches')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /job domain/i })).toBeInTheDocument();
     expect(screen.getByText('Job domain')).toBeInTheDocument();
-    expect(screen.getByLabelText(/paired-batch depth per vignette/i)).toHaveValue(1);
-    expect(screen.getByText('Provider budget readiness')).toBeInTheDocument();
+    expect(screen.getByLabelText(/target number of paired batches per vignette/i)).toHaveValue(1);
+    expect(screen.getByText('Provider Budget Estimates')).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /review & start domain evaluation/i })).toBeEnabled();
+      expect(screen.getByRole('button', { name: /review & start paired batches/i })).toBeEnabled();
     });
 
-    await user.click(screen.getByRole('button', { name: /review & start domain evaluation/i }));
+    await user.click(screen.getByRole('button', { name: /review & start paired batches/i }));
 
-    expect(screen.getByRole('heading', { name: /confirm launch/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /confirm domain level batches/i })).toBeInTheDocument();
     expect(screen.getByText(/target paired batches per vignette:/i)).toHaveTextContent('1');
     expect(screen.getByText(/total paired batches:/i)).toHaveTextContent('2');
     expect(screen.getByText(/total individual trial runs:/i)).toHaveTextContent('4');
@@ -572,7 +546,7 @@ describe('DomainTrialsDashboard', () => {
 
     expect(screen.getByText('Live processing')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /needs attention/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /review & start domain evaluation/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /review & start paired batches/i })).toBeDisabled();
 
     await user.click(screen.getByText('Jobs A'));
 

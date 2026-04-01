@@ -10,7 +10,6 @@ describe('LaunchConfirmModal', () => {
         <LaunchConfirmModal
           open={true}
           domainName="Job domain"
-          scopeCategory="PRODUCTION"
           vignetteCount={2}
           modelCount={2}
           totalPairedBatches={4}
@@ -31,7 +30,7 @@ describe('LaunchConfirmModal', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('heading', { name: /confirm launch/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /confirm domain level batches/i })).toBeInTheDocument();
     expect(screen.getByText('Job domain')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /start paired batches/i })).toBeEnabled();
   });

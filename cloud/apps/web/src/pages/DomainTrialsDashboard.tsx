@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from 'urql';
-import { RefreshCw } from 'lucide-react';
-import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { LaunchConfirmModal } from '../components/domains/domainTrials/LaunchConfirmModal';
 import { LaunchControlsPanel } from '../components/domains/domainTrials/LaunchControlsPanel';
 import { DomainEvaluationStatusPanel } from '../components/domains/domainTrials/DomainEvaluationStatusPanel';
 import { DomainEvaluationStatusDrawer } from '../components/domains/domainTrials/DomainEvaluationStatusDrawer';
-import { buildProviderBudgetReadiness, getBatchRuntimeState } from '../components/domains/domainTrials/launch-state';
+import { buildProviderBudgetEstimates, getBatchRuntimeState } from '../components/domains/domainTrials/launch-state';
 import {
   DOMAIN_EVALUATION_QUERY,
   DOMAIN_EVALUATION_STATUS_QUERY,
@@ -33,16 +31,10 @@ import {
   type StartDomainEvaluationMutationResult,
   type StartDomainEvaluationMutationVariables,
 } from '../api/operations/domains';
-import { PROVIDER_HEALTH_QUERY, type ProviderHealthQueryResult, type ProviderHealthQueryVariables } from '../api/operations/health';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 
 const POLL_MS = 5000;
-const EVALUATION_SCOPE_VALUES = ['PILOT', 'PRODUCTION', 'REPLICATION', 'VALIDATION'] as const;
-type EvaluationScopeCategory = (typeof EVALUATION_SCOPE_VALUES)[number];
-
-function isEvaluationScopeCategory(value: string | null): value is EvaluationScopeCategory {
-  return value != null && EVALUATION_SCOPE_VALUES.includes(value as EvaluationScopeCategory);
-}
+type EvaluationScopeCategory = 'PRODUCTION';
 
 export function DomainTrialsDashboard() {
   const { domainId } = useParams<{ domainId: string }>();
@@ -50,11 +42,7 @@ export function DomainTrialsDashboard() {
   const initialTemperatureParam = searchParams.get('temperature');
   const initialParsedTemperature = initialTemperatureParam == null ? Number.NaN : Number.parseFloat(initialTemperatureParam);
   const hasInitialTemperature = Number.isFinite(initialParsedTemperature) && initialParsedTemperature >= 0 && initialParsedTemperature <= 2;
-  const initialScope = isEvaluationScopeCategory(searchParams.get('scopeCategory'))
-    ? (searchParams.get('scopeCategory') as EvaluationScopeCategory)
-    : 'PRODUCTION';
-
-  const [scopeCategory, setScopeCategory] = useState<EvaluationScopeCategory>(initialScope);
+  const scopeCategory: EvaluationScopeCategory = 'PRODUCTION';
   const [useDefaultTemperature, setUseDefaultTemperature] = useState(!hasInitialTemperature);
   const [temperatureInput, setTemperatureInput] = useState(hasInitialTemperature ? String(initialParsedTemperature) : '0.7');
   const [maxBudgetEnabled, setMaxBudgetEnabled] = useState(false);
@@ -94,7 +82,7 @@ export function DomainTrialsDashboard() {
     pause: !domainId,
     requestPolicy: 'cache-and-network',
   });
-  const [estimateResult, refetchEstimate] = useQuery<EstimateDomainEvaluationCostQueryResult, EstimateDomainEvaluationCostQueryVariables>({
+  const [estimateResult] = useQuery<EstimateDomainEvaluationCostQueryResult, EstimateDomainEvaluationCostQueryVariables>({
     query: ESTIMATE_DOMAIN_EVALUATION_COST_QUERY,
       variables: {
         domainId: domainId ?? '',
@@ -107,13 +95,7 @@ export function DomainTrialsDashboard() {
     pause: !domainId,
     requestPolicy: 'cache-and-network',
   });
-  const [providerHealthResult, refetchProviderHealth] = useQuery<ProviderHealthQueryResult, ProviderHealthQueryVariables>({
-    query: PROVIDER_HEALTH_QUERY,
-    variables: { refresh: true },
-    pause: !domainId,
-    requestPolicy: 'cache-and-network',
-  });
-  const [llmModelsResult, refetchLlmModels] = useQuery<LlmModelsQueryResult, { providerId?: string; status?: string }>({
+  const [llmModelsResult] = useQuery<LlmModelsQueryResult, { providerId?: string; status?: string }>({
     query: LLM_MODELS_QUERY,
     variables: { status: 'ACTIVE' },
     pause: !domainId,
@@ -152,21 +134,18 @@ export function DomainTrialsDashboard() {
   >(START_DOMAIN_EVALUATION_MUTATION);
 
   useEffect(() => {
-    const existingScope = searchParams.get('scopeCategory');
     const existingEvaluationId = searchParams.get('evaluationId');
-    if (existingScope === scopeCategory && existingEvaluationId === currentEvaluationId) {
+    if (existingEvaluationId === currentEvaluationId) {
       return;
     }
     const next = new URLSearchParams(searchParams);
-    next.set('scopeCategory', scopeCategory);
     if (currentEvaluationId) next.set('evaluationId', currentEvaluationId);
     else next.delete('evaluationId');
     setSearchParams(next, { replace: true });
-  }, [currentEvaluationId, scopeCategory, searchParams, setSearchParams]);
+  }, [currentEvaluationId, searchParams, setSearchParams]);
 
   const plan = planResult.data?.domainTrialsPlan ?? null;
   const estimate = estimateResult.data?.estimateDomainEvaluationCost ?? null;
-  const providerHealth = providerHealthResult.data?.providerHealth ?? null;
   const modelCatalog = llmModelsResult.data?.llmModels ?? [];
   const currentEvaluation = currentEvaluationResult.data?.domainEvaluation ?? null;
   const currentEvaluationStatus = currentEvaluationStatusResult.data?.domainEvaluationStatus ?? null;
@@ -187,15 +166,14 @@ export function DomainTrialsDashboard() {
     }
     return next;
   }, [estimate?.models]);
-  const providerReadiness = useMemo(
-    () => buildProviderBudgetReadiness({
-      providerHealth,
+  const providerBudgetEstimates = useMemo(
+    () => buildProviderBudgetEstimates({
       selectedModels,
       estimatedSpendByModelId,
     }),
-    [estimatedSpendByModelId, providerHealth, selectedModels],
+    [estimatedSpendByModelId, selectedModels],
   );
-  const launchProviderBlocker = providerReadiness.find((provider) => provider.status !== 'READY') ?? null;
+  const launchProviderBlocker = providerBudgetEstimates.find((provider) => !provider.budgetReady) ?? null;
 
   const vignetteCount = plan?.vignettes.length ?? 0;
   const modelCount = planModels.length;
@@ -204,19 +182,19 @@ export function DomainTrialsDashboard() {
 
   const hasPendingLaunchSnapshot = currentEvaluationId != null && (currentEvaluationStatusResult.fetching || statusResult.fetching);
   const hasLiveRows = runStatuses.some((status) => getBatchRuntimeState(status) === 'LIVE');
-  const providerLaunchPending = selectedModels.length > 0 && providerReadiness.length === 0;
-  const providerLaunchReady = selectedModels.length === 0
+  const providerBudgetPending = llmModelsResult.fetching || (selectedModels.length > 0 && providerBudgetEstimates.length === 0);
+  const providerBudgetReady = selectedModels.length === 0
     ? true
-    : providerReadiness.length > 0 && providerReadiness.every((provider) => provider.status === 'READY');
-  const launchDisabled = hasPendingLaunchSnapshot || hasLiveRows || providerLaunchPending || !providerLaunchReady;
+    : providerBudgetEstimates.length > 0 && providerBudgetEstimates.every((provider) => provider.budgetReady);
+  const launchDisabled = hasPendingLaunchSnapshot || hasLiveRows || providerBudgetPending || !providerBudgetReady;
   const launchDisabledReason = hasPendingLaunchSnapshot
-    ? 'Refreshing the current launch snapshot.'
+    ? 'Refreshing the current launch.'
     : hasLiveRows
       ? 'A launch is already active for this domain.'
-      : providerLaunchPending
-        ? 'Provider budget readiness is still loading.'
-      : !providerLaunchReady
-        ? `${launchProviderBlocker?.providerDisplayName ?? 'A provider'} needs attention before launch.`
+      : providerBudgetPending
+        ? 'Provider budget estimates are still loading.'
+      : !providerBudgetReady
+        ? `${launchProviderBlocker?.providerDisplayName ?? 'A provider'} needs more budget before launch.`
       : null;
 
   useEffect(() => {
@@ -293,13 +271,11 @@ export function DomainTrialsDashboard() {
   if (!domainId) return <ErrorMessage message="Missing domain id." />;
 
   const planErrorMessage = planResult.error?.message ?? '';
-  const providerHealthErrorMessage = providerHealthResult.error?.message ?? '';
   const statusErrorMessage = statusResult.error?.message ?? '';
   const suppressPlanNoContentError = planErrorMessage.includes('No Content') && planNoContentRetries < 2;
   const suppressStatusNoContentError = statusErrorMessage.includes('No Content') && statusNoContentRetries < 2;
   const displayError = (suppressPlanNoContentError ? undefined : planResult.error)
     ?? (estimateResult.error ?? undefined)
-    ?? providerHealthResult.error
     ?? (currentEvaluationId ? currentEvaluationResult.error ?? currentEvaluationStatusResult.error ?? undefined : undefined)
     ?? (suppressStatusNoContentError ? undefined : statusResult.error);
 
@@ -307,22 +283,9 @@ export function DomainTrialsDashboard() {
   const temperatureLabel = useDefaultTemperature || !hasInitialTemperature || !hasValidTemperature
     ? 'Provider default'
     : String(parsedTemperature);
-
-  const handleRefresh = () => {
-    refetchPlan({ requestPolicy: 'network-only' });
-    refetchEstimate({ requestPolicy: 'network-only' });
-    refetchProviderHealth({ requestPolicy: 'network-only' });
-    refetchLlmModels({ requestPolicy: 'network-only' });
-    refetchLaunches({ requestPolicy: 'network-only' });
-    if (currentEvaluationId) {
-      refetchCurrentEvaluation({ requestPolicy: 'network-only' });
-      refetchCurrentEvaluationStatus({ requestPolicy: 'network-only' });
-    }
-    if (Object.keys(definitionRunIds).length > 0) {
-      refetchStatus({ requestPolicy: 'network-only' });
-    }
-    setLastStatusUpdatedAt(Date.now());
-  };
+  const statusHeader = hasLaunchSnapshot
+    ? `Current launch: ${currentEvaluation?.id ?? currentEvaluationId?.slice(-8) ?? 'unknown'}`
+    : null;
 
   const handleStart = async () => {
     if (!domainId) return;
@@ -362,11 +325,11 @@ export function DomainTrialsDashboard() {
 
     const payload = result.data?.startDomainEvaluation;
     if (!payload) {
-      setRunError('Failed to start domain evaluation.');
+      setRunError('Failed to start paired batches.');
       return;
     }
     if (payload.blockedByActiveLaunch) {
-      setRunError('An equivalent active domain evaluation is already running for this domain.');
+      setRunError('An equivalent active launch is already running for this domain.');
       return;
     }
 
@@ -390,67 +353,32 @@ export function DomainTrialsDashboard() {
     }
   };
 
-  const statusHeader = hasLaunchSnapshot
-    ? `Current launch: ${currentEvaluation?.id ?? currentEvaluationId?.slice(-8) ?? 'unknown'}`
-    : 'No active launch snapshot';
-
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-2">
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">Domain evaluation</div>
-            <div>
-              <h1 className="text-3xl font-serif font-medium text-[#1A1A1A]">{domainName}</h1>
-              <p className="mt-1 text-sm text-gray-600">
-                Set the paired-batch depth for the current launch signature, confirm provider budget readiness, and watch the launch move.
-              </p>
-              {filteredDefinitionIds.length > 0 && (
-                <p className="text-xs text-amber-700">
-                  Scoped to {filteredDefinitionIds.length} selected vignette{filteredDefinitionIds.length === 1 ? '' : 's'}.
-                </p>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-2">
+          <div>
+            <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Domain Level Batches</div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">{domainName}</h1>
+            {statusHeader && (
               <Badge variant={launchDisabled ? 'warning' : 'success'} size="count">
                 {statusHeader}
               </Badge>
-              {modelCount > 0 && <Badge variant="info" size="count">Models: {modelCount}</Badge>}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="ghost" size="sm" onClick={handleRefresh}>
-              <RefreshCw className="w-4 h-4 mr-1" />
-              Refresh
-            </Button>
-            <Link
-              to="/domains"
-              className="inline-flex h-9 items-center rounded-md border border-gray-200 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Back to Domains
-            </Link>
+            )}
           </div>
         </div>
       </div>
 
-      {displayError && <ErrorMessage message={`Failed to load domain evaluation data: ${displayError.message ?? 'Unknown error'}`} />}
+      {displayError && <ErrorMessage message={`Failed to load domain level batches data: ${displayError.message ?? 'Unknown error'}`} />}
       {runError && <ErrorMessage message={runError} />}
-      {providerHealthErrorMessage && <ErrorMessage message={`Provider budget data could not be loaded: ${providerHealthErrorMessage}`} />}
       {filteredDefinitionIdCount > 0 && plan && filteredDefinitionIdCount > plan.vignettes.length && (
         <ErrorMessage message={`Requested ${filteredDefinitionIdCount} scoped vignette IDs but ${filteredDefinitionIdCount - plan.vignettes.length} were invalid, stale, or not latest definitions in this domain.`} />
       )}
 
       <section className="space-y-4">
         <LaunchControlsPanel
-          scopeCategory={scopeCategory}
-          vignetteCount={vignetteCount}
-          modelCount={modelCount}
-          totalPairedBatches={totalPairedBatches}
-          totalTrialRuns={totalTrialRuns}
-          totalEstimatedCost={estimate?.totalEstimatedCost ?? plan?.totalEstimatedCost ?? 0}
-          estimateConfidence={estimate?.estimateConfidence}
-          fallbackReason={estimate?.fallbackReason}
-          knownExclusions={estimate?.knownExclusions}
           useDefaultTemperature={useDefaultTemperature}
           disableTemperatureInput={plan?.models.some((model) => !model.supportsTemperature) ?? false}
           temperatureInput={temperatureInput}
@@ -460,15 +388,10 @@ export function DomainTrialsDashboard() {
           targetBatchCountInput={targetBatchCountInput}
           hasValidTargetBatchCount={hasValidTargetBatchCount}
           isStarting={startDomainEvaluationResult.fetching}
-          planFetching={planResult.fetching || estimateResult.fetching}
           temperatureWarning={estimate?.temperatureWarning ?? plan?.temperatureWarning}
-          reviewSetupHref={`/domains?domainId=${domainId}&tab=setup&setupTab=contexts`}
-          reviewVignettesHref={`/domains?domainId=${domainId}&tab=vignettes`}
-          excludedRequestedDefinitionCount={Math.max(0, filteredDefinitionIdCount - (plan?.vignettes.length ?? 0))}
-          providerReadiness={providerReadiness}
+          providerBudgetEstimates={providerBudgetEstimates}
           launchDisabled={launchDisabled}
           launchDisabledReason={launchDisabledReason}
-          onSetScopeCategory={setScopeCategory}
           onSetUseDefaultTemperature={setUseDefaultTemperature}
           onSetTemperatureInput={setTemperatureInput}
           onSetMaxBudgetEnabled={setMaxBudgetEnabled}
@@ -492,7 +415,6 @@ export function DomainTrialsDashboard() {
       <LaunchConfirmModal
         open={showLaunchConfirm}
         domainName={domainName}
-        scopeCategory={scopeCategory}
         vignetteCount={vignetteCount}
         modelCount={modelCount}
         totalPairedBatches={totalPairedBatches}

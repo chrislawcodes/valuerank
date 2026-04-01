@@ -118,7 +118,7 @@ function App() {
             <Route
               path="/domains/:domainId/run-trials"
               element={
-                <ProtectedLayout fullWidth>
+                <ProtectedLayout>
                   <DomainTrialsDashboard />
                 </ProtectedLayout>
               }

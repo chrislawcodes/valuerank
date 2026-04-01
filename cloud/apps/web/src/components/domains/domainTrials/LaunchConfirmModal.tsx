@@ -5,7 +5,6 @@ import { formatCost } from './helpers';
 type LaunchConfirmModalProps = {
   open: boolean;
   domainName: string;
-  scopeCategory: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION';
   vignetteCount: number;
   modelCount: number;
   totalPairedBatches: number | null;
@@ -27,7 +26,6 @@ type LaunchConfirmModalProps = {
 export function LaunchConfirmModal({
   open,
   domainName,
-  scopeCategory,
   vignetteCount,
   modelCount,
   totalPairedBatches,
@@ -56,11 +54,10 @@ export function LaunchConfirmModal({
         aria-modal="true"
         aria-labelledby={headingId}
         className="w-full max-w-xl rounded-lg border border-gray-200 bg-white p-5 shadow-xl space-y-4"
-        >
-        <h2 id={headingId} className="text-lg font-semibold text-gray-900">Confirm launch</h2>
+      >
+        <h2 id={headingId} className="text-lg font-semibold text-gray-900">Confirm Domain Level Batches</h2>
         <div className="space-y-1 text-sm text-gray-700">
           <div>Domain: <span className="font-medium">{domainName}</span></div>
-          <div>Scope: <span className="font-medium">{scopeCategory.toLowerCase()}</span></div>
           <div>Selected latest vignettes: <span className="font-medium">{vignetteCount}</span></div>
           <div>Target paired batches per vignette: <span className="font-medium">{targetBatchCount}</span></div>
           <div>Total paired batches: <span className="font-medium">{totalPairedBatches ?? 'Not set'}</span></div>
@@ -86,7 +83,7 @@ export function LaunchConfirmModal({
         <div className="rounded border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700 space-y-2">
           <p className="font-medium text-gray-900">Review before confirming</p>
           <p>
-            This starts one domain evaluation launch. Use these links if you want to inspect setup coverage or vignette configuration before member runs begin.
+            This starts one launch for the selected domain. Use these links if you want to inspect setup coverage or vignette configuration before member runs begin.
           </p>
           <div className="flex flex-wrap gap-2">
             <Link
@@ -104,14 +101,14 @@ export function LaunchConfirmModal({
           </div>
         </div>
         <p className="text-xs text-gray-500">
-          This creates a domain evaluation launch and incurs model costs. Duplicate active launches with the same scope and sampling are blocked server-side.
+          This creates a launch and incurs model costs. Duplicate active launches with the same launch signature and sampling are blocked server-side.
         </p>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onCancel} disabled={isStarting}>
             Cancel
           </Button>
           <Button type="button" onClick={onConfirm} disabled={isStarting}>
-            {isStarting ? 'Starting...' : 'Start paired batches'}
+            {isStarting ? 'Starting...' : 'Start Paired Batches'}
           </Button>
         </div>
       </div>
