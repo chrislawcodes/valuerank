@@ -7,9 +7,8 @@
 
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { graphql, parse } from 'graphql';
+import { parse } from 'graphql';
 import { createLogger } from '@valuerank/shared';
-import { schema } from '../../graphql/index.js';
 import { createDataLoaders } from '../../graphql/dataloaders/index.js';
 import type { Context } from '../../graphql/context.js';
 import { buildMcpResponse, exceedsBudget } from '../../services/mcp/index.js';
@@ -93,8 +92,8 @@ Limited to 10KB token budget.`,
         };
 
         // Execute the query
-        const result = await graphql({
-          schema,
+        const { executeGraphQL } = await import('../../graphql/index.js');
+        const result = await executeGraphQL({
           source: args.query,
           variableValues: args.variables,
           contextValue,
