@@ -10,6 +10,20 @@ import { createLogger } from '@valuerank/shared';
 
 const log = createLogger('infra-models');
 
+// Short-lived cache to avoid redundant DB lookups during batch operations
+// (e.g. 75 startRun calls in a single domain evaluation launch all need the
+// same judge/summarizer config). 60 s TTL is short enough that admin config
+// changes take effect quickly.
+const INFRA_MODEL_CACHE_TTL_MS = 60_000;
+
+type InfraModelCacheEntry = {
+  value: InfraModelConfig;
+  expiresAt: number;
+};
+
+const judgeModelCache = { entry: null as InfraModelCacheEntry | null };
+const summarizerModelCache = { entry: null as InfraModelCacheEntry | null };
+
 export type InfraModelPurpose = 'scenario_expansion' | 'judge' | 'summarizer';
 
 export type InfraModelConfig = {
@@ -150,32 +164,45 @@ export async function getScenarioExpansionModel(): Promise<InfraModelConfig> {
 /**
  * Get the configured infrastructure model for transcript summarization.
  * Falls back to the lowest cost active model if not configured.
+ * Result is cached for 60 s to avoid repeated DB lookups in batch launches.
  */
 export async function getSummarizerModel(): Promise<InfraModelConfig> {
-  const configured = await getInfraModel('summarizer');
-
-  if (configured !== null) {
-    return configured;
+  const cached = summarizerModelCache.entry;
+  if (cached !== null && Date.now() < cached.expiresAt) {
+    return cached.value;
   }
 
-  // Fall back to the lowest cost active model
-  log.info('No summarizer model configured, finding lowest cost model');
-  return getLowestCostActiveModel('Lowest Cost');
+  const configured = await getInfraModel('summarizer');
+
+  const result = configured ?? await (async () => {
+    log.info('No summarizer model configured, finding lowest cost model');
+    return getLowestCostActiveModel('Lowest Cost');
+  })();
+
+  summarizerModelCache.entry = { value: result, expiresAt: Date.now() + INFRA_MODEL_CACHE_TTL_MS };
+  return result;
 }
 
 /**
  * Get the configured infrastructure model for judging/evaluation.
  * Falls back to the lowest cost active model if not configured.
+ * Result is cached for 60 s to avoid repeated DB lookups in batch launches.
  */
 export async function getJudgeModel(): Promise<InfraModelConfig> {
-  const configured = await getInfraModel('judge');
-
-  if (configured !== null) {
-    return configured;
+  const cached = judgeModelCache.entry;
+  if (cached !== null && Date.now() < cached.expiresAt) {
+    return cached.value;
   }
 
-  log.info('No judge model configured, finding lowest cost model');
-  return getLowestCostActiveModel('Judge Fallback');
+  const configured = await getInfraModel('judge');
+
+  const result = configured ?? await (async () => {
+    log.info('No judge model configured, finding lowest cost model');
+    return getLowestCostActiveModel('Judge Fallback');
+  })();
+
+  judgeModelCache.entry = { value: result, expiresAt: Date.now() + INFRA_MODEL_CACHE_TTL_MS };
+  return result;
 }
 
 /**

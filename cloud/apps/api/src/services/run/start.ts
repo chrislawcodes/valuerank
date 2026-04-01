@@ -8,6 +8,7 @@
 import { db, resolveDefinitionContent, type DefinitionContent, type RunCategory } from '@valuerank/db';
 import { ensureDomainConfigSnapshot } from '../domain-config/snapshot.js';
 import { createLogger, NotFoundError, ValidationError } from '@valuerank/shared';
+import type { JobInsert } from 'pg-boss';
 import { getBoss } from '../../queue/boss.js';
 import type { JobOptions, ProbeScenarioJobData, PriorityLevel } from '../../queue/types.js';
 import { PRIORITY_VALUES, DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
@@ -133,6 +134,76 @@ async function enqueueJobs(
         error: result.reason instanceof Error ? result.reason.message : String(result.reason),
       });
     });
+  }
+
+  return { jobIds, failures };
+}
+
+/**
+ * Bulk-inserts all jobs for a run using boss.insert(), grouped by queue name.
+ *
+ * A single INSERT ... VALUES (...), (...) round-trip per queue replaces the
+ * N individual boss.send() calls that were the primary bottleneck when
+ * launching many runs at once (e.g. target-batch top-up across 75 vignettes).
+ */
+async function bulkEnqueueJobs(
+  jobs: JobEntry[],
+): Promise<{ jobIds: string[]; failures: EnqueueFailure[] }> {
+  if (jobs.length === 0) return { jobIds: [], failures: [] };
+
+  const boss = getBoss();
+
+  // Group by queue name — boss.insert() takes a single queue name per call.
+  const jobsByQueue = new Map<string, JobEntry[]>();
+  for (const job of jobs) {
+    const existing = jobsByQueue.get(job.queueName) ?? [];
+    existing.push(job);
+    jobsByQueue.set(job.queueName, existing);
+  }
+
+  const jobIds: string[] = [];
+  const failures: EnqueueFailure[] = [];
+
+  for (const [queueName, queueJobs] of jobsByQueue) {
+    const insertPayloads: JobInsert<ProbeScenarioJobData>[] = queueJobs.map((job) => ({
+      data: job.data,
+      priority: job.options.priority,
+      retryLimit: job.options.retryLimit,
+      retryDelay: job.options.retryDelay,
+      retryBackoff: job.options.retryBackoff,
+      expireInSeconds: job.options.expireInSeconds,
+      ...(job.options.singletonKey !== undefined ? { singletonKey: job.options.singletonKey } : {}),
+    }));
+
+    try {
+      const ids = await boss.insert(queueName, insertPayloads);
+      if (ids === null || ids.length === 0) {
+        failures.push(
+          ...queueJobs.map((job) => ({ job, error: 'bulk insert returned no ids' })),
+        );
+      } else {
+        jobIds.push(...ids);
+        if (ids.length < queueJobs.length) {
+          log.warn(
+            { queueName, expected: queueJobs.length, got: ids.length },
+            'Bulk insert dropped some jobs (possible singleton dedup)',
+          );
+          // We cannot identify which specific jobs were dropped; surface the
+          // count discrepancy so the caller's integrity check catches it.
+          const droppedCount = queueJobs.length - ids.length;
+          for (let i = 0; i < droppedCount; i++) {
+            failures.push({ job: queueJobs[i]!, error: 'dropped by bulk insert' });
+          }
+        }
+      }
+    } catch (err) {
+      failures.push(
+        ...queueJobs.map((job) => ({
+          job,
+          error: err instanceof Error ? err.message : String(err),
+        })),
+      );
+    }
   }
 
   return { jobIds, failures };
@@ -868,8 +939,9 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   }
   log.debug({ runId: run.id, queueDistribution: Object.fromEntries(queueCounts) }, 'Job queue distribution');
 
-  // Enqueue in chunks, then retry any dropped jobs one more time.
-  const firstPass = await enqueueJobs(jobs, (queueName, data, options) => boss.send(queueName, data, options));
+  // Bulk-insert all jobs in a single INSERT per queue. Falls back to
+  // individual boss.send() retries only for any jobs that failed to insert.
+  const firstPass = await bulkEnqueueJobs(jobs);
   let jobIds = firstPass.jobIds;
   let remainingFailures = firstPass.failures;
 

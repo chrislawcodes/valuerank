@@ -69,6 +69,12 @@ export type AllModelAverage = {
   sampleCount: number;
 };
 
+// Cache the all-model average for 60 s. It changes rarely and is called once
+// per startRun invocation, so 75 concurrent launches would hammer the DB
+// with identical aggregate scans without caching.
+const ALL_MODEL_AVERAGE_CACHE_TTL_MS = 60_000;
+let allModelAverageCache: { value: AllModelAverage | null; expiresAt: number } | null = null;
+
 /**
  * Fetches token statistics for specific models for a specific definition.
  * Returns definition-specific stats if available, otherwise returns global stats.
@@ -159,10 +165,16 @@ export async function getTokenStatsForDefinition(
 /**
  * Calculates the average token counts across all models.
  * Used as fallback when a specific model has no statistics.
+ * Result is cached for 60 s to avoid redundant aggregate scans during batch launches.
  *
  * @returns Average input/output tokens, or null if no data exists
  */
 export async function getAllModelAverage(): Promise<AllModelAverage | null> {
+  const cached = allModelAverageCache;
+  if (cached !== null && Date.now() < cached.expiresAt) {
+    return cached.value;
+  }
+
   const result = await db.modelTokenStatistics.aggregate({
     where: {
       definitionId: null,
@@ -177,18 +189,19 @@ export async function getAllModelAverage(): Promise<AllModelAverage | null> {
     },
   });
 
-  if (result._avg.avgInputTokens === null || result._avg.avgOutputTokens === null) {
+  let avg: AllModelAverage | null = null;
+  if (result._avg.avgInputTokens !== null && result._avg.avgOutputTokens !== null) {
+    avg = {
+      input: Number(result._avg.avgInputTokens),
+      output: Number(result._avg.avgOutputTokens),
+      sampleCount: result._sum.sampleCount ?? 0,
+    };
+    log.debug({ avg }, 'Computed all-model average');
+  } else {
     log.debug('No model statistics exist in database');
-    return null;
   }
 
-  const avg: AllModelAverage = {
-    input: Number(result._avg.avgInputTokens),
-    output: Number(result._avg.avgOutputTokens),
-    sampleCount: result._sum.sampleCount ?? 0,
-  };
-
-  log.debug({ avg }, 'Computed all-model average');
+  allModelAverageCache = { value: avg, expiresAt: Date.now() + ALL_MODEL_AVERAGE_CACHE_TTL_MS };
   return avg;
 }
 
