@@ -386,18 +386,6 @@ export function DomainTrialsDashboard() {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="ghost" size="sm" onClick={handleRefresh}>
-            <RefreshCw className="w-4 h-4 mr-1" />
-            Refresh
-          </Button>
-          <Link
-            to="/domains"
-            className="inline-flex h-9 items-center rounded-md border border-gray-200 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Back to Domains
-          </Link>
-        </div>
       </div>
 
       {displayError && <ErrorMessage message={`Failed to load domain level batches data: ${displayError.message ?? 'Unknown error'}`} />}

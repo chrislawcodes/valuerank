@@ -54,7 +54,7 @@ export function LaunchConfirmModal({
         aria-modal="true"
         aria-labelledby={headingId}
         className="w-full max-w-xl rounded-lg border border-gray-200 bg-white p-5 shadow-xl space-y-4"
-        >
+      >
         <h2 id={headingId} className="text-lg font-semibold text-gray-900">Confirm Domain Level Batches</h2>
         <div className="space-y-1 text-sm text-gray-700">
           <div>Domain: <span className="font-medium">{domainName}</span></div>
