@@ -17,7 +17,7 @@ describe('config', () => {
 
   it('uses default PORT when not set', async () => {
     delete process.env.PORT;
-    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test';
+    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test_test';
 
     const { config } = await import('../src/config.js');
 
@@ -26,7 +26,7 @@ describe('config', () => {
 
   it('parses PORT from environment', async () => {
     process.env.PORT = '5000';
-    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test';
+    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test_test';
 
     const { config } = await import('../src/config.js');
 
@@ -35,7 +35,7 @@ describe('config', () => {
 
   it('uses default NODE_ENV when not set', async () => {
     delete process.env.NODE_ENV;
-    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test';
+    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test_test';
 
     const { config } = await import('../src/config.js');
 
@@ -43,15 +43,15 @@ describe('config', () => {
   });
 
   it('reads DATABASE_URL from environment', async () => {
-    process.env.DATABASE_URL = 'postgresql://user:pass@host/db';
+    process.env.DATABASE_URL = 'postgresql://user:pass@host/db_test';
 
     const { config } = await import('../src/config.js');
 
-    expect(config.DATABASE_URL).toBe('postgresql://user:pass@host/db');
+    expect(config.DATABASE_URL).toBe('postgresql://user:pass@host/db_test');
   });
 
   it('reads JWT_SECRET from environment', async () => {
-    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test';
+    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test_test';
     process.env.JWT_SECRET = TEST_JWT_SECRET;
 
     const { config } = await import('../src/config.js');
@@ -60,7 +60,7 @@ describe('config', () => {
   });
 
   it('throws if JWT_SECRET is too short', async () => {
-    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test';
+    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test_test';
     process.env.JWT_SECRET = 'short';
 
     await expect(import('../src/config.js')).rejects.toThrow(
@@ -69,7 +69,7 @@ describe('config', () => {
   });
 
   it('defaults DECISION_MODEL_V2 to false', async () => {
-    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test';
+    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test_test';
     delete process.env.DECISION_MODEL_V2;
 
     const { config } = await import('../src/config.js');
@@ -78,7 +78,7 @@ describe('config', () => {
   });
 
   it('reads DECISION_MODEL_V2 when enabled', async () => {
-    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test';
+    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test_test';
     process.env.DECISION_MODEL_V2 = 'true';
 
     const { config } = await import('../src/config.js');
@@ -87,7 +87,7 @@ describe('config', () => {
   });
 
   it('defaults SUMMARIZE_PARSER_VERSION to the current worker version', async () => {
-    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test';
+    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test_test';
     delete process.env.SUMMARIZE_PARSER_VERSION;
 
     const { config } = await import('../src/config.js');
@@ -96,7 +96,7 @@ describe('config', () => {
   });
 
   it('reads SUMMARIZE_PARSER_VERSION from environment', async () => {
-    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test';
+    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test_test';
     process.env.SUMMARIZE_PARSER_VERSION = 'parser-override-1';
 
     const { config } = await import('../src/config.js');

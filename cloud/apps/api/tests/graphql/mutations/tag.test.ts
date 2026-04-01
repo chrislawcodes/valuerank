@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, beforeAll } from 'vitest';
+import crypto from 'node:crypto';
 import request from 'supertest';
 import { createServer } from '../../../src/server.js';
 import { db } from '@valuerank/db';
@@ -159,7 +160,8 @@ describe('GraphQL Tag Mutations', () => {
   describe('deleteTag', () => {
     it('deletes a tag', async () => {
       // Create tag
-      const tag = await db.tag.create({ data: { name: 'to-delete' } });
+      const tagName = `to-delete-${crypto.randomUUID()}`;
+      const tag = await db.tag.create({ data: { name: tagName } });
 
       const mutation = `
         mutation DeleteTag($id: String!) {
