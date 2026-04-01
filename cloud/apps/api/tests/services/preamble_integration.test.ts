@@ -3,7 +3,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { db } from '@valuerank/db';
 import { startRun } from '../../src/services/run/start';
 import { createPreamble } from '../../src/services/preamble';
-import { createDefinition } from '../../src/services/definition';
 
 // Mock dependencies
 vi.mock('../../src/queue/boss', () => ({
