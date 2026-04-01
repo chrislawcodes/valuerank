@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from 'urql';
-import { RefreshCw } from 'lucide-react';
-import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { LaunchConfirmModal } from '../components/domains/domainTrials/LaunchConfirmModal';
@@ -84,7 +82,7 @@ export function DomainTrialsDashboard() {
     pause: !domainId,
     requestPolicy: 'cache-and-network',
   });
-  const [estimateResult, refetchEstimate] = useQuery<EstimateDomainEvaluationCostQueryResult, EstimateDomainEvaluationCostQueryVariables>({
+  const [estimateResult] = useQuery<EstimateDomainEvaluationCostQueryResult, EstimateDomainEvaluationCostQueryVariables>({
     query: ESTIMATE_DOMAIN_EVALUATION_COST_QUERY,
       variables: {
         domainId: domainId ?? '',
@@ -97,7 +95,7 @@ export function DomainTrialsDashboard() {
     pause: !domainId,
     requestPolicy: 'cache-and-network',
   });
-  const [llmModelsResult, refetchLlmModels] = useQuery<LlmModelsQueryResult, { providerId?: string; status?: string }>({
+  const [llmModelsResult] = useQuery<LlmModelsQueryResult, { providerId?: string; status?: string }>({
     query: LLM_MODELS_QUERY,
     variables: { status: 'ACTIVE' },
     pause: !domainId,
@@ -288,21 +286,6 @@ export function DomainTrialsDashboard() {
   const statusHeader = hasLaunchSnapshot
     ? `Current launch: ${currentEvaluation?.id ?? currentEvaluationId?.slice(-8) ?? 'unknown'}`
     : null;
-
-  const handleRefresh = () => {
-    refetchPlan({ requestPolicy: 'network-only' });
-    refetchEstimate({ requestPolicy: 'network-only' });
-    refetchLlmModels({ requestPolicy: 'network-only' });
-    refetchLaunches({ requestPolicy: 'network-only' });
-    if (currentEvaluationId) {
-      refetchCurrentEvaluation({ requestPolicy: 'network-only' });
-      refetchCurrentEvaluationStatus({ requestPolicy: 'network-only' });
-    }
-    if (Object.keys(definitionRunIds).length > 0) {
-      refetchStatus({ requestPolicy: 'network-only' });
-    }
-    setLastStatusUpdatedAt(Date.now());
-  };
 
   const handleStart = async () => {
     if (!domainId) return;
