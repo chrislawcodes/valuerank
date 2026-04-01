@@ -13,8 +13,9 @@ const log = createLogger('infra-models');
 // Short-lived cache to avoid redundant DB lookups during batch operations
 // (e.g. 75 startRun calls in a single domain evaluation launch all need the
 // same judge/summarizer config). 60 s TTL is short enough that admin config
-// changes take effect quickly.
-const INFRA_MODEL_CACHE_TTL_MS = 60_000;
+// changes take effect quickly. Disabled in test environments so system-setting
+// changes within a test are always reflected immediately.
+const INFRA_MODEL_CACHE_TTL_MS = process.env.NODE_ENV === 'test' ? 0 : 60_000;
 
 type InfraModelCacheEntry = {
   value: InfraModelConfig;

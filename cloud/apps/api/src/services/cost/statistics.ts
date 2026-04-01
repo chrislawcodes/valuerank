@@ -71,8 +71,8 @@ export type AllModelAverage = {
 
 // Cache the all-model average for 60 s. It changes rarely and is called once
 // per startRun invocation, so 75 concurrent launches would hammer the DB
-// with identical aggregate scans without caching.
-const ALL_MODEL_AVERAGE_CACHE_TTL_MS = 60_000;
+// with identical aggregate scans without caching. Disabled in test environments.
+const ALL_MODEL_AVERAGE_CACHE_TTL_MS = process.env.NODE_ENV === 'test' ? 0 : 60_000;
 let allModelAverageCache: { value: AllModelAverage | null; expiresAt: number } | null = null;
 
 /**

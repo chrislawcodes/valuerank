@@ -13,6 +13,13 @@ import { TEST_USER } from '../../test-utils.js';
 // Mock PgBoss
 const mockBoss = {
   send: vi.fn().mockResolvedValue('mock-job-id'),
+  // insert() is used by bulkEnqueueJobs for the primary enqueue path.
+  // Default implementation returns one ID per submitted job so the
+  // integrity check always passes without triggering the retry path.
+  insert: vi.fn().mockImplementation(
+    (_queueName: string, jobs: unknown[]) =>
+      Promise.resolve(jobs.map((_: unknown, i: number) => `mock-job-id-${i}`)),
+  ),
 };
 
 vi.mock('../../../src/queue/boss.js', () => ({
@@ -73,6 +80,11 @@ describe('startRun service', () => {
     vi.clearAllMocks();
     mockBoss.send.mockReset();
     mockBoss.send.mockResolvedValue('mock-job-id');
+    mockBoss.insert.mockReset();
+    mockBoss.insert.mockImplementation(
+      (_queueName: string, jobs: unknown[]) =>
+        Promise.resolve(jobs.map((_: unknown, i: number) => `mock-job-id-${i}`)),
+    );
   });
 
   afterEach(async () => {
@@ -474,10 +486,9 @@ describe('startRun service', () => {
         },
       });
 
-      // First send drops the job (null), retry succeeds.
-      mockBoss.send
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce('retry-job-id');
+      // Bulk insert returns no IDs (job dropped); send() in the retry path succeeds.
+      mockBoss.insert.mockResolvedValueOnce([]);
+      mockBoss.send.mockResolvedValueOnce('retry-job-id');
 
       const result = await startRun({
         definitionId: definition.id,
@@ -488,7 +499,9 @@ describe('startRun service', () => {
       createdRunIds.push(result.run.id);
 
       expect(result.jobCount).toBe(1);
-      expect(mockBoss.send).toHaveBeenCalledTimes(2);
+      // Primary path used insert (1 call); retry used send (1 call).
+      expect(mockBoss.insert).toHaveBeenCalledTimes(1);
+      expect(mockBoss.send).toHaveBeenCalledTimes(1);
     });
 
     it('retries only failed jobs in a multi-job batch', async () => {
@@ -515,11 +528,10 @@ describe('startRun service', () => {
         ],
       });
 
-      // First pass: one job drops, one succeeds. Retry: only failed job is retried.
-      mockBoss.send
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce('job-2')
-        .mockResolvedValueOnce('retry-job-1');
+      // Bulk insert returns only one ID for two submitted jobs — one job dropped.
+      // Only the dropped job should be retried via send().
+      mockBoss.insert.mockResolvedValueOnce(['job-2']);
+      mockBoss.send.mockResolvedValueOnce('retry-job-1');
 
       const result = await startRun({
         definitionId: definition.id,
@@ -530,7 +542,9 @@ describe('startRun service', () => {
       createdRunIds.push(result.run.id);
 
       expect(result.jobCount).toBe(2);
-      expect(mockBoss.send).toHaveBeenCalledTimes(3);
+      // Primary path: 1 insert call; retry path: 1 send call for the 1 dropped job.
+      expect(mockBoss.insert).toHaveBeenCalledTimes(1);
+      expect(mockBoss.send).toHaveBeenCalledTimes(1);
     });
 
     it('marks run as FAILED when jobs still cannot be enqueued after retry', async () => {
@@ -557,6 +571,9 @@ describe('startRun service', () => {
         ],
       });
 
+      // Bulk insert returns no IDs → all jobs fall through to retry.
+      // Retry via send() also fails (null). Run must be marked FAILED.
+      mockBoss.insert.mockResolvedValue([]);
       mockBoss.send.mockResolvedValue(null);
 
       await expect(
@@ -575,8 +592,9 @@ describe('startRun service', () => {
         createdRunIds.push(failedRun.id);
       }
       expect(failedRun?.status).toBe('FAILED');
-      // 2 jobs attempted, then both retried once.
-      expect(mockBoss.send).toHaveBeenCalledTimes(4);
+      // insert called once (bulk), send called once per job (2 jobs) in retry.
+      expect(mockBoss.insert).toHaveBeenCalledTimes(1);
+      expect(mockBoss.send).toHaveBeenCalledTimes(2);
     });
   });
 
