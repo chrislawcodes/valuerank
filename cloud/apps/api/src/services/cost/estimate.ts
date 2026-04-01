@@ -170,6 +170,7 @@ export async function estimateCost(input: EstimateCostInput): Promise<CostEstima
 
     perModel.push({
       modelId,
+      providerName: model.provider.name,
       displayName: model.displayName,
       scenarioCount,
       inputTokens: totalInputTokens,

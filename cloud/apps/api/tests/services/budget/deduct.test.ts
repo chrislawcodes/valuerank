@@ -26,68 +26,40 @@ vi.mock('@valuerank/db', async (importOriginal) => {
 
 import { db } from '@valuerank/db';
 import {
-  extractProviderName,
   groupCostByProvider,
   atomicDeduct,
   deductProviderBalancesForRun,
 } from '../../../src/services/budget/deduct.js';
 
-describe('extractProviderName', () => {
-  it('extracts provider prefix from provider:model format', () => {
-    expect(extractProviderName('openai:gpt-4o')).toBe('openai');
-    expect(extractProviderName('anthropic:claude-3-sonnet')).toBe('anthropic');
-    expect(extractProviderName('xai:grok-3')).toBe('xai');
-  });
-
-  it('returns null for modelId without colon separator', () => {
-    expect(extractProviderName('gpt-4o')).toBeNull();
-    expect(extractProviderName('somemodel')).toBeNull();
-  });
-
-  it('handles multiple colons — uses only first segment', () => {
-    expect(extractProviderName('openai:gpt-4:turbo')).toBe('openai');
-  });
-});
-
 describe('groupCostByProvider', () => {
   it('groups single provider correctly', () => {
     const perModel = [
-      { modelId: 'openai:gpt-4o', totalCost: 1.5 },
+      { modelId: 'claude-sonnet-4-5', providerName: 'anthropic', totalCost: 1.5 },
     ];
-    const result = groupCostByProvider(perModel);
-    expect(result.get('openai')).toBe(1.5);
+    const result = groupCostByProvider(perModel as never);
+    expect(result.get('anthropic')).toBe(1.5);
     expect(result.size).toBe(1);
   });
 
   it('aggregates multiple models from the same provider', () => {
     const perModel = [
-      { modelId: 'openai:gpt-4o', totalCost: 1.0 },
-      { modelId: 'openai:gpt-4o-mini', totalCost: 0.5 },
+      { modelId: 'gpt-5-mini', providerName: 'openai', totalCost: 1.0 },
+      { modelId: 'gpt-5.1', providerName: 'openai', totalCost: 0.5 },
     ];
-    const result = groupCostByProvider(perModel);
+    const result = groupCostByProvider(perModel as never);
     expect(result.get('openai')).toBe(1.5);
     expect(result.size).toBe(1);
   });
 
   it('keeps different providers separate', () => {
     const perModel = [
-      { modelId: 'openai:gpt-4o', totalCost: 1.0 },
-      { modelId: 'anthropic:claude-3', totalCost: 2.0 },
+      { modelId: 'gpt-5-mini', providerName: 'openai', totalCost: 1.0 },
+      { modelId: 'claude-sonnet-4-5', providerName: 'anthropic', totalCost: 2.0 },
     ];
-    const result = groupCostByProvider(perModel);
+    const result = groupCostByProvider(perModel as never);
     expect(result.get('openai')).toBe(1.0);
     expect(result.get('anthropic')).toBe(2.0);
     expect(result.size).toBe(2);
-  });
-
-  it('skips models without colon separator', () => {
-    const perModel = [
-      { modelId: 'gpt-4o', totalCost: 1.0 },
-      { modelId: 'openai:gpt-4o-mini', totalCost: 0.5 },
-    ];
-    const result = groupCostByProvider(perModel);
-    expect(result.has('gpt-4o')).toBe(false);
-    expect(result.get('openai')).toBe(0.5);
   });
 
   it('returns empty map for empty input', () => {
@@ -127,7 +99,7 @@ describe('deductProviderBalancesForRun', () => {
     findUniqueMock.mockResolvedValue({
       config: {
         estimatedCosts: {
-          perModel: [{ modelId: 'openai:gpt-4o', totalCost: 3.0 }],
+          perModel: [{ modelId: 'gpt-5-mini', providerName: 'openai', totalCost: 3.0 }],
         },
       },
     } as never);
@@ -152,7 +124,7 @@ describe('deductProviderBalancesForRun', () => {
     findUniqueMock.mockResolvedValue({
       config: {
         estimatedCosts: {
-          perModel: [{ modelId: 'openai:gpt-4o', totalCost: 3.0 }],
+          perModel: [{ modelId: 'gpt-5-mini', providerName: 'openai', totalCost: 3.0 }],
         },
       },
     } as never);
@@ -172,7 +144,7 @@ describe('deductProviderBalancesForRun', () => {
     const executeRawMock = vi.mocked(db.$executeRaw);
 
     findUniqueMock.mockResolvedValue({
-      config: { models: ['openai:gpt-4o'] },
+      config: { models: ['gpt-5-mini'] },
     } as never);
 
     await deductProviderBalancesForRun('run-123');
@@ -201,8 +173,8 @@ describe('deductProviderBalancesForRun', () => {
       config: {
         estimatedCosts: {
           perModel: [
-            { modelId: 'openai:gpt-4o', totalCost: 1.0 },
-            { modelId: 'anthropic:claude-3', totalCost: 2.0 },
+            { modelId: 'gpt-5-mini', providerName: 'openai', totalCost: 1.0 },
+            { modelId: 'claude-sonnet-4-5', providerName: 'anthropic', totalCost: 2.0 },
           ],
         },
       },
@@ -230,8 +202,8 @@ describe('deductProviderBalancesForRun', () => {
       config: {
         estimatedCosts: {
           perModel: [
-            { modelId: 'openai:gpt-4o', totalCost: 1.0 },
-            { modelId: 'anthropic:claude-3', totalCost: 2.0 },
+            { modelId: 'gpt-5-mini', providerName: 'openai', totalCost: 1.0 },
+            { modelId: 'claude-sonnet-4-5', providerName: 'anthropic', totalCost: 2.0 },
           ],
         },
       },

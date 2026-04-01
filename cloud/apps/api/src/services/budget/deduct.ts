@@ -13,31 +13,14 @@ import type { ModelCostEstimate } from '../cost/types.js';
 const log = createLogger('services:budget:deduct');
 
 /**
- * Extract the provider name prefix from a modelId.
- * e.g. "openai:gpt-4o" → "openai"
- * Returns null if the modelId has no ':' separator.
- */
-export function extractProviderName(modelId: string): string | null {
-  if (!modelId.includes(':')) {
-    return null;
-  }
-  return modelId.split(':', 1)[0] ?? null;
-}
-
-/**
  * Group per-model cost estimates by provider name.
- * Models without a ':' separator are skipped with a warning.
+ * Uses the providerName field stored in each ModelCostEstimate.
  */
 export function groupCostByProvider(perModel: ModelCostEstimate[]): Map<string, number> {
   const byProvider = new Map<string, number>();
   for (const item of perModel) {
-    const providerName = extractProviderName(item.modelId);
-    if (providerName === null) {
-      log.warn({ modelId: item.modelId }, 'Cannot extract provider name from modelId — skipping');
-      continue;
-    }
-    const existing = byProvider.get(providerName) ?? 0;
-    byProvider.set(providerName, existing + item.totalCost);
+    const existing = byProvider.get(item.providerName) ?? 0;
+    byProvider.set(item.providerName, existing + item.totalCost);
   }
   return byProvider;
 }
