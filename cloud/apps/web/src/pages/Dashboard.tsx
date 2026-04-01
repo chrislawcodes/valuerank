@@ -86,12 +86,12 @@ export function Dashboard() {
           </p>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             <Link
-              to={`/domains/${activeDomain.id}/run-trials?scopeCategory=PILOT`}
+              to={`/domains/${activeDomain.id}/run-trials`}
               className="rounded-lg border border-gray-200 bg-gray-50 p-4 hover:bg-gray-100"
             >
-              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Pilot next</div>
-              <div className="mt-1 text-sm font-semibold text-gray-900">Open domain evaluation launcher</div>
-              <div className="mt-1 text-xs text-gray-600">Resume the pilot or production launch flow for this domain.</div>
+              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Resume batches</div>
+              <div className="mt-1 text-sm font-semibold text-gray-900">Open domain level batches</div>
+              <div className="mt-1 text-xs text-gray-600">Resume the launch flow for this domain.</div>
             </Link>
             <Link
               to={`/domains/analysis?domainId=${activeDomain.id}`}

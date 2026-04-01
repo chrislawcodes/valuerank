@@ -150,7 +150,7 @@ export function DomainEvaluationStatusPanel({
     return (
       <div className="rounded-xl border border-gray-200 bg-white p-5">
         <h2 className="text-lg font-semibold text-gray-900">Status</h2>
-        <p className="mt-1 text-sm text-gray-600">No active launch snapshot is available for {domainName}.</p>
+        <p className="mt-1 text-sm text-gray-600">No active launch is available for {domainName}.</p>
       </div>
     );
   }
@@ -352,7 +352,7 @@ export function DomainEvaluationStatusPanel({
       {fetching && (
         <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Refreshing the current launch snapshot.
+          Refreshing the current launch state.
         </div>
       )}
 
