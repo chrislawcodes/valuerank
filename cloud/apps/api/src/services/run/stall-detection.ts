@@ -56,6 +56,32 @@ export async function detectStalledModels(runId: string, runStartedAt: Date): Pr
   return stalled;
 }
 
+export async function detectProgressStalls(
+  runId: string,
+  config: { models?: string[]; samplesPerScenario?: number },
+  scenarioCount: number,
+): Promise<string[]> {
+  const models = config.models ?? [];
+  const samplesPerScenario = config.samplesPerScenario ?? 1;
+  if (models.length === 0 || scenarioCount === 0) return [];
+
+  const expectedPerModel = scenarioCount * samplesPerScenario;
+
+  const transcriptCounts = await db.$queryRaw<Array<{ model_id: string; cnt: bigint }>>`
+    SELECT model_id, COUNT(*) as cnt
+    FROM transcripts
+    WHERE run_id = ${runId}
+    GROUP BY model_id
+  `;
+
+  const countByModel = new Map<string, number>();
+  for (const row of transcriptCounts) {
+    countByModel.set(row.model_id, Number(row.cnt));
+  }
+
+  return models.filter(modelId => (countByModel.get(modelId) ?? 0) < expectedPerModel);
+}
+
 export async function updateRunStalledModels(
   run: { id: string; stalledModels: string[] },
   newStalled: string[]
@@ -84,7 +110,7 @@ export async function detectAndUpdateStalledRuns(): Promise<{
 }> {
   const runningRuns = await db.run.findMany({
     where: { status: 'RUNNING' },
-    select: { id: true, stalledModels: true, startedAt: true },
+    select: { id: true, stalledModels: true, startedAt: true, progress: true, config: true },
   });
 
   let newStalls = 0;
@@ -95,7 +121,30 @@ export async function detectAndUpdateStalledRuns(): Promise<{
       log.error({ runId: run.id }, 'RUNNING run has null startedAt — skipping stall detection');
       continue;
     }
-    const stalled = await detectStalledModels(run.id, run.startedAt);
+
+    let stalled = await detectStalledModels(run.id, run.startedAt);
+
+    // If no queue-level stalls, check for progress stalls (jobs vanished from queue)
+    if (stalled.length === 0 && run.progress != null) {
+      const progress = run.progress as { total: number; completed: number; failed: number };
+      const done = progress.completed + progress.failed;
+      if (done < progress.total) {
+        // Check that there are truly zero pending/active jobs
+        const pendingModels = await getModelsWithPendingJobs(run.id);
+        if (pendingModels.length === 0) {
+          const config = run.config as { models?: string[]; samplesPerScenario?: number } | null;
+          const scenarioCount = await db.runScenarioSelection.count({ where: { runId: run.id } });
+          stalled = await detectProgressStalls(run.id, config ?? {}, scenarioCount);
+          if (stalled.length > 0) {
+            log.warn(
+              { runId: run.id, stalledModels: stalled, progress },
+              'Progress stall detected: incomplete progress with no pending jobs'
+            );
+          }
+        }
+      }
+    }
+
     const newlyStalled = stalled.filter(m => !run.stalledModels.includes(m));
     if (newlyStalled.length > 0) newStalls++;
     if (stalled.length > 0) totalStalled++;
