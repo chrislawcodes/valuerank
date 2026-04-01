@@ -1,6 +1,6 @@
 import { type FocusEvent, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Archive, ChevronDown, ChevronRight, FolderTree, GitCompare, Home, Library, Settings, ShieldCheck } from 'lucide-react';
+import { Archive, ChevronDown, ChevronRight, FolderTree, GitCompare, Library, Settings, ShieldCheck } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useClickOutside } from '../../hooks/useClickOutside';
 
@@ -92,7 +92,6 @@ export function NavTabs() {
       : isTabActive(item.path, item.aliases ?? [])
   ), [isTabActive]);
 
-  const isHomeActive = location.pathname === '/';
   const isVignettesActive = vignettesMenuItems.some((item) => isMenuItemActive(item));
   const isDomainsActive = domainMenuItems.some((item) => isMenuItemActive(item));
   const isValidationActive = validationMenuItems.some((item) => isTabActive(item.path));
@@ -233,20 +232,8 @@ export function NavTabs() {
     <nav className="hidden sm:block bg-[#1A1A1A] border-t border-gray-800">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex gap-1">
-          <NavLink
-            to="/"
-            end
-            className={`flex items-center gap-2 px-3 py-3 min-h-[44px] text-sm font-medium transition-colors border-b-2 ${isHomeActive
-              ? 'text-white border-teal-500'
-              : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
-            }`}
-          >
-            <Home className="w-4 h-4" />
-            <span className="hidden sm:inline">Home</span>
-          </NavLink>
-
-          {renderMenu(vignettesMenuRef, 'Vignettes', '/definitions', Library, vignettesMenuItems, isVignettesActive, isVignettesMenuOpen, setIsVignettesMenuOpen)}
           {renderMenu(domainMenuRef, 'Domains', '/domains', FolderTree, domainMenuItems, isDomainsActive, isDomainsMenuOpen, setIsDomainsMenuOpen)}
+          {renderMenu(vignettesMenuRef, 'Vignettes', '/definitions', Library, vignettesMenuItems, isVignettesActive, isVignettesMenuOpen, setIsVignettesMenuOpen)}
           {renderMenu(validationMenuRef, 'Validation', '/validation', ShieldCheck, validationMenuItems, isValidationActive, isValidationMenuOpen, setIsValidationMenuOpen)}
           {renderMenu(archiveMenuRef, 'Archive', '/archive', Archive, archiveMenuItems, isArchiveActive, isArchiveMenuOpen, setIsArchiveMenuOpen)}
           {renderMenu(settingsMenuRef, 'Settings', '/settings/account', Settings, settingsMenuItems, isSettingsActive, isSettingsMenuOpen, setIsSettingsMenuOpen)}
