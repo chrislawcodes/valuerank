@@ -4,11 +4,11 @@ import { graphql, type ExecutionResult, getOperationAST, type DocumentNode, Kind
 import { builder } from './builder.js';
 import { createContext, type Context } from './context.js';
 import { createLogger, AppError } from '@valuerank/shared';
+import { queriesReady } from './queries/index.js';
+import { mutationsReady } from './mutations/index.js';
 
 // Import all types and operations to register them with the builder
 import './types/index.js';
-import './queries/index.js';
-import './mutations/index.js';
 
 const log = createLogger('graphql');
 
@@ -99,6 +99,8 @@ function getOriginalError(value: unknown): unknown {
   const maybeOriginal = (value as { originalError?: unknown }).originalError;
   return maybeOriginal ?? null;
 }
+
+await Promise.all([queriesReady, mutationsReady]);
 
 // Build the GraphQL schema
 export const schema = builder.toSchema();

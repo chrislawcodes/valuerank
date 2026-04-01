@@ -37,8 +37,17 @@ export function createMcpRouter(): Router {
 
   // Get MCP server and register tools + resources
   const mcpServer = getMcpServer();
-  registerAllTools(mcpServer);
+  const toolsReady = registerAllTools(mcpServer);
   registerAllResources(mcpServer);
+
+  router.use(async (_req, _res, next) => {
+    try {
+      await toolsReady;
+      next();
+    } catch (err) {
+      next(err);
+    }
+  });
 
   // HEAD request for protocol version check - no auth required
   // Claude.ai uses this to verify MCP compatibility
