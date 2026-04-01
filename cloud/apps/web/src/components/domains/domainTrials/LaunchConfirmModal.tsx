@@ -63,7 +63,7 @@ export function LaunchConfirmModal({
           <div>Total paired batches: <span className="font-medium">{totalPairedBatches ?? 'Not set'}</span></div>
           <div>Total individual trial runs: <span className="font-medium">{totalTrialRuns ?? 'Not set'}</span></div>
           <div>Models: <span className="font-medium">{modelCount}</span></div>
-          <div>Estimated total cost: <span className="font-medium">{formatCost(estimatedTotalCost)}</span></div>
+          <div>Estimated remaining cost: <span className="font-medium">{formatCost(estimatedTotalCost)}</span></div>
           {estimateConfidence && <div>Estimate confidence: <span className="font-medium">{estimateConfidence.toLowerCase()}</span></div>}
           <div>Temperature: <span className="font-medium">{temperatureLabel}</span></div>
           <div>Budget cap: <span className="font-medium">{budgetCap === null ? 'None' : formatCost(budgetCap)}</span></div>

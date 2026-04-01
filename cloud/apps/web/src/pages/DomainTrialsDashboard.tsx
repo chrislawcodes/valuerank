@@ -159,21 +159,20 @@ export function DomainTrialsDashboard() {
     () => modelCatalog.filter((model) => planModelIds.has(model.modelId)),
     [modelCatalog, planModelIds],
   );
-  const estimatedSpendByModelId = useMemo(() => {
-    const next = new Map<string, number>();
-    for (const model of estimate?.models ?? []) {
-      next.set(model.modelId, model.estimatedCost);
-    }
-    return next;
-  }, [estimate?.models]);
   const providerBudgetEstimates = useMemo(
     () => buildProviderBudgetEstimates({
       selectedModels,
-      estimatedSpendByModelId,
+      cellEstimates: plan?.cellEstimates ?? [],
+      vignettes: plan?.vignettes ?? [],
+      targetBatchCount: selectedTargetBatchCount,
     }),
-    [estimatedSpendByModelId, selectedModels],
+    [plan?.cellEstimates, plan?.vignettes, selectedModels, selectedTargetBatchCount],
   );
   const launchProviderBlocker = providerBudgetEstimates.find((provider) => !provider.budgetReady) ?? null;
+  const estimatedRemainingCost = useMemo(
+    () => providerBudgetEstimates.reduce((sum, provider) => sum + provider.expectedSpendUsd, 0),
+    [providerBudgetEstimates],
+  );
 
   const vignetteCount = plan?.vignettes.length ?? 0;
   const modelCount = planModels.length;
@@ -419,7 +418,7 @@ export function DomainTrialsDashboard() {
         modelCount={modelCount}
         totalPairedBatches={totalPairedBatches}
         totalTrialRuns={totalTrialRuns}
-        estimatedTotalCost={estimate?.totalEstimatedCost ?? plan?.totalEstimatedCost ?? 0}
+        estimatedTotalCost={estimatedRemainingCost}
         estimateConfidence={estimate?.estimateConfidence}
         fallbackReason={estimate?.fallbackReason}
         knownExclusions={estimate?.knownExclusions}

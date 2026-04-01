@@ -67,4 +67,37 @@ describe('LaunchControlsPanel', () => {
     await user.type(screen.getByLabelText(/target number of paired batches per vignette/i), '2');
     expect(onSetTargetBatchCountInput).toHaveBeenCalled();
   });
+
+  it('explains the expected spend assumptions', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <LaunchControlsPanel
+          useDefaultTemperature={true}
+          disableTemperatureInput={false}
+          temperatureInput="0.7"
+          maxBudgetEnabled={false}
+          maxBudgetInput=""
+          hasValidBudget={true}
+          targetBatchCountInput="1"
+          hasValidTargetBatchCount={true}
+          isStarting={false}
+          providerBudgetEstimates={[makeProviderEstimate()]}
+          launchDisabled={false}
+          onSetUseDefaultTemperature={() => {}}
+          onSetTemperatureInput={() => {}}
+          onSetMaxBudgetEnabled={() => {}}
+          onSetMaxBudgetInput={() => {}}
+          onSetTargetBatchCountInput={() => {}}
+          onOpenConfirm={() => {}}
+        />
+      </MemoryRouter>,
+    );
+
+    await user.hover(screen.getByRole('button', { name: /expected spend assumptions/i }));
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/remaining work needed to reach the target/i);
+    expect(screen.getByRole('tooltip')).toHaveTextContent(/scales it by the number of batches still needed/i);
+  });
 });
