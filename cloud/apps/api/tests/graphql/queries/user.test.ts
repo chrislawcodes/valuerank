@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import crypto from 'node:crypto';
 import request from 'supertest';
 import { createServer } from '../../../src/server.js';
 import { db } from '@valuerank/db';
@@ -202,9 +203,10 @@ describe('GraphQL User Queries', () => {
 
     it('does not return keys from other users', async () => {
       // Create another user with an API key
+      const uniqueId = crypto.randomUUID();
       const otherUser = await db.user.create({
         data: {
-          email: 'other-user-keys@example.com',
+          email: `other-user-keys-${uniqueId}@example.com`,
           passwordHash: 'test-hash',
         },
       });
@@ -267,9 +269,10 @@ describe('GraphQL User Queries', () => {
 
     it('returns empty array when user has no keys', async () => {
       // Create a new user with no keys
+      const uniqueId = crypto.randomUUID();
       const newUser = await db.user.create({
         data: {
-          email: 'no-keys-user@example.com',
+          email: `no-keys-user-${uniqueId}@example.com`,
           passwordHash: 'test-hash',
         },
       });

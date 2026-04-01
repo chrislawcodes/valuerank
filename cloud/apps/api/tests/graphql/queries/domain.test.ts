@@ -504,12 +504,19 @@ describe('GraphQL Domain Query Registration', () => {
 
     const listedEvaluations = response.body.data.domainEvaluations as Array<Record<string, unknown>>;
     expect(listedEvaluations).toHaveLength(2);
-    expect(listedEvaluations[0]?.id).toBe(validationEvaluation.id);
-    expect(listedEvaluations[0]?.status).toBe('COMPLETED');
-    expect(listedEvaluations[0]?.memberCount).toBe(1);
-    expect(listedEvaluations[1]?.id).toBe(evaluation.id);
-    expect(listedEvaluations[1]?.status).toBe('RUNNING');
-    expect(listedEvaluations[1]?.memberCount).toBe(1);
+    const evaluationsById = new Map(
+      listedEvaluations.map((entry) => [String(entry.id), entry])
+    );
+
+    const validationEntry = evaluationsById.get(validationEvaluation.id);
+    expect(validationEntry).toBeDefined();
+    expect(validationEntry?.status).toBe('COMPLETED');
+    expect(validationEntry?.memberCount).toBe(1);
+
+    const evaluationEntry = evaluationsById.get(evaluation.id);
+    expect(evaluationEntry).toBeDefined();
+    expect(evaluationEntry?.status).toBe('RUNNING');
+    expect(evaluationEntry?.memberCount).toBe(1);
 
     const detailedEvaluation = response.body.data.domainEvaluation as Record<string, unknown>;
     expect(detailedEvaluation.id).toBe(evaluation.id);

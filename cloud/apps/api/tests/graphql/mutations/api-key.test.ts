@@ -6,6 +6,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import request from 'supertest';
+import crypto from 'node:crypto';
 import { createServer } from '../../../src/server.js';
 import { db } from '@valuerank/db';
 import { signToken } from '../../../src/auth/index.js';
@@ -360,11 +361,12 @@ describe('GraphQL API Key Mutations', () => {
       expect(response.body.errors[0].message).toContain('ApiKey not found');
     });
 
-    it('returns error when trying to revoke another user\'s key', async () => {
+  it('returns error when trying to revoke another user\'s key', async () => {
       // Create another user and their API key
+      const uniqueId = crypto.randomUUID();
       const otherUser = await db.user.create({
         data: {
-          email: 'other-user@example.com',
+          email: `other-user-${uniqueId}@example.com`,
           passwordHash: 'test-hash',
         },
       });
@@ -373,8 +375,8 @@ describe('GraphQL API Key Mutations', () => {
         data: {
           userId: otherUser.id,
           name: 'Other User Key',
-          keyHash: 'other-key-hash',
-          keyPrefix: 'vr_other12',
+          keyHash: `other-key-${uniqueId.slice(0, 8)}`,
+          keyPrefix: `vr_${uniqueId.slice(0, 7)}`,
         },
       });
 

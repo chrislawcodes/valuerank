@@ -7,6 +7,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createLogger } from '@valuerank/shared';
+import { beginAutoImportGeneration, autoImportDir } from '../../utils/auto-import.js';
 import {
   toolRegistrars,
   addToolRegistrar,
@@ -16,55 +17,27 @@ import {
 } from './registry.js';
 
 const log = createLogger('mcp:tools');
+beginAutoImportGeneration();
 
-// Import tools to trigger their registration via addToolRegistrar
-// P1 MVP Tools - Read
-import './list-runs.js';
-import './get-run-summary.js';
-import './list-definitions.js';
-import './graphql-query.js';
-// P2 Tools - Read
-import './get-dimension-analysis.js';
-import './get-transcript-summary.js';
-import './get-transcript.js';
-import './get-run-results.js';
-// Stage 14 - Write Tools
-import './create-definition.js';
-import './fork-definition.js';
-import './validate-definition.js';
-import './start-run.js';
-import './generate-scenarios-preview.js';
-// Feature 014 - Delete Tools
-import './delete-definition.js';
-import './delete-run.js';
-// Feature 014 - LLM Management Tools
-import './list-llm-providers.js';
-import './list-llm-models.js';
-import './get-llm-model.js';
-import './create-llm-model.js';
-import './update-llm-model.js';
-import './deprecate-llm-model.js';
-import './reactivate-llm-model.js';
-import './set-default-llm-model.js';
-import './update-llm-provider.js';
-import './set-infra-model.js';
-import './list-system-settings.js';
-// Feature 017 - Parallel Summarization
-import './set-summarization-parallelism.js';
-import './cancel-summarization.js';
-import './restart-summarization.js';
-// Definition management tools
-import './update-definition.js';
-import './add-tags-to-definitions.js';
-import './remove-tags-from-definitions.js';
-// Feature 018 - MCP Operations Tools
-import './recover-run.js';
-import './trigger-recovery.js';
-import './get-job-queue-status.js';
-import './get-unsummarized-transcripts.js';
-// Cross-model value analysis tools
-import './get-value-pairs.js';
-import './export-pairwise-outcomes.js';
+const toolsReady = autoImportDir(import.meta.url, 'MCP tools', [
+  'registry.js',
+  'helpers.js',
+  'value-pair-helpers.js',
+]);
+
+/**
+ * Track in-flight registration so concurrent callers share the same work.
+ *
+ * The MCP server is a singleton in the application, but tests can create the
+ * router multiple times before the first async registration finishes. Without
+ * this guard, those concurrent calls race past the `isServerRegistered` check
+ * and try to register the same tool twice.
+ */
+const registrationPromises = new WeakMap<McpServer, Promise<void>>();
+
+function isDuplicateToolRegistrationError(err: unknown): boolean {
+  return err instanceof Error && err.message.includes('already registered');
+}
 
 /**
  * Registers all MCP tools on the given server
@@ -75,26 +48,49 @@ import './export-pairwise-outcomes.js';
  *
  * @param server - MCP server instance to register tools on
  */
-export function registerAllTools(server: McpServer): void {
-  // Skip if tools already registered on this server
-  if (isServerRegistered(server)) {
-    log.debug('Tools already registered on this server, skipping');
+export async function registerAllTools(server: McpServer): Promise<void> {
+  const inFlight = registrationPromises.get(server);
+  if (inFlight !== undefined) {
+    await inFlight;
     return;
   }
 
-  log.info({ toolCount: toolRegistrars.length }, 'Registering MCP tools');
+  const registrationPromise = (async () => {
+    await toolsReady;
 
-  for (const registrar of toolRegistrars) {
-    try {
-      registrar(server);
-    } catch (err) {
-      log.error({ err }, 'Failed to register tool');
-      throw err;
+    // Skip if tools already registered on this server
+    if (isServerRegistered(server)) {
+      log.debug('Tools already registered on this server, skipping');
+      return;
     }
-  }
 
-  markServerRegistered(server);
-  log.info('All MCP tools registered');
+    log.info({ toolCount: toolRegistrars.length }, 'Registering MCP tools');
+
+    for (const registrar of toolRegistrars) {
+      try {
+        registrar(server);
+      } catch (err) {
+        if (isDuplicateToolRegistrationError(err)) {
+          log.debug({ err }, 'Skipping duplicate MCP tool registration');
+          continue;
+        }
+        log.error({ err }, 'Failed to register tool');
+        throw err;
+      }
+    }
+
+    markServerRegistered(server);
+    log.info('All MCP tools registered');
+  })();
+
+  registrationPromises.set(server, registrationPromise);
+
+  try {
+    await registrationPromise;
+  } catch (err) {
+    registrationPromises.delete(server);
+    throw err;
+  }
 }
 
 // Re-export for tools to use
