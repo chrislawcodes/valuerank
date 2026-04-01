@@ -4,11 +4,12 @@
  * Tests pauseRun, resumeRun, and cancelRun mutations.
  */
 
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { db } from '@valuerank/db';
 import type { Express } from 'express';
 import { getAuthHeader } from '../../test-utils.js';
+import { createServer } from '../../../src/server.js';
 
 // Mock PgBoss
 vi.mock('../../../src/queue/boss.js', () => ({
@@ -32,10 +33,7 @@ describe('Run Control Mutations', () => {
   const createdDefinitionIds: string[] = [];
   const createdRunIds: string[] = [];
 
-  beforeAll(async () => {
-    const { createServer } = await import('../../../src/server.js');
-    app = createServer();
-  });
+  app = createServer();
 
   afterEach(async () => {
     // Clean up runs first
