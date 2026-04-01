@@ -20,9 +20,9 @@ describe('NavTabs Component', () => {
   it('renders the new top-level navigation tabs', () => {
     renderNavTabs();
 
-    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
-    expect(screen.getByRole('link', { name: 'Vignettes' })).toHaveAttribute('href', '/definitions');
+    expect(screen.queryByRole('link', { name: 'Home' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Domains' })).toHaveAttribute('href', '/domains');
+    expect(screen.getByRole('link', { name: 'Vignettes' })).toHaveAttribute('href', '/definitions');
     expect(screen.getByRole('link', { name: 'Validation' })).toHaveAttribute('href', '/validation');
     expect(screen.getByRole('link', { name: 'Archive' })).toHaveAttribute('href', '/archive');
     expect(screen.getByRole('link', { name: 'Compare' })).toHaveAttribute('href', '/compare');
@@ -93,16 +93,16 @@ describe('NavTabs Component', () => {
     expect(screen.getByRole('link', { name: 'Legacy Survey Work' }).className).toContain('bg-teal-600/20');
   });
 
-  it('renders Vignettes before Domains before Validation and Archive in the top-level order', () => {
+  it('renders Domains before Vignettes before Validation and Archive in the top-level order', () => {
     renderNavTabs();
 
-    const vignettesLink = screen.getByRole('link', { name: 'Vignettes' });
     const domainsLink = screen.getByRole('link', { name: 'Domains' });
+    const vignettesLink = screen.getByRole('link', { name: 'Vignettes' });
     const validationLink = screen.getByRole('link', { name: 'Validation' });
     const archiveLink = screen.getByRole('link', { name: 'Archive' });
 
-    expect(vignettesLink.compareDocumentPosition(domainsLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(domainsLink.compareDocumentPosition(validationLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(domainsLink.compareDocumentPosition(vignettesLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(vignettesLink.compareDocumentPosition(validationLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(validationLink.compareDocumentPosition(archiveLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
