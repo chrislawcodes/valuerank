@@ -1,4 +1,5 @@
 import { Button } from '../../ui/Button';
+import { Tooltip } from '../../ui/Tooltip';
 import { formatCost } from './helpers';
 import type { ProviderBudgetEstimate } from './launch-state';
 
@@ -146,7 +147,37 @@ export function LaunchControlsPanel({
             <thead>
               <tr className="text-left text-gray-500 border-b border-gray-200">
                 <th className="px-3 py-2 font-medium">Provider</th>
-                <th className="px-3 py-2 font-medium">Expected spend</th>
+                <th className="px-3 py-2 font-medium">
+                  <div className="flex items-center gap-1">
+                    <span>Expected spend</span>
+                    <Tooltip
+                      delay={0}
+                      content={(
+                        <div className="max-w-xs space-y-2 text-xs leading-5">
+                          <p>This is a launch estimate for the remaining work needed to reach the target, not a live spend meter.</p>
+                          <p>
+                            For each vignette, it starts from the per-model cost estimate for the current target,
+                            then scales it by the number of batches still needed after subtracting batches already completed
+                            for the current launch signature.
+                          </p>
+                          <p>
+                            It does not account for retries, provider routing changes, or judge/summarization overhead.
+                          </p>
+                        </div>
+                      )}
+                    >
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        aria-label="Expected spend assumptions"
+                        className="!min-h-0 h-5 w-5 rounded-full !p-0 text-[11px] font-semibold text-gray-500 hover:text-gray-900"
+                      >
+                        ?
+                      </Button>
+                    </Tooltip>
+                  </div>
+                </th>
                 <th className="px-3 py-2 font-medium">Budget balance</th>
               </tr>
             </thead>

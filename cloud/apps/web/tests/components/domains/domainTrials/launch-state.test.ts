@@ -1,0 +1,103 @@
+import { describe, expect, it } from 'vitest';
+import type { LlmModel } from '../../../../src/api/operations/llm';
+import { buildProviderBudgetEstimates } from '../../../../src/components/domains/domainTrials/launch-state';
+
+function makeModel(overrides: Partial<LlmModel> = {}): LlmModel {
+  return {
+    id: 'model-openai',
+    providerId: 'openai',
+    modelId: 'model-openai',
+    displayName: 'OpenAI Model',
+    costInputPerMillion: 1,
+    costOutputPerMillion: 2,
+    status: 'ACTIVE',
+    isDefault: true,
+    isAvailable: true,
+    apiConfig: null,
+    createdAt: '2026-03-01T00:00:00.000Z',
+    updatedAt: '2026-03-01T00:00:00.000Z',
+    provider: {
+      id: 'openai',
+      name: 'openai',
+      displayName: 'OpenAI',
+      maxParallelRequests: 5,
+      requestsPerMinute: 100,
+      isEnabled: true,
+      balance: 100,
+      lastSyncedAt: null,
+      createdAt: '2026-03-01T00:00:00.000Z',
+      updatedAt: '2026-03-01T00:00:00.000Z',
+      models: [],
+    },
+    ...overrides,
+  };
+}
+
+describe('buildProviderBudgetEstimates', () => {
+  it('scales spend by batches still needed for each vignette', () => {
+    const estimates = buildProviderBudgetEstimates({
+      selectedModels: [
+        makeModel({
+          modelId: 'model-openai',
+          displayName: 'OpenAI Model',
+          provider: {
+            id: 'openai',
+            name: 'openai',
+            displayName: 'OpenAI',
+            maxParallelRequests: 5,
+            requestsPerMinute: 100,
+            isEnabled: true,
+            balance: 100,
+            lastSyncedAt: null,
+            createdAt: '2026-03-01T00:00:00.000Z',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+            models: [],
+          },
+        }),
+        makeModel({
+          id: 'model-anthropic',
+          providerId: 'anthropic',
+          modelId: 'model-anthropic',
+          displayName: 'Anthropic Model',
+          provider: {
+            id: 'anthropic',
+            name: 'anthropic',
+            displayName: 'Anthropic',
+            maxParallelRequests: 5,
+            requestsPerMinute: 100,
+            isEnabled: true,
+            balance: 50,
+            lastSyncedAt: null,
+            createdAt: '2026-03-01T00:00:00.000Z',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+            models: [],
+          },
+        }),
+      ],
+      cellEstimates: [
+        { definitionId: 'def-1', modelId: 'model-openai', estimatedCost: 100 },
+        { definitionId: 'def-1', modelId: 'model-anthropic', estimatedCost: 50 },
+        { definitionId: 'def-2', modelId: 'model-openai', estimatedCost: 40 },
+      ],
+      vignettes: [
+        { definitionId: 'def-1', existingBatchCount: 2 },
+        { definitionId: 'def-2', existingBatchCount: 5 },
+      ],
+      targetBatchCount: 5,
+    });
+
+    expect(estimates).toHaveLength(2);
+    expect(estimates[0]).toMatchObject({
+      providerDisplayName: 'Anthropic',
+      expectedSpendUsd: 30,
+      budgetBalanceUsd: 50,
+      budgetReady: true,
+    });
+    expect(estimates[1]).toMatchObject({
+      providerDisplayName: 'OpenAI',
+      expectedSpendUsd: 60,
+      budgetBalanceUsd: 100,
+      budgetReady: true,
+    });
+  });
+});

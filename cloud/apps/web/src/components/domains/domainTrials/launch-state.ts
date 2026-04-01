@@ -9,6 +9,17 @@ export type ProviderBudgetEstimate = {
   budgetReady: boolean;
 };
 
+export type LaunchPlanCellEstimate = {
+  definitionId: string;
+  modelId: string;
+  estimatedCost: number;
+};
+
+export type LaunchPlanVignette = {
+  definitionId: string;
+  existingBatchCount: number;
+};
+
 export type BatchRuntimeState = 'LIVE' | 'EXCEPTION' | 'TERMINAL';
 
 type RunStatusLike = {
@@ -73,17 +84,26 @@ export function formatProgressSummary(
 
 export function buildProviderBudgetEstimates(input: {
   selectedModels: LlmModel[];
-  estimatedSpendByModelId: Map<string, number>;
+  cellEstimates: LaunchPlanCellEstimate[];
+  vignettes: LaunchPlanVignette[];
+  targetBatchCount: number;
 }): ProviderBudgetEstimate[] {
-  const { selectedModels, estimatedSpendByModelId } = input;
+  const { selectedModels, cellEstimates, vignettes, targetBatchCount } = input;
+  const targetCount = Math.max(1, Math.floor(targetBatchCount));
+  const existingBatchCountByDefinitionId = new Map(
+    vignettes.map((vignette) => [vignette.definitionId, Math.max(0, vignette.existingBatchCount)]),
+  );
+  const modelById = new Map(selectedModels.map((model) => [model.modelId, model]));
   const providerRows = new Map<string, ProviderBudgetEstimate>();
 
-  for (const model of selectedModels) {
-    const provider = model.provider;
+  for (const cell of cellEstimates) {
+    const model = modelById.get(cell.modelId);
+    const provider = model?.provider;
     if (!provider) continue;
     const key = provider.id || provider.name;
     const existing = providerRows.get(key);
-    const nextSpend = estimatedSpendByModelId.get(model.modelId) ?? 0;
+    const remainingBatchCount = Math.max(0, targetCount - (existingBatchCountByDefinitionId.get(cell.definitionId) ?? 0));
+    const nextSpend = cell.estimatedCost * (remainingBatchCount / targetCount);
     const expectedSpendUsd = (existing?.expectedSpendUsd ?? 0) + nextSpend;
     const budgetBalanceUsd = existing?.budgetBalanceUsd ?? provider.balance ?? null;
 
