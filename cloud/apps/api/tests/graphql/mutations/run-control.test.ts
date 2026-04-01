@@ -4,7 +4,7 @@
  * Tests pauseRun, resumeRun, and cancelRun mutations.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { db } from '@valuerank/db';
 import type { Express } from 'express';
@@ -32,9 +32,7 @@ describe('Run Control Mutations', () => {
   const createdDefinitionIds: string[] = [];
   const createdRunIds: string[] = [];
 
-  beforeEach(async () => {
-    vi.resetModules();
-
+  beforeAll(async () => {
     const { createServer } = await import('../../../src/server.js');
     app = createServer();
   });
