@@ -435,7 +435,9 @@ async function launchDomainEvaluation(input: DomainEvaluationLaunchInput): Promi
   }
 
   // Compute per-definition existing batch counts when target mode is active.
-  // A batch counts if it is completed or in-flight at the same scope + temperature.
+  // A batch counts if it is completed or in-flight at the same scope, temperature,
+  // model set, and samplesPerScenario. Runs with a different model selection or
+  // sample count are not equivalent and must not reduce the top-up delta.
   const existingBatchCountByDefinitionId = new Map<string, number>();
   if (targetBatchCount != null && targetBatchCount > 0) {
     const COUNTABLE_STATUSES = ['COMPLETED', 'PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING'] as const;
@@ -449,9 +451,23 @@ async function launchDomainEvaluation(input: DomainEvaluationLaunchInput): Promi
       select: { definitionId: true, config: true },
     });
     for (const run of existingRuns) {
-      const runConfig = run.config as { temperature?: unknown } | null;
+      const runConfig = run.config as {
+        temperature?: unknown;
+        models?: unknown;
+        samplesPerScenario?: unknown;
+      } | null;
       const runTemperature = parseTemperature(runConfig?.temperature);
       if (runTemperature !== temperature) continue;
+      const runModels = normalizeModelSet(runConfig?.models);
+      if (
+        runModels.length !== normalizedModels.length ||
+        !runModels.every((modelId, index) => modelId === normalizedModels[index])
+      ) continue;
+      const runSamplesPerScenario =
+        typeof runConfig?.samplesPerScenario === 'number' && Number.isFinite(runConfig.samplesPerScenario)
+          ? runConfig.samplesPerScenario
+          : 1;
+      if (runSamplesPerScenario !== samplesPerScenario) continue;
       const prev = existingBatchCountByDefinitionId.get(run.definitionId) ?? 0;
       existingBatchCountByDefinitionId.set(run.definitionId, prev + 1);
     }
