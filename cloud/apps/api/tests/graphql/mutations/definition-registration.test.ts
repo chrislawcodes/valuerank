@@ -1,13 +1,18 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
+import type { Express } from 'express';
 import { db } from '@valuerank/db';
-import { createServer } from '../../../src/server.js';
 import { getAuthHeader } from '../../test-utils.js';
 
-const app = createServer();
+let app: Express;
 
 describe('Definition Mutation Registration', () => {
   const createdDefinitionIds: string[] = [];
+
+  beforeAll(async () => {
+    const { createServer } = await import('../../../src/server.js');
+    app = createServer();
+  });
 
   afterEach(async () => {
     if (createdDefinitionIds.length > 0) {

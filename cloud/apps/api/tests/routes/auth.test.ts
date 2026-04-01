@@ -5,10 +5,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import express, { type Express } from 'express';
 import request from 'supertest';
-import { createServer } from '../../src/server.js';
+import { authRouter } from '../../src/routes/auth.js';
+import { authMiddleware } from '../../src/auth/middleware.js';
 import { hashPassword, signToken } from '../../src/auth/index.js';
 import { clearPasswordChangedAtCacheForTests } from '../../src/auth/middleware.js';
+import { AppError } from '@valuerank/shared';
 
 // Mock the db module
 vi.mock('@valuerank/db', () => ({
@@ -25,11 +28,24 @@ vi.mock('@valuerank/db', () => ({
 import { db } from '@valuerank/db';
 
 describe('Auth Routes', () => {
-  const app = createServer();
+  let app: Express;
 
   beforeEach(() => {
     vi.clearAllMocks();
     clearPasswordChangedAtCacheForTests();
+
+    app = express();
+    app.use(express.json());
+    app.use(authMiddleware);
+    app.use('/api/auth', authRouter);
+    app.use((err: unknown, _req, res, _next) => {
+      if (err instanceof AppError) {
+        res.status(err.statusCode).json({ error: err.code, message: err.message });
+        return;
+      }
+
+      res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Something went wrong' });
+    });
   });
 
   describe('POST /api/auth/login', () => {

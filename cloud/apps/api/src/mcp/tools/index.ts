@@ -7,7 +7,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createLogger } from '@valuerank/shared';
-import { autoImportDir } from '../../utils/auto-import.js';
+import { beginAutoImportGeneration, autoImportDir } from '../../utils/auto-import.js';
 import {
   toolRegistrars,
   addToolRegistrar,
@@ -17,6 +17,7 @@ import {
 } from './registry.js';
 
 const log = createLogger('mcp:tools');
+beginAutoImportGeneration();
 
 const toolsReady = autoImportDir(import.meta.url, 'MCP tools', [
   'registry.js',

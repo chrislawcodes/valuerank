@@ -1,6 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import express from 'express';
 import request from 'supertest';
-import { createServer } from '../src/server.js';
+import type { Express } from 'express';
+import { healthRouter } from '../src/health.js';
 
 // Mock the db module
 vi.mock('@valuerank/db', () => ({
@@ -10,15 +12,18 @@ vi.mock('@valuerank/db', () => ({
 }));
 
 describe('Health endpoint', () => {
+  let app: Express;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    app = express();
+    app.use('/health', healthRouter);
   });
 
   it('returns healthy when database is connected', async () => {
     const { db } = await import('@valuerank/db');
     vi.mocked(db.$queryRaw).mockResolvedValue([{ '?column?': 1 }]);
 
-    const app = createServer();
     const response = await request(app).get('/health');
 
     expect(response.status).toBe(200);
@@ -30,7 +35,6 @@ describe('Health endpoint', () => {
     const { db } = await import('@valuerank/db');
     vi.mocked(db.$queryRaw).mockRejectedValue(new Error('Connection failed'));
 
-    const app = createServer();
     const response = await request(app).get('/health');
 
     expect(response.status).toBe(503);
