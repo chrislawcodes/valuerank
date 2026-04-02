@@ -7,6 +7,7 @@ import {
   type AnalysisOutput,
   type ContestedScenario,
   type DecisionStats,
+  type DecisionStatsOption,
   type ModelStats,
   type ValueAggregateStats,
   isAggregatedVisualizationData,
@@ -20,14 +21,7 @@ type DecisionAwareAggregateTranscript = AggregateTranscriptInput & {
   definitionSnapshot?: unknown;
 };
 
-type DecisionBucketCode =
-  | 'opponentStrongly'
-  | 'opponentSomewhat'
-  | 'neutral'
-  | 'somewhat'
-  | 'strongly';
-
-const DECISION_BUCKET_ORDER: readonly DecisionBucketCode[] = [
+const CANONICAL_DECISION_BUCKETS = [
   'opponentStrongly',
   'opponentSomewhat',
   'neutral',
@@ -35,51 +29,32 @@ const DECISION_BUCKET_ORDER: readonly DecisionBucketCode[] = [
   'strongly',
 ] as const;
 
-function normalizeDecisionBucketCode(rawCode: string): DecisionBucketCode | null {
-  const normalized = rawCode.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+type CanonicalDecisionBucket = (typeof CANONICAL_DECISION_BUCKETS)[number];
 
-  if (normalized === '1' || normalized === 'opponentstrongly' || normalized === 'stronglyopponent') return 'opponentStrongly';
-  if (normalized === '2' || normalized === 'opponentsomewhat' || normalized === 'somewhatopponent') return 'opponentSomewhat';
-  if (normalized === '3' || normalized === 'neutral' || normalized === 'middle') return 'neutral';
-  if (normalized === '4' || normalized === 'somewhat' || normalized === 'somewhatthis') return 'somewhat';
-  if (normalized === '5' || normalized === 'strongly' || normalized === 'stronglythis') return 'strongly';
-  if (normalized === 'stronglysupporttheothervalue' || normalized === 'stronglysupportothervalue') return 'opponentStrongly';
-  if (normalized === 'somewhatsupporttheothervalue' || normalized === 'somewhatsupportothervalue') return 'opponentSomewhat';
-  if (normalized === 'somewhatsupportthisvalue' || normalized === 'somewhatsupportthevalue') return 'somewhat';
-  if (normalized === 'stronglysupportthisvalue' || normalized === 'stronglysupportthevalue') return 'strongly';
+type CanonicalDecisionStats = {
+  options: Partial<Record<CanonicalDecisionBucket, DecisionStatsOption>>;
+};
 
-  return null;
+function isCanonicalDecisionBucket(value: string): value is CanonicalDecisionBucket {
+  return (CANONICAL_DECISION_BUCKETS as readonly string[]).includes(value);
 }
 
-function decisionBucketCodeToScore(code: DecisionBucketCode): 1 | 2 | 3 | 4 | 5 {
-  if (code === 'opponentStrongly') return 1;
-  if (code === 'opponentSomewhat') return 2;
-  if (code === 'neutral') return 3;
-  if (code === 'somewhat') return 4;
-  return 5;
+function createEmptyDecisionBucketCounts(): Record<CanonicalDecisionBucket, number> {
+  return {
+    opponentStrongly: 0,
+    opponentSomewhat: 0,
+    neutral: 0,
+    somewhat: 0,
+    strongly: 0,
+  };
 }
 
-function resolveBucketValue(transcript: DecisionAwareAggregateTranscript): DecisionBucketCode | null {
-  const resolved = resolveTranscriptDecisionModel({
-    decisionCode: transcript.decisionCode,
-    decisionMetadata: transcript.decisionMetadata,
-    definitionSnapshot: transcript.definitionSnapshot,
-    orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
-  });
-
-  if (resolved.canonical.direction === 'neutral') {
-    return 'neutral';
-  }
-
-  if (resolved.canonical.direction === 'favor_first') {
-    return resolved.canonical.strength === 'strong' ? 'strongly' : resolved.canonical.strength === 'lean' ? 'somewhat' : null;
-  }
-
-  if (resolved.canonical.direction === 'favor_second') {
-    return resolved.canonical.strength === 'strong' ? 'opponentStrongly' : resolved.canonical.strength === 'lean' ? 'opponentSomewhat' : null;
-  }
-
-  return null;
+function bucketCodeToSignedValue(code: CanonicalDecisionBucket): number {
+  if (code === 'strongly') return 2;
+  if (code === 'somewhat') return 1;
+  if (code === 'neutral') return 0;
+  if (code === 'opponentSomewhat') return -1;
+  return -2;
 }
 
 export function aggregateAnalysesLogic(
@@ -94,7 +69,7 @@ export function aggregateAnalysesLogic(
   const template = analyses[0]!;
   const modelIds = Array.from(new Set(analyses.flatMap((analysis) => Object.keys(analysis.perModel))));
   const aggregatedPerModel: Record<string, ModelStats> = {};
-  const decisionStats: Record<string, DecisionStats> = {};
+  const decisionStats: Record<string, CanonicalDecisionStats> = {};
   const valueAggregateStats: Record<string, ValueAggregateStats> = {};
 
   modelIds.forEach((modelId) => {
@@ -107,37 +82,32 @@ export function aggregateAnalysesLogic(
       return sum + (stats.sampleSize ?? 0);
     }, 0);
 
-    const modelDecisions: Record<number, number[]> = { 1: [], 2: [], 3: [], 4: [], 5: [] };
+    const modelDecisions: Partial<Record<CanonicalDecisionBucket, number[]>> = {};
 
     validAnalyses.forEach((analysis) => {
       const dist = analysis.visualizationData?.decisionDistribution?.[modelId];
       if (!dist) return;
 
-      const normalizedDist: Record<DecisionBucketCode, number> = {
-        opponentStrongly: 0,
-        opponentSomewhat: 0,
-        neutral: 0,
-        somewhat: 0,
-        strongly: 0,
-      };
+      const normalizedDist = createEmptyDecisionBucketCounts();
 
       Object.entries(dist).forEach(([option, count]) => {
-        const bucket = normalizeDecisionBucketCode(option);
-        if (bucket !== null && typeof count === 'number' && Number.isFinite(count)) {
-          normalizedDist[bucket] += count;
+        if (!isCanonicalDecisionBucket(option)) return;
+        if (typeof count === 'number' && Number.isFinite(count)) {
+          normalizedDist[option] += count;
         }
       });
 
       const runTotal = Object.values(normalizedDist).reduce((sum, count) => sum + count, 0);
       if (runTotal <= 0) return;
 
-      DECISION_BUCKET_ORDER.forEach((code) => {
-        modelDecisions[decisionBucketCodeToScore(code)]!.push(normalizedDist[code] / runTotal);
+      CANONICAL_DECISION_BUCKETS.forEach((code) => {
+        const values = modelDecisions[code] ??= [];
+        values.push(normalizedDist[code] / runTotal);
       });
     });
 
     decisionStats[modelId] = { options: {} };
-    [1, 2, 3, 4, 5].forEach((opt) => {
+    CANONICAL_DECISION_BUCKETS.forEach((opt) => {
       const values = modelDecisions[opt] || [];
       if (values.length === 0) return;
       const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -221,17 +191,11 @@ export function aggregateAnalysesLogic(
     scenarioDimensions: {},
   };
 
-  const decisionCountsByModel: Record<string, Record<DecisionBucketCode, number>> = {};
+  const decisionCountsByModel: Record<string, Record<CanonicalDecisionBucket, number>> = {};
   const decisionsByScenario: Record<string, Record<string, number[]>> = {};
 
   modelIds.forEach((modelId) => {
-    decisionCountsByModel[modelId] = {
-      opponentStrongly: 0,
-      opponentSomewhat: 0,
-      neutral: 0,
-      somewhat: 0,
-      strongly: 0,
-    };
+    decisionCountsByModel[modelId] = createEmptyDecisionBucketCounts();
   });
 
   transcripts.forEach((rawTranscript) => {
@@ -244,20 +208,34 @@ export function aggregateAnalysesLogic(
     ) {
       return;
     }
-    const code = resolveBucketValue(transcript);
+    const resolved = resolveTranscriptDecisionModel({
+      decisionCode: transcript.decisionCode,
+      decisionMetadata: transcript.decisionMetadata,
+      definitionSnapshot: transcript.definitionSnapshot,
+      orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+    });
+
+    let code: CanonicalDecisionBucket | null = null;
+    if (resolved.canonical.direction === 'neutral') {
+      code = 'neutral';
+    } else if (resolved.canonical.direction === 'favor_first' && resolved.canonical.strength === 'strong') {
+      code = 'strongly';
+    } else if (resolved.canonical.direction === 'favor_first' && resolved.canonical.strength === 'lean') {
+      code = 'somewhat';
+    } else if (resolved.canonical.direction === 'favor_second' && resolved.canonical.strength === 'lean') {
+      code = 'opponentSomewhat';
+    } else if (resolved.canonical.direction === 'favor_second' && resolved.canonical.strength === 'strong') {
+      code = 'opponentStrongly';
+    }
     if (code === null) return;
     const counts = decisionCountsByModel[transcript.modelId];
     if (counts) {
       counts[code] += 1;
     }
 
-    if (decisionsByScenario[transcript.modelId]?.[transcript.scenarioId]) {
-      decisionsByScenario[transcript.modelId]![transcript.scenarioId]!.push(decisionBucketCodeToScore(code));
-    } else if (decisionsByScenario[transcript.modelId]) {
-      decisionsByScenario[transcript.modelId]![transcript.scenarioId] = [decisionBucketCodeToScore(code)];
-    } else {
-      decisionsByScenario[transcript.modelId] = { [transcript.scenarioId]: [decisionBucketCodeToScore(code)] };
-    }
+    const modelScenarioDecisions = decisionsByScenario[transcript.modelId] ??= {};
+    const scenarioDecisions = modelScenarioDecisions[transcript.scenarioId] ??= [];
+    scenarioDecisions.push(bucketCodeToSignedValue(code));
   });
 
   modelIds.forEach((modelId) => {
@@ -334,7 +312,7 @@ export function aggregateAnalysesLogic(
     visualizationData: normalizedVisualizationData,
     mostContestedScenarios: mergedContested,
     varianceAnalysis: normalizedVarianceAnalysis,
-    decisionStats,
+    decisionStats: decisionStats as Record<string, DecisionStats>,
     valueAggregateStats,
   };
 }

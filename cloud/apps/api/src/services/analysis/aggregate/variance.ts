@@ -6,12 +6,86 @@ import type {
   ScenarioVarianceStats,
   VarianceStats,
 } from './contracts.js';
-import { resolveAnalysisScore } from '../../decision-model.js';
+import { resolveTranscriptDecisionModel } from '../../../graphql/queries/domain/decision-model.js';
 
 type DecisionAwareAggregateTranscript = AggregateTranscriptInput & {
   decisionMetadata?: unknown;
   definitionSnapshot?: unknown;
 };
+
+type DirectionCountKey =
+  | 'favor_first_lean'
+  | 'favor_first_strong'
+  | 'favor_second_lean'
+  | 'favor_second_strong'
+  | 'neutral';
+
+type CanonicalVarianceMetrics = {
+  bucketKey: DirectionCountKey;
+  distance: number;
+  signedDistance: number;
+};
+
+function createDirectionCounts(): Record<DirectionCountKey, number> {
+  return {
+    favor_first_lean: 0,
+    favor_first_strong: 0,
+    favor_second_lean: 0,
+    favor_second_strong: 0,
+    neutral: 0,
+  };
+}
+
+function resolveCanonicalVarianceMetrics(
+  direction: 'favor_first' | 'favor_second' | 'neutral' | 'unknown',
+  strength: 'strong' | 'lean' | 'neutral' | 'unknown'
+): CanonicalVarianceMetrics | null {
+  if (direction === 'neutral') {
+    return {
+      bucketKey: 'neutral',
+      distance: 0,
+      signedDistance: 0,
+    };
+  }
+
+  if (direction === 'favor_first') {
+    if (strength === 'strong') {
+      return {
+        bucketKey: 'favor_first_strong',
+        distance: 2,
+        signedDistance: 2,
+      };
+    }
+
+    if (strength === 'lean') {
+      return {
+        bucketKey: 'favor_first_lean',
+        distance: 1,
+        signedDistance: 1,
+      };
+    }
+  }
+
+  if (direction === 'favor_second') {
+    if (strength === 'lean') {
+      return {
+        bucketKey: 'favor_second_lean',
+        distance: 1,
+        signedDistance: -1,
+      };
+    }
+
+    if (strength === 'strong') {
+      return {
+        bucketKey: 'favor_second_strong',
+        distance: 2,
+        signedDistance: -2,
+      };
+    }
+  }
+
+  return null;
+}
 
 function computeVarianceStats(scores: number[]): VarianceStats {
   if (scores.length === 0) {
@@ -89,7 +163,7 @@ export function computeVarianceAnalysis(
   });
 
   const grouped = new Map<string, number[]>();
-  const groupedCanonicalScores = new Map<string, number[]>();
+  const groupedCanonicalMetrics = new Map<string, CanonicalVarianceMetrics[]>();
   const correctedScenarioIds = new Set<string>();
 
   transcripts.forEach((rawTranscript) => {
@@ -104,14 +178,18 @@ export function computeVarianceAnalysis(
     }
 
     const orientationFlipped = transcript.scenario?.orientationFlipped ?? false;
-    const canonicalScore = resolveAnalysisScore({
+    const resolved = resolveTranscriptDecisionModel({
       decisionCode: transcript.decisionCode ?? null,
       decisionMetadata: transcript.decisionMetadata,
       definitionSnapshot: transcript.definitionSnapshot,
       orientationFlipped,
     });
-    if (canonicalScore == null) return;
-    const score = Math.abs(canonicalScore - 3);
+    const canonicalMetrics = resolveCanonicalVarianceMetrics(
+      resolved.canonical.direction,
+      resolved.canonical.strength
+    );
+    if (canonicalMetrics === null) return;
+    const score = canonicalMetrics.distance;
     if (orientationFlipped) {
       correctedScenarioIds.add(transcript.scenarioId);
     }
@@ -121,9 +199,9 @@ export function computeVarianceAnalysis(
     current.push(score);
     grouped.set(key, current);
 
-    const currentCanonicalScores = groupedCanonicalScores.get(key) || [];
-    currentCanonicalScores.push(canonicalScore);
-    groupedCanonicalScores.set(key, currentCanonicalScores);
+    const currentCanonicalMetrics = groupedCanonicalMetrics.get(key) || [];
+    currentCanonicalMetrics.push(canonicalMetrics);
+    groupedCanonicalMetrics.set(key, currentCanonicalMetrics);
   });
 
   let maxSamples = 1;
@@ -154,10 +232,10 @@ export function computeVarianceAnalysis(
 
     scenarioMap.forEach((scores, scenarioId) => {
       const stats = computeVarianceStats(scores);
-      const canonicalScores = groupedCanonicalScores.get(`${scenarioId}||${modelId}`) ?? [];
+      const canonicalMetrics = groupedCanonicalMetrics.get(`${scenarioId}||${modelId}`) ?? [];
 
-      if (scores.length > 0 && canonicalScores.length > 0) {
-        const signed = canonicalScores.map((score) => score - 3);
+      if (scores.length > 0 && canonicalMetrics.length > 0) {
+        const signed = canonicalMetrics.map((metric) => metric.signedDistance);
         const medianSd = computeMedian(signed);
 
         const direction: 'A' | 'B' | 'NEUTRAL' =
@@ -170,17 +248,16 @@ export function computeVarianceAnalysis(
         ).length;
 
         const n = scores.length;
-        const neutralCount = canonicalScores.filter((score) => score === 3).length;
-
-        const scoreCounts: Record<string, number> = {};
-        for (const scoreValue of [1, 2, 3, 4, 5]) {
-          scoreCounts[String(scoreValue)] = canonicalScores.filter((score) => score === scoreValue).length;
-        }
+        const neutralCount = canonicalMetrics.filter((metric) => metric.bucketKey === 'neutral').length;
+        const directionCounts = createDirectionCounts();
+        canonicalMetrics.forEach((metric) => {
+          directionCounts[metric.bucketKey] += 1;
+        });
 
         const iqrVal = n >= 2 ? computeIQR(signed) : undefined;
 
         Object.assign(stats, {
-          scoreCounts,
+          directionCounts,
           direction,
           directionalAgreement: parseFloat((sameCount / n).toFixed(6)),
           medianSignedDistance: parseFloat(medianSd.toFixed(6)),
