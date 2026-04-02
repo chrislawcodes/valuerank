@@ -36,6 +36,10 @@ function isExcluded(
   );
 }
 
+function isDeclarationFile(fileName: string): boolean {
+  return /\.d\.(ts|mts|cts)$/.test(fileName);
+}
+
 function pickExistingModulePath(candidates: string[]): string | null {
   for (const candidate of candidates) {
     if (existsSync(candidate)) {
@@ -79,6 +83,7 @@ export async function autoImportDir(
 
       if (
         (entry.name.endsWith('.js') || entry.name.endsWith('.ts')) &&
+        !isDeclarationFile(entry.name) &&
         !entry.name.startsWith('_') &&
         !entry.name.startsWith('index.') &&
         !hasSiblingBarrel(dirPath, fileName) &&
