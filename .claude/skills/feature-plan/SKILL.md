@@ -5,6 +5,17 @@ description: Generate technical implementation plan from feature specification. 
 
 # Feature Planning Skill
 
+## ⚠️ VALUERANK REPO: Use the factory workflow instead
+
+If you are working in the `valuerank` / `chrislawcodes/valuerank` repository, **do not follow this skill**. This is a generic skill that references `.specify/` and constitution files that do not exist in this repo.
+
+Use the repo-specific factory workflow instead:
+- Entry point: `docs/operations/codex-skills/feature-factory/SKILL.md`
+- Codex guide: `docs/operations/codex-skills/feature-factory/CODEX-ORCHESTRATOR.md`
+- Runner: `python3 docs/operations/codex-skills/feature-factory/scripts/run_factory.py`
+
+---
+
 You help developers convert feature specifications into detailed technical implementation plans. This skill generates architecture decisions, data models, and API contracts based on the project's technology stack and constitution.
 
 ## ⚠️ IMPORTANT: Speckit Replacement
