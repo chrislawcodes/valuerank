@@ -48,7 +48,7 @@ python3 docs/operations/codex-skills/feature-factory/scripts/run_factory.py <com
 | **Tasks checkpoint** | Generate adversarial reviews, judge findings | `checkpoint --slug <slug> --stage tasks` |
 | **Implementation** | Implement one slice, run build + tests, commit | `codex exec -s workspace-write "..."` |
 | **Diff checkpoint** | Generate adversarial reviews of the diff, judge findings | `checkpoint --slug <slug> --stage diff` |
-| **Deliver** | Stage the PR for human approval | `deliver --slug <slug> --dry-run` then notify human |
+| **Deliver** | Create PR, notify human it is ready to squash merge | See Section 8 below |
 | **Closeout** | Write closeout summary | Write to `docs/feature-runs/<slug>/closeout.md`, then checkpoint |
 | **Closeout checkpoint** | Final adversarial review | `checkpoint --slug <slug> --stage closeout` |
 | **Reconcile a review** | Record your judgment on a review finding | `reconcile --slug <slug> --review <path> --status <accepted\|rejected\|deferred> --note "<judgment>"` |
@@ -84,13 +84,49 @@ Be specific. "Gemini flagged X as a security risk but spec explicitly scopes it 
 
 ## 5. What You Must Not Do Without Human Approval
 
-- `git push` or `git push --force`
+- `git push --force`
 - `git merge` into main or any protected branch
-- `gh pr create` — stage with `--dry-run`, notify human, wait for explicit approval
+- `gh pr merge` — create the PR, but let the human squash merge it
 - Any database migration on production
 - Any change to credentials, secrets, or deployment configuration
 
 If any runner command would trigger one of these, stop and block first.
+
+---
+
+## 8. Deliver — Creating a PR Ready to Squash Merge
+
+When all checkpoints are reconciled and implementation is complete:
+
+**Step 1:** Push the branch:
+```bash
+git push --set-upstream origin <branch-name>
+```
+
+**Step 2:** Create the PR against `main` on `chrislawcodes/valuerank`:
+```bash
+gh pr create \
+  --repo chrislawcodes/valuerank \
+  --base main \
+  --title "<concise title matching commit style>" \
+  --body "$(cat <<'EOF'
+## Summary
+<2-3 bullet points: what changed and why>
+
+## Test plan
+- [ ] <key thing to verify manually>
+- [ ] CI passes
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+EOF
+)"
+```
+
+**Step 3:** Notify the human:
+> "PR #NNN is open and ready to squash merge: <url>
+> CI is running. Once it goes green you can squash merge directly."
+
+Do not run `gh pr merge`. The human squash merges.
 
 ---
 
