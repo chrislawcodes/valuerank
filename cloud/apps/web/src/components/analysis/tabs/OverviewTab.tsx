@@ -40,6 +40,8 @@ type OverviewTabProps = {
   semantics: AnalysisSemanticsView;
   completedBatches: number | '-';
   aggregateSourceRunCount: number | null;
+  coverageBatchCount?: number | null;
+  coveragePairedBatchCount?: number | null;
   isAggregate: boolean;
   analysisMode?: 'single' | 'paired';
   companionAnalysis?: AnalysisResult | null;
@@ -629,6 +631,8 @@ function OverviewSummaryTable({
   expectedAttributes = [],
   completedBatches,
   aggregateSourceRunCount,
+  coverageBatchCount,
+  coveragePairedBatchCount,
   isAggregate,
   analysisMode,
   currentRun,
@@ -645,6 +649,8 @@ function OverviewSummaryTable({
   expectedAttributes?: string[];
   completedBatches: number | '-';
   aggregateSourceRunCount: number | null;
+  coverageBatchCount?: number | null;
+  coveragePairedBatchCount?: number | null;
   isAggregate: boolean;
   analysisMode?: 'single' | 'paired';
   currentRun?: Run | null;
@@ -712,15 +718,19 @@ function OverviewSummaryTable({
     companionAnalysis != null,
   );
 
-  const helperText = analysisMode === 'paired' && companionAnalysis
-    ? `Run-level evidence: pooled across ${repeatPatternSources.length} companion runs`
-    : isAggregate
-    ? aggregateSourceRunCount === null
-      ? 'Run-level evidence: contributing source-run count unavailable'
-      : `Run-level evidence: ${aggregateSourceRunCount} contributing source run${aggregateSourceRunCount === 1 ? '' : 's'}`
-    : completedBatches === '-'
-      ? 'Run-level evidence: completed batch count unavailable'
-      : `Run-level evidence: ${completedBatches} completed batch${completedBatches === 1 ? '' : 'es'}`;
+  const helperText = coverageBatchCount !== null && coverageBatchCount !== undefined
+    ? coveragePairedBatchCount !== null && coveragePairedBatchCount !== undefined
+      ? `Run-level evidence: ${coverageBatchCount} batches from coverage cell • ${coveragePairedBatchCount} paired batches`
+      : `Run-level evidence: ${coverageBatchCount} batches from coverage cell`
+    : analysisMode === 'paired' && companionAnalysis
+      ? `Run-level evidence: pooled across ${repeatPatternSources.length} companion runs`
+      : isAggregate
+        ? aggregateSourceRunCount === null
+          ? 'Run-level evidence: contributing source-run count unavailable'
+          : `Run-level evidence: ${aggregateSourceRunCount} contributing source run${aggregateSourceRunCount === 1 ? '' : 's'}`
+        : completedBatches === '-'
+          ? 'Run-level evidence: completed batch count unavailable'
+          : `Run-level evidence: ${completedBatches} completed batch${completedBatches === 1 ? '' : 'es'}`;
   const summaryRef = useRef<HTMLDivElement>(null);
   return (
     <div ref={summaryRef} className="space-y-3 rounded-lg border border-gray-200 p-4">
@@ -901,6 +911,8 @@ export function OverviewTab({
   semantics,
   completedBatches,
   aggregateSourceRunCount,
+  coverageBatchCount,
+  coveragePairedBatchCount,
   isAggregate,
   analysisMode,
   companionAnalysis,
@@ -921,6 +933,8 @@ export function OverviewTab({
         expectedAttributes={expectedAttributes}
         completedBatches={completedBatches}
         aggregateSourceRunCount={aggregateSourceRunCount}
+        coverageBatchCount={coverageBatchCount}
+        coveragePairedBatchCount={coveragePairedBatchCount}
         isAggregate={isAggregate}
         analysisMode={analysisMode}
         currentRun={currentRun}

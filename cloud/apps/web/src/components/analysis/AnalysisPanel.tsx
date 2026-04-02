@@ -49,6 +49,8 @@ type AnalysisPanelProps = {
   onTabChange: (tab: AnalysisTab) => void;
   analysisSearchParams?: URLSearchParams | string;
   analysisMode?: 'single' | 'paired';
+  coverageBatchCount?: number | null;
+  coveragePairedBatchCount?: number | null;
   onAnalysisModeChange?: (mode: 'single' | 'paired') => void;
   onSingleVignetteChange?: (runId: string) => void;
   companionAnalysis?: AnalysisResult | null;
@@ -287,6 +289,8 @@ export function AnalysisPanel({
   onTabChange,
   analysisSearchParams,
   analysisMode,
+  coverageBatchCount,
+  coveragePairedBatchCount,
   onAnalysisModeChange,
   onSingleVignetteChange,
   companionAnalysis,
@@ -441,7 +445,11 @@ export function AnalysisPanel({
       : ' All transcripts are represented in the current numeric summary.'
     }`
     : `${coverageContextLabel} do not have transcript coverage available yet.`;
-  const coverageEvidenceMessage = isAggregateAnalysis
+  const coverageEvidenceMessage = coverageBatchCount !== null && coverageBatchCount !== undefined
+    ? coveragePairedBatchCount !== null && coveragePairedBatchCount !== undefined
+      ? `Evidence: ${coverageBatchCount} batches from coverage cell • ${coveragePairedBatchCount} paired batches`
+      : `Evidence: ${coverageBatchCount} batches from coverage cell`
+    : isAggregateAnalysis
     ? aggregateSourceRunCount === null
       ? 'Evidence: contributing source-run count unavailable'
       : `Evidence: ${aggregateSourceRunCount} contributing source run${aggregateSourceRunCount === 1 ? '' : 's'} pooled`
@@ -600,6 +608,8 @@ export function AnalysisPanel({
             aggregateSourceRunCount={aggregateSourceRunCount}
             isAggregate={isAggregateAnalysis}
             analysisMode={analysisMode}
+            coverageBatchCount={coverageBatchCount}
+            coveragePairedBatchCount={coveragePairedBatchCount}
             companionAnalysis={companionAnalysis}
             currentRun={currentRun}
             currentAnalysis={analysis}

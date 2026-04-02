@@ -26,12 +26,14 @@ function CoverageCell({
   valueA,
   valueB,
   batchCount,
+  pairedBatchCount,
   definitionId,
   aggregateRunId,
 }: {
   valueA: string;
   valueB: string;
   batchCount: number;
+  pairedBatchCount: number;
   definitionId: string | null;
   aggregateRunId: string | null;
 }) {
@@ -112,7 +114,7 @@ function CoverageCell({
           <div className="p-1 flex flex-col">
             {hasVignette && aggregateRunId !== null && (
               <Link
-                to={`/analysis/${aggregateRunId}`}
+                to={`/analysis/${aggregateRunId}?tab=overview&mode=single&coverageBatchCount=${batchCount}&coveragePairedBatchCount=${pairedBatchCount}`}
                 className="flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-sm w-full text-left"
                 onClick={() => setIsOpen(false)}
               >
@@ -463,6 +465,7 @@ export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
                             valueA={rowVal}
                             valueB={colVal}
                             batchCount={cell?.batchCount ?? 0}
+                            pairedBatchCount={cell?.pairedBatchCount ?? 0}
                             definitionId={cell?.definitionId ?? null}
                             aggregateRunId={cell?.aggregateRunId ?? null}
                           />

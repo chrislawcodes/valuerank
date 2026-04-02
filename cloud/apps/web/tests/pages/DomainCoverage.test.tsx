@@ -47,6 +47,7 @@ const coverageByDomain = {
         valueA: 'Achievement',
         valueB: 'Self_Direction_Action',
         batchCount: 3,
+        pairedBatchCount: 2,
         definitionId: 'def-1',
         definitionName: 'A vs B',
         aggregateRunId: 'run-1',
@@ -65,6 +66,7 @@ const coverageByDomain = {
         valueA: 'Achievement',
         valueB: 'Self_Direction_Action',
         batchCount: 4,
+        pairedBatchCount: 3,
         definitionId: 'def-2',
         definitionName: 'B vs A',
         aggregateRunId: 'run-2',
@@ -253,7 +255,14 @@ describe('DomainCoverage Page', () => {
     expect(pairedBatchLink).toHaveAttribute('href', '/definitions/def-1/start-paired-batch');
 
     const vignetteAnalysisLink = await screen.findByRole('link', { name: /view vignette analysis/i });
-    expect(vignetteAnalysisLink).toHaveAttribute('href', '/analysis/run-1');
+    const href = vignetteAnalysisLink.getAttribute('href');
+    expect(href).toContain('/analysis/run-1');
+    const url = new URL(href ?? '', 'http://example.com');
+    expect(url.pathname).toBe('/analysis/run-1');
+    expect(url.searchParams.get('tab')).toBe('overview');
+    expect(url.searchParams.get('mode')).toBe('single');
+    expect(url.searchParams.get('coverageBatchCount')).toBe('3');
+    expect(url.searchParams.get('coveragePairedBatchCount')).toBe('2');
     expect(screen.queryByRole('link', { name: /view domain analysis/i })).not.toBeInTheDocument();
   });
 });
