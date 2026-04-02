@@ -336,6 +336,7 @@ builder.queryField('domainValueCoverage', (t) =>
               defIdsForPair,
               batchCountByDefinitionId,
               pairedBatchCountByDefinitionId,
+              pairedBatchGroupIdsByDefinitionId,
             );
             const primaryDefId = primaryDefinitionId ?? '';
             const primaryPair = pairByDefinitionId.get(primaryDefId);
