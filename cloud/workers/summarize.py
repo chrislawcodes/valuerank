@@ -53,7 +53,6 @@ import sys
 from typing import Any, Optional
 
 from common.errors import ErrorCode, LLMError, ValidationError, WorkerError, classify_exception
-from common.llm_adapters import generate
 from common.logging import get_logger
 
 log = get_logger("summarize")
@@ -508,6 +507,10 @@ def classify_decision_with_llm(
 
     Returns decision code string, "refusal", or "other".
     """
+    # Lazy import: deferred until actually needed so that the heavy LLM SDK
+    # dependencies are not loaded for the 99%+ of jobs that resolve deterministically.
+    from common.llm_adapters import generate  # noqa: PLC0415
+
     prompt = build_llm_decision_prompt(transcript_content, scale_labels)
     messages = [{"role": "user", "content": prompt}]
 
