@@ -15,7 +15,7 @@ import {
   isOrderInvarianceSummary,
 } from './order-effect-types.js';
 import { parseTemperature } from '../../utils/temperature.js';
-import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/decision-model.js';
+import { resolveAnalysisScore } from '../decision-model.js';
 import {
   aggregateWithinCellDisagreementRate,
   type OrderEffectStableSide,
@@ -35,7 +35,6 @@ import {
 } from './order-effect-statistics.js';
 import type { DuplicateCurrentOrderEffectSnapshotError } from './order-effect-cache.js';
 
-const VALID_DECISIONS = new Set(['1', '2', '3', '4', '5']);
 const ORDER_EFFECT_CACHE_INVARIANT_ERROR_CODE = 'ASSUMPTION_ANALYSIS_CACHE_INVARIANT';
 
 export type PairScenario = {
@@ -147,22 +146,12 @@ function _parseDecision(input: {
   definitionSnapshot: unknown;
   orientationFlipped: boolean;
 }): number | null {
-  const resolved = resolveTranscriptDecisionModel({
+  return resolveAnalysisScore({
     decisionCode: input.decisionCode,
     decisionMetadata: input.decisionMetadata,
     definitionSnapshot: input.definitionSnapshot,
     orientationFlipped: input.orientationFlipped,
   });
-  const canonicalScore = resolved.legacy.canonicalScore;
-  if (canonicalScore != null) {
-    return canonicalScore;
-  }
-
-  if (input.decisionCode == null || !VALID_DECISIONS.has(input.decisionCode)) {
-    return null;
-  }
-
-  return Number(input.decisionCode);
 }
 
 function _pickStableTranscripts(
@@ -457,22 +446,12 @@ export function parseDecision(input: {
   definitionSnapshot: unknown;
   orientationFlipped: boolean;
 }): number | null {
-  const resolved = resolveTranscriptDecisionModel({
+  return resolveAnalysisScore({
     decisionCode: input.decisionCode,
     decisionMetadata: input.decisionMetadata,
     definitionSnapshot: input.definitionSnapshot,
     orientationFlipped: input.orientationFlipped,
   });
-  const canonicalScore = resolved.legacy.canonicalScore;
-  if (canonicalScore != null) {
-    return canonicalScore;
-  }
-
-  if (input.decisionCode == null || !VALID_DECISIONS.has(input.decisionCode)) {
-    return null;
-  }
-
-  return Number(input.decisionCode);
 }
 
 export function pickStableTranscripts(

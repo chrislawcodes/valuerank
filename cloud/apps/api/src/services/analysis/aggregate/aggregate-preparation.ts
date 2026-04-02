@@ -25,6 +25,7 @@ import {
   buildScenarioAnalysisDimensionRecord,
   normalizeScenarioAnalysisMetadata,
 } from '../scenario-metadata.js';
+import { resolveAnalysisScore } from '../../decision-model.js';
 import { resolveTranscriptDecisionModel } from '../../../graphql/queries/domain/decision-model.js';
 import {
   buildValueOutcomes,
@@ -324,7 +325,12 @@ export async function prepareAggregateRunSnapshot(
       definitionSnapshot: transcript.definitionSnapshot,
       orientationFlipped,
     });
-    const score = resolved.legacy.canonicalScore;
+    const score = resolveAnalysisScore({
+      decisionCode: transcript.decisionCode,
+      decisionMetadata: transcript.decisionMetadata,
+      definitionSnapshot: transcript.definitionSnapshot,
+      orientationFlipped,
+    });
     const values = buildCanonicalValueOutcomes(
       resolved.canonical.direction,
       valueA,
