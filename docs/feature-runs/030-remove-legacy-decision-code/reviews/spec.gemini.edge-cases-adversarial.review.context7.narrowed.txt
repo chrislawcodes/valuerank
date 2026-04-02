@@ -1,0 +1,241 @@
+00001: /**
+00002:  * Analyze Basic Handler
+00003:  *
+00004:  * Handles analyze_basic jobs by executing Python analyze_basic worker.
+00005:  * Computes win rates, confidence intervals, model comparisons, and
+00006:  * dimension impact analysis.
+00007:  */
+00008: 
+00009: import path from 'path';
+00010: import type * as PgBoss from 'pg-boss';
+00011: import { db, resolveDefinitionContent } from '@valuerank/db';
+00012: import type { Prisma } from '@valuerank/db';
+00013: import { createLogger } from '@valuerank/shared';
+00014: import type { AnalyzeBasicJobData } from '../types.js';
+00015: import { spawnPython } from '../spawn.js';
+00016: import { computeInputHash, getCachedAnalysis, invalidateCache } from '../../services/analysis/cache.js';
+00017: import {
+00018:   buildScenarioAnalysisDimensionRecord,
+00019:   normalizeScenarioAnalysisMetadata,
+00020: } from '../../services/analysis/scenario-metadata.js';
+00021: import {
+00022:   resolveAnalysisDecisionModel,
+00023:   resolveAnalysisScore,
+00024:   resolveAnalysisValueOutcomes,
+00025: } from '../../services/decision-model.js';
+00026: import { parseTemperature } from '../../utils/temperature.js';
+00027: import { config } from '../../config.js';
+00028: 
+00029: const log = createLogger('queue:analyze-basic');
+00030: 
+00031: // Python worker path (relative to cloud/ directory)
+00032: const ANALYZE_WORKER_PATH = 'workers/analyze_basic.py';
+00033: 
+00034: // Code version for tracking analysis versions
+00035: const CODE_VERSION = '1.1.1';
+00036: const BASELINE_COMPATIBLE_ASSUMPTION_KEYS = new Set(['temp_zero_determinism']);
+00037: 
+00038: /**
+00039:  * Transcript data structure sent to Python worker.
+00040:  * Matches CSV export format for consistency.
+00041:  */
+00042: type TranscriptData = {
+00043:   id: string;
+00044:   modelId: string;
+00045:   scenarioId: string;
+00046:   sampleIndex: number; // Multi-sample: index within sample set (0 to N-1)
+00047:   orientationFlipped: boolean;
+00048:   decisionModelV2: {
+00049:     raw: unknown;
+00050:     canonical: unknown;
+00051:     legacy: unknown;
+00052:   } | null;
+00053:   summary: {
+00054:     score: number | null; // Decision code as numeric 1-5 (matches CSV "Decision Code")
+00055:     values?: Record<string, 'prioritized' | 'deprioritized' | 'neutral'>;
+00056:   };
+00057:   scenario: {
+00058:     name: string;
+00059:     dimensions: Record<string, number | string>; // Canonical analysis dimensions for grouping/effects
+00060:   };
+00061: };
+00062: 
+00063: function buildValueOutcomes(
+00064:   score: number | null,
+00065:   orientationFlipped: boolean,
+00066:   valueA: string | null,
+00067:   valueB: string | null
+00068: ): Record<string, 'prioritized' | 'deprioritized' | 'neutral'> | undefined {
+00069:   if (score == null || valueA == null || valueB == null) return undefined;
+00070:   const normalizedScore = orientationFlipped ? 6 - score : score;
+00071: 
+00072:   if (normalizedScore >= 4) {
+00073:     return {
+00074:       [valueA]: 'prioritized',
+00075:       [valueB]: 'deprioritized',
+00076:     };
+00077:   }
+00078:   if (normalizedScore <= 2) {
+00079:     return {
+00080:       [valueA]: 'deprioritized',
+00081:       [valueB]: 'prioritized',
+00082:     };
+00083:   }
+00084:   return {
+00085:     [valueA]: 'neutral',
+00086:     [valueB]: 'neutral',
+00087:   };
+00088: }
+00089: 
+00090: function getAssumptionKey(config: unknown): string | null {
+00091:   if (config == null || typeof config !== 'object') return null;
+00092:   const value = (config as Record<string, unknown>).assumptionKey;
+00093:   return typeof value === 'string' && value.trim() !== '' ? value : null;
+00094: }
+00095: 
+00096: function hasAssumptionRunTag(tags: Array<{ tag: { name: string } }>): boolean {
+00097:   return tags.some((entry) => entry.tag.name === 'assumption-run');
+00098: }
+00099: 
+00100: function isBaselineCompatibleRun(
+00101:   config: unknown,
+00102:   tags: Array<{ tag: { name: string } }>,
+00103: ): boolean {
+00104:   const assumptionKey = getAssumptionKey(config);
+00105:   if (assumptionKey === null) {
+00106:     return !hasAssumptionRunTag(tags);
+00107:   }
+00108: 
+00109:   return BASELINE_COMPATIBLE_ASSUMPTION_KEYS.has(assumptionKey);
+00110: }
+00111: 
+00112: /**
+00113:  * Python worker input structure.
+00114:  */
+00115: type AnalyzeWorkerInput = {
+00116:   runId: string;
+00117:   emitVignetteSemantics: boolean;
+00118:   transcripts: TranscriptData[];
+00119: };
+00120: 
+00121: /**
+00122:  * Analysis output from Python worker.
+00123:  */
+00124: type AnalysisOutput = {
+00125:   perModel: Record<string, unknown>;
+00126:   preferenceSummary?: {
+00127:     perModel: Record<string, unknown>;
+00128:   } | null;
+00129:   reliabilitySummary?: {
+00130:     perModel: Record<string, unknown>;
+00131:   } | null;
+00132:   modelAgreement: Record<string, unknown>;
+00133:   dimensionAnalysis: Record<string, unknown>;
+00134:   visualizationData?: Record<string, unknown>;
+00135:   varianceAnalysis: {
+00136:     isMultiSample: boolean;
+00137:     sample
+
+... [narrowed review slice: middle omitted] ...
+
+obId, runId, error: err }, 'Analysis permanently failed');
+00341:             return;
+00342:           }
+00343:           throw new Error(`${err.code}: ${err.message}`);
+00344:         }
+00345: 
+00346:         // Ensure visualizationData includes scenarioDimensions (needed for pivot filtering in the UI).
+00347:         (output.analysis as unknown as Record<string, unknown>).visualizationData = {
+00348:           ...(((output.analysis as unknown as Record<string, unknown>).visualizationData as Record<string, unknown> | undefined) ?? {}),
+00349:           scenarioDimensions,
+00350:         };
+00351: 
+00352:         // Mark any existing analyses as superseded
+00353:         await invalidateCache(runId);
+00354: 
+00355:         // Create analysis result record
+00356:         await db.analysisResult.create({
+00357:           data: {
+00358:             runId,
+00359:             analysisType: 'basic',
+00360:             inputHash,
+00361:             codeVersion: CODE_VERSION,
+00362:             output: output.analysis as unknown as Prisma.InputJsonValue,
+00363:             status: 'CURRENT',
+00364:           },
+00365:         });
+00366: 
+00367: 
+00368:         log.info(
+00369:           { jobId, runId, durationMs: output.analysis.durationMs },
+00370:           'Analyze:basic job completed'
+00371:         );
+00372: 
+00373:         // --- Trigger Aggregate Update ---
+00374:         try {
+00375:           const run = await db.run.findUnique({
+00376:             where: { id: runId },
+00377:             include: { tags: { include: { tag: true } } }
+00378:           });
+00379: 
+00380:           if (run) {
+00381:             const isAggregate = run.tags.some(rt => rt.tag.name === 'Aggregate');
+00382:             if (!isAggregate) {
+00383:               const config = run.config as {
+00384:                 definitionSnapshot?: {
+00385:                   _meta?: { preambleVersionId?: string; definitionVersion?: number | string };
+00386:                   preambleVersionId?: string;
+00387:                   version?: number | string;
+00388:                 }
+00389:               };
+00390:               const definitionId = run.definitionId;
+00391:               const runConfig = run.config as { temperature?: unknown } | null;
+00392:               const temperature = parseTemperature(runConfig?.temperature);
+00393:               const preambleVersionId =
+00394:                 config.definitionSnapshot?._meta?.preambleVersionId ??
+00395:                 config.definitionSnapshot?.preambleVersionId ??
+00396:                 null;
+00397:               const definitionVersionRaw =
+00398:                 config.definitionSnapshot?._meta?.definitionVersion ??
+00399:                 config.definitionSnapshot?.version ??
+00400:                 null;
+00401:               const parsedDefinitionVersion =
+00402:                 typeof definitionVersionRaw === 'number'
+00403:                   ? definitionVersionRaw
+00404:                   : typeof definitionVersionRaw === 'string' && definitionVersionRaw.trim() !== ''
+00405:                     ? Number.parseInt(definitionVersionRaw, 10)
+00406:                     : null;
+00407:               const definitionVersion = Number.isFinite(parsedDefinitionVersion)
+00408:                 ? parsedDefinitionVersion
+00409:                 : null;
+00410: 
+00411:               // Async trigger via job queue (with debouncing via singletonKey)
+00412:               // This prevents race conditions where multiple analyses trigger aggregation simultaneously
+00413:               // causing duplicate aggregate runs.
+00414:               const { getBoss } = await import('../boss.js');
+00415:               const { DEFAULT_JOB_OPTIONS } = await import('../types.js');
+00416: 
+00417:               const boss = getBoss();
+00418:               // Aggregate jobs are keyed by definition+preamble+version+temperature
+00419:               // so each temperature setting is aggregated separately.
+00420:               const singletonKey = `aggregate:${definitionId}:${preambleVersionId ?? 'null'}:${definitionVersion ?? 'null'}:${temperature ?? 'null'}`;
+00421: 
+00422:               await boss.send(
+00423:                 'aggregate_analysis',
+00424:                 { definitionId, preambleVersionId, definitionVersion, temperature },
+00425:                 {
+00426:                   ...DEFAULT_JOB_OPTIONS.aggregate_analysis,
+00427:                   singletonKey
+00428:                 }
+00429:               );
+00430: 
+00431:               log.info({ runId, definitionId, preambleVersionId, definitionVersion, temperature }, 'Enqueued aggregate_analysis job');
+00432:             }
+00433:           }
+00434:         } catch (err) {
+00435:           log.error({ err }, 'Error checking run for aggregation trigger');
+00436:         }
+00437: 
+00438:       } catch (error) {
+00439:         log.error({ jobId, runId, err: error }, 'Analyze:basic job failed');
+00440:         throw erro
