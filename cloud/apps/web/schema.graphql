@@ -1,0 +1,3420 @@
+"""Actual cost summary for a completed run"""
+type ActualCost {
+  """Per-model actual cost breakdown"""
+  perModel: [ActualModelCost!]!
+
+  """Total actual cost in USD"""
+  total: Float!
+}
+
+"""Actual cost for a single model from a completed run"""
+type ActualModelCost {
+  """Actual cost in USD"""
+  cost: Float!
+
+  """Total input tokens used"""
+  inputTokens: Int!
+
+  """Model identifier"""
+  modelId: ID!
+
+  """Total output tokens used"""
+  outputTokens: Int!
+
+  """Number of probes completed"""
+  probeCount: Int!
+}
+
+"""
+Eligibility and coverage metadata for same-signature aggregate analysis support
+"""
+type AggregateMetadata {
+  aggregateEligibility: String!
+  aggregateIneligibilityReason: String
+
+  """Coverage of the planned baseline condition set"""
+  conditionCoverage: JSON!
+
+  """Per-model pooled cross-run drift metadata"""
+  perModelDrift: JSON!
+
+  """Per-model pooled repeat coverage metadata"""
+  perModelRepeatCoverage: JSON!
+  sourceRunCount: Int!
+  sourceRunIds: [String!]!
+}
+
+type AnalysisFolderCounts {
+  aggregateCount: Int!
+  aggregateTagCounts: [AnalysisFolderTagCount!]!
+  aggregateUntaggedCount: Int!
+  tagCounts: [AnalysisFolderTagCount!]!
+  untaggedCount: Int!
+}
+
+type AnalysisFolderTagCount {
+  count: Int!
+  name: String!
+  tagId: String!
+}
+
+"""Analysis results for a run"""
+type AnalysisResult {
+  """Actual cost computed from completed transcripts for this run"""
+  actualCost: ActualCost
+
+  """Eligibility and repeat-coverage metadata for aggregate analysis rows"""
+  aggregateMetadata: AggregateMetadata
+  analysisType: String!
+  codeVersion: String!
+  computedAt: DateTime
+  createdAt: DateTime!
+
+  """Dimension impact analysis showing which variables drive variance"""
+  dimensionAnalysis: JSON
+  durationMs: Int
+  id: ID!
+  inputHash: String!
+
+  """Statistical methods and parameters used in analysis"""
+  methodsUsed: JSON!
+
+  """Model agreement matrix with pairwise correlations"""
+  modelAgreement: JSON!
+
+  """Scenarios with highest disagreement across models"""
+  mostContestedScenarios: [ContestedScenario!]!
+
+  """Per-model statistics with win rates and confidence intervals"""
+  perModel: JSON!
+
+  """Explicit preference direction and strength summary"""
+  preferenceSummary: PreferenceSummary
+
+  """Explicit baseline noise and reliability summary"""
+  reliabilitySummary: ReliabilitySummary
+  runId: String!
+
+  """Status of the analysis result (CURRENT or SUPERSEDED)"""
+  status: String!
+
+  """Variance analysis from multi-sample runs (when samplesPerScenario > 1)"""
+  varianceAnalysis: JSON
+
+  """
+  Data for frontend visualizations (decision distribution, model-scenario matrix)
+  """
+  visualizationData: JSON
+
+  """Warnings about statistical assumptions or data quality"""
+  warnings: [AnalysisWarning!]!
+}
+
+"""Status of an analysis result"""
+enum AnalysisStatus {
+  CURRENT
+  SUPERSEDED
+}
+
+"""Warning about statistical assumptions or data quality"""
+type AnalysisWarning {
+  code: String!
+  message: String!
+  recommendation: String!
+}
+
+"""
+API key for programmatic/MCP access. The full key is only returned once at creation time.
+"""
+type ApiKey {
+  """When this key was created"""
+  createdAt: DateTime!
+
+  """When this key expires (null = never expires)"""
+  expiresAt: DateTime
+
+  """Unique API key identifier"""
+  id: ID!
+
+  """Key prefix for identification (e.g., "vr_abc123")"""
+  keyPrefix: String!
+
+  """When this key was last used for authentication"""
+  lastUsedAt: DateTime
+
+  """User-provided name for this key"""
+  name: String!
+}
+
+type AssumptionsTempZeroResult {
+  domainName: String!
+  generatedAt: DateTime!
+  note: String
+  preflight: TempZeroPreflight!
+  rows: [TempZeroRow!]!
+  summary: TempZeroSummary!
+}
+
+"""Type of action that was audited"""
+enum AuditAction {
+  ACTION
+  CREATE
+  DELETE
+  UPDATE
+}
+
+"""An audit log entry recording a mutation"""
+type AuditLog {
+  """Type of action performed (CREATE, UPDATE, DELETE, ACTION)"""
+  action: String!
+
+  """When the action occurred"""
+  createdAt: DateTime!
+
+  """ID of the affected entity"""
+  entityId: String!
+
+  """Type of entity affected (e.g., Definition, Run)"""
+  entityType: String!
+
+  """Unique identifier"""
+  id: ID!
+
+  """Additional context about the action"""
+  metadata: JSON
+
+  """User who performed the action (null for system actions)"""
+  user: User
+}
+
+"""Paginated list of audit log entries"""
+type AuditLogConnection {
+  """Cursor for the last item in the current page (for pagination)"""
+  endCursor: String
+
+  """Whether there are more results after the current page"""
+  hasNextPage: Boolean!
+
+  """List of audit log entries"""
+  nodes: [AuditLog!]!
+
+  """Total number of matching audit log entries"""
+  totalCount: Int!
+}
+
+"""Filters for querying audit logs"""
+input AuditLogFilterInput {
+  """Filter by action type (CREATE, UPDATE, DELETE, ACTION)"""
+  action: String
+
+  """Filter by specific entity ID"""
+  entityId: String
+
+  """Filter by entity type (e.g., "Definition", "Run")"""
+  entityType: String
+
+  """Filter logs from this date/time (inclusive)"""
+  from: DateTime
+
+  """Filter logs until this date/time (inclusive)"""
+  to: DateTime
+
+  """Filter by user who performed the action"""
+  userId: String
+}
+
+"""An LLM model available for evaluation runs"""
+type AvailableModel {
+  """Default version to use if none specified"""
+  defaultVersion: String
+
+  """Human-readable model name (e.g., "GPT-4o")"""
+  displayName: String!
+
+  """Model identifier (e.g., "gpt-4o")"""
+  id: String!
+
+  """Whether the model is available (API key configured)"""
+  isAvailable: Boolean!
+
+  """Whether this is the default model for its provider"""
+  isDefault: Boolean!
+
+  """Provider identifier (e.g., "openai")"""
+  providerId: String!
+
+  """Available model versions"""
+  versions: [String!]!
+}
+
+"""Progress breakdown for a specific model"""
+type ByModelProgress {
+  completed: Int!
+  failed: Int!
+  modelId: String!
+}
+
+"""Result of cancelling scenario expansion"""
+type CancelExpansionResult {
+  """Whether an active job was cancelled"""
+  cancelled: Boolean!
+
+  """ID of the definition"""
+  definitionId: String!
+
+  """ID of the cancelled job (null if no active job)"""
+  jobId: String
+
+  """Status message"""
+  message: String!
+}
+
+"""Result of cancelling summarization for a run"""
+type CancelSummarizationPayload {
+  """Number of pending summarization jobs cancelled"""
+  cancelledCount: Int!
+
+  """The updated run"""
+  run: Run!
+}
+
+type ClusterAnalysis {
+  clusters: [DomainCluster!]!
+  defaultPair: [String!]
+  faultLinesByPair: JSON!
+  skipReason: String
+  skipped: Boolean!
+}
+
+type ClusterMember {
+  distancesToNearestClusters: [Float!]
+  isOutlier: Boolean!
+  label: String!
+  model: String!
+  nearestClusterIds: [String!]
+  silhouetteScore: Float!
+}
+
+type ClusterPairFaultLines {
+  clusterAId: String!
+  clusterBId: String!
+  distance: Float!
+  faultLines: [ValueFaultLine!]!
+}
+
+"""A recent job completion event"""
+type CompletionEvent {
+  """When the probe completed"""
+  completedAt: DateTime!
+
+  """How long the probe took in milliseconds"""
+  durationMs: Int!
+
+  """The model that was probed"""
+  modelId: String!
+
+  """The scenario that was evaluated"""
+  scenarioId: String!
+
+  """Whether the probe succeeded"""
+  success: Boolean!
+}
+
+type ConditionPlan {
+  conditionKey: String!
+  currentSEM: Float
+  currentSamples: Int!
+  neededSamples: Int!
+  scenarioId: String!
+  status: String!
+}
+
+"""A scenario with high disagreement across models"""
+type ContestedScenario {
+  modelScores: JSON!
+  scenarioId: String!
+  scenarioName: String!
+  variance: Float!
+}
+
+"""Complete cost estimate for a run before execution"""
+type CostEstimate {
+  """Minimum sample count across all models (indicates estimate quality)"""
+  basedOnSampleCount: Int!
+
+  """Explanation of fallback usage if applicable"""
+  fallbackReason: String
+
+  """True if any model is using fallback estimates"""
+  isUsingFallback: Boolean!
+
+  """Per-model cost breakdown"""
+  perModel: [ModelCostEstimate!]!
+
+  """Total number of scenarios to be run"""
+  scenarioCount: Int!
+
+  """Total estimated cost in USD across all models"""
+  total: Float!
+}
+
+type CoverageModelOption {
+  label: String!
+  modelId: String!
+}
+
+input CreateApiKeyInput {
+  """Human-readable name for the key (e.g., "Claude Desktop", "Cursor IDE")"""
+  name: String!
+}
+
+"""
+Result of creating a new API key. The full key is only available in this response.
+"""
+type CreateApiKeyResult {
+  """The created API key metadata"""
+  apiKey: ApiKey!
+
+  """
+  The full API key value. IMPORTANT: This is the only time the full key will be shown.
+  """
+  key: String!
+}
+
+input CreateDefinitionInput {
+  """JSONB content for the definition"""
+  content: JSON!
+
+  """Name of the definition"""
+  name: String!
+
+  """Optional parent definition ID for forking"""
+  parentId: String
+
+  """ID of the preamble version to use"""
+  preambleVersionId: String
+}
+
+input CreateDomainContextInput {
+  domainId: String!
+  text: String!
+}
+
+input CreateJobChoicePairInput {
+  contextId: ID!
+  domainId: ID!
+  levelPresetVersionId: ID
+  name: String!
+  preambleVersionId: ID
+  valueFirstId: ID!
+  valueSecondId: ID!
+}
+
+type CreateJobChoicePairResult {
+  definitionA: Definition!
+  definitionB: Definition!
+}
+
+input CreateLevelPresetInput {
+  l1: String!
+  l2: String!
+  l3: String!
+  l4: String!
+  l5: String!
+  name: String!
+}
+
+"""Input for creating a new LLM model"""
+input CreateLlmModelInput {
+  """Cost per 1M input tokens in USD"""
+  costInputPerMillion: Float!
+
+  """Cost per 1M output tokens in USD"""
+  costOutputPerMillion: Float!
+
+  """Human-readable display name"""
+  displayName: String!
+
+  """API model identifier (e.g., "gpt-4o-mini")"""
+  modelId: String!
+
+  """Provider ID this model belongs to"""
+  providerId: String!
+
+  """Set as default for this provider"""
+  setAsDefault: Boolean
+}
+
+input CreatePreambleInput {
+  content: String!
+  name: String!
+}
+
+input CreateSurveyInput {
+  description: String
+  instructions: String
+  name: String!
+  questions: [SurveyQuestionInput!]!
+  responseOptions: [SurveyResponseOptionInput!]!
+}
+
+input CreateValueStatementInput {
+  body: String!
+  domainId: String!
+  token: String!
+}
+
+scalar DateTime
+
+type DebugMismatchResult {
+  decisionCodes: [String]!
+  modelId: String!
+  promptHashes: [String]!
+  promptHashesMatch: Boolean
+  rawResponseSummary: String!
+  scenarioId: String!
+  systemFingerprints: [String]!
+  systemFingerprintsMatch: Boolean
+  transcriptCount: Int!
+}
+
+"""
+A scenario definition that can be versioned through parent-child relationships
+"""
+type Definition {
+  """All tags including both local and inherited (deduplicated)"""
+  allTags: [Tag!]!
+
+  """Full ancestry chain from this definition to root (oldest first)"""
+  ancestors: [Definition!]!
+
+  """Child definitions forked from this one"""
+  children: [Definition!]!
+
+  """JSONB content with scenario configuration"""
+  content: JSON!
+
+  """When this definition was created"""
+  createdAt: DateTime!
+
+  """User who created this definition"""
+  createdBy: User
+
+  """
+  User who deleted this definition (only populated for soft-deleted records)
+  """
+  deletedBy: User
+
+  """All descendants forked from this definition (newest first)"""
+  descendants: [Definition!]!
+
+  """Domain assigned to this definition"""
+  domain: Domain
+
+  """ID of the domain context attached to this definition"""
+  domainContextId: ID
+
+  """ID of assigned domain (null means None)"""
+  domainId: ID
+
+  """
+  Debug info from last scenario expansion, including raw LLM response and parse errors
+  """
+  expansionDebug: JSON
+
+  """Status of scenario expansion job for this definition"""
+  expansionStatus: ExpansionStatus!
+
+  """Unique identifier"""
+  id: ID!
+
+  """Tags inherited from all ancestor definitions (union of ancestor tags)"""
+  inheritedTags: [Tag!]!
+
+  """Whether this definition is a fork (has a parent)"""
+  isForked: Boolean!
+
+  """When this definition was last accessed (for retention)"""
+  lastAccessedAt: DateTime
+
+  """The level preset version used when this vignette was created"""
+  levelPresetVersion: LevelPresetVersion
+
+  """ID of the level preset version used when this vignette was created"""
+  levelPresetVersionId: String
+
+  """
+  Raw stored content. For forked definitions, only locally overridden fields are present.
+  """
+  localContent: JSON!
+
+  """Human-readable name"""
+  name: String!
+
+  """
+  Indicates which content fields are locally defined vs inherited from parent
+  """
+  overrides: DefinitionOverrides!
+
+  """Parent definition in version tree"""
+  parent: Definition
+
+  """ID of parent definition (null for root definitions)"""
+  parentId: ID
+
+  """The specific version of the preamble used"""
+  preambleVersion: PreambleVersion
+
+  """ID of the specific preamble version used"""
+  preambleVersionId: String
+
+  """
+  Fully resolved content after walking ancestor chain. All fields are guaranteed present.
+  """
+  resolvedContent: JSON!
+
+  """Number of runs using this definition"""
+  runCount: Int!
+
+  """Runs executed with this definition"""
+  runs(
+    """Maximum number of runs to return (default: all, max: 100)"""
+    limit: Int
+
+    """Number of runs to skip for pagination (default: 0)"""
+    offset: Int
+  ): [Run!]!
+
+  """Number of scenarios generated from this definition"""
+  scenarioCount: Int!
+
+  """Scenarios generated from this definition"""
+  scenarios(
+    """Maximum number of scenarios to return (default: all, max: 1000)"""
+    limit: Int
+
+    """Number of scenarios to skip for pagination (default: 0)"""
+    offset: Int
+  ): [Scenario!]!
+
+  """Tags assigned to this definition"""
+  tags: [Tag!]!
+
+  """Version and temperature consistency across trials for this definition"""
+  trialConfig: TrialConfigSummary!
+
+  """Number of prompt/response trials (transcripts) for this definition"""
+  trialCount: Int!
+
+  """When this definition was last updated"""
+  updatedAt: DateTime!
+
+  """Version counter (increments on every update)"""
+  version: Int!
+}
+
+"""
+Indicates which content fields are locally overridden vs inherited from parent
+"""
+type DefinitionOverrides {
+  """True if dimensions are locally defined, false if inherited"""
+  dimensions: Boolean!
+
+  """True if matching rules are locally defined, false if inherited"""
+  matchingRules: Boolean!
+
+  """True if template is locally defined, false if inherited"""
+  template: Boolean!
+}
+
+"""Result of deleting a definition"""
+type DeleteDefinitionResult {
+  """Total number of definitions deleted"""
+  count: Int!
+
+  """IDs of all definitions that were deleted (includes descendants)"""
+  deletedIds: [String!]!
+}
+
+type DeleteLevelPresetResult {
+  id: ID!
+}
+
+"""Result type for tag deletion"""
+type DeleteTagResult {
+  """Number of definitions the tag was removed from"""
+  affectedDefinitions: Int!
+
+  """Whether deletion was successful"""
+  success: Boolean!
+}
+
+"""Result of deprecating a model"""
+type DeprecateModelResult {
+  """The deprecated model"""
+  model: LlmModel!
+
+  """The new default model (if previous default was deprecated)"""
+  newDefault: LlmModel
+}
+
+"""A single domain used to group vignettes"""
+type Domain {
+  createdAt: DateTime!
+  defaultContext: DomainContext
+  defaultContextId: String
+  defaultLevelPresetVersion: LevelPresetVersion
+  defaultLevelPresetVersionId: String
+  defaultPreambleVersion: PreambleVersion
+  defaultPreambleVersionId: String
+  definitionCount: Int!
+  definitions: [Definition!]!
+  id: ID!
+  name: String!
+  normalizedName: String!
+  updatedAt: DateTime!
+}
+
+type DomainAnalysisConditionDetail {
+  conditionName: String!
+  deprioritized: Int!
+  dimensions: JSON
+  neutral: Int!
+  opponentSomewhat: Int!
+  opponentStrongly: Int!
+  prioritized: Int!
+  scenarioId: ID
+  selectedValueWinRate: Float
+  somewhat: Int!
+  strongly: Int!
+  totalTrials: Int!
+  unknownCount: Int!
+}
+
+type DomainAnalysisConditionTranscript {
+  content: JSON!
+  createdAt: DateTime!
+  decisionCode: String
+  decisionCodeSource: String
+  decisionModelV2: JSON
+  durationMs: Int!
+  id: ID!
+  modelId: String!
+  runId: ID!
+  scenarioId: ID
+  tokenCount: Int!
+  turnCount: Int!
+}
+
+type DomainAnalysisMissingDefinition {
+  definitionId: ID!
+  definitionName: String!
+  missingAllModels: Boolean!
+  missingModelIds: [String!]!
+  missingModelLabels: [String!]!
+  reasonCode: String!
+  reasonLabel: String!
+}
+
+type DomainAnalysisModel {
+  label: String!
+  model: String!
+  rankingShape: RankingShape!
+  values: [DomainAnalysisValueScore!]!
+}
+
+type DomainAnalysisResult {
+  clusterAnalysis: ClusterAnalysis!
+  coveredDefinitions: Int!
+  definitionsWithAnalysis: Int!
+  domainId: ID!
+  domainName: String!
+  generatedAt: DateTime!
+  missingDefinitionIds: [ID!]!
+  missingDefinitions: [DomainAnalysisMissingDefinition!]!
+  models: [DomainAnalysisModel!]!
+  rankingShapeBenchmarks: RankingShapeBenchmarks!
+  targetedDefinitions: Int!
+  totalDefinitions: Int!
+  unavailableModels: [DomainAnalysisUnavailableModel!]!
+}
+
+type DomainAnalysisUnavailableModel {
+  label: String!
+  model: String!
+  reason: String!
+}
+
+type DomainAnalysisValueDetailResult {
+  coveredDefinitions: Int!
+  deprioritized: Int!
+  domainId: ID!
+  domainName: String!
+  generatedAt: DateTime!
+  missingDefinitionIds: [ID!]!
+  modelId: String!
+  modelLabel: String!
+  neutral: Int!
+  prioritized: Int!
+  score: Float!
+  targetedDefinitions: Int!
+  totalTrials: Int!
+  valueKey: String!
+  vignettes: [DomainAnalysisVignetteDetail!]!
+}
+
+type DomainAnalysisValueScore {
+  deprioritized: Int!
+  neutral: Int!
+  prioritized: Int!
+  score: Float!
+  totalComparisons: Int!
+  valueKey: String!
+}
+
+type DomainAnalysisVignetteDetail {
+  aggregateRunId: ID
+  conditions: [DomainAnalysisConditionDetail!]!
+  definitionId: ID!
+  definitionName: String!
+  definitionVersion: Int!
+  deprioritized: Int!
+  neutral: Int!
+  otherValueKey: String!
+  prioritized: Int!
+  selectedValueWinRate: Float
+  totalTrials: Int!
+}
+
+type DomainAvailableSignature {
+  isVirtual: Boolean!
+  label: String!
+  signature: String!
+  temperature: Float
+}
+
+type DomainCluster {
+  centroid: JSON!
+  definingValues: [String!]!
+  id: String!
+  members: [ClusterMember!]!
+  name: String!
+}
+
+"""A snapshot of all domain config at a point in time"""
+type DomainConfigSnapshot {
+  contextId: String
+  createdAt: DateTime!
+  domainId: String!
+  fingerprint: String!
+  id: ID!
+  levelPresetVersionId: String
+  preambleVersionId: String
+  valueStatementVersionIds: [String!]!
+}
+
+"""Summary of a domain config snapshot for history display"""
+type DomainConfigSnapshotSummary {
+  contextLabel: String
+  createdAt: DateTime!
+  id: ID!
+  levelPresetLabel: String
+  preambleLabel: String
+  valueStatementCount: Int!
+}
+
+"""A shared context paragraph for all vignettes in a domain"""
+type DomainContext {
+  createdAt: DateTime!
+  domain: Domain
+  domainId: ID!
+  id: ID!
+  text: String!
+  updatedAt: DateTime!
+  version: Int!
+}
+
+type DomainEvaluation {
+  completedAt: DateTime
+  createdAt: DateTime!
+  createdByUserId: ID
+  domainId: ID!
+  domainNameAtLaunch: String!
+  failedDefinitions: Int!
+  id: ID!
+  maxBudgetUsd: Float
+  memberCount: Int!
+  members: [DomainEvaluationMember!]!
+  models: [String!]!
+  projectedCostUsd: Float!
+  scopeCategory: String!
+  skippedForBudget: Int!
+  startedAt: DateTime
+  startedRuns: Int!
+  status: String!
+  temperature: Float
+}
+
+type DomainEvaluationCostEstimate {
+  basedOnSampleCount: Int!
+  defaultTemperature: Float
+  definitions: [DomainEvaluationEstimateDefinition!]!
+  domainId: ID!
+  domainName: String!
+  estimateConfidence: String!
+  existingTemperatures: [Float!]!
+  fallbackReason: String
+  isUsingFallback: Boolean!
+  knownExclusions: [String!]!
+  models: [DomainEvaluationEstimateModel!]!
+  scopeCategory: String!
+  targetedDefinitions: Int!
+  temperatureWarning: String
+  totalEstimatedCost: Float!
+  totalScenarioCount: Int!
+}
+
+type DomainEvaluationEstimateDefinition {
+  basedOnSampleCount: Int!
+  definitionId: ID!
+  definitionName: String!
+  definitionVersion: Int!
+  estimatedCost: Float!
+  isUsingFallback: Boolean!
+  scenarioCount: Int!
+  signature: String!
+}
+
+type DomainEvaluationEstimateModel {
+  basedOnSampleCount: Int!
+  estimatedCost: Float!
+  isDefault: Boolean!
+  isUsingFallback: Boolean!
+  label: String!
+  modelId: String!
+  supportsTemperature: Boolean!
+}
+
+type DomainEvaluationMember {
+  createdAt: DateTime!
+  definitionIdAtLaunch: ID!
+  definitionNameAtLaunch: String!
+  domainIdAtLaunch: ID!
+  runCategory: String!
+  runCompletedAt: DateTime
+  runId: ID!
+  runStartedAt: DateTime
+  runStatus: String!
+}
+
+type DomainEvaluationStatus {
+  cancelledRuns: Int!
+  completedRuns: Int!
+  failedRuns: Int!
+  id: ID!
+  pendingRuns: Int!
+  runningRuns: Int!
+  status: String!
+  totalRuns: Int!
+}
+
+type DomainFindingsEligibility {
+  completedEligibleEvaluationCount: Int!
+  consideredScopeCategories: [String!]!
+  domainId: ID!
+  eligible: Boolean!
+  latestEligibleCompletedAt: DateTime
+  latestEligibleEvaluationId: ID
+  latestEligibleScopeCategory: String
+  reasons: [String!]!
+  recommendedActions: [String!]!
+  status: String!
+  summary: String!
+}
+
+type DomainMutationResult {
+  affectedDefinitions: Int!
+  success: Boolean!
+}
+
+type DomainRunSummary {
+  cancelledEvaluations: Int!
+  cancelledMemberRuns: Int!
+  completedEvaluations: Int!
+  completedMemberRuns: Int!
+  domainId: ID!
+  failedEvaluations: Int!
+  failedMemberRuns: Int!
+  latestEvaluationCreatedAt: DateTime
+  latestEvaluationId: ID
+  latestEvaluationStatus: String
+  latestScopeCategory: String
+  pendingEvaluations: Int!
+  pendingMemberRuns: Int!
+  pilotEvaluations: Int!
+  productionEvaluations: Int!
+  replicationEvaluations: Int!
+  runningEvaluations: Int!
+  runningMemberRuns: Int!
+  scopeCategory: String
+  totalEvaluations: Int!
+  totalMemberRuns: Int!
+  validationEvaluations: Int!
+}
+
+"""Current domain settings: pickers and value statements with versions"""
+type DomainSettings {
+  contextId: String
+  domainId: ID!
+  levelPresetVersionId: String
+  preambleVersionId: String
+  valueStatements: [ValueStatementWithVersions!]!
+}
+
+type DomainTrialModelStatus {
+  generationCompleted: Int!
+  generationFailed: Int!
+  generationTotal: Int!
+  latestErrorMessage: String
+  modelId: String!
+  summarizationCompleted: Int!
+  summarizationFailed: Int!
+  summarizationTotal: Int!
+}
+
+type DomainTrialPlanCellEstimate {
+  definitionId: ID!
+  estimatedCost: Float!
+  modelId: String!
+}
+
+type DomainTrialPlanModel {
+  isDefault: Boolean!
+  label: String!
+  modelId: String!
+  supportsTemperature: Boolean!
+}
+
+type DomainTrialPlanResult {
+  cellEstimates: [DomainTrialPlanCellEstimate!]!
+  defaultTemperature: Float
+  domainId: ID!
+  domainName: String!
+  existingTemperatures: [Float!]!
+  models: [DomainTrialPlanModel!]!
+  temperatureWarning: String
+  totalEstimatedCost: Float!
+  vignettes: [DomainTrialPlanVignette!]!
+}
+
+type DomainTrialPlanVignette {
+  definitionId: ID!
+  definitionName: String!
+  definitionVersion: Int!
+  existingBatchCount: Int!
+  scenarioCount: Int!
+  signature: String!
+}
+
+type DomainTrialRunEntry {
+  definitionId: ID!
+  modelIds: [String!]!
+  runId: ID!
+}
+
+type DomainTrialRunResult {
+  blockedByActiveLaunch: Boolean!
+  domainEvaluationId: ID
+  failedDefinitions: Int!
+  projectedCostUsd: Float!
+  runs: [DomainTrialRunEntry!]!
+  scopeCategory: String!
+  skippedForBudget: Int!
+  startedRuns: Int!
+  success: Boolean!
+  targetedDefinitions: Int!
+  totalDefinitions: Int!
+}
+
+type DomainTrialRunStatus {
+  analysisStatus: String
+  definitionId: ID!
+  modelStatuses: [DomainTrialModelStatus!]!
+  runId: ID!
+  stalledModels: [String!]!
+  status: String!
+  updatedAt: DateTime!
+}
+
+type DomainValueCoverageCell {
+  aggregateRunId: String
+  batchCount: Int!
+  definitionId: String
+  definitionName: String
+  valueA: String!
+  valueB: String!
+}
+
+type DomainValueCoverageResult {
+  availableModels: [CoverageModelOption!]!
+  cells: [DomainValueCoverageCell!]!
+  domainId: String!
+  values: [String!]!
+}
+
+"""Real-time execution metrics for monitoring parallel processing"""
+type ExecutionMetrics {
+  """Estimated seconds until all pending jobs complete"""
+  estimatedSecondsRemaining: Int
+
+  """Metrics for each LLM provider"""
+  providers: [ProviderExecutionMetrics!]!
+
+  """Total jobs actively being processed across all providers"""
+  totalActive: Int!
+
+  """Total jobs queued across all providers"""
+  totalQueued: Int!
+
+  """Total probe retry attempts across all models for this run"""
+  totalRetries: Int!
+}
+
+"""Status of a scenario expansion job"""
+enum ExpansionJobStatus {
+  """Job is currently running"""
+  ACTIVE
+
+  """Job completed successfully"""
+  COMPLETED
+
+  """Job failed"""
+  FAILED
+
+  """No expansion job exists"""
+  NONE
+
+  """Job is queued and waiting to run"""
+  PENDING
+}
+
+"""Real-time progress during scenario expansion"""
+type ExpansionProgress {
+  """Total number of scenarios expected to be generated"""
+  expectedScenarios: Int!
+
+  """Number of scenarios generated so far"""
+  generatedScenarios: Int!
+
+  """Number of input tokens used"""
+  inputTokens: Int!
+
+  """Human-readable status message"""
+  message: String!
+
+  """Number of output tokens received"""
+  outputTokens: Int!
+
+  """Current phase (starting, calling_llm, parsing, completed, failed)"""
+  phase: String!
+
+  """When this progress was last updated (ISO timestamp)"""
+  updatedAt: String!
+}
+
+"""Status of scenario expansion for a definition"""
+type ExpansionStatus {
+  """When the expansion job completed"""
+  completedAt: DateTime
+
+  """When the expansion job was created"""
+  createdAt: DateTime
+
+  """Error message if the job failed"""
+  error: String
+
+  """ID of the expansion job (if any)"""
+  jobId: String
+
+  """Real-time progress during expansion (null when not actively expanding)"""
+  progress: ExpansionProgress
+
+  """Number of scenarios currently generated for this definition"""
+  scenarioCount: Int!
+
+  """Current status of the expansion job"""
+  status: ExpansionJobStatus!
+
+  """What triggered the expansion (create, update, fork)"""
+  triggeredBy: String
+}
+
+"""An experiment grouping multiple runs for comparison"""
+type Experiment {
+  analysisPlan: JSON
+  createdAt: DateTime!
+  hypothesis: String
+  id: ID!
+  name: String!
+  runCount: Int!
+  runs: [Run!]!
+  updatedAt: DateTime!
+}
+
+"""Result of a synchronous export operation"""
+type ExportResult {
+  """The exported content (text/markdown/yaml/etc)"""
+  content: String!
+
+  """Suggested filename for download"""
+  filename: String!
+
+  """MIME type for the content"""
+  mimeType: String!
+}
+
+type FinalTrialPlan {
+  definitionId: String!
+  models: [ModelPlan!]!
+  totalJobs: Int!
+}
+
+input ForkDefinitionInput {
+  """
+  Optional content override. If not provided, inherits everything from parent (stores minimal v2 content).
+  """
+  content: JSON
+
+  """
+  If true, fork with minimal content (inherit everything). Default: true. Set to false to copy parent content.
+  """
+  inheritAll: Boolean
+
+  """Name for the forked definition"""
+  name: String!
+
+  """ID of the definition to fork from"""
+  parentId: String!
+}
+
+scalar JSON
+
+"""Job counts for a specific job type"""
+type JobTypeStatus {
+  """Number of jobs currently being processed"""
+  active: Int!
+
+  """Number of completed jobs (from recent archive)"""
+  completed: Int!
+
+  """Number of failed jobs"""
+  failed: Int!
+
+  """Number of jobs waiting to be processed"""
+  pending: Int!
+
+  """Job type name (e.g., probe_scenario)"""
+  type: String!
+}
+
+type LaunchAssumptionsTempZeroPayload {
+  failedVignetteIds: [String!]!
+  modelCount: Int!
+  runIds: [String!]!
+  startedRuns: Int!
+  totalVignettes: Int!
+}
+
+type LaunchOrderInvariancePayload {
+  approvedPairs: Int!
+  failedDefinitionIds: [String!]!
+  modelCount: Int!
+  runIds: [String!]!
+  runsByVariantType: JSON!
+  startedRuns: Int!
+}
+
+"""
+A named level preset defining the 5-word intensity scale for job-choice conditions
+"""
+type LevelPreset {
+  createdAt: DateTime!
+  id: ID!
+
+  """The most recently created version"""
+  latestVersion: LevelPresetVersion
+  name: String!
+  updatedAt: DateTime!
+
+  """All versions of this level preset (newest first)"""
+  versions: [LevelPresetVersion!]!
+}
+
+"""A versioned snapshot of a level preset (5-word intensity scale)"""
+type LevelPresetVersion {
+  createdAt: DateTime!
+  id: ID!
+  l1: String!
+  l2: String!
+  l3: String!
+  l4: String!
+  l5: String!
+
+  """The parent level preset"""
+  levelPreset: LevelPreset
+  levelPresetId: String!
+  version: String!
+}
+
+"""An LLM model with pricing and lifecycle status"""
+type LlmModel {
+  """
+  Provider-specific API configuration (e.g., {"maxTokensParam": "max_completion_tokens"})
+  """
+  apiConfig: JSON
+
+  """Cost per 1M input tokens in USD"""
+  costInputPerMillion: Float!
+
+  """Cost per 1M output tokens in USD"""
+  costOutputPerMillion: Float!
+  createdAt: DateTime!
+
+  """User who created this LLM model"""
+  createdBy: User
+
+  """Human-readable name (e.g., "GPT-4o Mini")"""
+  displayName: String!
+  id: ID!
+
+  """Whether this model is available (provider has API key configured)"""
+  isAvailable: Boolean!
+
+  """Whether this is the default model for its provider"""
+  isDefault: Boolean!
+
+  """API model identifier (e.g., "gpt-4o-mini")"""
+  modelId: String!
+
+  """The provider this model belongs to"""
+  provider: LlmProvider!
+
+  """Provider this model belongs to"""
+  providerId: ID!
+
+  """Lifecycle status (ACTIVE or DEPRECATED)"""
+  status: String!
+  updatedAt: DateTime!
+}
+
+"""Lifecycle status of an LLM model"""
+enum LlmModelStatus {
+  ACTIVE
+  DEPRECATED
+}
+
+"""An LLM API provider with rate limiting and parallelism settings"""
+type LlmProvider {
+  """Active models only (excludes deprecated)"""
+  activeModels: [LlmModel!]!
+
+  """Remaining budget balance in dollars (null = budget tracking disabled)"""
+  balance: Float
+  createdAt: DateTime!
+
+  """The default model for this provider"""
+  defaultModel: LlmModel
+
+  """Human-readable name (e.g., "OpenAI")"""
+  displayName: String!
+  id: ID!
+
+  """Whether the provider is available for use"""
+  isEnabled: Boolean!
+
+  """Timestamp of the most recent manual balance sync (null = never synced)"""
+  lastSyncedAt: DateTime
+
+  """Maximum concurrent API requests allowed"""
+  maxParallelRequests: Int!
+
+  """All models belonging to this provider"""
+  models: [LlmModel!]!
+
+  """Provider identifier (e.g., "openai", "anthropic")"""
+  name: String!
+
+  """Rate limit (requests per minute)"""
+  requestsPerMinute: Int!
+  updatedAt: DateTime!
+}
+
+"""Cost estimate for a single model in a run"""
+type ModelCostEstimate {
+  """Average input tokens per probe used for prediction"""
+  avgInputPerProbe: Float!
+
+  """Average output tokens per probe used for prediction"""
+  avgOutputPerProbe: Float!
+
+  """Human-readable model name"""
+  displayName: String!
+
+  """Cost for input tokens in USD"""
+  inputCost: Float!
+
+  """Predicted total input tokens for all scenarios"""
+  inputTokens: Float!
+
+  """True if using fallback estimates (no model-specific history)"""
+  isUsingFallback: Boolean!
+
+  """Model identifier (e.g., 'openai:gpt-4o')"""
+  modelId: ID!
+
+  """Cost for output tokens in USD"""
+  outputCost: Float!
+
+  """Predicted total output tokens for all scenarios"""
+  outputTokens: Float!
+
+  """Number of historical probes used to compute averages"""
+  sampleCount: Int!
+
+  """Number of scenarios this model will run"""
+  scenarioCount: Int!
+
+  """Total cost (inputCost + outputCost) in USD"""
+  totalCost: Float!
+}
+
+type ModelPlan {
+  conditions: [ConditionPlan!]!
+  modelId: String!
+  totalNeededSamples: Int!
+}
+
+"""Token usage statistics for a model, used for cost prediction"""
+type ModelTokenStats {
+  """Average input tokens per probe based on historical data"""
+  avgInputTokens: Float!
+
+  """Average output tokens per probe based on historical data"""
+  avgOutputTokens: Float!
+
+  """When these statistics were last updated"""
+  lastUpdatedAt: DateTime!
+
+  """Model identifier (e.g., 'openai:gpt-4o')"""
+  modelId: ID!
+
+  """Number of probes used to compute these averages"""
+  sampleCount: Int!
+}
+
+type Mutation {
+  """Add a tag to a definition. No-op if tag is already assigned."""
+  addTagToDefinition(
+    """Definition to tag"""
+    definitionId: String!
+
+    """Tag to assign"""
+    tagId: String!
+  ): Definition!
+  assignDomainToDefinitions(definitionIds: [ID!]!, domainId: ID): DomainMutationResult!
+  assignDomainToDefinitionsByFilter(domainId: ID, hasRuns: Boolean, rootOnly: Boolean, search: String, sourceDomainId: ID, tagIds: [ID!], withoutDomain: Boolean): DomainMutationResult!
+
+  "\n      Cancel an evaluation run.\n\n      Jobs currently being processed will complete, but all pending jobs\n      will be removed from the queue. Completed results are preserved.\n\n      Requires authentication. Run must be in PENDING, RUNNING, or PAUSED state.\n    "
+  cancelRun(
+    """The ID of the run to cancel"""
+    runId: ID!
+  ): Run!
+
+  """Cancel an in-progress scenario expansion for a definition."""
+  cancelScenarioExpansion(
+    """Definition ID to cancel expansion for"""
+    definitionId: String!
+  ): CancelExpansionResult!
+
+  "\n      Cancel pending summarization jobs for a run.\n\n      Only works when run is in SUMMARIZING state.\n      Cancels pending summarize_transcript jobs in the queue.\n      Preserves already-completed summaries.\n      Transitions run to COMPLETED state.\n\n      Requires authentication.\n    "
+  cancelSummarization(
+    """The ID of the run to cancel summarization for"""
+    runId: ID!
+  ): CancelSummarizationPayload!
+
+  """
+  Create a tag and immediately assign it to a definition. Convenience mutation for inline tag creation.
+  """
+  createAndAssignTag(
+    """Definition to tag"""
+    definitionId: String!
+
+    """New tag name"""
+    tagName: String!
+  ): Definition!
+
+  "\n      Create a new API key for the current user.\n      Requires authentication.\n\n      The full key value is returned ONLY in this response.\n      Store it securely - it cannot be retrieved later.\n    "
+  createApiKey(input: CreateApiKeyInput!): CreateApiKeyResult!
+
+  """
+  Create a new definition. Automatically adds schema_version to content if not present.
+  """
+  createDefinition(input: CreateDefinitionInput!): Definition!
+  createDomain(name: String!): Domain!
+  createDomainContext(input: CreateDomainContextInput!): DomainContext!
+  createJobChoicePair(input: CreateJobChoicePairInput!): CreateJobChoicePairResult!
+  createLevelPreset(l1: String!, l2: String!, l3: String!, l4: String!, l5: String!, name: String!): LevelPreset!
+
+  """Create a new LLM model under a provider"""
+  createLlmModel(input: CreateLlmModelInput!): LlmModel!
+
+  """Create a new preamble"""
+  createPreamble(input: CreatePreambleInput!): Preamble!
+
+  """
+  Create a survey with a backing definition and one scenario per question.
+  """
+  createSurvey(input: CreateSurveyInput!): Experiment!
+
+  """Create a new tag. Name is normalized to lowercase and must be unique."""
+  createTag(
+    """Tag name (1-50 characters, alphanumeric/hyphen/underscore)"""
+    name: String!
+  ): Tag!
+  createValueStatement(input: CreateValueStatementInput!): ValueStatement!
+
+  """
+  Soft delete a definition and all its descendants. Related scenarios and tags are also soft deleted.
+  """
+  deleteDefinition(
+    """Definition ID to delete"""
+    id: String!
+  ): DeleteDefinitionResult!
+  deleteDomain(id: ID!): DomainMutationResult!
+  deleteDomainContext(id: ID!): Boolean!
+  deleteLevelPreset(id: ID!): DeleteLevelPresetResult!
+
+  """Delete a preamble"""
+  deletePreamble(id: ID!): Preamble!
+
+  "\n      Soft delete a run and its associated data.\n\n      Sets deletedAt timestamp on the run. Transcripts and analysis results\n      associated with this run will be filtered out in queries.\n\n      Requires authentication.\n    "
+  deleteRun(
+    """The ID of the run to delete"""
+    runId: ID!
+  ): Boolean!
+
+  """Delete a survey and detach runs from it."""
+  deleteSurvey(id: ID!): Boolean!
+
+  """Delete a tag. Removes the tag from all definitions that use it."""
+  deleteTag(
+    """Tag ID to delete"""
+    id: String!
+  ): DeleteTagResult!
+  deleteValueStatement(id: ID!): Boolean!
+
+  """Deprecate an LLM model (mark as no longer recommended for new runs)"""
+  deprecateLlmModel(
+    """Model ID to deprecate"""
+    id: String!
+  ): DeprecateModelResult!
+
+  """Duplicate a survey into a new survey family at version 1."""
+  duplicateSurvey(id: ID!, name: String): Experiment!
+
+  """Export a definition as markdown in devtool-compatible format"""
+  exportDefinitionAsMd(
+    """Definition ID to export"""
+    id: ID!
+  ): ExportResult!
+
+  """Export scenarios as CLI-compatible YAML for use with probe.py"""
+  exportScenariosAsYaml(
+    """Definition ID to export scenarios for"""
+    definitionId: ID!
+  ): ExportResult!
+
+  """
+  Fork an existing definition. By default inherits all content from parent (sparse v2 storage).
+  """
+  forkDefinition(input: ForkDefinitionInput!): Definition!
+  launchAssumptionsTempZero(force: Boolean = false): LaunchAssumptionsTempZeroPayload!
+  launchOrderInvariance(force: Boolean = false): LaunchOrderInvariancePayload!
+
+  "\n      Pause the global job queue.\n\n      All job processing will stop until the queue is resumed.\n      Jobs will continue to be queued but not processed.\n\n      Requires authentication.\n    "
+  pauseQueue: QueueStatus!
+
+  "\n      Pause a running evaluation.\n\n      Jobs currently being processed will complete, but no new jobs\n      will be started until the run is resumed.\n\n      Requires authentication. Run must be in PENDING or RUNNING state.\n    "
+  pauseRun(
+    """The ID of the run to pause"""
+    runId: ID!
+  ): Run!
+
+  """Reactivate a deprecated LLM model"""
+  reactivateLlmModel(
+    """Model ID to reactivate"""
+    id: String!
+  ): LlmModel!
+
+  "\n      Recompute analysis for a run.\n\n      This will:\n      1. Mark any existing analysis as SUPERSEDED\n      2. Queue a new analyze_basic job\n      3. Return the job status (analysis will be computed asynchronously)\n\n      Returns null if the run is not found or not completed.\n      Requires authentication.\n    "
+  recomputeAnalysis(
+    """Run ID to recompute analysis for"""
+    runId: ID!
+  ): AnalysisResult
+
+  "\n      Attempt to recover an orphaned run.\n\n      If the run is stuck in RUNNING or SUMMARIZING state with no active jobs,\n      this will re-queue missing probe jobs or summarize jobs as needed.\n\n      Useful for recovering from API restarts or other interruptions.\n\n      Requires authentication.\n    "
+  recoverRun(
+    """The ID of the run to recover"""
+    runId: ID!
+  ): RecoverRunPayload!
+
+  """
+  Manually trigger scenario regeneration for a definition. Queues a new expansion job.
+  """
+  regenerateScenarios(
+    """Definition ID to regenerate scenarios for"""
+    definitionId: String!
+  ): RegenerateScenariosResult!
+
+  """Remove a tag from a definition. No-op if tag was not assigned."""
+  removeTagFromDefinition(
+    """Definition to untag"""
+    definitionId: String!
+
+    """Tag to remove"""
+    tagId: String!
+  ): Definition!
+  renameDomain(id: ID!, name: String!): Domain!
+
+  "\n      Restart summarization for a run.\n\n      Only works when run is in a terminal state (COMPLETED/FAILED/CANCELLED).\n      By default, only re-queues transcripts without summaries or with errors.\n      With force=true, re-queues all transcripts.\n\n      Requires authentication.\n    "
+  restartSummarization(
+    """If true, re-summarize all transcripts (not just failed/missing)"""
+    force: Boolean
+
+    """The ID of the run to restart summarization for"""
+    runId: ID!
+  ): RestartSummarizationPayload!
+
+  "\n      Resume the global job queue.\n\n      Job processing will restart from where it left off.\n\n      Requires authentication.\n    "
+  resumeQueue: QueueStatus!
+
+  "\n      Resume a paused evaluation.\n\n      Jobs will begin processing again from where they left off.\n\n      Requires authentication. Run must be in PAUSED state.\n    "
+  resumeRun(
+    """The ID of the run to resume"""
+    runId: ID!
+  ): Run!
+  retryDomainTrialCell(definitionId: ID!, domainId: ID!, modelId: String!, scopeCategory: String, temperature: Float): RetryDomainTrialCellResult!
+  reviewOrderInvariancePair(pairId: ID!, reviewNotes: String, reviewStatus: String!): ReviewOrderInvariancePairPayload!
+
+  "\n      Revoke (delete) an API key.\n      Requires authentication and ownership of the key.\n\n      Returns true if the key was successfully revoked.\n      Throws NotFoundError if the key doesn't exist or belongs to another user.\n    "
+  revokeApiKey(
+    """ID of the API key to revoke"""
+    id: ID!
+  ): Boolean!
+  runTrialsForDomain(definitionIds: [ID!], domainId: ID!, maxBudgetUsd: Float, temperature: Float): DomainTrialRunResult!
+
+  """Set a model as a default for its provider"""
+  setDefaultLlmModel(
+    """Model ID to set as default"""
+    id: String!
+  ): SetDefaultModelResult!
+  setDomainDefaults(defaultContextId: ID, defaultLevelPresetVersionId: ID, defaultPreambleVersionId: ID, id: ID!): Domain!
+  setDomainSettings(contextId: ID, domainId: ID!, levelPresetVersionId: ID, preambleVersionId: ID, valueStatements: [ValueStatementInput!]!): Domain!
+
+  """Set the budget balance for a provider (null disables budget tracking)"""
+  setProviderBalance(
+    """New balance in dollars (null = disable)"""
+    balance: Float
+
+    """Provider ID"""
+    providerId: String!
+  ): LlmProvider!
+  startDomainEvaluation(definitionIds: [ID!], domainId: ID!, maxBudgetUsd: Float, modelIds: [String!], samplePercentage: Int, samplesPerScenario: Int, scopeCategory: String, targetBatchCount: Int, temperature: Float): DomainTrialRunResult!
+
+  "\n      Start a new evaluation run.\n\n      Creates a run record and queues probe_scenario jobs for each model-scenario combination.\n      Requires authentication.\n\n      Returns the created run and the number of jobs queued.\n    "
+  startRun(
+    """Configuration for the new run"""
+    input: StartRunInput!
+  ): StartRunPayload!
+
+  """
+  Sync the provider balance with the real balance from the provider dashboard
+  """
+  syncProviderBalance(
+    """Provider ID"""
+    providerId: String!
+
+    """Real balance in dollars from provider dashboard"""
+    realBalance: Float!
+  ): ProviderBalanceSyncLog!
+
+  "\n      Trigger a system-wide scan for orphaned runs.\n\n      Detects all runs stuck in RUNNING or SUMMARIZING state with no active jobs,\n      and attempts to recover them by re-queuing missing jobs.\n\n      This is normally run automatically every 5 minutes, but can be triggered manually.\n\n      Requires authentication.\n    "
+  triggerRecovery: TriggerRecoveryPayload!
+
+  """
+  Detach a forked definition from its parent and snapshot inherited content locally.
+  """
+  unforkDefinition(
+    """Definition ID to detach from parent"""
+    id: String!
+  ): Definition!
+
+  """Remove a model from defaults for its provider"""
+  unsetDefaultLlmModel(
+    """Model ID to unset as default"""
+    id: String!
+  ): LlmModel!
+
+  """
+  Update an existing definition. Note: If definition has runs, consider forking instead to preserve history.
+  """
+  updateDefinition(
+    """Definition ID to update"""
+    id: String!
+    input: UpdateDefinitionInput!
+  ): Definition!
+
+  """
+  Update specific content fields of a definition. Supports clearing overrides to inherit from parent.
+  """
+  updateDefinitionContent(
+    """Definition ID to update"""
+    id: String!
+    input: UpdateDefinitionContentInput!
+  ): Definition!
+  updateDomainContext(id: ID!, input: UpdateDomainContextInput!): DomainContext!
+  updateJobChoicePair(input: UpdateJobChoicePairInput!): CreateJobChoicePairResult!
+  updateLevelPreset(id: ID!, l1: String!, l2: String!, l3: String!, l4: String!, l5: String!): LevelPreset!
+
+  """Update an LLM model (display name, costs, API config)"""
+  updateLlmModel(
+    """Model ID to update"""
+    id: String!
+    input: UpdateLlmModelInput!
+  ): LlmModel!
+
+  """Update LLM provider settings (rate limits, enabled status)"""
+  updateLlmProvider(
+    """Provider ID to update"""
+    id: String!
+    input: UpdateLlmProviderInput!
+  ): LlmProvider!
+
+  """Update a preamble (creates a new version)"""
+  updatePreamble(id: ID!, input: UpdatePreambleInput!): Preamble!
+
+  "\n      Update a run's properties.\n\n      Currently supports updating the run name.\n\n      Requires authentication.\n    "
+  updateRun(
+    """The fields to update"""
+    input: UpdateRunInput!
+
+    """The ID of the run to update"""
+    runId: ID!
+  ): Run!
+
+  """Create a new survey version from an existing survey."""
+  updateSurvey(id: ID!, input: UpdateSurveyInput!): Experiment!
+
+  """Update a system setting (creates if not exists)"""
+  updateSystemSetting(input: UpdateSystemSettingInput!): SystemSetting!
+
+  "\n      Manually update a transcript decision code.\n\n      Accepts only positive integer decision codes.\n      If the run is already completed, this will supersede current analysis\n      and queue a recompute job.\n\n      Requires authentication.\n    "
+  updateTranscriptDecision(
+    """Decision code override (must be a positive integer)"""
+    decisionCode: String!
+
+    """The ID of the transcript to update"""
+    transcriptId: ID!
+  ): Transcript!
+  updateValueStatement(id: ID!, input: UpdateValueStatementInput!): ValueStatement!
+}
+
+type OrderInvarianceExclusionCount {
+  count: Int!
+  reason: String!
+}
+
+type OrderInvarianceLaunchRun {
+  completedAt: DateTime
+  completedTrials: Int!
+  failedTrials: Int!
+  isStalled: Boolean!
+  percentComplete: Float!
+  runId: ID!
+  startedAt: DateTime
+  status: String!
+  targetedTrials: Int!
+}
+
+type OrderInvarianceLaunchStatus {
+  activeRuns: Int!
+  completedRuns: Int!
+  completedTrials: Int!
+  failedRuns: Int!
+  failedTrials: Int!
+  failureSummaries: [String!]!
+  generatedAt: DateTime!
+  isComplete: Boolean!
+  percentComplete: Float!
+  runs: [OrderInvarianceLaunchRun!]!
+  stalledModels: [String!]!
+  targetedTrials: Int!
+  totalRuns: Int!
+}
+
+type OrderInvarianceModelMetrics {
+  matchCount: Int!
+  matchEligibleCount: Int!
+  matchRate: Float
+  modelId: String!
+  modelLabel: String!
+  pairLevelMarginSummary: PairLevelMarginSummary
+  scaleOrderEligibleCount: Int!
+  scaleOrderExcludedCount: Int!
+  scaleOrderPull: String!
+  scaleOrderReversalRate: Float
+  valueOrderEligibleCount: Int!
+  valueOrderExcludedCount: Int!
+  valueOrderPull: String!
+  valueOrderReversalRate: Float
+  withinCellDisagreementRate: Float
+}
+
+type OrderInvarianceResult {
+  generatedAt: DateTime!
+  modelMetrics: [OrderInvarianceModelMetrics!]!
+  rows: [OrderInvarianceRow!]!
+  summary: OrderInvarianceSummary!
+}
+
+type OrderInvarianceReviewResult {
+  generatedAt: DateTime!
+  summary: OrderInvarianceReviewSummary!
+  vignettes: [OrderInvarianceReviewVignette!]!
+}
+
+type OrderInvarianceReviewSummary {
+  approvedVignettes: Int!
+  launchReady: Boolean!
+  pendingVignettes: Int!
+  rejectedVignettes: Int!
+  reviewedVignettes: Int!
+  totalVignettes: Int!
+}
+
+type OrderInvarianceReviewVignette {
+  baselineName: String!
+  baselineText: String!
+  conditionKey: String!
+  conditionPairCount: Int!
+  flippedName: String!
+  flippedText: String!
+  pairId: ID!
+  reviewNotes: String
+  reviewStatus: String!
+  reviewedAt: DateTime
+  reviewedBy: String
+  sourceScenarioId: ID!
+  variantScenarioId: ID!
+  variantType: String
+  vignetteId: ID!
+  vignetteTitle: String!
+}
+
+type OrderInvarianceRow {
+  conditionKey: String!
+  isMatch: Boolean
+  majorityVoteBaseline: Int
+  majorityVoteFlipped: Int
+  mismatchType: String
+  modelId: String!
+  modelLabel: String!
+  ordinalDistance: Int
+  rawScore: Int
+  variantType: String
+  vignetteId: ID!
+  vignetteTitle: String!
+}
+
+type OrderInvarianceSummary {
+  comparablePairs: Int!
+  exactMatchRate: Float
+  excludedPairs: [OrderInvarianceExclusionCount!]!
+  matchComparablePairs: Int!
+  matchRate: Float
+  missingPairs: Int!
+  presentationComparablePairs: Int!
+  presentationEffectMAD: Float
+  presentationMissingPairs: Int!
+  qualifyingPairs: Int!
+  scaleComparablePairs: Int!
+  scaleEffectMAD: Float
+  scaleMissingPairs: Int!
+  sensitiveModelCount: Int!
+  sensitiveVignetteCount: Int!
+  status: String!
+  totalCandidatePairs: Int!
+}
+
+type OrderInvarianceTranscript {
+  attributeALevel: Int
+  attributeBLevel: Int
+  content: JSON
+  createdAt: DateTime!
+  decisionCode: String
+  decisionCodeSource: String
+  durationMs: Int!
+  estimatedCost: Float
+  id: ID!
+  lastAccessedAt: DateTime
+  modelId: String!
+  modelVersion: String
+  orderLabel: String!
+  runId: ID!
+  scenarioId: ID!
+  tokenCount: Int!
+  turnCount: Int!
+}
+
+type OrderInvarianceTranscriptResult {
+  attributeALabel: String
+  attributeBLabel: String
+  conditionKey: String!
+  generatedAt: DateTime!
+  modelId: String!
+  modelLabel: String!
+  transcripts: [OrderInvarianceTranscript!]!
+  vignetteId: ID!
+  vignetteTitle: String!
+}
+
+type PairLevelMarginSummary {
+  mean: Float
+  median: Float
+  p25: Float
+  p75: Float
+}
+
+"""A reusable preamble that can be prepended to scenarios"""
+type Preamble {
+  createdAt: DateTime!
+  id: ID!
+
+  """The most recently created version"""
+  latestVersion: PreambleVersion
+  name: String!
+  updatedAt: DateTime!
+
+  """History of all versions for this preamble"""
+  versions: [PreambleVersion!]!
+}
+
+"""A versioned snapshot of a preamble"""
+type PreambleVersion {
+  content: String!
+  createdAt: DateTime!
+  id: ID!
+
+  """The parent preamble definition"""
+  preamble: Preamble
+  preambleId: String!
+  version: String!
+}
+
+"""Explicit preference summary for vignette analysis semantics"""
+type PreferenceSummary {
+  """Per-model preference direction and strength summary"""
+  perModel: JSON!
+}
+
+"""Result of a probe job execution"""
+type ProbeResult {
+  completedAt: DateTime
+  createdAt: DateTime!
+
+  """Probe execution duration in milliseconds"""
+  durationMs: Int
+
+  """
+  Error code if failed (e.g., NOT_FOUND, RATE_LIMIT, MAX_RETRIES_EXCEEDED)
+  """
+  errorCode: String
+
+  """Detailed error message if failed"""
+  errorMessage: String
+  id: ID!
+
+  """Input tokens consumed (for cost tracking)"""
+  inputTokens: Int
+  modelId: String!
+
+  """Output tokens generated (for cost tracking)"""
+  outputTokens: Int
+
+  """Number of retries attempted before final result"""
+  retryCount: Int!
+  runId: String!
+
+  """
+  Index within sample set for multi-sample runs (0 to N-1). Always 0 for single-sample runs.
+  """
+  sampleIndex: Int!
+  scenarioId: String!
+
+  """SUCCESS or FAILED"""
+  status: String!
+
+  """ID of the created transcript (if successful)"""
+  transcriptId: String
+}
+
+"""Summary of probe results for a single model"""
+type ProbeResultModelSummary {
+  """Unique error codes encountered"""
+  errorCodes: [String!]!
+
+  """Number of failed probes"""
+  failed: Int!
+  modelId: String!
+
+  """Number of successful probes"""
+  success: Int!
+}
+
+"""A record of a manual balance sync for a provider"""
+type ProviderBalanceSyncLog {
+  createdByUserId: String
+
+  """Difference: enteredBalance - systemBalanceAtSync"""
+  delta: Float!
+
+  """Real balance entered by the user"""
+  enteredBalance: Float!
+  id: ID!
+  providerId: String!
+  syncedAt: DateTime!
+
+  """System-tracked balance at the time of sync"""
+  systemBalanceAtSync: Float!
+}
+
+"""Execution metrics for a specific LLM provider"""
+type ProviderExecutionMetrics {
+  """Number of jobs currently being processed"""
+  activeJobs: Int!
+
+  """List of currently active model IDs for this provider"""
+  activeModelIds: [String!]!
+
+  """Maximum concurrent requests allowed for this provider"""
+  maxParallel: Int!
+
+  """Provider name (e.g., "anthropic", "openai")"""
+  provider: String!
+
+  """Number of jobs waiting in the rate limiter queue"""
+  queuedJobs: Int!
+
+  """Recent job completions (last 10)"""
+  recentCompletions: [CompletionEvent!]!
+
+  """Rate limit (requests per minute) for this provider"""
+  requestsPerMinute: Int!
+}
+
+"""Health status for all LLM providers"""
+type ProviderHealth {
+  """When the health check was performed"""
+  checkedAt: DateTime!
+
+  """Health status for each provider"""
+  providers: [ProviderHealthStatus!]!
+}
+
+"""Health status for an LLM provider"""
+type ProviderHealthStatus {
+  """Whether the API key is configured"""
+  configured: Boolean!
+
+  """Whether the API is reachable (health check passed)"""
+  connected: Boolean!
+
+  """Error message if health check failed"""
+  error: String
+
+  """Provider identifier (e.g., "openai")"""
+  id: String!
+
+  """When this provider was last checked"""
+  lastChecked: DateTime
+
+  """Provider display name (e.g., "OpenAI")"""
+  name: String!
+
+  """
+  Remaining budget in USD when available. For providers with spend-only APIs, this requires a configured monthly cap.
+  """
+  remainingBudgetUsd: Float
+}
+
+type Query {
+  """
+  Get the average token statistics across all models. Used as fallback when model-specific stats are unavailable.
+  """
+  allModelTokenAverage: ModelTokenStats
+
+  """
+  Fetch the latest analysis result for multiple runs. Useful for aggregation.
+  """
+  analyses(
+    """List of Run IDs"""
+    runIds: [ID!]!
+  ): [AnalysisResult!]!
+
+  """
+  Fetch the current analysis result for a run. Returns null if not yet computed.
+  """
+  analysis(
+    """Run ID"""
+    runId: ID!
+  ): AnalysisResult
+
+  """Get authoritative analysis folder counts for tag-based folder view."""
+  analysisFolderCounts(
+    """Filter by analysis status (CURRENT or SUPERSEDED)"""
+    analysisStatus: String
+
+    """Filter by definition ID"""
+    definitionId: String
+
+    """Filter by definition tag IDs"""
+    definitionTagIds: [ID!]
+
+    """Filter by experiment ID"""
+    experimentId: String
+
+    """
+    Filter by workflow category (PILOT, PRODUCTION, REPLICATION, VALIDATION, UNKNOWN_LEGACY)
+    """
+    runCategory: String
+
+    """Filter by run type (ALL, SURVEY, NON_SURVEY)"""
+    runType: String
+
+    """Filter by status (PENDING, RUNNING, COMPLETED, FAILED, CANCELLED)"""
+    status: String
+  ): AnalysisFolderCounts!
+
+  """Fetch all analysis versions for a run, including superseded versions."""
+  analysisHistory(
+    """Maximum number of results (default: 10, max: 100)"""
+    limit: Int
+
+    """Number of results to skip (default: 0)"""
+    offset: Int
+
+    """Run ID"""
+    runId: ID!
+  ): [AnalysisResult!]!
+
+  """Get the count of analysis versions for a run. Useful for pagination."""
+  analysisHistoryCount(
+    """Run ID to count analysis versions for"""
+    runId: ID!
+  ): Int!
+
+  "\n      List all API keys for the current user.\n      Requires authentication.\n\n      Note: Only key prefix is returned, not the full key value.\n    "
+  apiKeys(
+    """Maximum number of results (default: 50, max: 100)"""
+    limit: Int
+
+    """Number of results to skip (default: 0)"""
+    offset: Int
+  ): [ApiKey!]!
+  assumptionsOrderInvariance(directionOnly: Boolean, trimOutliers: Boolean): OrderInvarianceResult!
+  assumptionsOrderInvarianceLaunchStatus(runIds: [ID!]!): OrderInvarianceLaunchStatus!
+  assumptionsOrderInvarianceReview: OrderInvarianceReviewResult!
+  assumptionsOrderInvarianceTranscripts(conditionKey: String!, modelId: String!, vignetteId: ID!): OrderInvarianceTranscriptResult!
+  assumptionsTempZero(directionOnly: Boolean): AssumptionsTempZeroResult!
+
+  "\n      Query audit logs with optional filters and pagination.\n\n      Returns a paginated connection with audit log entries.\n      Use the 'after' cursor for pagination through large result sets.\n    "
+  auditLogs(
+    """Cursor for pagination (ID of last item from previous page)"""
+    after: String
+
+    """Filters to apply to the query"""
+    filter: AuditLogFilterInput
+
+    """Number of results to return (default: 50, max: 100)"""
+    first: Int
+  ): AuditLogConnection!
+
+  "\n      List available LLM models for evaluation runs.\n\n      Returns all supported models with their availability status.\n      A model is available if the corresponding provider API key is configured.\n\n      Use these model IDs when starting a run with the startRun mutation.\n    "
+  availableModels(
+    """Only return models that are available (provider API key configured)"""
+    availableOnly: Boolean
+
+    """Maximum number of results (default: 50, max: 100)"""
+    limit: Int
+
+    """Number of results to skip (default: 0)"""
+    offset: Int
+  ): [AvailableModel!]!
+  debugAssumptionsMismatches(modelId: String!, scenarioId: String!): DebugMismatchResult!
+
+  """Fetch a single definition by ID. Returns null if not found."""
+  definition(
+    """Definition ID"""
+    id: ID!
+
+    """Include soft-deleted definitions (default: false)"""
+    includeDeleted: Boolean
+  ): Definition
+
+  """
+  Get ancestors of a definition (full chain to root). Returns definitions ordered from root to immediate parent.
+  """
+  definitionAncestors(
+    """Definition ID to get ancestors for"""
+    id: ID!
+
+    """Maximum depth to traverse (default: 10)"""
+    maxDepth: Int
+  ): [Definition!]!
+
+  """
+  Get the count of definitions matching the specified filters. Useful for pagination.
+  """
+  definitionCount(
+    """Filter by domain ID"""
+    domainId: ID
+
+    """Only definitions that have been used in runs"""
+    hasRuns: Boolean
+
+    """If true, count only root definitions (no parent)"""
+    rootOnly: Boolean
+
+    """
+    Search across vignette metadata. Terms are AND by default; use explicit OR (e.g. "fairness OR safety") for OR matching.
+    """
+    search: String
+
+    """Filter by tag IDs (OR logic - matches any of the tags)"""
+    tagIds: [ID!]
+
+    """Only definitions that are not assigned to any domain"""
+    withoutDomain: Boolean
+  ): Int!
+
+  """
+  Get descendants of a definition (full subtree). Returns definitions ordered by creation date (newest first).
+  """
+  definitionDescendants(
+    """Definition ID to get descendants for"""
+    id: ID!
+
+    """Maximum depth to traverse (default: 10)"""
+    maxDepth: Int
+  ): [Definition!]!
+
+  """List definitions with enhanced filtering, search, and pagination."""
+  definitions(
+    """Filter by domain ID"""
+    domainId: ID
+
+    """Only definitions that have been used in runs"""
+    hasRuns: Boolean
+
+    """Maximum number of results (default: 20, max: 100)"""
+    limit: Int
+
+    """Number of results to skip for pagination (default: 0)"""
+    offset: Int
+
+    """If true, return only root definitions (no parent)"""
+    rootOnly: Boolean
+
+    """
+    Search across vignette metadata. Terms are AND by default; use explicit OR (e.g. "fairness OR safety") for OR matching.
+    """
+    search: String
+
+    """Filter by tag IDs (OR logic - matches any of the tags)"""
+    tagIds: [ID!]
+
+    """Only definitions that are not assigned to any domain"""
+    withoutDomain: Boolean
+  ): [Definition!]!
+  domain(id: ID!): Domain
+  domainAnalysis(domainId: ID!, scoreMethod: String, signature: String): DomainAnalysisResult!
+  domainAnalysisConditionTranscripts(definitionId: ID!, domainId: ID!, limit: Int, modelId: String!, scenarioId: ID, signature: String, valueKey: String!): [DomainAnalysisConditionTranscript!]!
+  domainAnalysisValueDetail(domainId: ID!, modelId: String!, scoreMethod: String, signature: String, valueKey: String!): DomainAnalysisValueDetailResult!
+  domainAvailableSignatures(domainId: ID!): [DomainAvailableSignature!]!
+  domainConfigSnapshots(domainId: ID!, limit: Int): [DomainConfigSnapshotSummary!]!
+  domainContext(id: ID!): DomainContext
+  domainContexts(domainId: String): [DomainContext!]!
+  domainEvaluation(id: ID!): DomainEvaluation
+  domainEvaluationMembers(id: ID!): [DomainEvaluationMember!]!
+  domainEvaluationStatus(id: ID!): DomainEvaluationStatus
+  domainEvaluations(domainId: ID!, limit: Int, offset: Int, scopeCategory: String, status: String): [DomainEvaluation!]!
+  domainFindingsEligibility(domainId: ID!): DomainFindingsEligibility!
+  domainRunSummary(domainId: ID!, scopeCategory: String): DomainRunSummary!
+  domainSettings(domainId: ID!): DomainSettings
+  domainTrialRunsStatus(runIds: [ID!]!): [DomainTrialRunStatus!]!
+  domainTrialsPlan(definitionIds: [ID!], domainId: ID!, scopeCategory: String, temperature: Float): DomainTrialPlanResult!
+
+  "\n      Returns a Schwartz value-pair coverage matrix for a domain.\n\n      Each cell shows how many completed trial batches (runs) exist for the vignette\n      that tests that pair of values in conflict. Optionally filtered to count only\n      runs that included the specified model IDs.\n\n      The matrix is symmetric: each unique value pair appears once, with the cell key\n      sorted alphabetically (valueA < valueB). Diagonal cells are omitted.\n    "
+  domainValueCoverage(
+    """Domain to compute coverage for"""
+    domainId: ID!
+
+    """
+    If provided, only count runs that included at least one of these model IDs
+    """
+    modelIds: [String!]
+
+    """If provided, only count completed runs matching this trial signature"""
+    signature: String
+  ): DomainValueCoverageResult
+  domains(limit: Int, offset: Int, search: String): [Domain!]!
+
+  "\n      Get the complete audit history for a specific entity.\n\n      Returns all audit log entries for the given entity type and ID,\n      ordered by creation time (newest first).\n    "
+  entityAuditHistory(
+    """ID of the entity"""
+    entityId: String!
+
+    """Type of entity (e.g., "Definition", "Run")"""
+    entityType: String!
+
+    """Maximum number of entries to return (default: 50, max: 100)"""
+    limit: Int
+
+    """Number of entries to skip (default: 0)"""
+    offset: Int
+  ): [AuditLog!]!
+
+  """
+  Estimate cost for a potential run before starting it. Returns per-model breakdown with token predictions based on historical data.
+  """
+  estimateCost(
+    """Definition ID to estimate cost for"""
+    definitionId: ID!
+
+    """Model IDs to include in the estimate"""
+    models: [String!]!
+
+    """Sample percentage (1-100, default 100)"""
+    samplePercentage: Int = 100
+
+    """
+    Number of samples per scenario-model pair for multi-sample runs (1-100, default 1)
+    """
+    samplesPerScenario: Int = 1
+  ): CostEstimate!
+  estimateDomainEvaluationCost(definitionIds: [ID!], domainId: ID!, modelIds: [String!], samplePercentage: Int, samplesPerScenario: Int, scopeCategory: String, temperature: Float): DomainEvaluationCostEstimate!
+  finalTrialPlan(definitionId: String!, models: [String!]!): FinalTrialPlan!
+
+  """
+  Get the configured infrastructure model for a specific purpose (e.g., "scenario_expansion")
+  """
+  infraModel(
+    """Purpose key (e.g., "scenario_expansion")"""
+    purpose: String!
+  ): LlmModel
+
+  """Get a specific level preset by ID"""
+  levelPreset(id: ID!): LevelPreset
+
+  """List all level presets"""
+  levelPresets: [LevelPreset!]!
+
+  """Get a specific LLM model by ID"""
+  llmModel(id: String!): LlmModel
+
+  """
+  Get a model by provider name and model ID (e.g., "openai" and "gpt-4o-mini")
+  """
+  llmModelByIdentifier(
+    """Model ID (e.g., "gpt-4o-mini")"""
+    modelId: String!
+
+    """Provider name (e.g., "openai")"""
+    providerName: String!
+  ): LlmModel
+
+  """List all LLM models, optionally filtered by provider or status"""
+  llmModels(
+    """Only show available models"""
+    availableOnly: Boolean
+
+    """Maximum number of results (default: 50, max: 100)"""
+    limit: Int
+
+    """Number of results to skip (default: 0)"""
+    offset: Int
+
+    """Filter by provider ID"""
+    providerId: String
+
+    """Filter by status (ACTIVE or DEPRECATED)"""
+    status: String
+  ): [LlmModel!]!
+
+  """Get a specific LLM provider by ID"""
+  llmProvider(id: String!): LlmProvider
+
+  """List all LLM providers with their models and availability status"""
+  llmProviders(
+    """Maximum number of results (default: 50, max: 100)"""
+    limit: Int
+
+    """Number of results to skip (default: 0)"""
+    offset: Int
+  ): [LlmProvider!]!
+
+  "\n      Get the currently authenticated user.\n      Returns null if not authenticated.\n    "
+  me: User
+
+  """
+  Get token statistics for specific models. Useful for understanding prediction quality.
+  """
+  modelTokenStats(
+    """Model IDs to get stats for (returns all if not specified)"""
+    modelIds: [String!]
+  ): [ModelTokenStats!]!
+
+  """Get a specific preamble by ID"""
+  preamble(id: ID!): Preamble
+
+  """List all preambles"""
+  preambles: [Preamble!]!
+
+  "\n      Get health status for all LLM providers.\n\n      Checks connectivity to each provider's API.\n      Results are cached for 5 minutes.\n\n      Use the `refresh` argument to force a fresh check.\n    "
+  providerHealth(
+    """Force a fresh health check (ignore cache)"""
+    refresh: Boolean
+  ): ProviderHealth!
+
+  "\n      Get health status for the job queue.\n\n      Shows queue running state, job counts, and success rates.\n    "
+  queueHealth: QueueHealth!
+
+  "\n      Get current queue status including job counts by type and state.\n\n      Requires authentication.\n\n      Returns isRunning, isPaused flags, job counts per type,\n      and aggregate totals across all types.\n    "
+  queueStatus: QueueStatus!
+
+  """Fetch a single run by ID. Returns null if not found or deleted."""
+  run(
+    """Run ID"""
+    id: ID!
+
+    """Include soft-deleted runs (default: false)"""
+    includeDeleted: Boolean
+  ): Run
+
+  """
+  Condition grid (attribute A x attribute B) with scenario IDs and existing trial counts.
+  """
+  runConditionGrid(
+    """Definition ID to build condition grid for"""
+    definitionId: ID!
+  ): RunConditionGrid
+
+  """
+  Get the count of runs matching the specified filters. Useful for pagination.
+  """
+  runCount(
+    """Filter by analysis status (CURRENT or SUPERSEDED)"""
+    analysisStatus: String
+
+    """Filter by definition ID"""
+    definitionId: String
+
+    """Filter by definition tag IDs"""
+    definitionTagIds: [ID!]
+
+    """Filter by experiment ID"""
+    experimentId: String
+
+    """Filter to runs that have analysis results (any status)"""
+    hasAnalysis: Boolean
+
+    """
+    Filter by workflow category (PILOT, PRODUCTION, REPLICATION, VALIDATION, UNKNOWN_LEGACY)
+    """
+    runCategory: String
+
+    """Filter by run type (ALL, SURVEY, NON_SURVEY)"""
+    runType: String
+
+    """Filter by status (PENDING, RUNNING, COMPLETED, FAILED, CANCELLED)"""
+    status: String
+  ): Int!
+
+  """List runs with optional filtering and pagination."""
+  runs(
+    """Filter by analysis status (CURRENT or SUPERSEDED)"""
+    analysisStatus: String
+
+    """Filter by definition ID"""
+    definitionId: String
+
+    """Filter by definition tag IDs"""
+    definitionTagIds: [ID!]
+
+    """Filter by experiment ID"""
+    experimentId: String
+
+    """Filter to runs that have analysis results (any status)"""
+    hasAnalysis: Boolean
+
+    """Maximum number of results (default: 20, max: 100)"""
+    limit: Int
+
+    """Number of results to skip for pagination (default: 0)"""
+    offset: Int
+
+    """
+    Filter by workflow category (PILOT, PRODUCTION, REPLICATION, VALIDATION, UNKNOWN_LEGACY)
+    """
+    runCategory: String
+
+    """Filter by run type (ALL, SURVEY, NON_SURVEY)"""
+    runType: String
+
+    """Filter by status (PENDING, RUNNING, COMPLETED, FAILED, CANCELLED)"""
+    status: String
+  ): [Run!]!
+
+  """
+  Fetch multiple runs by IDs for cross-run comparison. Limited to 10 runs maximum. Returns runs with their analysis data.
+  """
+  runsWithAnalysis(
+    """Array of run IDs to fetch (max 10)"""
+    ids: [ID!]!
+  ): [Run!]!
+
+  """Fetch a single scenario by ID with full content."""
+  scenario(
+    """Scenario ID"""
+    id: ID!
+  ): Scenario
+
+  """Get the count of scenarios for a definition."""
+  scenarioCount(
+    """Definition ID to count scenarios for"""
+    definitionId: ID!
+  ): Int!
+
+  "\n      List scenarios for a definition with full content.\n\n      Returns scenarios with their complete content including preamble, prompt,\n      followups, and dimension values. Use this to verify scenario generation\n      and inspect what will be sent to models during evaluation.\n    "
+  scenarios(
+    """Definition ID to get scenarios for"""
+    definitionId: ID!
+
+    """Maximum number of results (default: 50, max: 100)"""
+    limit: Int
+
+    """Number of results to skip for pagination (default: 0)"""
+    offset: Int
+  ): [Scenario!]!
+
+  """Fetch a survey by experiment ID."""
+  survey(
+    """Survey experiment ID"""
+    id: ID!
+  ): Experiment
+
+  """List surveys (stored as experiments with analysisPlan.kind="survey")."""
+  surveys(
+    """Optional case-insensitive search by survey name."""
+    search: String
+  ): [Experiment!]!
+
+  "\n      Get combined health status for all system components.\n\n      Includes provider health, queue health, and worker health.\n      Results are cached (providers: 5 min, workers: 10 min).\n\n      Use the `refresh` argument to force fresh checks.\n    "
+  systemHealth(
+    """Force fresh health checks (ignore cache)"""
+    refresh: Boolean
+  ): SystemHealth!
+
+  """Get a specific system setting by key"""
+  systemSetting(key: String!): SystemSetting
+
+  """List all system settings"""
+  systemSettings(
+    """Maximum number of results (default: 50, max: 100)"""
+    limit: Int
+
+    """Number of results to skip (default: 0)"""
+    offset: Int
+  ): [SystemSetting!]!
+
+  """Get a single tag by ID."""
+  tag(
+    """Tag ID"""
+    id: ID!
+  ): Tag
+
+  """
+  Get the count of tags matching the specified filters. Useful for pagination.
+  """
+  tagCount(
+    """Search tags by name (contains match)"""
+    search: String
+  ): Int!
+
+  """List all tags, optionally filtered by name search."""
+  tags(
+    """Maximum number of results (default: 50, max: 100)"""
+    limit: Int
+
+    """Number of results to skip (default: 0)"""
+    offset: Int
+
+    """Search tags by name (contains match)"""
+    search: String
+  ): [Tag!]!
+  tempZeroVerificationReport: TempZeroVerificationReport
+  valueStatement(id: ID!): ValueStatement
+  valueStatements(domainId: ID!): [ValueStatement!]!
+
+  "\n      Get health status for Python workers.\n\n      Checks Python environment, packages, and API key configuration.\n      Results are cached for 10 minutes.\n\n      Use the `refresh` argument to force a fresh check.\n    "
+  workerHealth(
+    """Force a fresh health check (ignore cache)"""
+    refresh: Boolean
+  ): WorkerHealth!
+}
+
+"""Health status for the job queue"""
+type QueueHealth {
+  """Number of currently processing jobs"""
+  activeJobs: Int!
+
+  """When the health check was performed"""
+  checkedAt: DateTime!
+
+  """Jobs completed in the last 24 hours"""
+  completedLast24h: Int!
+
+  """Error message if queue health check failed"""
+  error: String
+
+  """Jobs failed in the last 24 hours"""
+  failedLast24h: Int!
+
+  """Whether the queue is healthy"""
+  isHealthy: Boolean!
+
+  """Whether the queue is paused"""
+  isPaused: Boolean!
+
+  """Whether queue workers are running"""
+  isRunning: Boolean!
+
+  """Job counts by type"""
+  jobTypes: [JobTypeStatus!]
+
+  """Number of jobs waiting to be processed"""
+  pendingJobs: Int!
+
+  """Success rate (completed / total processed), null if no jobs"""
+  successRate: Float
+}
+
+"""Overall queue status and statistics"""
+type QueueStatus {
+  """Whether the queue is currently paused"""
+  isPaused: Boolean!
+
+  """Whether the queue workers are running"""
+  isRunning: Boolean!
+
+  """Job counts by type"""
+  jobTypes: [JobTypeStatus!]!
+
+  """Aggregate counts across all job types"""
+  totals: QueueTotals!
+}
+
+"""Aggregate job counts across all types"""
+type QueueTotals {
+  """Total active jobs across all types"""
+  active: Int!
+
+  """Total completed jobs (last 24h)"""
+  completed: Int!
+
+  """Total failed jobs"""
+  failed: Int!
+
+  """Total pending jobs across all types"""
+  pending: Int!
+}
+
+type RankingShape {
+  bottomGap: Float!
+  bottomStructure: String!
+  dominanceZScore: Float
+  spread: Float!
+  steepness: Float!
+  topGap: Float!
+  topStructure: String!
+}
+
+type RankingShapeBenchmarks {
+  domainMeanTopGap: Float!
+  domainStdTopGap: Float
+  medianSpread: Float!
+}
+
+"""Result of recovering an orphaned run"""
+type RecoverRunPayload {
+  """
+  The recovery action taken (requeued_probes, triggered_summarization, no_missing_probes, etc.)
+  """
+  action: String!
+
+  """Number of jobs re-queued (if applicable)"""
+  requeuedCount: Int
+
+  """The recovered run"""
+  run: Run!
+}
+
+"""Result of triggering scenario regeneration"""
+type RegenerateScenariosResult {
+  """ID of the definition being regenerated"""
+  definitionId: String!
+
+  """ID of the queued expansion job (null if not queued)"""
+  jobId: String
+
+  """Whether a new expansion job was queued"""
+  queued: Boolean!
+}
+
+"""Explicit baseline reliability summary for vignette analysis semantics"""
+type ReliabilitySummary {
+  """Per-model baseline noise and reliability summary"""
+  perModel: JSON!
+}
+
+"""Result of restarting summarization for a run"""
+type RestartSummarizationPayload {
+  """Number of summarization jobs queued"""
+  queuedCount: Int!
+
+  """The updated run"""
+  run: Run!
+}
+
+type RetryDomainTrialCellResult {
+  definitionId: ID!
+  message: String
+  modelId: String!
+  runId: ID
+  success: Boolean!
+}
+
+type ReviewOrderInvariancePairPayload {
+  pairId: ID!
+  reviewStatus: String!
+  reviewedAt: DateTime!
+}
+
+"""A saved record of a model evaluation or launch"""
+type Run {
+  """Most recent analysis result for this run"""
+  analysis: AnalysisResult
+
+  """Analysis status: pending, computing, completed, or failed"""
+  analysisStatus: String
+
+  """Number of batches represented by this saved record"""
+  batchCount: Int!
+
+  """Direct companion run ID for paired launches"""
+  companionRunId: String
+  completedAt: DateTime
+  config: JSON!
+  createdAt: DateTime!
+
+  """User who started this run"""
+  createdBy: User
+  definition: Definition
+  definitionId: String!
+
+  """Snapshot of the definition version used for this run"""
+  definitionSnapshot: JSON
+
+  """The version of the definition used in this run (from snapshot)"""
+  definitionVersion: Int
+
+  """User who deleted this run (only populated for soft-deleted records)"""
+  deletedBy: User
+
+  """
+  Estimated cost calculated when run was created. Stored in run config for historical reference.
+  """
+  estimatedCosts: CostEstimate
+
+  """
+  Real-time execution metrics for monitoring parallel processing (only available during RUNNING state)
+  """
+  executionMetrics: ExecutionMetrics
+  experiment: Experiment
+  experimentId: String
+
+  """Failed probe results with error details"""
+  failedProbes: [ProbeResult!]!
+  id: ID!
+  lastAccessedAt: DateTime
+
+  """List of LLM models used in this run"""
+  models: [LlmModel!]!
+
+  """Optional user-defined name for this run"""
+  name: String
+
+  """Shared identifier for the paired batch that this run belongs to"""
+  pairedBatchGroupId: String
+
+  """Probe results with detailed success/failure information"""
+  probeResults(
+    """Maximum number of results to return (default: all, max: 1000)"""
+    limit: Int
+
+    """Filter by model ID"""
+    modelId: String
+
+    """Number of results to skip for pagination (default: 0)"""
+    offset: Int
+
+    """Filter by status (SUCCESS or FAILED)"""
+    status: String
+  ): [ProbeResult!]!
+
+  """Summary of probe results grouped by model, with error codes"""
+  probeResultsByModel: [ProbeResultModelSummary!]!
+  progress: JSON
+
+  """Recent completed or failed tasks for this run"""
+  recentTasks(
+    """Maximum number of recent tasks to return"""
+    limit: Int = 5
+  ): [TaskResult!]!
+
+  """Workflow category assigned to the run"""
+  runCategory: String!
+
+  """Structured progress information with percentComplete"""
+  runProgress: RunProgress
+
+  """
+  Number of samples per scenario-model pair for multi-sample runs. Default is 1 for single-sample runs.
+  """
+  samplesPerScenario: Int!
+
+  """IDs of scenarios selected for this run"""
+  selectedScenarios: [String!]!
+
+  """
+  Model IDs currently detected as stalled (no successful probe completion for 3+ minutes while jobs are pending)
+  """
+  stalledModels: [String!]!
+  startedAt: DateTime
+
+  """
+  Current status of the run (PENDING, RUNNING, COMPLETED, FAILED, CANCELLED)
+  """
+  status: String!
+
+  """
+  Progress information for transcript summarization (only populated in SUMMARIZING state)
+  """
+  summarizeProgress: RunProgress
+
+  """Tags associated with this run"""
+  tags: [Tag!]!
+  transcriptCount: Int!
+  transcripts(
+    """Maximum number of transcripts to return (default: all, max: 1000)"""
+    limit: Int
+
+    """Filter transcripts by model ID"""
+    modelId: String
+
+    """Number of transcripts to skip for pagination (default: 0)"""
+    offset: Int
+  ): [Transcript!]!
+  updatedAt: DateTime!
+}
+
+type RunConditionGrid {
+  attributeA: String!
+  attributeB: String!
+  cells: [RunConditionGridCell!]!
+  colLevels: [String!]!
+  rowLevels: [String!]!
+}
+
+type RunConditionGridCell {
+  colLevel: String!
+  rowLevel: String!
+  scenarioCount: Int!
+  scenarioIds: [String!]!
+  trialCount: Int!
+}
+
+"""Priority level for run execution (affects job queue ordering)"""
+enum RunPriority {
+  HIGH
+  LOW
+  NORMAL
+}
+
+"""Progress information for a run"""
+type RunProgress {
+  """Progress breakdown by model"""
+  byModel: [ByModelProgress!]
+
+  """Number of successfully completed tasks"""
+  completed: Int!
+
+  """Number of failed tasks"""
+  failed: Int!
+
+  """Completion percentage (0-100)"""
+  percentComplete: Float!
+
+  """Total number of tasks in the run"""
+  total: Int!
+}
+
+"""Status of a run execution"""
+enum RunStatus {
+  CANCELLED
+  COMPLETED
+  FAILED
+  PENDING
+  RUNNING
+}
+
+"""A generated scenario from a definition"""
+type Scenario {
+  content: JSON!
+  createdAt: DateTime!
+  definition: Definition!
+  definitionId: String!
+  id: ID!
+  name: String!
+}
+
+"""Result of setting a default model"""
+type SetDefaultModelResult {
+  """The new default model"""
+  model: LlmModel!
+
+  """Always null when multiple defaults are allowed"""
+  previousDefault: LlmModel
+}
+
+"""Input for starting a new evaluation run"""
+input StartRunInput {
+  """ID of the definition to run"""
+  definitionId: ID!
+
+  """Optional experiment to associate this run with"""
+  experimentId: ID
+
+  """
+  If true, runs an adaptive sampling strategy to reach 10 samples per condition
+  """
+  finalTrial: Boolean
+
+  """Launch mode hint: STANDARD, PAIRED_BATCH, or AD_HOC_BATCH"""
+  launchMode: String
+
+  """List of model IDs to evaluate (e.g., ["gpt-4", "claude-3"])"""
+  models: [String!]!
+
+  """Priority level: LOW, NORMAL (default), HIGH"""
+  priority: String
+
+  """
+  Optional workflow category: PILOT, PRODUCTION, REPLICATION, VALIDATION, or UNKNOWN_LEGACY
+  """
+  runCategory: String
+
+  """Percentage of scenarios to sample (1-100, default 100)"""
+  samplePercentage: Int
+
+  """Seed for deterministic sampling (optional)"""
+  sampleSeed: Int
+
+  """
+  Number of samples per scenario-model pair for multi-sample runs (1-100, default 1). Higher values measure response variance.
+  """
+  samplesPerScenario: Int
+
+  """Optional explicit scenario IDs to run instead of percentage sampling"""
+  scenarioIds: [ID!]
+
+  """
+  Optional sampling temperature (0-2). If omitted, provider default is used.
+  """
+  temperature: Float
+}
+
+"""Result of starting a new run"""
+type StartRunPayload {
+  """Number of jobs queued for this run"""
+  jobCount: Int!
+
+  """Companion run IDs created for paired Job Choice batch launches"""
+  pairedRunIds: [String!]
+
+  """The created run"""
+  run: Run!
+}
+
+input SurveyQuestionInput {
+  text: String!
+}
+
+input SurveyResponseOptionInput {
+  label: String!
+}
+
+"""Combined system health status"""
+type SystemHealth {
+  """LLM provider health"""
+  providers: ProviderHealth!
+
+  """Job queue health"""
+  queue: QueueHealth!
+
+  """Python worker health"""
+  worker: WorkerHealth!
+}
+
+"""A system-wide configuration setting"""
+type SystemSetting {
+  id: ID!
+
+  """Setting key (unique identifier)"""
+  key: String!
+  updatedAt: DateTime!
+
+  """Setting value (JSON)"""
+  value: JSON!
+}
+
+"""A tag for organizing and categorizing definitions"""
+type Tag {
+  """When this tag was created"""
+  createdAt: DateTime!
+
+  """User who created this tag"""
+  createdBy: User
+
+  """Number of definitions using this tag"""
+  definitionCount: Int!
+
+  """Definitions using this tag"""
+  definitions: [Definition!]!
+
+  """Unique identifier"""
+  id: ID!
+
+  """Tag name (lowercase, 1-50 characters)"""
+  name: String!
+}
+
+"""Result of an individual scenario evaluation task"""
+type TaskResult {
+  """When the task completed"""
+  completedAt: DateTime
+
+  """Error message if task failed"""
+  error: String
+  modelId: String!
+  scenarioId: String!
+
+  """Current status of the task"""
+  status: String!
+}
+
+"""Status of an individual task/job"""
+enum TaskStatus {
+  COMPLETED
+  FAILED
+  PENDING
+  RUNNING
+}
+
+type TempZeroDecision {
+  content: JSON
+  decision: String
+  label: String!
+  transcriptId: String
+}
+
+type TempZeroModelVerification {
+  adapterModes: [String!]!
+  decisionMatchRatePct: Float
+  fingerprintDriftPct: Float
+  modelId: String!
+  promptHashStabilityPct: Float
+  transcriptCount: Int!
+}
+
+type TempZeroPreflight {
+  estimatedCostUsd: Float
+  estimatedInputTokens: Int
+  estimatedOutputTokens: Int
+  models: [TempZeroPreflightModel!]!
+  projectedComparisons: Int!
+  projectedPromptCount: Int!
+  runsToLaunch: Int!
+  selectedSignature: String
+  title: String!
+  totalBatchesToRun: Int!
+  vignettes: [TempZeroPreflightVignette!]!
+}
+
+type TempZeroPreflightModel {
+  adapterMode: String
+  label: String!
+  modelId: String!
+}
+
+type TempZeroPreflightVignette {
+  batchesToRun: Int!
+  conditionCount: Int!
+  rationale: String!
+  title: String!
+  vignetteId: ID!
+}
+
+type TempZeroRow {
+  batch1: String
+  batch2: String
+  batch3: String
+  conditionKey: String!
+  decisions: [TempZeroDecision!]!
+  isMatch: Boolean!
+  mismatchType: String
+  modelId: String!
+  modelLabel: String!
+  vignetteId: ID!
+  vignetteTitle: String!
+}
+
+type TempZeroSummary {
+  batchesRun: Int!
+  comparisons: Int!
+  differenceRate: Float
+  excludedComparisons: Int!
+  matchRate: Float
+  modelsTested: Int!
+  status: String!
+  title: String!
+  vignettesTested: Int!
+  worstModelId: String
+  worstModelLabel: String
+  worstModelMatchRate: Float
+}
+
+type TempZeroVerificationReport {
+  batchTimestamp: DateTime
+  generatedAt: DateTime!
+  models: [TempZeroModelVerification!]!
+  transcriptCount: Int!
+}
+
+"""A transcript from a model conversation during a run"""
+type Transcript {
+  content: JSON!
+  contentExpiresAt: DateTime
+  createdAt: DateTime!
+
+  """Parser and adjudication metadata for the transcript decision"""
+  decisionMetadata: JSON
+
+  """
+  Feature-flagged V2 decision envelope with raw evidence and canonical compatibility data
+  """
+  decisionModelV2: JSON
+  definitionSnapshot: JSON
+
+  """
+  Dimension values for this transcript's scenario (e.g. attribute levels for job-choice vignettes)
+  """
+  dimensionValues: JSON
+  durationMs: Int!
+
+  """Estimated cost in dollars based on token usage and model pricing"""
+  estimatedCost: Float
+  id: ID!
+  lastAccessedAt: DateTime
+
+  """The model identifier used for this transcript"""
+  modelId: String!
+  modelVersion: String
+  run: Run!
+  runId: String!
+
+  """
+  Index within sample set for multi-sample runs (0 to N-1). Always 0 for single-sample runs.
+  """
+  sampleIndex: Int!
+  scenario: Scenario
+  scenarioId: String
+  tokenCount: Int!
+  turnCount: Int!
+}
+
+"""Summary of trial configuration consistency for a definition"""
+type TrialConfigSummary {
+  """Definition version used by these trials"""
+  definitionVersion: Int
+
+  """
+  Whether all trials for this definition use the same version and temperature
+  """
+  isConsistent: Boolean!
+
+  """Validation error message when trial settings are inconsistent"""
+  message: String
+
+  """
+  Human-readable trial signature combining version and temperature (e.g. v3td, v2t0.7)
+  """
+  signature: String
+
+  """Per-signature breakdown of trial counts for this definition"""
+  signatureBreakdown: [TrialSignatureBreakdown!]!
+
+  """Temperature used by these trials"""
+  temperature: Float
+}
+
+"""Trial count grouped by signature/version/temperature for a definition"""
+type TrialSignatureBreakdown {
+  definitionVersion: Int
+  signature: String!
+  temperature: Float
+  trialCount: Int!
+}
+
+"""Result of triggering system-wide orphaned run recovery"""
+type TriggerRecoveryPayload {
+  """Number of orphaned runs detected"""
+  detected: Int!
+
+  """Number of runs that failed to recover"""
+  errors: Int!
+
+  """Number of runs successfully recovered"""
+  recovered: Int!
+}
+
+input UpdateDefinitionContentInput {
+  """
+  List of fields to clear local override for (inherit from parent). Valid values: template, dimensions, matching_rules
+  """
+  clearOverrides: [String!]
+
+  """
+  Update dimensions array. Set to null to clear override and inherit from parent.
+  """
+  dimensions: JSON
+
+  """Update matching rules. Set to empty string to clear override."""
+  matchingRules: String
+
+  """
+  Update template. Set to empty string to clear override and inherit from parent.
+  """
+  template: String
+}
+
+input UpdateDefinitionInput {
+  """Updated content (optional, replaces entire content if provided)"""
+  content: JSON
+
+  """Updated name (optional)"""
+  name: String
+
+  """Update preamble version ID"""
+  preambleVersionId: String
+}
+
+input UpdateDomainContextInput {
+  text: String!
+}
+
+input UpdateJobChoicePairInput {
+  contextId: ID!
+  definitionId: ID!
+  levelPresetVersionId: ID
+  name: String!
+  preambleVersionId: ID
+  valueFirstId: ID!
+  valueSecondId: ID!
+}
+
+input UpdateLevelPresetInput {
+  l1: String!
+  l2: String!
+  l3: String!
+  l4: String!
+  l5: String!
+}
+
+"""Input for updating an LLM model (model ID cannot be changed)"""
+input UpdateLlmModelInput {
+  """
+  Provider-specific API configuration (e.g., {"maxTokensParam": "max_completion_tokens"}). Set to null to clear.
+  """
+  apiConfig: JSON
+
+  """Updated cost per 1M input tokens"""
+  costInputPerMillion: Float
+
+  """Updated cost per 1M output tokens"""
+  costOutputPerMillion: Float
+
+  """Updated display name"""
+  displayName: String
+}
+
+"""Input for updating LLM provider settings"""
+input UpdateLlmProviderInput {
+  """Whether provider is enabled"""
+  isEnabled: Boolean
+
+  """Max concurrent API requests"""
+  maxParallelRequests: Int
+
+  """Rate limit (requests per minute)"""
+  requestsPerMinute: Int
+}
+
+input UpdatePreambleInput {
+  content: String!
+}
+
+"""Input for updating a run"""
+input UpdateRunInput {
+  """New name for the run (null to clear)"""
+  name: String
+}
+
+input UpdateSurveyInput {
+  description: String
+  instructions: String
+  name: String
+  questions: [SurveyQuestionInput!]
+  responseOptions: [SurveyResponseOptionInput!]
+}
+
+"""Input for updating a system setting"""
+input UpdateSystemSettingInput {
+  """Setting key"""
+  key: String!
+
+  """New value (JSON)"""
+  value: JSON!
+}
+
+input UpdateValueStatementInput {
+  body: String!
+}
+
+"""A user account"""
+type User {
+  """When the account was created"""
+  createdAt: DateTime!
+
+  """User email address"""
+  email: String!
+
+  """Unique user identifier"""
+  id: ID!
+
+  """When the user last logged in"""
+  lastLoginAt: DateTime
+
+  """User display name"""
+  name: String
+}
+
+type ValueFaultLine {
+  absDelta: Float!
+  clusterAId: String!
+  clusterAScore: Float!
+  clusterBId: String!
+  clusterBScore: Float!
+  delta: Float!
+  valueKey: String!
+}
+
+"""
+A value statement keyed by (domainId, token), used in Job Choice vignette assembly
+"""
+type ValueStatement {
+  body: String!
+  createdAt: DateTime!
+  domain: Domain
+  domainId: ID!
+  id: ID!
+  token: String!
+  updatedAt: DateTime!
+}
+
+input ValueStatementInput {
+  content: String!
+  token: String!
+}
+
+"""A versioned snapshot of a value statement content"""
+type ValueStatementVersion {
+  content: String!
+  createdAt: DateTime!
+  id: ID!
+  statementId: String!
+}
+
+"""
+A value statement with its current and previous content for diff display
+"""
+type ValueStatementWithVersions {
+  currentContent: String!
+  id: ID!
+  previousContent: String
+  token: String!
+}
+
+"""Health status for Python workers"""
+type WorkerHealth {
+  """API key configuration status by provider"""
+  apiKeys: JSON!
+
+  """When the health check was performed"""
+  checkedAt: DateTime!
+
+  """Error message if health check failed"""
+  error: String
+
+  """Whether the Python workers are healthy"""
+  isHealthy: Boolean!
+
+  """Installed Python packages with versions"""
+  packages: JSON!
+
+  """Python version running the workers"""
+  pythonVersion: String
+
+  """Health check warnings"""
+  warnings: [String!]!
+}
