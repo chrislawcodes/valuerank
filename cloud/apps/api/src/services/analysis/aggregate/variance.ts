@@ -6,7 +6,7 @@ import type {
   ScenarioVarianceStats,
   VarianceStats,
 } from './contracts.js';
-import { resolveTranscriptDecisionModel } from '../../../graphql/queries/domain/decision-model.js';
+import { resolveAnalysisScore } from '../../decision-model.js';
 
 type DecisionAwareAggregateTranscript = AggregateTranscriptInput & {
   decisionMetadata?: unknown;
@@ -104,13 +104,12 @@ export function computeVarianceAnalysis(
     }
 
     const orientationFlipped = transcript.scenario?.orientationFlipped ?? false;
-    const resolved = resolveTranscriptDecisionModel({
+    const canonicalScore = resolveAnalysisScore({
       decisionCode: transcript.decisionCode ?? null,
       decisionMetadata: transcript.decisionMetadata,
       definitionSnapshot: transcript.definitionSnapshot,
       orientationFlipped,
     });
-    const canonicalScore = resolved.legacy.canonicalScore;
     if (canonicalScore == null) return;
     const score = Math.abs(canonicalScore - 3);
     if (orientationFlipped) {

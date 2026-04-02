@@ -48,7 +48,6 @@ type TranscriptData = {
   decisionModelV2: {
     raw: unknown;
     canonical: unknown;
-    legacy: unknown;
   } | null;
   summary: {
     score: number | null; // Decision code as numeric 1-5 (matches CSV "Decision Code")
@@ -306,7 +305,6 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
                 ? {
                     raw: decisionModel.raw,
                     canonical: decisionModel.canonical,
-                    legacy: decisionModel.legacy,
                   }
                 : null,
               summary: values ? { score, values } : { score },
