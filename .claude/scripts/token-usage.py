@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """
-Track Claude token usage across all sessions since a given timestamp.
+Track Claude token usage for the current project since a given timestamp.
 
 Usage:
   token-usage.py snapshot               # print current UTC timestamp (save as feature start marker)
-  token-usage.py since <iso-timestamp>  # print tokens used across ALL sessions since that timestamp
+  token-usage.py since <iso-timestamp>  # print tokens used by THIS project since that timestamp
   token-usage.py total <marker-file>    # read timestamp from a file, print totals + human-readable summary
 
-Reads ALL session jsonl files in ~/.claude/projects/ — not just the most recent.
-This matters for features that span multiple sessions due to context compaction.
+Reads ONLY session jsonl files for the current working directory's project.
+This isolates token counts per worktree — parallel experiment paths don't bleed
+into each other even when run simultaneously.
+
+Claude Code maps each working directory to a project slug:
+  ~/.claude/projects/<slug>/*.jsonl
+where slug = cwd with '/' replaced by '-' (leading '-' stripped).
 
 Token buckets:
   input_tokens                — new prompt tokens
@@ -26,11 +31,27 @@ import json
 import os
 import glob
 from datetime import datetime, timezone
+from pathlib import Path
 
 
-def find_all_session_jsonls():
-    pattern = os.path.expanduser("~/.claude/projects/**/*.jsonl")
-    return glob.glob(pattern, recursive=True)
+def project_dir_for_cwd() -> Path:
+    """Return ~/.claude/projects/<slug> for the current working directory.
+
+    Claude Code slugifies the cwd by replacing both '/' and '.' with '-'.
+    The leading '-' from the leading '/' is kept. Examples:
+      /Users/foo/myrepo         →  -Users-foo-myrepo
+      /Users/foo/.claude/worktrees/bar  →  -Users-foo--claude-worktrees-bar
+    """
+    cwd = os.getcwd()
+    slug = cwd.replace("/", "-").replace(".", "-")
+    return Path.home() / ".claude" / "projects" / slug
+
+
+def find_project_jsonls() -> list[str]:
+    project_dir = project_dir_for_cwd()
+    if not project_dir.exists():
+        return []
+    return glob.glob(str(project_dir / "*.jsonl"))
 
 
 def sum_tokens_since(since_ts: str) -> dict:
@@ -40,7 +61,7 @@ def sum_tokens_since(since_ts: str) -> dict:
     cache_read = 0
     output_tokens = 0
 
-    for jsonl_path in find_all_session_jsonls():
+    for jsonl_path in find_project_jsonls():
         try:
             with open(jsonl_path) as f:
                 for line in f:
