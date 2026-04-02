@@ -1,4 +1,4 @@
-import { db, type AnalysisStatus, type Prisma, type RunCategory, type RunStatus } from '@valuerank/db';
+import type { AnalysisStatus, Prisma, RunCategory, RunStatus } from '@valuerank/db';
 
 export type RunTypeFilter = 'ALL' | 'SURVEY' | 'NON_SURVEY';
 
@@ -74,14 +74,15 @@ export function parseRunType(value: string | null | undefined): RunTypeFilter {
 }
 
 async function getRunIdsWithAnalysis(analysisStatus?: AnalysisStatus): Promise<string[]> {
-  const analysisResults = await db.analysisResult.findMany({
+  const { db } = await import('@valuerank/db');
+  const analysisResults = (await db.analysisResult.findMany({
     where: {
       deletedAt: null,
       ...(analysisStatus !== undefined ? { status: analysisStatus } : {}),
     },
     select: { runId: true },
     distinct: ['runId'],
-  });
+  })) ?? [];
 
   return analysisResults.map((analysisResult) => analysisResult.runId);
 }

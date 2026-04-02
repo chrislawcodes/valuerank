@@ -467,7 +467,7 @@ builder.queryField('domainEvaluations', (t) =>
           ...(scopeCategory ? { scopeCategory } : {}),
         },
         include: evaluationInclude,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: limit,
         skip: offset,
       });
@@ -568,7 +568,7 @@ builder.queryField('domainRunSummary', (t) =>
           domainId,
           ...(scopeCategory ? { scopeCategory } : {}),
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         select: {
           id: true,
           scopeCategory: true,
@@ -688,7 +688,7 @@ builder.queryField('domainFindingsEligibility', (t) =>
           domainId,
           scopeCategory: { in: consideredScopeCategories },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         select: {
           id: true,
           scopeCategory: true,

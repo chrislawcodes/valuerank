@@ -3,7 +3,6 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { db } from '@valuerank/db';
 
 const logger = vi.hoisted(() => ({
   warn: vi.fn(),
@@ -12,17 +11,30 @@ const logger = vi.hoisted(() => ({
   debug: vi.fn(),
 }));
 
-vi.mock('@valuerank/shared', async () => {
-  const actual = await vi.importActual<typeof import('@valuerank/shared')>('@valuerank/shared');
-  return {
-    ...actual,
-    createLogger: vi.fn(() => logger),
-  };
-});
+const dbMock = vi.hoisted(() => ({
+  run: {
+    findMany: vi.fn(),
+    update: vi.fn(),
+  },
+  runScenarioSelection: {
+    count: vi.fn(),
+  },
+  $queryRaw: vi.fn(),
+}));
 
+vi.mock('@valuerank/db', () => ({
+  db: dbMock,
+}));
+
+vi.mock('@valuerank/shared', () => ({
+  createLogger: vi.fn(() => logger),
+}));
+
+import { db } from '@valuerank/db';
 import {
   STALL_THRESHOLD_MS,
   detectAndUpdateStalledRuns,
+  detectProgressStalls,
   detectStalledModels,
   updateRunStalledModels,
 } from '../../../src/services/run/stall-detection.js';
@@ -40,7 +52,7 @@ describe('stall detection service', () => {
   });
 
   it('marks a model stalled when pending jobs exist and last success is older than 3 minutes', async () => {
-    vi.spyOn(db as any, '$queryRaw')
+    vi.mocked(db.$queryRaw)
       .mockResolvedValueOnce([{ model_id: 'model-a' }])
       .mockResolvedValueOnce([{ model_id: 'model-a', last_completion: new Date(now - STALL_THRESHOLD_MS - 1000) }]);
 
@@ -50,7 +62,7 @@ describe('stall detection service', () => {
   });
 
   it('does not mark a model stalled when last success is newer than 3 minutes', async () => {
-    vi.spyOn(db as any, '$queryRaw')
+    vi.mocked(db.$queryRaw)
       .mockResolvedValueOnce([{ model_id: 'model-a' }])
       .mockResolvedValueOnce([{ model_id: 'model-a', last_completion: new Date(now - STALL_THRESHOLD_MS + 1000) }]);
 
@@ -60,7 +72,7 @@ describe('stall detection service', () => {
   });
 
   it('marks a never-successful model stalled when the run is older than 3 minutes', async () => {
-    vi.spyOn(db as any, '$queryRaw')
+    vi.mocked(db.$queryRaw)
       .mockResolvedValueOnce([{ model_id: 'model-a' }])
       .mockResolvedValueOnce([]);
 
@@ -70,7 +82,7 @@ describe('stall detection service', () => {
   });
 
   it('does not mark a never-successful model stalled when the run is newer than 3 minutes', async () => {
-    vi.spyOn(db as any, '$queryRaw')
+    vi.mocked(db.$queryRaw)
       .mockResolvedValueOnce([{ model_id: 'model-a' }])
       .mockResolvedValueOnce([]);
 
@@ -80,7 +92,7 @@ describe('stall detection service', () => {
   });
 
   it('does not mark a model stalled when there are no pending jobs', async () => {
-    vi.spyOn(db as any, '$queryRaw').mockResolvedValueOnce([]);
+    vi.mocked(db.$queryRaw).mockResolvedValueOnce([]);
 
     await expect(
       detectStalledModels('run-1', new Date(now - STALL_THRESHOLD_MS - 1000))
@@ -88,7 +100,7 @@ describe('stall detection service', () => {
   });
 
   it('treats only FAILED records as no prior success', async () => {
-    vi.spyOn(db as any, '$queryRaw')
+    vi.mocked(db.$queryRaw)
       .mockResolvedValueOnce([{ model_id: 'model-a' }])
       .mockResolvedValueOnce([]);
 
@@ -97,24 +109,131 @@ describe('stall detection service', () => {
     ).resolves.toEqual(['model-a']);
   });
 
-  it('skips runs with null startedAt and logs an error', async () => {
-    const findManySpy = vi.spyOn(db.run as any, 'findMany').mockResolvedValue([
-      { id: 'run-1', stalledModels: [], startedAt: null },
+  it('returns empty when all models have the expected transcript count', async () => {
+    vi.mocked(db.$queryRaw).mockResolvedValueOnce([
+      { model_id: 'model-a', cnt: 6n },
+      { model_id: 'model-b', cnt: 6n },
     ]);
-    const updateSpy = vi.spyOn(db.run as any, 'update').mockResolvedValue({} as never);
-    const querySpy = vi.spyOn(db as any, '$queryRaw');
+
+    await expect(
+      detectProgressStalls(
+        'run-1',
+        { models: ['model-a', 'model-b'], samplesPerScenario: 2 },
+        3
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it('returns model IDs that have fewer transcripts than expected', async () => {
+    vi.mocked(db.$queryRaw).mockResolvedValueOnce([
+      { model_id: 'model-a', cnt: 5n },
+      { model_id: 'model-b', cnt: 6n },
+    ]);
+
+    await expect(
+      detectProgressStalls(
+        'run-1',
+        { models: ['model-a', 'model-b'], samplesPerScenario: 2 },
+        3
+      )
+    ).resolves.toEqual(['model-a']);
+  });
+
+  it('flags a run when progress is incomplete and zero pending jobs exist', async () => {
+    vi.mocked(db.run.findMany).mockResolvedValue([
+      {
+        id: 'run-1',
+        stalledModels: [],
+        startedAt: new Date(now - STALL_THRESHOLD_MS - 1000),
+        progress: { total: 6, completed: 3, failed: 1 },
+        config: { models: ['model-a'], samplesPerScenario: 2 },
+      },
+    ]);
+    vi.mocked(db.$queryRaw)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ model_id: 'model-a', cnt: 4n }]);
+    vi.mocked(db.runScenarioSelection.count).mockResolvedValue(3);
+    vi.mocked(db.run.update).mockResolvedValue({} as never);
+
+    const result = await detectAndUpdateStalledRuns();
+
+    expect(result).toEqual({ checked: 1, newStalls: 1, totalStalled: 1 });
+    expect(db.runScenarioSelection.count).toHaveBeenCalledTimes(1);
+    expect(db.run.update).toHaveBeenCalledTimes(1);
+    expect(db.run.update).toHaveBeenCalledWith({
+      where: { id: 'run-1' },
+      data: { stalledModels: ['model-a'] },
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      {
+        runId: 'run-1',
+        stalledModels: ['model-a'],
+        progress: { total: 6, completed: 3, failed: 1 },
+      },
+      'Progress stall detected: incomplete progress with no pending jobs'
+    );
+  });
+
+  it('does not flag a run when progress is complete', async () => {
+    vi.mocked(db.run.findMany).mockResolvedValue([
+      {
+        id: 'run-1',
+        stalledModels: [],
+        startedAt: new Date(now - STALL_THRESHOLD_MS - 1000),
+        progress: { total: 4, completed: 3, failed: 1 },
+        config: { models: ['model-a'] },
+      },
+    ]);
+    vi.mocked(db.$queryRaw).mockResolvedValueOnce([]);
+    vi.mocked(db.run.update).mockResolvedValue({} as never);
 
     const result = await detectAndUpdateStalledRuns();
 
     expect(result).toEqual({ checked: 1, newStalls: 0, totalStalled: 0 });
-    expect(findManySpy).toHaveBeenCalledTimes(1);
-    expect(querySpy).not.toHaveBeenCalled();
-    expect(updateSpy).not.toHaveBeenCalled();
+    expect(db.runScenarioSelection.count).not.toHaveBeenCalled();
+    expect(db.run.update).not.toHaveBeenCalled();
+  });
+
+  it('does not flag a run when pending jobs still exist in pgboss', async () => {
+    vi.mocked(db.run.findMany).mockResolvedValue([
+      {
+        id: 'run-1',
+        stalledModels: [],
+        startedAt: new Date(now - STALL_THRESHOLD_MS - 1000),
+        progress: { total: 6, completed: 3, failed: 1 },
+        config: { models: ['model-a'], samplesPerScenario: 2 },
+      },
+    ]);
+    vi.mocked(db.$queryRaw)
+      .mockResolvedValueOnce([{ model_id: 'model-a' }])
+      .mockResolvedValueOnce([{ model_id: 'model-a', last_completion: new Date(now - 1000) }])
+      .mockResolvedValueOnce([{ model_id: 'model-a' }]);
+    vi.mocked(db.run.update).mockResolvedValue({} as never);
+
+    const result = await detectAndUpdateStalledRuns();
+
+    expect(result).toEqual({ checked: 1, newStalls: 0, totalStalled: 0 });
+    expect(db.runScenarioSelection.count).not.toHaveBeenCalled();
+    expect(db.run.update).not.toHaveBeenCalled();
+  });
+
+  it('skips runs with null startedAt and logs an error', async () => {
+    vi.mocked(db.run.findMany).mockResolvedValue([
+      { id: 'run-1', stalledModels: [], startedAt: null },
+    ]);
+    vi.mocked(db.run.update).mockResolvedValue({} as never);
+
+    const result = await detectAndUpdateStalledRuns();
+
+    expect(result).toEqual({ checked: 1, newStalls: 0, totalStalled: 0 });
+    expect(db.$queryRaw).not.toHaveBeenCalled();
+    expect(db.run.update).not.toHaveBeenCalled();
     expect(logger.error).toHaveBeenCalledTimes(1);
   });
 
   it('only logs newly stalled models', async () => {
-    const updateSpy = vi.spyOn(db.run as any, 'update').mockResolvedValue({} as never);
+    vi.mocked(db.run.update).mockResolvedValue({} as never);
 
     await updateRunStalledModels(
       { id: 'run-1', stalledModels: ['model-a'] },
@@ -126,11 +245,11 @@ describe('stall detection service', () => {
       { runId: 'run-1', newlyStalled: ['model-b'] },
       'Stall detected: models not making progress'
     );
-    expect(updateSpy).toHaveBeenCalledTimes(1);
+    expect(db.run.update).toHaveBeenCalledTimes(1);
   });
 
   it('does not write to the database when stalled models are unchanged', async () => {
-    const updateSpy = vi.spyOn(db.run as any, 'update').mockResolvedValue({} as never);
+    vi.mocked(db.run.update).mockResolvedValue({} as never);
 
     await updateRunStalledModels(
       { id: 'run-1', stalledModels: ['model-a'] },
@@ -138,6 +257,6 @@ describe('stall detection service', () => {
     );
 
     expect(logger.warn).not.toHaveBeenCalled();
-    expect(updateSpy).not.toHaveBeenCalled();
+    expect(db.run.update).not.toHaveBeenCalled();
   });
 });

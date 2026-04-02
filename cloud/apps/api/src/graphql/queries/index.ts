@@ -1,26 +1,3 @@
-// Import all GraphQL query definitions to register them with builder
-// Queries are registered as a side effect of importing
+import { autoImportDir } from '../../utils/auto-import.js';
 
-import './definition.js';
-import './run.js';
-import './user.js';
-import './queue.js';
-import './tag.js';
-import './models.js';
-import './health.js';
-import './scenarios.js';
-import './analysis.js';
-import './llm.js';
-import './audit-log.js';
-import './preamble.js';
-import './final-trial-plan.js';
-import './survey.js';
-import './domain.js';
-import './domain-coverage.js';
-import './assumptions.js';
-import './order-invariance.js';
-import './temp-zero-verification.js';
-import './domain-context.js';
-import './value-statement.js';
-import './level-preset.js';
-import './domain-settings.js';
+export const queriesReady = autoImportDir(import.meta.url, 'GraphQL queries');

@@ -6,18 +6,17 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerGetTranscriptTool } from '../../../src/mcp/tools/get-transcript.js';
 
-// Mock db before importing the tool
+const transcriptFindFirst = vi.hoisted(() => vi.fn());
+
 vi.mock('@valuerank/db', () => ({
   db: {
     transcript: {
-      findFirst: vi.fn(),
+      findFirst: transcriptFindFirst,
     },
   },
 }));
-
-// Import after mock
-import { db } from '@valuerank/db';
 
 describe('get_transcript tool', () => {
   const testRunId = 'test-run-123';
@@ -32,13 +31,9 @@ describe('get_transcript tool', () => {
     }),
   } as unknown as McpServer;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
-
-    // Dynamically import to trigger registration
-    const { registerGetTranscriptTool } = await import(
-      '../../../src/mcp/tools/get-transcript.js'
-    );
+    transcriptFindFirst.mockReset();
     registerGetTranscriptTool(mockServer);
   });
 
@@ -116,7 +111,7 @@ describe('get_transcript tool', () => {
       },
     };
 
-    vi.mocked(db.transcript.findFirst).mockResolvedValue(mockTranscript);
+    transcriptFindFirst.mockResolvedValue(mockTranscript);
 
     const result = await toolHandler(
       { run_id: testRunId, scenario_id: testScenarioId, model: testModel },
@@ -145,7 +140,7 @@ describe('get_transcript tool', () => {
   });
 
   it('returns not_found when transcript does not exist', async () => {
-    vi.mocked(db.transcript.findFirst).mockResolvedValue(null);
+    transcriptFindFirst.mockResolvedValue(null);
 
     const result = await toolHandler(
       { run_id: testRunId, scenario_id: testScenarioId, model: testModel },
@@ -186,7 +181,7 @@ describe('get_transcript tool', () => {
       },
     };
 
-    vi.mocked(db.transcript.findFirst).mockResolvedValue(mockTranscript);
+    transcriptFindFirst.mockResolvedValue(mockTranscript);
 
     const result = await toolHandler(
       { run_id: testRunId, scenario_id: testScenarioId, model: testModel },
@@ -219,7 +214,7 @@ describe('get_transcript tool', () => {
       },
     };
 
-    vi.mocked(db.transcript.findFirst).mockResolvedValue(mockTranscript);
+    transcriptFindFirst.mockResolvedValue(mockTranscript);
 
     const result = await toolHandler(
       { run_id: testRunId, scenario_id: testScenarioId, model: testModel },
@@ -248,7 +243,7 @@ describe('get_transcript tool', () => {
       content: 'not an object', // Malformed
     };
 
-    vi.mocked(db.transcript.findFirst).mockResolvedValue(mockTranscript);
+    transcriptFindFirst.mockResolvedValue(mockTranscript);
 
     const result = await toolHandler(
       { run_id: testRunId, scenario_id: testScenarioId, model: testModel },
@@ -263,14 +258,14 @@ describe('get_transcript tool', () => {
   });
 
   it('filters out soft-deleted transcripts', async () => {
-    vi.mocked(db.transcript.findFirst).mockResolvedValue(null);
+    transcriptFindFirst.mockResolvedValue(null);
 
     await toolHandler(
       { run_id: testRunId, scenario_id: testScenarioId, model: testModel },
       { requestId: 'req-6' }
     );
 
-    expect(db.transcript.findFirst).toHaveBeenCalledWith({
+    expect(transcriptFindFirst).toHaveBeenCalledWith({
       where: {
         runId: testRunId,
         scenarioId: testScenarioId,
@@ -281,7 +276,7 @@ describe('get_transcript tool', () => {
   });
 
   it('returns error on database failure', async () => {
-    vi.mocked(db.transcript.findFirst).mockRejectedValue(new Error('DB connection failed'));
+    transcriptFindFirst.mockRejectedValue(new Error('DB connection failed'));
 
     const result = await toolHandler(
       { run_id: testRunId, scenario_id: testScenarioId, model: testModel },

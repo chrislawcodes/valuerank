@@ -26,15 +26,15 @@ vi.mock('../../src/services/run/scheduler', () => ({
 
 describe('Preamble Integration', () => {
     const userId = 'preamble-test-user-id';
+    const createdIds = {
+        runIds: [] as string[],
+        scenarioIds: [] as string[],
+        definitionIds: [] as string[],
+        preambleVersionIds: [] as string[],
+        preambleIds: [] as string[],
+    };
 
     beforeEach(async () => {
-        await db.runComparison.deleteMany();
-        await db.runScenarioSelection.deleteMany();
-        await db.scenario.deleteMany();
-        await db.run.deleteMany();
-        await db.definition.deleteMany();
-        await db.preamble.deleteMany();
-
         // Ensure provider
         const provider = await db.llmProvider.upsert({
             where: { name: 'openai' },
@@ -70,20 +70,62 @@ describe('Preamble Integration', () => {
     });
 
     afterEach(async () => {
+        if (createdIds.runIds.length > 0) {
+            await db.runScenarioSelection.deleteMany({
+                where: { runId: { in: createdIds.runIds } },
+            });
+            await db.run.deleteMany({
+                where: { id: { in: createdIds.runIds } },
+            });
+            createdIds.runIds = [];
+        }
+
+        if (createdIds.scenarioIds.length > 0) {
+            await db.scenario.deleteMany({
+                where: { id: { in: createdIds.scenarioIds } },
+            });
+            createdIds.scenarioIds = [];
+        }
+
+        if (createdIds.definitionIds.length > 0) {
+            await db.definition.deleteMany({
+                where: { id: { in: createdIds.definitionIds } },
+            });
+            createdIds.definitionIds = [];
+        }
+
+        if (createdIds.preambleVersionIds.length > 0) {
+            await db.preambleVersion.deleteMany({
+                where: { id: { in: createdIds.preambleVersionIds } },
+            });
+            createdIds.preambleVersionIds = [];
+        }
+
+        if (createdIds.preambleIds.length > 0) {
+            await db.preamble.deleteMany({
+                where: { id: { in: createdIds.preambleIds } },
+            });
+            createdIds.preambleIds = [];
+        }
+
         await db.user.deleteMany({ where: { id: userId } });
     });
 
     it('injects preamble content into run snapshot', async () => {
+        const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
         // 1. Create Preamble
         // Note: createPreamble signature is (name, content) based on error, assuming no userId param for now?
         // Wait, trace didn't show userId in signature.
         const preamble = await createPreamble(
-            'Integration Test Preamble',
+            `Integration Test Preamble ${uniqueSuffix}`,
             'You are a helpful assistant serving the public interest.'
         );
+        createdIds.preambleIds.push(preamble.id);
 
         const preambleVersion = preamble.latestVersion;
         expect(preambleVersion).toBeDefined();
+        createdIds.preambleVersionIds.push(preambleVersion!.id);
 
         // 2. Create Definition linked to Preamble
         const content = {
@@ -101,24 +143,26 @@ describe('Preamble Integration', () => {
         // Using Prisma to create definition with preambleVersionId
         const definition = await db.definition.create({
             data: {
-                name: 'Test Definition with Preamble',
+                name: `Test Definition with Preamble ${uniqueSuffix}`,
                 content,
                 preambleVersionId: preambleVersion!.id,
                 createdByUserId: userId,
             },
         });
+        createdIds.definitionIds.push(definition.id);
 
         // 3. Create Scenarios (required for run)
-        await db.scenario.create({
+        const scenario = await db.scenario.create({
             data: {
                 definitionId: definition.id,
-                name: 'Test Scenario 1',
+                name: `Test Scenario 1 ${uniqueSuffix}`,
                 content: {
                     text: 'Scenario text',
                     values: {},
                 },
             },
         });
+        createdIds.scenarioIds.push(scenario.id);
 
         // 4. Start Run
         const result = await startRun({
@@ -126,6 +170,7 @@ describe('Preamble Integration', () => {
             models: ['gpt-4'],
             userId,
         });
+        createdIds.runIds.push(result.run.id);
 
         // 5. Verify Run Config
         const run = await db.run.findUnique({
