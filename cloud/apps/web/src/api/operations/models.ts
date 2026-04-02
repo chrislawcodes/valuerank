@@ -1,41 +1,19 @@
-import { gql } from 'urql';
+import type { AvailableModelsQuery as GeneratedAvailableModelsQuery } from '../../generated/graphql';
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-export type AvailableModel = {
-  id: string;
-  providerId: string;
-  displayName: string;
-  versions: string[];
-  defaultVersion: string | null;
-  isAvailable: boolean;
-  isDefault: boolean;
-};
+export type AvailableModel = GeneratedAvailableModelsQuery['availableModels'][number];
 
 // ============================================================================
 // QUERIES
 // ============================================================================
 
-export const AVAILABLE_MODELS_QUERY = gql`
-  query AvailableModels {
-    availableModels {
-      id
-      providerId
-      displayName
-      versions
-      defaultVersion
-      isAvailable
-      isDefault
-    }
-  }
-`;
+export { AvailableModelsDocument as AVAILABLE_MODELS_QUERY } from '../../generated/graphql';
 
 // ============================================================================
 // RESULT TYPES
 // ============================================================================
 
-export type AvailableModelsQueryResult = {
-  availableModels: AvailableModel[];
-};
+export type AvailableModelsQueryResult = GeneratedAvailableModelsQuery;
