@@ -85,7 +85,7 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
     retryLimit: 3,
     retryDelay: 10,
     retryBackoff: true,
-    expireInSeconds: 120, // 2 minutes (summaries are quick)
+    expireInSeconds: 600, // 10 minutes - covers 5m Python spawn timeout + buffer
   },
   'analyze_basic': {
     retryLimit: 3,

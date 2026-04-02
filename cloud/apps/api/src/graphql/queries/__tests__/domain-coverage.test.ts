@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { extractValuePair, selectPrimaryDefinitionCount } from '../domain-coverage-utils.js';
+import {
+  extractValuePair,
+  selectPrimaryDefinitionCount,
+  selectPrimaryDefinitionCounts,
+} from '../domain-coverage-utils.js';
 
 describe('extractValuePair', () => {
   it('normalizes lowercase dimension names to canonical coverage keys', () => {
@@ -74,6 +78,50 @@ describe('selectPrimaryDefinitionCount', () => {
     expect(selectPrimaryDefinitionCount([], new Map())).toEqual({
       primaryDefinitionId: null,
       batchCount: 0,
+    });
+  });
+});
+
+describe('selectPrimaryDefinitionCounts', () => {
+  it('returns the total cell counts while choosing a stable primary definition', () => {
+    const batchCounts = new Map<string, number>([
+      ['def-a', 2],
+      ['def-b', 2],
+    ]);
+    const pairedCounts = new Map<string, number>([
+      ['def-a', 1],
+      ['def-b', 3],
+    ]);
+
+    expect(selectPrimaryDefinitionCounts(['def-a', 'def-b'], batchCounts, pairedCounts)).toEqual({
+      primaryDefinitionId: 'def-b',
+      batchCount: 4,
+      pairedBatchCount: 4,
+    });
+  });
+
+  it('prefers the higher paired count when batch counts tie', () => {
+    const batchCounts = new Map<string, number>([
+      ['def-a', 2],
+      ['def-b', 2],
+    ]);
+    const pairedCounts = new Map<string, number>([
+      ['def-a', 1],
+      ['def-b', 3],
+    ]);
+
+    expect(selectPrimaryDefinitionCounts(['def-a', 'def-b'], batchCounts, pairedCounts)).toEqual({
+      primaryDefinitionId: 'def-b',
+      batchCount: 4,
+      pairedBatchCount: 4,
+    });
+  });
+
+  it('returns zero for an empty definition list', () => {
+    expect(selectPrimaryDefinitionCounts([], new Map(), new Map())).toEqual({
+      primaryDefinitionId: null,
+      batchCount: 0,
+      pairedBatchCount: 0,
     });
   });
 });

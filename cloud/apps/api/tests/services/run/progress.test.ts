@@ -409,7 +409,7 @@ describe('progress service', () => {
         retryLimit: 3,
         retryDelay: 10,
         retryBackoff: true,
-        expireInSeconds: 120,
+        expireInSeconds: 600,
       });
     });
 

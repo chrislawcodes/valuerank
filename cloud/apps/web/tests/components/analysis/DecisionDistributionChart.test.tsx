@@ -17,9 +17,27 @@ import {
 function createMockVisualizationData(): VisualizationData {
   return {
     decisionDistribution: {
-      'gpt-4': { '1': 10, '2': 15, '3': 20, '4': 8, '5': 7 },
-      'claude-3': { '1': 12, '2': 18, '3': 15, '4': 10, '5': 5 },
-      'gemini-pro': { '1': 8, '2': 12, '3': 25, '4': 9, '5': 6 },
+      'gpt-4': {
+        opponentStrongly: 10,
+        opponentSomewhat: 15,
+        neutral: 20,
+        somewhat: 8,
+        strongly: 7,
+      },
+      'claude-3': {
+        opponentStrongly: 12,
+        opponentSomewhat: 18,
+        neutral: 15,
+        somewhat: 10,
+        strongly: 5,
+      },
+      'gemini-pro': {
+        opponentStrongly: 8,
+        opponentSomewhat: 12,
+        neutral: 25,
+        somewhat: 9,
+        strongly: 6,
+      },
     },
     modelScenarioMatrix: {},
   };
@@ -58,7 +76,13 @@ describe('DecisionDistributionChart', () => {
   it('handles single model data', () => {
     const visualizationData: VisualizationData = {
       decisionDistribution: {
-        'single-model': { '1': 5, '2': 10, '3': 15, '4': 8, '5': 2 },
+        'single-model': {
+          opponentStrongly: 5,
+          opponentSomewhat: 10,
+          neutral: 15,
+          somewhat: 8,
+          strongly: 2,
+        },
       },
       modelScenarioMatrix: {},
     };
@@ -92,18 +116,36 @@ describe('DecisionDistributionChart', () => {
 
   it('formats the scope note when model totals vary', () => {
     const chartData = buildDecisionDistributionChartData({
-      'model-a': { '1': 5, '2': 5, '3': 5, '4': 3, '5': 2 },
-      'model-b': { '1': 5, '2': 5, '3': 4, '4': 2, '5': 2 },
+      'model-a': {
+        opponentStrongly: 5,
+        opponentSomewhat: 5,
+        neutral: 5,
+        somewhat: 3,
+        strongly: 2,
+      },
+      'model-b': {
+        opponentStrongly: 5,
+        opponentSomewhat: 5,
+        neutral: 4,
+        somewhat: 2,
+        strongly: 2,
+      },
     });
 
     expect(formatDecisionDistributionScopeNote(chartData)).toBe(
-      'Total decisions in scope varies by model: n=18-20. Hover bars for raw counts.'
+      'Each bar shows the share of transcript decisions for that model.'
     );
   });
 
-  it('shows percentages and raw counts in the tooltip', () => {
+  it('shows semantic bucket counts in the tooltip', () => {
     const chartData = buildDecisionDistributionChartData({
-      'gpt-4': { '1': 10, '2': 15, '3': 20, '4': 8, '5': 7 },
+      'gpt-4': {
+        opponentStrongly: 10,
+        opponentSomewhat: 15,
+        neutral: 20,
+        somewhat: 8,
+        strongly: 7,
+      },
     });
     const buckets = buildDecisionDistributionBuckets({
       '1': 'Strongly support the other value',
@@ -122,21 +164,23 @@ describe('DecisionDistributionChart', () => {
     );
 
     expect(screen.getByText('gpt-4')).toBeInTheDocument();
-    expect(screen.getByText('Total decisions: n=60')).toBeInTheDocument();
     expect(screen.getByText('Strongly support the other value:')).toBeInTheDocument();
-    expect(screen.getByText('17% (10)')).toBeInTheDocument();
-    expect(screen.getByText('33% (20)')).toBeInTheDocument();
+    expect(screen.getByText('17%')).toBeInTheDocument();
+    expect(screen.getByText('(10)')).toBeInTheDocument();
+    expect(screen.getByText('33%')).toBeInTheDocument();
+    expect(screen.getByText('(20)')).toBeInTheDocument();
+    expect(screen.queryByText(/Total decisions:/i)).not.toBeInTheDocument();
   });
 
   it('truncates long model names', () => {
     const visualizationData: VisualizationData = {
       decisionDistribution: {
         'this-is-a-very-long-model-name-that-should-be-truncated': {
-          '1': 5,
-          '2': 10,
-          '3': 15,
-          '4': 8,
-          '5': 2,
+          opponentStrongly: 5,
+          opponentSomewhat: 10,
+          neutral: 15,
+          somewhat: 8,
+          strongly: 2,
         },
       },
       modelScenarioMatrix: {},

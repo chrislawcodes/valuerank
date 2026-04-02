@@ -7,6 +7,8 @@ import {
   releaseAggregateClaim,
   spawnAggregateWorker,
 } from '../../../src/services/analysis/aggregate/aggregate-run-workflow.js';
+import { aggregateAnalysesLogic } from '../../../src/services/analysis/aggregate/aggregate-logic.js';
+import type { AnalysisOutput } from '../../../src/services/analysis/aggregate/contracts.js';
 
 const { spawnPython } = vi.hoisted(() => ({
   spawnPython: vi.fn(),
@@ -757,6 +759,98 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
         isMultiSample: false,
         orientationCorrectedCount: 0,
       },
+    });
+  });
+
+  it('builds semantic decision buckets from transcript decisions', () => {
+    const analyses: AnalysisOutput[] = [
+      {
+        perModel: {
+          'gpt-4': {
+            sampleSize: 5,
+            values: {},
+            overall: { mean: 0, stdDev: 0, min: 0, max: 0 },
+          },
+        },
+        modelAgreement: {},
+      },
+    ];
+
+    const scenarios = [
+      { id: 'scenario-1', name: 'Scenario 1', content: { name: 'Scenario 1' } },
+      { id: 'scenario-2', name: 'Scenario 2', content: { name: 'Scenario 2' } },
+      { id: 'scenario-3', name: 'Scenario 3', content: { name: 'Scenario 3' } },
+      { id: 'scenario-4', name: 'Scenario 4', content: { name: 'Scenario 4' } },
+      { id: 'scenario-5', name: 'Scenario 5', content: { name: 'Scenario 5' } },
+    ];
+
+    const definitionSnapshot = {
+      dimensions: [
+      { name: 'Achievement' },
+      { name: 'Tradition' },
+    ],
+    };
+
+    const makeTranscript = (
+      scenarioId: string,
+      appliedDecision: Record<string, unknown>,
+    ) => ({
+      modelId: 'gpt-4',
+      scenarioId,
+      decisionCode: '5',
+      scenario: { orientationFlipped: false },
+      decisionMetadata: {
+        manualOverride: {
+          appliedDecision,
+          previousValue: '5',
+          overriddenAt: '2026-04-02T00:00:00.000Z',
+          overriddenByUserId: 'test-user',
+        },
+      },
+      definitionSnapshot,
+    });
+
+    const transcripts = [
+      makeTranscript('scenario-1', {
+        favoredValueKey: 'Tradition',
+        opposedValueKey: 'Achievement',
+        direction: 'favor_second',
+        strength: 'strong',
+      }),
+      makeTranscript('scenario-2', {
+        favoredValueKey: 'Tradition',
+        opposedValueKey: 'Achievement',
+        direction: 'favor_second',
+        strength: 'lean',
+      }),
+      makeTranscript('scenario-3', {
+        favoredValueKey: null,
+        opposedValueKey: null,
+        direction: 'neutral',
+        strength: 'neutral',
+      }),
+      makeTranscript('scenario-4', {
+        favoredValueKey: 'Achievement',
+        opposedValueKey: 'Tradition',
+        direction: 'favor_first',
+        strength: 'lean',
+      }),
+      makeTranscript('scenario-5', {
+        favoredValueKey: 'Achievement',
+        opposedValueKey: 'Tradition',
+        direction: 'favor_first',
+        strength: 'strong',
+      }),
+    ];
+
+    const result = aggregateAnalysesLogic(analyses, transcripts as never[], scenarios);
+
+    expect(result.visualizationData.decisionDistribution['gpt-4']).toEqual({
+      opponentStrongly: 1,
+      opponentSomewhat: 1,
+      neutral: 1,
+      somewhat: 1,
+      strongly: 1,
     });
   });
 });

@@ -1,0 +1,11 @@
+query AvailableModels {
+  availableModels {
+    id
+    providerId
+    displayName
+    versions
+    defaultVersion
+    isAvailable
+    isDefault
+  }
+}

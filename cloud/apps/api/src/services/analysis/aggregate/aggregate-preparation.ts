@@ -1,11 +1,7 @@
-import { createHash, randomUUID } from 'crypto';
-import path from 'path';
-import { db, resolveDefinitionContent, type Prisma } from '@valuerank/db';
+import { randomUUID } from 'crypto';
+import { db, resolveDefinitionContent, type AnalysisStatus, type Prisma } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
-import { spawnPython } from '../../../queue/spawn.js';
 import {
-  AGGREGATE_ANALYSIS_CODE_VERSION,
-  ANALYZE_WORKER_PATH,
   DRIFT_WARNING_THRESHOLD,
   LOW_COVERAGE_CAUTION_THRESHOLD,
   MIN_REPEAT_COVERAGE_COUNT,
@@ -13,13 +9,9 @@ import {
 } from './constants.js';
 import {
   type AggregateMetadata,
-  type AggregateScenarioInput,
   type AggregateWorkerInput,
-  type AggregateWorkerOutput,
   type AggregateWorkerTranscript,
-  type AggregatedResult,
   type AnalysisOutput,
-  type RunConfig,
   zAnalysisOutput,
   zRunConfig,
 } from './contracts.js';
@@ -34,118 +26,51 @@ import {
   normalizeScenarioAnalysisMetadata,
 } from '../scenario-metadata.js';
 import { resolveTranscriptDecisionModel } from '../../../graphql/queries/domain/decision-model.js';
+import {
+  buildValueOutcomes,
+  buildCanonicalValueOutcomes,
+  computeAggregateFingerprint,
+} from './aggregate-helpers.js';
+import {
+  type AggregateRecomputeClaim,
+  type AggregateRunConfig,
+  type AggregateRunPreparation,
+} from './aggregate-types.js';
 
 const log = createLogger('analysis:aggregate');
 const AGGREGATE_CLAIM_LEASE_MS = 300_000;
 
-export type AggregateRecomputeClaim = {
-  token: string;
-  sourceFingerprint: string;
-  leaseExpiresAt: string;
+type AggregateAnalysisRecord = {
+  id: string;
+  createdAt: Date;
+  deletedAt: Date | null;
+  runId: string;
+  analysisType: string;
+  codeVersion: string;
+  status: AnalysisStatus;
+  inputHash?: string;
+  output: Prisma.JsonValue;
 };
 
-export type AggregateRunSelection = {
-  preambleVersionId: string | null;
-  definitionVersion: number | null;
-  temperature: number | null;
+type AggregateTranscriptRecord = {
+  id: string;
+  runId: string;
+  sampleIndex: number;
+  modelId: string;
+  scenarioId: string | null;
+  decisionCode: string | null;
+  decisionMetadata: unknown;
+  definitionSnapshot: unknown;
+  summarizedAt: Date | null;
+  createdAt: Date;
+  scenario: {
+    id: string;
+    name: string;
+    deletedAt: Date | null;
+    orientationFlipped: boolean;
+    content: unknown;
+  } | null;
 };
-
-export type AggregateRunPreparation = {
-  definitionId: string;
-  selection: AggregateRunSelection;
-  scenarios: AggregateScenarioInput[];
-  sourceRunIds: string[];
-  analysisCount: number;
-  sampleSize: number;
-  templateRun: {
-    createdByUserId: string | null;
-    experimentId: string | null;
-    config: RunConfig;
-  };
-  finalRunConfig: AggregateRunConfig;
-  aggregateMetadataBase: Pick<
-    AggregateMetadata,
-    'aggregateEligibility' | 'aggregateIneligibilityReason' | 'sourceRunCount' | 'sourceRunIds' | 'conditionCoverage'
-  >;
-  aggregateWorkerInput: AggregateWorkerInput | null;
-  aggregateWorkerTranscripts: AggregateWorkerTranscript[];
-  aggregatedResult: AggregatedResult;
-  claim: AggregateRecomputeClaim;
-  sourceFingerprint: string;
-};
-
-export type AggregateClaimRecord = {
-  aggregateRunId: string;
-  createdNew: boolean;
-  previousConfig: AggregateRunConfig | null;
-  claim: AggregateRecomputeClaim;
-};
-
-export type AggregateRunConfig = RunConfig & {
-  aggregateSourceFingerprint?: string;
-  aggregateRecomputeClaim?: AggregateRecomputeClaim;
-};
-
-type AggregateSourceRunRecord = any;
-type AggregateAnalysisRecord = any;
-type AggregateTranscriptRecord = any;
-type AggregateWorkerSuccessOutput = Extract<AggregateWorkerOutput, { success: true }>;
-
-function buildValueOutcomes(
-  score: number | null,
-  orientationFlipped: boolean,
-  valueA: string | null,
-  valueB: string | null
-): Record<string, 'prioritized' | 'deprioritized' | 'neutral'> | undefined {
-  if (score == null || valueA == null || valueB == null) return undefined;
-  const normalizedScore = orientationFlipped ? 6 - score : score;
-
-  if (normalizedScore >= 4) {
-    return {
-      [valueA]: 'prioritized',
-      [valueB]: 'deprioritized',
-    };
-  }
-  if (normalizedScore <= 2) {
-    return {
-      [valueA]: 'deprioritized',
-      [valueB]: 'prioritized',
-    };
-  }
-  return {
-    [valueA]: 'neutral',
-    [valueB]: 'neutral',
-  };
-}
-
-function buildCanonicalValueOutcomes(
-  direction: 'favor_first' | 'favor_second' | 'neutral' | 'unknown',
-  valueA: string | null,
-  valueB: string | null,
-): Record<string, 'prioritized' | 'deprioritized' | 'neutral'> | undefined {
-  if (valueA == null || valueB == null || direction === 'unknown') {
-    return undefined;
-  }
-
-  if (direction === 'neutral') {
-    return {
-      [valueA]: 'neutral',
-      [valueB]: 'neutral',
-    };
-  }
-
-  if (direction === 'favor_first') {
-    return {
-      [valueA]: 'prioritized',
-      [valueB]: 'deprioritized',
-    };
-  }
-
-  return {
-    [valueA]: 'deprioritized',
-    [valueB]: 'prioritized',
-  };
-}
 
 export async function prepareAggregateRunSnapshot(
   definitionId: string,
@@ -236,9 +161,11 @@ export async function prepareAggregateRunSnapshot(
     })
   );
 
-  const validAnalyses = compatibleRuns
-    .map((run) => run.analysisResults[0])
-    .filter((analysis): analysis is AggregateAnalysisRecord => analysis !== undefined && analysis !== null);
+  const validAnalyses: AggregateAnalysisRecord[] = (
+    compatibleRuns
+      .map((run) => run.analysisResults[0])
+      .filter((analysis): analysis is NonNullable<typeof analysis> => analysis !== undefined && analysis !== null)
+  ) as AggregateAnalysisRecord[];
 
   if (validAnalyses.length === 0) {
     log.info({ definitionId }, 'No valid analysis results found for compatible runs');
@@ -582,356 +509,4 @@ export async function prepareAggregateRunSnapshot(
     claim,
     sourceFingerprint,
   };
-}
-
-export async function claimAggregateRun(prepared: AggregateRunPreparation): Promise<AggregateClaimRecord> {
-  let createdNew = false;
-  let previousConfig: AggregateRunConfig | null = null;
-  const aggregateRun = await db.$transaction(async (tx: Prisma.TransactionClient) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${prepared.definitionId}))`;
-
-    const existingRuns = await tx.run.findMany({
-      where: {
-        definitionId: prepared.definitionId,
-        tags: {
-          some: {
-            tag: {
-              name: 'Aggregate',
-            },
-          },
-        },
-        deletedAt: null,
-      },
-    });
-
-    const aggregateRun = findMatchingAggregateRun(existingRuns, prepared.selection);
-    const existingConfigResult = aggregateRun == null ? null : zRunConfig.safeParse(aggregateRun.config);
-    previousConfig =
-      existingConfigResult != null && existingConfigResult.success ? (existingConfigResult.data as AggregateRunConfig) : null;
-    const claimConfig = buildClaimConfig(prepared, previousConfig);
-
-    if (!aggregateRun) {
-      createdNew = true;
-      return tx.run.create({
-        data: {
-          definitionId: prepared.definitionId,
-          createdByUserId: prepared.templateRun.createdByUserId,
-          experimentId: prepared.templateRun.experimentId,
-          status: 'RUNNING',
-          config: claimConfig as unknown as Prisma.InputJsonValue,
-          tags: {
-            create: {
-              tag: {
-                connectOrCreate: {
-                  where: { name: 'Aggregate' },
-                  create: { name: 'Aggregate' },
-                },
-              },
-            },
-          },
-        },
-      });
-    }
-
-    await tx.run.update({
-      where: { id: aggregateRun.id },
-      data: {
-        config: claimConfig as unknown as Prisma.InputJsonValue,
-        status: 'RUNNING',
-      },
-    });
-
-    return aggregateRun;
-  });
-
-  return {
-    aggregateRunId: aggregateRun.id,
-    createdNew,
-    previousConfig,
-    claim: prepared.claim,
-  };
-}
-
-export async function persistAggregateRun(
-  prepared: AggregateRunPreparation,
-  claim: AggregateClaimRecord,
-  workerResult: AggregateWorkerSuccessOutput | null,
-): Promise<void> {
-  await db.$transaction(async (tx: Prisma.TransactionClient) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${prepared.definitionId}))`;
-
-    const aggregateRun = await tx.run.findUnique({
-      where: { id: claim.aggregateRunId },
-    });
-
-    if (!aggregateRun) {
-      throw new AggregateRecomputeRetryableError('Aggregate run disappeared before the final persist step');
-    }
-
-    const configResult = zRunConfig.safeParse(aggregateRun.config);
-    const currentConfig = configResult.success ? configResult.data : {};
-    const currentClaim = getAggregateRecomputeClaim(currentConfig);
-
-    if (!currentClaim) {
-      throw new AggregateRecomputeRetryableError('Aggregate recompute claim is missing before persist');
-    }
-    if (currentClaim.token !== claim.claim.token) {
-      throw new AggregateRecomputeRetryableError('Aggregate recompute claim was replaced before persist');
-    }
-    if (currentClaim.sourceFingerprint !== prepared.sourceFingerprint) {
-      throw new AggregateRecomputeRetryableError('Aggregate recompute claim fingerprint no longer matches the prepared snapshot');
-    }
-    if (new Date(currentClaim.leaseExpiresAt).getTime() <= Date.now()) {
-      throw new AggregateRecomputeRetryableError('Aggregate recompute claim lease expired before persist');
-    }
-
-    await verifyAggregateSnapshot(prepared);
-
-    const finalConfig: AggregateRunConfig = {
-      ...currentConfig,
-      ...prepared.finalRunConfig,
-      aggregateSourceFingerprint: prepared.sourceFingerprint,
-    };
-    delete (finalConfig as Record<string, unknown>).aggregateRecomputeClaim;
-
-    const aggregateMetadata: AggregateMetadata = {
-      ...prepared.aggregateMetadataBase,
-      perModelRepeatCoverage:
-        workerResult != null ? workerResult.analysis.aggregateSemantics?.perModelRepeatCoverage ?? {} : {},
-      perModelDrift:
-        workerResult != null ? workerResult.analysis.aggregateSemantics?.perModelDrift ?? {} : {},
-    };
-
-    const finalOutput: Record<string, unknown> = {
-      perModel: prepared.aggregatedResult.perModel,
-      preferenceSummary:
-        workerResult != null ? workerResult.analysis.preferenceSummary ?? null : null,
-      reliabilitySummary:
-        workerResult != null ? workerResult.analysis.reliabilitySummary ?? null : null,
-      aggregateMetadata,
-      modelAgreement: prepared.aggregatedResult.modelAgreement,
-      visualizationData: prepared.aggregatedResult.visualizationData,
-      mostContestedScenarios: prepared.aggregatedResult.mostContestedScenarios,
-      varianceAnalysis: prepared.aggregatedResult.varianceAnalysis,
-      decisionStats: prepared.aggregatedResult.decisionStats,
-      valueAggregateStats: prepared.aggregatedResult.valueAggregateStats,
-      sourceRunIds: prepared.sourceRunIds,
-      runCount: prepared.aggregateMetadataBase.sourceRunCount,
-      analysisCount: prepared.analysisCount,
-      methodsUsed: {
-        aggregateSemantics: 'same-signature-v1',
-        codeVersion: AGGREGATE_ANALYSIS_CODE_VERSION,
-      },
-      warnings: [],
-      computedAt: new Date().toISOString(),
-      durationMs: 0,
-    };
-
-    await tx.run.update({
-      where: { id: claim.aggregateRunId },
-      data: {
-        config: finalConfig as unknown as Prisma.InputJsonValue,
-        status: 'COMPLETED',
-      },
-    });
-
-    await tx.analysisResult.updateMany({
-      where: { runId: claim.aggregateRunId, status: 'CURRENT' },
-      data: { status: 'SUPERSEDED' },
-    });
-
-    await tx.analysisResult.create({
-      data: {
-        runId: claim.aggregateRunId,
-        analysisType: 'AGGREGATE',
-        status: 'CURRENT',
-        codeVersion: AGGREGATE_ANALYSIS_CODE_VERSION,
-        inputHash: `aggregate-${Date.now()}`,
-        output: finalOutput as unknown as Prisma.InputJsonValue,
-      },
-    });
-  });
-}
-
-export async function releaseAggregateClaim(
-  prepared: AggregateRunPreparation,
-  claim: AggregateClaimRecord,
-): Promise<void> {
-  try {
-    await db.$transaction(async (tx: Prisma.TransactionClient) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${prepared.definitionId}))`;
-
-      const aggregateRun = await tx.run.findUnique({
-        where: { id: claim.aggregateRunId },
-      });
-
-      if (!aggregateRun) {
-        return;
-      }
-
-      const currentConfigResult = zRunConfig.safeParse(aggregateRun.config);
-      const currentConfig = currentConfigResult.success ? currentConfigResult.data : {};
-      const currentClaim = getAggregateRecomputeClaim(currentConfig);
-      if (currentClaim?.token !== claim.claim.token) {
-        return;
-      }
-
-      if (claim.createdNew || claim.previousConfig == null) {
-        const failedConfig: AggregateRunConfig = {
-          ...(currentConfig as AggregateRunConfig),
-        };
-        delete failedConfig.aggregateRecomputeClaim;
-        delete failedConfig.aggregateSourceFingerprint;
-
-        await tx.run.update({
-          where: { id: aggregateRun.id },
-          data: {
-            config: failedConfig as unknown as Prisma.InputJsonValue,
-            status: 'FAILED',
-          },
-        });
-        return;
-      }
-
-      const restoredConfig: AggregateRunConfig = { ...claim.previousConfig };
-      delete restoredConfig.aggregateRecomputeClaim;
-
-      await tx.run.update({
-        where: { id: aggregateRun.id },
-        data: {
-          config: restoredConfig as unknown as Prisma.InputJsonValue,
-          status: 'COMPLETED',
-        },
-      });
-    });
-  } catch (err) {
-    log.warn({ err, definitionId: prepared.definitionId, runId: claim.aggregateRunId }, 'Best-effort aggregate claim cleanup failed');
-  }
-}
-
-export async function spawnAggregateWorker(prepared: AggregateRunPreparation): Promise<AggregateWorkerSuccessOutput | null> {
-  if (prepared.aggregateWorkerInput == null) {
-    return null;
-  }
-
-  const workerResult = await spawnPython<AggregateWorkerInput, AggregateWorkerOutput>(
-    ANALYZE_WORKER_PATH,
-    prepared.aggregateWorkerInput,
-    { cwd: path.resolve(process.cwd(), '../..'), timeout: 120000 }
-  );
-
-  if (!workerResult.success) {
-    throw new Error(`Aggregate semantic worker failed: ${workerResult.error}`);
-  }
-
-  if (!workerResult.data.success) {
-    throw new Error(`${workerResult.data.error.code}: ${workerResult.data.error.message}`);
-  }
-
-  return workerResult.data;
-}
-
-export class AggregateRecomputeRetryableError extends Error {
-  retryable = true;
-}
-
-function buildClaimConfig(
-  prepared: AggregateRunPreparation,
-  existingConfig: RunConfig | null
-): AggregateRunConfig {
-  const nextConfig: Record<string, unknown> = {
-    ...(existingConfig ?? {}),
-    ...prepared.finalRunConfig,
-    aggregateRecomputeClaim: prepared.claim,
-    aggregateSourceFingerprint: prepared.sourceFingerprint,
-  };
-  return nextConfig as AggregateRunConfig;
-}
-
-function getAggregateRecomputeClaim(config: RunConfig): AggregateRecomputeClaim | null {
-  const claim = (config as RunConfig & { aggregateRecomputeClaim?: unknown }).aggregateRecomputeClaim;
-  if (claim == null || typeof claim !== 'object') return null;
-
-  const token = (claim as Record<string, unknown>).token;
-  const sourceFingerprint = (claim as Record<string, unknown>).sourceFingerprint;
-  const leaseExpiresAt = (claim as Record<string, unknown>).leaseExpiresAt;
-
-  if (
-    typeof token !== 'string' ||
-    token.trim() === '' ||
-    typeof sourceFingerprint !== 'string' ||
-    sourceFingerprint.trim() === '' ||
-    typeof leaseExpiresAt !== 'string' ||
-    leaseExpiresAt.trim() === ''
-  ) {
-    return null;
-  }
-
-  return {
-    token,
-    sourceFingerprint,
-    leaseExpiresAt,
-  };
-}
-
-function findMatchingAggregateRun(
-  runs: AggregateSourceRunRecord[],
-  selection: AggregateRunSelection
-): AggregateSourceRunRecord | null {
-  return runs.find((run) => {
-    const parseResult = zRunConfig.safeParse(run.config);
-    if (!parseResult.success) return false;
-
-    const config = parseResult.data;
-    const runMeta = getSnapshotMeta(config);
-    const runTemperature = getConfigTemperature(config);
-    const preambleMatch =
-      selection.preambleVersionId === null
-        ? runMeta.preambleVersionId === null
-        : runMeta.preambleVersionId === selection.preambleVersionId;
-    const definitionVersionMatch =
-      selection.definitionVersion === null
-        ? runMeta.definitionVersion === null
-        : runMeta.definitionVersion === selection.definitionVersion;
-    const temperatureMatch = runTemperature === selection.temperature;
-    return preambleMatch && definitionVersionMatch && temperatureMatch;
-  }) ?? null;
-}
-
-function computeAggregateFingerprint(value: unknown): string {
-  return createHash('sha256')
-    .update(stableStringify(value))
-    .digest('hex');
-}
-
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map((entry) => stableStringify(entry)).join(',')}]`;
-  }
-
-  if (value != null && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`);
-    return `{${entries.join(',')}}`;
-  }
-
-  return JSON.stringify(value);
-}
-
-async function verifyAggregateSnapshot(prepared: AggregateRunPreparation): Promise<void> {
-  const currentPreparation = await prepareAggregateRunSnapshot(
-    prepared.definitionId,
-    prepared.selection.preambleVersionId,
-    prepared.selection.definitionVersion,
-    prepared.selection.temperature
-  );
-
-  if (currentPreparation == null) {
-    throw new AggregateRecomputeRetryableError('Aggregate snapshot became stale before the final persist step');
-  }
-
-  if (currentPreparation.sourceFingerprint !== prepared.sourceFingerprint) {
-    throw new AggregateRecomputeRetryableError('Aggregate snapshot fingerprint changed before the final persist step');
-  }
 }

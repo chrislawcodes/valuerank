@@ -19,6 +19,8 @@ import {
   buildDecisionDistributionBuckets,
   getDecisionDistributionEmptyState,
   getDecisionDistributionHelperText,
+  normalizeDecisionDistributionCounts,
+  type DecisionDistributionBucketCode,
 } from '../../../utils/decisionDistributionDisplay';
 import {
   OverlayChart,
@@ -48,10 +50,13 @@ function getRunDistribution(run: RunWithAnalysis, modelFilter?: string): RunDeci
   const vizData = run.analysis?.visualizationData;
   if (!vizData?.decisionDistribution) return null;
 
-  // Aggregate counts across filtered models
-  const aggregateCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-  let totalSamples = 0;
-  let weightedSum = 0;
+  const aggregateCounts: Record<DecisionDistributionBucketCode, number> = {
+    opponentStrongly: 0,
+    opponentSomewhat: 0,
+    neutral: 0,
+    somewhat: 0,
+    strongly: 0,
+  };
 
   for (const [modelId, modelDist] of Object.entries(vizData.decisionDistribution)) {
     // Apply model filter if specified
@@ -59,26 +64,21 @@ function getRunDistribution(run: RunWithAnalysis, modelFilter?: string): RunDeci
 
     // Get decision counts from visualization data
     if (modelDist) {
-      for (const [decision, count] of Object.entries(modelDist)) {
-        const d = Number(decision);
-        const c = Number(count);
-        if (d >= 1 && d <= 5 && !isNaN(c)) {
-          aggregateCounts[d] = (aggregateCounts[d] ?? 0) + c;
-          totalSamples += c;
-          weightedSum += d * c;
-        }
-      }
+      const normalized = normalizeDecisionDistributionCounts(modelDist);
+      (Object.keys(aggregateCounts) as DecisionDistributionBucketCode[]).forEach((bucket) => {
+        aggregateCounts[bucket] += normalized[bucket];
+      });
     }
   }
 
+  const totalSamples = Object.values(aggregateCounts).reduce((sum, count) => sum + count, 0);
   if (totalSamples === 0) return null;
 
   return {
     runId: run.id,
     runName: formatRunNameShort(run),
     counts: aggregateCounts,
-    total: totalSamples,
-    mean: weightedSum / totalSamples,
+    totalCount: totalSamples,
   };
 }
 
@@ -192,10 +192,14 @@ export function DecisionsViz({ runs, filters, onFilterChange }: ComparisonVisual
   // Build chart data for overlay mode
   const chartData = useMemo((): DecisionData[] => {
     return buckets.map((bucket) => {
-      const decision = Number(bucket.code);
-      const point: DecisionData = { decision };
+      const rawCounts: Record<string, number> = {};
+      const point: DecisionData = { decision: bucket.code, rawCounts };
       for (const dist of distributions) {
-        point[dist.runId] = dist.counts[decision] || 0;
+        const rawCount = dist.counts[bucket.code] || 0;
+        rawCounts[dist.runId] = rawCount;
+        point[dist.runId] = dist.totalCount > 0
+          ? (rawCount / dist.totalCount) * 100
+          : 0;
       }
       return point;
     });
@@ -269,11 +273,10 @@ export function DecisionsViz({ runs, filters, onFilterChange }: ComparisonVisual
               {dist.runName}
             </div>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-xl font-bold text-gray-900">{dist.mean.toFixed(2)}</span>
-              <span className="text-xs text-gray-500">mean</span>
-            </div>
-            <div className="text-xs text-gray-500 mt-0.5">
-              n={dist.total.toLocaleString()}
+              <span className="text-xl font-bold text-gray-900">
+                {dist.totalCount.toLocaleString()}
+              </span>
+              <span className="text-xs text-gray-500">Decision judgments</span>
             </div>
           </div>
         ))}

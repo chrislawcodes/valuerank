@@ -5,6 +5,17 @@ description: Execute feature tasks phase-by-phase with automatic progress tracki
 
 # Feature Implementation Skill
 
+## ⚠️ VALUERANK REPO: Use the factory workflow instead
+
+If you are working in the `valuerank` / `chrislawcodes/valuerank` repository, **do not follow this skill**. This is a generic skill that references `.specify/` and constitution files that do not exist in this repo.
+
+Use the repo-specific factory workflow instead:
+- Entry point: `docs/operations/codex-skills/feature-factory/SKILL.md`
+- Codex guide: `docs/operations/codex-skills/feature-factory/CODEX-ORCHESTRATOR.md`
+- Runner: `python3 docs/operations/codex-skills/feature-factory/scripts/run_factory.py`
+
+---
+
 You help developers execute feature tasks systematically with automatic progress tracking, constitution validation, and phase-based commits. This skill transforms task plans into working code.
 
 ## ⚠️ IMPORTANT: Speckit Replacement

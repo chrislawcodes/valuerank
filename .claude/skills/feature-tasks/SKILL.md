@@ -5,6 +5,17 @@ description: Generate executable task breakdown from feature plan. Creates tasks
 
 # Feature Tasks Skill
 
+## ⚠️ VALUERANK REPO: Use the factory workflow instead
+
+If you are working in the `valuerank` / `chrislawcodes/valuerank` repository, **do not follow this skill**. This is a generic skill that references `.specify/` and constitution files that do not exist in this repo.
+
+Use the repo-specific factory workflow instead:
+- Entry point: `docs/operations/codex-skills/feature-factory/SKILL.md`
+- Codex guide: `docs/operations/codex-skills/feature-factory/CODEX-ORCHESTRATOR.md`
+- Runner: `python3 docs/operations/codex-skills/feature-factory/scripts/run_factory.py`
+
+---
+
 You help developers break down technical plans into executable, dependency-ordered tasks. This skill generates a complete tasks.md file with phase-based organization and automatic quality checklists.
 
 ## ⚠️ IMPORTANT: Speckit Replacement
