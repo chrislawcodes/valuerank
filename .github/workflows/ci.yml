@@ -22,10 +22,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: cloud/package-lock.json
+
+      - name: Cache node_modules
+        id: node-cache
+        uses: actions/cache@v4
+        with:
+          path: cloud/node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('cloud/package-lock.json') }}
 
       - name: Install Node dependencies
+        if: steps.node-cache.outputs.cache-hit != 'true'
         working-directory: cloud
         run: npm ci
 
@@ -74,10 +80,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: cloud/package-lock.json
+
+      - name: Cache node_modules
+        id: node-cache
+        uses: actions/cache@v4
+        with:
+          path: cloud/node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('cloud/package-lock.json') }}
 
       - name: Install Node dependencies
+        if: steps.node-cache.outputs.cache-hit != 'true'
         working-directory: cloud
         run: npm ci
 
