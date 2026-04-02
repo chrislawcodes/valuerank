@@ -19,20 +19,20 @@ import {
 import {
   getDecisionDistributionChartAriaLabel,
   type DecisionDistributionBucket,
+  type DecisionDistributionBucketCode,
   DECISION_DISTRIBUTION_BUCKET_CODES,
 } from '../../../utils/decisionDistributionDisplay';
 
 export type DecisionData = {
-  decision: number;
-  [runId: string]: number;
-};
+  decision: DecisionDistributionBucketCode;
+  rawCounts: Record<string, number>;
+} & Record<string, number | string | Record<string, number>>;
 
 export type RunDecisionDistribution = {
   runId: string;
   runName: string;
-  counts: Record<number, number>;
-  total: number;
-  mean: number;
+  counts: Record<DecisionDistributionBucketCode, number>;
+  totalCount: number;
 };
 
 type OverlayTooltipProps = {
@@ -43,13 +43,22 @@ type OverlayTooltipProps = {
   buckets: DecisionDistributionBucket[];
 };
 
+function formatPercent(value: number): string {
+  return `${value.toFixed(0)}%`;
+}
+
 /**
  * Custom tooltip for overlay chart
  */
 export function OverlayTooltip({ active, payload, label, runNames, buckets }: OverlayTooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
 
-  const typedPayload = payload as ReadonlyArray<{ dataKey: string; value: number; color: string }>;
+  const typedPayload = payload as ReadonlyArray<{
+    dataKey: string;
+    value: number;
+    color: string;
+    payload?: { rawCounts?: Record<string, number> };
+  }>;
   const bucketLabel = buckets.find((bucket) => bucket.code === String(label))?.label ?? String(label);
 
   return (
@@ -63,7 +72,9 @@ export function OverlayTooltip({ active, payload, label, runNames, buckets }: Ov
               style={{ backgroundColor: entry.color }}
             />
             <span className="text-gray-600">{runNames.get(entry.dataKey) || entry.dataKey}:</span>
-            <span className="font-medium text-gray-900">{entry.value}</span>
+            <span className="font-medium text-gray-900">
+              {formatPercent(entry.value)} ({entry.payload?.rawCounts?.[entry.dataKey] ?? 0})
+            </span>
           </div>
         ))}
       </div>
@@ -133,8 +144,8 @@ export function SideBySideChart({ distributions, runColors, buckets }: SideBySid
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3" aria-label={chartAriaLabel}>
       {distributions.map((dist) => {
         const data = DECISION_DISTRIBUTION_BUCKET_CODES.map((code) => ({
-          decision: Number(code),
-          count: dist.counts[Number(code)] || 0,
+          decision: code,
+          count: dist.counts[code] || 0,
         }));
 
         const color = runColors.get(dist.runId) || '#14b8a6';
@@ -145,9 +156,6 @@ export function SideBySideChart({ distributions, runColors, buckets }: SideBySid
               <h4 className="text-sm font-medium text-gray-900 truncate" title={dist.runName}>
                 {dist.runName}
               </h4>
-              <p className="text-xs text-gray-500">
-                n={dist.total}, mean={dist.mean.toFixed(2)}
-              </p>
             </div>
             <div style={{ height: 150 }}>
               <ResponsiveContainer width="100%" height="100%">

@@ -267,7 +267,7 @@ describe('DecisionsViz', () => {
       expect(screen.getAllByText(/Run B/).length).toBeGreaterThanOrEqual(1);
     });
 
-    it('shows sample size and mean in side-by-side cards', () => {
+    it('shows transcript decision counts in side-by-side cards', () => {
       const runs = [createMockRun()];
 
       render(
@@ -278,9 +278,8 @@ describe('DecisionsViz', () => {
         />
       );
 
-      // Look for the stats pattern (n=XX, mean=X.XX)
-      const statsText = screen.getByText(/n=\d+, mean=\d+\.\d+/);
-      expect(statsText).toBeInTheDocument();
+      expect(screen.getByText('Decision judgments')).toBeInTheDocument();
+      expect(screen.getByText('130')).toBeInTheDocument();
     });
   });
 
@@ -324,7 +323,7 @@ describe('DecisionsViz', () => {
   });
 
   describe('summary stats', () => {
-    it('displays mean value for each run', () => {
+    it('displays transcript decision counts for each run', () => {
       const runs = [
         createMockRun({ id: 'run-1', definition: { ...createMockRun().definition, name: 'Run A' } }),
         createMockRun({ id: 'run-2', definition: { ...createMockRun().definition, name: 'Run B' } }),
@@ -338,11 +337,10 @@ describe('DecisionsViz', () => {
         />
       );
 
-      // Should show "mean" labels
-      expect(screen.getAllByText('mean').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Decision judgments').length).toBeGreaterThanOrEqual(1);
     });
 
-    it('displays sample count for each run', () => {
+    it('displays transcript decision count for each run', () => {
       const runs = [createMockRun()];
 
       render(
@@ -353,8 +351,7 @@ describe('DecisionsViz', () => {
         />
       );
 
-      // Should show n=XXX pattern
-      expect(screen.getByText(/n=\d+/)).toBeInTheDocument();
+      expect(screen.getByText('130')).toBeInTheDocument();
     });
   });
 

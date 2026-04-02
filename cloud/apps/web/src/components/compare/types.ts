@@ -175,6 +175,8 @@ export type VisualizationRegistration = {
   description: string;
 };
 
+import type { DecisionDistributionBucketCode } from '../../utils/decisionDistributionDisplay';
+
 // ============================================================================
 // DECISION DISTRIBUTION TYPES
 // ============================================================================
@@ -185,8 +187,8 @@ export type VisualizationRegistration = {
 export type DecisionDistribution = {
   runId: string;
   modelId?: string;
-  /** Counts for each decision bucket */
-  counts: Record<number, number>;
+  /** Counts for each semantic decision bucket */
+  counts: Record<DecisionDistributionBucketCode, number>;
   /** Total samples */
   total: number;
   /** Mean decision */
