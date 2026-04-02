@@ -4,6 +4,10 @@ import type {
     VisualizationData,
     ContestedScenario
 } from '../api/operations/analysis';
+import {
+    normalizeDecisionDistributionCounts,
+    type DecisionDistributionBucketCode,
+} from '../utils/decisionDistributionDisplay';
 
 /**
  * Service to handle client-side aggregation of multiple analysis results.
@@ -85,27 +89,35 @@ export function aggregateAnalyses(analyses: AnalysisResult[]): AggregateAnalysis
         // --- A. Aggregate Decision Distributions (for VisualizationData & Stats) ---
         const aggregatedDist: Record<string, number> = {};
         const modelDecisions: Record<number, number[]> = { 1: [], 2: [], 3: [], 4: [], 5: [] };
+        const bucketScoreByKey: Record<string, number> = {
+            opponentStrongly: 1,
+            opponentSomewhat: 2,
+            neutral: 3,
+            somewhat: 4,
+            strongly: 5,
+        };
 
         validAnalyses.forEach(analysis => {
             const dist = analysis.visualizationData?.decisionDistribution?.[modelId];
             if (dist) {
-                const runTotal = Object.values(dist).reduce((sum, c) => sum + c, 0);
+                const normalizedDist = normalizeDecisionDistributionCounts(dist);
+                const runTotal = Object.values(normalizedDist).reduce((sum, c) => sum + c, 0);
 
-                Object.entries(dist).forEach(([option, count]) => {
+                Object.entries(normalizedDist).forEach(([option, count]) => {
                     aggregatedDist[option] = (aggregatedDist[option] || 0) + count;
                 });
 
                 // Calculate distribution percentages for this single run (for stats)
                 if (runTotal > 0) {
-                    Object.entries(dist).forEach(([option, count]) => {
-                        const opt = parseInt(option);
+                    Object.entries(normalizedDist).forEach(([option, count]) => {
+                        const opt = bucketScoreByKey[option] ?? Number(option);
                         if (!isNaN(opt) && modelDecisions[opt]) {
                             modelDecisions[opt].push(count / runTotal);
                         }
                     });
                     // Handle 0 counts for missing options
-                    [1, 2, 3, 4, 5].forEach(opt => {
-                        if (!dist[String(opt)] && modelDecisions[opt]) {
+                    (Object.entries(bucketScoreByKey) as Array<[DecisionDistributionBucketCode, number]>).forEach(([bucket, opt]) => {
+                        if (!normalizedDist[bucket] && modelDecisions[opt]) {
                             modelDecisions[opt].push(0);
                         }
                     });
@@ -238,15 +250,15 @@ export function aggregateAnalyses(analyses: AnalysisResult[]): AggregateAnalysis
     };
 
     modelIds.forEach(mId => {
-        mergedVizData.decisionDistribution[mId] = {};
+        const currentDist = mergedVizData.decisionDistribution[mId] || {};
+        mergedVizData.decisionDistribution[mId] = currentDist;
         analyses.forEach(a => {
             const d = a.visualizationData?.decisionDistribution?.[mId];
             if (d) {
-                Object.entries(d).forEach(([k, v]) => {
-                    const currentDist = mergedVizData.decisionDistribution[mId];
-                    if (currentDist) {
-                        currentDist[k] = (currentDist[k] || 0) + v;
-                    }
+                const normalized = normalizeDecisionDistributionCounts(d);
+                Object.entries(normalized).forEach(([bucket, count]) => {
+                    currentDist[bucket as DecisionDistributionBucketCode] =
+                        (currentDist[bucket as DecisionDistributionBucketCode] || 0) + count;
                 });
             }
         });

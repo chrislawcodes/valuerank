@@ -30,22 +30,22 @@ type DecisionDistributionChartProps = {
 type ChartDataPoint = {
   model: string;
   fullName: string;
-  totalCount: number;
   rawCounts: DecisionDistributionCounts;
-  '1': number;
-  '2': number;
-  '3': number;
-  '4': number;
-  '5': number;
+  totalCount: number;
+  opponentStrongly: number;
+  opponentSomewhat: number;
+  neutral: number;
+  somewhat: number;
+  strongly: number;
 };
 
-// Decision code color scheme (green to red gradient)
+// Decision code color scheme from opponent support to this-value support.
 const DECISION_COLORS = {
-  '1': '#22c55e', // green - strong agree
-  '2': '#86efac', // light green
-  '3': '#fbbf24', // yellow - neutral
-  '4': '#fb923c', // light red/orange
-  '5': '#ef4444', // red - strong disagree
+  opponentStrongly: '#ef4444', // red - strong support for the other value
+  opponentSomewhat: '#fb923c', // orange - somewhat support for the other value
+  neutral: '#fbbf24', // yellow - neutral
+  somewhat: '#86efac', // light green - somewhat support this value
+  strongly: '#22c55e', // green - strong support this value
 } as const;
 
 function formatShare(value: number): string {
@@ -57,7 +57,7 @@ export function buildDecisionDistributionChartData(
 ): ChartDataPoint[] {
   const chartData = Object.entries(decisionDistribution).map(([model, dist]) => {
     const rawCounts = normalizeDecisionDistributionCounts(dist);
-    const totalCount = DECISION_DISTRIBUTION_BUCKET_CODES.reduce(
+    const total = DECISION_DISTRIBUTION_BUCKET_CODES.reduce(
       (sum, code) => sum + rawCounts[code],
       0,
     );
@@ -65,34 +65,26 @@ export function buildDecisionDistributionChartData(
     return {
       model: model.length > 20 ? model.slice(0, 18) + '...' : model,
       fullName: model,
-      totalCount,
       rawCounts,
-      '1': totalCount > 0 ? (rawCounts['1'] / totalCount) * 100 : 0,
-      '2': totalCount > 0 ? (rawCounts['2'] / totalCount) * 100 : 0,
-      '3': totalCount > 0 ? (rawCounts['3'] / totalCount) * 100 : 0,
-      '4': totalCount > 0 ? (rawCounts['4'] / totalCount) * 100 : 0,
-      '5': totalCount > 0 ? (rawCounts['5'] / totalCount) * 100 : 0,
+      totalCount: total,
+      opponentStrongly: total > 0 ? (rawCounts.opponentStrongly / total) * 100 : 0,
+      opponentSomewhat: total > 0 ? (rawCounts.opponentSomewhat / total) * 100 : 0,
+      neutral: total > 0 ? (rawCounts.neutral / total) * 100 : 0,
+      somewhat: total > 0 ? (rawCounts.somewhat / total) * 100 : 0,
+      strongly: total > 0 ? (rawCounts.strongly / total) * 100 : 0,
     };
   });
 
-  chartData.sort((a, b) => b.totalCount - a.totalCount);
+  chartData.sort((a, b) => b.totalCount - a.totalCount || a.fullName.localeCompare(b.fullName));
   return chartData;
 }
 
 export function formatDecisionDistributionScopeNote(chartData: ChartDataPoint[]): string {
   if (chartData.length === 0) {
-    return 'Total decisions in scope unavailable.';
+    return 'Decision share data unavailable.';
   }
 
-  const totals = chartData.map((entry) => entry.totalCount);
-  const minTotal = Math.min(...totals);
-  const maxTotal = Math.max(...totals);
-
-  if (minTotal === maxTotal) {
-    return `Total decisions in scope: n=${minTotal} per model. Hover bars for raw counts.`;
-  }
-
-  return `Total decisions in scope varies by model: n=${minTotal}-${maxTotal}. Hover bars for raw counts.`;
+  return 'Each bar shows the share of transcript decisions for that model.';
 }
 
 /**
@@ -110,7 +102,6 @@ export function CustomTooltip({ active, payload, buckets }: {
   return (
     <div className="bg-white p-3 shadow-lg rounded-lg border border-gray-200">
       <p className="font-medium text-gray-900 mb-2">{data.fullName}</p>
-      <p className="text-sm text-gray-600 mb-2">Total decisions: n={data.totalCount}</p>
       <div className="space-y-1 text-sm">
         {buckets.map((bucket) => (
           <div key={bucket.code} className="flex items-center gap-2" aria-label={bucket.ariaLabel}>
@@ -119,9 +110,8 @@ export function CustomTooltip({ active, payload, buckets }: {
               style={{ backgroundColor: DECISION_COLORS[bucket.code] }}
             />
             <span>{bucket.label}:</span>
-            <span className="font-medium">
-              {formatShare(data[bucket.code])} ({data.rawCounts[bucket.code]})
-            </span>
+            <span className="font-medium">{formatShare(data[bucket.code])}</span>
+            <span className="font-medium text-gray-500">({data.rawCounts[bucket.code]})</span>
           </div>
         ))}
       </div>
