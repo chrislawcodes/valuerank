@@ -40,10 +40,13 @@ function CoverageCell({
   const [isOpen, setIsOpen] = useState(false);
   const isDiagonal = valueA === valueB;
   const hasVignette = definitionId !== null;
-  const visibleLabel = isDiagonal || !hasVignette ? '—' : batchCount.toLocaleString();
+  const displayCount = pairedBatchCount > 0 ? pairedBatchCount : batchCount;
+  const visibleLabel = isDiagonal || !hasVignette ? '—' : displayCount.toLocaleString();
   const xLabel = VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB;
   const yLabel = VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA;
-  const batchLabel = batchCount === 1 ? 'batch' : 'batches';
+  const batchLabel = pairedBatchCount > 0
+    ? (displayCount === 1 ? 'paired batch' : 'paired batches')
+    : (displayCount === 1 ? 'batch' : 'batches');
 
   let bgColorClass = 'bg-gray-50';
   if (isDiagonal) {
@@ -71,7 +74,7 @@ function CoverageCell({
               ? 'Not applicable'
               : !hasVignette
                 ? `${xLabel} versus ${yLabel}: no vignette`
-                : `${xLabel} versus ${yLabel}: ${batchCount} ${batchLabel}`
+                : `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}`
           }
           className={cn(
             'w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border border-gray-100 rounded-none focus:ring-0 focus:ring-offset-0',
@@ -104,7 +107,7 @@ function CoverageCell({
                         : 'bg-emerald-500'
                   )}
                 />
-                {batchCount} {batchLabel}
+                {displayCount} {batchLabel}
               </div>
             ) : (
               <div className="mt-2 text-xs text-gray-500">No batch for this value pair</div>

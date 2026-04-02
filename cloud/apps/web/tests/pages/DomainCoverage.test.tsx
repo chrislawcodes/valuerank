@@ -247,7 +247,7 @@ describe('DomainCoverage Page', () => {
 
     await act(async () => {
       await user.click(
-        screen.getByRole('button', { name: /self-direction versus achievement.*3 batch/i })
+        screen.getByRole('button', { name: /self-direction versus achievement.*2 paired batch/i })
       );
     });
 
