@@ -8,8 +8,43 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
-    name: Lint, Build & Test
+  lint-build-web:
+    name: Lint, Build & Web Tests
+    runs-on: ubuntu-latest
+
+    env:
+      JWT_SECRET: test-secret-that-is-at-least-32-characters-long
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: cloud/package-lock.json
+
+      - name: Install Node dependencies
+        working-directory: cloud
+        run: npm ci
+
+      - name: Lint and build
+        working-directory: cloud
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+        run: npx turbo lint build
+
+      - name: Run web and shared tests
+        working-directory: cloud
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+        run: npx turbo test --filter=@valuerank/web --filter=@valuerank/shared
+
+  api-tests:
+    name: API & DB Tests
     runs-on: ubuntu-latest
 
     services:
@@ -46,6 +81,13 @@ jobs:
         working-directory: cloud
         run: npm ci
 
+      - name: Build dependencies
+        working-directory: cloud
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+        run: npx turbo build
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -66,9 +108,9 @@ jobs:
         working-directory: cloud
         run: npm run db:test:setup
 
-      - name: Lint, Build, Test (Node)
+      - name: Run API and DB tests
         working-directory: cloud
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-        run: npx turbo lint build test
+        run: npx turbo test --filter=@valuerank/api --filter=@valuerank/db
