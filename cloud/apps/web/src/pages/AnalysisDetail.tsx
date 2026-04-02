@@ -35,14 +35,36 @@ function parseAnalysisDetailMode(value: string | null): AnalysisDetailMode {
   return value === 'paired' ? 'paired' : 'single';
 }
 
+const COVERAGE_CONTEXT_QUERY_KEYS = ['coverageBatchCount', 'coveragePairedBatchCount'] as const;
+
+function parseCoverageCountParam(value: string | null): number | null {
+  if (value == null) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    return null;
+  }
+
+  const parsed = Number(trimmed);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
 function buildAnalysisDetailParams(
   searchParams: URLSearchParams,
   tab: AnalysisTab,
   mode: AnalysisDetailMode,
+  options: { preserveCoverageContext?: boolean } = {},
 ): URLSearchParams {
   const next = new URLSearchParams(searchParams);
   next.set('tab', tab);
   next.set('mode', mode);
+  if (!options.preserveCoverageContext) {
+    for (const key of COVERAGE_CONTEXT_QUERY_KEYS) {
+      next.delete(key);
+    }
+  }
   return next;
 }
 
@@ -55,6 +77,8 @@ export function AnalysisDetail() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const activeTab = parseAnalysisTab(searchParams.get('tab'));
+  const coverageBatchCount = parseCoverageCountParam(searchParams.get('coverageBatchCount'));
+  const coveragePairedBatchCount = parseCoverageCountParam(searchParams.get('coveragePairedBatchCount'));
   const analysisMode = parseAnalysisDetailMode(searchParams.get('mode'));
 
   useEffect(() => {
@@ -64,7 +88,9 @@ export function AnalysisDetail() {
       return;
     }
 
-    const nextSearch = buildAnalysisDetailParams(searchParams, activeTab, analysisMode).toString();
+    const nextSearch = buildAnalysisDetailParams(searchParams, activeTab, analysisMode, {
+      preserveCoverageContext: true,
+    }).toString();
     if (searchParams.toString() !== nextSearch) {
       navigate({
         pathname: buildAnalysisDetailPath(ANALYSIS_BASE_PATH, id || ''),
@@ -78,7 +104,9 @@ export function AnalysisDetail() {
       return;
     }
 
-    const next = buildAnalysisDetailParams(searchParams, tab, analysisMode);
+    const next = buildAnalysisDetailParams(searchParams, tab, analysisMode, {
+      preserveCoverageContext: true,
+    });
     navigate({
       pathname: buildAnalysisDetailPath(ANALYSIS_BASE_PATH, id || ''),
       search: next.toString().length > 0 ? `?${next.toString()}` : '',
@@ -90,7 +118,9 @@ export function AnalysisDetail() {
       return;
     }
 
-    const next = buildAnalysisDetailParams(searchParams, activeTab, mode);
+    const next = buildAnalysisDetailParams(searchParams, activeTab, mode, {
+      preserveCoverageContext: true,
+    });
     navigate({
       pathname: buildAnalysisDetailPath(ANALYSIS_BASE_PATH, id || ''),
       search: next.toString().length > 0 ? `?${next.toString()}` : '',
@@ -255,7 +285,9 @@ export function AnalysisDetail() {
       return;
     }
 
-    const next = buildAnalysisDetailParams(searchParams, activeTab, 'single');
+    const next = buildAnalysisDetailParams(searchParams, activeTab, 'single', {
+      preserveCoverageContext: false,
+    });
     navigate({
       pathname: buildAnalysisDetailPath(ANALYSIS_BASE_PATH, nextRunId),
       search: next.toString().length > 0 ? `?${next.toString()}` : '',
@@ -293,6 +325,8 @@ export function AnalysisDetail() {
             analysisBasePath={ANALYSIS_BASE_PATH}
             analysisSearchParams={searchParams}
             analysisMode={analysisMode}
+            coverageBatchCount={coverageBatchCount}
+            coveragePairedBatchCount={coveragePairedBatchCount}
             onAnalysisModeChange={handleModeChange}
             activeTab={activeTab}
             onTabChange={handleTabChange}
@@ -412,9 +446,13 @@ function Header({
                     onChange={(e) => {
                       const nextRun = aggregateRuns.find((run) => run.signature === e.target.value);
                       if (nextRun) {
+                        const nextSearchParams = new URLSearchParams(currentSearch);
+                        for (const key of COVERAGE_CONTEXT_QUERY_KEYS) {
+                          nextSearchParams.delete(key);
+                        }
                         navigate({
                           pathname: buildAnalysisDetailPath(ANALYSIS_BASE_PATH, nextRun.id),
-                          search: currentSearch.length > 0 ? `?${currentSearch}` : '',
+                          search: nextSearchParams.toString().length > 0 ? `?${nextSearchParams.toString()}` : '',
                         });
                       }
                     }}

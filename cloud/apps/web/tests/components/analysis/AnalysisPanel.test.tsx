@@ -875,6 +875,87 @@ describe('AnalysisPanel', () => {
     expect(screen.getByText('Evidence: 4 contributing source runs pooled')).toBeInTheDocument();
   });
 
+  it('shows the coverage cell batch count when provided', async () => {
+    const analysis = createMockAnalysis({
+      analysisType: 'AGGREGATE',
+      codeVersion: '1.2.0',
+      aggregateMetadata: {
+        aggregateEligibility: 'eligible_same_signature_baseline',
+        aggregateIneligibilityReason: null,
+        sourceRunCount: 4,
+        sourceRunIds: ['run-a', 'run-b', 'run-c', 'run-d'],
+        conditionCoverage: {
+          plannedConditionCount: 2,
+          observedConditionCount: 2,
+          complete: true,
+        },
+        perModelRepeatCoverage: {},
+        perModelDrift: {},
+      },
+    });
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanelHarness runId="run-1" isAggregate coverageBatchCount={5} />
+      </MemoryRouter>
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /^details$/i }));
+
+    expect(screen.getByText('Evidence: 5 batches from coverage cell')).toBeInTheDocument();
+  });
+
+  it('shows paired coverage counts when provided', async () => {
+    const analysis = createMockAnalysis({
+      analysisType: 'AGGREGATE',
+      codeVersion: '1.2.0',
+      aggregateMetadata: {
+        aggregateEligibility: 'eligible_same_signature_baseline',
+        aggregateIneligibilityReason: null,
+        sourceRunCount: 4,
+        sourceRunIds: ['run-a', 'run-b', 'run-c', 'run-d'],
+        conditionCoverage: {
+          plannedConditionCount: 2,
+          observedConditionCount: 2,
+          complete: true,
+        },
+        perModelRepeatCoverage: {},
+        perModelDrift: {},
+      },
+    });
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanelHarness
+          runId="run-1"
+          isAggregate
+          coverageBatchCount={5}
+          coveragePairedBatchCount={2}
+        />
+      </MemoryRouter>
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /^details$/i }));
+
+    expect(screen.getByText('Evidence: 5 batches from coverage cell • 2 paired batches')).toBeInTheDocument();
+  });
+
   it('removes the old summary cards and paired scope copy from the top of the page', () => {
     const analysis = createMockAnalysis({
       varianceAnalysis: {

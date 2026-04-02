@@ -9,6 +9,7 @@ export const DOMAIN_VALUE_COVERAGE_QUERY = gql`
         valueA
         valueB
         batchCount
+        pairedBatchCount
         definitionId
         definitionName
         aggregateRunId
@@ -30,6 +31,7 @@ export const DOMAIN_VALUE_COVERAGE_QUERY_LEGACY = gql`
         valueA
         valueB
         batchCount
+        pairedBatchCount
         definitionId
         definitionName
         aggregateRunId
@@ -46,6 +48,7 @@ export type DomainValueCoverageCell = {
   valueA: string;
   valueB: string;
   batchCount: number;
+  pairedBatchCount: number;
   definitionId: string | null;
   definitionName: string | null;
   aggregateRunId: string | null;
