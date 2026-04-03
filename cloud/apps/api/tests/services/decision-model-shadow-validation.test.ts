@@ -89,19 +89,19 @@ describe('buildDecisionModelShadowValidationReport', () => {
     expect(report.ambiguousCount).toBe(1);
     expect(report.unparseableCount).toBe(1);
     expect(report.missingMetadataCount).toBe(1);
-    expect(report.comparisonEligibleCount).toBe(5);
-    expect(report.comparisonMismatchCount).toBe(1);
+    expect(report.comparisonEligibleCount).toBe(0);
+    expect(report.comparisonMismatchCount).toBe(0);
 
     expect(report.bucketExemplars.exact[0]?.transcriptId).toBe('exact-match');
     expect(report.bucketExemplars.fallback_resolved[0]?.transcriptId).toBe('fallback-match');
     expect(report.bucketExemplars.ambiguous[0]?.transcriptId).toBe('ambiguous');
     expect(report.bucketExemplars.unparseable[0]?.transcriptId).toBe('unparseable');
     expect(report.bucketExemplars.missing_metadata[0]?.transcriptId).toBe('missing-metadata');
-    expect(report.comparisonMismatchExemplars[0]?.transcriptId).toBe('mismatch');
+    expect(report.comparisonMismatchExemplars).toHaveLength(0);
     expect(report.transcripts.find((entry) => entry.transcriptId === 'mismatch')?.comparison).toEqual({
-      legacyScore: 1,
-      v2Score: 5,
-      matches: false,
+      legacyScore: null,
+      v2Score: null,
+      matches: null,
     });
   });
 

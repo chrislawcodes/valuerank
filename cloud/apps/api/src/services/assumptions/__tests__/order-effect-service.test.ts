@@ -89,6 +89,64 @@ function buildPair(id: string, variantType: string | null, sourceScenarioId: str
   };
 }
 
+function buildDefinitionSnapshot() {
+  return {
+    dimensions: [
+      { name: 'Achievement' },
+      { name: 'Benevolence_Dependability' },
+    ],
+    methodology: {
+      presentation_order: 'A_first',
+    },
+  };
+}
+
+function buildDecisionMetadata(decisionCode: string) {
+  const appliedDecision = decisionCode === '5'
+    ? {
+        favoredValueKey: 'Achievement' as const,
+        opposedValueKey: 'Benevolence_Dependability' as const,
+        direction: 'favor_first' as const,
+        strength: 'strong' as const,
+      }
+    : decisionCode === '4'
+      ? {
+          favoredValueKey: 'Achievement' as const,
+          opposedValueKey: 'Benevolence_Dependability' as const,
+          direction: 'favor_first' as const,
+          strength: 'lean' as const,
+        }
+      : decisionCode === '2'
+        ? {
+            favoredValueKey: 'Benevolence_Dependability' as const,
+            opposedValueKey: 'Achievement' as const,
+            direction: 'favor_second' as const,
+            strength: 'lean' as const,
+          }
+        : decisionCode === '1'
+          ? {
+              favoredValueKey: 'Benevolence_Dependability' as const,
+              opposedValueKey: 'Achievement' as const,
+              direction: 'favor_second' as const,
+              strength: 'strong' as const,
+            }
+          : {
+              favoredValueKey: null,
+              opposedValueKey: null,
+              direction: 'neutral' as const,
+              strength: 'neutral' as const,
+            };
+
+  return {
+    manualOverride: {
+      appliedDecision,
+      previousValue: decisionCode,
+      overriddenAt: '2026-03-01T00:00:00.000Z',
+      overriddenByUserId: 'test-user',
+    },
+  };
+}
+
 function buildTranscript(args: {
   id: string;
   scenarioId: string;
@@ -103,6 +161,8 @@ function buildTranscript(args: {
     modelId: 'model-a',
     modelVersion: args.modelVersion ?? 'v1',
     decisionCode: args.decisionCode,
+    decisionMetadata: buildDecisionMetadata(args.decisionCode),
+    definitionSnapshot: buildDefinitionSnapshot(),
     createdAt: new Date(args.createdAt),
     run: {
       deletedAt: null,

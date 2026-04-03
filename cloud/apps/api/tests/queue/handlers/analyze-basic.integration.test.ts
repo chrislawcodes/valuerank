@@ -96,6 +96,68 @@ const MOCK_ANALYSIS = {
   },
 };
 
+function buildDefinitionSnapshot() {
+  return {
+    dimensions: [
+      { name: 'Achievement' },
+      { name: 'Benevolence_Dependability' },
+    ],
+    methodology: {
+      presentation_order: 'A_first',
+    },
+  };
+}
+
+function buildDecisionMetadata(decisionCode: string) {
+  if (decisionCode === '5') {
+    return {
+      matchedLabel: 'Achievement',
+      parseClass: 'exact',
+      parsePath: 'exact.favor_first.strong',
+      parserVersion: 'parser-1',
+      responseExcerpt: 'Achievement',
+    };
+  }
+
+  if (decisionCode === '4') {
+    return {
+      matchedLabel: 'Achievement',
+      parseClass: 'exact',
+      parsePath: 'exact.favor_first.lean',
+      parserVersion: 'parser-1',
+      responseExcerpt: 'Achievement',
+    };
+  }
+
+  if (decisionCode === '2') {
+    return {
+      matchedLabel: 'Achievement',
+      parseClass: 'exact',
+      parsePath: 'exact.favor_second.lean',
+      parserVersion: 'parser-1',
+      responseExcerpt: 'Achievement',
+    };
+  }
+
+  if (decisionCode === '1') {
+    return {
+      matchedLabel: 'Achievement',
+      parseClass: 'exact',
+      parsePath: 'exact.favor_second.strong',
+      parserVersion: 'parser-1',
+      responseExcerpt: 'Achievement',
+    };
+  }
+
+  return {
+    matchedLabel: 'Achievement',
+    parseClass: 'exact',
+    parsePath: 'exact.neutral.neutral',
+    parserVersion: 'parser-1',
+    responseExcerpt: 'Achievement',
+  };
+}
+
 // Mock job factory
 function createMockJob(data: Partial<AnalyzeBasicJobData> = {}): Job<AnalyzeBasicJobData> {
   return {
@@ -132,8 +194,8 @@ describe('analyze-basic integration', () => {
           schema_version: 1,
           preamble: 'Test preamble',
           dimensions: [
-            { name: 'Value_A', values: ['low', 'high'] },
-            { name: 'Value_B', values: ['low', 'high'] },
+            { name: 'Achievement', values: ['low', 'high'] },
+            { name: 'Benevolence_Dependability', values: ['low', 'high'] },
           ],
         },
       },
@@ -174,7 +236,9 @@ describe('analyze-basic integration', () => {
           runId: TEST_IDS.run,
           modelId: 'gpt-4',
           scenarioId: TEST_IDS.scenario1,
-          decisionCode: 'A',
+          decisionCode: '5',
+          decisionMetadata: buildDecisionMetadata('5'),
+          definitionSnapshot: buildDefinitionSnapshot(),
           content: { turns: [] },
           turnCount: 1,
           tokenCount: 100,
@@ -185,7 +249,9 @@ describe('analyze-basic integration', () => {
           runId: TEST_IDS.run,
           modelId: 'gpt-4',
           scenarioId: TEST_IDS.scenario2,
-          decisionCode: 'B',
+          decisionCode: '2',
+          decisionMetadata: buildDecisionMetadata('2'),
+          definitionSnapshot: buildDefinitionSnapshot(),
           content: { turns: [] },
           turnCount: 1,
           tokenCount: 100,
@@ -244,7 +310,12 @@ describe('analyze-basic integration', () => {
               id: TEST_IDS.transcript1,
               modelId: 'gpt-4',
               scenarioId: TEST_IDS.scenario1,
-              summary: { score: null }, // 'A' doesn't parse to numeric 1-5
+              summary: {
+                values: {
+                  Achievement: 'prioritized',
+                  Benevolence_Dependability: 'deprioritized',
+                },
+              },
               scenario: expect.objectContaining({
                 name: 'Test Scenario 1',
                 dimensions: { 'test-dimension': 1 },
@@ -658,6 +729,8 @@ describe('analyze-basic integration', () => {
           modelId: 'gpt-4',
           scenarioId: flippedScenarioId,
           decisionCode: '4',
+          decisionMetadata: buildDecisionMetadata('4'),
+          definitionSnapshot: buildDefinitionSnapshot(),
           content: { turns: [] },
           turnCount: 1,
           tokenCount: 100,
@@ -676,10 +749,9 @@ describe('analyze-basic integration', () => {
               id: flippedTranscriptId,
               orientationFlipped: true,
               summary: {
-                score: 4,
                 values: {
-                  Value_A: 'deprioritized',
-                  Value_B: 'prioritized',
+                  Achievement: 'deprioritized',
+                  Benevolence_Dependability: 'prioritized',
                 },
               },
             }),
@@ -701,7 +773,7 @@ describe('analyze-basic integration', () => {
           runId: TEST_IDS.run,
           modelId: 'gpt-4',
           scenarioId: null,
-          decisionCode: 'A',
+          decisionCode: '3',
           content: { turns: [] },
           turnCount: 1,
           tokenCount: 100,

@@ -127,16 +127,29 @@ async function createSourceRun({
       durationMs: 100,
       decisionCodeSource: 'deterministic',
       decisionMetadata: {
-        manualOverride: {
-          appliedDecision: {
-            favoredValueKey: 'ValueA',
-            opposedValueKey: 'ValueB',
-            direction: 'favor_first',
-            strength: 'strong',
+        matchedLabel: 'Achievement',
+        parseClass: 'exact',
+        parsePath: 'cached.winner_first',
+        parserVersion: 'parser-1',
+        responseExcerpt: 'Achievement',
+        summaryCache: {
+          summary: {
+            canonicalDecision: {
+              cacheVersion: 1,
+              decisionState: 'resolved',
+              favoredValueKey: 'Achievement',
+              strength: 'strong',
+            },
           },
-          previousValue: '5',
-          overriddenAt: new Date().toISOString(),
-          overriddenByUserId: 'test-user',
+        },
+      },
+      definitionSnapshot: {
+        dimensions: [
+          { name: 'Achievement' },
+          { name: 'Benevolence_Dependability' },
+        ],
+        methodology: {
+          presentation_order: 'A_first',
         },
       },
     })),
@@ -728,7 +741,10 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
             scenarioId: scenarioIds[1],
             orientationFlipped: true,
             summary: expect.objectContaining({
-              score: null,
+              values: {
+                ValueA: 'prioritized',
+                ValueB: 'deprioritized',
+              },
             }),
           }),
         ]),
@@ -756,8 +772,8 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
         },
       },
       varianceAnalysis: {
-        isMultiSample: false,
-        orientationCorrectedCount: 0,
+        isMultiSample: true,
+        orientationCorrectedCount: 1,
       },
     });
   });

@@ -171,12 +171,13 @@ describe('analyze-basic handler with decision-model v2 enabled', () => {
                 direction: 'favor_first',
                 strength: 'strong',
               }),
-              legacy: expect.objectContaining({
-                canonicalScore: 5,
+              raw: expect.objectContaining({
+                parseClass: 'exact',
+                parsePath: 'exact.favor_first.strong',
+                parserVersion: 'parser-1',
               }),
             }),
             summary: {
-              score: 5,
               values: {
                 Achievement: 'prioritized',
                 Benevolence_Dependability: 'deprioritized',
