@@ -96,17 +96,11 @@ export type DecisionModelResult = {
 export type TranscriptDecisionModelInput = {
   decisionCode: string | null;
   decisionMetadata: unknown;
-<<<<<<< HEAD
   /** Supply definitionSnapshot OR pairOverride — pairOverride takes precedence if both provided */
   definitionSnapshot?: unknown;
   orientationFlipped: boolean | null | undefined;
   /** Pre-resolved value pair; avoids fetching definitionSnapshot from DB when pair is already known */
   pairOverride?: DomainAnalysisValuePair | null;
-=======
-  definitionSnapshot?: unknown;
-  orientationFlipped: boolean | null | undefined;
-  pairOverride?: DecisionPair | null;
->>>>>>> 07bf239a (Resolve PR merge conflicts)
 };
 
 export type TranscriptDecisionModelResult = DecisionModelResult;
@@ -337,8 +331,6 @@ function parseLegacyScore(value: string | null | undefined): 1 | 2 | 3 | 4 | 5 |
   }
   return null;
 }
-
->>>>>>> 07bf239a (Resolve PR merge conflicts)
 function buildCanonicalDecisionFromPair(
   pair: DecisionPair,
   direction: DecisionDirection,
@@ -509,13 +501,7 @@ export function buildRawDecisionEvidence(
 export function resolveTranscriptDecisionModel(
   input: TranscriptDecisionModelInput,
 ): TranscriptDecisionModelResult {
-<<<<<<< HEAD
   const pair = input.pairOverride !== undefined ? input.pairOverride : extractValuePair(input.definitionSnapshot);
-=======
-  const pair = input.pairOverride !== undefined
-    ? input.pairOverride
-    : extractValuePair(input.definitionSnapshot);
->>>>>>> 07bf239a (Resolve PR merge conflicts)
   const raw = buildRawDecisionEvidence(input.decisionMetadata);
   const manualOverrideDecision = extractManualOverrideDecision(input.decisionMetadata);
   const cachedDecision = extractCachedWinnerFirstDecision(input.decisionMetadata);
