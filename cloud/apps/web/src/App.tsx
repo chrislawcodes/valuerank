@@ -126,7 +126,7 @@ function App() {
             <Route
               path="/domains/analysis"
               element={
-                <ProtectedLayout fullWidth>
+                <ProtectedLayout>
                   <DomainAnalysis />
                 </ProtectedLayout>
               }
