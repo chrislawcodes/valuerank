@@ -91,6 +91,13 @@ module.exports = {
       },
     },
     {
+      // Generated GraphQL artifacts are committed for CI and may use codegen helper types.
+      files: ['apps/web/src/generated/graphql.ts'],
+      rules: {
+        '@typescript-eslint/no-explicit-any': 'off',
+      },
+    },
+    {
       // Allow console in CLI tools
       files: ['apps/api/src/cli/**/*.ts'],
       rules: {

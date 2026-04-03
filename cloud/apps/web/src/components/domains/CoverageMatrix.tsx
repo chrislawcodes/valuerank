@@ -26,22 +26,27 @@ function CoverageCell({
   valueA,
   valueB,
   batchCount,
+  pairedBatchCount,
   definitionId,
   aggregateRunId,
 }: {
   valueA: string;
   valueB: string;
   batchCount: number;
+  pairedBatchCount: number;
   definitionId: string | null;
   aggregateRunId: string | null;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const isDiagonal = valueA === valueB;
   const hasVignette = definitionId !== null;
-  const visibleLabel = isDiagonal || !hasVignette ? '—' : batchCount.toLocaleString();
+  const displayCount = pairedBatchCount > 0 ? pairedBatchCount : batchCount;
+  const visibleLabel = isDiagonal || !hasVignette ? '—' : displayCount.toLocaleString();
   const xLabel = VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB;
   const yLabel = VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA;
-  const batchLabel = batchCount === 1 ? 'batch' : 'batches';
+  const batchLabel = pairedBatchCount > 0
+    ? (displayCount === 1 ? 'paired batch' : 'paired batches')
+    : (displayCount === 1 ? 'batch' : 'batches');
 
   let bgColorClass = 'bg-gray-50';
   if (isDiagonal) {
@@ -49,9 +54,9 @@ function CoverageCell({
       'bg-[url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxwYXRoIGQ9Ik0wLDggTDgsMCBMMCw4IFoiIHN0cm9rZT0iI2U1ZTdlYiIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9zdmc+")] bg-gray-100';
   } else if (!hasVignette) {
     bgColorClass = 'bg-gray-50';
-  } else if (batchCount < 3) {
+  } else if (displayCount < 3) {
     bgColorClass = 'bg-rose-100 hover:bg-rose-200 transition-colors text-rose-900';
-  } else if (batchCount < 10) {
+  } else if (displayCount < 10) {
     bgColorClass = 'bg-amber-100 hover:bg-amber-200 transition-colors text-amber-900';
   } else {
     bgColorClass = 'bg-emerald-500 hover:bg-emerald-600 transition-colors text-white';
@@ -69,15 +74,15 @@ function CoverageCell({
               ? 'Not applicable'
               : !hasVignette
                 ? `${xLabel} versus ${yLabel}: no vignette`
-                : `${xLabel} versus ${yLabel}: ${batchCount} ${batchLabel}`
+                : `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}`
           }
           className={cn(
             'w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border border-gray-100 rounded-none focus:ring-0 focus:ring-offset-0',
             bgColorClass,
             isDiagonal && 'cursor-not-allowed text-transparent font-normal',
             !isDiagonal && !hasVignette && 'text-gray-500 cursor-pointer hover:bg-gray-100',
-            hasVignette && batchCount < 3 && 'text-rose-900',
-            hasVignette && batchCount >= 3 && batchCount < 10 && 'text-amber-900'
+            hasVignette && displayCount < 3 && 'text-rose-900',
+            hasVignette && displayCount >= 3 && displayCount < 10 && 'text-amber-900'
           )}
         >
           {visibleLabel}
@@ -95,14 +100,14 @@ function CoverageCell({
                 <span
                   className={cn(
                     'inline-block w-2 h-2 rounded-full mr-1.5',
-                    batchCount < 3
+                    displayCount < 3
                       ? 'bg-rose-500'
-                      : batchCount < 10
+                      : displayCount < 10
                         ? 'bg-amber-500'
                         : 'bg-emerald-500'
                   )}
                 />
-                {batchCount} {batchLabel}
+                {displayCount} {batchLabel}
               </div>
             ) : (
               <div className="mt-2 text-xs text-gray-500">No batch for this value pair</div>
@@ -112,7 +117,7 @@ function CoverageCell({
           <div className="p-1 flex flex-col">
             {hasVignette && aggregateRunId !== null && (
               <Link
-                to={`/analysis/${aggregateRunId}`}
+                to={`/analysis/${aggregateRunId}?tab=overview&mode=single&coverageBatchCount=${batchCount}&coveragePairedBatchCount=${pairedBatchCount}`}
                 className="flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-sm w-full text-left"
                 onClick={() => setIsOpen(false)}
               >
@@ -463,6 +468,7 @@ export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
                             valueA={rowVal}
                             valueB={colVal}
                             batchCount={cell?.batchCount ?? 0}
+                            pairedBatchCount={cell?.pairedBatchCount ?? 0}
                             definitionId={cell?.definitionId ?? null}
                             aggregateRunId={cell?.aggregateRunId ?? null}
                           />

@@ -17,14 +17,39 @@ vi.mock('../../../src/queue/spawn.js', () => ({
 }));
 
 // Mock shared logger
-vi.mock('@valuerank/shared', () => ({
-  createLogger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
-}));
+vi.mock('@valuerank/shared', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@valuerank/shared')>();
+
+  return {
+    ...actual,
+    createLogger: () => ({
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    }),
+    getEnv: vi.fn((key: string, defaultValue?: string) => {
+      const values: Record<string, string> = {
+        JWT_SECRET: 'test-secret-that-is-at-least-32-characters-long',
+        PORT: '4000',
+        NODE_ENV: 'test',
+        SUMMARIZE_PARSER_VERSION: 'job-choice-v2',
+      };
+
+      return values[key] ?? defaultValue;
+    }),
+    getEnvOptional: vi.fn((key: string) => {
+      const values: Record<string, string> = {
+        JWT_SECRET: 'test-secret-that-is-at-least-32-characters-long',
+        PORT: '4000',
+        NODE_ENV: 'test',
+        SUMMARIZE_PARSER_VERSION: 'job-choice-v2',
+      };
+
+      return values[key];
+    }),
+  };
+});
 
 import { spawnPython } from '../../../src/queue/spawn.js';
 

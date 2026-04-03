@@ -53,7 +53,6 @@ import sys
 from typing import Any, Optional
 
 from common.errors import ErrorCode, LLMError, ValidationError, WorkerError, classify_exception
-from common.llm_adapters import generate
 from common.logging import get_logger
 
 log = get_logger("summarize")
@@ -165,6 +164,14 @@ def normalize_for_match(text: str) -> str:
     sanitized = text.replace("**", " ").replace("__", " ").replace("`", " ")
     sanitized = re.sub(r"[^a-z0-9]+", " ", sanitized.lower())
     return re.sub(r"\s+", " ", sanitized).strip()
+
+
+_FILLER_WORDS = frozenset({"their", "the", "a", "an"})
+
+
+def normalize_for_relaxed_match(text: str) -> str:
+    base = normalize_for_match(text)
+    return " ".join(w for w in base.split() if w not in _FILLER_WORDS)
 
 
 def build_response_text(transcript_content: dict[str, Any]) -> str:
@@ -314,6 +321,64 @@ def extract_text_label_decision(text: str, scale_labels: list[dict[str, str]]) -
             return None, None
 
     return None, None
+
+
+def extract_text_label_decision_relaxed(
+    text: str, scale_labels: list[dict[str, str]]
+) -> tuple[Optional[str], Optional[str]]:
+    """Same as extract_text_label_decision but strips filler words before comparing."""
+    if not text or not scale_labels:
+        return None, None
+
+    segments = response_segments(text)
+    if not segments:
+        return None, None
+
+    normalized_labels = [
+        {
+            "code": entry.get("code", ""),
+            "label": entry.get("label", ""),
+            "relaxed": normalize_for_relaxed_match(entry.get("label", "")),
+        }
+        for entry in scale_labels
+        if entry.get("label")
+    ]
+
+    for segment in segments:
+        relaxed_segment = normalize_for_relaxed_match(segment)
+        if relaxed_segment == "":
+            continue
+
+        prefix_matches = [
+            entry
+            for entry in normalized_labels
+            if entry["relaxed"]
+            and (
+                relaxed_segment == entry["relaxed"]
+                or relaxed_segment.startswith(entry["relaxed"] + " ")
+            )
+        ]
+
+        unique_prefix_matches = list({entry["code"]: entry for entry in prefix_matches}.values())
+        if len(unique_prefix_matches) == 1:
+            match = unique_prefix_matches[0]
+            return match["code"], match["label"]
+        if len(unique_prefix_matches) > 1:
+            return None, None
+
+    return None, None
+
+
+def extract_leading_text_label_decision_relaxed(
+    text: str, scale_labels: list[dict[str, str]]
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """Same as extract_leading_text_label_decision but uses relaxed matching."""
+    for candidate, used_prefix_stripping in leading_response_candidates(text):
+        decision_code, matched_label = extract_text_label_decision_relaxed(candidate, scale_labels)
+        if decision_code is not None:
+            parse_path = "text_label_relaxed_leading" if used_prefix_stripping else "text_label_relaxed"
+            return decision_code, matched_label, parse_path
+    return None, None, None
 
 
 def extract_leading_decision_code(text: str) -> Optional[str]:
@@ -508,6 +573,10 @@ def classify_decision_with_llm(
 
     Returns decision code string, "refusal", or "other".
     """
+    # Lazy import: deferred until actually needed so that the heavy LLM SDK
+    # dependencies are not loaded for the 99%+ of jobs that resolve deterministically.
+    from common.llm_adapters import generate  # noqa: PLC0415
+
     prompt = build_llm_decision_prompt(transcript_content, scale_labels)
     messages = [{"role": "user", "content": prompt}]
 
@@ -568,15 +637,28 @@ def extract_decision_result(transcript_content: dict[str, Any]) -> dict[str, Any
                 decision_code = text_label_code
                 parse_path = "text_label_exact"
             else:
-                llm_decision_code = classify_decision_with_llm(transcript_content, scale_labels)
-                if llm_decision_code != "other":
-                    decision_code = llm_decision_code
-                    decision_source = "llm"
-                    parse_class = "fallback_resolved"
-                    parse_path = "text_label_llm"
+                # Relaxed matching: strip filler words (their/the/a/an) before comparing.
+                # Catches models that paraphrase slightly (e.g. "recognition of expertise"
+                # instead of "recognition of their expertise").
+                relaxed_code, matched_label, relaxed_path = extract_leading_text_label_decision_relaxed(response_text, scale_labels)
+                if relaxed_code is not None:
+                    decision_code = relaxed_code
+                    parse_path = relaxed_path or "text_label_relaxed"
                 else:
-                    parse_class = "ambiguous"
-                    parse_path = "text_label_ambiguous"
+                    relaxed_code, matched_label = extract_text_label_decision_relaxed(response_text, scale_labels)
+                    if relaxed_code is not None:
+                        decision_code = relaxed_code
+                        parse_path = "text_label_relaxed"
+                    else:
+                        llm_decision_code = classify_decision_with_llm(transcript_content, scale_labels)
+                        if llm_decision_code != "other":
+                            decision_code = llm_decision_code
+                            decision_source = "llm"
+                            parse_class = "fallback_resolved"
+                            parse_path = "text_label_llm"
+                        else:
+                            parse_class = "ambiguous"
+                            parse_path = "text_label_ambiguous"
     elif decision_code == "other":
         llm_decision_code = classify_decision_with_llm(transcript_content)
         if llm_decision_code != "other":

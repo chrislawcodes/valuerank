@@ -51,6 +51,8 @@ vi.mock('../../src/components/analysis/AnalysisPanel', () => ({
     isAggregate,
     transcripts,
     analysisMode,
+    coverageBatchCount,
+    coveragePairedBatchCount,
     onAnalysisModeChange,
     onSingleVignetteChange,
     currentRun,
@@ -60,6 +62,8 @@ vi.mock('../../src/components/analysis/AnalysisPanel', () => ({
     isAggregate?: boolean;
     transcripts?: Array<unknown>;
     analysisMode?: 'single' | 'paired';
+    coverageBatchCount?: number | null;
+    coveragePairedBatchCount?: number | null;
     onAnalysisModeChange?: (mode: 'single' | 'paired') => void;
     onSingleVignetteChange?: (runId: string) => void;
     currentRun?: { id: string; definition?: { name?: string | null } | null } | null;
@@ -69,6 +73,9 @@ vi.mock('../../src/components/analysis/AnalysisPanel', () => ({
       data-testid="analysis-panel"
       data-is-aggregate={String(isAggregate)}
       data-transcript-count={String(transcripts?.length ?? 0)}
+      data-analysis-mode={analysisMode ?? 'unset'}
+      data-coverage-batch-count={String(coverageBatchCount ?? 'null')}
+      data-coverage-paired-batch-count={String(coveragePairedBatchCount ?? 'null')}
     >
       Analysis Panel for {runId}
       <button type="button" aria-pressed={analysisMode === 'single'} onClick={() => onAnalysisModeChange?.('single')}>
@@ -511,6 +518,45 @@ describe('AnalysisDetail', () => {
       expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=overview&mode=paired');
     });
 
+    it('passes coverage counts through when opened from a coverage cell', () => {
+      mockUseRun.mockReturnValue({
+        run: {
+          id: 'run-123',
+          analysisStatus: 'completed',
+          definition: { name: 'Test Definition' },
+        },
+        loading: false,
+        error: null,
+      });
+
+      renderWithRouter('/analysis/run-123?mode=single&coverageBatchCount=5&coveragePairedBatchCount=2');
+
+      expect(screen.getByTestId('analysis-panel')).toHaveAttribute('data-analysis-mode', 'single');
+      expect(screen.getByTestId('analysis-panel')).toHaveAttribute('data-coverage-batch-count', '5');
+      expect(screen.getByTestId('analysis-panel')).toHaveAttribute('data-coverage-paired-batch-count', '2');
+      expect(screen.getByTestId('location-search')).toHaveTextContent('mode=single');
+      expect(screen.getByTestId('location-search')).toHaveTextContent('coverageBatchCount=5');
+      expect(screen.getByTestId('location-search')).toHaveTextContent('coveragePairedBatchCount=2');
+      expect(screen.getByTestId('location-search')).toHaveTextContent('tab=overview');
+    });
+
+    it('ignores invalid coverage count query params', () => {
+      mockUseRun.mockReturnValue({
+        run: {
+          id: 'run-123',
+          analysisStatus: 'completed',
+          definition: { name: 'Test Definition' },
+        },
+        loading: false,
+        error: null,
+      });
+
+      renderWithRouter('/analysis/run-123?coverageBatchCount=abc&coveragePairedBatchCount=2.5');
+
+      expect(screen.getByTestId('analysis-panel')).toHaveAttribute('data-coverage-batch-count', 'null');
+      expect(screen.getByTestId('analysis-panel')).toHaveAttribute('data-coverage-paired-batch-count', 'null');
+    });
+
     it('switches to the selected single vignette run and preserves single mode', () => {
       mockUseRun.mockImplementation(({ id, pause }: { id: string; pause?: boolean }) => {
         if (pause || !id) {
@@ -593,6 +639,92 @@ describe('AnalysisDetail', () => {
 
       expect(screen.getByText('Analysis Panel for run-456')).toBeInTheDocument();
       expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=scenarios&mode=single');
+    });
+
+    it('drops stale coverage counts when switching single vignette runs', () => {
+      mockUseRun.mockImplementation(({ id, pause }: { id: string; pause?: boolean }) => {
+        if (pause || !id) {
+          return {
+            run: null,
+            loading: false,
+            error: null,
+            refetch: vi.fn(),
+          };
+        }
+
+        return {
+          run: {
+            id,
+            analysisStatus: 'completed',
+            config: {
+              jobChoiceLaunchMode: 'PAIRED_BATCH',
+              jobChoiceBatchGroupId: 'batch-1',
+              jobChoicePresentationOrder: id === 'run-123' ? 'A_first' : 'B_first',
+            },
+            definition: {
+              name: id === 'run-123' ? 'Achievement -> Benevolence' : 'Benevolence -> Achievement',
+              content: {
+                methodology: {
+                  family: 'job-choice',
+                  pair_key: 'pair-1',
+                  presentation_order: id === 'run-123' ? 'A_first' : 'B_first',
+                },
+              },
+            },
+            createdAt: id === 'run-123' ? '2024-01-01T00:00:00Z' : '2024-01-01T00:01:00Z',
+          },
+          loading: false,
+          error: null,
+          refetch: vi.fn(),
+        };
+      });
+      mockUseInfiniteRuns.mockReturnValue({
+        runs: [
+          {
+            id: 'run-123',
+            analysisStatus: 'completed',
+            createdAt: '2024-01-01T00:00:00Z',
+            config: {
+              jobChoiceBatchGroupId: 'batch-1',
+              jobChoicePresentationOrder: 'A_first',
+            },
+            definition: {
+              name: 'Achievement -> Benevolence',
+              content: { methodology: { pair_key: 'pair-1', presentation_order: 'A_first' } },
+            },
+          },
+          {
+            id: 'run-456',
+            analysisStatus: 'completed',
+            createdAt: '2024-01-01T00:01:00Z',
+            config: {
+              jobChoiceBatchGroupId: 'batch-1',
+              jobChoicePresentationOrder: 'B_first',
+            },
+            definition: {
+              name: 'Benevolence -> Achievement',
+              content: { methodology: { pair_key: 'pair-1', presentation_order: 'B_first' } },
+            },
+          },
+        ],
+        loading: false,
+        loadingMore: false,
+        error: null,
+        refetch: vi.fn(),
+        items: [],
+        hasNextPage: false,
+        loadMore: vi.fn(),
+        softRefetch: vi.fn(),
+      });
+
+      renderWithRouter('/analysis/run-123?tab=scenarios&coverageBatchCount=5&coveragePairedBatchCount=2');
+
+      fireEvent.change(screen.getByLabelText('Vignette'), { target: { value: 'run-456' } });
+
+      expect(screen.getByText('Analysis Panel for run-456')).toBeInTheDocument();
+      expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=scenarios&mode=single');
+      expect(screen.getByTestId('location-search')).not.toHaveTextContent('coverageBatchCount=');
+      expect(screen.getByTestId('location-search')).not.toHaveTextContent('coveragePairedBatchCount=');
     });
 
   });

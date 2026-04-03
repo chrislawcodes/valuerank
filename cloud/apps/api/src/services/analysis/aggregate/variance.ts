@@ -97,8 +97,6 @@ export function computeVarianceAnalysis(
     if (
       transcript.scenarioId == null ||
       transcript.scenarioId === '' ||
-      transcript.decisionCode == null ||
-      transcript.decisionCode === '' ||
       transcript.modelId == null ||
       transcript.modelId === ''
     ) {
@@ -107,7 +105,7 @@ export function computeVarianceAnalysis(
 
     const orientationFlipped = transcript.scenario?.orientationFlipped ?? false;
     const resolved = resolveTranscriptDecisionModel({
-      decisionCode: transcript.decisionCode,
+      decisionCode: transcript.decisionCode ?? null,
       decisionMetadata: transcript.decisionMetadata,
       definitionSnapshot: transcript.definitionSnapshot,
       orientationFlipped,

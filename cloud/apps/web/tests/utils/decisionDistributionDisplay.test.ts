@@ -16,7 +16,13 @@ describe('decisionDistributionDisplay', () => {
       '5': 'Strongly support this value',
     });
 
-    expect(buckets.map((bucket) => bucket.code)).toEqual(['1', '2', '3', '4', '5']);
+    expect(buckets.map((bucket) => bucket.code)).toEqual([
+      'opponentStrongly',
+      'opponentSomewhat',
+      'neutral',
+      'somewhat',
+      'strongly',
+    ]);
     expect(buckets.map((bucket) => bucket.label)).toEqual([
       'Strongly support the other value',
       'Somewhat support the other value',
@@ -38,17 +44,35 @@ describe('decisionDistributionDisplay', () => {
   it('normalizes missing and unknown bucket keys to zero-count rows', () => {
     expect(
       normalizeDecisionDistributionCounts({
-        '1': 5,
-        '3': 2,
-        '5': 7,
+        opponentStrongly: 5,
+        neutral: 2,
+        strongly: 7,
         '9': 99,
       }),
     ).toEqual({
-      '1': 5,
-      '2': 0,
-      '3': 2,
-      '4': 0,
-      '5': 7,
+      opponentStrongly: 5,
+      opponentSomewhat: 0,
+      neutral: 2,
+      somewhat: 0,
+      strongly: 7,
+    });
+  });
+
+  it('normalizes legacy descriptive decision keys to semantic buckets', () => {
+    expect(
+      normalizeDecisionDistributionCounts({
+        opponentStrongly: 2,
+        opponentSomewhat: 3,
+        neutral: 4,
+        somewhat: 5,
+        strongly: 6,
+      }),
+    ).toEqual({
+      opponentStrongly: 2,
+      opponentSomewhat: 3,
+      neutral: 4,
+      somewhat: 5,
+      strongly: 6,
     });
   });
 });
