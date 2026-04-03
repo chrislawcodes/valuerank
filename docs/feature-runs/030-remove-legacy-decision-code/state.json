@@ -26,7 +26,19 @@
     "unresolved": []
   },
   "delivery": {},
-  "dirty_overrides": {},
+  "dirty_overrides": {
+    "allowed_dirty_paths": [
+      "docs/feature-runs",
+      "specs",
+      ".claude/worktrees",
+      ".railwayignore",
+      "cloud/apps/api/specs",
+      "cloud/scripts",
+      "cloud/workers"
+    ],
+    "used": true,
+    "updated_at": 1775177668
+  },
   "checkpoint_progress": {
     "index": 0,
     "markers_sha": "",
