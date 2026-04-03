@@ -243,8 +243,7 @@ export type DomainAnalysisConditionTranscript = {
   decisionCode: string | null;
   decisionCodeSource: string | null;
   decisionMetadata: unknown;
-  definitionSnapshot?: unknown;
-  pairOverride?: DomainAnalysisValuePair | null;
+  definitionSnapshot: unknown;
   decisionModelV2?: TranscriptDecisionModelResult | null;
   turnCount: number;
   tokenCount: number;

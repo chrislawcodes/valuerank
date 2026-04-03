@@ -54,6 +54,38 @@ function buildValueOutcomesFromCanonical(
   return undefined;
 }
 
+function buildValueOutcomesFromScore(
+  score: number | null,
+  orientationFlipped: boolean,
+  valueA: string | null,
+  valueB: string | null,
+): Record<string, DecisionValueOutcome> | undefined {
+  if (score === null || valueA === null || valueB === null) {
+    return undefined;
+  }
+
+  const normalizedScore = orientationFlipped ? 6 - score : score;
+
+  if (normalizedScore >= 4) {
+    return {
+      [valueA]: 'prioritized',
+      [valueB]: 'deprioritized',
+    };
+  }
+
+  if (normalizedScore <= 2) {
+    return {
+      [valueA]: 'deprioritized',
+      [valueB]: 'prioritized',
+    };
+  }
+
+  return {
+    [valueA]: 'neutral',
+    [valueB]: 'neutral',
+  };
+}
+
 export function resolveAnalysisDecisionModel(
   input: TranscriptDecisionModelInput,
   useDecisionModelV2: boolean = config.DECISION_MODEL_V2,
@@ -83,8 +115,19 @@ export function resolveAnalysisValueOutcomes(
   input: TranscriptDecisionModelInput,
   valueA: string | null,
   valueB: string | null,
-  _useDecisionModelV2: boolean = config.DECISION_MODEL_V2,
+  useDecisionModelV2: boolean = config.DECISION_MODEL_V2,
 ): Record<string, DecisionValueOutcome> | undefined {
+  const legacyScore = parseLegacyDecisionCode(input.decisionCode);
+
+  if (!useDecisionModelV2) {
+    return buildValueOutcomesFromScore(
+      legacyScore,
+      Boolean(input.orientationFlipped),
+      valueA,
+      valueB,
+    );
+  }
+
   const decisionModel = resolveTranscriptDecisionModel(input);
   const canonicalOutcomes = buildValueOutcomesFromCanonical(
     decisionModel.canonical,
@@ -96,5 +139,10 @@ export function resolveAnalysisValueOutcomes(
     return canonicalOutcomes;
   }
 
-  return undefined;
+  return buildValueOutcomesFromScore(
+    decisionModel.legacy.canonicalScore ?? decisionModel.legacy.rawScore ?? legacyScore,
+    Boolean(input.orientationFlipped),
+    valueA,
+    valueB,
+  );
 }
