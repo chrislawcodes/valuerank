@@ -1,130 +1,105 @@
-# ValueRank - AI Moral Values Evaluation Framework
+# ValueRank Agent Contract
 
-## What This Project Does
-ValueRank measures how AI models prioritize moral values in ethical dilemmas. It's a "nutrition label for AI behavior" — making value alignment comparable across models.
+This file is the shared working contract for Claude, Codex, Gemini, and any other agent that works in this repo.
 
----
+ValueRank evaluates how AI models prioritize moral values in tradeoff prompts.
+
+## Communication Style
+
+- Use plain, direct language at a high-school reading level.
+- Use short sentences.
+- Explain jargon if you need it.
+- Start with a short summary, then details.
+- When there are real options, use a table and give a recommendation with a reason.
+- Be honest about risk, uncertainty, or disagreement.
+
+## Clarifying Questions
+
+- If you need clarifying questions, decide the full set first.
+- Say how many questions you have before asking the first one.
+- Ask them one at a time.
+- Give your recommendation before each question when helpful.
+
+## Never Do
+
+- Push commits directly to `main`.
+- Merge a PR unless the human directly asks.
+- Suppress errors to make checks pass.
+- Commit secrets or credentials.
+- Rename legacy symbols casually when the task is not an explicit terminology migration.
+
+## Project Scope
+
+- The active product lives under `cloud/`.
+- Treat `src/` as legacy unless the task explicitly targets it.
+- Railway deploys from `main`, so treat `main` as production-facing.
 
 ## Terminology
 
-All terms (Vignette, Condition, Attribute, Trial, Batch, etc.) are defined in the canonical glossary:
-→ `docs/canonical-glossary.md`
+Canonical source: `docs/canonical-glossary.md`
 
-Use those terms in all code, specs, UI copy, and docs. Key mappings:
+- Use glossary terms in new specs, UI copy, docs, and analysis discussions.
+- Existing code, schema, and APIs may still use older names. Map them instead of renaming them casually.
+- `definition` usually means `vignette`
+- `dimension` usually means `attribute`
+- `scenario` is ambiguous; use `vignette`, `condition`, or `narrative` based on what is actually meant
 
-| Use this | Not this |
-|----------|----------|
-| vignette | definition |
-| attribute | dimension |
-| condition | scenario (when meaning one exact case) |
+## Repo Rules
 
----
+- Open PRs against `chrislawcodes/valuerank`.
+- Follow the Preflight Gate in `cloud/CLAUDE.md` before any `git push` or PR creation.
+- One feature per branch. Do not stack new work on top of an open feature PR unless the human asks.
+- Fix the root cause when CI fails. Do not retry blindly.
 
-## Repository
+## Read First
 
-- All PRs go to `chrislawcodes/valuerank`: `gh pr create --repo chrislawcodes/valuerank`
-- Railway deployment pulls from `chrislawcodes/valuerank` on `main`
-- All agents must follow the Preflight Gate in `cloud/CLAUDE.md` before any `git push` or PR creation
+Always read:
 
----
+- `cloud/CLAUDE.md` for coding standards and preflight
+- `docs/canonical-glossary.md` for terminology
 
-## Critical Documentation
+Read when relevant:
 
-Read these before making significant changes:
+- `docs/valuerank_prd.yaml` for product behavior
+- `docs/values-summary.md` for value definitions and tensions
+- `docs/README.md` for architecture overview
+- `experiments.md` when choosing a delivery path
+- `MEMORY.md` for the active branch handoff
+- `docs/feature-runs/<slug>/` when working in Feature Factory
 
-| Document | Purpose |
-|----------|---------|
-| `docs/canonical-glossary.md` | Canonical terminology — use these terms everywhere |
-| `docs/values-summary.md` | 19 Schwartz values — canonical definitions and circular structure |
-| `docs/valuerank_prd.yaml` | Product requirements — user journeys, scenario design rules, Judge philosophy |
-| `docs/README.md` | Cloud platform overview — architecture, components, getting started |
-| `cloud/CLAUDE.md` | Cloud constitution — coding standards, testing, database patterns |
+## Delivery Paths
 
-**Key principles:**
-- Values are based on Schwartz et al. (2012), DOI: 10.1037/a0029393
-- The Judge doesn't decide right/wrong — it records which values the AI focused on
-- Scenarios must expose true value trade-offs with no procedural escape hatches
-- Opposite quadrants in the circular structure create the strongest value tensions
+- The human chooses the delivery path.
+- Available paths: `Direct Path`, `Feature Factory`, `Experiment Workflow`.
+- If the path is unclear, ask before starting.
+- Do not switch paths mid-feature unless the human asks.
 
----
+## Roles And Handoffs
 
-## Tech Stack
+- The AI the human is currently working with is the default integrator.
+- In Feature Factory, follow the repo-owned workflow docs and workflow state.
+- Agents may hand off work, but the current integrator owns user communication and the next decision.
+- When blocked, stop and ask the human for the missing decision.
 
-- **TypeScript/Node.js** — API server (GraphQL/Express), React frontend (Vite)
-- **PostgreSQL** — Database with Prisma ORM
-- **PgBoss** — Job queue for async processing
-- **Python 3** — Workers (probe, judge, summarize)
-- **LLM Providers** — OpenAI, Anthropic, Google, xAI, DeepSeek, Mistral
+## Data-Critical Work
 
-Everything runs through the cloud platform. The legacy Python CLI (`src/`) is no longer used.
+- For migrations, backfills, rollout scripts, or seed changes, follow `~/.claude/rules/data-critical-waves.md`.
+- Do not assume production enum values or string formats.
+- Require a safe verification plan before push.
 
----
+## Memory Policy
 
-## Key Analysis Concepts
-
-These are needed to understand the codebase — not just background reading:
-
-- **Blind Judging** — Models are anonymized during evaluation to prevent bias. Code that handles judge results must never expose raw model IDs until after scoring.
-- **Win Rate** — `prioritized / (prioritized + deprioritized)` per value. This is the core metric for scoring.
-- **Pairwise Matrix** — How often one value beats another in direct conflicts. Used in comparison and display features.
-- **Higher-Order Categories** — Four quadrants grouping values by motivational conflict. Used for UI organization and analysis grouping.
-
----
-
-## Feature Development Workflow
-
-For any feature:
-1. Describe what you want — the feature factory will clarify and build it correctly
-2. Feature factory runs: spec → plan → tasks → implementation
-3. One PR per branch — never build new work on top of an open PR branch
-4. Claude integrates — Codex and Gemini never push to main directly
-
-For data-critical work (migrations, backfills, rollout scripts) → see `~/.claude/rules/data-critical-waves.md`
-
----
-
-## Multi-Agent Roles
-
-| Agent | Role |
-|-------|------|
-| Claude | Coordinator, judge, integrator |
-| Gemini | Adversarial review, codebase research |
-| Codex | Implementation, adversarial attacks |
-
-- Codex and Gemini never push to main or merge PRs
-- If blocked or uncertain, output `ESCALATE_TO_CLAUDE` and stop
-
----
-
-## MEMORY.md
-
-Every feature gets a `MEMORY.md` at the repo root. It tracks:
-- Architectural decisions made during the feature
-- Off-limits symbols (do NOT rename without updating this file)
-- Removed/renamed symbols (for `check-symbols.sh`)
-- Current wave status and resolved impasses
-
-Always pass `MEMORY.md` context when handing off between agents.
-
----
-
-## CI Failures
-
-1. Run `~/.claude/scripts/parse-ci-errors.sh <run-id>` to extract errors
-2. Fix properly — don't suppress errors
-3. Push and wait for CI
-4. If CI fails a second time, read the new errors before fixing again
-
----
+- `MEMORY.md` is a short handoff file for the active feature on the current branch.
+- Keep only: locked decisions, off-limits symbols, removed or renamed symbols, current status, and open blockers.
+- Do not use `MEMORY.md` as a long-term archive.
+- In Feature Factory, runtime state lives in `docs/feature-runs/<slug>/state.json`.
+- In Feature Factory, durable artifacts live in `docs/feature-runs/<slug>/spec.md`, `plan.md`, `tasks.md`, and `closeout.md`.
+- Before merge, move durable notes into feature artifacts or another normal doc.
+- Trim `MEMORY.md` back to the current active handoff.
 
 ## Project Status
 
-`STATUS.md` is the Obsidian-linked project board. Update it whenever a task is completed — mark it done, move it to Recently Completed, and update the Next column for whatever is now unblocked.
-
----
-
-## Claude Code Agent Instructions
-
-- Use the **test-runner-json** agent when running tests
-- Use the **coverage-analyzer** agent for coverage analysis
-- Use the **feature factory** skill workflow for any non-trivial feature: `feature-spec` → `feature-plan` → `feature-tasks` → `feature-implement`
+- Update `STATUS.md` when a meaningful task is complete.
+- Mark the work done.
+- Move it to Recently Completed.
+- Update Next for what is now unblocked.

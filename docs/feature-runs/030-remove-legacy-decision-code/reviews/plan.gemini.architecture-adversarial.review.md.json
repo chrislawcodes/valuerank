@@ -1,0 +1,57 @@
+{
+  "session_id": "13a0f56e-938e-42b2-b465-060b550619e2",
+  "response": "## Findings\n\n| Severity | Finding |\n| :--- | :--- |\n| **HIGH** | **Permanent Maintenance Burden via Single Fallback**<br/>The decision to make `resolveTranscriptDecisionModel` the single, permanent gateway for handling legacy `decisionCode` data instead of performing a one-time data backfill introduces a significant, long-term architectural risk. This function becomes a permanent maintenance burden and a single point of failure for viewing all historical data. Any future changes to the decision model or a bug in this specific fallback logic will have disproportionately high impact. The plan correctly identifies this as a trade-off, but understates the long-term cost of embedding this legacy logic directly into a core query resolver. |\n| **HIGH** | **Client-Side Complexity without a Deprecation Plan**<br/>The plan pushes the complexity of handling two different data shapes (`scoreCounts` and `directionCounts`) to the frontend normalizer. While presented as a temporary solution, there is no corresponding plan or wave to remove this compatibility code. This introduces immediate complexity and a high risk of this \"temporary\" fix becoming permanent technical debt, making the frontend more fragile and harder to maintain. |\n| **MEDIUM** | **[UNVERIFIED] Unaudited Data Access Patterns**<br/>The plan focuses on removing legacy code from the main application stack but assumes no other systems consume the legacy fields. The `decisionCode` and `decisionCodeSource` columns are being left in the database. There is a risk that external systems (e.g., BI tools, data science notebooks, direct database queries) rely on these columns. By not selecting them in the application, the application's view of the world can diverge from other consumers, creating a risk of data inconsistency and breaking downstream dependencies that were not audited. |\n| **MEDIUM** | **[UNVERIFIED] Overly Strong Assumption about Worker Behavior**<br/>The mitigation for old `scoreCounts` data relies on the assumption that \"Python workers only write aggregate results, never read them.\" If this assumption is incorrect, or if worker behavior changes in the future, workers could fail when encountering old aggregate data. This assumption should be verified as a hard constraint before proceeding. |\n| **LOW** | **Ambiguity in Parity Testing**<br/>Wave 4 proposes a parity test comparing `directionCounts` output to the old `scoreCounts` mapping. This is good, but it may not be sufficient. The legacy numeric code could have implicit behaviors (e.g., handling of nulls, zeroes, or out-of-range values) that are not captured by a simple fixture-based parity test. The removal of the `6 - score` flip, for example, is a pattern of numeric inversion that could have subtle, untested side effects if it existed elsewhere. |\n\n## Residual Risks\n\nEven if the above findings are addressed, the project will be left with the following risks:\n\n| Risk | Description |\n| :--- | :--- |\n| **Architectural Debt Concentration** | The `resolveTranscriptDecisionModel` function will become a critical, fragile \"don't touch\" component. By choosing a runtime fallback over a data migration, the project concentrates a piece of legacy logic in a single, high-traffic location, making future refactoring of this domain significantly more complex and risky. |\n| **Stale Schema** | By leaving the `decisionCode` column in the database, the schema no longer accurately represents the state of the application logic. This creates a landmine for future developers, database administrators, or data analysts who may incorrectly assume the column is in use or contains meaningful, up-to-date information. |\n| **Incomplete Deletion** | The legacy system is not being truly removed, but rather hidden at the application layer. This incomplete removal means the team must retain knowledge of how the legacy system worked indefinitely to maintain the fallback and debug any issues that arise from it. This cognitive overhead is a hidden cost not accounted for in the plan. |",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 34129
+        },
+        "tokens": {
+          "input": 2757,
+          "prompt": 13362,
+          "candidates": 835,
+          "total": 15884,
+          "cached": 10605,
+          "thoughts": 1687,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 34129,
+            "tokens": {
+              "input": 2757,
+              "prompt": 13362,
+              "candidates": 835,
+              "total": 15884,
+              "cached": 10605,
+              "thoughts": 1687,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

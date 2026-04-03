@@ -294,6 +294,12 @@ def later_progress_exists(stages: dict[str, dict[str, object]], current_stage: s
     index = CHECKPOINT_STAGES.index(current_stage)
     for later_stage in CHECKPOINT_STAGES[index + 1 : CHECKPOINT_STAGES.index("diff") + 1]:
         later_state = stages[later_stage]
+        # Fresh runs create heading-only spec/plan/tasks files up front. Those stubs should
+        # not count as real later-stage progress when deciding the next action.
+        if later_stage in STAGE_ARTIFACT_HEADINGS:
+            if later_state["artifact_meaningful"] or later_state["manifest_exists"]:
+                return True, later_stage
+            continue
         if later_state["artifact_exists"] or later_state["manifest_exists"]:
             return True, later_stage
     return False, ""

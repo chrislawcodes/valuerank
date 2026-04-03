@@ -6,6 +6,7 @@ Builds review specs, runs fallback reviews, manages checkpoint progress.
 import argparse
 import concurrent.futures
 import json
+import re
 import subprocess
 import sys
 import time
@@ -62,6 +63,9 @@ RUN_CODEX_REVIEW = REVIEW_SCRIPTS / "run_codex_review.py"
 DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"
 DEFAULT_CODEX_MODEL = "gpt-5.4-mini"
 
+SMALL_TASK_SET_THRESHOLD = 15
+_AUTO_ACCEPT_NOTE = "No actionable findings detected — auto-accepted"
+
 # Gemini reviews launch GEMINI_STAGGER_SECONDS apart without the file lock so they overlap.
 # Codex reviews always run fully in parallel with Gemini (different API, no rate limit concern).
 # Validated 2026-03-30: zero 429s across parallel-implement-command checkpoints at 30s stagger.
@@ -72,6 +76,28 @@ GEMINI_STAGGER_SECONDS: int | None = 30
 # ---------------------------------------------------------------------------
 # Review helpers
 # ---------------------------------------------------------------------------
+
+_ACTIONABLE_FINDING_RE = re.compile(
+    r"(?:"
+    r"^\s*-\s+(?:\[[^\]]+\]\s+)?(high|medium):"  # bullet-list: "- high:" or "- [tag] high:"
+    r"|"
+    r"^\|\s*\*\*(critical|high|medium)\*\*"  # table row: "| **HIGH** |" or "| **CRITICAL** |"
+    r")",
+    re.MULTILINE,
+)
+
+
+def detect_actionable_findings(review_path: Path) -> bool:
+    """Return True if the review contains any HIGH or MEDIUM severity findings.
+
+    Lowercases the full text once so mixed-case headings (High, HIGH, high) all match.
+    Returns False if the file cannot be read, treating unreadable files as non-blocking.
+    """
+    try:
+        text = review_path.read_text(encoding="utf-8").lower()
+    except OSError:
+        return False
+    return bool(_ACTIONABLE_FINDING_RE.search(text))
 
 
 def trim_detail(text: str, limit: int = 240) -> str:
@@ -100,6 +126,7 @@ def required_reviews(
     performance_sensitive: bool,
     extra_gemini: list[str],
     fast: bool = False,
+    small_task_set: bool = False,
 ) -> list[dict[str, str]]:
     if fast:
         return [
@@ -150,6 +177,16 @@ def required_reviews(
         raise ValueError(f"Unsupported stage: {stage}")
 
     secondary_gemini = pick_secondary_lens(primary_gemini, secondary_default, extra_candidates)
+
+    if small_task_set and stage in ("tasks", "closeout"):
+        return [
+            {
+                "reviewer": "codex",
+                "lens": codex_lens,
+                "model": DEFAULT_CODEX_MODEL,
+            },
+        ]
+
     return [
         {
             "reviewer": "gemini",

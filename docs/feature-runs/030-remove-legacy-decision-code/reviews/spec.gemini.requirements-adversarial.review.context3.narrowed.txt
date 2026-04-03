@@ -1,0 +1,228 @@
+00001: import { normalizeAnalysisArtifacts } from '../normalize-analysis-output.js';
+00002: import { normalizeScenarioAnalysisMetadata } from '../scenario-metadata.js';
+00003: import {
+00004:   type AggregatedResult,
+00005:   type AggregateScenarioInput,
+00006:   type AggregateTranscriptInput,
+00007:   type AnalysisOutput,
+00008:   type ContestedScenario,
+00009:   type DecisionStats,
+00010:   type ModelStats,
+00011:   type ValueAggregateStats,
+00012:   isAggregatedVisualizationData,
+00013:   isRunVarianceAnalysis,
+00014: } from './contracts.js';
+00015: import { resolveTranscriptDecisionModel } from '../../../graphql/queries/domain/decision-model.js';
+00016: import { computeVarianceAnalysis } from './variance.js';
+00017: 
+00018: type DecisionAwareAggregateTranscript = AggregateTranscriptInput & {
+00019:   decisionMetadata?: unknown;
+00020:   definitionSnapshot?: unknown;
+00021: };
+00022: 
+00023: type DecisionBucketCode =
+00024:   | 'opponentStrongly'
+00025:   | 'opponentSomewhat'
+00026:   | 'neutral'
+00027:   | 'somewhat'
+00028:   | 'strongly';
+00029: 
+00030: const DECISION_BUCKET_ORDER: readonly DecisionBucketCode[] = [
+00031:   'opponentStrongly',
+00032:   'opponentSomewhat',
+00033:   'neutral',
+00034:   'somewhat',
+00035:   'strongly',
+00036: ] as const;
+00037: 
+00038: function normalizeDecisionBucketCode(rawCode: string): DecisionBucketCode | null {
+00039:   const normalized = rawCode.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+00040: 
+00041:   if (normalized === '1' || normalized === 'opponentstrongly' || normalized === 'stronglyopponent') return 'opponentStrongly';
+00042:   if (normalized === '2' || normalized === 'opponentsomewhat' || normalized === 'somewhatopponent') return 'opponentSomewhat';
+00043:   if (normalized === '3' || normalized === 'neutral' || normalized === 'middle') return 'neutral';
+00044:   if (normalized === '4' || normalized === 'somewhat' || normalized === 'somewhatthis') return 'somewhat';
+00045:   if (normalized === '5' || normalized === 'strongly' || normalized === 'stronglythis') return 'strongly';
+00046:   if (normalized === 'stronglysupporttheothervalue' || normalized === 'stronglysupportothervalue') return 'opponentStrongly';
+00047:   if (normalized === 'somewhatsupporttheothervalue' || normalized === 'somewhatsupportothervalue') return 'opponentSomewhat';
+00048:   if (normalized === 'somewhatsupportthisvalue' || normalized === 'somewhatsupportthevalue') return 'somewhat';
+00049:   if (normalized === 'stronglysupportthisvalue' || normalized === 'stronglysupportthevalue') return 'strongly';
+00050: 
+00051:   return null;
+00052: }
+00053: 
+00054: function decisionBucketCodeToScore(code: DecisionBucketCode): 1 | 2 | 3 | 4 | 5 {
+00055:   if (code === 'opponentStrongly') return 1;
+00056:   if (code === 'opponentSomewhat') return 2;
+00057:   if (code === 'neutral') return 3;
+00058:   if (code === 'somewhat') return 4;
+00059:   return 5;
+00060: }
+00061: 
+00062: function resolveBucketValue(transcript: DecisionAwareAggregateTranscript): DecisionBucketCode | null {
+00063:   const resolved = resolveTranscriptDecisionModel({
+00064:     decisionCode: transcript.decisionCode,
+00065:     decisionMetadata: transcript.decisionMetadata,
+00066:     definitionSnapshot: transcript.definitionSnapshot,
+00067:     orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+00068:   });
+00069: 
+00070:   if (resolved.canonical.direction === 'neutral') {
+00071:     return 'neutral';
+00072:   }
+00073: 
+00074:   if (resolved.canonical.direction === 'favor_first') {
+00075:     return resolved.canonical.strength === 'strong' ? 'strongly' : resolved.canonical.strength === 'lean' ? 'somewhat' : null;
+00076:   }
+00077: 
+00078:   if (resolved.canonical.direction === 'favor_second') {
+00079:     return resolved.canonical.strength === 'strong' ? 'opponentStrongly' : resolved.canonical.strength === 'lean' ? 'opponentSomewhat' : null;
+00080:   }
+00081: 
+00082:   return null;
+00083: }
+00084: 
+00085: export function aggregateAnalysesLogic(
+00086:   analyses: AnalysisOutput[],
+00087:   transcripts: AggregateTranscriptInput[],
+00088:   scenarios: AggregateScenarioInput[]
+00089: ): AggregatedResult {
+00090:   if (analyses.length === 0) {
+00091:     throw new Error('Cannot aggregate empty analyses list');
+00092:   }
+00093: 
+00094:   const template = analyses[0]!;
+00095:   const modelIds = Array.from(new Set(analyses.flatMap((analysis) => Object.keys(analysis.perModel))));
+00096:   const aggregatedPerModel: Record<string, ModelStats> = {};
+00097:   const decisionStats: Record<string, DecisionStats> = {};
+00098:   const valueAggregateStats: Record<string, ValueAggregateStats> = {};
+00099: 
+00100:   modelIds.forEach((modelId) => {
+00101:     const validAnalyses = analyses.filter((analysis) => Boolean(analysis.perModel[modelId]));
+00102:     if (validAnalyses.length === 0) return;
+00103: 
+00104:     const totalModelSamples = validAnalyses.reduce((sum, analysis) => {
+00105:       const stats = analysis.perModel[
+
+... [narrowed review slice: middle omitted] ...
+
+decisionDistribution: {},
+00220:     modelScenarioMatrix: {},
+00221:     scenarioDimensions: {},
+00222:   };
+00223: 
+00224:   const decisionCountsByModel: Record<string, Record<DecisionBucketCode, number>> = {};
+00225:   const decisionsByScenario: Record<string, Record<string, number[]>> = {};
+00226: 
+00227:   modelIds.forEach((modelId) => {
+00228:     decisionCountsByModel[modelId] = {
+00229:       opponentStrongly: 0,
+00230:       opponentSomewhat: 0,
+00231:       neutral: 0,
+00232:       somewhat: 0,
+00233:       strongly: 0,
+00234:     };
+00235:   });
+00236: 
+00237:   transcripts.forEach((rawTranscript) => {
+00238:     const transcript = rawTranscript as DecisionAwareAggregateTranscript;
+00239:     if (
+00240:       transcript.modelId == null ||
+00241:       transcript.modelId === '' ||
+00242:       transcript.scenarioId == null ||
+00243:       transcript.scenarioId === ''
+00244:     ) {
+00245:       return;
+00246:     }
+00247:     const code = resolveBucketValue(transcript);
+00248:     if (code === null) return;
+00249:     const counts = decisionCountsByModel[transcript.modelId];
+00250:     if (counts) {
+00251:       counts[code] += 1;
+00252:     }
+00253: 
+00254:     if (decisionsByScenario[transcript.modelId]?.[transcript.scenarioId]) {
+00255:       decisionsByScenario[transcript.modelId]![transcript.scenarioId]!.push(decisionBucketCodeToScore(code));
+00256:     } else if (decisionsByScenario[transcript.modelId]) {
+00257:       decisionsByScenario[transcript.modelId]![transcript.scenarioId] = [decisionBucketCodeToScore(code)];
+00258:     } else {
+00259:       decisionsByScenario[transcript.modelId] = { [transcript.scenarioId]: [decisionBucketCodeToScore(code)] };
+00260:     }
+00261:   });
+00262: 
+00263:   modelIds.forEach((modelId) => {
+00264:     const dist = decisionCountsByModel[modelId] ?? {
+00265:       opponentStrongly: 0,
+00266:       opponentSomewhat: 0,
+00267:       neutral: 0,
+00268:       somewhat: 0,
+00269:       strongly: 0,
+00270:     };
+00271:     const scenarioDecisions = decisionsByScenario[modelId];
+00272: 
+00273:     mergedVizData.decisionDistribution[modelId] = dist;
+00274: 
+00275:     const scenarioMeans: Record<string, number> = {};
+00276:     if (scenarioDecisions) {
+00277:       Object.entries(scenarioDecisions).forEach(([scenarioId, decisions]) => {
+00278:         if (decisions.length === 0) return;
+00279:         const sum = decisions.reduce((a, b) => a + b, 0);
+00280:         scenarioMeans[scenarioId] = sum / decisions.length;
+00281:       });
+00282:     }
+00283:     mergedVizData.modelScenarioMatrix[modelId] = scenarioMeans;
+00284:   });
+00285: 
+00286:   const scenarioMap = new Map<string, { varianceSum: number; count: number; scenario: ContestedScenario }>();
+00287:   analyses.forEach((analysis) => {
+00288:     analysis.mostContestedScenarios?.forEach((scenario) => {
+00289:       const existing = scenarioMap.get(scenario.scenarioId) || { varianceSum: 0, count: 0, scenario };
+00290:       existing.varianceSum += scenario.variance;
+00291:       existing.count += 1;
+00292:       scenarioMap.set(scenario.scenarioId, existing);
+00293:     });
+00294:   });
+00295: 
+00296:   const mergedContested = Array.from(scenarioMap.values())
+00297:     .map((value) => ({
+00298:       ...value.scenario,
+00299:       variance: value.varianceSum / value.count,
+00300:     }))
+00301:     .sort((a, b) => b.variance - a.variance)
+00302:     .slice(0, 20);
+00303: 
+00304:   const dimensionsMap: Record<string, Record<string, number | string>> = {};
+00305:   scenarios.forEach((scenario) => {
+00306:     const normalized = normalizeScenarioAnalysisMetadata(scenario.content);
+00307:     if (normalized) {
+00308:       dimensionsMap[scenario.id] = normalized.groupingDimensions;
+00309:     }
+00310:   });
+00311:   mergedVizData.scenarioDimensions = dimensionsMap;
+00312: 
+00313:   const varianceAnalysis = computeVarianceAnalysis(transcripts, scenarios);
+00314:   const normalizedArtifacts = normalizeAnalysisArtifacts({
+00315:     visualizationData: mergedVizData,
+00316:     varianceAnalysis,
+00317:     scenarios: scenarios.map((scenario) => ({
+00318:       id: scenario.id,
+00319:       name: scenario.name,
+00320:       content: scenario.content,
+00321:     })),
+00322:   });
+00323: 
+00324:   const normalizedVisualizationData = isAggregatedVisualizationData(normalizedArtifacts.visualizationData)
+00325:     ? normalizedArtifacts.visualizationData
+00326:     : mergedVizData;
+00327:   const normalizedVarianceAnalysis = isRunVarianceAnalysis(normalizedArtifacts.varianceAnalysis)
+00328:     ? normalizedArtifacts.varianceAnalysis
+00329:     : varianceAnalysis;
+00330: 
+00331:   return {
+00332:     perModel: aggregatedPerModel,
+00333:     modelAgreement: template.modelAgreement,
+00334:     visualizationData: normalizedVisualizationData,
+00335:     mostContestedScenarios: mergedContested,
+00336:     varianceAnalysis: normalizedVarianceAnalysis,
+00337:     decisionStats,
+0

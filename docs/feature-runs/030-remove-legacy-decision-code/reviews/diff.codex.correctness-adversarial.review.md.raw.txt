@@ -1,0 +1,7 @@
+## Findings
+- [UNVERIFIED] Medium: `cloud/apps/api/src/queue/handlers/analyze-basic.ts` stopped emitting `summary.score` and now writes only `summary.values` or `{}`. That breaks the current transcript contract: the existing integration test in `cloud/apps/api/tests/queue/handlers/analyze-basic.integration.test.ts` still expects `summary: { score: null }`, and web readers like `cloud/apps/web/src/components/runs/TranscriptRow.tsx` and `cloud/apps/web/src/utils/transcriptDecisionModel.ts` still fall back to `summary.score`. Any transcript that previously relied on the numeric score will now render/sort as blank or undecided unless every consumer has already been migrated.
+- [UNVERIFIED] Medium: The new `summary: values ? { values } : {}` shape drops the score entirely even when `resolveAnalysisValueOutcomes` cannot recover a value mapping. In the old code, malformed or legacy transcripts still preserved the coarse decision code; now those cases become an empty object, so downstream tooling loses the only usable signal instead of degrading gracefully.
+
+## Residual Risks
+- I did not verify every out-of-tree consumer, so anything outside this repo that reads transcript summaries may still depend on `summary.score` or the previous JSON shape.
+- Persisted transcript records may now be mixed across old and new shapes, so any migration or backfill logic still needs an explicit compatibility check.

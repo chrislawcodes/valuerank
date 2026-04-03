@@ -496,16 +496,21 @@ Constitution Check: [PASS/WARN/SKIPPED]
 Next Steps:
 1. Review tasks.md for completeness
 2. Review checklists/ for quality gates
-3. When ready to implement, invoke the feature-implement skill
+3. When ready to implement:
+   - In ValueRank, use `/feature-implement <slug>`
+   - In other repos, invoke the feature-implement skill
 
-To continue: Simply say "use feature-implement skill" or "start implementation"
+To continue:
+- In ValueRank: say `/feature-implement <slug>` or "start implementation"
+- In other repos: say "use feature-implement skill" or "start implementation"
 ```
 
 **Handoff Instructions**:
 - Tell the user the task breakdown is complete and ready for review
-- Invite them to proceed with the `feature-implement` skill when ready
+- Invite them to proceed with `/feature-implement <slug>` in ValueRank, or the
+  `feature-implement` skill in other repos
 - DO NOT suggest using `/speckit.implement` or any other speckit command
-- Make it clear they should invoke the feature-implement SKILL, not a slash command
+- Make it clear that ValueRank uses `/feature-implement <slug>`, not this generic next step
 
 ---
 

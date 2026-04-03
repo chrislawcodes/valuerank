@@ -272,16 +272,6 @@ def command_checkpoint(args: argparse.Namespace) -> int:
             )
     policy = resolved_review_policy(args.slug, args)
     context_paths = [normalized_repo_path(path, "context path") for path in args.context]
-
-    # Auto-add files mentioned in the spec/artifact as context so reviewers
-    # can verify assumptions against real code rather than generating unfounded findings.
-    if args.stage in ("spec", "plan") and not getattr(args, "no_auto_context", False):
-        auto_context = _extract_file_paths_from_artifact(artifact_path, REPO_ROOT)
-        for p in auto_context:
-            if len(context_paths) >= _AUTO_CONTEXT_MAX_FILES:
-                break
-            if p not in context_paths:
-                context_paths.append(p)
     allow_dirty_paths = [normalized_repo_path(path, "allow-dirty path") for path in args.allow_dirty_path]
     prior_diff_budget = diff_review_budget_state(args.slug) if args.stage == "diff" else None
 
@@ -345,6 +335,17 @@ def command_checkpoint(args: argparse.Namespace) -> int:
         scope_manifest = save_scope_manifest(args.slug, args.path)
 
     artifact_path = Path(args.artifact).resolve() if args.artifact else default_artifact_path(args.slug, args.stage)
+
+    # Auto-add files mentioned in the spec/artifact as context so reviewers
+    # can verify assumptions against real code rather than generating unfounded findings.
+    if args.stage in ("spec", "plan") and not getattr(args, "no_auto_context", False):
+        auto_context = _extract_file_paths_from_artifact(artifact_path, REPO_ROOT)
+        for p in auto_context:
+            if len(context_paths) >= _AUTO_CONTEXT_MAX_FILES:
+                break
+            if p not in context_paths:
+                context_paths.append(p)
+
     if args.stage in STAGE_ARTIFACT_HEADINGS and not artifact_has_meaningful_content(args.stage, artifact_path):
         raise SystemExit(
             f"{args.stage} checkpoint requires a non-stub artifact first: {artifact_path}"

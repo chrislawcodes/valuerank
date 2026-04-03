@@ -261,6 +261,33 @@ class RepairDecisionTests(unittest.TestCase):
         self.assertEqual(MODULE.stage_drift_class("spec", state), "stub-artifact")
         self.assertEqual(MODULE.stage_status_label("feature-workflow-repair", "spec", state), "stub-artifact")
 
+    def test_recommended_next_action_ignores_stub_later_stage_docs_on_fresh_run(self) -> None:
+        stages = {
+            "spec": stage_state(artifact_exists=True, artifact_meaningful=False, manifest_exists=False, healthy=False),
+            "plan": stage_state(artifact_exists=True, artifact_meaningful=False, manifest_exists=False, healthy=False),
+            "tasks": stage_state(artifact_exists=True, artifact_meaningful=False, manifest_exists=False, healthy=False),
+            "diff": stage_state(),
+            "closeout": stage_state(),
+        }
+        action = MODULE.recommended_next_action(
+            "feature-workflow-repair",
+            {
+                "blocked": {"active": False},
+                "delivery": {},
+                "discovery": {
+                    "required": True,
+                    "complete": True,
+                    "answers": {},
+                    "unresolved": [],
+                    "non_goals": [],
+                    "acceptance_criteria": [],
+                },
+            },
+            stages,
+            True,
+        )
+        self.assertEqual(action, "author_spec")
+
     def test_recommended_next_action_blocks_stub_artifact_with_later_progress(self) -> None:
         stages = {
             "spec": stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True),

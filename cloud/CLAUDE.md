@@ -1,17 +1,19 @@
 # Cloud ValueRank - Project Constitution
 
-This document defines the coding standards and architectural principles for the Cloud ValueRank project. All code contributions must adhere to these guidelines.
+This document defines the cloud-specific coding standards and push checks for ValueRank.
 
-## Git Workflow
+Repo-wide agent behavior, delivery paths, terminology policy, and memory policy live in the repo-root `AGENTS.md`.
 
-**ALWAYS use Pull Requests to merge changes to main.** Never commit directly to main.
+## Push And PR Checks
 
-1. Create a feature branch before making changes
-2. Commit changes to the feature branch
-3. Push the branch and create a PR via `gh pr create --repo chrislawcodes/valuerank`
-4. Wait for human review/approval before merging
+- Use Pull Requests for changes that will land on `main`.
+- Ask the human before running `git push`.
+- Run the Preflight Gate before any `git push` or PR creation.
 
-**NEVER push to origin without explicit human confirmation.** Always ask before running `git push`.
+## Workflow State
+
+- For Feature Factory, use the repo-owned workflow docs and `docs/feature-runs/<slug>/state.json` as the source of truth.
+- Repo-root `MEMORY.md` is only a short handoff file for the active feature. Do not use it as long-term archive or as the source of truth for workflow state.
 
 ### Pre-push Hook
 
@@ -266,6 +268,7 @@ Imports:        Node → External → Internal → Relative
 
 ## Terminology
 
-### "Vignette" vs. "Definition"
+Canonical source: `docs/canonical-glossary.md`
 
-The UI uses **Vignette**; the code, types, and database use **Definition**. Do not rename internal code symbols.
+- Follow the terminology policy in repo-root `AGENTS.md`.
+- In cloud code, older names like `definition`, `dimension`, and `scenario` may still appear in code, schema, or APIs. Map them to glossary terms instead of renaming them casually.

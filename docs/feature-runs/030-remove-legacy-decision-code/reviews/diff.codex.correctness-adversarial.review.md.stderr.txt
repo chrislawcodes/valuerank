@@ -1,0 +1,715 @@
+Reading additional input from stdin...
+OpenAI Codex v0.118.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d50d3-8116-77f2-a607-d4e6bd34d758
+--------
+user
+Review this diff artifact using a correctness-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/apps/api/src/graphql/types/transcript.ts b/cloud/apps/api/src/graphql/types/transcript.ts
+index 31b0fb90..a60cfe68 100644
+--- a/cloud/apps/api/src/graphql/types/transcript.ts
++++ b/cloud/apps/api/src/graphql/types/transcript.ts
+@@ -32,7 +32,7 @@ builder.objectType(TranscriptRef, {
+     decisionModelV2: t.field({
+       type: 'JSON',
+       nullable: true,
+-      description: 'Feature-flagged V2 decision envelope with raw evidence and canonical compatibility data',
++      description: 'V2 decision envelope with raw evidence and canonical direction/strength decision',
+       resolve: async (transcript, _args, ctx) => {
+         if (!config.DECISION_MODEL_V2) {
+           return null;
+diff --git a/cloud/apps/api/src/queue/handlers/analyze-basic.ts b/cloud/apps/api/src/queue/handlers/analyze-basic.ts
+index e01deaf1..9f8f52bc 100644
+--- a/cloud/apps/api/src/queue/handlers/analyze-basic.ts
++++ b/cloud/apps/api/src/queue/handlers/analyze-basic.ts
+@@ -20,7 +20,6 @@ import {
+ } from '../../services/analysis/scenario-metadata.js';
+ import {
+   resolveAnalysisDecisionModel,
+-  resolveAnalysisScore,
+   resolveAnalysisValueOutcomes,
+ } from '../../services/decision-model.js';
+ import { parseTemperature } from '../../utils/temperature.js';
+@@ -50,7 +49,6 @@ type TranscriptData = {
+     canonical: unknown;
+   } | null;
+   summary: {
+-    score: number | null; // Decision code as numeric 1-5 (matches CSV "Decision Code")
+     values?: Record<string, 'prioritized' | 'deprioritized' | 'neutral'>;
+   };
+   scenario: {
+@@ -59,33 +57,6 @@ type TranscriptData = {
+   };
+ };
+ 
+-function buildValueOutcomes(
+-  score: number | null,
+-  orientationFlipped: boolean,
+-  valueA: string | null,
+-  valueB: string | null
+-): Record<string, 'prioritized' | 'deprioritized' | 'neutral'> | undefined {
+-  if (score == null || valueA == null || valueB == null) return undefined;
+-  const normalizedScore = orientationFlipped ? 6 - score : score;
+-
+-  if (normalizedScore >= 4) {
+-    return {
+-      [valueA]: 'prioritized',
+-      [valueB]: 'deprioritized',
+-    };
+-  }
+-  if (normalizedScore <= 2) {
+-    return {
+-      [valueA]: 'deprioritized',
+-      [valueB]: 'prioritized',
+-    };
+-  }
+-  return {
+-    [valueA]: 'neutral',
+-    [valueB]: 'neutral',
+-  };
+-}
+-
+ function getAssumptionKey(config: unknown): string | null {
+   if (config == null || typeof config !== 'object') return null;
+   const value = (config as Record<string, unknown>).assumptionKey;
+@@ -272,28 +243,17 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
+               },
+               useDecisionModelV2,
+             );
+-            const score = resolveAnalysisScore(
++            const values = resolveAnalysisValueOutcomes(
+               {
+                 decisionCode: t.decisionCode,
+                 decisionMetadata: t.decisionMetadata,
+                 definitionSnapshot: t.definitionSnapshot,
+                 orientationFlipped,
+               },
++              valueA,
++              valueB,
+               useDecisionModelV2,
+             );
+-            const values = useDecisionModelV2
+-              ? resolveAnalysisValueOutcomes(
+-                  {
+-                    decisionCode: t.decisionCode,
+-                    decisionMetadata: t.decisionMetadata,
+-                    definitionSnapshot: t.definitionSnapshot,
+-                    orientationFlipped,
+-                  },
+-                  valueA,
+-                  valueB,
+-                  useDecisionModelV2,
+-                )
+-              : buildValueOutcomes(score, orientationFlipped, valueA, valueB);
+ 
+             return {
+               id: t.id,
+@@ -307,7 +267,7 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
+                     canonical: decisionModel.canonical,
+                   }
+                 : null,
+-              summary: values ? { score, values } : { score },
++              summary: values ? { values } : {},
+               scenario: {
+                 name: t.scenario!.name,
+                 dimensions,
+diff --git a/cloud/apps/api/src/services/assumptions/order-effect-comparison.ts b/cloud/apps/api/src/services/assumptions/order-effect-comparison.ts
+index d1858994..39942fbf 100644
+--- a/cloud/apps/api/src/services/assumptions/order-effect-comparison.ts
++++ b/cloud/apps/api/src/services/assumptions/order-effect-comparison.ts
+@@ -15,7 +15,7 @@ import {
+   isOrderInvarianceSummary,
+ } from './order-effect-types.js';
+ import { parseTemperature } from '../../utils/temperature.js';
+-import { resolveAnalysisScore } from '../decision-model.js';
++import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/shared.js';
+ import {
+   aggregateWithinCellDisagreementRate,
+   type OrderEffectStableSide,
+@@ -140,18 +140,30 @@ function _isTempZeroRun(config: unknown): boolean {
+   return parseTemperature((config as { temperature?: unknown } | null)?.temperature) === 0;
+ }
+ 
++// TODO(slice-3.2): replace numeric score with canonical direction/strength throughout order-effect
++function _canonicalToScore(input: {
++  decisionCode: string | null;
++  decisionMetadata: unknown;
++  definitionSnapshot: unknown;
++  orientationFlipped: boolean;
++}): number | null {
++  const result = resolveTranscriptDecisionModel(input);
++  const { direction, strength } = result.canonical;
++  if (direction === 'favor_first' && strength === 'strong') return 5;
++  if (direction === 'favor_first' && strength === 'lean') return 4;
++  if (direction === 'neutral' && strength === 'neutral') return 3;
++  if (direction === 'favor_second' && strength === 'lean') return 2;
++  if (direction === 'favor_second' && strength === 'strong') return 1;
++  return null;
++}
++
+ function _parseDecision(input: {
+   decisionCode: string | null;
+   decisionMetadata: unknown;
+   definitionSnapshot: unknown;
+   orientationFlipped: boolean;
+ }): number | null {
+-  return resolveAnalysisScore({
+-    decisionCode: input.decisionCode,
+-    decisionMetadata: input.decisionMetadata,
+-    definitionSnapshot: input.definitionSnapshot,
+-    orientationFlipped: input.orientationFlipped,
+-  });
++  return _canonicalToScore(input);
+ }
+ 
+ function _pickStableTranscripts(
+@@ -446,12 +458,7 @@ export function parseDecision(input: {
+   definitionSnapshot: unknown;
+   orientationFlipped: boolean;
+ }): number | null {
+-  return resolveAnalysisScore({
+-    decisionCode: input.decisionCode,
+-    decisionMetadata: input.decisionMetadata,
+-    definitionSnapshot: input.definitionSnapshot,
+-    orientationFlipped: input.orientationFlipped,
+-  });
++  return _canonicalToScore(input);
+ }
+ 
+ export function pickStableTranscripts(
+diff --git a/cloud/apps/api/src/services/decision-model.ts b/cloud/apps/api/src/services/decision-model.ts
+index 27fb56ba..268e497d 100644
+--- a/cloud/apps/api/src/services/decision-model.ts
++++ b/cloud/apps/api/src/services/decision-model.ts
+@@ -41,15 +41,6 @@ function buildValueOutcomesFromCanonical(
+   return undefined;
+ }
+ 
+-function canonicalDecisionToScore(canonical: CanonicalDecision): number | null {
+-  if (canonical.direction === 'favor_first' && canonical.strength === 'strong') return 5;
+-  if (canonical.direction === 'favor_first' && canonical.strength === 'lean') return 4;
+-  if (canonical.direction === 'neutral' && canonical.strength === 'neutral') return 3;
+-  if (canonical.direction === 'favor_second' && canonical.strength === 'lean') return 2;
+-  if (canonical.direction === 'favor_second' && canonical.strength === 'strong') return 1;
+-  return null;
+-}
+-
+ export function resolveAnalysisDecisionModel(
+   input: TranscriptDecisionModelInput,
+   useDecisionModelV2: boolean = config.DECISION_MODEL_V2,
+@@ -61,18 +52,6 @@ export function resolveAnalysisDecisionModel(
+   return resolveTranscriptDecisionModel(input);
+ }
+ 
+-export function resolveAnalysisScore(
+-  input: TranscriptDecisionModelInput,
+-  useDecisionModelV2: boolean = config.DECISION_MODEL_V2,
+-): number | null {
+-  const decisionModel = resolveTranscriptDecisionModel(input);
+-  if (!useDecisionModelV2) {
+-    return canonicalDecisionToScore(decisionModel.canonical);
+-  }
+-
+-  return canonicalDecisionToScore(decisionModel.canonical);
+-}
+-
+ export function resolveAnalysisValueOutcomes(
+   input: TranscriptDecisionModelInput,
+   valueA: string | null,
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the diff for regressions in shape, semantics, and any code paths that quietly lost fallback behavior. The main risk here is whether downstream consumers still expect the old summary fields.
+codex
+I’m verifying whether the removed score path is still referenced elsewhere, because that determines whether this is just a cleanup or an API break. If there are remaining consumers, this becomes a real regression rather than a style change.
+exec
+/bin/zsh -lc "rg -n \"resolveAnalysisScore|summary\\.score|decisionModelV2|values: \\{ score|score: number \\| null\" cloud/apps/api/src" in /Users/chrislaw/valuerank
+ succeeded in 0ms:
+cloud/apps/api/src/queue/handlers/analyze-basic.ts:47:  decisionModelV2: {
+cloud/apps/api/src/queue/handlers/analyze-basic.ts:264:              decisionModelV2: decisionModel
+cloud/apps/api/src/services/analysis/aggregate/aggregate-helpers.ts:16:  score: number | null,
+cloud/apps/api/src/graphql/types/transcript.ts:32:    decisionModelV2: t.field({
+cloud/apps/api/src/graphql/queries/domain/shared.ts:244:  decisionModelV2?: TranscriptDecisionModelResult | null;
+cloud/apps/api/src/graphql/queries/domain/types.ts:328:    decisionModelV2: t.field({
+
+exec
+/bin/zsh -lc "rg -n \"summary\\.score|\\.summary\\b|score\\s*:\\s*number \\| null\" cloud/apps/api cloud/apps/web" in /Users/chrislaw/valuerank
+ succeeded in 0ms:
+cloud/apps/web/src/pages/ValidationHome.tsx:90:  const reviewSummary = reviewData?.assumptionsOrderInvarianceReview.summary ?? null;
+cloud/apps/web/src/utils/transcriptDecisionModel.ts:226:    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.decisionCode,
+cloud/apps/web/src/utils/transcriptDecisionModel.ts:227:    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.decision,
+cloud/apps/web/src/utils/transcriptDecisionModel.ts:228:    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.score,
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:338:        summary: output.summary,
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:384:        summaryResult.summary,
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:393:        summaryResult.summary,
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:149:  const rawDecisionEvidence = buildRawDecisionEvidence(summaryCache.summary.decisionMetadata);
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:153:          decisionCode: summaryCache.summary.decisionCode ?? '',
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:154:          decisionSource: summaryCache.summary.decisionCodeSource ?? '',
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:155:          decisionText: summaryCache.summary.decisionText,
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:156:          decisionMetadata: summaryCache.summary.decisionMetadata,
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:157:          canonicalDecision: summaryCache.summary.canonicalDecision ?? null,
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:168:      decisionText: summaryCache.summary.decisionText,
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:170:        summaryCache.summary.decisionMetadata,
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:195:          ...summary,
+cloud/apps/api/src/queue/handlers/summarize-types.ts:124:    isSummaryCacheSummary(value.summary)
+cloud/apps/web/src/utils/analysisCoverage.ts:116:      summary.scoredTranscripts += 1;
+cloud/apps/web/src/pages/AnalysisConditionDetail.tsx:284:      if (row?.summary.labelPair) {
+cloud/apps/web/src/pages/AnalysisConditionDetail.tsx:285:        return row.summary.buckets;
+cloud/apps/web/src/pages/AnalysisConditionDetail.tsx:289:    return detailRows[0]?.summary.buckets ?? [];
+cloud/apps/web/src/pages/AnalysisConditionDetail.tsx:292:  const hasUnresolvedTranscripts = detailRows.some((row) => row.summary.unknownCount > 0);
+cloud/apps/web/src/pages/AnalysisConditionDetail.tsx:326:    const bucket = row.summary.buckets[bucketIndex];
+cloud/apps/web/src/pages/AnalysisConditionDetail.tsx:409:                {row.summary.buckets.map((bucket, index) => {
+cloud/apps/web/src/pages/AnalysisConditionDetail.tsx:430:                  {row.summary.knownCount}
+cloud/apps/web/src/pages/AnalysisConditionDetail.tsx:433:                  {row.summary.unknownCount}
+cloud/apps/api/src/mcp/tools/get-run-summary.ts:37:  const withoutInsights = { ...summary };
+cloud/apps/web/src/pages/DomainAnalysis.tsx:116:        summary: findingsEligibilityData.summary,
+cloud/apps/web/src/pages/DomainAnalysis.tsx:204:        <p className="mt-1 text-xs text-gray-500">{state.summary}</p>
+cloud/apps/web/src/pages/DomainAnalysis.tsx:223:            {state.summary}
+cloud/apps/web/src/pages/TempZeroEffectAssumptions.tsx:537:                <h2 className="text-sm font-semibold text-gray-900">{result.summary.title}</h2>
+cloud/apps/web/src/pages/TempZeroEffectAssumptions.tsx:547:                  result.summary.status === 'INSUFFICIENT_DATA'
+cloud/apps/web/src/pages/TempZeroEffectAssumptions.tsx:552:                {result.summary.status === 'INSUFFICIENT_DATA' ? 'Insufficient Data' : 'Computed'}
+cloud/apps/api/src/services/assumptions/order-effect-comparison.ts:529:    summary: result.summary,
+cloud/apps/api/src/services/assumptions/order-effect-comparison.ts:552:    || !isOrderInvarianceSummary(candidate.summary)
+cloud/apps/api/src/services/assumptions/order-effect-comparison.ts:563:    summary: candidate.summary,
+cloud/apps/api/src/services/assumptions/__tests__/order-effect-service.test.ts:174:    expect(result.summary.matchRate).toBeNull();
+cloud/apps/api/src/services/assumptions/__tests__/order-effect-service.test.ts:235:    expect(initialResult.summary.matchRate).toBe(1);
+cloud/apps/api/src/services/assumptions/__tests__/order-effect-service.test.ts:236:    expect(changedResult.summary.matchRate).toBe(0);
+cloud/apps/api/src/services/assumptions/__tests__/order-effect-service.test.ts:291:    expect(initialResult.summary.matchRate).toBe(1);
+cloud/apps/api/src/services/assumptions/__tests__/order-effect-service.test.ts:300:          ? (firstSnapshot.output as Record<string, unknown>).summary
+cloud/apps/api/src/services/assumptions/__tests__/order-effect-service.test.ts:312:    expect(repairedResult.summary.matchRate).toBe(1);
+cloud/apps/api/src/services/assumptions/__tests__/order-effect-service.test.ts:433:    expect(result.summary.matchRate).toBe(1);
+cloud/apps/web/src/components/runs/TranscriptRow.tsx:76:  const summary = content.summary;
+cloud/apps/web/src/components/runs/TranscriptRow.tsx:78:    const summaryCandidates = [summary.decisionCode, summary.decision, summary.score];
+cloud/apps/api/src/graphql/queries/domain/decision-model.ts:401:  const summary = summaryCache && isRecord(summaryCache.summary) ? summaryCache.summary : null;
+cloud/apps/api/src/graphql/queries/assumptions.ts:334:      resolve: (parent) => parent.summary,
+cloud/apps/api/src/services/analysis/aggregate/aggregate-helpers.ts:16:  score: number | null,
+cloud/apps/web/src/components/assumptions/OrderEffectPanel.tsx:581:  const reviewGateMessage = reviewResult?.summary.launchReady
+cloud/apps/web/src/components/assumptions/OrderEffectPanel.tsx:601:          disabled={!reviewResult?.summary.launchReady}
+cloud/apps/web/src/components/assumptions/OrderEffectPanel.tsx:787:                <div className="mt-1 text-base font-semibold text-gray-900">{reviewResult.summary.totalVignettes}</div>
+cloud/apps/web/src/components/assumptions/OrderEffectPanel.tsx:791:                <div className="mt-1 text-base font-semibold text-gray-900">{reviewResult.summary.reviewedVignettes}</div>
+cloud/apps/web/src/components/assumptions/OrderEffectPanel.tsx:795:                <div className="mt-1 text-base font-semibold text-teal-700">{reviewResult.summary.approvedVignettes}</div>
+cloud/apps/web/src/components/assumptions/OrderEffectPanel.tsx:799:                <div className="mt-1 text-base font-semibold text-orange-700">{reviewResult.summary.rejectedVignettes}</div>
+cloud/apps/web/src/components/assumptions/OrderEffectPanel.tsx:803:                <div className="mt-1 text-base font-semibold text-gray-900">{reviewResult.summary.pendingVignettes}</div>
+cloud/apps/web/src/components/assumptions/OrderEffectPanel.tsx:1030:                  {formatPercent(result.summary.matchRate)}
+cloud/apps/web/src/components/assumptions/OrderEffectPanel.tsx:1032:                <div className="mt-0.5 text-[11px] text-gray-400">N={result.summary.comparablePairs}</div>
+cloud/apps/web/src/components/assumptions/OrderEffectPanel.tsx:1034:              {ENABLE_2X2_ORDER_EFFECT_UI && result?.summary?.presentationEffectMAD !== undefined && (
+cloud/apps/web/src/components/assumptions/OrderEffectPanel.tsx:1041:                      {formatMAD(result.summary.presentationEffectMAD)}
+cloud/apps/web/src/components/assumptions/OrderEffectPanel.tsx:1044:                      N={result.summary.presentationComparablePairs} · Mean Abs Diff — narrative-order bias
+cloud/apps/web/src/components/assumptions/OrderEffectPanel.tsx:1052:                      {formatMAD(result.summary.scaleEffectMAD)}
+cloud/apps/web/src/components/compare/visualizations/OverviewViz.tsx:71:            ({runs.length} runs, {statistics.summary.totalSamples} total samples)
+cloud/apps/web/src/components/compare/visualizations/OverviewViz.tsx:281:              {formatNumber(statistics.summary.meanDecisionRange[0])}
+cloud/apps/web/src/components/compare/visualizations/OverviewViz.tsx:288:                left: `${((statistics.summary.meanDecisionRange[0] - 1) / 4) * 100}%`,
+cloud/apps/web/src/components/compare/visualizations/OverviewViz.tsx:289:                right: `${100 - ((statistics.summary.meanDecisionRange[1] - 1) / 4) * 100}%`,
+cloud/apps/web/src/components/compare/visualizations/OverviewViz.tsx:296:              {formatNumber(statistics.summary.meanDecisionRange[1])}
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:73:      expect(result.summary).toBeDefined();
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:101:      expect(result.summary?.turnCount).toBe(4);
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:128:      expect(result.summary?.wordCount).toBeGreaterThan(10);
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:143:      expect(result.summary?.decision.direction).toBe('favor_first');
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:144:      expect(result.summary?.decision.strength).toBe('strong');
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:145:      expect(result.summary?.decision.favoredValueKey).toBe('Achievement');
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:146:      expect(result.summary?.decision.text).toBe('Prioritize safety over efficiency');
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:163:      expect(result.summary?.keyReasoning).toContain('Safety is paramount');
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:164:      expect(result.summary?.keyReasoning.length).toBe(3);
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:185:      expect(result.summary?.timestamp).toBe('2024-01-15T10:30:00.000Z');
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:197:      expect(result.summary).toBeUndefined();
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:218:      expect(result.summary?.decision.direction).toBe('unknown');
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:219:      expect(result.summary?.decision.strength).toBe('unknown');
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:220:      expect(result.summary?.decision.favoredValueKey).toBeNull();
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:221:      expect(result.summary?.decision.text).toBe('No decision recorded');
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:238:      expect(result.summary?.keyReasoning.length).toBe(5);
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:264:      expect(result.summary?.turnCount).toBe(2);
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:265:      expect(result.summary?.wordCount).toBeGreaterThan(0);
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:284:      expect(result.summary?.turnCount).toBe(0);
+cloud/apps/api/tests/mcp/tools/get-transcript-summary.test.ts:285:      expect(result.summary?.wordCount).toBe(0);
+cloud/apps/api/tests/queue/handlers/summarize-transcript.test.ts:643:      changedMetadata.summaryCache.summary.canonicalDecision.cacheVersion = 0;
+cloud/apps/api/tests/queue/handlers/summarize-transcript.test.ts:702:        malformedMetadata.summaryCache.summary.decisionCode = 'error';
+cloud/apps/api/tests/graphql/queries/order-invariance.test.ts:216:    expect(response.body.data.assumptionsOrderInvariance.summary).toMatchObject({
+cloud/apps/api/tests/graphql/queries/order-invariance.test.ts:395:    expect(response.body.data.assumptionsOrderInvariance.summary).toMatchObject({
+cloud/apps/api/tests/graphql/queries/order-invariance.test.ts:522:    expect(response.body.data.assumptionsOrderInvariance.summary.status).toBe('COMPUTED');
+cloud/apps/api/tests/graphql/queries/domain.test.ts:723:    expect(eligibility.summary).toMatch(/diagnostic signals/i);
+cloud/apps/api/tests/graphql/queries/domain.test.ts:973:    expect(eligibility.summary).toMatch(/auditable launch snapshots/i);
+
+codex
+I found at least one concrete downstream reader that still looks for `summary.score`, so I’m checking whether the new shape actually removes the only value it can display. That would turn this from an internal cleanup into a user-visible regression.
+exec
+/bin/zsh -lc "sed -n '60,110p' cloud/apps/web/src/components/runs/TranscriptRow.tsx" in /Users/chrislaw/valuerank
+ succeeded in 0ms:
+function extractShortDirection(fullLabel: string): string {
+  const idx = fullLabel.toLowerCase().indexOf(' taking ');
+  return idx !== -1 ? fullLabel.slice(0, idx) : fullLabel;
+}
+
+
+function extractDecision(content: unknown): string {
+  if (!isRecord(content)) return '-';
+
+  const directCandidates = [content.decisionCode, content.decision, content.score];
+  for (const candidate of directCandidates) {
+    if (typeof candidate === 'number' || typeof candidate === 'string') {
+      return String(candidate);
+    }
+  }
+
+  const summary = content.summary;
+  if (isRecord(summary)) {
+    const summaryCandidates = [summary.decisionCode, summary.decision, summary.score];
+    for (const candidate of summaryCandidates) {
+      if (typeof candidate === 'number' || typeof candidate === 'string') {
+        return String(candidate);
+      }
+    }
+  }
+
+  return '-';
+}
+
+function getLegacyDecisionDisplay(
+  transcript: Transcript,
+  decision: string,
+  normalizeDecision: boolean,
+  dimensions?: Record<string, string | number> | null,
+): string {
+  const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
+  const decisionScaleLabels = decisionMetadata?.scaleLabels ?? [];
+  const normalizedDecision = normalizeLegacyDecisionCode(decision, normalizeDecision);
+  const decisionScaleEntry = decisionScaleLabels.find((entry) => entry.code === String(normalizedDecision));
+  const rawMatchedLabel = (decisionMetadata as Record<string, unknown> | null)?.['matchedLabel'] as string | null;
+  const labelText = normalizeDecision
+    ? (decisionScaleEntry?.label ?? null)
+    : (rawMatchedLabel ?? decisionScaleEntry?.label ?? null);
+  const shortDirection = labelText != null ? extractShortDirection(labelText) : null;
+  const primaryDimKey = dimensions != null ? (Object.keys(dimensions)[0] ?? null) : null;
+  const jobWithMarker = ' taking the job with ';
+  const jobWithIdx = labelText?.toLowerCase().indexOf(jobWithMarker) ?? -1;
+  const jobSubject = jobWithIdx >= 0 && labelText != null
+    ? formatDisplayLabel(labelText.slice(jobWithIdx + jobWithMarker.length))
+    : null;
+
+
+exec
+/bin/zsh -lc "sed -n '1,140p' cloud/apps/api/src/services/decision-model.ts" in /Users/chrislaw/valuerank
+ succeeded in 0ms:
+import { config } from '../config.js';
+import {
+  resolveTranscriptDecisionModel,
+  type CanonicalDecision,
+  type DecisionModelResult,
+  type TranscriptDecisionModelInput,
+} from '../graphql/queries/domain/shared.js';
+
+type DecisionValueOutcome = 'prioritized' | 'deprioritized' | 'neutral';
+
+function buildValueOutcomesFromCanonical(
+  canonical: CanonicalDecision,
+  valueA: string | null,
+  valueB: string | null,
+): Record<string, DecisionValueOutcome> | undefined {
+  if (valueA === null || valueB === null) {
+    return undefined;
+  }
+
+  if (canonical.direction === 'neutral') {
+    return {
+      [valueA]: 'neutral',
+      [valueB]: 'neutral',
+    };
+  }
+
+  if (canonical.direction === 'favor_first') {
+    return {
+      [valueA]: 'prioritized',
+      [valueB]: 'deprioritized',
+    };
+  }
+
+  if (canonical.direction === 'favor_second') {
+    return {
+      [valueA]: 'deprioritized',
+      [valueB]: 'prioritized',
+    };
+  }
+
+  return undefined;
+}
+
+export function resolveAnalysisDecisionModel(
+  input: TranscriptDecisionModelInput,
+  useDecisionModelV2: boolean = config.DECISION_MODEL_V2,
+): DecisionModelResult | null {
+  if (!useDecisionModelV2) {
+    return null;
+  }
+
+  return resolveTranscriptDecisionModel(input);
+}
+
+export function resolveAnalysisValueOutcomes(
+  input: TranscriptDecisionModelInput,
+  valueA: string | null,
+  valueB: string | null,
+  useDecisionModelV2: boolean = config.DECISION_MODEL_V2,
+): Record<string, DecisionValueOutcome> | undefined {
+  const decisionModel = resolveTranscriptDecisionModel(input);
+  const canonicalOutcomes = buildValueOutcomesFromCanonical(
+    decisionModel.canonical,
+    valueA,
+    valueB,
+  );
+
+  if (canonicalOutcomes !== undefined) {
+    return canonicalOutcomes;
+  }
+
+  return undefined;
+}
+
+exec
+/bin/zsh -lc "sed -n '230,320p' cloud/apps/api/src/queue/handlers/analyze-basic.ts" in /Users/chrislaw/valuerank
+ succeeded in 0ms:
+            const dimensions = buildScenarioAnalysisDimensionRecord(normalizedScenarioMetadata);
+
+            if (normalizedScenarioMetadata) {
+              scenarioDimensions[scenario.id] = normalizedScenarioMetadata.groupingDimensions;
+            }
+
+            const orientationFlipped = scenario.orientationFlipped ?? false;
+            const decisionModel = resolveAnalysisDecisionModel(
+              {
+                decisionCode: t.decisionCode,
+                decisionMetadata: t.decisionMetadata,
+                definitionSnapshot: t.definitionSnapshot,
+                orientationFlipped,
+              },
+              useDecisionModelV2,
+            );
+            const values = resolveAnalysisValueOutcomes(
+              {
+                decisionCode: t.decisionCode,
+                decisionMetadata: t.decisionMetadata,
+                definitionSnapshot: t.definitionSnapshot,
+                orientationFlipped,
+              },
+              valueA,
+              valueB,
+              useDecisionModelV2,
+            );
+
+            return {
+              id: t.id,
+              modelId: t.modelId,
+              scenarioId: t.scenarioId as string,
+              sampleIndex: t.sampleIndex,
+              orientationFlipped,
+              decisionModelV2: decisionModel
+                ? {
+                    raw: decisionModel.raw,
+                    canonical: decisionModel.canonical,
+                  }
+                : null,
+              summary: values ? { values } : {},
+              scenario: {
+                name: t.scenario!.name,
+                dimensions,
+              },
+            };
+          });
+
+        // Execute Python analyze worker
+        const result = await spawnPython<AnalyzeWorkerInput, AnalyzeWorkerOutput>(
+          ANALYZE_WORKER_PATH,
+          { runId, emitVignetteSemantics, transcripts: transcriptData },
+          { cwd: path.resolve(process.cwd(), '../..'), timeout: 120000 }
+        );
+
+        // Handle spawn failure
+        if (!result.success) {
+          log.error({ jobId, runId, error: result.error, stderr: result.stderr }, 'Python spawn failed');
+          throw new Error(`Python worker failed: ${result.error}`);
+        }
+
+        // Handle worker failure
+        const output = result.data;
+        if (!output.success) {
+          const err = output.error;
+          log.warn({ jobId, runId, error: err }, 'Analyze worker returned error');
+          if (!err.retryable) {
+            // Non-retryable error - log and complete job
+            log.error({ jobId, runId, error: err }, 'Analysis permanently failed');
+            return;
+          }
+          throw new Error(`${err.code}: ${err.message}`);
+        }
+
+        // Ensure visualizationData includes scenarioDimensions (needed for pivot filtering in the UI).
+        (output.analysis as unknown as Record<string, unknown>).visualizationData = {
+          ...(((output.analysis as unknown as Record<string, unknown>).visualizationData as Record<string, unknown> | undefined) ?? {}),
+          scenarioDimensions,
+        };
+
+        // Mark any existing analyses as superseded
+        await invalidateCache(runId);
+
+        // Create analysis result record
+        await db.analysisResult.create({
+          data: {
+            runId,
+            analysisType: 'basic',
+            inputHash,
+            codeVersion: CODE_VERSION,
+            output: output.analysis as unknown as Prisma.InputJsonValue,
+
+exec
+/bin/zsh -lc "rg -n \"summary\\.score|decisionCode.*score|score.*summary\" cloud/apps/api/src cloud/apps/web/src | sed -n '1,80p'" in /Users/chrislaw/valuerank
+ succeeded in 0ms:
+cloud/apps/web/src/utils/transcriptDecisionModel.ts:226:    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.decisionCode,
+cloud/apps/web/src/utils/transcriptDecisionModel.ts:227:    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.decision,
+cloud/apps/web/src/utils/transcriptDecisionModel.ts:228:    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.score,
+cloud/apps/web/src/utils/analysisCoverage.ts:116:      summary.scoredTranscripts += 1;
+cloud/apps/web/src/components/runs/TranscriptRow.tsx:69:  const directCandidates = [content.decisionCode, content.decision, content.score];
+cloud/apps/web/src/components/runs/TranscriptRow.tsx:78:    const summaryCandidates = [summary.decisionCode, summary.decision, summary.score];
+
+exec
+/bin/zsh -lc "sed -n '210,240p' cloud/apps/web/src/utils/transcriptDecisionModel.ts" in /Users/chrislaw/valuerank
+ succeeded in 0ms:
+}
+
+export function getTranscriptDecisionSortValue(
+  transcript: Transcript,
+  displayMode: TranscriptDecisionDisplayMode,
+): string | number {
+  if (displayMode === 'audit') {
+    return getCanonicalTranscriptDecisionSortValue(transcript);
+  }
+
+  const fallbackCandidates = [
+    transcript.decisionModelV2?.legacy?.canonicalScore,
+    transcript.decisionCode,
+    (transcript.content as { decisionCode?: unknown } | null)?.decisionCode,
+    (transcript.content as { decision?: unknown } | null)?.decision,
+    (transcript.content as { score?: unknown } | null)?.score,
+    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.decisionCode,
+    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.decision,
+    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.score,
+  ];
+
+  for (const candidate of fallbackCandidates) {
+    if (typeof candidate === 'number' || typeof candidate === 'string') {
+      return candidate;
+    }
+  }
+
+  return '';
+}
+
+export function isTranscriptDecisionMetadata(value: unknown): value is Record<string, unknown> {
+
+exec
+/bin/zsh -lc "rg -n \"summary\\.score|summary: \\{ score|score\\)\" cloud/apps/api/tests cloud/apps/web/src | sed -n '1,120p'" in /Users/chrislaw/valuerank
+ succeeded in 0ms:
+cloud/apps/api/tests/services/import/md.test.ts:71:        expect(stakeholderDim!.levels![0]!.score).toBe(1);
+cloud/apps/api/tests/services/import/md.test.ts:75:        expect(stakeholderDim!.levels![2]!.score).toBe(3);
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:146:  const clamped = Math.min(2, Math.max(0, score));
+cloud/apps/web/src/utils/decisionLabels.ts:263:        labels[String(level.score)] = level.label;
+cloud/apps/web/src/utils/decisionLabels.ts:439:        if (typeof score === 'number' && Number.isFinite(score)) {
+cloud/apps/web/src/utils/analysisCoverage.ts:116:      summary.scoredTranscripts += 1;
+cloud/apps/web/src/utils/decisionBuckets.ts:68:      if (typeof score === 'number' && Number.isFinite(score)) {
+cloud/apps/web/src/utils/decisionBuckets.ts:109:      if (typeof score === 'number' && Number.isFinite(score)) {
+cloud/apps/api/tests/integration/md-roundtrip.test.ts:118:      expect(stakeholderDim!.levels![0]!.score).toBe(1);
+cloud/apps/api/tests/graphql/queries/domain-clustering.test.ts:260:      expect(score).toBeGreaterThan(0.2);
+cloud/apps/api/tests/graphql/queries/domain-clustering.test.ts:274:    expect(result.get(2)?.score).toBeCloseTo(1);
+cloud/apps/api/tests/graphql/queries/domain-clustering.test.ts:289:    expect(m0.score).toBeGreaterThan(0.2);
+cloud/apps/api/tests/queue/handlers/analyze-basic.integration.test.ts:247:              summary: { score: null }, // 'A' doesn't parse to numeric 1-5
+cloud/apps/web/src/components/runs/TranscriptRow.tsx:78:    const summaryCandidates = [summary.decisionCode, summary.decision, summary.score];
+cloud/apps/web/src/components/analysis/ContestedScenariosList.tsx:148:                      <span className={`font-medium ${getScoreColor(score)}`}>
+cloud/apps/web/src/components/definitions/DimensionLevelEditor.tsx:32:    if (!isNaN(score)) {
+cloud/apps/web/src/components/definitions/DimensionEditor.tsx:191:                    if (!isNaN(score)) {
+cloud/apps/web/src/components/compare/visualizations/DefinitionDiff.tsx:55:    const sortedLevels = [...dim.levels].sort((a, b) => a.score - b.score);
+
+codex
+I found an integration test that still expects the handler to emit `summary.score`, which is a strong signal this change is not just cosmetic. I’m checking the exact assertion so I can call out the failure mode precisely.
+exec
+/bin/zsh -lc "sed -n '220,270p' cloud/apps/api/tests/queue/handlers/analyze-basic.integration.test.ts" in /Users/chrislaw/valuerank
+ succeeded in 0ms:
+      expect(result?.codeVersion).toBe('1.1.1');
+      expect(result?.status).toBe('CURRENT');
+
+      // Verify output structure
+      const output = result?.output as typeof MOCK_ANALYSIS.analysis;
+      expect(output.perModel).toBeDefined();
+      expect(output.preferenceSummary).toEqual(MOCK_ANALYSIS.analysis.preferenceSummary);
+      expect(output.reliabilitySummary).toEqual(MOCK_ANALYSIS.analysis.reliabilitySummary);
+      expect(output.modelAgreement).toBeDefined();
+      expect(output.methodsUsed).toBeDefined();
+      expect(output.computedAt).toBe('2024-01-01T00:00:01.000Z');
+    });
+
+    it('calls Python worker with transcript data including scenario info', async () => {
+      const handler = createAnalyzeBasicHandler();
+      await handler([createMockJob()]);
+
+      expect(spawnPython).toHaveBeenCalledWith(
+        'workers/analyze_basic.py',
+        expect.objectContaining({
+          runId: TEST_IDS.run,
+          emitVignetteSemantics: true,
+          transcripts: expect.arrayContaining([
+            expect.objectContaining({
+              id: TEST_IDS.transcript1,
+              modelId: 'gpt-4',
+              scenarioId: TEST_IDS.scenario1,
+              summary: { score: null }, // 'A' doesn't parse to numeric 1-5
+              scenario: expect.objectContaining({
+                name: 'Test Scenario 1',
+                dimensions: { 'test-dimension': 1 },
+              }),
+            }),
+          ]),
+        }),
+        expect.objectContaining({ timeout: 120000 })
+      );
+    });
+
+    it('keeps vignette semantic summaries enabled for temp-zero baseline-compatible runs', async () => {
+      await db.run.update({
+        where: { id: TEST_IDS.run },
+        data: {
+          config: {
+            models: ['gpt-4'],
+            assumptionKey: 'temp_zero_determinism',
+          },
+        },
+      });
+
+      const handler = createAnalyzeBasicHandler();
+
+codex
+## Findings
+- [UNVERIFIED] Medium: `cloud/apps/api/src/queue/handlers/analyze-basic.ts` stopped emitting `summary.score` and now writes only `summary.values` or `{}`. That breaks the current transcript contract: the existing integration test in `cloud/apps/api/tests/queue/handlers/analyze-basic.integration.test.ts` still expects `summary: { score: null }`, and web readers like `cloud/apps/web/src/components/runs/TranscriptRow.tsx` and `cloud/apps/web/src/utils/transcriptDecisionModel.ts` still fall back to `summary.score`. Any transcript that previously relied on the numeric score will now render/sort as blank or undecided unless every consumer has already been migrated.
+- [UNVERIFIED] Medium: The new `summary: values ? { values } : {}` shape drops the score entirely even when `resolveAnalysisValueOutcomes` cannot recover a value mapping. In the old code, malformed or legacy transcripts still preserved the coarse decision code; now those cases become an empty object, so downstream tooling loses the only usable signal instead of degrading gracefully.
+
+## Residual Risks
+- I did not verify every out-of-tree consumer, so anything outside this repo that reads transcript summaries may still depend on `summary.score` or the previous JSON shape.
+- Persisted transcript records may now be mixed across old and new shapes, so any migration or backfill logic still needs an explicit compatibility check.
+tokens used
+19,959
