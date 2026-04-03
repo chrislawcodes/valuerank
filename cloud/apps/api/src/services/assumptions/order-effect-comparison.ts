@@ -151,7 +151,7 @@ function _canonicalToScore(input: {
   const { direction, strength } = result.canonical;
   if (direction === 'favor_first' && strength === 'strong') return 5;
   if (direction === 'favor_first' && strength === 'lean') return 4;
-  if (direction === 'neutral') return 3;
+  if (direction === 'neutral' && strength === 'neutral') return 3;
   if (direction === 'favor_second' && strength === 'lean') return 2;
   if (direction === 'favor_second' && strength === 'strong') return 1;
   return null;
