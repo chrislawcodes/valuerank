@@ -8,8 +8,10 @@ import type { TranscriptDecisionModelResult } from './decision-model.js';
 export {
   buildRawDecisionEvidence,
   DECISION_MODEL_READ_RULES,
+  canonicalDecisionToLegacyScore,
   resolveCanonicalDecision,
   resolveDecisionModel,
+  resolveLegacyDecisionCompat,
   resolveTranscriptDecisionModel,
 } from './decision-model.js';
 export type {
@@ -23,6 +25,7 @@ export type {
   DecisionPair,
   DecisionSource,
   DecisionStrength,
+  LegacyDecisionCompat,
   RawDecisionEvidence,
   TranscriptDecisionModelInput,
   TranscriptDecisionModelResult,
@@ -240,7 +243,8 @@ export type DomainAnalysisConditionTranscript = {
   decisionCode: string | null;
   decisionCodeSource: string | null;
   decisionMetadata: unknown;
-  definitionSnapshot: unknown;
+  definitionSnapshot?: unknown;
+  pairOverride?: DomainAnalysisValuePair | null;
   decisionModelV2?: TranscriptDecisionModelResult | null;
   turnCount: number;
   tokenCount: number;
@@ -535,7 +539,6 @@ export function aggregateValueCountsFromTranscripts(
     modelId: string;
     decisionCode: string | null;
     decisionMetadata: unknown;
-    definitionSnapshot: unknown;
     scenario: { orientationFlipped: boolean | null } | null;
   }>,
   sourceRunDefinitionById: Map<string, string>,
@@ -558,8 +561,8 @@ export function aggregateValueCountsFromTranscripts(
     const resolved = resolveTranscriptDecisionModel({
       decisionCode: transcript.decisionCode,
       decisionMetadata: transcript.decisionMetadata,
-      definitionSnapshot: transcript.definitionSnapshot,
       orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+      pairOverride: pair,
     });
     const canonical = resolved.canonical;
     if (canonical.direction === 'unknown') continue;

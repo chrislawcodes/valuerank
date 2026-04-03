@@ -37,9 +37,13 @@ function createDirectionCounts(): Record<DirectionCountKey, number> {
 }
 
 function resolveCanonicalVarianceMetrics(
-  direction: 'favor_first' | 'favor_second' | 'neutral' | 'unknown',
+  direction: 'favor_first' | 'favor_second' | 'neutral' | 'refusal' | 'unknown',
   strength: 'strong' | 'lean' | 'neutral' | 'unknown'
 ): CanonicalVarianceMetrics | null {
+  if (direction === 'refusal') {
+    return null;
+  }
+
   if (direction === 'neutral') {
     return {
       bucketKey: 'neutral',
