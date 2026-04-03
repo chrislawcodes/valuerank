@@ -54,38 +54,6 @@ function buildValueOutcomesFromCanonical(
   return undefined;
 }
 
-function buildValueOutcomesFromScore(
-  score: number | null,
-  orientationFlipped: boolean,
-  valueA: string | null,
-  valueB: string | null,
-): Record<string, DecisionValueOutcome> | undefined {
-  if (score === null || valueA === null || valueB === null) {
-    return undefined;
-  }
-
-  const normalizedScore = orientationFlipped ? 6 - score : score;
-
-  if (normalizedScore >= 4) {
-    return {
-      [valueA]: 'prioritized',
-      [valueB]: 'deprioritized',
-    };
-  }
-
-  if (normalizedScore <= 2) {
-    return {
-      [valueA]: 'deprioritized',
-      [valueB]: 'prioritized',
-    };
-  }
-
-  return {
-    [valueA]: 'neutral',
-    [valueB]: 'neutral',
-  };
-}
-
 export function resolveAnalysisDecisionModel(
   input: TranscriptDecisionModelInput,
   useDecisionModelV2: boolean = config.DECISION_MODEL_V2,
