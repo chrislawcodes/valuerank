@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HelpCircle, X } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -37,13 +37,6 @@ const TOP_COLUMN_GROUPS: Array<{ label: string; values: ValueKey[] }> = [
   { label: 'Openness to Change', values: ['Hedonism', 'Stimulation', 'Self_Direction_Action'] },
 ];
 const HEDONISM_SPLIT_VALUE: ValueKey = 'Hedonism';
-const MODEL_COLUMN_WIDTH_PX = 260;
-const DEFAULT_VALUE_COLUMN_WIDTH_PX = 118;
-const HEDONISM_COLUMN_WIDTH_PX = 220;
-const OPENNESS_GROUP_WIDTH_PX = HEDONISM_COLUMN_WIDTH_PX + DEFAULT_VALUE_COLUMN_WIDTH_PX * 2;
-const HEDONISM_CENTER_IN_OPENNESS_PERCENT = ((HEDONISM_COLUMN_WIDTH_PX / 2) / OPENNESS_GROUP_WIDTH_PX) * 100;
-const TABLE_TOTAL_WIDTH_PX =
-  MODEL_COLUMN_WIDTH_PX + HEDONISM_COLUMN_WIDTH_PX + DEFAULT_VALUE_COLUMN_WIDTH_PX * (COLUMN_VALUES.length - 1);
 
 function hasGroupStartBorder(value: ValueKey): boolean {
   return value === 'Universalism_Nature' || value === 'Conformity_Interpersonal' || value === 'Power_Dominance';
@@ -66,9 +59,12 @@ export function ValuePrioritiesSection({
 }: ValuePrioritiesSectionProps) {
   const navigate = useNavigate();
   const detailedTableRef = useRef<HTMLDivElement>(null);
+  const opennessGroupRef = useRef<HTMLTableCellElement>(null);
+  const hedonismCellRef = useRef<HTMLTableCellElement>(null);
   const [scoreMode, setScoreMode] = useState<'WIN_RATE' | 'FULL_BT'>('WIN_RATE');
   const [sortState, setSortState] = useState<SortState>({ key: 'model', direction: 'asc' });
   const [showSectionHelp, setShowSectionHelp] = useState(false);
+  const [opennessSplitPercent, setOpennessSplitPercent] = useState(33.3333);
 
   const updateSort = (key: 'model' | ValueKey) => {
     setSortState((prev) => {
@@ -104,6 +100,40 @@ export function ValuePrioritiesSection({
     if (all.length === 0) return { min: -1, max: 1 };
     return { min: Math.min(...all), max: Math.max(...all) };
   }, [models, scoreMode]);
+
+  useLayoutEffect(() => {
+    const updateSplitPosition = () => {
+      const opennessWidth = opennessGroupRef.current?.getBoundingClientRect().width ?? 0;
+      const hedonismCellCenter = hedonismCellRef.current?.getBoundingClientRect().left ?? 0;
+      const hedonismCellWidth = hedonismCellRef.current?.getBoundingClientRect().width ?? 0;
+      const opennessLeft = opennessGroupRef.current?.getBoundingClientRect().left ?? 0;
+
+      if (opennessWidth > 0 && hedonismCellWidth > 0) {
+        setOpennessSplitPercent((((hedonismCellCenter + hedonismCellWidth / 2) - opennessLeft) / opennessWidth) * 100);
+      }
+    };
+
+    updateSplitPosition();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateSplitPosition);
+      return () => window.removeEventListener('resize', updateSplitPosition);
+    }
+
+    const observer = new ResizeObserver(updateSplitPosition);
+    if (opennessGroupRef.current) {
+      observer.observe(opennessGroupRef.current);
+    }
+    if (hedonismCellRef.current) {
+      observer.observe(hedonismCellRef.current);
+    }
+
+    window.addEventListener('resize', updateSplitPosition);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateSplitPosition);
+    };
+  }, [scoreMode, models.length]);
 
   const handleValueCellClick = (modelId: string, valueKey: ValueKey) => {
     if (selectedDomainId === '') return;
@@ -210,16 +240,7 @@ export function ValuePrioritiesSection({
           <CopyVisualButton targetRef={detailedTableRef} label="value priorities table" />
         </div>
         <div className="overflow-x-auto">
-          <table className="table-fixed text-xs" style={{ width: `${TABLE_TOTAL_WIDTH_PX}px` }}>
-            <colgroup>
-              <col style={{ width: `${MODEL_COLUMN_WIDTH_PX}px` }} />
-              {COLUMN_VALUES.map((value) => (
-                <col
-                  key={`col-${value}`}
-                  style={{ width: `${value === HEDONISM_SPLIT_VALUE ? HEDONISM_COLUMN_WIDTH_PX : DEFAULT_VALUE_COLUMN_WIDTH_PX}px` }}
-                />
-              ))}
-            </colgroup>
+          <table className="w-full table-auto text-xs">
             <thead>
             <tr className="border-b border-gray-100 text-gray-500">
               <th
@@ -252,12 +273,13 @@ export function ValuePrioritiesSection({
                       groupIndex === 0 || isOpennessGroup ? '' : 'border-l-2 border-gray-300'
                     } ${groupIndex === TOP_COLUMN_GROUPS.length - 1 ? 'border-r-2 border-gray-300' : ''}`}
                     colSpan={group.values.length}
+                    ref={isOpennessGroup ? opennessGroupRef : undefined}
                   >
                     {isOpennessGroup && (
                       <span
                         aria-hidden="true"
                         className="pointer-events-none absolute inset-y-0 border-l-2 border-gray-300"
-                        style={{ left: `${HEDONISM_CENTER_IN_OPENNESS_PERCENT}%` }}
+                        style={{ left: `${opennessSplitPercent}%` }}
                       />
                     )}
                     {group.label}
@@ -269,11 +291,11 @@ export function ValuePrioritiesSection({
               {COLUMN_VALUES.map((value) => (
                 <th
                   key={value}
-                  className={`relative px-2 py-2 text-right font-medium ${
+                  className={`relative py-2 text-right font-medium ${
                     hasGroupStartBorder(value) ? 'border-l-2 border-gray-300' : ''
                   } ${hasGroupEndBorder(value) ? 'border-r-2 border-gray-300' : ''} ${
                     value === HEDONISM_SPLIT_VALUE ? 'border-x border-dashed border-gray-400' : ''
-                  }`}
+                  } ${value === HEDONISM_SPLIT_VALUE ? 'px-1' : 'px-2'}`}
                   aria-sort={
                     sortState.key === value
                       ? sortState.direction === 'asc'
@@ -281,6 +303,7 @@ export function ValuePrioritiesSection({
                         : 'descending'
                       : 'none'
                   }
+                  ref={value === HEDONISM_SPLIT_VALUE ? hedonismCellRef : undefined}
                 >
                   <Tooltip content={VALUE_DESCRIPTIONS[value]} delay={25}>
                     <Button
@@ -288,14 +311,18 @@ export function ValuePrioritiesSection({
                       variant="ghost"
                       size="sm"
                       className={`h-auto min-h-0 !p-0 text-xs font-medium text-gray-600 hover:text-gray-900 ${
-                        value === HEDONISM_SPLIT_VALUE ? 'block w-full' : ''
+                        value === HEDONISM_SPLIT_VALUE ? 'inline-flex whitespace-nowrap' : ''
                       }`}
                       onClick={() => updateSort(value)}
                     >
                       {value === HEDONISM_SPLIT_VALUE ? (
-                        <span className="grid min-h-[32px] w-full grid-cols-2 items-center text-xs">
-                          <span className="px-1 text-center">Hedonism</span>
-                          <span className="whitespace-nowrap px-1 text-center">(50/50 split)</span>
+                        <span className="inline-flex min-h-[32px] flex-col items-center justify-center leading-tight text-xs">
+                          <span className="px-1 text-center">
+                            Hedonism
+                          </span>
+                          <span className="whitespace-nowrap px-1 text-center text-[10px]">
+                            (50/50 split)
+                          </span>
                         </span>
                       ) : (
                         <>{VALUE_LABELS[value]}</>
