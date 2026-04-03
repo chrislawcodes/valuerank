@@ -252,7 +252,6 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
               },
               valueA,
               valueB,
-              useDecisionModelV2,
             );
 
             return {

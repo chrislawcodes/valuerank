@@ -25,8 +25,7 @@ describe('analysis decision model helper', () => {
 
   it('returns null for decision model when V2 is disabled', () => {
     expect(resolveAnalysisDecisionModel(input, false)).toBeNull();
-    // resolveAnalysisValueOutcomes always uses canonical regardless of flag
-    expect(resolveAnalysisValueOutcomes(input, 'Achievement', 'Benevolence_Dependability', false)).toEqual({
+    expect(resolveAnalysisValueOutcomes(input, 'Achievement', 'Benevolence_Dependability')).toEqual({
       Achievement: 'prioritized',
       Benevolence_Dependability: 'deprioritized',
     });
@@ -46,7 +45,7 @@ describe('analysis decision model helper', () => {
         source: 'deterministic',
       },
     });
-    expect(resolveAnalysisValueOutcomes(input, 'Achievement', 'Benevolence_Dependability', true)).toEqual({
+    expect(resolveAnalysisValueOutcomes(input, 'Achievement', 'Benevolence_Dependability')).toEqual({
       Achievement: 'prioritized',
       Benevolence_Dependability: 'deprioritized',
     });
