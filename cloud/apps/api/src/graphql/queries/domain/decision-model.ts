@@ -1,4 +1,4 @@
-import { DOMAIN_ANALYSIS_VALUE_KEYS, extractValuePair, toPascalCaseKey, type DomainAnalysisValueKey } from '../domain-analysis-values.js';
+import { DOMAIN_ANALYSIS_VALUE_KEYS, extractValuePair, toPascalCaseKey, type DomainAnalysisValueKey, type DomainAnalysisValuePair } from '../domain-analysis-values.js';
 import { JOB_CHOICE_VALUE_STATEMENTS, labelFromBody } from '@valuerank/shared';
 
 export type DecisionDirection = 'favor_first' | 'favor_second' | 'neutral' | 'unknown';
@@ -96,8 +96,11 @@ export type DecisionModelResult = {
 export type TranscriptDecisionModelInput = {
   decisionCode: string | null;
   decisionMetadata: unknown;
-  definitionSnapshot: unknown;
+  /** Supply definitionSnapshot OR pairOverride — pairOverride takes precedence if both provided */
+  definitionSnapshot?: unknown;
   orientationFlipped: boolean | null | undefined;
+  /** Pre-resolved value pair; avoids fetching definitionSnapshot from DB when pair is already known */
+  pairOverride?: DomainAnalysisValuePair | null;
 };
 
 export type TranscriptDecisionModelResult = DecisionModelResult;
@@ -490,7 +493,7 @@ export function canonicalDecisionToLegacyScore(
 export function resolveTranscriptDecisionModel(
   input: TranscriptDecisionModelInput,
 ): TranscriptDecisionModelResult {
-  const pair = extractValuePair(input.definitionSnapshot);
+  const pair = input.pairOverride !== undefined ? input.pairOverride : extractValuePair(input.definitionSnapshot);
   const raw = buildRawDecisionEvidence(input.decisionMetadata);
   const manualOverrideDecision = extractManualOverrideDecision(input.decisionMetadata);
   const cachedDecision = extractCachedWinnerFirstDecision(input.decisionMetadata);

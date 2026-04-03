@@ -120,7 +120,6 @@ builder.queryField('domainAnalysis', (t) =>
             modelId: true,
             decisionCode: true,
             decisionMetadata: true,
-            definitionSnapshot: true,
             scenario: {
               select: {
                 orientationFlipped: true,
@@ -449,7 +448,6 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
             scenarioId: true,
             decisionCode: true,
             decisionMetadata: true,
-            definitionSnapshot: true,
             scenario: {
               select: {
                 orientationFlipped: true,
@@ -493,8 +491,8 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
           const canon = resolveTranscriptDecisionModel({
             decisionCode: transcript.decisionCode,
             decisionMetadata: transcript.decisionMetadata,
-            definitionSnapshot: transcript.definitionSnapshot,
             orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+            pairOverride: pair,
           }).canonical;
 
           if (canon.direction === 'unknown') {
