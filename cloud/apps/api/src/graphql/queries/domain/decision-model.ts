@@ -96,9 +96,11 @@ export type DecisionModelResult = {
 export type TranscriptDecisionModelInput = {
   decisionCode: string | null;
   decisionMetadata: unknown;
+  /** Supply definitionSnapshot OR pairOverride — pairOverride takes precedence if both provided */
   definitionSnapshot?: unknown;
   orientationFlipped: boolean | null | undefined;
-  pairOverride?: DecisionPair | null;
+  /** Pre-resolved value pair; avoids fetching definitionSnapshot from DB when pair is already known */
+  pairOverride?: DomainAnalysisValuePair | null;
 };
 
 export type TranscriptDecisionModelResult = DecisionModelResult;
@@ -498,9 +500,7 @@ export function buildRawDecisionEvidence(
 export function resolveTranscriptDecisionModel(
   input: TranscriptDecisionModelInput,
 ): TranscriptDecisionModelResult {
-  const pair = input.pairOverride !== undefined
-    ? input.pairOverride
-    : extractValuePair(input.definitionSnapshot);
+  const pair = input.pairOverride !== undefined ? input.pairOverride : extractValuePair(input.definitionSnapshot);
   const raw = buildRawDecisionEvidence(input.decisionMetadata);
   const manualOverrideDecision = extractManualOverrideDecision(input.decisionMetadata);
   const cachedDecision = extractCachedWinnerFirstDecision(input.decisionMetadata);
