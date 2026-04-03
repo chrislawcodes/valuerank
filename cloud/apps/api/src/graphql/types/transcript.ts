@@ -32,7 +32,7 @@ builder.objectType(TranscriptRef, {
     decisionModelV2: t.field({
       type: 'JSON',
       nullable: true,
-      description: 'V2 decision envelope with raw evidence and canonical direction/strength decision',
+      description: 'Feature-flagged V2 decision envelope with raw evidence and canonical compatibility data',
       resolve: async (transcript, _args, ctx) => {
         if (!config.DECISION_MODEL_V2) {
           return null;

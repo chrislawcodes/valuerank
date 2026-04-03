@@ -168,6 +168,7 @@ export type AggregateWorkerTranscript = {
   sampleIndex: number;
   orientationFlipped: boolean;
   summary: {
+    score: number | null;
     values?: Record<string, 'prioritized' | 'deprioritized' | 'neutral'>;
   };
   scenario: {

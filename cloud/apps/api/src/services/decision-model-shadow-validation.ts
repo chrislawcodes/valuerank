@@ -1,4 +1,7 @@
 import {
+  resolveAnalysisScore,
+} from './decision-model.js';
+import {
   resolveTranscriptDecisionModel,
   type DecisionSource,
   type RawDecisionEvidence,
@@ -81,10 +84,32 @@ function classifyBucket(result: TranscriptDecisionModelResult): DecisionModelSha
 }
 
 function compareScores(
-  _transcript: DecisionModelShadowValidationTranscriptInput,
+  transcript: DecisionModelShadowValidationTranscriptInput,
 ): DecisionModelShadowValidationComparison {
-  // Legacy V1 score removed — comparison is no longer applicable.
-  return { legacyScore: null, v2Score: null, matches: null };
+  const legacyScore = resolveAnalysisScore(transcript, false) as DecisionModelShadowValidationScore;
+  const v2Score = resolveAnalysisScore(transcript, true) as DecisionModelShadowValidationScore;
+
+  if (legacyScore === null && v2Score === null) {
+    return {
+      legacyScore,
+      v2Score,
+      matches: null,
+    };
+  }
+
+  if (legacyScore === null || v2Score === null) {
+    return {
+      legacyScore,
+      v2Score,
+      matches: false,
+    };
+  }
+
+  return {
+    legacyScore,
+    v2Score,
+    matches: legacyScore === v2Score,
+  };
 }
 
 function emptyBuckets(): Record<DecisionModelShadowValidationBucket, DecisionModelShadowValidationTranscript[]> {

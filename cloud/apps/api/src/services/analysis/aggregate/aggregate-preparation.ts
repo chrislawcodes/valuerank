@@ -27,6 +27,7 @@ import {
 } from '../scenario-metadata.js';
 import { resolveTranscriptDecisionModel } from '../../../graphql/queries/domain/decision-model.js';
 import {
+  buildValueOutcomes,
   buildCanonicalValueOutcomes,
   computeAggregateFingerprint,
 } from './aggregate-helpers.js';
@@ -323,8 +324,14 @@ export async function prepareAggregateRunSnapshot(
       definitionSnapshot: transcript.definitionSnapshot,
       orientationFlipped,
     });
+    const score = resolved.legacy.canonicalScore;
     const values = buildCanonicalValueOutcomes(
       resolved.canonical.direction,
+      valueA,
+      valueB,
+    ) ?? buildValueOutcomes(
+      score,
+      false,
       valueA,
       valueB,
     );
@@ -336,7 +343,7 @@ export async function prepareAggregateRunSnapshot(
       scenarioId: transcript.scenarioId!,
       sampleIndex: transcript.sampleIndex,
       orientationFlipped,
-      summary: values ? { values } : {},
+      summary: values ? { score, values } : { score },
       scenario: {
         name: transcript.scenario?.name ?? transcript.scenarioId ?? '',
         dimensions,

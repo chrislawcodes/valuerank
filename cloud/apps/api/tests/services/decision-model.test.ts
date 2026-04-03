@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   resolveAnalysisDecisionModel,
+  resolveAnalysisScore,
   resolveAnalysisValueOutcomes,
 } from '../../src/services/decision-model.js';
 
@@ -23,16 +24,13 @@ describe('analysis decision model helper', () => {
     orientationFlipped: false,
   };
 
-  it('returns null for decision model when V2 is disabled', () => {
+  it('keeps legacy score parsing when V2 is disabled', () => {
     expect(resolveAnalysisDecisionModel(input, false)).toBeNull();
-    // resolveAnalysisValueOutcomes always uses canonical regardless of flag
-    expect(resolveAnalysisValueOutcomes(input, 'Achievement', 'Benevolence_Dependability', false)).toEqual({
-      Achievement: 'prioritized',
-      Benevolence_Dependability: 'deprioritized',
-    });
+    expect(resolveAnalysisScore(input, false)).toBeNull();
+    expect(resolveAnalysisValueOutcomes(input, 'Achievement', 'Benevolence_Dependability', false)).toBeUndefined();
   });
 
-  it('resolves canonical decision when V2 is enabled', () => {
+  it('resolves canonical compatibility when V2 is enabled', () => {
     const decisionModel = resolveAnalysisDecisionModel(input, true);
 
     expect(decisionModel).toMatchObject({
@@ -45,7 +43,12 @@ describe('analysis decision model helper', () => {
         normalizationReason: null,
         source: 'deterministic',
       },
+      legacy: {
+        rawScore: null,
+        canonicalScore: 5,
+      },
     });
+    expect(resolveAnalysisScore(input, true)).toBe(5);
     expect(resolveAnalysisValueOutcomes(input, 'Achievement', 'Benevolence_Dependability', true)).toEqual({
       Achievement: 'prioritized',
       Benevolence_Dependability: 'deprioritized',
