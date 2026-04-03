@@ -1,0 +1,1206 @@
+diff --git a/cloud/.eslintrc.cjs b/cloud/.eslintrc.cjs
+index 741a75db..89ba7681 100644
+--- a/cloud/.eslintrc.cjs
++++ b/cloud/.eslintrc.cjs
+@@ -8,7 +8,7 @@ module.exports = {
+   parserOptions: {
+     ecmaVersion: 2022,
+     sourceType: 'module',
+-    project: ['./apps/*/tsconfig.json', './packages/*/tsconfig.json'],
++    project: ['./apps/*/tsconfig.json', './packages/*/tsconfig.json', './scripts/tsconfig.json'],
+     tsconfigRootDir: __dirname,
+   },
+   plugins: ['@typescript-eslint'],
+@@ -104,6 +104,13 @@ module.exports = {
+         'no-console': 'off',
+       },
+     },
++    {
++      // Allow console in repository scripts
++      files: ['scripts/**/*.ts'],
++      rules: {
++        'no-console': 'off',
++      },
++    },
+     {
+       // Allow console in test files
+       files: ['**/tests/**/*.ts', '**/*.test.ts'],
+diff --git a/cloud/apps/api/src/graphql/queries/__tests__/domain-coverage.test.ts b/cloud/apps/api/src/graphql/queries/__tests__/domain-coverage.test.ts
+index de73abe3..46f65a4f 100644
+--- a/cloud/apps/api/src/graphql/queries/__tests__/domain-coverage.test.ts
++++ b/cloud/apps/api/src/graphql/queries/__tests__/domain-coverage.test.ts
+@@ -1,6 +1,8 @@
+ import { describe, expect, it } from 'vitest';
+ import {
+   extractValuePair,
++  getCoverageBatchGroupId,
++  getCoverageBatchIncrement,
+   selectPrimaryDefinitionCount,
+   selectPrimaryDefinitionCounts,
+ } from '../domain-coverage-utils.js';
+@@ -202,68 +204,62 @@ describe('selectPrimaryDefinitionCounts', () => {
+   });
+ });
+ 
+-describe('samplesPerScenario increment logic', () => {
+-  // Replicates the increment logic from domain-coverage.ts counting loop
+-  function computeIncrement(samplesPerScenario: unknown): number {
+-    return Number.isInteger(samplesPerScenario) && (samplesPerScenario as number) >= 1
+-      ? (samplesPerScenario as number)
+-      : 1;
+-  }
++describe('getCoverageBatchIncrement', () => {
+ 
+   it('returns samplesPerScenario when it is a valid positive integer', () => {
+-    expect(computeIncrement(5)).toBe(5);
++    expect(getCoverageBatchIncrement(5)).toBe(5);
+   });
+ 
+   it('returns 1 when samplesPerScenario is 1', () => {
+-    expect(computeIncrement(1)).toBe(1);
++    expect(getCoverageBatchIncrement(1)).toBe(1);
+   });
+ 
+   it('falls back to 1 when config is null (entire config null)', () => {
+     const value = (null as { samplesPerScenario?: unknown } | null)?.samplesPerScenario;
+-    expect(computeIncrement(value)).toBe(1);
++    expect(getCoverageBatchIncrement(value)).toBe(1);
+   });
+ 
+   it('falls back to 1 when samplesPerScenario is absent from config', () => {
+-    expect(computeIncrement(undefined)).toBe(1);
++    expect(getCoverageBatchIncrement(undefined)).toBe(1);
+   });
+ 
+   it('falls back to 1 when samplesPerScenario is null', () => {
+-    expect(computeIncrement(null)).toBe(1);
++    expect(getCoverageBatchIncrement(null)).toBe(1);
+   });
+ 
+   it('falls back to 1 when samplesPerScenario is a string', () => {
+-    expect(computeIncrement('5')).toBe(1);
++    expect(getCoverageBatchIncrement('5')).toBe(1);
+   });
+ 
+   it('falls back to 1 when samplesPerScenario is a float', () => {
+-    expect(computeIncrement(1.5)).toBe(1);
++    expect(getCoverageBatchIncrement(1.5)).toBe(1);
+   });
+ 
+   it('falls back to 1 when samplesPerScenario is 0', () => {
+-    expect(computeIncrement(0)).toBe(1);
++    expect(getCoverageBatchIncrement(0)).toBe(1);
+   });
+ 
+   it('falls back to 1 when samplesPerScenario is negative', () => {
+-    expect(computeIncrement(-10)).toBe(1);
++    expect(getCoverageBatchIncrement(-10)).toBe(1);
+   });
+ 
+   it('falls back to 1 when samplesPerScenario is NaN', () => {
+-    expect(computeIncrement(NaN)).toBe(1);
++    expect(getCoverageBatchIncrement(NaN)).toBe(1);
+   });
+ 
+   it('falls back to 1 when samplesPerScenario is Infinity', () => {
+-    expect(computeIncrement(Infinity)).toBe(1);
++    expect(getCoverageBatchIncrement(Infinity)).toBe(1);
+   });
+ 
+   it('falls back to 1 when samplesPerScenario is -Infinity', () => {
+-    expect(computeIncrement(-Infinity)).toBe(1);
++    expect(getCoverageBatchIncrement(-Infinity)).toBe(1);
+   });
+ 
+   it('sums correctly across multiple runs for the same definition (5+5=10)', () => {
+     const batchCountByDefinitionId = new Map<string, number>();
+     const defId = 'def-1';
+     for (const samplesPerScenario of [5, 5]) {
+-      const increment = computeIncrement(samplesPerScenario);
++      const increment = getCoverageBatchIncrement(samplesPerScenario);
+       batchCountByDefinitionId.set(defId, (batchCountByDefinitionId.get(defId) ?? 0) + increment);
+     }
+     expect(batchCountByDefinitionId.get(defId)).toBe(10);
+@@ -273,9 +269,41 @@ describe('samplesPerScenario increment logic', () => {
+     const batchCountByDefinitionId = new Map<string, number>();
+     const defId = 'def-2';
+     for (const samplesPerScenario of [5, null]) {
+-      const increment = computeIncrement(samplesPerScenario);
++      const increment = getCoverageBatchIncrement(samplesPerScenario);
+       batchCountByDefinitionId.set(defId, (batchCountByDefinitionId.get(defId) ?? 0) + increment);
+     }
+     expect(batchCountByDefinitionId.get(defId)).toBe(6);
+   });
+ });
++
++describe('getCoverageBatchGroupId', () => {
++  it('prefers jobChoiceBatchGroupId when present', () => {
++    expect(
++      getCoverageBatchGroupId({
++        jobChoiceBatchGroupId: 'job-choice-group',
++        pairedBatchGroupId: 'paired-group',
++      }),
++    ).toBe('job-choice-group');
++  });
++
++  it('falls back to pairedBatchGroupId when jobChoiceBatchGroupId is absent', () => {
++    expect(
++      getCoverageBatchGroupId({
++        pairedBatchGroupId: 'paired-group',
++      }),
++    ).toBe('paired-group');
++  });
++
++  it('trims whitespace from the selected batch-group id', () => {
++    expect(
++      getCoverageBatchGroupId({
++        jobChoiceBatchGroupId: '  group-id  ',
++      }),
++    ).toBe('group-id');
++  });
++
++  it('returns null when both batch-group ids are missing or blank', () => {
++    expect(getCoverageBatchGroupId({})).toBeNull();
++    expect(getCoverageBatchGroupId({ jobChoiceBatchGroupId: '   ' })).toBeNull();
++  });
++});
+diff --git a/cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts b/cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts
+index c8bfe39b..40550a9f 100644
+--- a/cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts
++++ b/cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts
+@@ -122,3 +122,24 @@ export function selectPrimaryDefinitionCounts(
+     pairedBatchCount,
+   };
+ }
++
++export function getCoverageBatchIncrement(samplesPerScenario: unknown): number {
++  return Number.isInteger(samplesPerScenario) && (samplesPerScenario as number) >= 1
++    ? (samplesPerScenario as number)
++    : 1;
++}
++
++export function getCoverageBatchGroupId(runConfig: unknown): string | null {
++  const config = runConfig as {
++    jobChoiceBatchGroupId?: unknown;
++    pairedBatchGroupId?: unknown;
++  } | null;
++
++  const raw = typeof config?.jobChoiceBatchGroupId === 'string'
++    ? config.jobChoiceBatchGroupId
++    : typeof config?.pairedBatchGroupId === 'string'
++      ? config.pairedBatchGroupId
++      : null;
++
++  return raw != null && raw.trim().length > 0 ? raw.trim() : null;
++}
+diff --git a/cloud/apps/api/src/graphql/queries/domain-coverage.ts b/cloud/apps/api/src/graphql/queries/domain-coverage.ts
+index 94be4800..ed4eb285 100644
+--- a/cloud/apps/api/src/graphql/queries/domain-coverage.ts
++++ b/cloud/apps/api/src/graphql/queries/domain-coverage.ts
+@@ -16,6 +16,8 @@ import {
+   COVERAGE_VALUE_KEYS,
+   type CoverageValueKey,
+   extractValuePair,
++  getCoverageBatchGroupId,
++  getCoverageBatchIncrement,
+   selectPrimaryDefinitionCounts,
+ } from './domain-coverage-utils.js';
+ 
+@@ -177,7 +179,7 @@ builder.queryField('domainValueCoverage', (t) =>
+         settled.forEach((result, idx) => {
+           if (result.status === 'rejected') {
+             ctx.log.error(
+-              { err: result.reason, definitionId: batch[idx]?.id },
++              { err: result.reason as unknown, definitionId: batch[idx]?.id },
+               'Failed to resolve definition content for coverage grid'
+             );
+           }
+@@ -243,27 +245,13 @@ builder.queryField('domainValueCoverage', (t) =>
+           }
+           const samplesPerScenario =
+             (run.config as { samplesPerScenario?: unknown } | null)?.samplesPerScenario;
+-          const increment =
+-            Number.isInteger(samplesPerScenario) && (samplesPerScenario as number) >= 1
+-              ? (samplesPerScenario as number)
+-              : 1;
++          const increment = getCoverageBatchIncrement(samplesPerScenario);
+           batchCountByDefinitionId.set(
+             run.definitionId,
+             (batchCountByDefinitionId.get(run.definitionId) ?? 0) + increment,
+           );
+ 
+-          const pairedBatchGroupId = (() => {
+-            const runConfig = run.config as {
+-              jobChoiceBatchGroupId?: unknown;
+-              pairedBatchGroupId?: unknown;
+-            } | null;
+-            const raw = typeof runConfig?.jobChoiceBatchGroupId === 'string'
+-              ? runConfig.jobChoiceBatchGroupId
+-              : typeof runConfig?.pairedBatchGroupId === 'string'
+-                ? runConfig.pairedBatchGroupId
+-                : null;
+-            return raw != null && raw.trim().length > 0 ? raw.trim() : null;
+-          })();
++          const pairedBatchGroupId = getCoverageBatchGroupId(run.config);
+ 
+           if (pairedBatchGroupId === null) {
+             pairedBatchCountByDefinitionId.set(
+diff --git a/cloud/apps/api/src/graphql/queries/domain/planning-utils.ts b/cloud/apps/api/src/graphql/queries/domain/planning-utils.ts
+new file mode 100644
+index 00000000..737d1a38
+--- /dev/null
++++ b/cloud/apps/api/src/graphql/queries/domain/planning-utils.ts
+@@ -0,0 +1,279 @@
++import { formatTrialSignature, formatVnewLabel, formatVnewSignature, isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
++import { parseTemperature } from '../../../utils/temperature.js';
++import { parseDefinitionVersion } from '../../../utils/definition-version.js';
++
++export type DomainAvailableSignatureOption = {
++  signature: string;
++  label: string;
++  isVirtual: boolean;
++  temperature: number | null;
++};
++
++type RunConfigLike = {
++  config: unknown;
++};
++
++type ExistingRunLike = {
++  definitionId: string;
++  status: string;
++  runCategory: string;
++  config: unknown;
++};
++
++type TrialRunRowLike = {
++  id: string;
++  definitionId: string;
++  status: string;
++  updatedAt: Date;
++  stalledModels: string[] | null;
++  config: unknown;
++};
++
++type TrialRunGroupByRowLike = {
++  runId: string;
++  modelId: string;
++  status?: string;
++  count: number;
++};
++
++type FailedProbeRowLike = {
++  runId: string;
++  modelId: string;
++  errorCode: string | null;
++  errorMessage: string | null;
++};
++
++type TrialRunModelStatus = {
++  modelId: string;
++  generationCompleted: number;
++  generationFailed: number;
++  generationTotal: number;
++  summarizationCompleted: number;
++  summarizationFailed: number;
++  summarizationTotal: number;
++  latestErrorMessage: string | null;
++};
++
++export type TrialRunStatusRow = {
++  runId: string;
++  definitionId: string;
++  status: string;
++  updatedAt: Date;
++  stalledModels: string[];
++  analysisStatus: string | null;
++  modelStatuses: TrialRunModelStatus[];
++};
++
++function formatRunSignature(config: unknown): string {
++  const runConfig = config as {
++    definitionSnapshot?: {
++      _meta?: { definitionVersion?: unknown };
++      version?: unknown;
++    };
++    temperature?: unknown;
++  } | null;
++  const definitionVersion =
++    parseDefinitionVersion(runConfig?.definitionSnapshot?._meta?.definitionVersion) ??
++    parseDefinitionVersion(runConfig?.definitionSnapshot?.version);
++  const temperature = parseTemperature(runConfig?.temperature);
++  return formatTrialSignature(definitionVersion, temperature);
++}
++
++export function selectDefaultVnewSignature(completedRuns: RunConfigLike[]): string | null {
++  if (completedRuns.length === 0) return null;
++  const temperatureCounts = new Map<string, { temperature: number | null; count: number }>();
++
++  for (const run of completedRuns) {
++    const runConfig = run.config as { temperature?: unknown } | null;
++    const temperature = parseTemperature(runConfig?.temperature);
++    const key = temperature === null ? 'd' : temperature.toString();
++    const existing = temperatureCounts.get(key);
++    if (existing) {
++      existing.count += 1;
++    } else {
++      temperatureCounts.set(key, { temperature, count: 1 });
++    }
++  }
++
++  const winner = Array.from(temperatureCounts.values())
++    .sort((left, right) => {
++      const leftIsZero = left.temperature === 0;
++      const rightIsZero = right.temperature === 0;
++      if (leftIsZero !== rightIsZero) return leftIsZero ? -1 : 1;
++      if (left.count !== right.count) return right.count - left.count;
++      if (left.temperature === null) return 1;
++      if (right.temperature === null) return -1;
++      return left.temperature - right.temperature;
++    })[0];
++
++  if (!winner) return null;
++  return formatVnewSignature(winner.temperature);
++}
++
++export function runMatchesSignature(runConfig: unknown, signature: string): boolean {
++  if (isVnewSignature(signature)) {
++    return parseTemperature((runConfig as { temperature?: unknown } | null)?.temperature) === parseVnewTemperature(signature);
++  }
++  return formatRunSignature(runConfig) === signature;
++}
++
++export function buildAvailableSignatureOptions(completedRuns: RunConfigLike[]): DomainAvailableSignatureOption[] {
++  const exactSignatureSet = new Set<string>();
++  const temperatureCounts = new Map<string, { temperature: number | null; count: number }>();
++
++  for (const run of completedRuns) {
++    exactSignatureSet.add(formatRunSignature(run.config));
++    const runConfig = run.config as { temperature?: unknown } | null;
++    const temperature = parseTemperature(runConfig?.temperature);
++    const key = temperature === null ? 'd' : temperature.toString();
++    const existing = temperatureCounts.get(key);
++    if (existing) {
++      existing.count += 1;
++    } else {
++      temperatureCounts.set(key, { temperature, count: 1 });
++    }
++  }
++
++  const vnewCandidates = Array.from(temperatureCounts.values())
++    .sort((left, right) => {
++      const leftIsZero = left.temperature === 0;
++      const rightIsZero = right.temperature === 0;
++      if (leftIsZero !== rightIsZero) return leftIsZero ? -1 : 1;
++      if (left.count !== right.count) return right.count - left.count;
++      if (left.temperature === null) return 1;
++      if (right.temperature === null) return -1;
++      return left.temperature - right.temperature;
++    });
++
++  const virtualSignatures = vnewCandidates.map((entry) => ({
++    signature: formatVnewSignature(entry.temperature),
++    label: formatVnewLabel(entry.temperature),
++    isVirtual: true,
++    temperature: entry.temperature,
++  }));
++  const exactSignatures = Array.from(exactSignatureSet.values())
++    .sort((left, right) => left.localeCompare(right))
++    .map((signature) => ({
++      signature,
++      label: signature,
++      isVirtual: false,
++      temperature: null,
++    }));
++
++  return [...virtualSignatures, ...exactSignatures];
++}
++
++export function buildExistingBatchCountByDefinitionId(
++  existingRuns: ExistingRunLike[],
++  effectiveScopeCategory: string,
++  temperature: number | null,
++): Map<string, number> {
++  const countableStatuses = new Set(['COMPLETED', 'PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING']);
++  const counts = new Map<string, number>();
++
++  for (const run of existingRuns) {
++    if (!countableStatuses.has(run.status)) continue;
++    if (run.runCategory !== effectiveScopeCategory) continue;
++    const runConfig = run.config as { temperature?: unknown } | null;
++    const runTemperature = parseTemperature(runConfig?.temperature);
++    if (runTemperature !== temperature) continue;
++    const prev = counts.get(run.definitionId) ?? 0;
++    counts.set(run.definitionId, prev + 1);
++  }
++
++  return counts;
++}
++
++export function buildTrialRunStatusRows(
++  runIds: string[],
++  runs: TrialRunRowLike[],
++  probeRows: TrialRunGroupByRowLike[],
++  transcriptRows: TrialRunGroupByRowLike[],
++  summarizedRows: TrialRunGroupByRowLike[],
++  summarizeFailedRows: TrialRunGroupByRowLike[],
++  selectedScenarioCounts: Array<{ runId: string; count: number }>,
++  failedProbeRows: FailedProbeRowLike[],
++  analysisStatusByRunId: Map<string, string | null>,
++): TrialRunStatusRow[] {
++  const probeByKey = new Map<string, { completed: number; failed: number }>();
++  for (const row of probeRows) {
++    const key = `${row.runId}::${row.modelId}`;
++    const existing = probeByKey.get(key) ?? { completed: 0, failed: 0 };
++    if (row.status === 'SUCCESS') {
++      existing.completed = row.count;
++    } else if (row.status === 'FAILED') {
++      existing.failed = row.count;
++    }
++    probeByKey.set(key, existing);
++  }
++
++  const transcriptTotalByKey = new Map<string, number>();
++  for (const row of transcriptRows) {
++    transcriptTotalByKey.set(`${row.runId}::${row.modelId}`, row.count);
++  }
++
++  const summarizedByKey = new Map<string, number>();
++  for (const row of summarizedRows) {
++    summarizedByKey.set(`${row.runId}::${row.modelId}`, row.count);
++  }
++
++  const summarizeFailedByKey = new Map<string, number>();
++  for (const row of summarizeFailedRows) {
++    summarizeFailedByKey.set(`${row.runId}::${row.modelId}`, row.count);
++  }
++
++  const latestErrorByKey = new Map<string, string>();
++  for (const row of failedProbeRows) {
++    const key = `${row.runId}::${row.modelId}`;
++    if (latestErrorByKey.has(key)) continue;
++    const messageParts = [row.errorCode, row.errorMessage].filter(
++      (part): part is string => typeof part === 'string' && part.trim() !== '',
++    );
++    latestErrorByKey.set(key, messageParts.length > 0 ? messageParts.join(' - ') : 'Model probe failed.');
++  }
++
++  const scenarioCountByRun = new Map(selectedScenarioCounts.map((row) => [row.runId, row.count]));
++  const runById = new Map(runs.map((run) => [run.id, run]));
++
++  return runIds
++    .map((runId) => {
++      const run = runById.get(runId);
++      if (run === undefined) return null;
++
++      const runConfig = run.config as { models?: unknown; samplesPerScenario?: unknown } | null;
++      const models = Array.isArray(runConfig?.models)
++        ? runConfig.models.filter((model): model is string => typeof model === 'string')
++        : [];
++      const samplesPerScenario = typeof runConfig?.samplesPerScenario === 'number' && Number.isFinite(runConfig.samplesPerScenario)
++        ? runConfig.samplesPerScenario
++        : 1;
++      const generationTotal = (scenarioCountByRun.get(run.id) ?? 0) * samplesPerScenario;
++
++      const modelStatuses = models.map((modelId) => {
++        const key = `${run.id}::${modelId}`;
++        const probe = probeByKey.get(key) ?? { completed: 0, failed: 0 };
++        const summarizationTotal = transcriptTotalByKey.get(key) ?? 0;
++        return {
++          modelId,
++          generationCompleted: probe.completed,
++          generationFailed: probe.failed,
++          generationTotal,
++          summarizationCompleted: summarizedByKey.get(key) ?? 0,
++          summarizationFailed: summarizeFailedByKey.get(key) ?? 0,
++          summarizationTotal,
++          latestErrorMessage: latestErrorByKey.get(key) ?? null,
++        };
++      });
++
++      return {
++        runId: run.id,
++        definitionId: run.definitionId,
++        status: run.status,
++        updatedAt: run.updatedAt,
++        stalledModels: run.stalledModels ?? [],
++        analysisStatus: analysisStatusByRunId.get(run.id) ?? null,
++        modelStatuses,
++      };
++    })
++    .filter((row): row is TrialRunStatusRow => row !== null);
++}
+
+... [narrowed diff slice: middle omitted] ...
+
+diff --git a/cloud/apps/web/src/components/domains/CoverageMatrix.tsx b/cloud/apps/web/src/components/domains/CoverageMatrix.tsx
+index 7522d746..371bc73b 100644
+--- a/cloud/apps/web/src/components/domains/CoverageMatrix.tsx
++++ b/cloud/apps/web/src/components/domains/CoverageMatrix.tsx
+@@ -1,7 +1,5 @@
+-import { forwardRef, type SVGProps, useEffect, useMemo, useState } from 'react';
+-import { Link } from 'react-router-dom';
++import { forwardRef, useEffect, useMemo, useState } from 'react';
+ import { useQuery } from 'urql';
+-import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
+ import { ErrorMessage } from '../ui/ErrorMessage';
+ import { Loading } from '../ui/Loading';
+ import {
+@@ -17,185 +15,10 @@ import {
+ } from '../../api/operations/domainAnalysis';
+ import { VALUE_LABELS } from './domainAnalysisData';
+ import { formatDisplayLabel } from '../../utils/displayLabels';
+-import { ChevronRight, FileSearch } from 'lucide-react';
+ import { cn } from '../../lib/utils';
+ import { getCanonicalDimension } from '@valuerank/shared';
+-
+-// Render a matrix cell
+-function CoverageCell({
+-  valueA,
+-  valueB,
+-  batchCount,
+-  pairedBatchCount,
+-  definitionId,
+-  aggregateRunId,
+-}: {
+-  valueA: string;
+-  valueB: string;
+-  batchCount: number;
+-  pairedBatchCount: number;
+-  definitionId: string | null;
+-  aggregateRunId: string | null;
+-}) {
+-  const [isOpen, setIsOpen] = useState(false);
+-  const isDiagonal = valueA === valueB;
+-  const hasVignette = definitionId !== null;
+-  const displayCount = pairedBatchCount > 0 ? pairedBatchCount : batchCount;
+-  const visibleLabel = isDiagonal || !hasVignette ? '—' : displayCount.toLocaleString();
+-  const xLabel = VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB;
+-  const yLabel = VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA;
+-  const batchLabel = pairedBatchCount > 0
+-    ? (displayCount === 1 ? 'paired batch' : 'paired batches')
+-    : (displayCount === 1 ? 'batch' : 'batches');
+-
+-  let bgColorClass = 'bg-gray-50';
+-  if (isDiagonal) {
+-    bgColorClass =
+-      'bg-[url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxwYXRoIGQ9Ik0wLDggTDgsMCBMMCw4IFoiIHN0cm9rZT0iI2U1ZTdlYiIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9zdmc+")] bg-gray-100';
+-  } else if (!hasVignette) {
+-    bgColorClass = 'bg-gray-50';
+-  } else if (displayCount < 3) {
+-    bgColorClass = 'bg-rose-100 hover:bg-rose-200 transition-colors text-rose-900';
+-  } else if (displayCount < 10) {
+-    bgColorClass = 'bg-amber-100 hover:bg-amber-200 transition-colors text-amber-900';
+-  } else {
+-    bgColorClass = 'bg-emerald-500 hover:bg-emerald-600 transition-colors text-white';
+-  }
+-
+-  return (
+-    <Popover open={isOpen} onOpenChange={setIsOpen}>
+-      <PopoverTrigger asChild>
+-        {/* eslint-disable-next-line react/forbid-elements */}
+-        <button
+-          type="button"
+-          disabled={isDiagonal}
+-          aria-label={
+-            isDiagonal
+-              ? 'Not applicable'
+-              : !hasVignette
+-                ? `${xLabel} versus ${yLabel}: no vignette`
+-                : `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}`
+-          }
+-          className={cn(
+-            'w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border border-gray-100 rounded-none focus:ring-0 focus:ring-offset-0',
+-            bgColorClass,
+-            isDiagonal && 'cursor-not-allowed text-transparent font-normal',
+-            !isDiagonal && !hasVignette && 'text-gray-500 cursor-pointer hover:bg-gray-100',
+-            hasVignette && displayCount < 3 && 'text-rose-900',
+-            hasVignette && displayCount >= 3 && displayCount < 10 && 'text-amber-900'
+-          )}
+-        >
+-          {visibleLabel}
+-        </button>
+-      </PopoverTrigger>
+-      {!isDiagonal && (
+-        <PopoverContent
+-          className="w-64 p-0 shadow-lg border-gray-200"
+-          align="center"
+-          sideOffset={5}
+-        >
+-          <div className="p-3 border-b border-gray-100 bg-gray-50/50 rounded-t-md">
+-            {hasVignette ? (
+-              <div className="mt-2 text-xs text-gray-600 flex items-center">
+-                <span
+-                  className={cn(
+-                    'inline-block w-2 h-2 rounded-full mr-1.5',
+-                    displayCount < 3
+-                      ? 'bg-rose-500'
+-                      : displayCount < 10
+-                        ? 'bg-amber-500'
+-                        : 'bg-emerald-500'
+-                  )}
+-                />
+-                {displayCount} {batchLabel}
+-              </div>
+-            ) : (
+-              <div className="mt-2 text-xs text-gray-500">No batch for this value pair</div>
+-            )}
+-          </div>
+-
+-          <div className="p-1 flex flex-col">
+-            {hasVignette && aggregateRunId !== null && (
+-              <Link
+-                to={`/analysis/${aggregateRunId}?tab=overview&mode=single&coverageBatchCount=${batchCount}&coveragePairedBatchCount=${pairedBatchCount}`}
+-                className="flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-sm w-full text-left"
+-                onClick={() => setIsOpen(false)}
+-              >
+-                <span className="flex items-center">
+-                  <FileSearch className="w-4 h-4 mr-2 text-gray-400" />
+-                  View Vignette Analysis
+-                </span>
+-                <ChevronRight className="w-4 h-4 text-gray-400" />
+-              </Link>
+-            )}
+-
+-            {hasVignette && (
+-              <Link
+-                to={`/definitions/${definitionId}/start-paired-batch`}
+-                state={{
+-                  returnLabel: 'Back to Value coverage',
+-                  returnTo: `${window.location.pathname}${window.location.search}`,
+-                }}
+-                className="flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-sm w-full text-left"
+-                onClick={() => setIsOpen(false)}
+-              >
+-                <span className="flex items-center">
+-                  <PlayIcon className="w-4 h-4 mr-2 text-teal-600" />
+-                  Start Paired Batch
+-                </span>
+-                <ChevronRight className="w-4 h-4 text-gray-400" />
+-              </Link>
+-            )}
+-          </div>
+-        </PopoverContent>
+-      )}
+-    </Popover>
+-  );
+-}
+-
+-function PlayIcon(props: SVGProps<SVGSVGElement>) {
+-  return (
+-    <svg
+-      xmlns="http://www.w3.org/2000/svg"
+-      viewBox="0 0 24 24"
+-      fill="none"
+-      stroke="currentColor"
+-      strokeWidth="2"
+-      strokeLinecap="round"
+-      strokeLinejoin="round"
+-      {...props}
+-    >
+-      <polygon points="6 3 20 12 6 21 6 3" />
+-    </svg>
+-  );
+-}
+-
+-function parseSignatureVersion(signature: string): number | null {
+-  const match = signature.match(/^v(\d+)/i);
+-  if (!match) return null;
+-  const version = Number.parseInt(match[1] ?? '', 10);
+-  return Number.isFinite(version) ? version : null;
+-}
+-
+-function selectPreferredSignature(options: DomainAvailableSignature[]): string {
+-  // Virtual signatures ("Latest @ X") always beat exact versioned ones.
+-  // Among virtuals, prefer default temperature (vnewtd) then temp-zero (vnewt0).
+-  const virtualDefault = options.find((o) => o.isVirtual && o.signature === 'vnewtd');
+-  if (virtualDefault) return virtualDefault.signature;
+-  const virtualT0 = options.find((o) => o.isVirtual && o.signature === 'vnewt0');
+-  if (virtualT0) return virtualT0.signature;
+-  const anyVirtual = options.find((o) => o.isVirtual);
+-  if (anyVirtual) return anyVirtual.signature;
+-
+-  // Fall back to highest-version exact signature
+-  const sorted = [...options].sort((left, right) => {
+-    const leftVersion = parseSignatureVersion(left.signature) ?? -1;
+-    const rightVersion = parseSignatureVersion(right.signature) ?? -1;
+-    if (leftVersion !== rightVersion) return rightVersion - leftVersion;
+-    return right.signature.localeCompare(left.signature);
+-  });
+-  return sorted[0]?.signature ?? '';
+-}
++import { CoverageCell } from './CoverageCell';
++import { selectPreferredSignature } from './coverageMatrixHelpers';
+ 
+ type CategoryGroup = {
+   name: string;
+diff --git a/cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts b/cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts
+new file mode 100644
+index 00000000..7a0f8fff
+--- /dev/null
++++ b/cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts
+@@ -0,0 +1,28 @@
++import type { DomainAvailableSignature } from '../../api/operations/domainAnalysis';
++
++export function parseSignatureVersion(signature: string): number | null {
++  const match = signature.match(/^v(\d+)/i);
++  if (!match) return null;
++  const version = Number.parseInt(match[1] ?? '', 10);
++  return Number.isFinite(version) ? version : null;
++}
++
++export function selectPreferredSignature(options: DomainAvailableSignature[]): string {
++  // Virtual signatures ("Latest @ X") always beat exact versioned ones.
++  // Among virtuals, prefer default temperature (vnewtd) then temp-zero (vnewt0).
++  const virtualDefault = options.find((o) => o.isVirtual && o.signature === 'vnewtd');
++  if (virtualDefault) return virtualDefault.signature;
++  const virtualT0 = options.find((o) => o.isVirtual && o.signature === 'vnewt0');
++  if (virtualT0) return virtualT0.signature;
++  const anyVirtual = options.find((o) => o.isVirtual);
++  if (anyVirtual) return anyVirtual.signature;
++
++  // Fall back to highest-version exact signature
++  const sorted = [...options].sort((left, right) => {
++    const leftVersion = parseSignatureVersion(left.signature) ?? -1;
++    const rightVersion = parseSignatureVersion(right.signature) ?? -1;
++    if (leftVersion !== rightVersion) return rightVersion - leftVersion;
++    return right.signature.localeCompare(left.signature);
++  });
++  return sorted[0]?.signature ?? '';
++}
+diff --git a/cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.helpers.ts b/cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.helpers.ts
+new file mode 100644
+index 00000000..34abc457
+--- /dev/null
++++ b/cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.helpers.ts
+@@ -0,0 +1,66 @@
++import { getBatchRuntimeState } from './launch-state';
++import { formatProgressSummary } from './launch-state';
++
++export type StatusPanelRow = {
++  status: string;
++  analysisStatus: string | null;
++  updatedAt: string | null;
++  stalledModels: string[];
++  modelStatuses: Array<{
++    generationCompleted: number;
++    generationFailed: number;
++    generationTotal: number;
++    summarizationCompleted: number;
++    summarizationFailed: number;
++    summarizationTotal: number;
++  }>;
++};
++
++export function formatTimestamp(value: string | null | undefined): string {
++  if (!value) return 'Unknown';
++  const date = new Date(value);
++  return Number.isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString();
++}
++
++export function getPrimaryProgressText(row: StatusPanelRow): string {
++  if (row.status === 'SUMMARIZING') {
++    return `${formatProgressSummary(row.modelStatuses, 'summarization')} summarized`;
++  }
++  if (row.analysisStatus === 'pending' || row.analysisStatus === 'computing') {
++    return 'Analysis queued';
++  }
++  if (row.status === 'FAILED' || row.status === 'CANCELLED') {
++    return row.stalledModels.length > 0
++      ? `Stalled models: ${row.stalledModels.join(', ')}`
++      : 'Batch failed';
++  }
++  if (row.status === 'COMPLETED') {
++    return row.analysisStatus === 'completed' ? 'Analysis complete' : 'Completed, awaiting analysis';
++  }
++  return `${formatProgressSummary(row.modelStatuses, 'generation')} generated`;
++}
++
++export function getProgressPercent(row: StatusPanelRow): number {
++  if (row.modelStatuses.length === 0) return 0;
++  if (row.status === 'SUMMARIZING' || row.status === 'COMPLETED') {
++    const completed = row.modelStatuses.reduce(
++      (sum, model) => sum + model.summarizationCompleted + model.summarizationFailed,
++      0,
++    );
++    const total = row.modelStatuses.reduce((sum, model) => sum + model.summarizationTotal, 0);
++    return total > 0 ? Math.min(100, (completed / total) * 100) : 0;
++  }
++  const completed = row.modelStatuses.reduce(
++    (sum, model) => sum + model.generationCompleted + model.generationFailed,
++    0,
++  );
++  const total = row.modelStatuses.reduce((sum, model) => sum + model.generationTotal, 0);
++  return total > 0 ? Math.min(100, (completed / total) * 100) : 0;
++}
++
++export function getProgressBarTone(row: StatusPanelRow): string {
++  const runtime = getBatchRuntimeState(row);
++  if (runtime === 'EXCEPTION') return 'bg-red-500';
++  if (runtime === 'LIVE') return 'bg-teal-500';
++  return 'bg-gray-300';
++}
+diff --git a/cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx b/cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx
+index 4d3bf936..6e3e3a35 100644
+--- a/cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx
++++ b/cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx
+@@ -1,10 +1,12 @@
+ import { ChevronRight, Clock3, Loader2, AlertTriangle } from 'lucide-react';
+ import { Badge } from '../../ui/Badge';
++import { getBatchRuntimeState, getBatchStageLabel } from './launch-state';
+ import {
+-  getBatchRuntimeState,
+-  getBatchStageLabel,
+-  formatProgressSummary,
+-} from './launch-state';
++  formatTimestamp,
++  getPrimaryProgressText,
++  getProgressBarTone,
++  getProgressPercent,
++} from './DomainEvaluationStatusPanel.helpers';
+ import type {
+   DomainEvaluation,
+   DomainEvaluationMember,
+@@ -37,55 +39,6 @@ type RowView = {
+   modelStatuses: RunStatusRow['modelStatuses'];
+ };
+ 
+-function formatTimestamp(value: string | null | undefined): string {
+-  if (!value) return 'Unknown';
+-  const date = new Date(value);
+-  return Number.isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString();
+-}
+-
+-function getPrimaryProgressText(row: RowView): string {
+-  if (row.status === 'SUMMARIZING') {
+-    return `${formatProgressSummary(row.modelStatuses, 'summarization')} summarized`;
+-  }
+-  if (row.analysisStatus === 'pending' || row.analysisStatus === 'computing') {
+-    return 'Analysis queued';
+-  }
+-  if (row.status === 'FAILED' || row.status === 'CANCELLED') {
+-    return row.stalledModels.length > 0
+-      ? `Stalled models: ${row.stalledModels.join(', ')}`
+-      : 'Batch failed';
+-  }
+-  if (row.status === 'COMPLETED') {
+-    return row.analysisStatus === 'completed' ? 'Analysis complete' : 'Completed, awaiting analysis';
+-  }
+-  return `${formatProgressSummary(row.modelStatuses, 'generation')} generated`;
+-}
+-
+-function getProgressPercent(row: RowView): number {
+-  if (row.modelStatuses.length === 0) return 0;
+-  if (row.status === 'SUMMARIZING' || row.status === 'COMPLETED') {
+-    const completed = row.modelStatuses.reduce(
+-      (sum, model) => sum + model.summarizationCompleted + model.summarizationFailed,
+-      0,
+-    );
+-    const total = row.modelStatuses.reduce((sum, model) => sum + model.summarizationTotal, 0);
+-    return total > 0 ? Math.min(100, (completed / total) * 100) : 0;
+-  }
+-  const completed = row.modelStatuses.reduce(
+-    (sum, model) => sum + model.generationCompleted + model.generationFailed,
+-    0,
+-  );
+-  const total = row.modelStatuses.reduce((sum, model) => sum + model.generationTotal, 0);
+-  return total > 0 ? Math.min(100, (completed / total) * 100) : 0;
+-}
+-
+-function getProgressBarTone(row: RowView): string {
+-  const runtime = getBatchRuntimeState(row);
+-  if (runtime === 'EXCEPTION') return 'bg-red-500';
+-  if (runtime === 'LIVE') return 'bg-teal-500';
+-  return 'bg-gray-300';
+-}
+-
+ export function DomainEvaluationStatusPanel({
+   domainName,
+   evaluation,
+diff --git a/cloud/package.json b/cloud/package.json
+index eb4bcabb..2844a9c8 100644
+--- a/cloud/package.json
++++ b/cloud/package.json
+@@ -21,6 +21,7 @@
+     "db:test:setup": "DATABASE_URL=postgresql://valuerank:valuerank@localhost:5433/valuerank_test DIRECT_URL=postgresql://valuerank:valuerank@localhost:5433/valuerank_test npx prisma db push --schema=packages/db/prisma/schema.prisma --skip-generate",
+     "db:test:reset": "DATABASE_URL=postgresql://valuerank:valuerank@localhost:5433/valuerank_test DIRECT_URL=postgresql://valuerank:valuerank@localhost:5433/valuerank_test npx prisma db push --schema=packages/db/prisma/schema.prisma --force-reset --skip-generate",
+     "audit:domain-coverage": "tsx scripts/audit-domain-coverage.ts",
++    "audit:domain-coverage-completeness": "tsx scripts/audit-domain-coverage-completeness.ts",
+     "clean": "turbo clean && rm -rf node_modules"
+   },
+   "devDependencies": {
+diff --git a/cloud/scripts/audit-domain-coverage-completeness.ts b/cloud/scripts/audit-domain-coverage-completeness.ts
+new file mode 100644
+index 00000000..c635e5ee
+--- /dev/null
++++ b/cloud/scripts/audit-domain-coverage-completeness.ts
+@@ -0,0 +1,254 @@
++#!/usr/bin/env tsx
++/**
++ * Read-only audit for runs that are processing-complete but coverage-incomplete.
++ *
++ * Usage:
++ *   npm run audit:domain-coverage-completeness
++ *   npm run audit:domain-coverage-completeness -- --limit 25
++ *   npx tsx scripts/audit-domain-coverage-completeness.ts --help
++ */
++
++import process from 'node:process';
++import { pathToFileURL } from 'node:url';
++import { db } from '../packages/db/src/index.js';
++import {
++  findMissingTranscriptKeys,
++  normalizeSamplesPerScenario,
++  type TranscriptKey,
++} from '../apps/api/src/services/run/coverage-completeness.js';
++
++type CliOptions = {
++  help: boolean;
++  limit: number | null;
++};
++
++type AuditRun = {
++  id: string;
++  definitionId: string;
++  createdAt: Date;
++  config: unknown;
++  definition: {
++    name: string;
++    version: number;
++  };
++  scenarioSelections: Array<{ scenarioId: string }>;
++  transcripts: Array<{
++    scenarioId: string | null;
++    modelId: string;
++    sampleIndex: number;
++  }>;
++};
++
++type CoverageState = 'COMPLETE' | 'INCOMPLETE' | 'LEGACY_UNAVAILABLE' | 'EMPTY_EXPECTATION';
++
++type AuditRow = {
++  runId: string;
++  definitionId: string;
++  definitionName: string;
++  definitionVersion: number;
++  createdAt: string;
++  coverageState: CoverageState;
++  expectedKeyCount: number;
++  presentKeyCount: number;
++  missingKeyCount: number;
++  duplicateKeyCount: number;
++  missingModelIds: string[];
++};
++
++function parseArgs(): CliOptions {
++  const args = process.argv.slice(2);
++  const options: CliOptions = {
++    help: false,
++    limit: null,
++  };
++
++  for (let index = 0; index < args.length; index += 1) {
++    const arg = args[index];
++    if (arg === '--help' || arg === '-h') {
++      options.help = true;
++      continue;
++    }
++    if (arg === '--limit') {
++      const raw = args[index + 1];
++      if (raw === undefined) {
++        throw new Error('--limit requires a value');
++      }
++      const parsed = Number(raw);
++      if (!Number.isInteger(parsed) || parsed < 0) {
++        throw new Error('--limit must be a non-negative integer');
++      }
++      options.limit = parsed;
++      index += 1;
++    }
++  }
++
++  return options;
++}
++
++function printUsage(): void {
++  console.log(
++    [
++      'Usage: npm run audit:domain-coverage-completeness -- [--limit N]',
++      '',
++      'Prints runs that are processing-complete but coverage-incomplete.',
++      'The output is read-only and safe to inspect before any repair work.',
++    ].join('\n'),
++  );
++}
++
++function toTranscriptKey(transcript: {
++  scenarioId: string | null;
++  modelId: string;
++  sampleIndex: number;
++}): TranscriptKey | null {
++  if (transcript.scenarioId === null) return null;
++  return {
++    scenarioId: transcript.scenarioId,
++    modelId: transcript.modelId,
++    sampleIndex: transcript.sampleIndex,
++  };
++}
++
++function summarizeRun(run: AuditRun): AuditRow {
++  const runConfig = run.config as { models?: unknown; samplesPerScenario?: unknown } | null;
++  const scenarioIds = run.scenarioSelections.map((selection) => selection.scenarioId);
++  const models = Array.isArray(runConfig?.models)
++    ? runConfig.models.filter((value): value is string => typeof value === 'string')
++    : [];
++  const samplesPerScenario = normalizeSamplesPerScenario(runConfig?.samplesPerScenario);
++
++  const presentTranscripts = run.transcripts
++    .map(toTranscriptKey)
++    .filter((transcript): transcript is TranscriptKey => transcript !== null);
++  const presentKeySet = new Set(
++    presentTranscripts.map((key) => `${key.scenarioId}:${key.modelId}:${key.sampleIndex}`),
++  );
++
++  const expectedKeyCount = scenarioIds.length * models.length * samplesPerScenario;
++  const presentKeyCount = presentKeySet.size;
++  const missingKeys = scenarioIds.length === 0 || models.length === 0
++    ? []
++    : findMissingTranscriptKeys({
++      scenarioIds,
++      models,
++      samplesPerScenario,
++      existingTranscripts: presentTranscripts,
++    });
++
++  const missingKeyCount = missingKeys.length;
++  const duplicateKeyCount = run.transcripts.length - presentKeyCount;
++  const missingModelIds = Array.from(new Set(missingKeys.map((key) => key.modelId))).sort();
++
++  let coverageState: CoverageState;
++  if (scenarioIds.length === 0) {
++    coverageState = 'LEGACY_UNAVAILABLE';
++  } else if (expectedKeyCount === 0) {
++    coverageState = 'EMPTY_EXPECTATION';
++  } else if (missingKeyCount > 0) {
++    coverageState = 'INCOMPLETE';
++  } else {
++    coverageState = 'COMPLETE';
++  }
++
++  return {
++    runId: run.id,
++    definitionId: run.definitionId,
++    definitionName: run.definition.name,
++    definitionVersion: run.definition.version,
++    createdAt: run.createdAt.toISOString(),
++    coverageState,
++    expectedKeyCount,
++    presentKeyCount,
++    missingKeyCount,
++    duplicateKeyCount,
++    missingModelIds,
++  };
++}
++
++function formatRow(row: AuditRow): string {
++  return JSON.stringify(row);
++}
++
++async function main(): Promise<void> {
++  const { help, limit } = parseArgs();
++  if (help) {
++    printUsage();
++    return;
++  }
++
++  const runs = await db.run.findMany({
++    where: {
++      status: 'COMPLETED',
++      deletedAt: null,
++    },
++    orderBy: [
++      { definitionId: 'asc' },
++      { createdAt: 'asc' },
++    ],
++    select: {
++      id: true,
++      definitionId: true,
++      createdAt: true,
++      config: true,
++      definition: {
++        select: {
++          name: true,
++          version: true,
++        },
++      },
++      scenarioSelections: {
++        select: {
++          scenarioId: true,
++        },
++      },
++      transcripts: {
++        where: {
++          deletedAt: null,
++        },
++        select: {
++          scenarioId: true,
++          modelId: true,
++          sampleIndex: true,
++        },
++      },
++    },
++  });
++
++  const auditRows = runs
++    .map(summarizeRun)
++    .filter((row) => row.coverageState !== 'COMPLETE');
++
++  console.log('# Domain Coverage Completeness Audit');
++  console.log(`Completed runs scanned: ${runs.length}`);
++  console.log(`Coverage-complete runs: ${runs.length - auditRows.length}`);
++  console.log(`Coverage-incomplete runs: ${auditRows.length}`);
++
++  const stateCounts = new Map<CoverageState, number>();
++  for (const row of auditRows) {
++    stateCounts.set(row.coverageState, (stateCounts.get(row.coverageState) ?? 0) + 1);
++  }
++  console.log(`Legacy-unavailable runs: ${stateCounts.get('LEGACY_UNAVAILABLE') ?? 0}`);
++  console.log(`Empty-expectation runs: ${stateCounts.get('EMPTY_EXPECTATION') ?? 0}`);
++  console.log('');
++
++  if (auditRows.length === 0) {
++    console.log('No coverage-incomplete completed runs found.');
++    return;
++  }
++
++  const visibleRows = limit === null ? auditRows : auditRows.slice(0, limit);
++  for (const row of visibleRows) {
++    console.log(formatRow(row));
++  }
++
++  if (limit !== null && auditRows.length > limit) {
++    console.log(`... truncated ${auditRows.length - limit} additional row(s)`);
++  }
++}
++
++if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
++  main().catch((error: unknown) => {
++    console.error(error);
++    process.exit(1);
++  });
++}
+diff --git a/cloud/scripts/tsconfig.json b/cloud/scripts/tsconfig.json
+new file mode 100644
+index 00000000..d627b6b1
+--- /dev/null
++++ b/cloud/scripts/tsconfig.json
+@@ -0,0 +1,9 @@
++{
++  "extends": "../tsconfig.base.json",
++  "compilerOptions": {
++    "skipLibCheck": true
++  },
++  "include": [
++    "*.ts"
++  ]
++}

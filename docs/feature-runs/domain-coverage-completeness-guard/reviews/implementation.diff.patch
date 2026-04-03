@@ -1,0 +1,13 @@
+diff --git a/cloud/apps/api/src/services/run/coverage-completeness.ts b/cloud/apps/api/src/services/run/coverage-completeness.ts
+index a6cd974a..dc7a7eeb 100644
+--- a/cloud/apps/api/src/services/run/coverage-completeness.ts
++++ b/cloud/apps/api/src/services/run/coverage-completeness.ts
+@@ -11,7 +11,7 @@ export type TranscriptExpectation = {
+ };
+ 
+ function transcriptKeyToString({ scenarioId, modelId, sampleIndex }: TranscriptKey): string {
+-  return JSON.stringify([scenarioId, modelId, sampleIndex]);
++  return JSON.stringify({ scenarioId, modelId, sampleIndex });
+ }
+ 
+ export function normalizeSamplesPerScenario(samplesPerScenario: unknown): number {
