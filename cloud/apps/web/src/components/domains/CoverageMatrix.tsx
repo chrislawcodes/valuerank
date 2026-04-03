@@ -54,9 +54,9 @@ function CoverageCell({
       'bg-[url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxwYXRoIGQ9Ik0wLDggTDgsMCBMMCw4IFoiIHN0cm9rZT0iI2U1ZTdlYiIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9zdmc+")] bg-gray-100';
   } else if (!hasVignette) {
     bgColorClass = 'bg-gray-50';
-  } else if (batchCount < 3) {
+  } else if (displayCount < 3) {
     bgColorClass = 'bg-rose-100 hover:bg-rose-200 transition-colors text-rose-900';
-  } else if (batchCount < 10) {
+  } else if (displayCount < 10) {
     bgColorClass = 'bg-amber-100 hover:bg-amber-200 transition-colors text-amber-900';
   } else {
     bgColorClass = 'bg-emerald-500 hover:bg-emerald-600 transition-colors text-white';
@@ -81,8 +81,8 @@ function CoverageCell({
             bgColorClass,
             isDiagonal && 'cursor-not-allowed text-transparent font-normal',
             !isDiagonal && !hasVignette && 'text-gray-500 cursor-pointer hover:bg-gray-100',
-            hasVignette && batchCount < 3 && 'text-rose-900',
-            hasVignette && batchCount >= 3 && batchCount < 10 && 'text-amber-900'
+            hasVignette && displayCount < 3 && 'text-rose-900',
+            hasVignette && displayCount >= 3 && displayCount < 10 && 'text-amber-900'
           )}
         >
           {visibleLabel}
@@ -100,9 +100,9 @@ function CoverageCell({
                 <span
                   className={cn(
                     'inline-block w-2 h-2 rounded-full mr-1.5',
-                    batchCount < 3
+                    displayCount < 3
                       ? 'bg-rose-500'
-                      : batchCount < 10
+                      : displayCount < 10
                         ? 'bg-amber-500'
                         : 'bg-emerald-500'
                   )}
