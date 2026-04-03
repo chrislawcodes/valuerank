@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "vite --port 3030",
     "build": "tsc && vite build",
+    "codegen": "graphql-codegen --config codegen.ts",
     "preview": "vite preview",
     "lint": "eslint src --ext .ts,.tsx",
     "lint:fix": "eslint src --ext .ts,.tsx --fix",
+    "verify": "npm run codegen && git diff --exit-code -- src/generated/graphql.ts && npm run lint && npm run test && npm run build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -35,6 +37,11 @@
     "urql": "^4.0.0"
   },
   "devDependencies": {
+    "@graphql-codegen/cli": "^6.2.1",
+    "@graphql-codegen/client-preset": "^5.2.4",
+    "@graphql-codegen/typescript": "^5.0.9",
+    "@graphql-codegen/typescript-operations": "^5.0.9",
+    "@graphql-codegen/typescript-urql": "^5.0.0",
     "@testing-library/jest-dom": "^6.1.0",
     "@testing-library/react": "^14.1.0",
     "@testing-library/user-event": "^14.5.0",
@@ -43,6 +50,7 @@
     "@vitejs/plugin-react": "^4.2.1",
     "@vitest/coverage-v8": "^1.1.0",
     "autoprefixer": "^10.4.16",
+    "graphql-tag": "^2.12.6",
     "jsdom": "^23.0.0",
     "postcss": "^8.4.32",
     "tailwindcss": "^3.3.6",

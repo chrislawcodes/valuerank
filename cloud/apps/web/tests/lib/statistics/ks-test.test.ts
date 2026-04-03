@@ -39,7 +39,7 @@ describe('ksStatistic', () => {
     });
   });
 
-  describe('decision distributions (1-5 scale)', () => {
+  describe('decision distributions (semantic buckets)', () => {
     it('detects shift toward higher decisions', () => {
       // Run 1: centered around 2-3
       const sample1 = [1, 2, 2, 2, 3, 3, 3, 3, 4];
@@ -111,9 +111,9 @@ describe('ksStatistic', () => {
 describe('ksFromCounts', () => {
   it('calculates KS from decision count records', () => {
     // Run 1: mostly 2s and 3s
-    const counts1 = { 1: 5, 2: 30, 3: 40, 4: 20, 5: 5 };
+    const counts1 = { opponentStrongly: 5, opponentSomewhat: 30, neutral: 40, somewhat: 20, strongly: 5 };
     // Run 2: mostly 4s and 5s
-    const counts2 = { 1: 5, 2: 10, 3: 20, 4: 40, 5: 25 };
+    const counts2 = { opponentStrongly: 5, opponentSomewhat: 10, neutral: 20, somewhat: 40, strongly: 25 };
 
     const result = ksFromCounts(counts1, counts2);
 
@@ -123,7 +123,7 @@ describe('ksFromCounts', () => {
   });
 
   it('handles identical count distributions', () => {
-    const counts = { 1: 10, 2: 20, 3: 40, 4: 20, 5: 10 };
+    const counts = { opponentStrongly: 10, opponentSomewhat: 20, neutral: 40, somewhat: 20, strongly: 10 };
 
     const result = ksFromCounts(counts, counts);
 
@@ -132,7 +132,7 @@ describe('ksFromCounts', () => {
   });
 
   it('handles empty counts', () => {
-    const result = ksFromCounts({}, { 3: 10 });
+    const result = ksFromCounts({}, { neutral: 10 });
 
     expect(result.statistic).toBe(1);
     expect(result.interpretation).toBe('very_different');

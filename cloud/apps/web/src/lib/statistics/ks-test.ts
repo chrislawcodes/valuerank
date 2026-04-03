@@ -121,7 +121,7 @@ export function interpretKS(statistic: number): KSInterpretation {
 /**
  * Calculate KS statistic from count arrays (e.g., decision distributions).
  *
- * This is useful when you have counts per decision value (1-5)
+ * This is useful when you have counts per semantic decision bucket
  * rather than raw sample arrays.
  *
  * @param counts1 - Record of value -> count for first distribution
@@ -129,8 +129,8 @@ export function interpretKS(statistic: number): KSInterpretation {
  * @returns KS statistic and interpretation
  */
 export function ksFromCounts(
-  counts1: Record<number, number>,
-  counts2: Record<number, number>
+  counts1: Record<string, number>,
+  counts2: Record<string, number>
 ): KSResult {
   // Convert counts to samples
   const sample1 = countsToSample(counts1);
@@ -142,10 +142,30 @@ export function ksFromCounts(
 /**
  * Convert a counts record to an array of values.
  */
-function countsToSample(counts: Record<number, number>): number[] {
+function countsToSample(counts: Record<string, number>): number[] {
   const sample: number[] = [];
+  const bucketScoreByKey: Record<string, number> = {
+    opponentStrongly: 1,
+    opponentSomewhat: 2,
+    neutral: 3,
+    somewhat: 4,
+    strongly: 5,
+    1: 1,
+    2: 2,
+    3: 3,
+    4: 4,
+    5: 5,
+  };
   for (const [value, count] of Object.entries(counts)) {
-    const numValue = Number(value);
+    if (!Number.isFinite(count) || count <= 0) {
+      continue;
+    }
+
+    const numValue = bucketScoreByKey[value] ?? Number(value);
+    if (!Number.isFinite(numValue)) {
+      continue;
+    }
+
     for (let i = 0; i < count; i++) {
       sample.push(numValue);
     }

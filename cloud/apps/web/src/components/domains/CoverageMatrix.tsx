@@ -26,22 +26,27 @@ function CoverageCell({
   valueA,
   valueB,
   batchCount,
+  pairedBatchCount,
   definitionId,
   aggregateRunId,
 }: {
   valueA: string;
   valueB: string;
   batchCount: number;
+  pairedBatchCount: number;
   definitionId: string | null;
   aggregateRunId: string | null;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const isDiagonal = valueA === valueB;
   const hasVignette = definitionId !== null;
-  const visibleLabel = isDiagonal || !hasVignette ? '—' : batchCount.toLocaleString();
+  const displayCount = pairedBatchCount > 0 ? pairedBatchCount : batchCount;
+  const visibleLabel = isDiagonal || !hasVignette ? '—' : displayCount.toLocaleString();
   const xLabel = VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB;
   const yLabel = VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA;
-  const batchLabel = batchCount === 1 ? 'batch' : 'batches';
+  const batchLabel = pairedBatchCount > 0
+    ? (displayCount === 1 ? 'paired batch' : 'paired batches')
+    : (displayCount === 1 ? 'batch' : 'batches');
 
   let bgColorClass = 'bg-gray-50';
   if (isDiagonal) {
@@ -69,7 +74,7 @@ function CoverageCell({
               ? 'Not applicable'
               : !hasVignette
                 ? `${xLabel} versus ${yLabel}: no vignette`
-                : `${xLabel} versus ${yLabel}: ${batchCount} ${batchLabel}`
+                : `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}`
           }
           className={cn(
             'w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border border-gray-100 rounded-none focus:ring-0 focus:ring-offset-0',
@@ -102,7 +107,7 @@ function CoverageCell({
                         : 'bg-emerald-500'
                   )}
                 />
-                {batchCount} {batchLabel}
+                {displayCount} {batchLabel}
               </div>
             ) : (
               <div className="mt-2 text-xs text-gray-500">No batch for this value pair</div>
@@ -112,7 +117,7 @@ function CoverageCell({
           <div className="p-1 flex flex-col">
             {hasVignette && aggregateRunId !== null && (
               <Link
-                to={`/analysis/${aggregateRunId}`}
+                to={`/analysis/${aggregateRunId}?tab=overview&mode=single&coverageBatchCount=${batchCount}&coveragePairedBatchCount=${pairedBatchCount}`}
                 className="flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-sm w-full text-left"
                 onClick={() => setIsOpen(false)}
               >
@@ -463,6 +468,7 @@ export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
                             valueA={rowVal}
                             valueB={colVal}
                             batchCount={cell?.batchCount ?? 0}
+                            pairedBatchCount={cell?.pairedBatchCount ?? 0}
                             definitionId={cell?.definitionId ?? null}
                             aggregateRunId={cell?.aggregateRunId ?? null}
                           />

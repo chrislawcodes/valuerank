@@ -16,13 +16,14 @@ import {
   COVERAGE_VALUE_KEYS,
   type CoverageValueKey,
   extractValuePair,
-  selectPrimaryDefinitionCount,
+  selectPrimaryDefinitionCounts,
 } from './domain-coverage-utils.js';
 
 type DomainValueCoverageCell = {
   valueA: string;
   valueB: string;
   batchCount: number;
+  pairedBatchCount: number;
   definitionId: string | null;
   definitionName: string | null;
   aggregateRunId: string | null;
@@ -56,6 +57,7 @@ const DomainValueCoverageCellRef = builder
       valueA: t.exposeString('valueA'),
       valueB: t.exposeString('valueB'),
       batchCount: t.exposeInt('batchCount'),
+      pairedBatchCount: t.exposeInt('pairedBatchCount'),
       definitionId: t.exposeString('definitionId', { nullable: true }),
       definitionName: t.exposeString('definitionName', { nullable: true }),
       aggregateRunId: t.exposeString('aggregateRunId', { nullable: true }),
@@ -185,6 +187,9 @@ builder.queryField('domainValueCoverage', (t) =>
       // Count completed runs per definition, optionally filtered by signature and model
       const definitionIds = Array.from(pairByDefinitionId.keys());
       const batchCountByDefinitionId = new Map<string, number>();
+      const pairedBatchCountByDefinitionId = new Map<string, number>();
+      const pairedBatchGroupIdsByDefinitionId = new Map<string, Set<string>>();
+      const pairedBatchIncrementsByGroupId = new Map<string, Map<string, number>>();
       const latestMatchingRunIdByDefinitionId = new Map<string, string>();
       const latestAggregateRunIdByDefinitionId = new Map<string, string>();
       const signatureScopedRunsByDefinitionId = new Map<string, Array<{
@@ -246,6 +251,41 @@ builder.queryField('domainValueCoverage', (t) =>
             run.definitionId,
             (batchCountByDefinitionId.get(run.definitionId) ?? 0) + increment,
           );
+
+          const pairedBatchGroupId = (() => {
+            const runConfig = run.config as {
+              jobChoiceBatchGroupId?: unknown;
+              pairedBatchGroupId?: unknown;
+            } | null;
+            const raw = typeof runConfig?.jobChoiceBatchGroupId === 'string'
+              ? runConfig.jobChoiceBatchGroupId
+              : typeof runConfig?.pairedBatchGroupId === 'string'
+                ? runConfig.pairedBatchGroupId
+                : null;
+            return raw != null && raw.trim().length > 0 ? raw.trim() : null;
+          })();
+
+          if (pairedBatchGroupId === null) {
+            pairedBatchCountByDefinitionId.set(
+              run.definitionId,
+              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + increment,
+            );
+            continue;
+          }
+
+          const seenGroupIds = pairedBatchGroupIdsByDefinitionId.get(run.definitionId) ?? new Set<string>();
+          if (!seenGroupIds.has(pairedBatchGroupId)) {
+            seenGroupIds.add(pairedBatchGroupId);
+            pairedBatchGroupIdsByDefinitionId.set(run.definitionId, seenGroupIds);
+            pairedBatchCountByDefinitionId.set(
+              run.definitionId,
+              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + increment,
+            );
+            // Track increment per group ID for cross-definition dedup
+            const defIncrements = pairedBatchIncrementsByGroupId.get(run.definitionId) ?? new Map<string, number>();
+            defIncrements.set(pairedBatchGroupId, increment);
+            pairedBatchIncrementsByGroupId.set(run.definitionId, defIncrements);
+          }
         }
       }
 
@@ -289,16 +329,20 @@ builder.queryField('domainValueCoverage', (t) =>
               valueA,
               valueB,
               batchCount: 0,
+              pairedBatchCount: 0,
               definitionId: null,
               definitionName: null,
               aggregateRunId: null,
             });
           } else {
-            // Primary definition: pick the one with most batches for the link target,
-            // but do not sum other definitions into the displayed cell count.
-            const { primaryDefinitionId, batchCount } = selectPrimaryDefinitionCount(
+            // Use the total counts across all definitions for the visible cell, but
+            // still choose one stable definition for the analysis link target.
+            const { primaryDefinitionId, batchCount, pairedBatchCount } = selectPrimaryDefinitionCounts(
               defIdsForPair,
               batchCountByDefinitionId,
+              pairedBatchCountByDefinitionId,
+              pairedBatchGroupIdsByDefinitionId,
+              pairedBatchIncrementsByGroupId,
             );
             const primaryDefId = primaryDefinitionId ?? '';
             const primaryPair = pairByDefinitionId.get(primaryDefId);
@@ -311,6 +355,7 @@ builder.queryField('domainValueCoverage', (t) =>
               valueA,
               valueB,
               batchCount,
+              pairedBatchCount,
               definitionId: primaryDefId !== '' ? primaryDefId : null,
               definitionName: primaryPair?.name ?? null,
               aggregateRunId,
