@@ -130,6 +130,10 @@ function getDecisionReason(
     return 'empty_input';
   }
 
+  if (canonicalDirection === 'refusal') {
+    return 'rendered';
+  }
+
   if (canonicalDirection !== 'unknown' && canonicalStrength !== 'unknown') {
     return 'rendered';
   }
