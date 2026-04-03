@@ -154,7 +154,7 @@ function buildValueCounts(
   return { first, neutral, second, total };
 }
 
-function buildComparisonRows(
+export function buildComparisonRows(
   aFirstRun: Run | null,
   aFirstAnalysis: AnalysisResult | null,
   bFirstRun: Run | null,
@@ -163,16 +163,8 @@ function buildComparisonRows(
   const labels = getPairedOrientationLabels(
     aFirstRun?.definition?.content ?? bFirstRun?.definition?.content ?? null,
   );
-  const firstValueKey = aFirstRun
-    ? labels.canonicalValues?.[0] ?? null
-    : bFirstRun
-      ? labels.flippedValues?.[0] ?? null
-      : null;
-  const secondValueKey = aFirstRun
-    ? labels.canonicalValues?.[1] ?? null
-    : bFirstRun
-      ? labels.flippedValues?.[1] ?? null
-      : null;
+  const firstValueKey = labels.canonicalValues?.[0] ?? null;
+  const secondValueKey = labels.canonicalValues?.[1] ?? null;
 
   const valueKeyLookup = (() => {
     if (!firstValueKey || !secondValueKey) return null;
