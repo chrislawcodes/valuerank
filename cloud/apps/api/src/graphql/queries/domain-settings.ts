@@ -31,6 +31,7 @@ builder.queryField('domainSettings', (t) =>
           defaultPreambleVersionId: true,
           defaultLevelPresetVersionId: true,
           defaultContextId: true,
+          defaultModelIds: true,
         },
       });
 
@@ -63,6 +64,7 @@ builder.queryField('domainSettings', (t) =>
         preambleVersionId: domain.defaultPreambleVersionId,
         levelPresetVersionId: domain.defaultLevelPresetVersionId,
         contextId: domain.defaultContextId,
+        defaultModelIds: domain.defaultModelIds,
         valueStatements,
       };
 

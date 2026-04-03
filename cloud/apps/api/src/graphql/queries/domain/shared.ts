@@ -260,6 +260,13 @@ type SignatureResolutionResult = {
   missingReasonByDefinitionId: Map<string, DomainAnalysisMissingReasonCode>;
 };
 
+export function runModelsContainAll(config: unknown, defaultModelIds: string[]): boolean {
+  if (defaultModelIds.length === 0) return true;
+  const models = (config as { models?: unknown } | null)?.models;
+  if (!Array.isArray(models)) return false;
+  return defaultModelIds.every((id) => (models as unknown[]).includes(id));
+}
+
 export function isDomainAnalysisValueKey(value: string): value is DomainAnalysisValueKey {
   return DOMAIN_ANALYSIS_VALUE_KEYS.includes(value as DomainAnalysisValueKey);
 }
@@ -284,6 +291,7 @@ export function getMissingReasonLabel(reasonCode: DomainAnalysisMissingReasonCod
 export async function resolveSignatureRuns(
   latestDefinitionIds: string[],
   selectedSignature: string | null,
+  defaultModelIds: string[] = [],
 ): Promise<SignatureResolutionResult> {
   if (latestDefinitionIds.length === 0) {
     return {
@@ -337,7 +345,15 @@ export async function resolveSignatureRuns(
       continue;
     }
 
-    for (const matchedRun of matchedRuns) {
+    const modelFilteredRuns = defaultModelIds.length === 0
+      ? matchedRuns
+      : matchedRuns.filter((run) => runModelsContainAll(run.config, defaultModelIds));
+    if (modelFilteredRuns.length === 0) {
+      missingReasonByDefinitionId.set(definitionId, 'NO_SIGNATURE_MATCH');
+      continue;
+    }
+
+    for (const matchedRun of modelFilteredRuns) {
       filteredSourceRunIds.push(matchedRun.id);
       filteredSourceRunDefinitionById.set(matchedRun.id, definitionId);
     }

@@ -13,6 +13,13 @@ export const DOMAIN_VALUE_COVERAGE_QUERY = gql`
         definitionId
         definitionName
         aggregateRunId
+        minTrialCount
+        maxTrialCount
+        modelBreakdown {
+          modelId
+          label
+          trialCount
+        }
       }
       availableModels {
         modelId
@@ -44,6 +51,12 @@ export const DOMAIN_VALUE_COVERAGE_QUERY_LEGACY = gql`
   }
 `;
 
+export type CoverageModelBreakdownItem = {
+  modelId: string;
+  label: string;
+  trialCount: number;
+};
+
 export type DomainValueCoverageCell = {
   valueA: string;
   valueB: string;
@@ -52,6 +65,9 @@ export type DomainValueCoverageCell = {
   definitionId: string | null;
   definitionName: string | null;
   aggregateRunId: string | null;
+  minTrialCount: number | null;
+  maxTrialCount: number | null;
+  modelBreakdown: CoverageModelBreakdownItem[] | null;
 };
 
 export type CoverageModelOption = {
