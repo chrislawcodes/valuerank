@@ -56,6 +56,34 @@ const START_DOMAIN_EVALUATION_MUTATION = `
   }
 `;
 
+const BACKFILL_DOMAIN_EVALUATION_MODELS_MUTATION = `
+  mutation BackfillDomainEvaluationModels(
+    $domainEvaluationId: ID!
+    $modelIds: [String!]!
+    $definitionIds: [ID!]
+    $targetBatchCount: Int
+  ) {
+    backfillDomainEvaluationModels(
+      domainEvaluationId: $domainEvaluationId
+      modelIds: $modelIds
+      definitionIds: $definitionIds
+      targetBatchCount: $targetBatchCount
+    ) {
+      domainEvaluationId
+      scopeCategory
+      success
+      targetedDefinitions
+      startedRuns
+      failedDefinitions
+      runs {
+        definitionId
+        runId
+        modelIds
+      }
+    }
+  }
+`;
+
 const RETRY_DOMAIN_TRIAL_CELL_MUTATION = `
   mutation RetryDomainTrialCell(
     $domainId: ID!
@@ -114,6 +142,19 @@ describe('GraphQL Domain Mutations', () => {
         costOutputPerMillion: 1,
       },
       update: { status: 'ACTIVE', isDefault: true },
+    });
+    await db.llmModel.upsert({
+      where: { providerId_modelId: { providerId: provider.id, modelId: 'test-domain-model-2' } },
+      create: {
+        providerId: provider.id,
+        modelId: 'test-domain-model-2',
+        displayName: 'Test Domain Model 2',
+        status: 'ACTIVE',
+        isDefault: false,
+        costInputPerMillion: 1,
+        costOutputPerMillion: 1,
+      },
+      update: { status: 'ACTIVE', isDefault: false },
     });
 
     startRunMock.mockImplementation(async (input) => {
@@ -622,6 +663,271 @@ describe('GraphQL Domain Mutations', () => {
       const call = startRunMock.mock.calls[0]?.[0];
       expect(call?.definitionId).toBe(def.id);
       expect(call?.configExtras).toBeUndefined();
+    });
+
+    it('attaches missing model backfill runs to the existing evaluation', async () => {
+      const domain = await db.domain.create({
+        data: { name: 'Backfill Existing Evaluation', normalizedName: `backfill-existing-evaluation-${Date.now()}` },
+      });
+      createdDomainIds.push(domain.id);
+
+      const defA = await db.definition.create({
+        data: {
+          name: 'Backfill Job A',
+          domainId: domain.id,
+          version: 1,
+          content: {
+            methodology: { family: 'job-choice', pair_key: 'backfill-pair-1', presentation_order: 'A_first' },
+            components: { value_first: { token: 'career' }, value_second: { token: 'family' } },
+          },
+          createdByUserId: TEST_USER.id,
+        },
+      });
+      const defB = await db.definition.create({
+        data: {
+          name: 'Backfill Job B',
+          domainId: domain.id,
+          version: 1,
+          content: {
+            methodology: { family: 'job-choice', pair_key: 'backfill-pair-1', presentation_order: 'B_first' },
+            components: { value_first: { token: 'family' }, value_second: { token: 'career' } },
+          },
+          createdByUserId: TEST_USER.id,
+        },
+      });
+      createdDefinitionIds.push(defA.id, defB.id);
+
+      startRunMock.mockClear();
+      const launchResponse = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: START_DOMAIN_EVALUATION_MUTATION,
+          variables: {
+            domainId: domain.id,
+            modelIds: ['test-domain-model', 'test-domain-model-2'],
+          },
+        });
+
+      expect(launchResponse.status).toBe(200);
+      expect(launchResponse.body.errors).toBeUndefined();
+      const domainEvaluationId = launchResponse.body.data.startDomainEvaluation.domainEvaluationId as string;
+      expect(startRunMock).toHaveBeenCalledTimes(2);
+
+      await db.run.updateMany({
+        where: { id: { in: launchResponse.body.data.startDomainEvaluation.runs.map((run: { runId: string }) => run.runId) } },
+        data: {
+          config: {
+            models: ['test-domain-model'],
+            temperature: null,
+            samplePercentage: 100,
+            samplesPerScenario: 1,
+          },
+        },
+      });
+
+      startRunMock.mockClear();
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: BACKFILL_DOMAIN_EVALUATION_MODELS_MUTATION,
+          variables: {
+            domainEvaluationId,
+            modelIds: ['test-domain-model-2'],
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.backfillDomainEvaluationModels.success).toBe(true);
+      expect(response.body.data.backfillDomainEvaluationModels.domainEvaluationId).toBe(domainEvaluationId);
+      expect(response.body.data.backfillDomainEvaluationModels.startedRuns).toBe(2);
+      expect(startRunMock).toHaveBeenCalledTimes(2);
+      expect(startRunMock.mock.calls.map((call) => call[0]?.models)).toEqual([
+        ['test-domain-model-2'],
+        ['test-domain-model-2'],
+      ]);
+
+      const batchGroupIds = startRunMock.mock.calls.map((call) => call[0]?.configExtras?.jobChoiceBatchGroupId);
+      expect(batchGroupIds[0]).toBeTruthy();
+      expect(batchGroupIds[0]).toBe(batchGroupIds[1]);
+
+      const evaluation = await db.domainEvaluation.findUnique({
+        where: { id: domainEvaluationId },
+        include: { members: true },
+      });
+
+      expect(evaluation?.members).toHaveLength(4);
+      expect(evaluation?.members.filter((member) => member.definitionIdAtLaunch === defA.id)).toHaveLength(2);
+      expect(evaluation?.members.filter((member) => member.definitionIdAtLaunch === defB.id)).toHaveLength(2);
+    });
+
+    it('tops up a partial pair so both paired vignettes stay aligned', async () => {
+      const domain = await db.domain.create({
+        data: { name: 'Backfill Partial Pair', normalizedName: `backfill-partial-pair-${Date.now()}` },
+      });
+      createdDomainIds.push(domain.id);
+
+      const defA = await db.definition.create({
+        data: {
+          name: 'Partial Pair Job A',
+          domainId: domain.id,
+          version: 1,
+          content: {
+            methodology: { family: 'job-choice', pair_key: 'backfill-pair-2', presentation_order: 'A_first' },
+            components: { value_first: { token: 'career' }, value_second: { token: 'family' } },
+          },
+          createdByUserId: TEST_USER.id,
+        },
+      });
+      const defB = await db.definition.create({
+        data: {
+          name: 'Partial Pair Job B',
+          domainId: domain.id,
+          version: 1,
+          content: {
+            methodology: { family: 'job-choice', pair_key: 'backfill-pair-2', presentation_order: 'B_first' },
+            components: { value_first: { token: 'family' }, value_second: { token: 'career' } },
+          },
+          createdByUserId: TEST_USER.id,
+        },
+      });
+      createdDefinitionIds.push(defA.id, defB.id);
+
+      startRunMock.mockClear();
+      const launchResponse = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: START_DOMAIN_EVALUATION_MUTATION,
+          variables: {
+            domainId: domain.id,
+            modelIds: ['test-domain-model', 'test-domain-model-2'],
+          },
+        });
+
+      expect(launchResponse.status).toBe(200);
+      expect(launchResponse.body.errors).toBeUndefined();
+      const domainEvaluationId = launchResponse.body.data.startDomainEvaluation.domainEvaluationId as string;
+
+      const launchedRunIds = launchResponse.body.data.startDomainEvaluation.runs.map((run: { runId: string }) => run.runId);
+      const evaluationRuns = await db.run.findMany({
+        where: { id: { in: launchedRunIds } },
+        orderBy: { definitionId: 'asc' },
+      });
+      const runForA = evaluationRuns.find((run) => run.definitionId === defA.id);
+      const runForB = evaluationRuns.find((run) => run.definitionId === defB.id);
+
+      expect(runForA).toBeTruthy();
+      expect(runForB).toBeTruthy();
+
+      await db.run.update({
+        where: { id: runForA!.id },
+        data: {
+          config: {
+            models: ['test-domain-model', 'test-domain-model-2'],
+            temperature: null,
+            samplePercentage: 100,
+            samplesPerScenario: 1,
+          },
+        },
+      });
+      await db.run.update({
+        where: { id: runForB!.id },
+        data: {
+          config: {
+            models: ['test-domain-model'],
+            temperature: null,
+            samplePercentage: 100,
+            samplesPerScenario: 1,
+          },
+        },
+      });
+
+      startRunMock.mockClear();
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: BACKFILL_DOMAIN_EVALUATION_MODELS_MUTATION,
+          variables: {
+            domainEvaluationId,
+            modelIds: ['test-domain-model-2'],
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.backfillDomainEvaluationModels.startedRuns).toBe(2);
+      expect(startRunMock).toHaveBeenCalledTimes(2);
+      expect(startRunMock.mock.calls.map((call) => call[0]?.definitionId).sort()).toEqual([defA.id, defB.id].sort());
+    });
+
+    it('rejects backfill models that were not part of the original evaluation', async () => {
+      const domain = await db.domain.create({
+        data: { name: 'Backfill Invalid Model', normalizedName: `backfill-invalid-model-${Date.now()}` },
+      });
+      createdDomainIds.push(domain.id);
+
+      const defA = await db.definition.create({
+        data: {
+          name: 'Invalid Model Job A',
+          domainId: domain.id,
+          version: 1,
+          content: {
+            methodology: { family: 'job-choice', pair_key: 'backfill-pair-3', presentation_order: 'A_first' },
+            components: { value_first: { token: 'career' }, value_second: { token: 'family' } },
+          },
+          createdByUserId: TEST_USER.id,
+        },
+      });
+      const defB = await db.definition.create({
+        data: {
+          name: 'Invalid Model Job B',
+          domainId: domain.id,
+          version: 1,
+          content: {
+            methodology: { family: 'job-choice', pair_key: 'backfill-pair-3', presentation_order: 'B_first' },
+            components: { value_first: { token: 'family' }, value_second: { token: 'career' } },
+          },
+          createdByUserId: TEST_USER.id,
+        },
+      });
+      createdDefinitionIds.push(defA.id, defB.id);
+
+      startRunMock.mockClear();
+      const launchResponse = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: START_DOMAIN_EVALUATION_MUTATION,
+          variables: {
+            domainId: domain.id,
+            modelIds: ['test-domain-model'],
+          },
+        });
+
+      expect(launchResponse.status).toBe(200);
+      expect(launchResponse.body.errors).toBeUndefined();
+      const domainEvaluationId = launchResponse.body.data.startDomainEvaluation.domainEvaluationId as string;
+
+      startRunMock.mockClear();
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: BACKFILL_DOMAIN_EVALUATION_MODELS_MUTATION,
+          variables: {
+            domainEvaluationId,
+            modelIds: ['test-domain-model-2'],
+          },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toBeNull();
+      expect(response.body.errors?.[0]?.message).toContain('Selected models are not part of this evaluation');
+      expect(startRunMock).not.toHaveBeenCalled();
     });
   });
 });

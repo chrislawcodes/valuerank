@@ -1,0 +1,16 @@
+{
+  "source_artifact_path": "docs/feature-runs/domain-evaluation-model-backfill/reviews/implementation.diff.patch",
+  "source_artifact_sha256": "b51e512d3f0586ed83d35c11e8a2d3875156845138ad937e72295fe8db4af7d4",
+  "narrowed_artifact_path": "docs/feature-runs/domain-evaluation-model-backfill/reviews/diff.codex.correctness-adversarial.review.md.narrowed.txt",
+  "narrowed_artifact_sha256": "e5dffa3e5acc5091c3ba481fd51fd44569fb5de9d980b7077b346dfdb1cf766b",
+  "strategy": "diff-head-tail-chunks",
+  "head_chunks": [
+    "diff --git a/cloud/apps/api/src/graphql/mutations/domain/evaluation.ts b/cloud/apps/api/src/graphql/mutations/domain/evaluation.ts",
+    "diff --git a/cloud/apps/api/src/graphql/mutations/domain/launch.ts b/cloud/apps/api/src/graphql/mutations/domain/launch.ts",
+    "diff --git a/cloud/apps/api/src/graphql/mutations/domain/types.ts b/cloud/apps/api/src/graphql/mutations/domain/types.ts"
+  ],
+  "tail_chunks": [
+    "diff --git a/cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx b/cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx",
+    "diff --git acloud/apps/web/src/components/domains/domainTrials/BackfillConfirmModal.tsx bcloud/apps/web/src/components/domains/domainTrials/BackfillConfirmModal.tsx"
+  ]
+}

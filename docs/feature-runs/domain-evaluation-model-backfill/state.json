@@ -1,0 +1,49 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "Backfill work should start from the Domain Level Batches screen because that screen already tracks the current domain evaluation.",
+      "A backfill should only attach to an existing domain evaluation when the scope category and temperature still match that evaluation.",
+      "A model backfill should only allow model IDs that are already part of the target evaluation's original model set so the evaluation metadata stays honest."
+    ],
+    "summary": "Add a supported way to backfill missing model coverage into an existing domain evaluation so reruns stay attached to the original launch instead of becoming orphan evaluations.",
+    "updated_at": 1775192202,
+    "answers": {},
+    "non_goals": [],
+    "acceptance_criteria": [
+      "The feature blocks unsafe attachments when the requested temperature, scope category, or model set do not match the target evaluation."
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "checkpoint_fallback": {},
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "dirty_overrides": {
+    "allowed_dirty_paths": [
+      "MEMORY.md",
+      "STATUS.md"
+    ],
+    "used": true,
+    "updated_at": 1775195361
+  }
+}

@@ -124,6 +124,82 @@ describe('selectPrimaryDefinitionCounts', () => {
       pairedBatchCount: 0,
     });
   });
+
+  it('deduplicates shared group IDs across companion definitions', () => {
+    // A_first and B_first definitions share the same paired batch group IDs
+    const batchCounts = new Map<string, number>([
+      ['def-a-first', 5],
+      ['def-b-first', 5],
+    ]);
+    const pairedCounts = new Map<string, number>([
+      ['def-a-first', 3],
+      ['def-b-first', 3],
+    ]);
+    const groupIds = new Map<string, Set<string>>([
+      ['def-a-first', new Set(['group-1', 'group-2', 'group-3'])],
+      ['def-b-first', new Set(['group-1', 'group-2', 'group-3'])],
+    ]);
+
+    // Without dedup: 3 + 3 = 6. With dedup: 3 unique groups.
+    expect(selectPrimaryDefinitionCounts(
+      ['def-a-first', 'def-b-first'], batchCounts, pairedCounts, groupIds,
+    )).toEqual({
+      primaryDefinitionId: 'def-a-first',
+      batchCount: 10,
+      pairedBatchCount: 3,
+    });
+  });
+
+  it('counts ungrouped runs separately from grouped runs', () => {
+    const batchCounts = new Map<string, number>([
+      ['def-a', 3],
+    ]);
+    // pairedBatchCount = 2 grouped + 1 ungrouped = 3
+    const pairedCounts = new Map<string, number>([
+      ['def-a', 3],
+    ]);
+    const groupIds = new Map<string, Set<string>>([
+      ['def-a', new Set(['group-1', 'group-2'])],
+    ]);
+
+    expect(selectPrimaryDefinitionCounts(
+      ['def-a'], batchCounts, pairedCounts, groupIds,
+    )).toEqual({
+      primaryDefinitionId: 'def-a',
+      batchCount: 3,
+      pairedBatchCount: 3, // 2 grouped + 1 ungrouped
+    });
+  });
+
+  it('deduplicates with samplesPerScenario increments across companions', () => {
+    // 3 paired batch groups shared across A_first and B_first.
+    // Group 1: sps=1, Group 2: sps=1, Group 3: sps=3 → total 5 batches per side.
+    const batchCounts = new Map<string, number>([
+      ['def-a-first', 10],
+      ['def-b-first', 10],
+    ]);
+    const pairedCounts = new Map<string, number>([
+      ['def-a-first', 5],
+      ['def-b-first', 5],
+    ]);
+    const groupIds = new Map<string, Set<string>>([
+      ['def-a-first', new Set(['group-1', 'group-2', 'group-3'])],
+      ['def-b-first', new Set(['group-1', 'group-2', 'group-3'])],
+    ]);
+    const increments = new Map<string, Map<string, number>>([
+      ['def-a-first', new Map([['group-1', 1], ['group-2', 1], ['group-3', 3]])],
+      ['def-b-first', new Map([['group-1', 1], ['group-2', 1], ['group-3', 3]])],
+    ]);
+
+    // Without dedup: 5 + 5 = 10. With dedup: 1+1+3 = 5 (max increment per group).
+    expect(selectPrimaryDefinitionCounts(
+      ['def-a-first', 'def-b-first'], batchCounts, pairedCounts, groupIds, increments,
+    )).toEqual({
+      primaryDefinitionId: 'def-a-first',
+      batchCount: 20,
+      pairedBatchCount: 5,
+    });
+  });
 });
 
 describe('samplesPerScenario increment logic', () => {

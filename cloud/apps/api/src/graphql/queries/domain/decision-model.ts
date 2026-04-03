@@ -330,6 +330,18 @@ function parseLegacyScore(value: string | null | undefined): 1 | 2 | 3 | 4 | 5 |
   return null;
 }
 
+function buildRefusalCanonicalDecision(): CanonicalDecision {
+  return {
+    favoredValueKey: null,
+    opposedValueKey: null,
+    direction: 'refusal',
+    strength: 'unknown',
+    normalizationApplied: false,
+    normalizationReason: null,
+    source: 'deterministic',
+  };
+}
+
 function buildCanonicalDecisionFromPair(
   pair: DecisionPair,
   direction: DecisionDirection,
@@ -592,6 +604,10 @@ export function resolveLegacyDecisionCompat(
 }
 
 export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDecision {
+  if (input.legacyDecisionCode === 'refusal') {
+    return buildRefusalCanonicalDecision();
+  }
+
   const pair = isValidDecisionPair(input.pair) ? input.pair : null;
   if (!pair) {
     return input.pair == null ? buildUnknownCanonicalDecision('unknown') : buildUnknownCanonicalDecision('error');

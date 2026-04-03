@@ -8,7 +8,7 @@ import {
   DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,
   DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
 } from '../../../services/run/config.js';
-import { launchDomainEvaluation } from './launch.js';
+import { backfillDomainEvaluationModels, launchDomainEvaluation } from './launch.js';
 import {
   DomainTrialRunResultRef,
   RetryDomainTrialCellResultRef,
@@ -88,6 +88,39 @@ builder.mutationField('startDomainEvaluation', (t) =>
         userId: ctx.user.id,
         log: ctx.log,
         auditOperationType: 'start-domain-evaluation',
+      });
+    },
+  }),
+);
+
+builder.mutationField('backfillDomainEvaluationModels', (t) =>
+  t.field({
+    type: DomainTrialRunResultRef,
+    args: {
+      domainEvaluationId: t.arg.id({ required: true }),
+      modelIds: t.arg.stringList({ required: true }),
+      definitionIds: t.arg.idList({ required: false }),
+      targetBatchCount: t.arg.int({ required: false }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const rawTargetBatchCount = args.targetBatchCount ?? null;
+      const targetBatchCount =
+        rawTargetBatchCount !== null && Number.isFinite(rawTargetBatchCount) && rawTargetBatchCount >= 1
+          ? rawTargetBatchCount
+          : null;
+
+      return backfillDomainEvaluationModels({
+        domainEvaluationId: String(args.domainEvaluationId),
+        modelIds: args.modelIds?.map(String) ?? [],
+        definitionIds: args.definitionIds?.map(String) ?? [],
+        targetBatchCount,
+        userId: ctx.user.id,
+        log: ctx.log,
+        auditOperationType: 'backfill-domain-evaluation-models',
       });
     },
   }),

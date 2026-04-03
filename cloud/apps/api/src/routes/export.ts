@@ -26,6 +26,7 @@ import {
   generateExportFilename,
 } from '../services/export/csv.js';
 import { collectVisibleDimensionColumns } from '../services/export/decision-display.js';
+import { collectDomainCsvDimensionColumns, iterateDomainCsvTranscriptPages } from '../services/export/domain-csv.js';
 import { exportDefinitionAsMd } from '../services/export/md.js';
 import { exportScenariosAsYaml } from '../services/export/yaml.js';
 import { generateExcelExport, type RunExportData } from '../services/export/xlsx/index.js';
@@ -294,29 +295,10 @@ exportRouter.get(
 
       const { domain, filteredSourceRunIds, resolvedSignature } = resolved;
 
-      const transcripts = filteredSourceRunIds.length > 0
-        ? await db.transcript.findMany({
-            where: {
-              runId: { in: filteredSourceRunIds },
-              deletedAt: null,
-            },
-            include: {
-              scenario: true,
-              run: { select: { name: true, config: true, definition: { select: { version: true } } } },
-            },
-            orderBy: [{ modelId: 'asc' }, { scenarioId: 'asc' }],
-          })
-        : [];
-
-      log.info(
-        { domainId, transcriptCount: transcripts.length, resolvedSignature },
-        'Transcripts fetched for domain CSV export',
+      const dimensionColumns = await collectDomainCsvDimensionColumns(
+        filteredSourceRunIds,
+        includeDecisionMetadata,
       );
-
-      const fixedHeaders = includeDecisionMetadata === true
-        ? [...PRE_VARIABLE_HEADERS, ...POST_VARIABLE_HEADERS_WITH_METADATA]
-        : [...PRE_VARIABLE_HEADERS, ...POST_VARIABLE_HEADERS];
-      const dimensionColumns = collectVisibleDimensionColumns(transcripts, fixedHeaders);
       const { headers: variableNames } = dimensionColumns;
 
       // Build filename: omit signature segment when not resolved
@@ -331,20 +313,25 @@ exportRouter.get(
 
       res.write('\uFEFF');
       res.write(getCSVHeader(variableNames, { includeDecisionMetadata }));
-      if (transcripts.length > 0) {
-        res.write('\n');
+      let rowsWritten = 0;
+
+      for await (const transcripts of iterateDomainCsvTranscriptPages(filteredSourceRunIds)) {
+        for (const transcript of transcripts) {
+          res.write('\n');
+          const row = transcriptToCSVRow(transcript, dimensionColumns);
+          res.write(formatCSVRow(row, variableNames, { includeDecisionMetadata }));
+          rowsWritten += 1;
+        }
       }
 
-      transcripts.forEach((transcript, index) => {
-        const row = transcriptToCSVRow(transcript, dimensionColumns);
-        res.write(formatCSVRow(row, variableNames, { includeDecisionMetadata }));
-        if (index < transcripts.length - 1) {
-          res.write('\n');
-        }
-      });
-
       log.info(
-        { domainId, rowsWritten: transcripts.length, variableCount: variableNames.length, includeDecisionMetadata },
+        {
+          domainId,
+          rowsWritten,
+          variableCount: variableNames.length,
+          includeDecisionMetadata,
+          resolvedSignature,
+        },
         'Domain CSV export complete',
       );
 

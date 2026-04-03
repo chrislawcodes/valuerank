@@ -10,7 +10,7 @@ from typing import Any, TypedDict
 import numpy as np
 from scipy import stats
 
-from stats.decision_model import resolve_transcript_normalized_score
+from stats.decision_model import resolve_transcript_signed_distance
 
 
 class DimensionEffect(TypedDict):
@@ -147,8 +147,8 @@ def compute_dimension_effects(
     for t in transcripts:
         scenario = t.get("scenario", {})
 
-        # Get score from the V2 decision envelope when available.
-        score = resolve_transcript_normalized_score(t)
+        # Get signed distance from canonical decision envelope.
+        score = resolve_transcript_signed_distance(t)
         if score is None:
             continue
         scores.append(float(score))

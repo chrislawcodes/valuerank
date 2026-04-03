@@ -1,0 +1,21 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/mutations/domain",
+    "cloud/apps/api/src/graphql/queries/domain",
+    "cloud/apps/api/tests/graphql/mutations/domain.test.ts",
+    "cloud/apps/web/src/api/operations/domains.ts",
+    "cloud/apps/web/src/components/domains/domainTrials",
+    "cloud/apps/web/src/pages/DomainTrialsDashboard.tsx",
+    "cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/mutations/domain",
+    "cloud/apps/api/src/graphql/queries/domain",
+    "cloud/apps/api/tests/graphql/mutations/domain.test.ts",
+    "cloud/apps/web/src/api/operations/domains.ts",
+    "cloud/apps/web/src/components/domains/domainTrials",
+    "cloud/apps/web/src/pages/DomainTrialsDashboard.tsx",
+    "cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx",
+    "docs/feature-runs/domain-evaluation-model-backfill"
+  ]
+}

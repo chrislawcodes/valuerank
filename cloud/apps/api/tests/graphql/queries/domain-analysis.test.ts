@@ -298,17 +298,17 @@ describe('GraphQL domain analysis', () => {
     // Both definitions now resolve to Achievement being prioritized.
     expect(valueByKey.get('Achievement')).toEqual({
       valueKey: 'Achievement',
-      prioritized: 1,
+      prioritized: 2,
       deprioritized: 0,
       neutral: 0,
-      totalComparisons: 1,
+      totalComparisons: 2,
     });
     expect(valueByKey.get('Benevolence_Dependability')).toEqual({
       valueKey: 'Benevolence_Dependability',
       prioritized: 0,
-      deprioritized: 1,
+      deprioritized: 2,
       neutral: 0,
-      totalComparisons: 1,
+      totalComparisons: 2,
     });
 
     const detail = response.body.data.detail as {
@@ -330,10 +330,10 @@ describe('GraphQL domain analysis', () => {
 
     expect(detail.targetedDefinitions).toBe(2);
     expect(detail.coveredDefinitions).toBe(2);
-    expect(detail.prioritized).toBe(1);
+    expect(detail.prioritized).toBe(2);
     expect(detail.deprioritized).toBe(0);
     expect(detail.neutral).toBe(0);
-    expect(detail.totalTrials).toBe(1);
+    expect(detail.totalTrials).toBe(2);
     expect(detail.vignettes).toHaveLength(2);
     expect(detail.vignettes.map((vignette) => vignette.definitionName).sort()).toEqual([
       'Job Choice A First',

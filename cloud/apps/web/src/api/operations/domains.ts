@@ -188,6 +188,38 @@ export const START_DOMAIN_EVALUATION_MUTATION = gql`
   }
 `;
 
+export const BACKFILL_DOMAIN_EVALUATION_MODELS_MUTATION = gql`
+  mutation BackfillDomainEvaluationModels(
+    $domainEvaluationId: ID!
+    $modelIds: [String!]!
+    $definitionIds: [ID!]
+    $targetBatchCount: Int
+  ) {
+    backfillDomainEvaluationModels(
+      domainEvaluationId: $domainEvaluationId
+      modelIds: $modelIds
+      definitionIds: $definitionIds
+      targetBatchCount: $targetBatchCount
+    ) {
+      domainEvaluationId
+      scopeCategory
+      success
+      totalDefinitions
+      targetedDefinitions
+      startedRuns
+      failedDefinitions
+      skippedForBudget
+      projectedCostUsd
+      blockedByActiveLaunch
+      runs {
+        definitionId
+        runId
+        modelIds
+      }
+    }
+  }
+`;
+
 export const DOMAIN_EVALUATIONS_QUERY = gql`
   query DomainEvaluations($domainId: ID!, $scopeCategory: String, $status: String, $limit: Int, $offset: Int) {
     domainEvaluations(domainId: $domainId, scopeCategory: $scopeCategory, status: $status, limit: $limit, offset: $offset) {
@@ -227,6 +259,15 @@ export const DOMAIN_EVALUATION_QUERY = gql`
       skippedForBudget
       projectedCostUsd
       models
+      launchableDefinitionIds
+      launchableDefinitions {
+        definitionId
+        definitionName
+        pairKey
+      }
+      samplePercentage
+      samplesPerScenario
+      targetBatchCount
       temperature
       maxBudgetUsd
       memberCount
@@ -235,6 +276,7 @@ export const DOMAIN_EVALUATION_QUERY = gql`
         definitionIdAtLaunch
         definitionNameAtLaunch
         domainIdAtLaunch
+        modelIds
         createdAt
         runStatus
         runCategory
@@ -543,6 +585,26 @@ export type StartDomainEvaluationMutationResult = {
   };
 };
 
+export type BackfillDomainEvaluationModelsMutationResult = {
+  backfillDomainEvaluationModels: {
+    domainEvaluationId: string | null;
+    scopeCategory: string;
+    success: boolean;
+    totalDefinitions: number;
+    targetedDefinitions: number;
+    startedRuns: number;
+    failedDefinitions: number;
+    skippedForBudget: number;
+    projectedCostUsd: number;
+    blockedByActiveLaunch: boolean;
+    runs: Array<{
+      definitionId: string;
+      runId: string;
+      modelIds: string[];
+    }>;
+  };
+};
+
 export type StartDomainEvaluationMutationVariables = {
   domainId: string;
   scopeCategory?: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION';
@@ -552,6 +614,13 @@ export type StartDomainEvaluationMutationVariables = {
   modelIds?: string[];
   samplePercentage?: number;
   samplesPerScenario?: number;
+  targetBatchCount?: number;
+};
+
+export type BackfillDomainEvaluationModelsMutationVariables = {
+  domainEvaluationId: string;
+  modelIds: string[];
+  definitionIds?: string[];
   targetBatchCount?: number;
 };
 
@@ -569,6 +638,15 @@ export type DomainEvaluation = {
   skippedForBudget: number;
   projectedCostUsd: number;
   models: string[];
+  launchableDefinitionIds?: string[];
+  launchableDefinitions?: Array<{
+    definitionId: string;
+    definitionName: string;
+    pairKey: string | null;
+  }>;
+  samplePercentage?: number | null;
+  samplesPerScenario?: number | null;
+  targetBatchCount?: number | null;
   temperature: number | null;
   maxBudgetUsd: number | null;
   memberCount: number;
@@ -579,6 +657,7 @@ export type DomainEvaluationMember = {
   definitionIdAtLaunch: string;
   definitionNameAtLaunch: string;
   domainIdAtLaunch: string;
+  modelIds: string[];
   createdAt: string;
   runStatus: string;
   runCategory: string;

@@ -1,6 +1,7 @@
 import { db, type Prisma, type DomainEvaluationScopeCategory, type DomainEvaluationStatus, type RunStatus } from '@valuerank/db';
 import { AuthenticationError } from '@valuerank/shared';
 import { builder } from '../../builder.js';
+import { normalizeModelSet } from '../../mutations/domain/types.js';
 
 type DomainEvaluationSnapshot = {
   startedRuns?: number;
@@ -8,8 +9,18 @@ type DomainEvaluationSnapshot = {
   skippedForBudget?: number;
   projectedCostUsd?: number;
   models?: string[];
+  launchableDefinitionIds?: string[];
+  samplePercentage?: number;
+  samplesPerScenario?: number;
+  targetBatchCount?: number | null;
   temperature?: number | null;
   maxBudgetUsd?: number | null;
+};
+
+type DomainEvaluationLaunchableDefinitionShape = {
+  definitionId: string;
+  definitionName: string;
+  pairKey: string | null;
 };
 
 type DomainEvaluationMemberShape = {
@@ -17,6 +28,7 @@ type DomainEvaluationMemberShape = {
   definitionIdAtLaunch: string;
   definitionNameAtLaunch: string;
   domainIdAtLaunch: string;
+  modelIds: string[];
   createdAt: Date;
   runStatus: string;
   runCategory: string;
@@ -39,6 +51,10 @@ type DomainEvaluationShape = {
   skippedForBudget: number;
   projectedCostUsd: number;
   models: string[];
+  launchableDefinitionIds: string[];
+  samplePercentage: number | null;
+  samplesPerScenario: number | null;
+  targetBatchCount: number | null;
   temperature: number | null;
   maxBudgetUsd: number | null;
   memberCount: number;
@@ -104,6 +120,7 @@ type DomainEvaluationRecord = Prisma.DomainEvaluationGetPayload<{
             id: true;
             status: true;
             runCategory: true;
+            config: true;
             startedAt: true;
             completedAt: true;
           };
@@ -136,11 +153,22 @@ const DomainEvaluationMemberRef = builder
       definitionIdAtLaunch: t.exposeID('definitionIdAtLaunch'),
       definitionNameAtLaunch: t.exposeString('definitionNameAtLaunch'),
       domainIdAtLaunch: t.exposeID('domainIdAtLaunch'),
+      modelIds: t.exposeStringList('modelIds'),
       createdAt: t.field({ type: 'DateTime', resolve: (parent) => parent.createdAt }),
       runStatus: t.exposeString('runStatus'),
       runCategory: t.exposeString('runCategory'),
       runStartedAt: t.field({ type: 'DateTime', nullable: true, resolve: (parent) => parent.runStartedAt }),
       runCompletedAt: t.field({ type: 'DateTime', nullable: true, resolve: (parent) => parent.runCompletedAt }),
+    }),
+  });
+
+const DomainEvaluationLaunchableDefinitionRef = builder
+  .objectRef<DomainEvaluationLaunchableDefinitionShape>('DomainEvaluationLaunchableDefinition')
+  .implement({
+    fields: (t) => ({
+      definitionId: t.exposeID('definitionId'),
+      definitionName: t.exposeString('definitionName'),
+      pairKey: t.exposeString('pairKey', { nullable: true }),
     }),
   });
 
@@ -162,9 +190,17 @@ const DomainEvaluationRef = builder
       skippedForBudget: t.exposeInt('skippedForBudget'),
       projectedCostUsd: t.exposeFloat('projectedCostUsd'),
       models: t.exposeStringList('models'),
+      launchableDefinitionIds: t.exposeIDList('launchableDefinitionIds'),
+      samplePercentage: t.exposeInt('samplePercentage', { nullable: true }),
+      samplesPerScenario: t.exposeInt('samplesPerScenario', { nullable: true }),
+      targetBatchCount: t.exposeInt('targetBatchCount', { nullable: true }),
       temperature: t.exposeFloat('temperature', { nullable: true }),
       maxBudgetUsd: t.exposeFloat('maxBudgetUsd', { nullable: true }),
       memberCount: t.exposeInt('memberCount'),
+      launchableDefinitions: t.field({
+        type: [DomainEvaluationLaunchableDefinitionRef],
+        resolve: async (parent) => resolveLaunchableDefinitions(parent.launchableDefinitionIds, parent.members),
+      }),
       members: t.field({
         type: [DomainEvaluationMemberRef],
         resolve: (parent) => parent.members,
@@ -257,10 +293,13 @@ function parseStatus(value: string | null | undefined): DomainEvaluationStatus |
 }
 
 function getSnapshot(configSnapshot: unknown): DomainEvaluationSnapshot {
-  if (!configSnapshot || typeof configSnapshot !== 'object' || Array.isArray(configSnapshot)) {
+  if (configSnapshot == null || typeof configSnapshot !== 'object' || Array.isArray(configSnapshot)) {
     return {};
   }
   const snapshot = configSnapshot as Record<string, unknown>;
+  const samplePercentageValue = snapshot.samplePercentage;
+  const samplesPerScenarioValue = snapshot.samplesPerScenario;
+  const targetBatchCountValue = snapshot.targetBatchCount;
   const temperatureValue = snapshot.temperature;
   const maxBudgetValue = snapshot.maxBudgetUsd;
   return {
@@ -271,6 +310,21 @@ function getSnapshot(configSnapshot: unknown): DomainEvaluationSnapshot {
     models: Array.isArray(snapshot.models)
       ? snapshot.models.filter((value): value is string => typeof value === 'string')
       : undefined,
+    launchableDefinitionIds: Array.isArray(snapshot.launchableDefinitionIds)
+      ? snapshot.launchableDefinitionIds.filter((value): value is string => typeof value === 'string')
+      : undefined,
+    samplePercentage:
+      typeof samplePercentageValue === 'number' && Number.isFinite(samplePercentageValue)
+        ? samplePercentageValue
+        : undefined,
+    samplesPerScenario:
+      typeof samplesPerScenarioValue === 'number' && Number.isFinite(samplesPerScenarioValue)
+        ? samplesPerScenarioValue
+        : undefined,
+    targetBatchCount:
+      (typeof targetBatchCountValue === 'number' && Number.isFinite(targetBatchCountValue)) || targetBatchCountValue === null
+        ? targetBatchCountValue
+        : undefined,
     temperature:
       typeof temperatureValue === 'number' || temperatureValue === null
         ? temperatureValue
@@ -364,7 +418,7 @@ function emptyRunSummary(domainId: string, scopeCategory: DomainEvaluationScopeC
 }
 
 function hasAuditableFindingsSnapshot(runConfig: unknown): boolean {
-  if (!runConfig || typeof runConfig !== 'object' || Array.isArray(runConfig)) {
+  if (runConfig == null || typeof runConfig !== 'object' || Array.isArray(runConfig)) {
     return false;
   }
   const config = runConfig as Record<string, unknown>;
@@ -385,6 +439,7 @@ function toShape(
     definitionIdAtLaunch: member.definitionIdAtLaunch,
     definitionNameAtLaunch: member.definitionNameAtLaunch,
     domainIdAtLaunch: member.domainIdAtLaunch,
+    modelIds: normalizeModelSet((member.run.config as { models?: unknown } | null)?.models),
     createdAt: member.createdAt,
     runStatus: member.run.status,
     runCategory: member.run.runCategory,
@@ -417,11 +472,73 @@ function toShape(
     skippedForBudget: snapshot.skippedForBudget ?? 0,
     projectedCostUsd: snapshot.projectedCostUsd ?? 0,
     models: snapshot.models ?? [],
+    launchableDefinitionIds: snapshot.launchableDefinitionIds ?? [],
+    samplePercentage: snapshot.samplePercentage ?? null,
+    samplesPerScenario: snapshot.samplesPerScenario ?? null,
+    targetBatchCount: snapshot.targetBatchCount ?? null,
     temperature: snapshot.temperature ?? null,
     maxBudgetUsd: snapshot.maxBudgetUsd ?? null,
     memberCount: members.length,
     members,
   };
+}
+
+function extractJobChoicePairKey(content: unknown): string | null {
+  if (content == null || typeof content !== 'object' || Array.isArray(content)) {
+    return null;
+  }
+
+  const methodology = (content as Record<string, unknown>).methodology;
+  if (methodology == null || typeof methodology !== 'object' || Array.isArray(methodology)) {
+    return null;
+  }
+
+  const record = methodology as Record<string, unknown>;
+  if (record.family !== 'job-choice' || typeof record.pair_key !== 'string' || record.pair_key.trim() === '') {
+    return null;
+  }
+
+  return record.pair_key;
+}
+
+async function resolveLaunchableDefinitions(
+  launchableDefinitionIds: string[],
+  members: DomainEvaluationMemberShape[],
+): Promise<DomainEvaluationLaunchableDefinitionShape[]> {
+  if (launchableDefinitionIds.length === 0) {
+    return [];
+  }
+
+  const definitions = await db.definition.findMany({
+    where: { id: { in: launchableDefinitionIds } },
+    select: {
+      id: true,
+      name: true,
+      content: true,
+    },
+  });
+
+  const definitionById = new Map(
+    definitions.map((definition) => [
+      definition.id,
+      {
+        definitionName: definition.name ?? 'Untitled vignette',
+        pairKey: extractJobChoicePairKey(definition.content),
+      },
+    ]),
+  );
+  const memberNameByDefinitionId = new Map(
+    members.map((member) => [member.definitionIdAtLaunch, member.definitionNameAtLaunch]),
+  );
+
+  return launchableDefinitionIds.map((definitionId) => {
+    const definition = definitionById.get(definitionId);
+    return {
+      definitionId,
+      definitionName: definition?.definitionName ?? memberNameByDefinitionId.get(definitionId) ?? 'Untitled vignette',
+      pairKey: definition?.pairKey ?? null,
+    };
+  });
 }
 
 const evaluationInclude = {
@@ -432,6 +549,7 @@ const evaluationInclude = {
           id: true,
           status: true,
           runCategory: true,
+          config: true,
           startedAt: true,
           completedAt: true,
         },
