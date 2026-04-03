@@ -15,7 +15,7 @@ import {
   isOrderInvarianceSummary,
 } from './order-effect-types.js';
 import { parseTemperature } from '../../utils/temperature.js';
-import { resolveAnalysisScore } from '../decision-model.js';
+import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/shared.js';
 import {
   aggregateWithinCellDisagreementRate,
   type OrderEffectStableSide,
@@ -140,18 +140,30 @@ function _isTempZeroRun(config: unknown): boolean {
   return parseTemperature((config as { temperature?: unknown } | null)?.temperature) === 0;
 }
 
+// TODO(slice-3.2): replace numeric score with canonical direction/strength throughout order-effect
+function _canonicalToScore(input: {
+  decisionCode: string | null;
+  decisionMetadata: unknown;
+  definitionSnapshot: unknown;
+  orientationFlipped: boolean;
+}): number | null {
+  const result = resolveTranscriptDecisionModel(input);
+  const { direction, strength } = result.canonical;
+  if (direction === 'favor_first' && strength === 'strong') return 5;
+  if (direction === 'favor_first' && strength === 'lean') return 4;
+  if (direction === 'neutral') return 3;
+  if (direction === 'favor_second' && strength === 'lean') return 2;
+  if (direction === 'favor_second' && strength === 'strong') return 1;
+  return null;
+}
+
 function _parseDecision(input: {
   decisionCode: string | null;
   decisionMetadata: unknown;
   definitionSnapshot: unknown;
   orientationFlipped: boolean;
 }): number | null {
-  return resolveAnalysisScore({
-    decisionCode: input.decisionCode,
-    decisionMetadata: input.decisionMetadata,
-    definitionSnapshot: input.definitionSnapshot,
-    orientationFlipped: input.orientationFlipped,
-  });
+  return _canonicalToScore(input);
 }
 
 function _pickStableTranscripts(
@@ -446,12 +458,7 @@ export function parseDecision(input: {
   definitionSnapshot: unknown;
   orientationFlipped: boolean;
 }): number | null {
-  return resolveAnalysisScore({
-    decisionCode: input.decisionCode,
-    decisionMetadata: input.decisionMetadata,
-    definitionSnapshot: input.definitionSnapshot,
-    orientationFlipped: input.orientationFlipped,
-  });
+  return _canonicalToScore(input);
 }
 
 export function pickStableTranscripts(
