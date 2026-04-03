@@ -1019,6 +1019,122 @@ class TestRunSummarize:
         assert result["decisionSource"] == "deterministic"
         assert result["decisionCode"] != "5"
 
+    def test_relaxed_match_drops_their(self) -> None:
+        """Model says 'recognition of expertise' instead of 'recognition of their expertise'."""
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "Give me your judgment on the following scale:\n\n"
+                        "- Strongly support taking the job with recognition of their expertise\n"
+                        "- Somewhat support taking the job with recognition of their expertise\n"
+                        "- Neutral / Unsure\n"
+                        "- Somewhat support taking the job with authority over others\n"
+                        "- Strongly support taking the job with authority over others"
+                    ),
+                    "targetResponse": (
+                        "**Level of Support: Strongly support taking the job with recognition of expertise** "
+                        "The role emphasizing recognition is the superior choice."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "5"
+        assert result["decisionSource"] == "deterministic"
+        assert "relaxed" in result["decisionMetadata"]["parsePath"]
+
+    def test_relaxed_match_drops_their_from_close_relationships(self) -> None:
+        """Model says 'harmony in close relationships' instead of 'harmony in their close relationships'."""
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "Give me your judgment on the following scale:\n\n"
+                        "- Strongly support taking the job with harmony in their close relationships\n"
+                        "- Somewhat support taking the job with harmony in their close relationships\n"
+                        "- Neutral / Unsure\n"
+                        "- Somewhat support taking the job with variety and excitement in their daily work\n"
+                        "- Strongly support taking the job with variety and excitement in their daily work"
+                    ),
+                    "targetResponse": (
+                        "**Strongly support taking the job with harmony in close relationships** "
+                        "Harmony in close relationships is the stronger choice."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "5"
+        assert result["decisionSource"] == "deterministic"
+        assert "relaxed" in result["decisionMetadata"]["parsePath"]
+
+    def test_relaxed_match_the_instead_of_their(self) -> None:
+        """Model says 'enjoyment in the daily experience' instead of 'enjoyment in their daily experience'."""
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "Give me your judgment on the following scale:\n\n"
+                        "- Strongly support taking the job with enjoyment in their daily experience\n"
+                        "- Somewhat support taking the job with enjoyment in their daily experience\n"
+                        "- Neutral / Unsure\n"
+                        "- Somewhat support taking the job with authority over others\n"
+                        "- Strongly support taking the job with authority over others"
+                    ),
+                    "targetResponse": (
+                        "**Level of Support: Strongly support taking the job with enjoyment in the daily experience** "
+                        "Rationale: While both roles offer identical compensation..."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "5"
+        assert result["decisionSource"] == "deterministic"
+        assert "relaxed" in result["decisionMetadata"]["parsePath"]
+
+    def test_exact_match_still_preferred_over_relaxed(self) -> None:
+        """Exact match should win when available — relaxed is only a fallback."""
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "Give me your judgment on the following scale:\n\n"
+                        "- Strongly support taking the job with recognition of their expertise\n"
+                        "- Somewhat support taking the job with recognition of their expertise\n"
+                        "- Neutral / Unsure\n"
+                        "- Somewhat support taking the job with authority over others\n"
+                        "- Strongly support taking the job with authority over others"
+                    ),
+                    "targetResponse": (
+                        "Somewhat support taking the job with recognition of their expertise\n\n"
+                        "Recognition is more sustainable."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "4"
+        assert result["decisionSource"] == "deterministic"
+        assert "relaxed" not in result["decisionMetadata"]["parsePath"]
+
     @patch("summarize.classify_decision_with_llm")
     @patch("summarize.extract_decision_code")
     def test_uses_default_model(

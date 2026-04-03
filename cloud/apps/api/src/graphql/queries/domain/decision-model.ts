@@ -1,7 +1,7 @@
 import { DOMAIN_ANALYSIS_VALUE_KEYS, extractValuePair, toPascalCaseKey, type DomainAnalysisValueKey } from '../domain-analysis-values.js';
 import { JOB_CHOICE_VALUE_STATEMENTS, labelFromBody } from '@valuerank/shared';
 
-export type DecisionDirection = 'favor_first' | 'favor_second' | 'neutral' | 'unknown';
+export type DecisionDirection = 'favor_first' | 'favor_second' | 'neutral' | 'refusal' | 'unknown';
 export type DecisionStrength = 'strong' | 'lean' | 'neutral' | 'unknown';
 export type DecisionSource = 'deterministic' | 'manual' | 'error' | 'unknown';
 
@@ -308,6 +308,18 @@ function buildUnknownCanonicalDecision(source: DecisionSource): CanonicalDecisio
   };
 }
 
+function buildRefusalCanonicalDecision(): CanonicalDecision {
+  return {
+    favoredValueKey: null,
+    opposedValueKey: null,
+    direction: 'refusal',
+    strength: 'unknown',
+    normalizationApplied: false,
+    normalizationReason: null,
+    source: 'deterministic',
+  };
+}
+
 function buildCanonicalDecisionFromPair(
   pair: DecisionPair,
   direction: DecisionDirection,
@@ -506,6 +518,10 @@ export function resolveTranscriptDecisionModel(
 }
 
 export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDecision {
+  if (input.legacyDecisionCode === 'refusal') {
+    return buildRefusalCanonicalDecision();
+  }
+
   const pair = isValidDecisionPair(input.pair) ? input.pair : null;
   if (!pair) {
     return input.pair == null ? buildUnknownCanonicalDecision('unknown') : buildUnknownCanonicalDecision('error');
@@ -646,7 +662,7 @@ export function resolveLegacyDecisionCompat(
   canonicalDecision: CanonicalDecision = resolveCanonicalDecision(input),
 ): LegacyDecisionCompat {
   const canonicalScore = canonicalDecisionToLegacyScore(canonicalDecision);
-  if (canonicalDecision.direction === 'unknown' || canonicalDecision.strength === 'unknown') {
+  if (canonicalDecision.direction === 'unknown' || canonicalDecision.direction === 'refusal' || canonicalDecision.strength === 'unknown') {
     return {
       rawScore: null,
       canonicalScore: null,
