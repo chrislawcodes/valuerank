@@ -1,0 +1,160 @@
+OpenAI Codex v0.118.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank-domain-evaluation-backfill-attach
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019d51be-b205-7410-bafc-b564448d2721
+--------
+user
+Review this spec artifact using a feasibility-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: spec.md
+# Spec
+
+## Summary
+
+Add a supported way to backfill missing model coverage into an existing Domain Evaluation so reruns stay attached to the original launch instead of creating a separate orphan evaluation.
+
+The first use case is the production `gpt-4.1` gap on the Domain Analysis page. We need a safe product path for "rerun just the missing model coverage" without pretending that a single-model rerun is a brand-new full-cohort launch.
+
+## Problem
+
+Today the product can:
+
+- start a fresh Domain Evaluation across a domain
+- retry one vignette/model cell as a standalone run
+
+It cannot do the thing we actually need here:
+
+- choose an existing Domain Evaluation
+- backfill one or more missing models into that evaluation
+- keep the new runs attached to the original evaluation
+
+Because of that gap, model-specific reruns become separate evaluations, which makes the launch history messy and makes it harder to monitor the original evaluation as one unit.
+
+## Goals
+
+- Let a user start a model backfill from the existing Domain Level Batches screen.
+- Attach backfill runs to the selected Domain Evaluation instead of creating a new evaluation.
+- Keep the evaluation's original model list as the source of truth for what that evaluation is supposed to contain.
+- Launch only the missing model coverage needed to reach the requested paired-batch depth for the selected latest vignettes.
+- Preserve paired-batch launch metadata for job-choice vignette pairs.
+- Show enough UI state that a user can see which models are missing before starting the backfill.
+
+## Non-Goals
+
+- Redesign the whole Domain Level Batches page.
+- Reinterpret old evaluations that were launched with a different vignette set or a different signature.
+- Merge separate evaluations after the fact.
+- Backfill models that were never part of the target evaluation's original model set.
+- Add a production data migration.
+
+## User Story
+
+As a person managing Domain Evaluations, I want to pick an existing evaluation and backfill only the missing model coverage into that same evaluation, so the new runs stay grouped with the original launch and the analysis gaps disappear without creating a fake new cohort.
+
+## Required Behavior
+
+### Launch Surface
+
+- The Domain Level Batches screen should expose a backfill action when there is a current Domain Evaluation to attach to.
+- The backfill action should be separate from the normal "start paired batches" action so users can tell the difference between:
+  - starting a new full-cohort launch
+  - filling missing model coverage into an existing evaluation
+- The target evaluation must be explicit. The backfill request must carry one concrete `domainEvaluationId`, and the server must never infer the attach target from `domainId` alone.
+
+### Model Selection
+
+- The UI should only let the user choose model IDs that belong to the target evaluation's original model list and are still active in the system.
+- The UI should show which of those models still have missing coverage for the currently selected latest vignettes at the requested paired-batch depth.
+- If no models are missing, the backfill action should stay disabled and explain why.
+- Before launch, the UI should show a confirmation summary with:
+  - the target evaluation ID
+  - the selected model IDs
+  - the number of new paired batches or runs that will start
+  - the estimated additional spend for this backfill request
+
+### Server-Side Attach Rules
+
+- Backfill runs must attach to an existing Domain Evaluation.
+- The server must reuse the target evaluation's saved scope category, temperature, sample percentage, and samples-per-condition settings.
+- The server must reject unsafe requests, including:
+  - model IDs outside the evaluation's original model set
+  - vignettes outside the evaluation's original launch scope
+  - evaluations that do not have enough snapshot data to backfill safely
+- "Enough snapshot data" means the evaluation snapshot must include:
+  - the original model list
+  - the original launchable vignette IDs
+  - the saved temperature, including an explicit `null` provider-default case
+  - the saved sample percentage
+  - the saved samples-per-condition value
+  - the saved run category or equivalent scope information needed to recreate the original run settings
+- The server must re-calculate missing coverage when the request arrives. The client-side missing list is advisory only.
+- The server must serialize backfill planning per target evaluation so overlapping requests cannot both launch the same missing work.
+
+### Coverage Rules
+
+- Backfill launches are single-model runs.
+- A model only counts as covered when the attached run is in one of these statuses:
+  - `COMPLETED`
+  - `PENDING`
+  - `RUNNING`
+  - `PAUSED`
+  - `SUMMARIZING`
+- `FAILED` and `CANCELLED` runs do not count as coverage and may be replaced by backfill work.
+- For non-paired vignette launches, the server should count existing coverage per vignette/model inside the target evaluation and top up only the missing depth.
+- For paired job-choice launches, the server should use paired-min logic per model so a model only counts as covered when both sides of the pair have the requested depth.
+- A paired model backfill launches both sides of the pair together for that model and stamps the same paired-batch metadata shape used by normal paired launches.
+- Backfill may intentionally create mixed-depth evaluations when one selected model is topped up deeper than another. That is allowed, and the product should not imply that every model inside one evaluation has identical depth.
+
+### Evaluation State
+
+- New backfill runs must be added as members of the existing Domain Evaluation.
+- Reopening a completed evaluation with attached backfill work should make that evaluation read as active again while the new runs are in flight.
+- The evaluation summary should keep the original model list, but its member list and run totals should include the attached backfill work.
+- Once the attached backfill runs are no longer active, the evaluation should fall back to the same terminal-state rules used for any other evaluation:
+  - `COMPLETED` when all member runs are complete and none failed
+  - `FAILED` when any attached member run failed or was cancelled
+
+## Acceptance Criteria
+
+- A user can start a model backfill from the Domain Level Batches screen for the current Domain Evaluation.
+- The user can select one or more missing models from the target evaluation's original model set.
+- The server starts only the missing model coverage needed to reach the requested paired-batch depth for the selected latest vignettes.
+- The server attaches those runs to the existing Domain Evaluation instead of creating a new evaluation.
+- The current Domain Evaluation view shows the attached backfill runs as members of that evaluation.
+- Unsafe backfill requests are rejected with clear errors instead of silently attaching the wrong runs.
+- Overlapping backfill requests against the same evaluation do not launch duplicate missing work.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+2026-04-03T05:09:05.232492Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d51be-b205-7410-bafc-b564448d2721.tmp-1775192945168550000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+codex
+## Findings
+- High: The spec does not define the unit of a paired backfill. It says backfill launches are single-model runs, but paired job-choice backfills must launch both sides of a pair together and reuse paired-batch metadata. The artifact never states whether the API should create one logical backfill record, two child runs, or one paired batch, so spend estimates, member counts, and completion logic can all diverge.
+- High: The launch flow is not safe under partial failure or retry. Serializing planning per evaluation prevents two planners from racing, but the spec never says launches are atomic, rollbackable, or idempotent. If the server creates some runs and then errors, or the client retries after a timeout, duplicate or orphaned backfill work is still possible.
+- Medium [UNVERIFIED]: The feature depends on every target evaluation already having a complete snapshot of the original model list, vignette IDs, temperature, sample percentage, samples-per-condition, and run category. The spec says to reject evaluations that lack any of that, but it does not define a blocked UI state or a recovery path. If the first production evaluation is missing even one field, the feature cannot solve the stated backfill need.
+- Medium: The server-side recalc rule is underspecified when the client selection is stale. The client missing list is only advisory, but the spec never says whether the server should reject stale model IDs, silently drop already-covered models, or launch only the still-missing subset. That makes the confirmation summary and the actual launch outcome easy to disagree.
+- Medium [UNVERIFIED]: The coverage-state list is incomplete. Only COMPLETED, PENDING, RUNNING, PAUSED, and SUMMARIZING count as covered, but the spec does not say what to do with other likely job states such as QUEUED, TIMED_OUT, SKIPPED, or provider-specific transient states. If any of those exist in the runtime, the backfill planner can misclassify coverage.
+
+## Residual Risks
+- Completed evaluations will no longer be effectively immutable once backfills are attached, so downstream pages, exports, and alerts may need explicit updates to handle reopen-then-return-to-terminal behavior.
+- Mixed-depth evaluations are allowed, so every summary and comparison view will need a clear visual rule for per-model depth instead of assuming uniform coverage across the evaluation.
+- Spend estimates may still be approximate unless the product defines the exact counting formula for paired backfills and any provider-specific pricing differences.
+tokens used
+33,962

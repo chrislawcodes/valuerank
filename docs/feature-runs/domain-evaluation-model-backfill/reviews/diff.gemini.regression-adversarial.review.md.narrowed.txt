@@ -1,0 +1,1059 @@
+diff --git a/cloud/apps/api/src/graphql/mutations/domain/evaluation.ts b/cloud/apps/api/src/graphql/mutations/domain/evaluation.ts
+index eca7ff5f..bd5d8a6e 100644
+--- a/cloud/apps/api/src/graphql/mutations/domain/evaluation.ts
++++ b/cloud/apps/api/src/graphql/mutations/domain/evaluation.ts
+@@ -8,7 +8,7 @@ import {
+   DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,
+   DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
+ } from '../../../services/run/config.js';
+-import { launchDomainEvaluation } from './launch.js';
++import { backfillDomainEvaluationModels, launchDomainEvaluation } from './launch.js';
+ import {
+   DomainTrialRunResultRef,
+   RetryDomainTrialCellResultRef,
+@@ -93,6 +93,39 @@ builder.mutationField('startDomainEvaluation', (t) =>
+   }),
+ );
+ 
++builder.mutationField('backfillDomainEvaluationModels', (t) =>
++  t.field({
++    type: DomainTrialRunResultRef,
++    args: {
++      domainEvaluationId: t.arg.id({ required: true }),
++      modelIds: t.arg.stringList({ required: true }),
++      definitionIds: t.arg.idList({ required: false }),
++      targetBatchCount: t.arg.int({ required: false }),
++    },
++    resolve: async (_root, args, ctx) => {
++      if (!ctx.user) {
++        throw new AuthenticationError('Authentication required');
++      }
++
++      const rawTargetBatchCount = args.targetBatchCount ?? null;
++      const targetBatchCount =
++        rawTargetBatchCount !== null && Number.isFinite(rawTargetBatchCount) && rawTargetBatchCount >= 1
++          ? rawTargetBatchCount
++          : null;
++
++      return backfillDomainEvaluationModels({
++        domainEvaluationId: String(args.domainEvaluationId),
++        modelIds: args.modelIds?.map(String) ?? [],
++        definitionIds: args.definitionIds?.map(String) ?? [],
++        targetBatchCount,
++        userId: ctx.user.id,
++        log: ctx.log,
++        auditOperationType: 'backfill-domain-evaluation-models',
++      });
++    },
++  }),
++);
++
+ builder.mutationField('retryDomainTrialCell', (t) =>
+   t.field({
+     type: RetryDomainTrialCellResultRef,
+diff --git a/cloud/apps/api/src/graphql/mutations/domain/launch.ts b/cloud/apps/api/src/graphql/mutations/domain/launch.ts
+index d6f04df4..48c20c5d 100644
+--- a/cloud/apps/api/src/graphql/mutations/domain/launch.ts
++++ b/cloud/apps/api/src/graphql/mutations/domain/launch.ts
+@@ -1,6 +1,6 @@
+ import { randomUUID } from 'crypto';
+ import { db } from '@valuerank/db';
+-import type { Prisma } from '@valuerank/db';
++import type { Prisma, RunStatus } from '@valuerank/db';
+ import { createAuditLog } from '../../../services/audit/index.js';
+ import { startRun as startRunService } from '../../../services/run/index.js';
+ import { estimateCost as estimateCostService } from '../../../services/cost/estimate.js';
+@@ -8,6 +8,7 @@ import { parseTemperature } from '../../../utils/temperature.js';
+ import { isValidPair, getComponentTokens } from '../../../utils/auto-pair.js';
+ import {
+   type DomainEvaluationLaunchInput,
++  type DomainEvaluationModelBackfillInput,
+   type DomainTrialRunEntry,
+   type DomainTrialRunResult,
+   normalizeModelSet,
+@@ -106,9 +107,9 @@ type JobChoiceMethodology = {
+ };
+ 
+ function extractJobChoiceMethodology(content: unknown): JobChoiceMethodology | null {
+-  if (!content || typeof content !== 'object' || Array.isArray(content)) return null;
++  if (content == null || typeof content !== 'object' || Array.isArray(content)) return null;
+   const m = (content as Record<string, unknown>).methodology;
+-  if (!m || typeof m !== 'object' || Array.isArray(m)) return null;
++  if (m == null || typeof m !== 'object' || Array.isArray(m)) return null;
+   const rec = m as Record<string, unknown>;
+   if (
+     rec.family !== 'job-choice' ||
+@@ -128,6 +129,89 @@ type LaunchGroup = {
+   definitions: DefinitionRow[];
+ };
+ 
++const ACTIVE_RUN_STATUSES: RunStatus[] = ['PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING'];
++const COUNTABLE_RUN_STATUSES: RunStatus[] = ['COMPLETED', ...ACTIVE_RUN_STATUSES];
++
++type BackfillEvaluationSnapshot = {
++  models: string[];
++  launchableDefinitionIds: string[];
++  temperature: number | null;
++  samplePercentage: number;
++  samplesPerScenario: number;
++  startedRuns: number;
++  failedDefinitions: number;
++  skippedForBudget: number;
++  projectedCostUsd: number;
++};
++
++type BackfillLaunchGroupRepetition = {
++  pairKey: string | null;
++  definitions: DefinitionRow[];
++  modelId: string;
++};
++
++function getBackfillSnapshot(configSnapshot: unknown): BackfillEvaluationSnapshot | null {
++  if (configSnapshot == null || typeof configSnapshot !== 'object' || Array.isArray(configSnapshot)) {
++    return null;
++  }
++
++  const snapshot = configSnapshot as Record<string, unknown>;
++  const models = normalizeModelSet(snapshot.models);
++  const launchableDefinitionIds = Array.isArray(snapshot.launchableDefinitionIds)
++    ? snapshot.launchableDefinitionIds.filter((value): value is string => typeof value === 'string' && value.trim() !== '')
++    : [];
++  const temperature = parseTemperature(snapshot.temperature);
++  const samplePercentage = typeof snapshot.samplePercentage === 'number' && Number.isFinite(snapshot.samplePercentage)
++    ? snapshot.samplePercentage
++    : null;
++  const samplesPerScenario = typeof snapshot.samplesPerScenario === 'number' && Number.isFinite(snapshot.samplesPerScenario)
++    ? snapshot.samplesPerScenario
++    : null;
++  const startedRuns = typeof snapshot.startedRuns === 'number' && Number.isFinite(snapshot.startedRuns)
++    ? snapshot.startedRuns
++    : 0;
++  const failedDefinitions = typeof snapshot.failedDefinitions === 'number' && Number.isFinite(snapshot.failedDefinitions)
++    ? snapshot.failedDefinitions
++    : 0;
++  const skippedForBudget = typeof snapshot.skippedForBudget === 'number' && Number.isFinite(snapshot.skippedForBudget)
++    ? snapshot.skippedForBudget
++    : 0;
++  const projectedCostUsd = typeof snapshot.projectedCostUsd === 'number' && Number.isFinite(snapshot.projectedCostUsd)
++    ? snapshot.projectedCostUsd
++    : 0;
++
++  if (models.length === 0 || launchableDefinitionIds.length === 0 || samplePercentage === null || samplesPerScenario === null) {
++    return null;
++  }
++
++  return {
++    models,
++    launchableDefinitionIds,
++    temperature,
++    samplePercentage,
++    samplesPerScenario,
++    startedRuns,
++    failedDefinitions,
++    skippedForBudget,
++    projectedCostUsd,
++  };
++}
++
++function runMatchesSingleModel(config: unknown, modelId: string, temperature: number | null): boolean {
++  const runConfig = config as { models?: unknown; temperature?: unknown } | null;
++  const runModels = normalizeModelSet(runConfig?.models);
++  const runTemperature = parseTemperature(runConfig?.temperature);
++  return runTemperature === temperature && runModels.length === 1 && runModels[0] === modelId;
++}
++
++function coverageKey(definitionId: string, modelId: string): string {
++  return `${definitionId}::${modelId}`;
++}
++
++function getCoverageCount(coverageCounts: Map<string, number>, definitionId: string, modelId: string): number {
++  return coverageCounts.get(coverageKey(definitionId, modelId)) ?? 0;
++}
++
+ function groupDefinitionsByPairKey(definitions: DefinitionRow[]): {
+   groups: LaunchGroup[];
+   incompletePairKeys: string[];
+@@ -167,6 +251,322 @@ function groupDefinitionsByPairKey(definitions: DefinitionRow[]): {
+   return { groups, incompletePairKeys };
+ }
+ 
++export async function backfillDomainEvaluationModels(input: DomainEvaluationModelBackfillInput): Promise<DomainTrialRunResult> {
++  const {
++    domainEvaluationId,
++    modelIds,
++    definitionIds = [],
++    targetBatchCount = null,
++    userId,
++    log,
++    auditOperationType,
++  } = input;
++
++  if (modelIds.length === 0) {
++    throw new Error('Select at least one model to backfill.');
++  }
++
++  const effectiveTargetBatchCount = targetBatchCount != null && targetBatchCount > 0 ? targetBatchCount : 1;
++  const uniqueRequestedModelIds = Array.from(new Set(modelIds.map((modelId) => modelId.trim()).filter((modelId) => modelId !== '')));
++  if (uniqueRequestedModelIds.length === 0) {
++    throw new Error('Select at least one model to backfill.');
++  }
++
++  const evaluation = await db.domainEvaluation.findUnique({
++    where: { id: domainEvaluationId },
++    include: {
++      members: {
++        include: {
++          run: {
++            select: {
++              id: true,
++              status: true,
++              config: true,
++            },
++          },
++        },
++      },
++    },
++  });
++  if (!evaluation) {
++    throw new Error(`Domain evaluation not found: ${domainEvaluationId}`);
++  }
++
++  const snapshot = getBackfillSnapshot(evaluation.configSnapshot);
++  if (!snapshot) {
++    throw new Error('This evaluation does not have enough saved launch settings to support model backfill.');
++  }
++
++  const allowedModelIds = new Set(snapshot.models);
++  const invalidRequestedModels = uniqueRequestedModelIds.filter((modelId) => !allowedModelIds.has(modelId));
++  if (invalidRequestedModels.length > 0) {
++    throw new Error(`Selected models are not part of this evaluation: ${invalidRequestedModels.join(', ')}`);
++  }
++
++  const activeModels = await db.llmModel.findMany({
++    where: {
++      modelId: { in: uniqueRequestedModelIds },
++      status: 'ACTIVE',
++    },
++    select: { modelId: true },
++  });
++  const activeModelIdSet = new Set(activeModels.map((model) => model.modelId));
++  const inactiveRequestedModels = uniqueRequestedModelIds.filter((modelId) => !activeModelIdSet.has(modelId));
++  if (inactiveRequestedModels.length > 0) {
++    throw new Error(`Selected models are not active: ${inactiveRequestedModels.join(', ')}`);
++  }
++
++  const launchableDefinitionIdSet = new Set(snapshot.launchableDefinitionIds);
++  const uniqueRequestedDefinitionIds = Array.from(new Set(definitionIds.map((definitionId) => definitionId.trim()).filter((definitionId) => definitionId !== '')));
++  const selectedDefinitionIds = uniqueRequestedDefinitionIds.length > 0 ? uniqueRequestedDefinitionIds : snapshot.launchableDefinitionIds;
++  const outOfScopeDefinitionIds = selectedDefinitionIds.filter((definitionId) => !launchableDefinitionIdSet.has(definitionId));
++  if (outOfScopeDefinitionIds.length > 0) {
++    throw new Error(`Selected vignettes are not part of this evaluation: ${outOfScopeDefinitionIds.join(', ')}`);
++  }
++
++  const domain = await db.domain.findUnique({ where: { id: evaluation.domainId } });
++  if (!domain) {
++    throw new Error(`Domain not found: ${evaluation.domainId}`);
++  }
++
++  const allDomainDefinitions = await db.definition.findMany({
++    where: { domainId: evaluation.domainId, deletedAt: null },
++    select: {
++      id: true,
++      name: true,
++      parentId: true,
++      version: true,
++      createdAt: true,
++      updatedAt: true,
++      content: true,
++    },
++  });
++  const totalDefinitions = allDomainDefinitions.length;
++  const selectedDefinitions = allDomainDefinitions.filter((definition) => selectedDefinitionIds.includes(definition.id));
++  const selectedDefinitionIdSet = new Set(selectedDefinitions.map((definition) => definition.id));
++  const missingDefinitions = selectedDefinitionIds.filter((definitionId) => !selectedDefinitionIdSet.has(definitionId));
++  if (missingDefinitions.length > 0) {
++    throw new Error(`Selected vignettes are missing or deleted: ${missingDefinitions.join(', ')}`);
++  }
++
++  const { groups: launchGroups, incompletePairKeys } = groupDefinitionsByPairKey(selectedDefinitions);
++  if (incompletePairKeys.length > 0) {
++    throw new Error(`Backfill requires complete vignette pairs. Include both sides for: ${incompletePairKeys.join(', ')}`);
++  }
++
++  const countableCoverage = new Map<string, number>();
++  for (const member of evaluation.members) {
++    if (!COUNTABLE_RUN_STATUSES.includes(member.run.status)) continue;
++    const runConfig = member.run.config as { models?: unknown } | null;
++    const runModelIds = normalizeModelSet(runConfig?.models);
++    for (const modelId of runModelIds) {
++      const key = coverageKey(member.definitionIdAtLaunch, modelId);
++      countableCoverage.set(key, (countableCoverage.get(key) ?? 0) + 1);
++    }
++  }
++
++  const backfillGroups: BackfillLaunchGroupRepetition[] = [];
++  const costEstimateCache = new Map<string, number>();
++  let projectedCostUsd = 0;
++
++  for (const group of launchGroups) {
++    for (const modelId of uniqueRequestedModelIds) {
++      const existingDepth = group.pairKey !== null
++        ? group.definitions.reduce(
++          (min, definition) => Math.min(min, getCoverageCount(countableCoverage, definition.id, modelId)),
++          Number.POSITIVE_INFINITY,
++        )
++        : getCoverageCount(countableCoverage, group.definitions[0]!.id, modelId);
++
++      const normalizedExistingDepth = Number.isFinite(existingDepth) ? existingDepth : 0;
++      const delta = Math.max(0, effectiveTargetBatchCount - normalizedExistingDepth);
++      if (delta === 0) continue;
++
++      for (let index = 0; index < delta; index += 1) {
++        backfillGroups.push({
++          pairKey: group.pairKey,
++          definitions: group.definitions,
++          modelId,
++        });
++      }
++
++      for (const definition of group.definitions) {
++        const costKey = coverageKey(definition.id, modelId);
++        let estimatedCost = costEstimateCache.get(costKey);
++        if (estimatedCost == null) {
++          const estimate = await estimateCostService({
++            definitionId: definition.id,
++            modelIds: [modelId],
++            samplePercentage: snapshot.samplePercentage,
++            samplesPerScenario: snapshot.samplesPerScenario,
++          });
++          estimatedCost = estimate.total;
++          costEstimateCache.set(costKey, estimatedCost);
++        }
++        projectedCostUsd += estimatedCost * delta;
++      }
++    }
++  }
++
++  if (backfillGroups.length === 0) {
++    return {
++      domainEvaluationId: evaluation.id,
++      scopeCategory: evaluation.scopeCategory,
++      success: true,
++      totalDefinitions,
++      targetedDefinitions: selectedDefinitions.length,
++      startedRuns: 0,
++      failedDefinitions: 0,
++      skippedForBudget: 0,
++      projectedCostUsd: 0,
++      blockedByActiveLaunch: false,
++      runs: [],
++    };
++  }
++
++  let startedRuns = 0;
++  let failedDefinitions = 0;
++  const runs: DomainTrialRunEntry[] = [];
++
++  for (const group of backfillGroups) {
++    const activeEquivalentRuns = await db.run.findMany({
++      where: {
++        definitionId: { in: group.definitions.map((definition) => definition.id) },
++        runCategory: evaluation.scopeCategory,
++        status: { in: ACTIVE_RUN_STATUSES },
++        deletedAt: null,
++      },
++      select: {
++        definitionId: true,
++        config: true,
++      },
++    });
++    const hasActiveEquivalentRun = activeEquivalentRuns.some((run) => runMatchesSingleModel(run.config, group.modelId, snapshot.temperature));
++    if (hasActiveEquivalentRun) {
++      continue;
++    }
++
++    const batchGroupId = group.pairKey !== null ? randomUUID() : null;
++    const runResults = await Promise.allSettled(
++      group.definitions.map(async (definition) => {
++        const tokens = group.pairKey !== null ? getComponentTokens(definition.content) : null;
++        return startRunService({
++          definitionId: definition.id,
++          models: [group.modelId],
++          samplePercentage: snapshot.samplePercentage,
++          samplesPerScenario: snapshot.samplesPerScenario,
++          temperature: snapshot.temperature ?? undefined,
++          priority: 'NORMAL',
++          runCategory: evaluation.scopeCategory,
++          userId,
++          finalTrial: false,
++          ...(group.pairKey !== null
++            ? {
++              configExtras: {
++                jobChoiceLaunchMode: 'PAIRED_BATCH',
++                jobChoiceBatchGroupId: batchGroupId,
++                jobChoiceValueFirst: tokens?.value_first.token,
++                methodologySafe: true,
++              },
++            }
++            : {}),
++        });
++      }),
++    );
++
++    runResults.forEach((result, index) => {
++      if (result.status === 'fulfilled') {
++        startedRuns += 1;
++        runs.push({
++          definitionId: result.value.run.definitionId,
++          runId: result.value.run.id,
++          modelIds: [group.modelId],
++        });
++        return;
++      }
++
++      failedDefinitions += 1;
++      const failedDefinition = group.definitions[index];
++      log.error(
++        {
++          domainEvaluationId,
++          definitionId: failedDefinition?.id ?? null,
++          modelId: group.modelId,
++          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
++        },
++        'Failed to start evaluation model backfill run',
++      );
++    });
++  }
++
++  if (runs.length > 0) {
++    const definitionById = new Map(selectedDefinitions.map((definition) => [definition.id, definition]));
++    await db.domainEvaluationRun.createMany({
++      data: runs.map((run) => {
++        const definition = definitionById.get(run.definitionId);
++        return {
++          domainEvaluationId: evaluation.id,
++          runId: run.runId,
++          definitionIdAtLaunch: run.definitionId,
++          definitionNameAtLaunch: definition?.name ?? 'Untitled vignette',
++          domainIdAtLaunch: evaluation.domainId,
++        };
++      }),
++    });
++  }
++
++  const updatedSnapshot = {
++    ...(evaluation.configSnapshot as Prisma.JsonObject),
++    startedRuns: snapshot.startedRuns + startedRuns,
++    failedDefinitions: snapshot.failedDefinitions + failedDefinitions,
++    skippedForBudget: snapshot.skippedForBudget,
++    projectedCostUsd: snapshot.projectedCostUsd + projectedCostUsd,
++  } as Prisma.InputJsonValue;
++
++  await db.domainEvaluation.update({
++    where: { id: evaluation.id },
++    data: {
++      status: startedRuns > 0 ? 'RUNNING' : (failedDefinitions > 0 ? 'FAILED' : evaluation.status),
++      startedAt: startedRuns > 0 ? (evaluation.startedAt ?? new Date()) : evaluation.startedAt,
++      completedAt: startedRuns > 0 ? null : evaluation.completedAt,
++      configSnapshot: updatedSnapshot,
++    },
++  });
++
++  await createAuditLog({
++    action: 'ACTION',
++    entityType: 'Domain',
++    entityId: evaluation.domainId,
++    userId,
++    metadata: {
++      operationType: auditOperationType,
++      domainName: domain.name,
++      domainEvaluationId,
++      scopeCategory: evaluation.scopeCategory,
++      requestedDefinitionIds: selectedDefinitionIds,
++      modelIds: uniqueRequestedModelIds,
++      targetBatchCount: effectiveTargetBatchCount,
++      startedRuns,
++      failedDefinitions,
++      projectedCostUsd,
++    },
++  });
++
++  return {
++    domainEvaluationId: evaluation.id,
++    scopeCategory: evaluation.scopeCategory,
++    success: failedDefinitions === 0,
++    totalDefinitions,
++    targetedDefinitions: selectedDefinitions.length,
++    startedRuns,
++    failedDefinitions,
++    skippedForBudget: 0,
++    projectedCostUsd,
++    blockedByActiveLaunch: false,
++    runs,
++  };
++}
++
+ export async function launchDomainEvaluation(input: DomainEvaluationLaunchInput): Promise<DomainTrialRunResult> {
+   const {
+     domainId,
+@@ -438,6 +838,7 @@ export async function launchDomainEvaluation(input: DomainEvaluationLaunchInput)
+           maxBudgetUsd: budgetCap,
+           samplePercentage,
+           samplesPerScenario,
++          targetBatchCount,
+           defaultsOnly: modelIds.length === 0 && defaultModels.length > 0,
+           runCategory: scopeCategory,
+         },
+@@ -542,6 +943,7 @@ export async function launchDomainEvaluation(input: DomainEvaluationLaunchInput)
+           maxBudgetUsd: budgetCap,
+           samplePercentage,
+           samplesPerScenario,
++          targetBatchCount,
+           defaultsOnly: modelIds.length === 0 && defaultModels.length > 0,
+           runCategory: scopeCategory,
+         } as Prisma.InputJsonValue,
+@@ -571,6 +973,7 @@ export async function launchDomainEvaluation(input: DomainEvaluationLaunchInput)
+       maxBudgetUsd: budgetCap,
+       samplePercentage,
+       samplesPerScenario,
++      targetBatchCount,
+       defaultsOnly: modelIds.length === 0 && defaultModels.length > 0,
+     },
+   });
+diff --git a/cloud/apps/api/src/graphql/mutations/domain/types.ts b/cloud/apps/api/src/graphql/mutations/domain/types.ts
+index 7bbebbbe..7011d232 100644
+--- a/cloud/apps/api/src/graphql/mutations/domain/types.ts
++++ b/cloud/apps/api/src/graphql/mutations/domain/types.ts
+@@ -43,6 +43,19 @@ export type DomainEvaluationLaunchInput = {
+   auditOperationType: 'run-trials-for-domain' | 'start-domain-evaluation';
+ };
+ 
++export type DomainEvaluationModelBackfillInput = {
++  domainEvaluationId: string;
++  modelIds: string[];
++  definitionIds?: string[];
++  targetBatchCount?: number | null;
++  userId: string;
++  log: {
++    error: (payload: Record<string, unknown>, message: string) => void;
++    warn: (payload: Record<string, unknown>, message: string) => void;
++  };
++  auditOperationType: 'backfill-domain-evaluation-models';
++};
++
+ export type RetryDomainTrialCellResult = {
+   success: boolean;
+   definitionId: string;
+
+... [narrowed diff slice: middle omitted] ...
+
+diff --git a/cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx b/cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx
+index adc1dc68..1401519f 100644
+--- a/cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx
++++ b/cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx
+@@ -1,9 +1,10 @@
+ import { beforeEach, describe, expect, it, vi } from 'vitest';
+-import { render, screen, waitFor } from '@testing-library/react';
++import { render, screen, waitFor, within } from '@testing-library/react';
+ import userEvent from '@testing-library/user-event';
+ import { MemoryRouter, Route, Routes } from 'react-router-dom';
+ import { DomainTrialsDashboard } from '../../src/pages/DomainTrialsDashboard';
+ import {
++  BACKFILL_DOMAIN_EVALUATION_MODELS_MUTATION,
+   DOMAIN_EVALUATIONS_QUERY,
+   DOMAIN_EVALUATION_QUERY,
+   DOMAIN_EVALUATION_STATUS_QUERY,
+@@ -18,6 +19,7 @@ const useQueryMock = vi.fn();
+ const useMutationMock = vi.fn();
+ const useRunMock = vi.fn();
+ const startDomainEvaluationMock = vi.fn();
++const backfillDomainEvaluationModelsMock = vi.fn();
+ const NOW = new Date().toISOString();
+ 
+ vi.mock('urql', async () => {
+@@ -398,6 +400,14 @@ function mockActiveLaunchQueries() {
+             skippedForBudget: 0,
+             projectedCostUsd: 84,
+             models: ['model-1', 'model-2'],
++            launchableDefinitionIds: ['def-1', 'def-2'],
++            launchableDefinitions: [
++              { definitionId: 'def-1', definitionName: 'Jobs A', pairKey: 'pair-1' },
++              { definitionId: 'def-2', definitionName: 'Jobs B', pairKey: 'pair-1' },
++            ],
++            samplePercentage: 100,
++            samplesPerScenario: 1,
++            targetBatchCount: 1,
+             temperature: null,
+             maxBudgetUsd: null,
+             memberCount: 2,
+@@ -407,6 +417,7 @@ function mockActiveLaunchQueries() {
+                 definitionIdAtLaunch: 'def-1',
+                 definitionNameAtLaunch: 'Jobs A',
+                 domainIdAtLaunch: 'domain-a',
++                modelIds: ['model-1', 'model-2'],
+                 createdAt: '2026-03-15T12:01:00.000Z',
+                 runStatus: 'RUNNING',
+                 runCategory: 'PRODUCTION',
+@@ -418,6 +429,7 @@ function mockActiveLaunchQueries() {
+                 definitionIdAtLaunch: 'def-2',
+                 definitionNameAtLaunch: 'Jobs B',
+                 domainIdAtLaunch: 'domain-a',
++                modelIds: ['model-1', 'model-2'],
+                 createdAt: '2026-03-15T12:01:00.000Z',
+                 runStatus: 'FAILED',
+                 runCategory: 'PRODUCTION',
+@@ -503,17 +515,316 @@ function mockActiveLaunchQueries() {
+   });
+ }
+ 
++function mockBackfillQueries() {
++  useQueryMock.mockImplementation((args: { query: unknown; variables?: Record<string, unknown> }) => {
++    if (args.query === DOMAIN_TRIALS_PLAN_QUERY) {
++      return [{
++        data: {
++          domainTrialsPlan: {
++            domainId: 'domain-a',
++            domainName: 'Job domain',
++            vignettes: [
++              { definitionId: 'def-1', definitionName: 'Jobs A', definitionVersion: 1, signature: 'sig-a', scenarioCount: 25, existingBatchCount: 1 },
++              { definitionId: 'def-2', definitionName: 'Jobs B', definitionVersion: 1, signature: 'sig-b', scenarioCount: 25, existingBatchCount: 1 },
++            ],
++            models: [
++              { modelId: 'model-1', label: 'Model One', isDefault: true, supportsTemperature: true },
++              { modelId: 'model-2', label: 'Model Two', isDefault: false, supportsTemperature: true },
++            ],
++            cellEstimates: [
++              { definitionId: 'def-1', modelId: 'model-1', estimatedCost: 21 },
++              { definitionId: 'def-1', modelId: 'model-2', estimatedCost: 21 },
++              { definitionId: 'def-2', modelId: 'model-1', estimatedCost: 21 },
++              { definitionId: 'def-2', modelId: 'model-2', estimatedCost: 21 },
++            ],
++            totalEstimatedCost: 84,
++            existingTemperatures: [],
++            defaultTemperature: null,
++            temperatureWarning: null,
++          },
++        },
++        fetching: false,
++        error: undefined,
++      }, vi.fn()];
++    }
++    if (args.query === ESTIMATE_DOMAIN_EVALUATION_COST_QUERY) {
++      if (args.variables?.modelIds && Array.isArray(args.variables.modelIds) && args.variables.modelIds[0] === 'model-2') {
++        return [{
++          data: {
++            estimateDomainEvaluationCost: {
++              domainId: 'domain-a',
++              domainName: 'Job domain',
++              scopeCategory: 'PRODUCTION',
++              targetedDefinitions: 2,
++              totalScenarioCount: 50,
++              totalEstimatedCost: 42,
++              basedOnSampleCount: 50,
++              isUsingFallback: false,
++              fallbackReason: null,
++              estimateConfidence: 'HIGH',
++              knownExclusions: [],
++              models: [
++                { modelId: 'model-2', label: 'Model Two', isDefault: false, supportsTemperature: true, estimatedCost: 42, basedOnSampleCount: 50, isUsingFallback: false },
++              ],
++              definitions: [
++                { definitionId: 'def-1', definitionName: 'Jobs A', definitionVersion: 1, signature: 'sig-a', scenarioCount: 25, estimatedCost: 21, basedOnSampleCount: 50, isUsingFallback: false },
++                { definitionId: 'def-2', definitionName: 'Jobs B', definitionVersion: 1, signature: 'sig-b', scenarioCount: 25, estimatedCost: 21, basedOnSampleCount: 50, isUsingFallback: false },
++              ],
++              existingTemperatures: [],
++              defaultTemperature: null,
++              temperatureWarning: null,
++            },
++          },
++          fetching: false,
++          error: undefined,
++        }, vi.fn()];
++      }
++
++      return [{
++        data: {
++          estimateDomainEvaluationCost: {
++            domainId: 'domain-a',
++            domainName: 'Job domain',
++            scopeCategory: 'PRODUCTION',
++            targetedDefinitions: 2,
++            totalScenarioCount: 50,
++            totalEstimatedCost: 84,
++            basedOnSampleCount: 50,
++            isUsingFallback: false,
++            fallbackReason: null,
++            estimateConfidence: 'HIGH',
++            knownExclusions: [],
++            models: [
++              { modelId: 'model-1', label: 'Model One', isDefault: true, supportsTemperature: true, estimatedCost: 42, basedOnSampleCount: 50, isUsingFallback: false },
++              { modelId: 'model-2', label: 'Model Two', isDefault: false, supportsTemperature: true, estimatedCost: 42, basedOnSampleCount: 50, isUsingFallback: false },
++            ],
++            definitions: [],
++            existingTemperatures: [],
++            defaultTemperature: null,
++            temperatureWarning: null,
++          },
++        },
++        fetching: false,
++        error: undefined,
++      }, vi.fn()];
++    }
++    if (args.query === LLM_MODELS_QUERY) {
++      return [{
++        data: {
++          llmModels: [
++            {
++              id: 'model-1-id',
++              providerId: 'openai',
++              modelId: 'model-1',
++              displayName: 'Model One',
++              costInputPerMillion: 1,
++              costOutputPerMillion: 2,
++              status: 'ACTIVE',
++              isDefault: true,
++              isAvailable: true,
++              apiConfig: null,
++              createdAt: '2026-03-01T00:00:00.000Z',
++              updatedAt: '2026-03-01T00:00:00.000Z',
++              provider: {
++                id: 'openai',
++                name: 'openai',
++                displayName: 'OpenAI',
++                maxParallelRequests: 5,
++                requestsPerMinute: 100,
++                isEnabled: true,
++                balance: 100,
++                lastSyncedAt: NOW,
++                createdAt: '2026-03-01T00:00:00.000Z',
++                updatedAt: '2026-03-01T00:00:00.000Z',
++                models: [],
++              },
++            },
++            {
++              id: 'model-2-id',
++              providerId: 'anthropic',
++              modelId: 'model-2',
++              displayName: 'Model Two',
++              costInputPerMillion: 1,
++              costOutputPerMillion: 2,
++              status: 'ACTIVE',
++              isDefault: false,
++              isAvailable: true,
++              apiConfig: null,
++              createdAt: '2026-03-01T00:00:00.000Z',
++              updatedAt: '2026-03-01T00:00:00.000Z',
++              provider: {
++                id: 'anthropic',
++                name: 'anthropic',
++                displayName: 'Anthropic',
++                maxParallelRequests: 5,
++                requestsPerMinute: 100,
++                isEnabled: true,
++                balance: 100,
++                lastSyncedAt: NOW,
++                createdAt: '2026-03-01T00:00:00.000Z',
++                updatedAt: '2026-03-01T00:00:00.000Z',
++                models: [],
++              },
++            },
++          ],
++        },
++        fetching: false,
++        error: undefined,
++      }, vi.fn()];
++    }
++    if (args.query === DOMAIN_EVALUATIONS_QUERY) {
++      return [{
++        data: {
++          domainEvaluations: [
++            {
++              id: 'eval-1',
++              domainId: 'domain-a',
++              domainNameAtLaunch: 'Job domain',
++              scopeCategory: 'PRODUCTION',
++              status: 'COMPLETED',
++              createdAt: '2026-03-15T12:00:00.000Z',
++              startedAt: '2026-03-15T12:01:00.000Z',
++              completedAt: '2026-03-15T12:05:00.000Z',
++              startedRuns: 2,
++              failedDefinitions: 0,
++              skippedForBudget: 0,
++              projectedCostUsd: 84,
++              models: ['model-1', 'model-2'],
++              temperature: null,
++              maxBudgetUsd: null,
++              memberCount: 2,
++            },
++          ],
++        },
++        fetching: false,
++        error: undefined,
++      }, vi.fn()];
++    }
++    if (args.query === DOMAIN_EVALUATION_QUERY) {
++      return [{
++        data: {
++          domainEvaluation: {
++            id: 'eval-1',
++            domainId: 'domain-a',
++            domainNameAtLaunch: 'Job domain',
++            scopeCategory: 'PRODUCTION',
++            status: 'COMPLETED',
++            createdAt: '2026-03-15T12:00:00.000Z',
++            startedAt: '2026-03-15T12:01:00.000Z',
++            completedAt: '2026-03-15T12:05:00.000Z',
++            startedRuns: 2,
++            failedDefinitions: 0,
++            skippedForBudget: 0,
++            projectedCostUsd: 84,
++            models: ['model-1', 'model-2'],
++            launchableDefinitionIds: ['def-1', 'def-2'],
++            launchableDefinitions: [
++              { definitionId: 'def-1', definitionName: 'Jobs A', pairKey: 'pair-1' },
++              { definitionId: 'def-2', definitionName: 'Jobs B', pairKey: 'pair-1' },
++            ],
++            samplePercentage: 100,
++            samplesPerScenario: 1,
++            targetBatchCount: 1,
++            temperature: null,
++            maxBudgetUsd: null,
++            memberCount: 2,
++            members: [
++              {
++                runId: 'run-1',
++                definitionIdAtLaunch: 'def-1',
++                definitionNameAtLaunch: 'Jobs A',
++                domainIdAtLaunch: 'domain-a',
++                modelIds: ['model-1'],
++                createdAt: '2026-03-15T12:01:00.000Z',
++                runStatus: 'COMPLETED',
++                runCategory: 'PRODUCTION',
++                runStartedAt: '2026-03-15T12:01:00.000Z',
++                runCompletedAt: '2026-03-15T12:03:00.000Z',
++              },
++              {
++                runId: 'run-2',
++                definitionIdAtLaunch: 'def-2',
++                definitionNameAtLaunch: 'Jobs B',
++                domainIdAtLaunch: 'domain-a',
++                modelIds: ['model-1'],
++                createdAt: '2026-03-15T12:01:00.000Z',
++                runStatus: 'COMPLETED',
++                runCategory: 'PRODUCTION',
++                runStartedAt: '2026-03-15T12:01:00.000Z',
++                runCompletedAt: '2026-03-15T12:03:00.000Z',
++              },
++            ],
++          },
++        },
++        fetching: false,
++        error: undefined,
++      }, vi.fn()];
++    }
++    if (args.query === DOMAIN_EVALUATION_STATUS_QUERY) {
++      return [{
++        data: {
++          domainEvaluationStatus: {
++            id: 'eval-1',
++            status: 'COMPLETED',
++            totalRuns: 2,
++            pendingRuns: 0,
++            runningRuns: 0,
++            completedRuns: 2,
++            failedRuns: 0,
++            cancelledRuns: 0,
++          },
++        },
++        fetching: false,
++        error: undefined,
++      }, vi.fn()];
++    }
++    if (args.query === DOMAIN_TRIAL_RUNS_STATUS_QUERY) {
++      return [{
++        data: {
++          domainTrialRunsStatus: [
++            {
++              runId: 'run-1',
++              definitionId: 'def-1',
++              status: 'COMPLETED',
++              updatedAt: '2026-03-15T12:04:00.000Z',
++              stalledModels: [],
++              analysisStatus: 'completed',
++              modelStatuses: [],
++            },
++            {
++              runId: 'run-2',
++              definitionId: 'def-2',
++              status: 'COMPLETED',
++              updatedAt: '2026-03-15T12:04:00.000Z',
++              stalledModels: [],
++              analysisStatus: 'completed',
++              modelStatuses: [],
++            },
++          ],
++        },
++        fetching: false,
++        error: undefined,
++      }, vi.fn()];
++    }
++    return [{ data: undefined, fetching: false, error: undefined }, vi.fn()];
++  });
++}
++
+ describe('DomainTrialsDashboard', () => {
+   beforeEach(() => {
+     useQueryMock.mockReset();
+     useMutationMock.mockReset();
+     useRunMock.mockReset();
+     startDomainEvaluationMock.mockReset();
++    backfillDomainEvaluationModelsMock.mockReset();
+ 
+     useMutationMock.mockImplementation((query: unknown) => {
+       if (query === START_DOMAIN_EVALUATION_MUTATION) {
+         return [{ fetching: false }, startDomainEvaluationMock];
+       }
++      if (query === BACKFILL_DOMAIN_EVALUATION_MODELS_MUTATION) {
++        return [{ fetching: false }, backfillDomainEvaluationModelsMock];
++      }
+       return [{ fetching: false }, vi.fn()];
+     });
+ 
+@@ -565,4 +876,54 @@ describe('DomainTrialsDashboard', () => {
+     expect(screen.getByText('Recent transcripts')).toBeInTheDocument();
+     expect(screen.getByText('Open run diagnostics')).toBeInTheDocument();
+   });
++
++  it('lets the user backfill a missing model into the existing batch', async () => {
++    const user = userEvent.setup();
++    mockBackfillQueries();
++    backfillDomainEvaluationModelsMock.mockResolvedValue({
++      data: {
++        backfillDomainEvaluationModels: {
++          domainEvaluationId: 'eval-1',
++          scopeCategory: 'PRODUCTION',
++          success: true,
++          totalDefinitions: 2,
++          targetedDefinitions: 2,
++          startedRuns: 2,
++          failedDefinitions: 0,
++          skippedForBudget: 0,
++          projectedCostUsd: 42,
++          blockedByActiveLaunch: false,
++          runs: [
++            { definitionId: 'def-1', runId: 'run-3', modelIds: ['model-2'] },
++            { definitionId: 'def-2', runId: 'run-4', modelIds: ['model-2'] },
++          ],
++        },
++      },
++      error: undefined,
++    });
++
++    renderDomainTrialsDashboard(['/domains/domain-a/run-trials?evaluationId=eval-1']);
++
++    expect(screen.getByRole('heading', { name: /missing model backfill/i })).toBeInTheDocument();
++    expect(screen.getByLabelText(/backfill target number of paired batches per vignette/i)).toHaveValue(1);
++    expect(screen.getByText(/selected model:/i)).toHaveTextContent('Model Two');
++    expect(screen.getByText(/new paired batch groups:/i)).toHaveTextContent('1');
++    expect(screen.getByText(/new individual trial runs:/i)).toHaveTextContent('2');
++    expect(screen.getByText(/estimated additional cost:/i)).toHaveTextContent('$42.00');
++
++    await user.click(screen.getByRole('button', { name: /review & start missing model backfill/i }));
++
++    const dialog = screen.getByRole('dialog');
++    expect(within(dialog).getByRole('heading', { name: /confirm missing model backfill/i })).toBeInTheDocument();
++    expect(within(dialog).getByText(/existing batch:/i)).toHaveTextContent('eval-1');
++    expect(within(dialog).getByText(/^model:/i)).toHaveTextContent('Model Two');
++
++    await user.click(screen.getByRole('button', { name: /start backfill/i }));
++
++    expect(backfillDomainEvaluationModelsMock).toHaveBeenCalledWith({
++      domainEvaluationId: 'eval-1',
++      modelIds: ['model-2'],
++      targetBatchCount: 1,
++    });
++  });
+ });
+
+diff --git acloud/apps/web/src/components/domains/domainTrials/BackfillConfirmModal.tsx bcloud/apps/web/src/components/domains/domainTrials/BackfillConfirmModal.tsx
+new file mode 100644
+index 00000000..384e2afb
+--- /dev/null
++++ bcloud/apps/web/src/components/domains/domainTrials/BackfillConfirmModal.tsx
+@@ -0,0 +1,76 @@
++import { Button } from '../../ui/Button';
++import { formatCost } from './helpers';
++
++type BackfillConfirmModalProps = {
++  open: boolean;
++  evaluationId: string;
++  domainName: string;
++  modelLabel: string;
++  targetBatchCount: number;
++  newBatchGroups: number;
++  newRuns: number;
++  estimatedTotalCost: number | null;
++  isStarting: boolean;
++  onCancel: () => void;
++  onConfirm: () => void;
++};
++
++export function BackfillConfirmModal({
++  open,
++  evaluationId,
++  domainName,
++  modelLabel,
++  targetBatchCount,
++  newBatchGroups,
++  newRuns,
++  estimatedTotalCost,
++  isStarting,
++  onCancel,
++  onConfirm,
++}: BackfillConfirmModalProps) {
++  if (!open) return null;
++
++  const headingId = 'backfill-confirm-modal-heading';
++
++  return (
++    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
++      <div
++        role="dialog"
++        aria-modal="true"
++        aria-labelledby={headingId}
++        className="w-full max-w-xl rounded-lg border border-gray-200 bg-white p-5 shadow-xl space-y-4"
++      >
++        <h2 id={headingId} className="text-lg font-semibold text-gray-900">Confirm Missing Model Backfill</h2>
++        <div className="space-y-1 text-sm text-gray-700">
++          <div>Domain: <span className="font-medium">{domainName}</span></div>
++          <div>Existing batch: <span className="font-medium">{evaluationId}</span></div>
++          <div>Model: <span className="font-medium">{modelLabel}</span></div>
++          <div>Target paired batches per vignette: <span className="font-medium">{targetBatchCount}</span></div>
++          <div>New paired batch groups: <span className="font-medium">{newBatchGroups}</span></div>
++          <div>New individual trial runs: <span className="font-medium">{newRuns}</span></div>
++          <div>
++            Estimated additional cost:{' '}
++            <span className="font-medium">{estimatedTotalCost == null ? 'Unavailable' : formatCost(estimatedTotalCost)}</span>
++          </div>
++        </div>
++        <div className="rounded border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700 space-y-2">
++          <p className="font-medium text-gray-900">What this does</p>
++          <p>
++            This fills the missing model coverage inside the existing batch instead of making a separate batch.
++          </p>
++          <p>
++            The server rechecks the batch right before launch, so if the missing work was already filled or is still in flight, it will not start duplicates.
++          </p>
++        </div>
++        <div className="flex justify-end gap-2">
++          <Button type="button" variant="ghost" onClick={onCancel} disabled={isStarting}>
++            Cancel
++          </Button>
++          <Button type="button" onClick={onConfirm} disabled={isStarting}>
++            {isStarting ? 'Starting...' : 'Start Backfill'}
++          </Button>
++        </div>
++      </div>
++    </div>
++  );
++}

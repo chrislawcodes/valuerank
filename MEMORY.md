@@ -158,3 +158,25 @@ Plan: docs/plans/level-set-presets-plan.md
 ## Status
 Implementation complete for the current slice.
 API and web verification passed on the targeted tests and workspace builds.
+
+---
+
+# Domain Evaluation Model Backfill Memory
+
+## Architectural Decisions
+- Missing-model backfills attach new runs to the existing `DomainEvaluation` instead of creating a new evaluation.
+- Backfills reuse the saved evaluation snapshot for scope, temperature, sample percentage, samples per scenario, and launchable vignette ids.
+- The dashboard backfill flow is model-at-a-time in this slice, even though the mutation accepts multiple model ids.
+- Job-choice pairs backfill by paired minimum depth, so both sides stay balanced.
+- Backfills take a per-evaluation Postgres advisory lock before recomputing coverage and updating the evaluation snapshot.
+
+## Off-limits Symbols
+- `backfillDomainEvaluationModels`
+- `DomainEvaluationModelBackfillInput`
+- `launchableDefinitionIds`
+- `targetBatchCount`
+
+## Status
+Implementation complete for the current slice.
+Targeted API and web typechecks passed.
+Targeted API and web tests passed.
