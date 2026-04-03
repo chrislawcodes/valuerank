@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { db } from '@valuerank/db';
-import type { Prisma } from '@valuerank/db';
+import type { Prisma, RunStatus } from '@valuerank/db';
 import { createAuditLog } from '../../../services/audit/index.js';
 import { startRun as startRunService } from '../../../services/run/index.js';
 import { estimateCost as estimateCostService } from '../../../services/cost/estimate.js';
@@ -8,6 +8,7 @@ import { parseTemperature } from '../../../utils/temperature.js';
 import { isValidPair, getComponentTokens } from '../../../utils/auto-pair.js';
 import {
   type DomainEvaluationLaunchInput,
+  type DomainEvaluationModelBackfillInput,
   type DomainTrialRunEntry,
   type DomainTrialRunResult,
   normalizeModelSet,
@@ -106,9 +107,9 @@ type JobChoiceMethodology = {
 };
 
 function extractJobChoiceMethodology(content: unknown): JobChoiceMethodology | null {
-  if (!content || typeof content !== 'object' || Array.isArray(content)) return null;
+  if (content == null || typeof content !== 'object' || Array.isArray(content)) return null;
   const m = (content as Record<string, unknown>).methodology;
-  if (!m || typeof m !== 'object' || Array.isArray(m)) return null;
+  if (m == null || typeof m !== 'object' || Array.isArray(m)) return null;
   const rec = m as Record<string, unknown>;
   if (
     rec.family !== 'job-choice' ||
@@ -127,6 +128,89 @@ type LaunchGroup = {
   pairKey: string | null;
   definitions: DefinitionRow[];
 };
+
+const ACTIVE_RUN_STATUSES: RunStatus[] = ['PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING'];
+const COUNTABLE_RUN_STATUSES: RunStatus[] = ['COMPLETED', ...ACTIVE_RUN_STATUSES];
+
+type BackfillEvaluationSnapshot = {
+  models: string[];
+  launchableDefinitionIds: string[];
+  temperature: number | null;
+  samplePercentage: number;
+  samplesPerScenario: number;
+  startedRuns: number;
+  failedDefinitions: number;
+  skippedForBudget: number;
+  projectedCostUsd: number;
+};
+
+type BackfillLaunchGroupRepetition = {
+  pairKey: string | null;
+  definitions: DefinitionRow[];
+  modelId: string;
+};
+
+function getBackfillSnapshot(configSnapshot: unknown): BackfillEvaluationSnapshot | null {
+  if (configSnapshot == null || typeof configSnapshot !== 'object' || Array.isArray(configSnapshot)) {
+    return null;
+  }
+
+  const snapshot = configSnapshot as Record<string, unknown>;
+  const models = normalizeModelSet(snapshot.models);
+  const launchableDefinitionIds = Array.isArray(snapshot.launchableDefinitionIds)
+    ? snapshot.launchableDefinitionIds.filter((value): value is string => typeof value === 'string' && value.trim() !== '')
+    : [];
+  const temperature = parseTemperature(snapshot.temperature);
+  const samplePercentage = typeof snapshot.samplePercentage === 'number' && Number.isFinite(snapshot.samplePercentage)
+    ? snapshot.samplePercentage
+    : null;
+  const samplesPerScenario = typeof snapshot.samplesPerScenario === 'number' && Number.isFinite(snapshot.samplesPerScenario)
+    ? snapshot.samplesPerScenario
+    : null;
+  const startedRuns = typeof snapshot.startedRuns === 'number' && Number.isFinite(snapshot.startedRuns)
+    ? snapshot.startedRuns
+    : 0;
+  const failedDefinitions = typeof snapshot.failedDefinitions === 'number' && Number.isFinite(snapshot.failedDefinitions)
+    ? snapshot.failedDefinitions
+    : 0;
+  const skippedForBudget = typeof snapshot.skippedForBudget === 'number' && Number.isFinite(snapshot.skippedForBudget)
+    ? snapshot.skippedForBudget
+    : 0;
+  const projectedCostUsd = typeof snapshot.projectedCostUsd === 'number' && Number.isFinite(snapshot.projectedCostUsd)
+    ? snapshot.projectedCostUsd
+    : 0;
+
+  if (models.length === 0 || launchableDefinitionIds.length === 0 || samplePercentage === null || samplesPerScenario === null) {
+    return null;
+  }
+
+  return {
+    models,
+    launchableDefinitionIds,
+    temperature,
+    samplePercentage,
+    samplesPerScenario,
+    startedRuns,
+    failedDefinitions,
+    skippedForBudget,
+    projectedCostUsd,
+  };
+}
+
+function runMatchesSingleModel(config: unknown, modelId: string, temperature: number | null): boolean {
+  const runConfig = config as { models?: unknown; temperature?: unknown } | null;
+  const runModels = normalizeModelSet(runConfig?.models);
+  const runTemperature = parseTemperature(runConfig?.temperature);
+  return runTemperature === temperature && runModels.length === 1 && runModels[0] === modelId;
+}
+
+function coverageKey(definitionId: string, modelId: string): string {
+  return `${definitionId}::${modelId}`;
+}
+
+function getCoverageCount(coverageCounts: Map<string, number>, definitionId: string, modelId: string): number {
+  return coverageCounts.get(coverageKey(definitionId, modelId)) ?? 0;
+}
 
 function groupDefinitionsByPairKey(definitions: DefinitionRow[]): {
   groups: LaunchGroup[];
@@ -165,6 +249,346 @@ function groupDefinitionsByPairKey(definitions: DefinitionRow[]): {
   }
 
   return { groups, incompletePairKeys };
+}
+
+export async function backfillDomainEvaluationModels(input: DomainEvaluationModelBackfillInput): Promise<DomainTrialRunResult> {
+  const {
+    domainEvaluationId,
+    modelIds,
+    definitionIds = [],
+    targetBatchCount = null,
+    userId,
+    log,
+    auditOperationType,
+  } = input;
+
+  if (modelIds.length === 0) {
+    throw new Error('Select at least one model to backfill.');
+  }
+
+  const effectiveTargetBatchCount = targetBatchCount != null && targetBatchCount > 0 ? targetBatchCount : 1;
+  const uniqueRequestedModelIds = Array.from(new Set(modelIds.map((modelId) => modelId.trim()).filter((modelId) => modelId !== '')));
+  if (uniqueRequestedModelIds.length === 0) {
+    throw new Error('Select at least one model to backfill.');
+  }
+
+  const execution = await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('domain-evaluation-backfill'), hashtext(${domainEvaluationId}))`;
+
+    const evaluation = await tx.domainEvaluation.findUnique({
+      where: { id: domainEvaluationId },
+      include: {
+        members: {
+          include: {
+            run: {
+              select: {
+                id: true,
+                status: true,
+                config: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!evaluation) {
+      throw new Error(`Domain evaluation not found: ${domainEvaluationId}`);
+    }
+
+    const snapshot = getBackfillSnapshot(evaluation.configSnapshot);
+    if (!snapshot) {
+      throw new Error('This evaluation does not have enough saved launch settings to support model backfill.');
+    }
+
+    const allowedModelIds = new Set(snapshot.models);
+    const invalidRequestedModels = uniqueRequestedModelIds.filter((modelId) => !allowedModelIds.has(modelId));
+    if (invalidRequestedModels.length > 0) {
+      throw new Error(`Selected models are not part of this evaluation: ${invalidRequestedModels.join(', ')}`);
+    }
+
+    const activeModels = await tx.llmModel.findMany({
+      where: {
+        modelId: { in: uniqueRequestedModelIds },
+        status: 'ACTIVE',
+      },
+      select: { modelId: true },
+    });
+    const activeModelIdSet = new Set(activeModels.map((model) => model.modelId));
+    const inactiveRequestedModels = uniqueRequestedModelIds.filter((modelId) => !activeModelIdSet.has(modelId));
+    if (inactiveRequestedModels.length > 0) {
+      throw new Error(`Selected models are not active: ${inactiveRequestedModels.join(', ')}`);
+    }
+
+    const launchableDefinitionIdSet = new Set(snapshot.launchableDefinitionIds);
+    const uniqueRequestedDefinitionIds = Array.from(new Set(definitionIds.map((definitionId) => definitionId.trim()).filter((definitionId) => definitionId !== '')));
+    const selectedDefinitionIds = uniqueRequestedDefinitionIds.length > 0 ? uniqueRequestedDefinitionIds : snapshot.launchableDefinitionIds;
+    const outOfScopeDefinitionIds = selectedDefinitionIds.filter((definitionId) => !launchableDefinitionIdSet.has(definitionId));
+    if (outOfScopeDefinitionIds.length > 0) {
+      throw new Error(`Selected vignettes are not part of this evaluation: ${outOfScopeDefinitionIds.join(', ')}`);
+    }
+
+    const domain = await tx.domain.findUnique({ where: { id: evaluation.domainId } });
+    if (!domain) {
+      throw new Error(`Domain not found: ${evaluation.domainId}`);
+    }
+
+    const totalDefinitions = await tx.definition.count({
+      where: { domainId: evaluation.domainId, deletedAt: null },
+    });
+    const selectedDefinitions = await tx.definition.findMany({
+      where: {
+        domainId: evaluation.domainId,
+        deletedAt: null,
+        id: { in: selectedDefinitionIds },
+      },
+      select: {
+        id: true,
+        name: true,
+        parentId: true,
+        version: true,
+        createdAt: true,
+        updatedAt: true,
+        content: true,
+      },
+    });
+    const selectedDefinitionIdSet = new Set(selectedDefinitions.map((definition) => definition.id));
+    const missingDefinitions = selectedDefinitionIds.filter((definitionId) => !selectedDefinitionIdSet.has(definitionId));
+    if (missingDefinitions.length > 0) {
+      throw new Error(`Selected vignettes are missing or deleted: ${missingDefinitions.join(', ')}`);
+    }
+
+    const { groups: launchGroups, incompletePairKeys } = groupDefinitionsByPairKey(selectedDefinitions);
+    if (incompletePairKeys.length > 0) {
+      throw new Error(`Backfill requires complete vignette pairs. Include both sides for: ${incompletePairKeys.join(', ')}`);
+    }
+
+    const countableCoverage = new Map<string, number>();
+    for (const member of evaluation.members) {
+      if (!COUNTABLE_RUN_STATUSES.includes(member.run.status)) continue;
+      const runConfig = member.run.config as { models?: unknown } | null;
+      const runModelIds = normalizeModelSet(runConfig?.models);
+      for (const modelId of runModelIds) {
+        const key = coverageKey(member.definitionIdAtLaunch, modelId);
+        countableCoverage.set(key, (countableCoverage.get(key) ?? 0) + 1);
+      }
+    }
+
+    const backfillGroups: BackfillLaunchGroupRepetition[] = [];
+    const costEstimateCache = new Map<string, number>();
+    let projectedCostUsd = 0;
+
+    for (const group of launchGroups) {
+      for (const modelId of uniqueRequestedModelIds) {
+        const existingDepth = group.pairKey !== null
+          ? group.definitions.reduce(
+            (min, definition) => Math.min(min, getCoverageCount(countableCoverage, definition.id, modelId)),
+            Number.POSITIVE_INFINITY,
+          )
+          : getCoverageCount(countableCoverage, group.definitions[0]!.id, modelId);
+
+        const normalizedExistingDepth = Number.isFinite(existingDepth) ? existingDepth : 0;
+        const delta = Math.max(0, effectiveTargetBatchCount - normalizedExistingDepth);
+        if (delta === 0) continue;
+
+        for (let index = 0; index < delta; index += 1) {
+          backfillGroups.push({
+            pairKey: group.pairKey,
+            definitions: group.definitions,
+            modelId,
+          });
+        }
+
+        for (const definition of group.definitions) {
+          const costKey = coverageKey(definition.id, modelId);
+          let estimatedCost = costEstimateCache.get(costKey);
+          if (estimatedCost == null) {
+            const estimate = await estimateCostService({
+              definitionId: definition.id,
+              modelIds: [modelId],
+              samplePercentage: snapshot.samplePercentage,
+              samplesPerScenario: snapshot.samplesPerScenario,
+            });
+            estimatedCost = estimate.total;
+            costEstimateCache.set(costKey, estimatedCost);
+          }
+          projectedCostUsd += estimatedCost * delta;
+        }
+      }
+    }
+
+    if (backfillGroups.length === 0) {
+      return {
+        domainId: evaluation.domainId,
+        domainName: domain.name,
+        result: {
+          domainEvaluationId: evaluation.id,
+          scopeCategory: evaluation.scopeCategory,
+          success: true,
+          totalDefinitions,
+          targetedDefinitions: selectedDefinitions.length,
+          startedRuns: 0,
+          failedDefinitions: 0,
+          skippedForBudget: 0,
+          projectedCostUsd: 0,
+          blockedByActiveLaunch: false,
+          runs: [],
+        },
+        selectedDefinitionIds,
+      };
+    }
+
+    let startedRuns = 0;
+    let failedDefinitions = 0;
+    const runs: DomainTrialRunEntry[] = [];
+
+    for (const group of backfillGroups) {
+      const activeEquivalentRuns = await tx.run.findMany({
+        where: {
+          definitionId: { in: group.definitions.map((definition) => definition.id) },
+          runCategory: evaluation.scopeCategory,
+          status: { in: ACTIVE_RUN_STATUSES },
+          deletedAt: null,
+        },
+        select: {
+          definitionId: true,
+          config: true,
+        },
+      });
+      const hasActiveEquivalentRun = activeEquivalentRuns.some((run) => runMatchesSingleModel(run.config, group.modelId, snapshot.temperature));
+      if (hasActiveEquivalentRun) {
+        continue;
+      }
+
+      const batchGroupId = group.pairKey !== null ? randomUUID() : null;
+      const runResults = await Promise.allSettled(
+        group.definitions.map(async (definition) => {
+          const tokens = group.pairKey !== null ? getComponentTokens(definition.content) : null;
+          return startRunService({
+            definitionId: definition.id,
+            models: [group.modelId],
+            samplePercentage: snapshot.samplePercentage,
+            samplesPerScenario: snapshot.samplesPerScenario,
+            temperature: snapshot.temperature ?? undefined,
+            priority: 'NORMAL',
+            runCategory: evaluation.scopeCategory,
+            userId,
+            finalTrial: false,
+            ...(group.pairKey !== null
+              ? {
+                configExtras: {
+                  jobChoiceLaunchMode: 'PAIRED_BATCH',
+                  jobChoiceBatchGroupId: batchGroupId,
+                  jobChoiceValueFirst: tokens?.value_first.token,
+                  methodologySafe: true,
+                },
+              }
+              : {}),
+          });
+        }),
+      );
+
+      runResults.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          startedRuns += 1;
+          runs.push({
+            definitionId: result.value.run.definitionId,
+            runId: result.value.run.id,
+            modelIds: [group.modelId],
+          });
+          return;
+        }
+
+        failedDefinitions += 1;
+        const failedDefinition = group.definitions[index];
+        log.error(
+          {
+            domainEvaluationId,
+            definitionId: failedDefinition?.id ?? null,
+            modelId: group.modelId,
+            error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+          },
+          'Failed to start evaluation model backfill run',
+        );
+      });
+    }
+
+    if (runs.length > 0) {
+      const definitionById = new Map(selectedDefinitions.map((definition) => [definition.id, definition]));
+      await tx.domainEvaluationRun.createMany({
+        data: runs.map((run) => {
+          const definition = definitionById.get(run.definitionId);
+          return {
+            domainEvaluationId: evaluation.id,
+            runId: run.runId,
+            definitionIdAtLaunch: run.definitionId,
+            definitionNameAtLaunch: definition?.name ?? 'Untitled vignette',
+            domainIdAtLaunch: evaluation.domainId,
+          };
+        }),
+      });
+    }
+
+    const updatedSnapshot = {
+      ...(evaluation.configSnapshot as Prisma.JsonObject),
+      startedRuns: snapshot.startedRuns + startedRuns,
+      failedDefinitions: snapshot.failedDefinitions + failedDefinitions,
+      skippedForBudget: snapshot.skippedForBudget,
+      projectedCostUsd: snapshot.projectedCostUsd + projectedCostUsd,
+    } as Prisma.InputJsonValue;
+
+    await tx.domainEvaluation.update({
+      where: { id: evaluation.id },
+      data: {
+        status: startedRuns > 0 ? 'RUNNING' : (failedDefinitions > 0 ? 'FAILED' : evaluation.status),
+        startedAt: startedRuns > 0 ? (evaluation.startedAt ?? new Date()) : evaluation.startedAt,
+        completedAt: startedRuns > 0 ? null : evaluation.completedAt,
+        configSnapshot: updatedSnapshot,
+      },
+    });
+
+    return {
+      domainId: evaluation.domainId,
+      domainName: domain.name,
+      result: {
+        domainEvaluationId: evaluation.id,
+        scopeCategory: evaluation.scopeCategory,
+        success: failedDefinitions === 0,
+        totalDefinitions,
+        targetedDefinitions: selectedDefinitions.length,
+        startedRuns,
+        failedDefinitions,
+        skippedForBudget: 0,
+        projectedCostUsd,
+        blockedByActiveLaunch: false,
+        runs,
+      },
+      selectedDefinitionIds,
+    };
+  }, {
+    timeout: 300_000,
+    maxWait: 30_000,
+  });
+
+  await createAuditLog({
+    action: 'ACTION',
+    entityType: 'Domain',
+    entityId: execution.domainId,
+    userId,
+    metadata: {
+      operationType: auditOperationType,
+      domainName: execution.domainName,
+      domainEvaluationId,
+      scopeCategory: execution.result.scopeCategory,
+      requestedDefinitionIds: execution.selectedDefinitionIds,
+      modelIds: uniqueRequestedModelIds,
+      targetBatchCount: effectiveTargetBatchCount,
+      startedRuns: execution.result.startedRuns,
+      failedDefinitions: execution.result.failedDefinitions,
+      projectedCostUsd: execution.result.projectedCostUsd,
+    },
+  });
+
+  return execution.result;
 }
 
 export async function launchDomainEvaluation(input: DomainEvaluationLaunchInput): Promise<DomainTrialRunResult> {
@@ -438,6 +862,7 @@ export async function launchDomainEvaluation(input: DomainEvaluationLaunchInput)
           maxBudgetUsd: budgetCap,
           samplePercentage,
           samplesPerScenario,
+          targetBatchCount,
           defaultsOnly: modelIds.length === 0 && defaultModels.length > 0,
           runCategory: scopeCategory,
         },
@@ -542,6 +967,7 @@ export async function launchDomainEvaluation(input: DomainEvaluationLaunchInput)
           maxBudgetUsd: budgetCap,
           samplePercentage,
           samplesPerScenario,
+          targetBatchCount,
           defaultsOnly: modelIds.length === 0 && defaultModels.length > 0,
           runCategory: scopeCategory,
         } as Prisma.InputJsonValue,
@@ -571,6 +997,7 @@ export async function launchDomainEvaluation(input: DomainEvaluationLaunchInput)
       maxBudgetUsd: budgetCap,
       samplePercentage,
       samplesPerScenario,
+      targetBatchCount,
       defaultsOnly: modelIds.length === 0 && defaultModels.length > 0,
     },
   });

@@ -1,0 +1,57 @@
+{
+  "session_id": "2ce5bda1-6a44-4576-b681-c0afbfdbae74",
+  "response": "## Findings\n\n| Severity | Finding |\n| :--- | :--- |\n| **MEDIUM** | **[UNVERIFIED] Race Condition Vulnerability in Concurrent Operations** |\n| **MEDIUM** | **[UNVERIFIED] Hidden Breaking Change in Unrelated Module** |\n| **LOW** | **Brittle Dependency on Unversioned Snapshot** |\n| **LOW** | **Incomplete Test Coverage for New Failure Paths** |\n\n---\n\n### **[UNVERIFIED] Race Condition Vulnerability in Concurrent Operations**\n**Severity: MEDIUM**\n\nThe new backfill mechanism uses a `pg_advisory_xact_lock` on the `domainEvaluationId`, while the original launch mechanism uses a lock on the `domainId`. These are different locking keys, which allows a new evaluation launch and a backfill operation to run concurrently for the same domain.\n\nDue to standard `READ COMMITTED` transaction isolation, the backfill process's check for existing active runs (`hasActiveEquivalentRun`) may not see runs created by a concurrent launch transaction that has not yet committed. This can lead to both processes deciding to launch runs for the same `(definition, model)` pair, resulting in duplicated work, unnecessary cost, and potential data analysis complications. While the check is a good preventative measure, its effectiveness is undermined by the race condition.\n\n**Recommendation:**\nUse a consistent advisory lock key (e.g., based on `domainId`) for all operations that could launch runs within a domain to ensure they are serialized. Alternatively, enforce a `UNIQUE` constraint at the database level on active runs to prevent duplicates programmatically, or ensure the `startRunService` is fully idempotent.\n\n### **[UNVERIFIED] Hidden Breaking Change in Unrelated Module**\n**Severity: MEDIUM**\n\nThe patch includes a significant refactoring of the `decision-model.ts` module, which appears unrelated to the main backfill feature. This change removes the exported `legacy` object from the `DecisionModelResult` type and all associated helper functions (`resolveLegacyDecisionCompat`, `canonicalDecisionToLegacyScore`, etc.).\n\nThis constitutes a breaking API change for any internal consumer of the `resolveDecisionModel` function that might have been relying on the `legacy` property. Bundling an undocumented breaking change inside a feature patch is a risky practice that hinders code review and future maintenance.\n\n**Recommendation:**\nRevert the `decision-model.ts` changes from this patch and submit them as a separate pull request. This allows the breaking change to be reviewed, documented, and merged independently, following the project's standard process for such changes.\n\n### **Brittle Dependency on Unversioned Snapshot**\n**Severity: LOW**\n\nThe backfill feature's logic is critically dependent on the structure and content of the `configSnapshot` JSON blob stored on each `DomainEvaluation` record. The patch updates the launch endpoint to correctly save the necessary fields (`launchableDefinitionIds`, `samplePercentage`, etc.) for future evaluations.\n\nHowever, this creates a brittle, implicit contract between the code that writes the snapshot and the code that reads it. If the snapshot schema changes in the future, the backfill functionality may fail for older evaluations that have a different snapshot structure.\n\n**Recommendation:**\nIntroduce a version number into the `configSnapshot` (e.g., `\"snapshotVersion\": 2`). This would allow the `getBackfillSnapshot` function to be more robust, either by handling different versions explicitly or by safely failing when it encounters an unsupported version.\n\n### **Incomplete Test Coverage for New Failure Paths**\n**Severity: LOW**\n\nThe new `backfillDomainEvaluationModels` function adds several important server-side validations and error paths:\n- Rejecting models that are inactive.\n- Rejecting models that were not part of the original evaluation.\n- Rejecting requests for evaluations with a missing/invalid configuration snapshot.\n- Rejecting requests that would result in an incomplete pair.\n\nWhile the backend integration tests (`domain.test.ts`) cover the happy path and one validation case, they do not cover these other failure conditions. While the implementation appears to handle them, the lack of automated tests makes this logic vulnerable to future regressions.\n\n**Recommendation:**\nAdd integration tests that specifically target each of the new server-side validation rules to ensure they behave as expected and are protected against future changes.\n\n---\n\n## Residual Risks\n\n- **Concurrency Defects:** The identified race condition highlights the difficulty of managing concurrency. The ultimate solution lies in database constraints (`UNIQUE` indexes on active runs) or fully idempotent services, which may be a larger refactoring effort. Without this, the risk of creating duplicate work under concurrent load remains.\n- **Data Schema Evolution:** The feature's reliance on a loosely-structured `configSnapshot` JSON blob is a source of fragility. This pattern, while common, carries an inherent risk that a feature may not work on older data records if the schema assumed by the code drifts from the schema written in the past. More structured and versioned data contracts are the primary mitigation.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 71941
+        },
+        "tokens": {
+          "input": 40693,
+          "prompt": 40693,
+          "candidates": 1053,
+          "total": 47451,
+          "cached": 0,
+          "thoughts": 5705,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 71941,
+            "tokens": {
+              "input": 40693,
+              "prompt": 40693,
+              "candidates": 1053,
+              "total": 47451,
+              "cached": 0,
+              "thoughts": 5705,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

@@ -43,6 +43,19 @@ export type DomainEvaluationLaunchInput = {
   auditOperationType: 'run-trials-for-domain' | 'start-domain-evaluation';
 };
 
+export type DomainEvaluationModelBackfillInput = {
+  domainEvaluationId: string;
+  modelIds: string[];
+  definitionIds?: string[];
+  targetBatchCount?: number | null;
+  userId: string;
+  log: {
+    error: (payload: Record<string, unknown>, message: string) => void;
+    warn: (payload: Record<string, unknown>, message: string) => void;
+  };
+  auditOperationType: 'backfill-domain-evaluation-models';
+};
+
 export type RetryDomainTrialCellResult = {
   success: boolean;
   definitionId: string;

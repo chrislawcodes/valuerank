@@ -1,0 +1,57 @@
+{
+  "session_id": "67a3e365-16b7-4630-97a0-30bd199ded0a",
+  "response": "## Findings\n\n### CRITICAL\n\n- **Stuck jobs may prevent necessary backfills.**\n  The spec defines a run as \"covered\" if its status is `PENDING`, `RUNNING`, `PAUSED`, or `SUMMARIZING`. This prevents a user from launching a replacement for a job that is permanently stuck in one of these states (e.g., due to an ephemeral infrastructure failure or a bug in the runner). A user's only recourse would be to wait for manual intervention or for the job to time out and fail, which may not be possible or timely. The system should provide a way to override this and replace jobs that are considered stuck, even if they are technically in a non-terminal state.\n\n### HIGH\n\n- **Evaluation-level failure status is disproportionate and misleading.**\n  The spec states that a Domain Evaluation should enter a `FAILED` state if *any* attached member run fails, including a single backfilled run. If a large, successful evaluation (e.g., 1000 completed runs) has one backfilled run that fails, the entire evaluation's status flips to `FAILED`. This misrepresents the 99.9% success of the overall effort and destroys valuable context. A more nuanced status (e.g., `COMPLETED_WITH_FAILURES`) is needed to accurately reflect the state of the evaluation.\n\n- **Resurrecting a `COMPLETED` evaluation has undefined consequences.**\n  The spec requires that attaching a backfill run to a `COMPLETED` evaluation makes it \"active again.\" This state transition from a terminal state back to an in-progress one is significant and has cascading effects that are not addressed. For example: Does this re-trigger \"evaluation started\" notifications? Does it move the evaluation from a \"Completed\" list back to an \"Active\" list in the UI, potentially confusing users who considered it done? The full downstream impact of this \"resurrection\" must be defined to avoid unexpected behavior and user confusion.\n\n### MEDIUM\n\n- **Race conditions can lead to confused users and failed requests.**\n  The spec correctly mandates server-side serialization to prevent duplicate launches. However, it does not address the user experience of this scenario. If User A loads the backfill screen, and then User B starts a backfill for the same evaluation, User A's screen is now dangerously stale. When User A attempts their own backfill, they will be met with a server rejection that their client-side view did not predict. This can be confusing and frustrating. The UI should include a mechanism to detect and warn the user that the target evaluation's state has changed since the page was loaded.\n\n- **[UNVERIFIED] Backfills may fail if original evaluation parameters become invalid.**\n  The server is required to reuse saved parameters (scope, temperature, etc.) from the original evaluation snapshot. The spec does not define what should happen if one of these parameters has become invalid in the time since the original launch (e.g., a `scope category` is deprecated, a model provider changes its valid temperature range). The server should gracefully handle this by rejecting the backfill with a clear error message explaining that the original parameters are no longer valid, rather than failing opaquely.\n\n### LOW\n\n- **[UNVERIFIED] User authorization is not re-validated.**\n  The spec requires checking that a model to be backfilled was in the original evaluation's model list and is \"still active in the system.\" It does not mention re-validating if the *current user* still has permission to launch runs for that model. A user's permissions may have been revoked. Launching the backfill without re-checking authorization could violate current access control policies.\n\n## Residual Risks\n\n- **Older evaluations may not be backfillable.**\n  The spec correctly states that the server must reject backfills for evaluations that lack \"enough snapshot data.\" This creates a hard line: evaluations created before this feature was implemented (and the necessary data was snapshotted) will not be eligible for backfilling. This is a reasonable technical constraint but will be a functional limitation for users wanting to patch older evaluations.\n\n- **Backfills may use different infrastructure or pricing than the original.**\n  A backfill run happens at the current point in time. The underlying model provider, pricing, or even the cloud infrastructure may have changed since the original evaluation. While the *parameters* (like temperature) are preserved, the execution context is not. This could introduce subtle variance in results or costs that are not immediately obvious.\n\n- **Mixed-depth evaluations could complicate analysis.**\n  The spec explicitly allows for backfills to create evaluations where different models have different numbers of completed runs (depth). While this is a practical choice, it places a burden on downstream analysis and UI components to be aware of and correctly handle this mixed depth, as a simple average across the evaluation could be misleading.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 39511
+        },
+        "tokens": {
+          "input": 2342,
+          "prompt": 12895,
+          "candidates": 1020,
+          "total": 16354,
+          "cached": 10553,
+          "thoughts": 2439,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 39511,
+            "tokens": {
+              "input": 2342,
+              "prompt": 12895,
+              "candidates": 1020,
+              "total": 16354,
+              "cached": 10553,
+              "thoughts": 2439,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}
