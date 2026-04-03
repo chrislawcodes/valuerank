@@ -1,11 +1,13 @@
 {
   "paths": [
-    "cloud/apps/api/src/services/run/coverage-completeness.ts",
-    "cloud/apps/api/tests/services/run/coverage-completeness.test.ts"
+    "docs/feature-runs/domain-coverage-completeness-guard/plan.md",
+    "docs/feature-runs/domain-coverage-completeness-guard/scope.json",
+    "docs/feature-runs/domain-coverage-completeness-guard/state.json"
   ],
   "allowed_dirty_paths": [
-    "cloud/apps/api/src/services/run/coverage-completeness.ts",
-    "cloud/apps/api/tests/services/run/coverage-completeness.test.ts",
-    "docs/feature-runs/domain-coverage-completeness-guard"
+    "docs/feature-runs/domain-coverage-completeness-guard",
+    "docs/feature-runs/domain-coverage-completeness-guard/plan.md",
+    "docs/feature-runs/domain-coverage-completeness-guard/scope.json",
+    "docs/feature-runs/domain-coverage-completeness-guard/state.json"
   ]
 }

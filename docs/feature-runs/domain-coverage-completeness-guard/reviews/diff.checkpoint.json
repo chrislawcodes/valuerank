@@ -2,7 +2,7 @@
   "feature_slug": "domain-coverage-completeness-guard",
   "stage": "diff",
   "artifact_path": "docs/feature-runs/domain-coverage-completeness-guard/reviews/implementation.diff.patch",
-  "git_base_ref": "f00eb78af21092781875ef5c19ad1e2c15befe7b",
+  "git_base_ref": "bbd63da212c18375c7107157b9ebac3f636abde7",
   "allowed_dirty_paths": [],
   "required_reviews": [
     {

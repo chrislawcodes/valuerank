@@ -8,7 +8,7 @@ approval: never
 sandbox: read-only
 reasoning effort: high
 reasoning summaries: none
-session id: 019d553e-4cc7-7591-866e-27d4b6f8fa43
+session id: 019d5541-6300-7ba3-85fa-16dd22256f42
 --------
 user
 Review this diff artifact using a correctness-adversarial lens.
@@ -22,32 +22,68 @@ Return markdown using exactly these sections:
 Keep the response concrete and ordered by severity.
 
 Artifact: implementation.diff.patch
-diff --git a/cloud/apps/api/src/services/run/coverage-completeness.ts b/cloud/apps/api/src/services/run/coverage-completeness.ts
-index a6cd974a..dc7a7eeb 100644
---- a/cloud/apps/api/src/services/run/coverage-completeness.ts
-+++ b/cloud/apps/api/src/services/run/coverage-completeness.ts
-@@ -11,7 +11,7 @@ export type TranscriptExpectation = {
- };
- 
- function transcriptKeyToString({ scenarioId, modelId, sampleIndex }: TranscriptKey): string {
--  return JSON.stringify([scenarioId, modelId, sampleIndex]);
-+  return JSON.stringify({ scenarioId, modelId, sampleIndex });
+diff --git a/docs/feature-runs/domain-coverage-completeness-guard/plan.md b/docs/feature-runs/domain-coverage-completeness-guard/plan.md
+index b7a70824..3374d009 100644
+--- a/docs/feature-runs/domain-coverage-completeness-guard/plan.md
++++ b/docs/feature-runs/domain-coverage-completeness-guard/plan.md
+@@ -114,6 +114,9 @@ Completeness results are computed from the current database state for each reque
+ - review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: Accepted: the spec already makes the completeness check bulk-based and records the on-demand performance tradeoff as a residual risk; the batch-integrity, mixed-cell UI, and aggregate-link concerns are all explicitly scoped in the spec's product decisions and concrete UI behavior.
+ - review: reviews/spec.gemini.edge-cases-adversarial.review.md | status: accepted | note: Accepted: the spec now explicitly defines paired-batch rollup, duplicate transcript handling via distinct keys and duplicate counts, and the visible mixed-state cell treatment; the remaining race-condition and UX concerns are residual risks, not blockers.
+ - review: reviews/tasks.codex.execution-adversarial.review.md | status: accepted | note: Accepted: the tasks now point at the root STATUS.md file, wire the audit script into package.json, and keep the verification steps aligned with the actual repo layout and script entry points.
++- review: reviews/diff.gemini.regression-adversarial.review.md | status: accepted | note: Accepted: the helper now uses collision-safe structured keys, the remaining performance concern is a residual risk for this in-memory helper, and the compatibility warning does not apply to any persisted key format in this slice.
++- review: reviews/diff.gemini.quality-adversarial.review.md | status: accepted | note: Accepted: the helper now uses structured JSON keys to avoid delimiter collisions, the brittle array-order concern is addressed, and the remaining performance/migration concerns are residual risks only.
++- review: reviews/diff.codex.correctness-adversarial.review.md | status: accepted | note: Accepted: the helper now uses collision-safe structured keys, the test coverage includes the edge cases called out by the review, and the remaining compatibility concern is a residual risk only.
+ - review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: Accepted: the spec already defines the batch-group rollup rule, adds completeness-aware signature states, and deliberately uses coverageState != COMPLETE for the incomplete-data drill-down so the review's remaining concerns are covered by the current spec or explicit residual risks.
+ - review: reviews/plan.gemini.architecture-adversarial.review.md | status: deferred | note: Deferred by design: this feature intentionally separates processing-complete from coverage-complete. The lifecycle fix is out of scope for this slice, and the plan documents that split explicitly.
+ - review: reviews/plan.gemini.testability-adversarial.review.md | status: accepted | note: Accepted: the plan now preserves paired-batch dedupe semantics, keeps the recovery service aligned with the shared completeness rule, and explicitly defers launch-estimate coverage counts as a follow-up so the testability burden stays bounded to the reporting surfaces in scope.
+diff --git a/docs/feature-runs/domain-coverage-completeness-guard/scope.json b/docs/feature-runs/domain-coverage-completeness-guard/scope.json
+new file mode 100644
+index 00000000..f3fa25d9
+--- /dev/null
++++ b/docs/feature-runs/domain-coverage-completeness-guard/scope.json
+@@ -0,0 +1,13 @@
++{
++  "paths": [
++    "docs/feature-runs/domain-coverage-completeness-guard/plan.md",
++    "docs/feature-runs/domain-coverage-completeness-guard/scope.json",
++    "docs/feature-runs/domain-coverage-completeness-guard/state.json"
++  ],
++  "allowed_dirty_paths": [
++    "docs/feature-runs/domain-coverage-completeness-guard",
++    "docs/feature-runs/domain-coverage-completeness-guard/plan.md",
++    "docs/feature-runs/domain-coverage-completeness-guard/scope.json",
++    "docs/feature-runs/domain-coverage-completeness-guard/state.json"
++  ]
++}
+\ No newline at end of file
+diff --git a/docs/feature-runs/domain-coverage-completeness-guard/state.json b/docs/feature-runs/domain-coverage-completeness-guard/state.json
+index 7c683e1b..c78911bc 100644
+--- a/docs/feature-runs/domain-coverage-completeness-guard/state.json
++++ b/docs/feature-runs/domain-coverage-completeness-guard/state.json
+@@ -26,6 +26,6 @@
+     "unresolved": []
+   },
+   "delivery": {},
+-  "dirty_overrides": {},
+-  "checkpoint_fallback": {}
++  "checkpoint_fallback": {},
++  "dirty_overrides": {}
  }
- 
- export function normalizeSamplesPerScenario(samplesPerScenario: unknown): number {
+\ No newline at end of file
 
 
 Return only markdown with exactly these sections:
 ## Findings
 ## Residual Risks
 Do not include any other sections.
-2026-04-03T21:27:19.581762Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d553e-4cc7-7591-866e-27d4b6f8fa43.tmp-1775251639514926000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-04-03T21:30:41.872223Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d5541-6300-7ba3-85fa-16dd22256f42.tmp-1775251841804378000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
 codex
 ## Findings
-1. [UNVERIFIED] **Medium** - Changing `transcriptKeyToString` from `JSON.stringify([scenarioId, modelId, sampleIndex])` to `JSON.stringify({ scenarioId, modelId, sampleIndex })` is a breaking key-format change. Any code, cache, stored data, tests, or persisted artifacts that still expect the old array-shaped key will stop matching existing entries and can silently miss lookups or duplicate records. This is especially risky if these keys are used across process boundaries or survive deploys.
+None.
 
 ## Residual Risks
-- I could not verify whether this key is purely internal or whether older serialized keys already exist in storage or fixtures. If old array-form keys are present anywhere, the change needs a migration or dual-read strategy.
-- If the function is only used for new in-memory maps within a single runtime, the impact is lower, but that assumption is not confirmed from the artifact alone.
+- [UNVERIFIED] The new `scope.json` widens `allowed_dirty_paths` to the entire `docs/feature-runs/domain-coverage-completeness-guard` directory. If downstream validation expects a tighter allowlist, this could let unrelated files slip through.
+- [UNVERIFIED] The change is documentation/state only. It does not prove the underlying review conclusions are actually enforced by the code path that consumes this feature-run metadata.
+- The `state.json` edit is a pure key reorder. That is usually harmless, but any tooling that does raw file hashing or byte-for-byte comparison could treat it as a meaningful change.
 tokens used
-2,496
+3,393

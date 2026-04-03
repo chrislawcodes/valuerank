@@ -1,11 +1,12 @@
 {
   "repo_root": ".",
-  "git_head_sha": "bbd63da212c18375c7107157b9ebac3f636abde7",
-  "git_base_ref": "f00eb78af21092781875ef5c19ad1e2c15befe7b",
-  "git_base_sha": "f00eb78af21092781875ef5c19ad1e2c15befe7b",
+  "git_head_sha": "8f69262992dc242b8f19f281e3aaad57051323a7",
+  "git_base_ref": "bbd63da212c18375c7107157b9ebac3f636abde7",
+  "git_base_sha": "bbd63da212c18375c7107157b9ebac3f636abde7",
   "paths": [
-    "cloud/apps/api/src/services/run/coverage-completeness.ts",
-    "cloud/apps/api/tests/services/run/coverage-completeness.test.ts"
+    "docs/feature-runs/domain-coverage-completeness-guard/plan.md",
+    "docs/feature-runs/domain-coverage-completeness-guard/scope.json",
+    "docs/feature-runs/domain-coverage-completeness-guard/state.json"
   ],
   "allowed_dirty_paths": [],
   "untracked_files_included": [],
