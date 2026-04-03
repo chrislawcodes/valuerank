@@ -53,6 +53,7 @@ builder.objectType(DomainRef, {
         return db.preambleVersion.findUnique({ where: { id: domain.defaultPreambleVersionId } });
       },
     }),
+    defaultModelIds: t.exposeStringList('defaultModelIds'),
     defaultContextId: t.exposeString('defaultContextId', { nullable: true }),
     defaultContext: t.field({
       type: DomainContextRef,

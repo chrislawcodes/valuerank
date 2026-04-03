@@ -14,6 +14,33 @@ import {
 } from '../../api/operations/domain-contexts';
 import type { SetDomainSettingsMutationVariables } from '../../api/operations/domains';
 
+const DOMAIN_DEFAULT_MODEL_IDS_QUERY = `
+  query DomainDefaultModelIds($id: ID!) {
+    domain(id: $id) {
+      id
+      defaultModelIds
+    }
+  }
+`;
+
+const ACTIVE_LLM_MODELS_QUERY = `
+  query ActiveLlmModelsForSettings {
+    llmModels(status: "ACTIVE") {
+      modelId
+      displayName
+    }
+  }
+`;
+
+type ActiveLlmModel = {
+  modelId: string;
+  displayName: string;
+};
+
+type ActiveLlmModelsQueryData = {
+  llmModels: ActiveLlmModel[];
+};
+
 const PREAMBLES_QUERY = `
   query PreamblesForDomainSettings {
     preambles {
@@ -63,6 +90,7 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
   const [localPreambleVersionId, setLocalPreambleVersionId] = useState<string | null>(null);
   const [localLevelPresetVersionId, setLocalLevelPresetVersionId] = useState<string | null>(null);
   const [localContextId, setLocalContextId] = useState<string | null>(null);
+  const [localDefaultModelIds, setLocalDefaultModelIds] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [editingToken, setEditingToken] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -91,9 +119,27 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
     variables: { domainId },
   });
 
+  const [{ data: activeModelsData }] = useQuery<ActiveLlmModelsQueryData>({
+    query: ACTIVE_LLM_MODELS_QUERY,
+  });
+
+  const [{ data: domainData }] = useQuery<{ domain: { id: string; defaultModelIds: string[] } | null }>({
+    query: DOMAIN_DEFAULT_MODEL_IDS_QUERY,
+    variables: { id: domainId },
+    pause: domainId === '',
+    requestPolicy: 'cache-and-network',
+  });
+
+  // Sync localDefaultModelIds from domain when it loads
+  useEffect(() => {
+    if (domainData?.domain == null) return;
+    setLocalDefaultModelIds(domainData.domain.defaultModelIds ?? []);
+  }, [domainData?.domain]);
+
   const preambles = preamblesData?.preambles ?? [];
   const levelPresets = levelPresetsData?.levelPresets ?? [];
   const contexts = contextsData?.domainContexts ?? [];
+  const activeModels = activeModelsData?.llmModels ?? [];
 
   const handleSave = async () => {
     if (settings == null) return;
@@ -112,6 +158,7 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
       levelPresetVersionId: localLevelPresetVersionId,
       contextId: localContextId,
       valueStatements,
+      defaultModelIds: localDefaultModelIds,
     };
 
     try {
@@ -201,6 +248,43 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
             </option>
           ))}
         </select>
+      </div>
+
+      {/* Default models (for coverage matrix min-trial counting) */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Default models
+        </label>
+        <p className="text-xs text-gray-500 mb-2">
+          When set, the coverage matrix shows the minimum trials per cell across these models, with a warning when counts differ.
+          Leave empty to use the total batch count (legacy behavior).
+        </p>
+        {activeModels.length === 0 ? (
+          <p className="text-sm text-gray-500">No active models found.</p>
+        ) : (
+          <div className="space-y-1">
+            {activeModels.map((model) => {
+              const isChecked = localDefaultModelIds.includes(model.modelId);
+              return (
+                <label key={model.modelId} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                    checked={isChecked}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setLocalDefaultModelIds((prev) => [...prev, model.modelId]);
+                      } else {
+                        setLocalDefaultModelIds((prev) => prev.filter((id) => id !== model.modelId));
+                      }
+                    }}
+                  />
+                  {model.displayName}
+                </label>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Value statements */}

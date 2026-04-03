@@ -21,6 +21,12 @@ import {
   selectPrimaryDefinitionCounts,
 } from './domain-coverage-utils.js';
 
+type ModelTrialCount = {
+  modelId: string;
+  label: string;
+  trialCount: number;
+};
+
 type DomainValueCoverageCell = {
   valueA: string;
   valueB: string;
@@ -29,6 +35,10 @@ type DomainValueCoverageCell = {
   definitionId: string | null;
   definitionName: string | null;
   aggregateRunId: string | null;
+  // Per-model trial counts (populated only when defaultModelIds is non-empty)
+  minTrialCount: number | null;
+  maxTrialCount: number | null;
+  modelTrialCounts: ModelTrialCount[];
 };
 
 type CoverageModelOption = {
@@ -52,6 +62,16 @@ const CoverageModelOptionRef = builder
     }),
   });
 
+const ModelTrialCountRef = builder
+  .objectRef<ModelTrialCount>('ModelTrialCount')
+  .implement({
+    fields: (t) => ({
+      modelId: t.exposeString('modelId'),
+      label: t.exposeString('label'),
+      trialCount: t.exposeInt('trialCount'),
+    }),
+  });
+
 const DomainValueCoverageCellRef = builder
   .objectRef<DomainValueCoverageCell>('DomainValueCoverageCell')
   .implement({
@@ -63,6 +83,12 @@ const DomainValueCoverageCellRef = builder
       definitionId: t.exposeString('definitionId', { nullable: true }),
       definitionName: t.exposeString('definitionName', { nullable: true }),
       aggregateRunId: t.exposeString('aggregateRunId', { nullable: true }),
+      minTrialCount: t.exposeInt('minTrialCount', { nullable: true }),
+      maxTrialCount: t.exposeInt('maxTrialCount', { nullable: true }),
+      modelTrialCounts: t.field({
+        type: [ModelTrialCountRef],
+        resolve: (parent) => parent.modelTrialCounts,
+      }),
     }),
   });
 
@@ -144,8 +170,10 @@ builder.queryField('domainValueCoverage', (t) =>
 
       ctx.log.debug({ domainId, filterModelIds, selectedSignature }, 'Computing domain value coverage');
 
-      const domain = await db.domain.findUnique({ where: { id: domainId }, select: { id: true } });
+      const domain = await db.domain.findUnique({ where: { id: domainId }, select: { id: true, defaultModelIds: true } });
       if (!domain) return null;
+
+      const defaultModelIds = domain.defaultModelIds ?? [];
 
       // Fetch all non-deleted definitions (need IDs to resolve content)
       const definitions = await db.definition.findMany({
@@ -200,6 +228,9 @@ builder.queryField('domainValueCoverage', (t) =>
         config: unknown;
         transcripts: Array<{ modelId: string }>;
       }>>();
+      // Per-model trial count tracking: definitionId -> modelId -> trialCount
+      // A trial = one transcript; each run that includes a model = samplesPerScenario trials for that model
+      const modelTrialsByDefinitionId = new Map<string, Map<string, number>>();
 
       if (definitionIds.length > 0) {
         const completedRuns = await db.run.findMany({
@@ -251,6 +282,18 @@ builder.queryField('domainValueCoverage', (t) =>
             (batchCountByDefinitionId.get(run.definitionId) ?? 0) + increment,
           );
 
+          // Track per-model trial counts for default models
+          if (defaultModelIds.length > 0) {
+            const modelCounts = modelTrialsByDefinitionId.get(run.definitionId) ?? new Map<string, number>();
+            const runModelIds = new Set(run.transcripts.map((t) => t.modelId));
+            for (const mid of defaultModelIds) {
+              if (runModelIds.has(mid)) {
+                modelCounts.set(mid, (modelCounts.get(mid) ?? 0) + increment);
+              }
+            }
+            modelTrialsByDefinitionId.set(run.definitionId, modelCounts);
+          }
+
           const pairedBatchGroupId = getCoverageBatchGroupId(run.config);
 
           if (pairedBatchGroupId === null) {
@@ -286,19 +329,25 @@ builder.queryField('domainValueCoverage', (t) =>
         }
       }
 
+      // Also collect display names for default models
+      const allModelIdsToFetch = new Set([...availableModelIds, ...defaultModelIds]);
       const modelDetailRows =
-        availableModelIds.size > 0
+        allModelIdsToFetch.size > 0
           ? await db.llmModel.findMany({
-            where: { modelId: { in: Array.from(availableModelIds) } },
+            where: { modelId: { in: Array.from(allModelIdsToFetch) } },
             select: { modelId: true, displayName: true },
             orderBy: { displayName: 'asc' },
           })
           : [];
 
-      const availableModels: CoverageModelOption[] = modelDetailRows.map((m) => ({
-        modelId: m.modelId,
-        label: m.displayName,
-      }));
+      const modelLabelById = new Map(modelDetailRows.map((m) => [m.modelId, m.displayName]));
+
+      const availableModels: CoverageModelOption[] = modelDetailRows
+        .filter((m) => availableModelIds.has(m.modelId))
+        .map((m) => ({
+          modelId: m.modelId,
+          label: m.displayName,
+        }));
 
       // Build the symmetric 45-cell matrix (one cell per unique sorted pair)
       const values = [...COVERAGE_VALUE_KEYS] as string[];
@@ -321,6 +370,9 @@ builder.queryField('domainValueCoverage', (t) =>
               definitionId: null,
               definitionName: null,
               aggregateRunId: null,
+              minTrialCount: null,
+              maxTrialCount: null,
+              modelTrialCounts: [],
             });
           } else {
             // Use the total counts across all definitions for the visible cell, but
@@ -339,6 +391,36 @@ builder.queryField('domainValueCoverage', (t) =>
               : (latestAggregateRunIdByDefinitionId.get(primaryDefId)
                 ?? latestMatchingRunIdByDefinitionId.get(primaryDefId)
                 ?? null);
+
+            // Compute per-model trial counts across all definitions for this pair
+            let minTrialCount: number | null = null;
+            let maxTrialCount: number | null = null;
+            const modelTrialCounts: ModelTrialCount[] = [];
+
+            if (defaultModelIds.length > 0) {
+              // Aggregate trial counts per model across all definitions that cover this pair
+              const aggregatedModelCounts = new Map<string, number>();
+              for (const defId of defIdsForPair) {
+                const defModelCounts = modelTrialsByDefinitionId.get(defId);
+                if (defModelCounts) {
+                  for (const [mid, count] of defModelCounts) {
+                    aggregatedModelCounts.set(mid, (aggregatedModelCounts.get(mid) ?? 0) + count);
+                  }
+                }
+              }
+
+              for (const mid of defaultModelIds) {
+                const count = aggregatedModelCounts.get(mid) ?? 0;
+                modelTrialCounts.push({
+                  modelId: mid,
+                  label: modelLabelById.get(mid) ?? mid,
+                  trialCount: count,
+                });
+                if (minTrialCount === null || count < minTrialCount) minTrialCount = count;
+                if (maxTrialCount === null || count > maxTrialCount) maxTrialCount = count;
+              }
+            }
+
             cells.push({
               valueA,
               valueB,
@@ -347,6 +429,9 @@ builder.queryField('domainValueCoverage', (t) =>
               definitionId: primaryDefId !== '' ? primaryDefId : null,
               definitionName: primaryPair?.name ?? null,
               aggregateRunId,
+              minTrialCount,
+              maxTrialCount,
+              modelTrialCounts,
             });
           }
         }

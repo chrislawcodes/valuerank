@@ -294,6 +294,9 @@ export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
                             pairedBatchCount={cell?.pairedBatchCount ?? 0}
                             definitionId={cell?.definitionId ?? null}
                             aggregateRunId={cell?.aggregateRunId ?? null}
+                            minTrialCount={cell?.minTrialCount ?? null}
+                            maxTrialCount={cell?.maxTrialCount ?? null}
+                            modelTrialCounts={cell?.modelTrialCounts ?? []}
                           />
                         </td>
                       );
@@ -314,10 +317,12 @@ export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
       {!fetching && canonicalValues.length > 0 && (
         <div className="px-1 pt-2 text-xs text-gray-500">
           <p>
-            Batches per cell are{' '}
+            Cell counts are{' '}
             <span className="font-medium text-rose-700">red (&lt;3)</span>,{' '}
             <span className="font-medium text-amber-700">yellow (3-9)</span>, or{' '}
-            <span className="font-medium text-emerald-700">green (10+)</span>. Click any cell to add a batch.
+            <span className="font-medium text-emerald-700">green (10+)</span>.
+            {' '}When default models are configured, the number shows the minimum trials across those models.
+            A triangle warning means trial counts differ across models. Click any cell for details.
           </p>
         </div>
       )}

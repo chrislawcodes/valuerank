@@ -1,9 +1,10 @@
 import { useState, type SVGProps } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, FileSearch } from 'lucide-react';
+import { AlertTriangle, ChevronRight, FileSearch } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
 import { cn } from '../../lib/utils';
 import { VALUE_LABELS } from './domainAnalysisData';
+import type { ModelTrialCount } from '../../api/operations/domainCoverage';
 
 type CoverageCellProps = {
   valueA: string;
@@ -12,6 +13,9 @@ type CoverageCellProps = {
   pairedBatchCount: number;
   definitionId: string | null;
   aggregateRunId: string | null;
+  minTrialCount?: number | null;
+  maxTrialCount?: number | null;
+  modelTrialCounts?: ModelTrialCount[];
 };
 
 export function CoverageCell({
@@ -21,11 +25,22 @@ export function CoverageCell({
   pairedBatchCount,
   definitionId,
   aggregateRunId,
+  minTrialCount,
+  maxTrialCount,
+  modelTrialCounts = [],
 }: CoverageCellProps) {
   const [isOpen, setIsOpen] = useState(false);
   const isDiagonal = valueA === valueB;
   const hasVignette = definitionId !== null;
-  const displayCount = pairedBatchCount > 0 ? pairedBatchCount : batchCount;
+
+  // When per-model tracking is active (minTrialCount is not null), show min trial count
+  // Otherwise fall back to legacy batch count display
+  const hasPerModelData = minTrialCount !== null && minTrialCount !== undefined;
+  const hasMismatch = hasPerModelData && maxTrialCount !== null && maxTrialCount !== undefined && minTrialCount < maxTrialCount;
+  const displayCount = hasPerModelData
+    ? minTrialCount
+    : (pairedBatchCount > 0 ? pairedBatchCount : batchCount);
+  const primaryCount = batchCount; // still used for color thresholds
   const visibleLabel = isDiagonal || !hasVignette ? '—' : displayCount.toLocaleString();
   const xLabel = VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB;
   const yLabel = VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA;
@@ -39,9 +54,9 @@ export function CoverageCell({
       'bg-[url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxwYXRoIGQ9Ik0wLDggTDgsMCBMMCw4IFoiIHN0cm9rZT0iI2U1ZTdlYiIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9zdmc+")] bg-gray-100';
   } else if (!hasVignette) {
     bgColorClass = 'bg-gray-50';
-  } else if (batchCount < 3) {
+  } else if (primaryCount < 3) {
     bgColorClass = 'bg-rose-100 hover:bg-rose-200 transition-colors text-rose-900';
-  } else if (batchCount < 10) {
+  } else if (primaryCount < 10) {
     bgColorClass = 'bg-amber-100 hover:bg-amber-200 transition-colors text-amber-900';
   } else {
     bgColorClass = 'bg-emerald-500 hover:bg-emerald-600 transition-colors text-white';
@@ -59,18 +74,21 @@ export function CoverageCell({
               ? 'Not applicable'
               : !hasVignette
                 ? `${xLabel} versus ${yLabel}: no vignette`
-                : `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}`
+                : `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}${hasMismatch ? ' (mismatch)' : ''}`
           }
           className={cn(
-            'w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border border-gray-100 rounded-none focus:ring-0 focus:ring-offset-0',
+            'w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border border-gray-100 rounded-none focus:ring-0 focus:ring-offset-0 relative',
             bgColorClass,
             isDiagonal && 'cursor-not-allowed text-transparent font-normal',
             !isDiagonal && !hasVignette && 'text-gray-500 cursor-pointer hover:bg-gray-100',
-            hasVignette && batchCount < 3 && 'text-rose-900',
-            hasVignette && batchCount >= 3 && batchCount < 10 && 'text-amber-900'
+            hasVignette && primaryCount < 3 && 'text-rose-900',
+            hasVignette && primaryCount >= 3 && primaryCount < 10 && 'text-amber-900'
           )}
         >
           {visibleLabel}
+          {hasMismatch && !isDiagonal && (
+            <AlertTriangle className="w-3 h-3 absolute top-1 right-1 text-amber-500" aria-hidden="true" />
+          )}
         </button>
       </PopoverTrigger>
       {!isDiagonal && (
@@ -81,19 +99,39 @@ export function CoverageCell({
         >
           <div className="p-3 border-b border-gray-100 bg-gray-50/50 rounded-t-md">
             {hasVignette ? (
-              <div className="mt-2 text-xs text-gray-600 flex items-center">
-                <span
-                  className={cn(
-                    'inline-block w-2 h-2 rounded-full mr-1.5',
-                    batchCount < 3
-                      ? 'bg-rose-500'
-                      : batchCount < 10
-                        ? 'bg-amber-500'
-                        : 'bg-emerald-500'
+              <>
+                <div className="mt-2 text-xs text-gray-600 flex items-center">
+                  <span
+                    className={cn(
+                      'inline-block w-2 h-2 rounded-full mr-1.5',
+                      primaryCount < 3
+                        ? 'bg-rose-500'
+                        : primaryCount < 10
+                          ? 'bg-amber-500'
+                          : 'bg-emerald-500'
+                    )}
+                  />
+                  {displayCount} {batchLabel}
+                  {hasMismatch && (
+                    <span className="ml-1.5 text-amber-600 font-medium">(uneven)</span>
                   )}
-                />
-                {displayCount} {batchLabel}
-              </div>
+                </div>
+                {modelTrialCounts.length > 0 && (
+                  <div className="mt-2 space-y-0.5">
+                    {modelTrialCounts.map((m) => (
+                      <div key={m.modelId} className="flex items-center justify-between text-xs text-gray-600">
+                        <span className="truncate mr-2 max-w-[140px]" title={m.label}>{m.label}</span>
+                        <span className={cn(
+                          'font-medium tabular-nums',
+                          hasMismatch && m.trialCount === minTrialCount ? 'text-amber-600' : 'text-gray-700'
+                        )}>
+                          {m.trialCount}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             ) : (
               <div className="mt-2 text-xs text-gray-500">No batch for this value pair</div>
             )}

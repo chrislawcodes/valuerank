@@ -9,6 +9,7 @@ export type Domain = {
   defaultLevelPresetVersionId: string | null;
   defaultPreambleVersionId: string | null;
   defaultContextId: string | null;
+  defaultModelIds: string[];
 };
 
 export const DOMAINS_QUERY = gql`
@@ -969,6 +970,7 @@ export const SET_DOMAIN_SETTINGS_MUTATION = `
     $levelPresetVersionId: ID
     $contextId: ID
     $valueStatements: [ValueStatementInput!]!
+    $defaultModelIds: [String!]
   ) {
     setDomainSettings(
       domainId: $domainId
@@ -976,12 +978,14 @@ export const SET_DOMAIN_SETTINGS_MUTATION = `
       levelPresetVersionId: $levelPresetVersionId
       contextId: $contextId
       valueStatements: $valueStatements
+      defaultModelIds: $defaultModelIds
     ) {
       id
       name
       defaultPreambleVersionId
       defaultLevelPresetVersionId
       defaultContextId
+      defaultModelIds
     }
   }
 `;
@@ -993,6 +997,7 @@ export type SetDomainSettingsMutationResult = {
     defaultPreambleVersionId: string | null;
     defaultLevelPresetVersionId: string | null;
     defaultContextId: string | null;
+    defaultModelIds: string[];
   };
 };
 
@@ -1002,4 +1007,5 @@ export type SetDomainSettingsMutationVariables = {
   levelPresetVersionId?: string | null;
   contextId?: string | null;
   valueStatements: Array<{ token: string; content: string }>;
+  defaultModelIds?: string[] | null;
 };

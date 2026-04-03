@@ -50,7 +50,7 @@ builder.queryField('domainAnalysis', (t) =>
       if (requestedSignature === null) {
         ctx.log.warn({ domainId }, 'domainAnalysis called without signature; defaulting to first vnew signature');
       }
-      const domain = await db.domain.findUnique({ where: { id: domainId } });
+      const domain = await db.domain.findUnique({ where: { id: domainId }, select: { id: true, name: true, defaultModelIds: true } });
       if (!domain) throw new Error(`Domain not found: ${domainId}`);
 
       const definitions = await db.definition.findMany({
@@ -101,7 +101,7 @@ builder.queryField('domainAnalysis', (t) =>
       );
 
       const valuePairByDefinition = await resolveValuePairsInChunks(latestDefinitionIds);
-      const resolvedSignatureRuns = await resolveSignatureRuns(latestDefinitionIds, requestedSignature);
+      const resolvedSignatureRuns = await resolveSignatureRuns(latestDefinitionIds, requestedSignature, domain.defaultModelIds);
       const filteredSourceRunIds = resolvedSignatureRuns.filteredSourceRunIds;
       const filteredSourceRunDefinitionById = resolvedSignatureRuns.filteredSourceRunDefinitionById;
 
@@ -275,7 +275,7 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
       }
       const valueKey = rawValueKey;
 
-      const domain = await db.domain.findUnique({ where: { id: domainId } });
+      const domain = await db.domain.findUnique({ where: { id: domainId }, select: { id: true, name: true, defaultModelIds: true } });
       if (!domain) throw new Error(`Domain not found: ${domainId}`);
 
       const definitions = await db.definition.findMany({
@@ -375,7 +375,7 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         latestRunByDefinition.set(run.definitionId, { id: run.id });
       }
 
-      const resolvedSignatureRuns = await resolveSignatureRuns(scoreDefinitionIds, requestedSignature);
+      const resolvedSignatureRuns = await resolveSignatureRuns(scoreDefinitionIds, requestedSignature, domain.defaultModelIds);
       const filteredSourceRunIds = resolvedSignatureRuns.filteredSourceRunIds;
       const filteredSourceRunDefinitionById = resolvedSignatureRuns.filteredSourceRunDefinitionById;
       const targetDefinitionIdSet = new Set(targetDefinitionIds);
@@ -689,10 +689,16 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
         ctx.log.warn({ domainId, definitionId, modelId, valueKey }, 'domainAnalysisConditionTranscripts called without signature; defaulting to first vnew signature');
       }
 
-      const definition = await db.definition.findFirst({
-        where: { id: definitionId, domainId, deletedAt: null },
-        select: { id: true },
-      });
+      const [definition, domain] = await Promise.all([
+        db.definition.findFirst({
+          where: { id: definitionId, domainId, deletedAt: null },
+          select: { id: true },
+        }),
+        db.domain.findUnique({
+          where: { id: domainId },
+          select: { defaultModelIds: true },
+        }),
+      ]);
       if (!definition) return [];
 
       const pairMap = await resolveValuePairsInChunks([definitionId]);
@@ -700,7 +706,7 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
       if (!pair) return [];
       if (pair.valueA !== valueKey && pair.valueB !== valueKey) return [];
 
-      const resolvedSignatureRuns = await resolveSignatureRuns([definitionId], requestedSignature);
+      const resolvedSignatureRuns = await resolveSignatureRuns([definitionId], requestedSignature, domain?.defaultModelIds ?? []);
       const sourceRunIds = resolvedSignatureRuns.filteredSourceRunIds;
       if (sourceRunIds.length === 0) return [];
 

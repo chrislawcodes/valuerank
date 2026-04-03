@@ -281,9 +281,22 @@ export function getMissingReasonLabel(reasonCode: DomainAnalysisMissingReasonCod
   }
 }
 
+/**
+ * Returns true if the run's config.models array contains ALL of the required model IDs.
+ * When requiredModelIds is empty, every run matches (no filter applied).
+ */
+export function runModelsContainAll(runConfig: unknown, requiredModelIds: string[]): boolean {
+  if (requiredModelIds.length === 0) return true;
+  const config = runConfig as { models?: unknown } | null;
+  if (!Array.isArray(config?.models)) return false;
+  const runModels = new Set(config.models as string[]);
+  return requiredModelIds.every((id) => runModels.has(id));
+}
+
 export async function resolveSignatureRuns(
   latestDefinitionIds: string[],
   selectedSignature: string | null,
+  requiredModelIds: string[] = [],
 ): Promise<SignatureResolutionResult> {
   if (latestDefinitionIds.length === 0) {
     return {
@@ -329,9 +342,17 @@ export async function resolveSignatureRuns(
       continue;
     }
 
-    const matchedRuns = effectiveSignature === null
+    const signatureMatchedRuns = effectiveSignature === null
       ? runs
       : runs.filter((run) => runMatchesSignature(run.config, effectiveSignature));
+    if (signatureMatchedRuns.length === 0) {
+      missingReasonByDefinitionId.set(definitionId, 'NO_SIGNATURE_MATCH');
+      continue;
+    }
+
+    const matchedRuns = requiredModelIds.length === 0
+      ? signatureMatchedRuns
+      : signatureMatchedRuns.filter((run) => runModelsContainAll(run.config, requiredModelIds));
     if (matchedRuns.length === 0) {
       missingReasonByDefinitionId.set(definitionId, 'NO_SIGNATURE_MATCH');
       continue;
