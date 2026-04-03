@@ -1,0 +1,217 @@
+00001: import { forwardRef, useEffect, useMemo, useState } from 'react';
+00002: import { useQuery } from 'urql';
+00003: import { ErrorMessage } from '../ui/ErrorMessage';
+00004: import { Loading } from '../ui/Loading';
+00005: import {
+00006:   DOMAIN_VALUE_COVERAGE_QUERY,
+00007:   DOMAIN_VALUE_COVERAGE_QUERY_LEGACY,
+00008:   type DomainValueCoverageQueryResult,
+00009:   type DomainValueCoverageQueryVariables,
+00010: } from '../../api/operations/domainCoverage';
+00011: import {
+00012:   DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+00013:   type DomainAvailableSignature,
+00014:   type DomainAvailableSignaturesQueryResult,
+00015: } from '../../api/operations/domainAnalysis';
+00016: import { VALUE_LABELS } from './domainAnalysisData';
+00017: import { formatDisplayLabel } from '../../utils/displayLabels';
+00018: import { cn } from '../../lib/utils';
+00019: import { getCanonicalDimension } from '@valuerank/shared';
+00020: import { CoverageCell } from './CoverageCell';
+00021: import { selectPreferredSignature } from './coverageMatrixHelpers';
+00022: 
+00023: type CategoryGroup = {
+00024:   name: string;
+00025:   color: string;
+00026:   values: string[];
+00027: };
+00028: 
+00029: /**
+00030:  * CoverageMatrix — embeddable coverage matrix component.
+00031:  *
+00032:  * Accepts a domainId prop; manages its own signature and model state internally.
+00033:  * No URL sync — the parent page owns URL state for domainId.
+00034:  */
+00035: export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
+00036:   function CoverageMatrix({ domainId }, ref) {
+00037:   const [selectedSignature, setSelectedSignature] = useState<string>('');
+00038:   const [allowAllSignatures, setAllowAllSignatures] = useState(false);
+00039:   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
+00040: 
+00041:   const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
+00042:     DomainAvailableSignaturesQueryResult,
+00043:     { domainId: string }
+00044:   >({
+00045:     query: DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+00046:     variables: { domainId },
+00047:     pause: domainId === '',
+00048:     requestPolicy: 'cache-and-network',
+00049:   });
+00050: 
+00051:   const signatureOptions = useMemo<DomainAvailableSignature[]>(
+00052:     () => signatureData?.domainAvailableSignatures ?? [],
+00053:     [signatureData],
+00054:   );
+00055:   const preferredSignature = useMemo(
+00056:     () => selectPreferredSignature(signatureOptions),
+00057:     [signatureOptions],
+00058:   );
+00059:   const hasValidSelectedSignature = useMemo(
+00060:     () => selectedSignature === '' || signatureOptions.some((option) => option.signature === selectedSignature),
+00061:     [selectedSignature, signatureOptions],
+00062:   );
+00063:   const signatureSelectionReady = domainId !== ''
+00064:     && !signaturesLoading
+00065:     && hasValidSelectedSignature
+00066:     && (selectedSignature !== '' || allowAllSignatures || signatureOptions.length === 0);
+00067: 
+00068:   // Reset state when domainId changes
+00069:   useEffect(() => {
+00070:     setSelectedSignature('');
+00071:     setAllowAllSignatures(false);
+00072:     setUseLegacyQuery(false);
+00073:   }, [domainId]);
+00074: 
+00075:   useEffect(() => {
+00076:     if (signaturesLoading) return;
+00077:     if (signatureOptions.length === 0) {
+00078:       if (selectedSignature !== '') setSelectedSignature('');
+00079:       return;
+00080:     }
+00081:     if (selectedSignature !== '' && signatureOptions.some((option) => option.signature === selectedSignature)) return;
+00082:     if (selectedSignature === '' && allowAllSignatures) return;
+00083:     setSelectedSignature(preferredSignature);
+00084:   }, [allowAllSignatures, preferredSignature, selectedSignature, signatureOptions, signaturesLoading]);
+00085: 
+00086:   const [{ data: scoredData, fetching: scoredFetching, error: scoredError }] = useQuery<
+00087:     DomainValueCoverageQueryResult,
+00088:     DomainValueCoverageQueryVariables
+00089:   >({
+00090:     query: DOMAIN_VALUE_COVERAGE_QUERY,
+00091:     variables: {
+00092:       domainId,
+00093:       signature: selectedSignature === '' ? undefined : selectedSignature,
+00094:     },
+00095:     pause: domainId === '' || !signatureSelectionReady || useLegacyQuery,
+00096:     requestPolicy: 'cache-and-network',
+00097:   });
+00098: 
+00099:   const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<
+00100:     DomainValueCoverageQueryResult,
+00101:     Omit<DomainValueCoverageQueryVariables, 'signature'>
+00102:   >({
+00103:     query: DOMAIN_VALUE_COVERAGE_QUERY_LEGACY,
+00104:     variables: {
+00105:       domainId,
+00106:     },
+00107:     pause: domainId === '' || !signatureSelectionReady || !useLegacyQuery,
+00108:     requestPolicy: 'cache-and-network',
+00109:   });
+00110: 
+00111:   useEffect(() => {
+00112:     const message = scoredError?.message ?? '';
+00113:     const isUnknownArgumentError = message.includes('Unknown argument "signature"');
+00114:
+
+... [narrowed review slice: middle omitted] ...
+
+nter border-b border-l border-gray-200 tracking-normal',
+00230:                       group.color
+00231:                     )}
+00232:                   >
+00233:                     {group.name}
+00234:                   </th>
+00235:                 ))}
+00236:               </tr>
+00237:               <tr>
+00238:                 {valueGroups.flatMap((group, groupIndex) =>
+00239:                   group.values.map((val, valIndex) => (
+00240:                     <th
+00241:                       key={`col-${val}`}
+00242:                       className={cn(
+00243:                         'w-[6.5rem] p-1.5 text-[11px] font-medium text-gray-600 border-b border-gray-200 align-top text-center leading-tight whitespace-normal break-words',
+00244:                         valIndex === 0 && 'border-l',
+00245:                         groupIndex % 2 === 0 ? 'bg-gray-50/30' : 'bg-white'
+00246:                       )}
+00247:                     >
+00248:                       <div className="mx-auto max-w-[6.5rem]">
+00249:                         {VALUE_LABELS[val as keyof typeof VALUE_LABELS] ?? formatDisplayLabel(val)}
+00250:                       </div>
+00251:                     </th>
+00252:                   ))
+00253:                 )}
+00254:               </tr>
+00255:             </thead>
+00256:             <tbody>
+00257:               {valueGroups.flatMap((rowGroup, rowGroupIdx) =>
+00258:                 rowGroup.values.map((rowVal, rowValIdx) => (
+00259:                   <tr key={`row-${rowVal}`}>
+00260:                     {rowValIdx === 0 && (
+00261:                       <th
+00262:                         rowSpan={rowGroup.values.length}
+00263:                         className={cn(
+00264:                           'w-[6.75rem] px-1 py-1.5 text-[11px] font-medium text-center border-t border-r border-gray-200 tracking-normal leading-tight whitespace-normal break-words overflow-hidden align-middle',
+00265:                           rowGroup.color
+00266:                         )}
+00267:                       >
+00268:                         {rowGroup.name}
+00269:                       </th>
+00270:                     )}
+00271:                     <th
+00272:                       className={cn(
+00273:                         'w-[8rem] px-0.5 py-1 text-[11px] font-medium text-gray-600 text-right border-t border-r border-gray-200 whitespace-normal break-words leading-tight',
+00274:                         rowGroupIdx % 2 === 0 ? 'bg-gray-50/30' : 'bg-white'
+00275:                       )}
+00276:                     >
+00277:                       {VALUE_LABELS[rowVal as keyof typeof VALUE_LABELS] ??
+00278:                         formatDisplayLabel(rowVal)}
+00279:                     </th>
+00280: 
+00281:                     {displayValues.map((colVal) => {
+00282:                       const keyA = [colVal, rowVal].sort().join('::');
+00283:                       const cell = cellLookup.get(keyA);
+00284: 
+00285:                       return (
+00286:                         <td
+00287:                           key={`cell-${rowVal}-${colVal}`}
+00288:                           className="h-12 w-[3.5rem] border border-gray-100 p-0"
+00289:                         >
+00290:                           <CoverageCell
+00291:                             valueA={rowVal}
+00292:                             valueB={colVal}
+00293:                             batchCount={cell?.batchCount ?? 0}
+00294:                             pairedBatchCount={cell?.pairedBatchCount ?? 0}
+00295:                             definitionId={cell?.definitionId ?? null}
+00296:                             aggregateRunId={cell?.aggregateRunId ?? null}
+00297:                           />
+00298:                         </td>
+00299:                       );
+00300:                     })}
+00301:                   </tr>
+00302:                 ))
+00303:               )}
+00304:             </tbody>
+00305:           </table>
+00306:         </div>
+00307:       ) : (
+00308:         <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+00309:           <p>No coverage data available for this domain yet.</p>
+00310:           <p className="mt-1 text-sm">Create vignettes in the Vignettes tab, then run evaluations to see coverage here.</p>
+00311:         </div>
+00312:       )}
+00313: 
+00314:       {!fetching && canonicalValues.length > 0 && (
+00315:         <div className="px-1 pt-2 text-xs text-gray-500">
+00316:           <p>
+00317:             Batches per cell are{' '}
+00318:             <span className="font-medium text-rose-700">red (&lt;3)</span>,{' '}
+00319:             <span className="font-medium text-amber-700">yellow (3-9)</span>, or{' '}
+00320:             <span className="font-medium text-emerald-700">green (10+)</span>. Click any cell to add a batch.
+00321:           </p>
+00322:         </div>
+00323:       )}
+00324:     </div>
+00325:   );
+00326: });
+00327: 
+0032

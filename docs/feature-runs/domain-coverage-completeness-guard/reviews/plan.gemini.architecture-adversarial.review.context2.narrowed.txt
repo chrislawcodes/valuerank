@@ -1,0 +1,247 @@
+00001: import { db, Prisma } from '@valuerank/db';
+00002: import { AuthenticationError } from '@valuerank/shared';
+00003: import { builder } from '../../builder.js';
+00004: import { estimateCost as estimateCostService } from '../../../services/cost/estimate.js';
+00005: import {
+00006:   DomainEvaluationCostEstimateRef,
+00007:   DomainAvailableSignatureRef,
+00008:   DomainTrialPlanResultRef,
+00009:   DomainTrialRunStatusRef,
+00010: } from './types.js';
+00011: import {
+00012:   type DomainEvaluationCostEstimate,
+00013:   formatRunSignature,
+00014:   formatVnewLabel,
+00015:   formatVnewSignature,
+00016:   hydrateDefinitionAncestors,
+00017:   selectLatestDefinitionPerLineage,
+00018:   supportsTemperature,
+00019: } from './shared.js';
+00020: import type { DomainTrialPlanCellEstimate } from './shared.js';
+00021: import { formatTrialSignature } from '@valuerank/shared/trial-signature';
+00022: import { parseTemperature } from '../../../utils/temperature.js';
+00023: import { resolveRunAnalysisStatuses } from '../../../services/run/analysis-status.js';
+00024: 
+00025: const DOMAIN_TRIAL_PLAN_COST_CHUNK_SIZE = 5;
+00026: const DOMAIN_ESTIMATE_KNOWN_EXCLUSIONS = [
+00027:   'Judge/evaluator and summarization passes are not included in this estimate yet.',
+00028:   'Retries, provider routing changes, and failed-job overhead are not included.',
+00029: ] as const;
+00030: 
+00031: type DomainEstimateInput = {
+00032:   domainId: string;
+00033:   definitionIds?: string[];
+00034:   modelIds?: string[];
+00035:   temperature?: number | null;
+00036:   samplePercentage?: number;
+00037:   samplesPerScenario?: number;
+00038:   scopeCategory?: string | null;
+00039: };
+00040: 
+00041: type DomainEstimateInternals = {
+00042:   trialPlan: {
+00043:     domainId: string;
+00044:     domainName: string;
+00045:     vignettes: Array<{
+00046:       definitionId: string;
+00047:       definitionName: string;
+00048:       definitionVersion: number;
+00049:       signature: string;
+00050:       scenarioCount: number;
+00051:       existingBatchCount: number;
+00052:     }>;
+00053:     models: Array<{
+00054:       modelId: string;
+00055:       label: string;
+00056:       isDefault: boolean;
+00057:       supportsTemperature: boolean;
+00058:     }>;
+00059:     cellEstimates: DomainTrialPlanCellEstimate[];
+00060:     totalEstimatedCost: number;
+00061:     existingTemperatures: number[];
+00062:     defaultTemperature: number | null;
+00063:     temperatureWarning: string | null;
+00064:   };
+00065:   costEstimate: DomainEvaluationCostEstimate;
+00066: };
+00067: 
+00068: function buildFallbackReason(isUsingFallback: boolean, basedOnSampleCount: number): string | null {
+00069:   if (!isUsingFallback) return null;
+00070:   if (basedOnSampleCount === 0) {
+00071:     return 'No historical token data is available for at least one selected model. Using system defaults (100 input / 900 output tokens per probe).';
+00072:   }
+00073:   return 'Some selected models are using fallback token estimates based on all-model averages.';
+00074: }
+00075: 
+00076: function buildEstimateConfidence(isUsingFallback: boolean, basedOnSampleCount: number): 'HIGH' | 'MEDIUM' | 'LOW' {
+00077:   if (basedOnSampleCount === 0) return 'LOW';
+00078:   if (isUsingFallback || basedOnSampleCount < 50) return 'MEDIUM';
+00079:   return 'HIGH';
+00080: }
+00081: 
+00082: async function buildDomainEstimate(input: DomainEstimateInput): Promise<DomainEstimateInternals> {
+00083:   const {
+00084:     domainId,
+00085:     definitionIds = [],
+00086:     modelIds = [],
+00087:     temperature = null,
+00088:     samplePercentage = 100,
+00089:     samplesPerScenario = 1,
+00090:     scopeCategory = 'PRODUCTION',
+00091:   } = input;
+00092:   const effectiveScopeCategory = scopeCategory ?? 'PRODUCTION';
+00093: 
+00094:   const domain = await db.domain.findUnique({ where: { id: domainId } });
+00095:   if (!domain) throw new Error(`Domain not found: ${domainId}`);
+00096: 
+00097:   const definitions = await db.definition.findMany({
+00098:     where: { domainId, deletedAt: null },
+00099:     select: {
+00100:       id: true,
+00101:       name: true,
+00102:       version: true,
+00103:       parentId: true,
+00104:       createdAt: true,
+00105:       updatedAt: true,
+00106:     },
+00107:   });
+00108: 
+00109:   if (definitions.length === 0) {
+00110:     return {
+00111:       trialPlan: {
+00112:         domainId,
+00113:         domainName: domain.name,
+00114:         vignettes: [],
+00115:         models: [],
+00116:         cellEstimates: [],
+00117:         totalEstimatedCost: 0,
+00118:         existingTemperatures: [],
+00119:         defaultTemperature: temperature,
+00120:         temperatureWarning: null,
+00121:       },
+00122:       costEstimate: {
+00123:         domainId,
+00124:         domainName: domain.name,
+00125:         scopeCategory: effectiveScopeCategory,
+00126:         targetedDefinitions: 0,
+00127:         totalScenarioCount: 0,
+00128:         totalEstimatedCost: 0,
+00129:         basedOnSampleCount: 0,
+00130:
+
+... [narrowed review slice: middle omitted] ...
+
+Id) => {
+00553:           const key = `${run.id}::${modelId}`;
+00554:           const probe = probeByKey.get(key) ?? { completed: 0, failed: 0 };
+00555:           const summarizationTotal = transcriptTotalByKey.get(key) ?? 0;
+00556:           return {
+00557:             modelId,
+00558:             generationCompleted: probe.completed,
+00559:             generationFailed: probe.failed,
+00560:             generationTotal,
+00561:             summarizationCompleted: summarizedByKey.get(key) ?? 0,
+00562:             summarizationFailed: summarizeFailedByKey.get(key) ?? 0,
+00563:             summarizationTotal,
+00564:             latestErrorMessage: latestErrorByKey.get(key) ?? null,
+00565:           };
+00566:         });
+00567: 
+00568:         return {
+00569:           runId: run.id,
+00570:           definitionId: run.definitionId,
+00571:           status: run.status,
+00572:           updatedAt: run.updatedAt,
+00573:           stalledModels: run.stalledModels,
+00574:           analysisStatus: analysisStatusByRunId.get(run.id) ?? null,
+00575:           modelStatuses,
+00576:         };
+00577:       })).then((rows) => rows.filter((row): row is NonNullable<typeof row> => row !== null));
+00578:     },
+00579:   }),
+00580: );
+00581: 
+00582: builder.queryField('domainAvailableSignatures', (t) =>
+00583:   t.field({
+00584:     type: [DomainAvailableSignatureRef],
+00585:     args: {
+00586:       domainId: t.arg.id({ required: true }),
+00587:     },
+00588:     resolve: async (_root, args, ctx) => {
+00589:       if (!ctx.user) {
+00590:         throw new AuthenticationError('Authentication required');
+00591:       }
+00592:       const domainId = String(args.domainId);
+00593:       const domain = await db.domain.findUnique({ where: { id: domainId } });
+00594:       if (!domain) throw new Error(`Domain not found: ${domainId}`);
+00595: 
+00596:       const definitions = await db.definition.findMany({
+00597:         where: { domainId, deletedAt: null },
+00598:         select: {
+00599:           id: true,
+00600:           name: true,
+00601:           parentId: true,
+00602:           version: true,
+00603:           createdAt: true,
+00604:           updatedAt: true,
+00605:         },
+00606:       });
+00607:       if (definitions.length === 0) return [];
+00608: 
+00609:       const definitionsById = await hydrateDefinitionAncestors(definitions);
+00610:       const latestDefinitions = selectLatestDefinitionPerLineage(definitions, definitionsById);
+00611:       const latestDefinitionIds = latestDefinitions.map((definition) => definition.id);
+00612: 
+00613:       const runs = await db.run.findMany({
+00614:         where: {
+00615:           definitionId: { in: latestDefinitionIds },
+00616:           status: 'COMPLETED',
+00617:           deletedAt: null,
+00618:         },
+00619:         select: {
+00620:           config: true,
+00621:         },
+00622:       });
+00623: 
+00624:       const exactSignatureSet = new Set<string>();
+00625:       const temperatureCounts = new Map<string, { temperature: number | null; count: number }>();
+00626:       for (const run of runs) {
+00627:         exactSignatureSet.add(formatRunSignature(run.config));
+00628:         const runConfig = run.config as { temperature?: unknown } | null;
+00629:         const temperature = parseTemperature(runConfig?.temperature);
+00630:         const key = temperature === null ? 'd' : temperature.toString();
+00631:         const existing = temperatureCounts.get(key);
+00632:         if (existing) {
+00633:           existing.count += 1;
+00634:         } else {
+00635:           temperatureCounts.set(key, { temperature, count: 1 });
+00636:         }
+00637:       }
+00638: 
+00639:       const vnewCandidates = Array.from(temperatureCounts.values())
+00640:         .sort((left, right) => {
+00641:           const leftIsZero = left.temperature === 0;
+00642:           const rightIsZero = right.temperature === 0;
+00643:           if (leftIsZero !== rightIsZero) return leftIsZero ? -1 : 1;
+00644:           if (left.count !== right.count) return right.count - left.count;
+00645:           if (left.temperature === null) return 1;
+00646:           if (right.temperature === null) return -1;
+00647:           return left.temperature - right.temperature;
+00648:         });
+00649: 
+00650:       const virtualSignatures = vnewCandidates.map((entry) => ({
+00651:         signature: formatVnewSignature(entry.temperature),
+00652:         label: formatVnewLabel(entry.temperature),
+00653:         isVirtual: true,
+00654:         temperature: entry.temperature,
+00655:       }));
+00656:       const exactSignatures = Array.from(exactSignatureSet.values())
+00657:         .sort((left, right) => left.localeCompare(right))
+00658:         .map((signature) => ({
+00659:           signature,
+00660:           label: signature,
+00661:           isVirtual: false,
+00662:           temperature: null,
+00663:         }));
+00664: 
+00665:       return [...virtualSignatures, ...exactSignat

@@ -343,6 +343,7 @@ builder.objectType(DomainAnalysisConditionTranscriptRef, {
           decisionMetadata: transcript.decisionMetadata,
           definitionSnapshot: transcript.definitionSnapshot,
           orientationFlipped: scenario?.orientationFlipped ?? null,
+          pairOverride: transcript.pairOverride,
         });
       },
     }),

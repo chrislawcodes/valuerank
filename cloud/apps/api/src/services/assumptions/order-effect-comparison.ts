@@ -15,7 +15,7 @@ import {
   isOrderInvarianceSummary,
 } from './order-effect-types.js';
 import { parseTemperature } from '../../utils/temperature.js';
-import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/decision-model.js';
+import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/shared.js';
 import {
   aggregateWithinCellDisagreementRate,
   type OrderEffectStableSide,
@@ -35,7 +35,6 @@ import {
 } from './order-effect-statistics.js';
 import type { DuplicateCurrentOrderEffectSnapshotError } from './order-effect-cache.js';
 
-const VALID_DECISIONS = new Set(['1', '2', '3', '4', '5']);
 const ORDER_EFFECT_CACHE_INVARIANT_ERROR_CODE = 'ASSUMPTION_ANALYSIS_CACHE_INVARIANT';
 
 export type PairScenario = {
@@ -141,28 +140,30 @@ function _isTempZeroRun(config: unknown): boolean {
   return parseTemperature((config as { temperature?: unknown } | null)?.temperature) === 0;
 }
 
+// TODO(slice-3.2): replace numeric score with canonical direction/strength throughout order-effect
+function _canonicalToScore(input: {
+  decisionCode: string | null;
+  decisionMetadata: unknown;
+  definitionSnapshot: unknown;
+  orientationFlipped: boolean;
+}): number | null {
+  const result = resolveTranscriptDecisionModel(input);
+  const { direction, strength } = result.canonical;
+  if (direction === 'favor_first' && strength === 'strong') return 5;
+  if (direction === 'favor_first' && strength === 'lean') return 4;
+  if (direction === 'neutral' && strength === 'neutral') return 3;
+  if (direction === 'favor_second' && strength === 'lean') return 2;
+  if (direction === 'favor_second' && strength === 'strong') return 1;
+  return null;
+}
+
 function _parseDecision(input: {
   decisionCode: string | null;
   decisionMetadata: unknown;
   definitionSnapshot: unknown;
   orientationFlipped: boolean;
 }): number | null {
-  const resolved = resolveTranscriptDecisionModel({
-    decisionCode: input.decisionCode,
-    decisionMetadata: input.decisionMetadata,
-    definitionSnapshot: input.definitionSnapshot,
-    orientationFlipped: input.orientationFlipped,
-  });
-  const canonicalScore = resolved.legacy.canonicalScore;
-  if (canonicalScore != null) {
-    return canonicalScore;
-  }
-
-  if (input.decisionCode == null || !VALID_DECISIONS.has(input.decisionCode)) {
-    return null;
-  }
-
-  return Number(input.decisionCode);
+  return _canonicalToScore(input);
 }
 
 function _pickStableTranscripts(
@@ -457,22 +458,7 @@ export function parseDecision(input: {
   definitionSnapshot: unknown;
   orientationFlipped: boolean;
 }): number | null {
-  const resolved = resolveTranscriptDecisionModel({
-    decisionCode: input.decisionCode,
-    decisionMetadata: input.decisionMetadata,
-    definitionSnapshot: input.definitionSnapshot,
-    orientationFlipped: input.orientationFlipped,
-  });
-  const canonicalScore = resolved.legacy.canonicalScore;
-  if (canonicalScore != null) {
-    return canonicalScore;
-  }
-
-  if (input.decisionCode == null || !VALID_DECISIONS.has(input.decisionCode)) {
-    return null;
-  }
-
-  return Number(input.decisionCode);
+  return _canonicalToScore(input);
 }
 
 export function pickStableTranscripts(

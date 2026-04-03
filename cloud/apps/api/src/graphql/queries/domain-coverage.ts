@@ -16,6 +16,8 @@ import {
   COVERAGE_VALUE_KEYS,
   type CoverageValueKey,
   extractValuePair,
+  getCoverageBatchGroupId,
+  getCoverageBatchIncrement,
   selectPrimaryDefinitionCounts,
 } from './domain-coverage-utils.js';
 
@@ -177,7 +179,7 @@ builder.queryField('domainValueCoverage', (t) =>
         settled.forEach((result, idx) => {
           if (result.status === 'rejected') {
             ctx.log.error(
-              { err: result.reason, definitionId: batch[idx]?.id },
+              { err: result.reason as unknown, definitionId: batch[idx]?.id },
               'Failed to resolve definition content for coverage grid'
             );
           }
@@ -243,27 +245,13 @@ builder.queryField('domainValueCoverage', (t) =>
           }
           const samplesPerScenario =
             (run.config as { samplesPerScenario?: unknown } | null)?.samplesPerScenario;
-          const increment =
-            Number.isInteger(samplesPerScenario) && (samplesPerScenario as number) >= 1
-              ? (samplesPerScenario as number)
-              : 1;
+          const increment = getCoverageBatchIncrement(samplesPerScenario);
           batchCountByDefinitionId.set(
             run.definitionId,
             (batchCountByDefinitionId.get(run.definitionId) ?? 0) + increment,
           );
 
-          const pairedBatchGroupId = (() => {
-            const runConfig = run.config as {
-              jobChoiceBatchGroupId?: unknown;
-              pairedBatchGroupId?: unknown;
-            } | null;
-            const raw = typeof runConfig?.jobChoiceBatchGroupId === 'string'
-              ? runConfig.jobChoiceBatchGroupId
-              : typeof runConfig?.pairedBatchGroupId === 'string'
-                ? runConfig.pairedBatchGroupId
-                : null;
-            return raw != null && raw.trim().length > 0 ? raw.trim() : null;
-          })();
+          const pairedBatchGroupId = getCoverageBatchGroupId(run.config);
 
           if (pairedBatchGroupId === null) {
             pairedBatchCountByDefinitionId.set(

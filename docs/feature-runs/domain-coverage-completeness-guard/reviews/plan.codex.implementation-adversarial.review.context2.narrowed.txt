@@ -1,0 +1,265 @@
+00001: import { db, Prisma } from '@valuerank/db';
+00002: import { AuthenticationError } from '@valuerank/shared';
+00003: import { builder } from '../../builder.js';
+00004: import { estimateCost as estimateCostService } from '../../../services/cost/estimate.js';
+00005: import {
+00006:   DomainEvaluationCostEstimateRef,
+00007:   DomainAvailableSignatureRef,
+00008:   DomainTrialPlanResultRef,
+00009:   DomainTrialRunStatusRef,
+00010: } from './types.js';
+00011: import {
+00012:   type DomainEvaluationCostEstimate,
+00013:   hydrateDefinitionAncestors,
+00014:   selectLatestDefinitionPerLineage,
+00015:   supportsTemperature,
+00016: } from './shared.js';
+00017: import type { DomainTrialPlanCellEstimate } from './shared.js';
+00018: import {
+00019:   buildAvailableSignatureOptions,
+00020:   buildExistingBatchCountByDefinitionId,
+00021:   buildTrialRunStatusRows,
+00022: } from './planning-utils.js';
+00023: import { formatTrialSignature } from '@valuerank/shared/trial-signature';
+00024: import { parseTemperature } from '../../../utils/temperature.js';
+00025: import { resolveRunAnalysisStatuses } from '../../../services/run/analysis-status.js';
+00026: 
+00027: const DOMAIN_TRIAL_PLAN_COST_CHUNK_SIZE = 5;
+00028: const DOMAIN_ESTIMATE_KNOWN_EXCLUSIONS = [
+00029:   'Judge/evaluator and summarization passes are not included in this estimate yet.',
+00030:   'Retries, provider routing changes, and failed-job overhead are not included.',
+00031: ] as const;
+00032: 
+00033: type DomainEstimateInput = {
+00034:   domainId: string;
+00035:   definitionIds?: string[];
+00036:   modelIds?: string[];
+00037:   temperature?: number | null;
+00038:   samplePercentage?: number;
+00039:   samplesPerScenario?: number;
+00040:   scopeCategory?: string | null;
+00041: };
+00042: 
+00043: type DomainEstimateInternals = {
+00044:   trialPlan: {
+00045:     domainId: string;
+00046:     domainName: string;
+00047:     vignettes: Array<{
+00048:       definitionId: string;
+00049:       definitionName: string;
+00050:       definitionVersion: number;
+00051:       signature: string;
+00052:       scenarioCount: number;
+00053:       existingBatchCount: number;
+00054:     }>;
+00055:     models: Array<{
+00056:       modelId: string;
+00057:       label: string;
+00058:       isDefault: boolean;
+00059:       supportsTemperature: boolean;
+00060:     }>;
+00061:     cellEstimates: DomainTrialPlanCellEstimate[];
+00062:     totalEstimatedCost: number;
+00063:     existingTemperatures: number[];
+00064:     defaultTemperature: number | null;
+00065:     temperatureWarning: string | null;
+00066:   };
+00067:   costEstimate: DomainEvaluationCostEstimate;
+00068: };
+00069: 
+00070: function buildFallbackReason(isUsingFallback: boolean, basedOnSampleCount: number): string | null {
+00071:   if (!isUsingFallback) return null;
+00072:   if (basedOnSampleCount === 0) {
+00073:     return 'No historical token data is available for at least one selected model. Using system defaults (100 input / 900 output tokens per probe).';
+00074:   }
+00075:   return 'Some selected models are using fallback token estimates based on all-model averages.';
+00076: }
+00077: 
+00078: function buildEstimateConfidence(isUsingFallback: boolean, basedOnSampleCount: number): 'HIGH' | 'MEDIUM' | 'LOW' {
+00079:   if (basedOnSampleCount === 0) return 'LOW';
+00080:   if (isUsingFallback || basedOnSampleCount < 50) return 'MEDIUM';
+00081:   return 'HIGH';
+00082: }
+00083: 
+00084: async function buildDomainEstimate(input: DomainEstimateInput): Promise<DomainEstimateInternals> {
+00085:   const {
+00086:     domainId,
+00087:     definitionIds = [],
+00088:     modelIds = [],
+00089:     temperature = null,
+00090:     samplePercentage = 100,
+00091:     samplesPerScenario = 1,
+00092:     scopeCategory = 'PRODUCTION',
+00093:   } = input;
+00094:   const effectiveScopeCategory = scopeCategory ?? 'PRODUCTION';
+00095: 
+00096:   const domain = await db.domain.findUnique({ where: { id: domainId } });
+00097:   if (!domain) throw new Error(`Domain not found: ${domainId}`);
+00098: 
+00099:   const definitions = await db.definition.findMany({
+00100:     where: { domainId, deletedAt: null },
+00101:     select: {
+00102:       id: true,
+00103:       name: true,
+00104:       version: true,
+00105:       parentId: true,
+00106:       createdAt: true,
+00107:       updatedAt: true,
+00108:     },
+00109:   });
+00110: 
+00111:   if (definitions.length === 0) {
+00112:     return {
+00113:       trialPlan: {
+00114:         domainId,
+00115:         domainName: domain.name,
+00116:         vignettes: [],
+00117:         models: [],
+00118:         cellEstimates: [],
+00119:         totalEstimatedCost: 0,
+00120:         existingTemperatures: [],
+00121:         defaultTemperature: temperature,
+00122:         temperatureWarning: null,
+00123:       },
+00124:       costEstimate: {
+00125:         domainId,
+00126:         domainName: domain.name,
+00127:         scopeCategory: effectiveScopeCategory,
+00128:         targetedDefinitions: 0,
+00129:         totalScenarioCount: 0,
+
+... [narrowed review slice: middle omitted] ...
+
+ranscript.groupBy({
+00442:         by: ['runId', 'modelId'],
+00443:         where: { runId: { in: runIds }, deletedAt: null },
+00444:         _count: { _all: true },
+00445:       });
+00446:       const summarizedRows = await db.transcript.groupBy({
+00447:         by: ['runId', 'modelId'],
+00448:         where: { runId: { in: runIds }, deletedAt: null, summarizedAt: { not: null } },
+00449:         _count: { _all: true },
+00450:       });
+00451:       const summarizeFailedRows = await db.transcript.groupBy({
+00452:         by: ['runId', 'modelId'],
+00453:         where: {
+00454:           runId: { in: runIds },
+00455:           deletedAt: null,
+00456:           summarizedAt: { not: null },
+00457:           decisionMetadata: { equals: Prisma.DbNull },
+00458:         },
+00459:         _count: { _all: true },
+00460:       });
+00461:       const selectedScenarioCounts = await db.runScenarioSelection.groupBy({
+00462:         by: ['runId'],
+00463:         where: { runId: { in: runIds } },
+00464:         _count: { _all: true },
+00465:       });
+00466:       const failedProbeRows = await db.probeResult.findMany({
+00467:         where: {
+00468:           runId: { in: runIds },
+00469:           status: 'FAILED',
+00470:         },
+00471:         select: {
+00472:           runId: true,
+00473:           modelId: true,
+00474:           errorCode: true,
+00475:           errorMessage: true,
+00476:           completedAt: true,
+00477:           createdAt: true,
+00478:         },
+00479:         orderBy: [{ completedAt: 'desc' }, { createdAt: 'desc' }],
+00480:       });
+00481: 
+00482:       const analysisStatusByRunId = await resolveRunAnalysisStatuses(
+00483:         runs.map((run) => ({
+00484:           id: run.id,
+00485:           definitionId: run.definitionId,
+00486:           status: run.status,
+00487:           completedAt: run.completedAt,
+00488:           config: run.config,
+00489:         })),
+00490:       );
+00491:       return buildTrialRunStatusRows(
+00492:         runIds,
+00493:         runs,
+00494:         probeRows.map((row) => ({
+00495:           runId: row.runId,
+00496:           modelId: row.modelId,
+00497:           status: row.status,
+00498:           count: row._count._all,
+00499:         })),
+00500:         transcripts.map((row) => ({
+00501:           runId: row.runId,
+00502:           modelId: row.modelId,
+00503:           count: row._count._all,
+00504:         })),
+00505:         summarizedRows.map((row) => ({
+00506:           runId: row.runId,
+00507:           modelId: row.modelId,
+00508:           count: row._count._all,
+00509:         })),
+00510:         summarizeFailedRows.map((row) => ({
+00511:           runId: row.runId,
+00512:           modelId: row.modelId,
+00513:           count: row._count._all,
+00514:         })),
+00515:         selectedScenarioCounts.map((row) => ({
+00516:           runId: row.runId,
+00517:           count: row._count._all,
+00518:         })),
+00519:         failedProbeRows.map((row) => ({
+00520:           runId: row.runId,
+00521:           modelId: row.modelId,
+00522:           errorCode: row.errorCode,
+00523:           errorMessage: row.errorMessage,
+00524:         })),
+00525:         analysisStatusByRunId,
+00526:       );
+00527:     },
+00528:   }),
+00529: );
+00530: 
+00531: builder.queryField('domainAvailableSignatures', (t) =>
+00532:   t.field({
+00533:     type: [DomainAvailableSignatureRef],
+00534:     args: {
+00535:       domainId: t.arg.id({ required: true }),
+00536:     },
+00537:     resolve: async (_root, args, ctx) => {
+00538:       if (!ctx.user) {
+00539:         throw new AuthenticationError('Authentication required');
+00540:       }
+00541:       const domainId = String(args.domainId);
+00542:       const domain = await db.domain.findUnique({ where: { id: domainId } });
+00543:       if (!domain) throw new Error(`Domain not found: ${domainId}`);
+00544: 
+00545:       const definitions = await db.definition.findMany({
+00546:         where: { domainId, deletedAt: null },
+00547:         select: {
+00548:           id: true,
+00549:           name: true,
+00550:           parentId: true,
+00551:           version: true,
+00552:           createdAt: true,
+00553:           updatedAt: true,
+00554:         },
+00555:       });
+00556:       if (definitions.length === 0) return [];
+00557: 
+00558:       const definitionsById = await hydrateDefinitionAncestors(definitions);
+00559:       const latestDefinitions = selectLatestDefinitionPerLineage(definitions, definitionsById);
+00560:       const latestDefinitionIds = latestDefinitions.map((definition) => definition.id);
+00561: 
+00562:       const runs = await db.run.findMany({
+00563:         where: {
+00564:           definitionId: { in: latestDefinitionIds },
+00565:           status: 'COMPLETED',
+00566:           deletedAt: null,
+00567:         },
+00568:         select: {
+00569:           config: true,
+00570:         },
+00571:       });
+00572: 
+00573:       return buildAvailableSignature

@@ -1,0 +1,216 @@
+00001: import { ChevronRight, Clock3, Loader2, AlertTriangle } from 'lucide-react';
+00002: import { Badge } from '../../ui/Badge';
+00003: import {
+00004:   getBatchRuntimeState,
+00005:   getBatchStageLabel,
+00006:   formatProgressSummary,
+00007: } from './launch-state';
+00008: import type {
+00009:   DomainEvaluation,
+00010:   DomainEvaluationMember,
+00011:   DomainEvaluationStatus,
+00012:   DomainTrialRunsStatusQueryResult,
+00013: } from '../../../api/operations/domains';
+00014: 
+00015: type RunStatusRow = DomainTrialRunsStatusQueryResult['domainTrialRunsStatus'][number];
+00016: 
+00017: type DomainEvaluationStatusPanelProps = {
+00018:   domainName: string;
+00019:   evaluation: (DomainEvaluation & { members: DomainEvaluationMember[] }) | null;
+00020:   evaluationStatus: DomainEvaluationStatus | null;
+00021:   runStatuses: RunStatusRow[];
+00022:   fetching: boolean;
+00023:   lastUpdatedAt: number | null;
+00024:   selectedRunId: string | null;
+00025:   onSelectRun: (runId: string) => void;
+00026: };
+00027: 
+00028: type RowView = {
+00029:   runId: string;
+00030:   definitionId: string;
+00031:   definitionName: string;
+00032:   status: string;
+00033:   analysisStatus: string | null;
+00034:   updatedAt: string | null;
+00035:   stalledModels: string[];
+00036:   latestErrorMessage: string | null;
+00037:   modelStatuses: RunStatusRow['modelStatuses'];
+00038: };
+00039: 
+00040: function formatTimestamp(value: string | null | undefined): string {
+00041:   if (!value) return 'Unknown';
+00042:   const date = new Date(value);
+00043:   return Number.isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString();
+00044: }
+00045: 
+00046: function getPrimaryProgressText(row: RowView): string {
+00047:   if (row.status === 'SUMMARIZING') {
+00048:     return `${formatProgressSummary(row.modelStatuses, 'summarization')} summarized`;
+00049:   }
+00050:   if (row.analysisStatus === 'pending' || row.analysisStatus === 'computing') {
+00051:     return 'Analysis queued';
+00052:   }
+00053:   if (row.status === 'FAILED' || row.status === 'CANCELLED') {
+00054:     return row.stalledModels.length > 0
+00055:       ? `Stalled models: ${row.stalledModels.join(', ')}`
+00056:       : 'Batch failed';
+00057:   }
+00058:   if (row.status === 'COMPLETED') {
+00059:     return row.analysisStatus === 'completed' ? 'Analysis complete' : 'Completed, awaiting analysis';
+00060:   }
+00061:   return `${formatProgressSummary(row.modelStatuses, 'generation')} generated`;
+00062: }
+00063: 
+00064: function getProgressPercent(row: RowView): number {
+00065:   if (row.modelStatuses.length === 0) return 0;
+00066:   if (row.status === 'SUMMARIZING' || row.status === 'COMPLETED') {
+00067:     const completed = row.modelStatuses.reduce(
+00068:       (sum, model) => sum + model.summarizationCompleted + model.summarizationFailed,
+00069:       0,
+00070:     );
+00071:     const total = row.modelStatuses.reduce((sum, model) => sum + model.summarizationTotal, 0);
+00072:     return total > 0 ? Math.min(100, (completed / total) * 100) : 0;
+00073:   }
+00074:   const completed = row.modelStatuses.reduce(
+00075:     (sum, model) => sum + model.generationCompleted + model.generationFailed,
+00076:     0,
+00077:   );
+00078:   const total = row.modelStatuses.reduce((sum, model) => sum + model.generationTotal, 0);
+00079:   return total > 0 ? Math.min(100, (completed / total) * 100) : 0;
+00080: }
+00081: 
+00082: function getProgressBarTone(row: RowView): string {
+00083:   const runtime = getBatchRuntimeState(row);
+00084:   if (runtime === 'EXCEPTION') return 'bg-red-500';
+00085:   if (runtime === 'LIVE') return 'bg-teal-500';
+00086:   return 'bg-gray-300';
+00087: }
+00088: 
+00089: export function DomainEvaluationStatusPanel({
+00090:   domainName,
+00091:   evaluation,
+00092:   evaluationStatus,
+00093:   runStatuses,
+00094:   fetching,
+00095:   lastUpdatedAt,
+00096:   selectedRunId,
+00097:   onSelectRun,
+00098: }: DomainEvaluationStatusPanelProps) {
+00099:   const memberByRunId = new Map((evaluation?.members ?? []).map((member) => [member.runId, member]));
+00100:   const rows: RowView[] = [];
+00101: 
+00102:   for (const status of runStatuses) {
+00103:     const member = memberByRunId.get(status.runId);
+00104:     if (!member) continue;
+00105:     rows.push({
+00106:       runId: status.runId,
+00107:       definitionId: status.definitionId,
+00108:       definitionName: member.definitionNameAtLaunch,
+00109:       status: status.status,
+00110:       analysisStatus: status.analysisStatus,
+00111:       updatedAt: status.updatedAt,
+00112:       stalledModels: status.stalledModels ?? [],
+00113:       latestErrorMessage: status.modelStatuses.find((model) => model.latestErrorMessage != null)?.latestErrorMessage ?? null,
+00114:       modelStatuses: status.modelStatuses,
+00115:     });
+00116:   }
+00117: 
+00118:   for (const member of evaluation?.members ?? []) {
+00119:     if (rows.some((row) => row.runId === member.runId)) continue;
+00120:     rows.push({
+00121:       runId: member.runId,
+00122:       defi
+
+... [narrowed review slice: middle omitted] ...
+
+);
+00276:                 })}
+00277:               </tbody>
+00278:             </table>
+00279:           </div>
+00280:         )}
+00281:       </div>
+00282: 
+00283:       <div className="space-y-3">
+00284:         <div>
+00285:           <h3 className="text-base font-semibold text-gray-900">Needs attention</h3>
+00286:           <p className="text-sm text-gray-600">Stalled or failed batches live here until the issue is reviewed.</p>
+00287:         </div>
+00288:         {exceptionRows.length === 0 ? (
+00289:           <p className="text-sm text-gray-500">No stalled or failed batches right now.</p>
+00290:         ) : (
+00291:           <div className="overflow-hidden rounded-lg border border-gray-200">
+00292:             <table className="min-w-full divide-y divide-gray-200 text-sm">
+00293:               <thead className="bg-gray-50 text-left text-gray-500">
+00294:                 <tr>
+00295:                   <th className="px-4 py-3 font-medium">Batch</th>
+00296:                   <th className="px-4 py-3 font-medium">Problem</th>
+00297:                   <th className="px-4 py-3 font-medium">Progress</th>
+00298:                   <th className="px-4 py-3 font-medium">Updated</th>
+00299:                 </tr>
+00300:               </thead>
+00301:               <tbody className="divide-y divide-gray-100 bg-white">
+00302:                 {exceptionRows.map((row) => {
+00303:                   const selected = selectedRunId === row.runId;
+00304:                   const problem = row.stalledModels.length > 0
+00305:                     ? `Stalled model${row.stalledModels.length === 1 ? '' : 's'}`
+00306:                     : row.analysisStatus === 'failed'
+00307:                       ? 'Analysis failed'
+00308:                       : row.status === 'FAILED'
+00309:                         ? 'Run failed'
+00310:                         : row.status === 'CANCELLED'
+00311:                           ? 'Run cancelled'
+00312:                           : 'Needs review';
+00313:                   return (
+00314:                     <tr
+00315:                       key={row.runId}
+00316:                       className={`cursor-pointer transition-colors hover:bg-amber-50/50 ${selected ? 'bg-amber-50/80' : ''}`}
+00317:                       onClick={() => onSelectRun(row.runId)}
+00318:                     >
+00319:                       <td className="px-4 py-3 align-top">
+00320:                         <div className="font-medium text-gray-900">{row.definitionName}</div>
+00321:                         <div className="text-xs text-gray-500">Batch {row.runId.slice(-8)}</div>
+00322:                       </td>
+00323:                       <td className="px-4 py-3 align-top">
+00324:                         <div className="flex items-center gap-2">
+00325:                           <Badge variant="error" size="count">{problem}</Badge>
+00326:                         </div>
+00327:                           <div className="mt-1 text-xs text-gray-600">
+00328:                             {row.latestErrorMessage ?? (row.stalledModels.length > 0 ? row.stalledModels.join(', ') : 'Review the log details.')}
+00329:                           </div>
+00330:                       </td>
+00331:                       <td className="px-4 py-3 align-top text-gray-700">
+00332:                         <div>{getPrimaryProgressText(row)}</div>
+00333:                         <div className="mt-2 h-1.5 rounded-full bg-gray-100">
+00334:                           <div className={`h-1.5 rounded-full ${getProgressBarTone(row)}`} style={{ width: `${getProgressPercent(row)}%` }} />
+00335:                         </div>
+00336:                       </td>
+00337:                       <td className="px-4 py-3 align-top text-gray-700">
+00338:                         <div className="flex items-center gap-2">
+00339:                           {formatTimestamp(row.updatedAt)}
+00340:                           <ChevronRight className="h-4 w-4 text-gray-400" />
+00341:                         </div>
+00342:                       </td>
+00343:                     </tr>
+00344:                   );
+00345:                 })}
+00346:               </tbody>
+00347:             </table>
+00348:           </div>
+00349:         )}
+00350:       </div>
+00351: 
+00352:       {fetching && (
+00353:         <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+00354:           <Loader2 className="h-4 w-4 animate-spin" />
+00355:           Refreshing the current launch state.
+00356:         </div>
+00357:       )}
+00358: 
+00359:       {evaluation?.status === 'COMPLETED' && (
+00360:         <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900">
+00361:           <AlertTriangle className="h-4 w-4" />
+00362:           This launch has completed. Open a row to review the run details.
+00363:         </div>
+00364:       )}
+003

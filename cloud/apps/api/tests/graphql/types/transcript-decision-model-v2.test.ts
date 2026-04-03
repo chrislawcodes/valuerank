@@ -149,10 +149,6 @@ describe('Transcript decisionModelV2 GraphQL field', () => {
         normalizationReason: null,
         source: 'deterministic',
       },
-      legacy: {
-        rawScore: 5,
-        canonicalScore: 1,
-      },
     });
   });
 

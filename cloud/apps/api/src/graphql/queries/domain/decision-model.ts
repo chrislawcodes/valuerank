@@ -36,11 +36,6 @@ export type CanonicalDecision = {
   source: DecisionSource;
 };
 
-export type LegacyDecisionCompat = {
-  rawScore: 1 | 2 | 3 | 4 | 5 | null;
-  canonicalScore: 1 | 2 | 3 | 4 | 5 | null;
-};
-
 export type DecisionReadSurface = 'api' | 'web' | 'worker' | 'export';
 export type DecisionReadMode = 'v1' | 'v2';
 export type DecisionReadRule = {
@@ -81,7 +76,6 @@ export type DecisionModelInput = {
   pair: DecisionPair | null;
   orientationFlipped: boolean | null | undefined;
   raw: RawDecisionEvidence;
-  legacyDecisionCode?: string | null;
   manualOverridePresent?: boolean;
   manualOverrideDecision?: CanonicalAppliedDecision | null;
   cachedDecision?: CachedWinnerFirstDecision | null;
@@ -90,7 +84,6 @@ export type DecisionModelInput = {
 export type DecisionModelResult = {
   raw: RawDecisionEvidence;
   canonical: CanonicalDecision;
-  legacy: LegacyDecisionCompat;
 };
 
 export type TranscriptDecisionModelInput = {
@@ -123,7 +116,7 @@ function isValueKey(value: string): value is DomainAnalysisValueKey {
 }
 
 function isDecisionDirection(value: unknown): value is DecisionDirection {
-  return value === 'favor_first' || value === 'favor_second' || value === 'neutral' || value === 'unknown';
+  return value === 'favor_first' || value === 'favor_second' || value === 'neutral' || value === 'refusal' || value === 'unknown';
 }
 
 function isDecisionStrength(value: unknown): value is DecisionStrength {
@@ -287,18 +280,6 @@ function resolveJobChoiceValueKeyFromText(text: string): DomainAnalysisValueKey 
   return resolved;
 }
 
-function canonicalDecisionScoreFromDirectionStrength(
-  direction: DecisionDirection,
-  strength: DecisionStrength,
-): 1 | 2 | 3 | 4 | 5 | null {
-  if (direction === 'favor_first' && strength === 'strong') return 5;
-  if (direction === 'favor_first' && strength === 'lean') return 4;
-  if (direction === 'neutral' && strength === 'neutral') return 3;
-  if (direction === 'favor_second' && strength === 'lean') return 2;
-  if (direction === 'favor_second' && strength === 'strong') return 1;
-  return null;
-}
-
 function buildUnknownCanonicalDecision(source: DecisionSource): CanonicalDecision {
   return {
     favoredValueKey: null,
@@ -311,18 +292,17 @@ function buildUnknownCanonicalDecision(source: DecisionSource): CanonicalDecisio
   };
 }
 
-function buildRefusalCanonicalDecision(): CanonicalDecision {
-  return {
-    favoredValueKey: null,
-    opposedValueKey: null,
-    direction: 'refusal',
-    strength: 'unknown',
-    normalizationApplied: false,
-    normalizationReason: null,
-    source: 'deterministic',
-  };
+function canonicalDecisionScoreFromDirectionStrength(
+  direction: DecisionDirection,
+  strength: DecisionStrength,
+): 1 | 2 | 3 | 4 | 5 | null {
+  if (direction === 'favor_first' && strength === 'strong') return 5;
+  if (direction === 'favor_first' && strength === 'lean') return 4;
+  if (direction === 'neutral' && strength === 'neutral') return 3;
+  if (direction === 'favor_second' && strength === 'lean') return 2;
+  if (direction === 'favor_second' && strength === 'strong') return 1;
+  return null;
 }
-
 function buildCanonicalDecisionFromPair(
   pair: DecisionPair,
   direction: DecisionDirection,
@@ -369,6 +349,12 @@ function buildCanonicalDecisionFromPair(
   return buildUnknownCanonicalDecision(source);
 }
 
+export function canonicalDecisionToLegacyScore(
+  decision: Pick<CanonicalDecision, 'direction' | 'strength'>,
+): 1 | 2 | 3 | 4 | 5 | null {
+  return canonicalDecisionScoreFromDirectionStrength(decision.direction, decision.strength);
+}
+
 function validateManualAppliedDecision(
   pair: DecisionPair,
   appliedDecision: unknown,
@@ -402,11 +388,6 @@ function validateManualAppliedDecision(
     return { ok: false };
   }
 
-  const canonicalScore = canonicalDecisionScoreFromDirectionStrength(decision.direction, decision.strength);
-  if (canonicalScore === null && decision.direction !== 'unknown') {
-    return { ok: false };
-  }
-
   return {
     ok: true,
     canonical: {
@@ -419,13 +400,6 @@ function validateManualAppliedDecision(
       source: 'manual',
     },
   };
-}
-
-function parseLegacyScore(value: string | null | undefined): 1 | 2 | 3 | 4 | 5 | null {
-  if (value === '1' || value === '2' || value === '3' || value === '4' || value === '5') {
-    return Number(value) as 1 | 2 | 3 | 4 | 5;
-  }
-  return null;
 }
 
 function extractManualOverrideDecision(
@@ -496,12 +470,6 @@ export function buildRawDecisionEvidence(
   };
 }
 
-export function canonicalDecisionToLegacyScore(
-  decision: Pick<CanonicalDecision, 'direction' | 'strength'>,
-): 1 | 2 | 3 | 4 | 5 | null {
-  return canonicalDecisionScoreFromDirectionStrength(decision.direction, decision.strength);
-}
-
 export function resolveTranscriptDecisionModel(
   input: TranscriptDecisionModelInput,
 ): TranscriptDecisionModelResult {
@@ -509,22 +477,19 @@ export function resolveTranscriptDecisionModel(
   const raw = buildRawDecisionEvidence(input.decisionMetadata);
   const manualOverrideDecision = extractManualOverrideDecision(input.decisionMetadata);
   const cachedDecision = extractCachedWinnerFirstDecision(input.decisionMetadata);
-  return resolveDecisionModel({
+  const resolved = resolveDecisionModel({
     pair,
     orientationFlipped: input.orientationFlipped,
     raw,
-    legacyDecisionCode: input.decisionCode,
     manualOverridePresent: manualOverrideDecision !== null,
     manualOverrideDecision,
     cachedDecision,
   });
+
+  return resolved;
 }
 
 export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDecision {
-  if (input.legacyDecisionCode === 'refusal') {
-    return buildRefusalCanonicalDecision();
-  }
-
   const pair = isValidDecisionPair(input.pair) ? input.pair : null;
   if (!pair) {
     return input.pair == null ? buildUnknownCanonicalDecision('unknown') : buildUnknownCanonicalDecision('error');
@@ -659,39 +624,10 @@ export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDe
     'deterministic',
   );
 }
-
-export function resolveLegacyDecisionCompat(
-  input: DecisionModelInput,
-  canonicalDecision: CanonicalDecision = resolveCanonicalDecision(input),
-): LegacyDecisionCompat {
-  const canonicalScore = canonicalDecisionToLegacyScore(canonicalDecision);
-  if (canonicalDecision.direction === 'unknown' || canonicalDecision.direction === 'refusal' || canonicalDecision.strength === 'unknown') {
-    return {
-      rawScore: null,
-      canonicalScore: null,
-    };
-  }
-
-  const legacyCode =
-    parseLegacyScore(input.raw.manualOverride?.previousValue)
-    ?? parseLegacyScore(input.legacyDecisionCode);
-
-  if (legacyCode != null) {
-    return { rawScore: legacyCode, canonicalScore };
-  }
-
-  return {
-    rawScore: null,
-    canonicalScore,
-  };
-}
-
 export function resolveDecisionModel(input: DecisionModelInput): DecisionModelResult {
   const canonical = resolveCanonicalDecision(input);
-  const legacy = resolveLegacyDecisionCompat(input, canonical);
   return {
     raw: input.raw,
     canonical,
-    legacy,
   };
 }

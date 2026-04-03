@@ -10,14 +10,16 @@ import {
 } from './types.js';
 import {
   type DomainEvaluationCostEstimate,
-  formatRunSignature,
-  formatVnewLabel,
-  formatVnewSignature,
   hydrateDefinitionAncestors,
   selectLatestDefinitionPerLineage,
   supportsTemperature,
 } from './shared.js';
 import type { DomainTrialPlanCellEstimate } from './shared.js';
+import {
+  buildAvailableSignatureOptions,
+  buildExistingBatchCountByDefinitionId,
+  buildTrialRunStatusRows,
+} from './planning-utils.js';
 import { formatTrialSignature } from '@valuerank/shared/trial-signature';
 import { parseTemperature } from '../../../utils/temperature.js';
 import { resolveRunAnalysisStatuses } from '../../../services/run/analysis-status.js';
@@ -253,20 +255,11 @@ async function buildDomainEstimate(input: DomainEstimateInput): Promise<DomainEs
   }
   const existingTemperatures = Array.from(existingTemperatureSet.values()).sort((a, b) => a - b);
 
-  // Build per-definition existing batch counts for the current scope + temperature.
-  // A batch counts if it's completed or in-flight (PENDING/RUNNING/PAUSED/SUMMARIZING)
-  // and its temperature matches the current launch temperature and runCategory matches.
-  const COUNTABLE_STATUSES = new Set(['COMPLETED', 'PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING']);
-  const existingBatchCountByDefinitionId = new Map<string, number>();
-  for (const run of existingRuns) {
-    if (!COUNTABLE_STATUSES.has(run.status)) continue;
-    if (run.runCategory !== effectiveScopeCategory) continue;
-    const runConfig = run.config as { temperature?: unknown } | null;
-    const runTemperature = parseTemperature(runConfig?.temperature);
-    if (runTemperature !== temperature) continue;
-    const prev = existingBatchCountByDefinitionId.get(run.definitionId) ?? 0;
-    existingBatchCountByDefinitionId.set(run.definitionId, prev + 1);
-  }
+  const existingBatchCountByDefinitionId = buildExistingBatchCountByDefinitionId(
+    existingRuns,
+    effectiveScopeCategory,
+    temperature,
+  );
 
   let temperatureWarning: string | null = null;
   if (existingTemperatures.length > 0) {
@@ -486,43 +479,6 @@ builder.queryField('domainTrialRunsStatus', (t) =>
         orderBy: [{ completedAt: 'desc' }, { createdAt: 'desc' }],
       });
 
-      const probeByKey = new Map<string, { completed: number; failed: number }>();
-      for (const row of probeRows) {
-        const key = `${row.runId}::${row.modelId}`;
-        const existing = probeByKey.get(key) ?? { completed: 0, failed: 0 };
-        if (row.status === 'SUCCESS') {
-          existing.completed = row._count._all;
-        } else if (row.status === 'FAILED') {
-          existing.failed = row._count._all;
-        }
-        probeByKey.set(key, existing);
-      }
-
-      const transcriptTotalByKey = new Map<string, number>();
-      for (const row of transcripts) {
-        transcriptTotalByKey.set(`${row.runId}::${row.modelId}`, row._count._all);
-      }
-      const summarizedByKey = new Map<string, number>();
-      for (const row of summarizedRows) {
-        summarizedByKey.set(`${row.runId}::${row.modelId}`, row._count._all);
-      }
-      const summarizeFailedByKey = new Map<string, number>();
-      for (const row of summarizeFailedRows) {
-        summarizeFailedByKey.set(`${row.runId}::${row.modelId}`, row._count._all);
-      }
-      const latestErrorByKey = new Map<string, string>();
-      for (const row of failedProbeRows) {
-        const key = `${row.runId}::${row.modelId}`;
-        if (latestErrorByKey.has(key)) continue;
-        const messageParts = [row.errorCode, row.errorMessage].filter(
-          (part): part is string => typeof part === 'string' && part.trim() !== '',
-        );
-        latestErrorByKey.set(key, messageParts.length > 0 ? messageParts.join(' - ') : 'Model probe failed.');
-      }
-
-      const scenarioCountByRun = new Map(
-        selectedScenarioCounts.map((row) => [row.runId, row._count._all]),
-      );
       const analysisStatusByRunId = await resolveRunAnalysisStatuses(
         runs.map((run) => ({
           id: run.id,
@@ -532,49 +488,42 @@ builder.queryField('domainTrialRunsStatus', (t) =>
           config: run.config,
         })),
       );
-
-      const runById = new Map(runs.map((run) => [run.id, run]));
-
-      return Promise.all(runIds.map(async (runId) => {
-        const run = runById.get(runId);
-        if (run === undefined) {
-          return null;
-        }
-        const runConfig = run.config as { models?: unknown; samplesPerScenario?: unknown } | null;
-        const models = Array.isArray(runConfig?.models)
-          ? runConfig.models.filter((model): model is string => typeof model === 'string')
-          : [];
-        const samplesPerScenario = typeof runConfig?.samplesPerScenario === 'number' && Number.isFinite(runConfig.samplesPerScenario)
-          ? runConfig.samplesPerScenario
-          : 1;
-        const generationTotal = (scenarioCountByRun.get(run.id) ?? 0) * samplesPerScenario;
-
-        const modelStatuses = models.map((modelId) => {
-          const key = `${run.id}::${modelId}`;
-          const probe = probeByKey.get(key) ?? { completed: 0, failed: 0 };
-          const summarizationTotal = transcriptTotalByKey.get(key) ?? 0;
-          return {
-            modelId,
-            generationCompleted: probe.completed,
-            generationFailed: probe.failed,
-            generationTotal,
-            summarizationCompleted: summarizedByKey.get(key) ?? 0,
-            summarizationFailed: summarizeFailedByKey.get(key) ?? 0,
-            summarizationTotal,
-            latestErrorMessage: latestErrorByKey.get(key) ?? null,
-          };
-        });
-
-        return {
-          runId: run.id,
-          definitionId: run.definitionId,
-          status: run.status,
-          updatedAt: run.updatedAt,
-          stalledModels: run.stalledModels,
-          analysisStatus: analysisStatusByRunId.get(run.id) ?? null,
-          modelStatuses,
-        };
-      })).then((rows) => rows.filter((row): row is NonNullable<typeof row> => row !== null));
+      return buildTrialRunStatusRows(
+        runIds,
+        runs,
+        probeRows.map((row) => ({
+          runId: row.runId,
+          modelId: row.modelId,
+          status: row.status,
+          count: row._count._all,
+        })),
+        transcripts.map((row) => ({
+          runId: row.runId,
+          modelId: row.modelId,
+          count: row._count._all,
+        })),
+        summarizedRows.map((row) => ({
+          runId: row.runId,
+          modelId: row.modelId,
+          count: row._count._all,
+        })),
+        summarizeFailedRows.map((row) => ({
+          runId: row.runId,
+          modelId: row.modelId,
+          count: row._count._all,
+        })),
+        selectedScenarioCounts.map((row) => ({
+          runId: row.runId,
+          count: row._count._all,
+        })),
+        failedProbeRows.map((row) => ({
+          runId: row.runId,
+          modelId: row.modelId,
+          errorCode: row.errorCode,
+          errorMessage: row.errorMessage,
+        })),
+        analysisStatusByRunId,
+      );
     },
   }),
 );
@@ -621,48 +570,7 @@ builder.queryField('domainAvailableSignatures', (t) =>
         },
       });
 
-      const exactSignatureSet = new Set<string>();
-      const temperatureCounts = new Map<string, { temperature: number | null; count: number }>();
-      for (const run of runs) {
-        exactSignatureSet.add(formatRunSignature(run.config));
-        const runConfig = run.config as { temperature?: unknown } | null;
-        const temperature = parseTemperature(runConfig?.temperature);
-        const key = temperature === null ? 'd' : temperature.toString();
-        const existing = temperatureCounts.get(key);
-        if (existing) {
-          existing.count += 1;
-        } else {
-          temperatureCounts.set(key, { temperature, count: 1 });
-        }
-      }
-
-      const vnewCandidates = Array.from(temperatureCounts.values())
-        .sort((left, right) => {
-          const leftIsZero = left.temperature === 0;
-          const rightIsZero = right.temperature === 0;
-          if (leftIsZero !== rightIsZero) return leftIsZero ? -1 : 1;
-          if (left.count !== right.count) return right.count - left.count;
-          if (left.temperature === null) return 1;
-          if (right.temperature === null) return -1;
-          return left.temperature - right.temperature;
-        });
-
-      const virtualSignatures = vnewCandidates.map((entry) => ({
-        signature: formatVnewSignature(entry.temperature),
-        label: formatVnewLabel(entry.temperature),
-        isVirtual: true,
-        temperature: entry.temperature,
-      }));
-      const exactSignatures = Array.from(exactSignatureSet.values())
-        .sort((left, right) => left.localeCompare(right))
-        .map((signature) => ({
-          signature,
-          label: signature,
-          isVirtual: false,
-          temperature: null,
-        }));
-
-      return [...virtualSignatures, ...exactSignatures];
+      return buildAvailableSignatureOptions(runs);
     },
   }),
 );

@@ -1,0 +1,69 @@
+{
+  "feature_slug": "domain-coverage-completeness-guard",
+  "stage": "plan",
+  "artifact_path": "docs/feature-runs/domain-coverage-completeness-guard/plan.md",
+  "git_base_ref": "",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "gemini",
+      "lens": "architecture-adversarial",
+      "stage": "plan",
+      "path": "docs/feature-runs/domain-coverage-completeness-guard/reviews/plan.gemini.architecture-adversarial.review.md",
+      "context_paths": [
+        "cloud/apps/api/src/services/run/coverage-completeness.ts",
+        "cloud/apps/api/src/services/run/recovery.ts",
+        "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+        "cloud/apps/api/src/graphql/queries/domain/planning.ts",
+        "cloud/apps/api/src/graphql/queries/domain/shared.ts",
+        "cloud/apps/api/src/services/domain.ts",
+        "cloud/apps/web/src/components/domains/CoverageMatrix.tsx",
+        "cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx",
+        "cloud/apps/web/src/api/operations/domainCoverage.ts",
+        "cloud/apps/web/src/api/operations/domainAnalysis.ts"
+      ],
+      "model": "gemini-2.5-pro"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "testability-adversarial",
+      "stage": "plan",
+      "path": "docs/feature-runs/domain-coverage-completeness-guard/reviews/plan.gemini.testability-adversarial.review.md",
+      "context_paths": [
+        "cloud/apps/api/src/services/run/coverage-completeness.ts",
+        "cloud/apps/api/src/services/run/recovery.ts",
+        "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+        "cloud/apps/api/src/graphql/queries/domain/planning.ts",
+        "cloud/apps/api/src/graphql/queries/domain/shared.ts",
+        "cloud/apps/api/src/services/domain.ts",
+        "cloud/apps/web/src/components/domains/CoverageMatrix.tsx",
+        "cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx",
+        "cloud/apps/web/src/api/operations/domainCoverage.ts",
+        "cloud/apps/web/src/api/operations/domainAnalysis.ts"
+      ],
+      "model": "gemini-2.5-pro"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "implementation-adversarial",
+      "stage": "plan",
+      "path": "docs/feature-runs/domain-coverage-completeness-guard/reviews/plan.codex.implementation-adversarial.review.md",
+      "context_paths": [
+        "cloud/apps/api/src/services/run/coverage-completeness.ts",
+        "cloud/apps/api/src/services/run/recovery.ts",
+        "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+        "cloud/apps/api/src/graphql/queries/domain/planning.ts",
+        "cloud/apps/api/src/graphql/queries/domain/shared.ts",
+        "cloud/apps/api/src/services/domain.ts",
+        "cloud/apps/web/src/components/domains/CoverageMatrix.tsx",
+        "cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx",
+        "cloud/apps/web/src/api/operations/domainCoverage.ts",
+        "cloud/apps/web/src/api/operations/domainAnalysis.ts"
+      ],
+      "model": "gpt-5.4-mini"
+    }
+  ],
+  "max_artifact_chars": null,
+  "max_context_chars": null,
+  "max_total_chars": null
+}

@@ -1,0 +1,208 @@
+00001: import { forwardRef, type SVGProps, useEffect, useMemo, useState } from 'react';
+00002: import { Link } from 'react-router-dom';
+00003: import { useQuery } from 'urql';
+00004: import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
+00005: import { ErrorMessage } from '../ui/ErrorMessage';
+00006: import { Loading } from '../ui/Loading';
+00007: import {
+00008:   DOMAIN_VALUE_COVERAGE_QUERY,
+00009:   DOMAIN_VALUE_COVERAGE_QUERY_LEGACY,
+00010:   type DomainValueCoverageQueryResult,
+00011:   type DomainValueCoverageQueryVariables,
+00012: } from '../../api/operations/domainCoverage';
+00013: import {
+00014:   DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+00015:   type DomainAvailableSignature,
+00016:   type DomainAvailableSignaturesQueryResult,
+00017: } from '../../api/operations/domainAnalysis';
+00018: import { VALUE_LABELS } from './domainAnalysisData';
+00019: import { formatDisplayLabel } from '../../utils/displayLabels';
+00020: import { ChevronRight, FileSearch } from 'lucide-react';
+00021: import { cn } from '../../lib/utils';
+00022: import { getCanonicalDimension } from '@valuerank/shared';
+00023: 
+00024: // Render a matrix cell
+00025: function CoverageCell({
+00026:   valueA,
+00027:   valueB,
+00028:   batchCount,
+00029:   pairedBatchCount,
+00030:   definitionId,
+00031:   aggregateRunId,
+00032: }: {
+00033:   valueA: string;
+00034:   valueB: string;
+00035:   batchCount: number;
+00036:   pairedBatchCount: number;
+00037:   definitionId: string | null;
+00038:   aggregateRunId: string | null;
+00039: }) {
+00040:   const [isOpen, setIsOpen] = useState(false);
+00041:   const isDiagonal = valueA === valueB;
+00042:   const hasVignette = definitionId !== null;
+00043:   const displayCount = pairedBatchCount > 0 ? pairedBatchCount : batchCount;
+00044:   const visibleLabel = isDiagonal || !hasVignette ? '—' : displayCount.toLocaleString();
+00045:   const xLabel = VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB;
+00046:   const yLabel = VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA;
+00047:   const batchLabel = pairedBatchCount > 0
+00048:     ? (displayCount === 1 ? 'paired batch' : 'paired batches')
+00049:     : (displayCount === 1 ? 'batch' : 'batches');
+00050: 
+00051:   let bgColorClass = 'bg-gray-50';
+00052:   if (isDiagonal) {
+00053:     bgColorClass =
+00054:       'bg-[url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxwYXRoIGQ9Ik0wLDggTDgsMCBMMCw4IFoiIHN0cm9rZT0iI2U1ZTdlYiIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9zdmc+")] bg-gray-100';
+00055:   } else if (!hasVignette) {
+00056:     bgColorClass = 'bg-gray-50';
+00057:   } else if (batchCount < 3) {
+00058:     bgColorClass = 'bg-rose-100 hover:bg-rose-200 transition-colors text-rose-900';
+00059:   } else if (batchCount < 10) {
+00060:     bgColorClass = 'bg-amber-100 hover:bg-amber-200 transition-colors text-amber-900';
+00061:   } else {
+00062:     bgColorClass = 'bg-emerald-500 hover:bg-emerald-600 transition-colors text-white';
+00063:   }
+00064: 
+00065:   return (
+00066:     <Popover open={isOpen} onOpenChange={setIsOpen}>
+00067:       <PopoverTrigger asChild>
+00068:         {/* eslint-disable-next-line react/forbid-elements */}
+00069:         <button
+00070:           type="button"
+00071:           disabled={isDiagonal}
+00072:           aria-label={
+00073:             isDiagonal
+00074:               ? 'Not applicable'
+00075:               : !hasVignette
+00076:                 ? `${xLabel} versus ${yLabel}: no vignette`
+00077:                 : `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}`
+00078:           }
+00079:           className={cn(
+00080:             'w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border border-gray-100 rounded-none focus:ring-0 focus:ring-offset-0',
+00081:             bgColorClass,
+00082:             isDiagonal && 'cursor-not-allowed text-transparent font-normal',
+00083:             !isDiagonal && !hasVignette && 'text-gray-500 cursor-pointer hover:bg-gray-100',
+00084:             hasVignette && batchCount < 3 && 'text-rose-900',
+00085:             hasVignette && batchCount >= 3 && batchCount < 10 && 'text-amber-900'
+00086:           )}
+00087:         >
+00088:           {visibleLabel}
+00089:         </button>
+00090:       </PopoverTrigger>
+00091:       {!isDiagonal && (
+00092:         <PopoverContent
+00093:           className="w-64 p-0 shadow-lg border-gray-200"
+00094:           align="center"
+00095:           sideOffset={5}
+00096:         >
+00097:           <div className="p-3 border-b border-gray-100 bg-gray-50/50 rounded-t-md">
+00098:             {hasVignette ? (
+00099:               <div className="mt-2 text-xs text-gray-600 flex items-center">
+00100:                 <span
+00101:                   className={cn(
+00102:                     'inline-block w-2 h-2 rounded-full mr-1.5',
+00103:                     batchCount < 3
+00104:                       ? 'bg-rose-500'
+00105:
+
+... [narrowed review slice: middle omitted] ...
+
+nter border-b border-l border-gray-200 tracking-normal',
+00407:                       group.color
+00408:                     )}
+00409:                   >
+00410:                     {group.name}
+00411:                   </th>
+00412:                 ))}
+00413:               </tr>
+00414:               <tr>
+00415:                 {valueGroups.flatMap((group, groupIndex) =>
+00416:                   group.values.map((val, valIndex) => (
+00417:                     <th
+00418:                       key={`col-${val}`}
+00419:                       className={cn(
+00420:                         'w-[6.5rem] p-1.5 text-[11px] font-medium text-gray-600 border-b border-gray-200 align-top text-center leading-tight whitespace-normal break-words',
+00421:                         valIndex === 0 && 'border-l',
+00422:                         groupIndex % 2 === 0 ? 'bg-gray-50/30' : 'bg-white'
+00423:                       )}
+00424:                     >
+00425:                       <div className="mx-auto max-w-[6.5rem]">
+00426:                         {VALUE_LABELS[val as keyof typeof VALUE_LABELS] ?? formatDisplayLabel(val)}
+00427:                       </div>
+00428:                     </th>
+00429:                   ))
+00430:                 )}
+00431:               </tr>
+00432:             </thead>
+00433:             <tbody>
+00434:               {valueGroups.flatMap((rowGroup, rowGroupIdx) =>
+00435:                 rowGroup.values.map((rowVal, rowValIdx) => (
+00436:                   <tr key={`row-${rowVal}`}>
+00437:                     {rowValIdx === 0 && (
+00438:                       <th
+00439:                         rowSpan={rowGroup.values.length}
+00440:                         className={cn(
+00441:                           'w-[6.75rem] px-1 py-1.5 text-[11px] font-medium text-center border-t border-r border-gray-200 tracking-normal leading-tight whitespace-normal break-words overflow-hidden align-middle',
+00442:                           rowGroup.color
+00443:                         )}
+00444:                       >
+00445:                         {rowGroup.name}
+00446:                       </th>
+00447:                     )}
+00448:                     <th
+00449:                       className={cn(
+00450:                         'w-[8rem] px-0.5 py-1 text-[11px] font-medium text-gray-600 text-right border-t border-r border-gray-200 whitespace-normal break-words leading-tight',
+00451:                         rowGroupIdx % 2 === 0 ? 'bg-gray-50/30' : 'bg-white'
+00452:                       )}
+00453:                     >
+00454:                       {VALUE_LABELS[rowVal as keyof typeof VALUE_LABELS] ??
+00455:                         formatDisplayLabel(rowVal)}
+00456:                     </th>
+00457: 
+00458:                     {displayValues.map((colVal) => {
+00459:                       const keyA = [colVal, rowVal].sort().join('::');
+00460:                       const cell = cellLookup.get(keyA);
+00461: 
+00462:                       return (
+00463:                         <td
+00464:                           key={`cell-${rowVal}-${colVal}`}
+00465:                           className="h-12 w-[3.5rem] border border-gray-100 p-0"
+00466:                         >
+00467:                           <CoverageCell
+00468:                             valueA={rowVal}
+00469:                             valueB={colVal}
+00470:                             batchCount={cell?.batchCount ?? 0}
+00471:                             pairedBatchCount={cell?.pairedBatchCount ?? 0}
+00472:                             definitionId={cell?.definitionId ?? null}
+00473:                             aggregateRunId={cell?.aggregateRunId ?? null}
+00474:                           />
+00475:                         </td>
+00476:                       );
+00477:                     })}
+00478:                   </tr>
+00479:                 ))
+00480:               )}
+00481:             </tbody>
+00482:           </table>
+00483:         </div>
+00484:       ) : (
+00485:         <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+00486:           <p>No coverage data available for this domain yet.</p>
+00487:           <p className="mt-1 text-sm">Create vignettes in the Vignettes tab, then run evaluations to see coverage here.</p>
+00488:         </div>
+00489:       )}
+00490: 
+00491:       {!fetching && canonicalValues.length > 0 && (
+00492:         <div className="px-1 pt-2 text-xs text-gray-500">
+00493:           <p>
+00494:             Batches per cell are{' '}
+00495:             <span className="font-medium text-rose-700">red (&lt;3)</span>,{' '}
+00496:             <span className="font-medium text-amber-700">yellow (3-9)</span>, or{' '}
+00497:             <span className="font-medium text-emerald-700">green (10+)</span>. Click any cell to add a batch.
+00498:           </p>
+00499:         </div>
+00500:       )}
+00501:     </div>
+00502:   );
+00503: });
+00504: 
+00505: CoverageMatrix.d

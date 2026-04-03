@@ -25,6 +25,8 @@
 
 | Feature | Branch | Status | What's Wrong |
 |---------|--------|--------|--------------|
+| **domain-coverage-completeness-guard** | `030-remove-legacy-decision-code` | 🟡 In progress | Plan/tasks are green. Shared completeness plumbing, coverage-query helpers, UI helper splits, and the read-only audit script are in place; diff checkpoint and rebase are next. |
+| **domain-analysis-definition-snapshot-crash** | — | 🟡 Ready | Default-temperature domain analysis can crash in Prisma when transcripts contain unreadable `definitionSnapshot` data. Local API fix is ready: domain analysis now uses the pre-resolved value pair instead of reading transcript snapshots. Prod data cleanup still needs direct SQL access to find and null the bad snapshots. |
 | **transcript-resummarization-backfill** | — | 🟡 Ready | Script written (`cloud/scripts/backfill-resummarize-existing-transcripts.ts`) but no PR yet — needs review and merge |
 | **provider-budget migration** | — | 🟡 Pending prod apply | PR #483 merged. Migration SQL not yet applied to prod. Run: `psql $DIRECT_URL -f cloud/packages/db/prisma/migrations/20260331000000_add_provider_budget_tracking/migration.sql` then `npx prisma@5 migrate resolve --applied 20260331000000_add_provider_budget_tracking` |
 | **domain-evaluation-model-backfill** | `codex/domain-evaluation-backfill-attach` | 🟡 In review | Adds a supported way to backfill missing model coverage into existing Domain Level Batches so reruns stay attached to the original evaluation instead of becoming orphan batches |

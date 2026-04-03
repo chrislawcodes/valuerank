@@ -53,7 +53,6 @@ function buildInput(
   return {
     pair: PAIR,
     orientationFlipped: false,
-    legacyDecisionCode: null,
     manualOverridePresent: false,
     manualOverrideDecision: null,
     ...overrides,
@@ -119,7 +118,7 @@ describe('decision model', () => {
 
   it('resolves a transcript decision model envelope behind the shared boundary', () => {
     const result = resolveTranscriptDecisionModel({
-      decisionCode: '5',
+      decisionCode: null,
       decisionMetadata: {
         matchedLabel: 'Achievement',
         parseClass: 'exact',
@@ -153,12 +152,11 @@ describe('decision model', () => {
       normalizationApplied: true,
       normalizationReason: 'orientation_flipped',
     });
-    expect(result.legacy).toEqual({ rawScore: 5, canonicalScore: 1 });
   });
 
   it('resolves the current job-choice numeric metadata shape behind the shared boundary', () => {
     const result = resolveTranscriptDecisionModel({
-      decisionCode: '2',
+      decisionCode: null,
       decisionMetadata: {
         parseClass: 'exact',
         parsePath: 'numeric_deterministic',
@@ -190,12 +188,11 @@ describe('decision model', () => {
       normalizationReason: null,
       source: 'deterministic',
     });
-    expect(result.legacy).toEqual({ rawScore: 2, canonicalScore: 1 });
   });
 
   it('resolves the current job-choice text-label metadata shape behind the shared boundary', () => {
     const result = resolveTranscriptDecisionModel({
-      decisionCode: '5',
+      decisionCode: null,
       decisionMetadata: {
         parseClass: 'exact',
         parsePath: 'text_label_leading',
@@ -227,12 +224,11 @@ describe('decision model', () => {
       normalizationReason: null,
       source: 'deterministic',
     });
-    expect(result.legacy).toEqual({ rawScore: 5, canonicalScore: 1 });
   });
 
   it('resolves the current job-choice neutral metadata shape behind the shared boundary', () => {
     const result = resolveTranscriptDecisionModel({
-      decisionCode: '3',
+      decisionCode: null,
       decisionMetadata: {
         parseClass: 'exact',
         parsePath: 'text_label_exact',
@@ -264,7 +260,6 @@ describe('decision model', () => {
       normalizationReason: null,
       source: 'deterministic',
     });
-    expect(result.legacy).toEqual({ rawScore: 3, canonicalScore: 3 });
   });
 
   it('documents the surface read rules for the current migration boundary', () => {
@@ -277,7 +272,7 @@ describe('decision model', () => {
   });
 
   it('resolves an exact first-side strong decision', () => {
-    const result = resolveDecisionModel(buildInput(buildRaw(), { legacyDecisionCode: '5' }));
+    const result = resolveDecisionModel(buildInput(buildRaw()));
     expectCanonical(result.canonical, {
       favoredValueKey: 'Achievement',
       opposedValueKey: 'Benevolence_Dependability',
@@ -287,7 +282,6 @@ describe('decision model', () => {
       normalizationReason: null,
       source: 'deterministic',
     });
-    expect(result.legacy).toEqual({ rawScore: 5, canonicalScore: 5 });
   });
 
   it('resolves an exact second-side lean decision', () => {
@@ -297,7 +291,6 @@ describe('decision model', () => {
           matchedLabel: 'Benevolence_Dependability',
           parsePath: 'exact.favor_second.lean',
         }),
-        { legacyDecisionCode: '2' },
       ),
     );
     expectCanonical(result.canonical, {
@@ -309,7 +302,6 @@ describe('decision model', () => {
       normalizationReason: null,
       source: 'deterministic',
     });
-    expect(result.legacy).toEqual({ rawScore: 2, canonicalScore: 2 });
   });
 
   it('resolves a neutral decision', () => {
@@ -319,7 +311,6 @@ describe('decision model', () => {
           matchedLabel: 'Achievement',
           parsePath: 'exact.neutral',
         }),
-        { legacyDecisionCode: '3' },
       ),
     );
     expectCanonical(result.canonical, {
@@ -331,7 +322,6 @@ describe('decision model', () => {
       normalizationReason: null,
       source: 'deterministic',
     });
-    expect(result.legacy).toEqual({ rawScore: 3, canonicalScore: 3 });
   });
 
   it('flips orientation for an exact decision', () => {
@@ -341,7 +331,7 @@ describe('decision model', () => {
           matchedLabel: 'Achievement',
           parsePath: 'exact.favor_first.strong',
         }),
-        { orientationFlipped: true, legacyDecisionCode: '1' },
+        { orientationFlipped: true },
       ),
     );
     expectCanonical(result.canonical, {
@@ -353,7 +343,6 @@ describe('decision model', () => {
       normalizationReason: 'orientation_flipped',
       source: 'deterministic',
     });
-    expect(result.legacy).toEqual({ rawScore: 1, canonicalScore: 1 });
   });
 
   it('resolves a fallback-resolved decision', () => {
@@ -364,7 +353,6 @@ describe('decision model', () => {
           matchedLabel: 'Benevolence_Dependability',
           parsePath: 'fallback.favor_second.lean',
         }),
-        { legacyDecisionCode: '2' },
       ),
     );
     expectCanonical(result.canonical, {
@@ -376,7 +364,6 @@ describe('decision model', () => {
       normalizationReason: null,
       source: 'deterministic',
     });
-    expect(result.legacy).toEqual({ rawScore: 2, canonicalScore: 2 });
   });
 
   it('treats an ambiguous response as unknown', () => {
@@ -386,7 +373,6 @@ describe('decision model', () => {
           parseClass: 'ambiguous',
           parsePath: 'exact.favor_first.strong',
         }),
-        { legacyDecisionCode: '5' },
       ),
     );
     expectCanonical(result.canonical, {
@@ -398,7 +384,6 @@ describe('decision model', () => {
       normalizationReason: null,
       source: 'unknown',
     });
-    expect(result.legacy).toEqual({ rawScore: null, canonicalScore: null });
   });
 
   it('treats an unparseable response as unknown', () => {
@@ -408,7 +393,6 @@ describe('decision model', () => {
           parseClass: 'unparseable',
           parsePath: 'text_label_ambiguous',
         }),
-        { legacyDecisionCode: '4' },
       ),
     );
     expectCanonical(result.canonical, {
@@ -420,7 +404,6 @@ describe('decision model', () => {
       normalizationReason: null,
       source: 'unknown',
     });
-    expect(result.legacy).toEqual({ rawScore: null, canonicalScore: null });
   });
 
   it('lets a manual override replace an ambiguous response', () => {
@@ -433,7 +416,6 @@ describe('decision model', () => {
           }),
         }),
         {
-          legacyDecisionCode: '2',
           manualOverridePresent: true,
           manualOverrideDecision: {
             favoredValueKey: 'Achievement',
@@ -453,7 +435,6 @@ describe('decision model', () => {
       normalizationReason: null,
       source: 'manual',
     });
-    expect(result.legacy).toEqual({ rawScore: 2, canonicalScore: 4 });
   });
 
   it('lets a manual override replace an exact response', () => {
@@ -467,7 +448,6 @@ describe('decision model', () => {
           }),
         }),
         {
-          legacyDecisionCode: '5',
           manualOverridePresent: true,
           manualOverrideDecision: {
             favoredValueKey: 'Benevolence_Dependability',
@@ -487,7 +467,6 @@ describe('decision model', () => {
       normalizationReason: null,
       source: 'manual',
     });
-    expect(result.legacy).toEqual({ rawScore: 5, canonicalScore: 1 });
   });
 
   it('returns unknown when pair metadata is missing', () => {
@@ -495,7 +474,6 @@ describe('decision model', () => {
       buildInput(buildRaw({ matchedLabel: 'Achievement' }), {
         pair: null,
         orientationFlipped: false,
-        legacyDecisionCode: '5',
       }),
     );
     expectCanonical(result.canonical, {
@@ -507,7 +485,6 @@ describe('decision model', () => {
       normalizationReason: null,
       source: 'unknown',
     });
-    expect(result.legacy).toEqual({ rawScore: null, canonicalScore: null });
   });
 
   it('returns error when pair metadata is malformed, even with ambiguous evidence', () => {
@@ -523,7 +500,6 @@ describe('decision model', () => {
             valueB: 'Achievement',
           } as DecisionPair,
           orientationFlipped: false,
-          legacyDecisionCode: '5',
         },
       ),
     );
@@ -536,7 +512,6 @@ describe('decision model', () => {
       normalizationReason: null,
       source: 'error',
     });
-    expect(result.legacy).toEqual({ rawScore: null, canonicalScore: null });
   });
 
   it('returns error for an invalid manual override', () => {
@@ -548,7 +523,6 @@ describe('decision model', () => {
           }),
         }),
         {
-          legacyDecisionCode: '5',
           manualOverridePresent: true,
           manualOverrideDecision: {
             favoredValueKey: 'Achievement',
@@ -568,7 +542,6 @@ describe('decision model', () => {
       normalizationReason: null,
       source: 'error',
     });
-    expect(result.legacy).toEqual({ rawScore: null, canonicalScore: null });
   });
 
   it('lets a valid manual override win over conflicting raw legacy metadata', () => {
@@ -583,7 +556,6 @@ describe('decision model', () => {
           }),
         }),
         {
-          legacyDecisionCode: '1',
           manualOverridePresent: true,
           manualOverrideDecision: {
             favoredValueKey: 'Achievement',
@@ -603,7 +575,6 @@ describe('decision model', () => {
       normalizationReason: null,
       source: 'manual',
     });
-    expect(result.legacy).toEqual({ rawScore: 1, canonicalScore: 5 });
   });
 
   it('paired batch regression: A_first and B_first both report the same canonical direction when the same value wins', () => {
@@ -615,7 +586,7 @@ describe('decision model', () => {
     const achievementLabel = 'Strongly support taking the job with recognition of their expertise';
 
     const aFirstResult = resolveTranscriptDecisionModel({
-      decisionCode: '5',
+      decisionCode: null,
       decisionMetadata: {
         parseClass: 'exact',
         parsePath: 'text_label_leading',
@@ -631,7 +602,7 @@ describe('decision model', () => {
     });
 
     const bFirstResult = resolveTranscriptDecisionModel({
-      decisionCode: '1',
+      decisionCode: null,
       decisionMetadata: {
         parseClass: 'exact',
         parsePath: 'text_label_leading',

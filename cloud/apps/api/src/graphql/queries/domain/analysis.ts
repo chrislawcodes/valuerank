@@ -721,14 +721,18 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
           decisionCode: true,
           decisionCodeSource: true,
           decisionMetadata: true,
-          definitionSnapshot: true,
           turnCount: true,
           tokenCount: true,
           durationMs: true,
           createdAt: true,
           content: true,
         },
-      });
+      }).then((transcripts) =>
+        transcripts.map((transcript) => ({
+          ...transcript,
+          pairOverride: pair,
+        })),
+      );
     },
   }),
 );

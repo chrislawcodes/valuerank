@@ -1,0 +1,240 @@
+00001: /**
+00002:  * Domain Coverage Query
+00003:  *
+00004:  * Returns a value-pair coverage matrix for a domain: how many completed
+00005:  * trial batches (runs) exist for each Schwartz value pair vignette.
+00006:  * Scoped to the same 10-value set used in domain analysis.
+00007:  */
+00008: 
+00009: import { builder } from '../builder.js';
+00010: import { db, resolveDefinitionContent } from '@valuerank/db';
+00011: import { formatTrialSignature, isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
+00012: import { parseDefinitionVersion } from '../../utils/definition-version.js';
+00013: import { parseTemperature } from '../../utils/temperature.js';
+00014: 
+00015: import {
+00016:   COVERAGE_VALUE_KEYS,
+00017:   type CoverageValueKey,
+00018:   extractValuePair,
+00019:   selectPrimaryDefinitionCounts,
+00020: } from './domain-coverage-utils.js';
+00021: 
+00022: type DomainValueCoverageCell = {
+00023:   valueA: string;
+00024:   valueB: string;
+00025:   batchCount: number;
+00026:   pairedBatchCount: number;
+00027:   definitionId: string | null;
+00028:   definitionName: string | null;
+00029:   aggregateRunId: string | null;
+00030: };
+00031: 
+00032: type CoverageModelOption = {
+00033:   modelId: string;
+00034:   label: string;
+00035: };
+00036: 
+00037: type DomainValueCoverageResult = {
+00038:   domainId: string;
+00039:   values: string[];
+00040:   cells: DomainValueCoverageCell[];
+00041:   availableModels: CoverageModelOption[];
+00042: };
+00043: 
+00044: const CoverageModelOptionRef = builder
+00045:   .objectRef<CoverageModelOption>('CoverageModelOption')
+00046:   .implement({
+00047:     fields: (t) => ({
+00048:       modelId: t.exposeString('modelId'),
+00049:       label: t.exposeString('label'),
+00050:     }),
+00051:   });
+00052: 
+00053: const DomainValueCoverageCellRef = builder
+00054:   .objectRef<DomainValueCoverageCell>('DomainValueCoverageCell')
+00055:   .implement({
+00056:     fields: (t) => ({
+00057:       valueA: t.exposeString('valueA'),
+00058:       valueB: t.exposeString('valueB'),
+00059:       batchCount: t.exposeInt('batchCount'),
+00060:       pairedBatchCount: t.exposeInt('pairedBatchCount'),
+00061:       definitionId: t.exposeString('definitionId', { nullable: true }),
+00062:       definitionName: t.exposeString('definitionName', { nullable: true }),
+00063:       aggregateRunId: t.exposeString('aggregateRunId', { nullable: true }),
+00064:     }),
+00065:   });
+00066: 
+00067: const DomainValueCoverageResultRef = builder
+00068:   .objectRef<DomainValueCoverageResult>('DomainValueCoverageResult')
+00069:   .implement({
+00070:     fields: (t) => ({
+00071:       domainId: t.exposeString('domainId'),
+00072:       values: t.exposeStringList('values'),
+00073:       cells: t.field({
+00074:         type: [DomainValueCoverageCellRef],
+00075:         resolve: (parent) => parent.cells,
+00076:       }),
+00077:       availableModels: t.field({
+00078:         type: [CoverageModelOptionRef],
+00079:         resolve: (parent) => parent.availableModels,
+00080:       }),
+00081:     }),
+00082:   });
+00083: 
+00084: function formatRunSignature(config: unknown): string {
+00085:   const runConfig = config as {
+00086:     definitionSnapshot?: {
+00087:       _meta?: { definitionVersion?: unknown };
+00088:       version?: unknown;
+00089:     };
+00090:     temperature?: unknown;
+00091:   } | null;
+00092:   const definitionVersion =
+00093:     parseDefinitionVersion(runConfig?.definitionSnapshot?._meta?.definitionVersion) ??
+00094:     parseDefinitionVersion(runConfig?.definitionSnapshot?.version);
+00095:   const temperature = parseTemperature(runConfig?.temperature);
+00096:   return formatTrialSignature(definitionVersion, temperature);
+00097: }
+00098: 
+00099: function runMatchesSignature(runConfig: unknown, signature: string): boolean {
+00100:   if (isVnewSignature(signature)) {
+00101:     return parseTemperature((runConfig as { temperature?: unknown } | null)?.temperature) === parseVnewTemperature(signature);
+00102:   }
+00103:   return formatRunSignature(runConfig) === signature;
+00104: }
+00105: 
+00106: const VALUE_PAIR_RESOLVE_CHUNK_SIZE = 20;
+00107: 
+00108: builder.queryField('domainValueCoverage', (t) =>
+00109:   t.field({
+00110:     type: DomainValueCoverageResultRef,
+00111:     nullable: true,
+00112:     description: `
+00113:       Returns a Schwartz value-pair coverage matrix for a domain.
+00114: 
+00115:       Each cell shows how many completed trial batches (runs) exist for the vignette
+00116:       that tests that pair of values in conflict. Optionally filtered to count only
+00117:       runs that included the specified model IDs.
+00118: 
+00119:       The matrix is symmetric: each unique value pair appears once, with the cell key
+00120:       sorted alphabetically (valueA < valueB). Diagonal cells are omitted.
+00121:     `,
+00122:     args: {
+00123:       domainId: t.arg.id({
+00124:         required: true,
+00125:         description: 'Domain to compute coverage for',
+00126:       }),
+00127:
+
+... [narrowed review slice: middle omitted] ...
+
+);
+00253: 
+00254:           const pairedBatchGroupId = (() => {
+00255:             const runConfig = run.config as {
+00256:               jobChoiceBatchGroupId?: unknown;
+00257:               pairedBatchGroupId?: unknown;
+00258:             } | null;
+00259:             const raw = typeof runConfig?.jobChoiceBatchGroupId === 'string'
+00260:               ? runConfig.jobChoiceBatchGroupId
+00261:               : typeof runConfig?.pairedBatchGroupId === 'string'
+00262:                 ? runConfig.pairedBatchGroupId
+00263:                 : null;
+00264:             return raw != null && raw.trim().length > 0 ? raw.trim() : null;
+00265:           })();
+00266: 
+00267:           if (pairedBatchGroupId === null) {
+00268:             pairedBatchCountByDefinitionId.set(
+00269:               run.definitionId,
+00270:               (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + increment,
+00271:             );
+00272:             continue;
+00273:           }
+00274: 
+00275:           const seenGroupIds = pairedBatchGroupIdsByDefinitionId.get(run.definitionId) ?? new Set<string>();
+00276:           if (!seenGroupIds.has(pairedBatchGroupId)) {
+00277:             seenGroupIds.add(pairedBatchGroupId);
+00278:             pairedBatchGroupIdsByDefinitionId.set(run.definitionId, seenGroupIds);
+00279:             pairedBatchCountByDefinitionId.set(
+00280:               run.definitionId,
+00281:               (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+00282:             );
+00283:           }
+00284:         }
+00285:       }
+00286: 
+00287:       const availableModelIds = new Set<string>();
+00288:       for (const runs of signatureScopedRunsByDefinitionId.values()) {
+00289:         for (const run of runs) {
+00290:           for (const transcript of run.transcripts) {
+00291:             availableModelIds.add(transcript.modelId);
+00292:           }
+00293:         }
+00294:       }
+00295: 
+00296:       const modelDetailRows =
+00297:         availableModelIds.size > 0
+00298:           ? await db.llmModel.findMany({
+00299:             where: { modelId: { in: Array.from(availableModelIds) } },
+00300:             select: { modelId: true, displayName: true },
+00301:             orderBy: { displayName: 'asc' },
+00302:           })
+00303:           : [];
+00304: 
+00305:       const availableModels: CoverageModelOption[] = modelDetailRows.map((m) => ({
+00306:         modelId: m.modelId,
+00307:         label: m.displayName,
+00308:       }));
+00309: 
+00310:       // Build the symmetric 45-cell matrix (one cell per unique sorted pair)
+00311:       const values = [...COVERAGE_VALUE_KEYS] as string[];
+00312:       const cells: DomainValueCoverageCell[] = [];
+00313: 
+00314:       for (const valueA of COVERAGE_VALUE_KEYS) {
+00315:         for (const valueB of COVERAGE_VALUE_KEYS) {
+00316:           // Only emit sorted pairs: skip diagonal and reversed pairs
+00317:           if (valueA.localeCompare(valueB) >= 0) continue;
+00318: 
+00319:           const key = `${valueA}::${valueB}`;
+00320:           const defIdsForPair = definitionsByPairKey.get(key) ?? [];
+00321: 
+00322:           if (defIdsForPair.length === 0) {
+00323:             cells.push({
+00324:               valueA,
+00325:               valueB,
+00326:               batchCount: 0,
+00327:               pairedBatchCount: 0,
+00328:               definitionId: null,
+00329:               definitionName: null,
+00330:               aggregateRunId: null,
+00331:             });
+00332:           } else {
+00333:             // Use the total counts across all definitions for the visible cell, but
+00334:             // still choose one stable definition for the analysis link target.
+00335:             const { primaryDefinitionId, batchCount, pairedBatchCount } = selectPrimaryDefinitionCounts(
+00336:               defIdsForPair,
+00337:               batchCountByDefinitionId,
+00338:               pairedBatchCountByDefinitionId,
+00339:             );
+00340:             const primaryDefId = primaryDefinitionId ?? '';
+00341:             const primaryPair = pairByDefinitionId.get(primaryDefId);
+00342:             const aggregateRunId = primaryDefId === ''
+00343:               ? null
+00344:               : (latestAggregateRunIdByDefinitionId.get(primaryDefId)
+00345:                 ?? latestMatchingRunIdByDefinitionId.get(primaryDefId)
+00346:                 ?? null);
+00347:             cells.push({
+00348:               valueA,
+00349:               valueB,
+00350:               batchCount,
+00351:               pairedBatchCount,
+00352:               definitionId: primaryDefId !== '' ? primaryDefId : null,
+00353:               definitionName: primaryPair?.name ?? null,
+00354:               aggregateRunId,
+00355:             });
+00356:           }
+00357:         }
+00358:       }
+00359: 
+00360:       ctx.log.debug({ domainId, cellCount: cells.length }, 'Domain value coverage computed');
+00361:       return { domainId, values, cells, available

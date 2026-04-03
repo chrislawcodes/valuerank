@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/api/src/services/run/progress.ts",
+  "source_artifact_sha256": "408861aa708eb373faee89b6f182b9d866cb6c28990043919757661c8caa7765",
+  "narrowed_artifact_path": "docs/feature-runs/domain-coverage-completeness-guard/reviews/plan.codex.implementation-adversarial.review.context9.narrowed.txt",
+  "narrowed_artifact_sha256": "d958aa35aaae079767bf8bee8ce8559d71d9c0cb843afbb575a090d0a31a43c5",
+  "strategy": "head-tail-numbered-lines"
+}

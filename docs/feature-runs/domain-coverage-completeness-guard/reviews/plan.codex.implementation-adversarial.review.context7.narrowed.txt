@@ -1,0 +1,285 @@
+00001: /**
+00002:  * Run Progress Service
+00003:  *
+00004:  * Handles atomic progress updates and status transitions for runs.
+00005:  * Uses PostgreSQL JSONB operators for concurrent-safe increments.
+00006:  */
+00007: 
+00008: import { db } from '@valuerank/db';
+00009: import { createLogger, NotFoundError } from '@valuerank/shared';
+00010: import type { Prisma } from '@prisma/client';
+00011: 
+00012: const log = createLogger('services:run:progress');
+00013: 
+00014: export type ProgressUpdate = {
+00015:   incrementCompleted?: number;
+00016:   incrementFailed?: number;
+00017: };
+00018: 
+00019: export type ProgressData = {
+00020:   total: number;
+00021:   completed: number;
+00022:   failed: number;
+00023: };
+00024: 
+00025: /**
+00026:  * Updates run progress atomically using PostgreSQL JSONB operators.
+00027:  *
+00028:  * This function:
+00029:  * 1. Atomically increments completed/failed counts
+00030:  * 2. Transitions run status based on progress:
+00031:  *    - PENDING -> RUNNING when first job completes
+00032:  *    - RUNNING -> SUMMARIZING when all jobs done
+00033:  * 3. Sets startedAt/completedAt timestamps as appropriate
+00034:  *
+00035:  * Note: Progress is only updated for runs in PENDING or RUNNING state.
+00036:  * Once a run transitions to SUMMARIZING or terminal states, progress
+00037:  * updates are ignored to prevent overcounting.
+00038:  */
+00039: export async function updateProgress(
+00040:   runId: string,
+00041:   update: ProgressUpdate
+00042: ): Promise<{ progress: ProgressData; status: string }> {
+00043:   const { incrementCompleted = 0, incrementFailed = 0 } = update;
+00044: 
+00045:   // First check current state
+00046:   const currentRun = await db.run.findUnique({
+00047:     where: { id: runId },
+00048:     select: { progress: true, status: true },
+00049:   });
+00050: 
+00051:   if (!currentRun) {
+00052:     throw new NotFoundError('Run', runId);
+00053:   }
+00054: 
+00055:   // Don't update progress if run is not in PENDING or RUNNING state
+00056:   // This prevents overcounting when probe jobs complete after the run has moved on
+00057:   if (!['PENDING', 'RUNNING'].includes(currentRun.status)) {
+00058:     log.debug(
+00059:       { runId, status: currentRun.status, incrementCompleted, incrementFailed },
+00060:       'Skipping progress update - run not in PENDING/RUNNING state'
+00061:     );
+00062:     return {
+00063:       progress: currentRun.progress as ProgressData,
+00064:       status: currentRun.status,
+00065:     };
+00066:   }
+00067: 
+00068:   if (incrementCompleted === 0 && incrementFailed === 0) {
+00069:     // No-op, just return current state
+00070:     return {
+00071:       progress: currentRun.progress as ProgressData,
+00072:       status: currentRun.status,
+00073:     };
+00074:   }
+00075: 
+00076:   log.debug(
+00077:     { runId, incrementCompleted, incrementFailed },
+00078:     'Updating run progress'
+00079:   );
+00080: 
+00081:   // Use raw SQL for atomic JSONB increment
+00082:   // This prevents race conditions when multiple jobs complete simultaneously
+00083:   const result = await db.$queryRaw<Array<{
+00084:     id: string;
+00085:     progress: ProgressData;
+00086:     status: string;
+00087:     started_at: Date | null;
+00088:     completed_at: Date | null;
+00089:   }>>`
+00090:     UPDATE runs
+00091:     SET
+00092:       progress = jsonb_set(
+00093:         jsonb_set(
+00094:           progress,
+00095:           '{completed}',
+00096:           to_jsonb(GREATEST(0, (progress->>'completed')::int + ${incrementCompleted}))
+00097:         ),
+00098:         '{failed}',
+00099:         to_jsonb(GREATEST(0, (progress->>'failed')::int + ${incrementFailed}))
+00100:       ),
+00101:       updated_at = NOW()
+00102:     WHERE id = ${runId}
+00103:     RETURNING id, progress, status, started_at, completed_at
+00104:   `;
+00105: 
+00106:   const updatedRun = result[0];
+00107:   if (!updatedRun) {
+00108:     throw new NotFoundError('Run', runId);
+00109:   }
+00110: 
+00111:   const progress = updatedRun.progress;
+00112: 
+00113:   // Determine if status transition is needed
+00114:   const newStatus = determineStatus(progress, updatedRun.status);
+00115: 
+00116:   if (newStatus !== updatedRun.status) {
+00117:     await transitionStatus(runId, updatedRun.status, newStatus);
+00118:     log.info(
+00119:       { runId, oldStatus: updatedRun.status, newStatus, progress },
+00120:       'Run status transitioned'
+00121:     );
+00122:     return { progress, status: newStatus };
+00123:   }
+00124: 
+00125:   log.debug({ runId, progress }, 'Progress updated');
+00126:   return { progress, status: updatedRun.status };
+00127: }
+00128: 
+00129: // Valid run statuses (from Prisma enum)
+00130: type RunStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUMMARIZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+00131: 
+00132: /**
+00133:  * Determines the appropriate run status based on progress.
+00134:  */
+00135: function determineStatus(progress: ProgressData, currentStatus: string): RunStatus {
+00136:   const { total, completed, faile
+
+... [narrowed review slice: middle omitted] ...
+
+g.warn({ runId }, 'No transcripts to summarize, completing run');
+00226:     await db.run.update({
+00227:       where: { id: runId },
+00228:       data: { status: 'COMPLETED', completedAt: new Date(), stalledModels: [] },
+00229:     });
+00230:     return;
+00231:   }
+00232: 
+00233:   // Initialize summarizeProgress
+00234:   await db.run.update({
+00235:     where: { id: runId },
+00236:     data: {
+00237:       summarizeProgress: {
+00238:         total: transcripts.length,
+00239:         completed: 0,
+00240:         failed: 0,
+00241:       },
+00242:     },
+00243:   });
+00244: 
+00245:   log.info({ runId, transcriptCount: transcripts.length }, 'Queueing summarize jobs');
+00246: 
+00247:   const jobOptions = DEFAULT_JOB_OPTIONS['summarize_transcript'];
+00248: 
+00249:   for (const transcript of transcripts) {
+00250:     await boss.send('summarize_transcript', {
+00251:       runId,
+00252:       transcriptId: transcript.id,
+00253:     }, jobOptions);
+00254:   }
+00255: 
+00256:   log.info({ runId, jobCount: transcripts.length }, 'Summarize jobs queued');
+00257: }
+00258: 
+00259: /**
+00260:  * Increments completed count by 1.
+00261:  * Convenience wrapper for updateProgress.
+00262:  */
+00263: export async function incrementCompleted(
+00264:   runId: string
+00265: ): Promise<{ progress: ProgressData; status: string }> {
+00266:   return updateProgress(runId, { incrementCompleted: 1 });
+00267: }
+00268: 
+00269: /**
+00270:  * Increments failed count by 1.
+00271:  * Convenience wrapper for updateProgress.
+00272:  */
+00273: export async function incrementFailed(
+00274:   runId: string
+00275: ): Promise<{ progress: ProgressData; status: string }> {
+00276:   return updateProgress(runId, { incrementFailed: 1 });
+00277: }
+00278: 
+00279: /**
+00280:  * Gets current progress for a run.
+00281:  */
+00282: export async function getProgress(runId: string): Promise<ProgressData | null> {
+00283:   const run = await db.run.findUnique({
+00284:     where: { id: runId },
+00285:     select: { progress: true },
+00286:   });
+00287: 
+00288:   if (!run) {
+00289:     return null;
+00290:   }
+00291: 
+00292:   return run.progress as ProgressData | null;
+00293: }
+00294: 
+00295: /**
+00296:  * Calculates percent complete from progress data.
+00297:  */
+00298: export function calculatePercentComplete(progress: ProgressData): number {
+00299:   if (progress.total === 0) {
+00300:     return 100; // Edge case: no jobs means complete
+00301:   }
+00302:   const done = progress.completed + progress.failed;
+00303:   return Math.round((done / progress.total) * 100);
+00304: }
+00305: 
+00306: /**
+00307:  * Updates summarize progress atomically using PostgreSQL JSONB operators.
+00308:  * Increments the completed or failed count for transcript summarization.
+00309:  */
+00310: export async function updateSummarizeProgress(
+00311:   runId: string,
+00312:   update: { incrementCompleted?: number; incrementFailed?: number }
+00313: ): Promise<ProgressData | null> {
+00314:   const { incrementCompleted = 0, incrementFailed = 0 } = update;
+00315: 
+00316:   if (incrementCompleted === 0 && incrementFailed === 0) {
+00317:     const run = await db.run.findUnique({
+00318:       where: { id: runId },
+00319:       select: { summarizeProgress: true },
+00320:     });
+00321:     return run?.summarizeProgress as ProgressData | null;
+00322:   }
+00323: 
+00324:   log.debug(
+00325:     { runId, incrementCompleted, incrementFailed },
+00326:     'Updating summarize progress'
+00327:   );
+00328: 
+00329:   // Use raw SQL for atomic JSONB increment
+00330:   const result = await db.$queryRaw<Array<{
+00331:     id: string;
+00332:     summarize_progress: ProgressData;
+00333:   }>>`
+00334:     UPDATE runs
+00335:     SET
+00336:       summarize_progress = jsonb_set(
+00337:         jsonb_set(
+00338:           summarize_progress,
+00339:           '{completed}',
+00340:           to_jsonb((summarize_progress->>'completed')::int + ${incrementCompleted})
+00341:         ),
+00342:         '{failed}',
+00343:         to_jsonb((summarize_progress->>'failed')::int + ${incrementFailed})
+00344:       ),
+00345:       updated_at = NOW()
+00346:     WHERE id = ${runId}
+00347:     RETURNING id, summarize_progress
+00348:   `;
+00349: 
+00350:   const updatedRun = result[0];
+00351:   if (!updatedRun) {
+00352:     return null;
+00353:   }
+00354: 
+00355:   log.debug({ runId, summarizeProgress: updatedRun.summarize_progress }, 'Summarize progress updated');
+00356:   return updatedRun.summarize_progress;
+00357: }
+00358: 
+00359: /**
+00360:  * Increments summarize completed count by 1.
+00361:  */
+00362: export async function incrementSummarizeCompleted(runId: string): Promise<ProgressData | null> {
+00363:   return updateSummarizeProgress(runId, { incrementCompleted: 1 });
+00364: }
+00365: 
+00366: /**
+00367:  * Increments summarize failed count by 1.
+00368:  */
+00369: export async function incrementSummarizeFailed(runId: string): Promise<ProgressData | null> {
+00370:   return updateSummari

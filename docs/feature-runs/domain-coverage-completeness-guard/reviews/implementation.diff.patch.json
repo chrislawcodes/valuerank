@@ -1,0 +1,15 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "9682101be08524291e537e68dd1afe470a093775",
+  "git_base_ref": "8f69262992dc242b8f19f281e3aaad57051323a7",
+  "git_base_sha": "8f69262992dc242b8f19f281e3aaad57051323a7",
+  "paths": [
+    "docs/feature-runs/domain-coverage-completeness-guard/plan.md",
+    "docs/feature-runs/domain-coverage-completeness-guard/scope.json",
+    "docs/feature-runs/domain-coverage-completeness-guard/state.json"
+  ],
+  "allowed_dirty_paths": [],
+  "untracked_files_included": [],
+  "artifact_path": "docs/feature-runs/domain-coverage-completeness-guard/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}
