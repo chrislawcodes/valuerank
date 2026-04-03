@@ -78,7 +78,11 @@ GEMINI_STAGGER_SECONDS: int | None = 30
 # ---------------------------------------------------------------------------
 
 _ACTIONABLE_FINDING_RE = re.compile(
-    r"^\s*-\s+(?:\[[^\]]+\]\s+)?(high|medium):",
+    r"(?:"
+    r"^\s*-\s+(?:\[[^\]]+\]\s+)?(high|medium):"  # bullet-list: "- high:" or "- [tag] high:"
+    r"|"
+    r"^\|\s*\*\*(critical|high|medium)\*\*"  # table row: "| **HIGH** |" or "| **CRITICAL** |"
+    r")",
     re.MULTILINE,
 )
 
