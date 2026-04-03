@@ -1,10 +1,9 @@
 import { db, resolveDefinitionContent } from '@valuerank/db';
-import { formatTrialSignature, formatVnewLabel, formatVnewSignature, isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
+import { formatVnewLabel, formatVnewSignature } from '@valuerank/shared/trial-signature';
 import { DOMAIN_ANALYSIS_VALUE_KEYS, type DomainAnalysisValueKey, extractValuePair } from '../domain-analysis-values.js';
-import { parseTemperature } from '../../../utils/temperature.js';
-import { parseDefinitionVersion } from '../../../utils/definition-version.js';
 import { resolveTranscriptDecisionModel } from './decision-model.js';
 import type { TranscriptDecisionModelResult } from './decision-model.js';
+import { runMatchesSignature, selectDefaultVnewSignature } from './planning-utils.js';
 export {
   buildRawDecisionEvidence,
   DECISION_MODEL_READ_RULES,
@@ -271,21 +270,6 @@ export function parseDomainAnalysisScoreMethod(value: string | null | undefined)
   return value === 'FULL_BT' ? 'FULL_BT' : 'LOG_ODDS';
 }
 
-export function formatRunSignature(config: unknown): string {
-  const runConfig = config as {
-    definitionSnapshot?: {
-      _meta?: { definitionVersion?: unknown };
-      version?: unknown;
-    };
-    temperature?: unknown;
-  } | null;
-  const definitionVersion =
-    parseDefinitionVersion(runConfig?.definitionSnapshot?._meta?.definitionVersion) ??
-    parseDefinitionVersion(runConfig?.definitionSnapshot?.version);
-  const temperature = parseTemperature(runConfig?.temperature);
-  return formatTrialSignature(definitionVersion, temperature);
-}
-
 export function getMissingReasonLabel(reasonCode: DomainAnalysisMissingReasonCode): string {
   switch (reasonCode) {
     case 'NO_COMPLETED_RUNS':
@@ -297,44 +281,6 @@ export function getMissingReasonLabel(reasonCode: DomainAnalysisMissingReasonCod
     default:
       return 'No compatible runs were found for this vignette.';
   }
-}
-
-function selectDefaultVnewSignature(completedRuns: Array<{ config: unknown }>): string | null {
-  if (completedRuns.length === 0) return null;
-  const temperatureCounts = new Map<string, { temperature: number | null; count: number }>();
-
-  for (const run of completedRuns) {
-    const runConfig = run.config as { temperature?: unknown } | null;
-    const temperature = parseTemperature(runConfig?.temperature);
-    const key = temperature === null ? 'd' : temperature.toString();
-    const existing = temperatureCounts.get(key);
-    if (existing) {
-      existing.count += 1;
-    } else {
-      temperatureCounts.set(key, { temperature, count: 1 });
-    }
-  }
-
-  const winner = Array.from(temperatureCounts.values())
-    .sort((left, right) => {
-      const leftIsZero = left.temperature === 0;
-      const rightIsZero = right.temperature === 0;
-      if (leftIsZero !== rightIsZero) return leftIsZero ? -1 : 1;
-      if (left.count !== right.count) return right.count - left.count;
-      if (left.temperature === null) return 1;
-      if (right.temperature === null) return -1;
-      return left.temperature - right.temperature;
-    })[0];
-
-  if (!winner) return null;
-  return formatVnewSignature(winner.temperature);
-}
-
-function runMatchesSignature(runConfig: unknown, signature: string): boolean {
-  if (isVnewSignature(signature)) {
-    return parseTemperature((runConfig as { temperature?: unknown } | null)?.temperature) === parseVnewTemperature(signature);
-  }
-  return formatRunSignature(runConfig) === signature;
 }
 
 export async function resolveSignatureRuns(

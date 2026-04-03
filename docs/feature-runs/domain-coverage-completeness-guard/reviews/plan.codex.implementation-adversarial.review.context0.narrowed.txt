@@ -1,0 +1,269 @@
+00001: /**
+00002:  * Run Recovery Service
+00003:  *
+00004:  * Detects and recovers orphaned runs - runs stuck in RUNNING/SUMMARIZING state
+00005:  * with no active/pending jobs in the queue.
+00006:  *
+00007:  * This handles scenarios like:
+00008:  * - API restart during job processing (jobs orphaned)
+00009:  * - Power outage / pod eviction
+00010:  * - Jobs that expired and exhausted retries without updating run progress
+00011:  */
+00012: 
+00013: import { db } from '@valuerank/db';
+00014: import { createLogger } from '@valuerank/shared';
+00015: import { getBoss } from '../../queue/boss.js';
+00016: import { DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
+00017: import { getQueueNameForModel } from '../parallelism/index.js';
+00018: import {
+00019:   findMissingTranscriptKeys,
+00020:   normalizeSamplesPerScenario,
+00021:   type TranscriptKey,
+00022: } from './coverage-completeness.js';
+00023: 
+00024: const log = createLogger('services:run:recovery');
+00025: 
+00026: // How long a run must be stuck before we consider it orphaned (5 minutes)
+00027: const STUCK_THRESHOLD_MINUTES = 5;
+00028: 
+00029: // How often to run recovery (set by scheduled job)
+00030: export const RECOVERY_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+00031: 
+00032: export type OrphanedRunInfo = {
+00033:   runId: string;
+00034:   status: string;
+00035:   progress: { total: number; completed: number; failed: number };
+00036:   pendingJobs: number;
+00037:   activeJobs: number;
+00038:   missingProbes: number;
+00039:   stuckMinutes: number;
+00040: };
+00041: 
+00042: export type RecoveryResult = {
+00043:   detected: OrphanedRunInfo[];
+00044:   recovered: Array<{ runId: string; action: string; requeuedCount?: number }>;
+00045:   errors: Array<{ runId: string; error: string }>;
+00046: };
+00047: 
+00048: /**
+00049:  * Detects orphaned runs by comparing run progress with actual queue state.
+00050:  *
+00051:  * A run is considered orphaned if:
+00052:  * 1. Status is RUNNING or SUMMARIZING
+00053:  * 2. No pending or active jobs exist for this run
+00054:  * 3. Progress shows incomplete (completed + failed < total)
+00055:  * 4. Last update was > STUCK_THRESHOLD_MINUTES ago
+00056:  */
+00057: export async function detectOrphanedRuns(): Promise<OrphanedRunInfo[]> {
+00058:   const orphaned: OrphanedRunInfo[] = [];
+00059: 
+00060:   // Find runs that might be stuck
+00061:   const stuckRuns = await db.run.findMany({
+00062:     where: {
+00063:       status: { in: ['RUNNING', 'SUMMARIZING'] },
+00064:       updatedAt: {
+00065:         lt: new Date(Date.now() - STUCK_THRESHOLD_MINUTES * 60 * 1000),
+00066:       },
+00067:       deletedAt: null,
+00068:     },
+00069:     select: {
+00070:       id: true,
+00071:       status: true,
+00072:       progress: true,
+00073:       updatedAt: true,
+00074:       config: true,
+00075:     },
+00076:   });
+00077: 
+00078:   if (stuckRuns.length === 0) {
+00079:     return [];
+00080:   }
+00081: 
+00082:   log.debug({ stuckRunCount: stuckRuns.length }, 'Checking potentially stuck runs');
+00083: 
+00084:   for (const run of stuckRuns) {
+00085:     const progress = run.progress as { total: number; completed: number; failed: number };
+00086: 
+00087:     // Count pending/active jobs for this run in PgBoss
+00088:     const jobCounts = await countJobsForRun(run.id);
+00089: 
+00090:     if (jobCounts.pending === 0 && jobCounts.active === 0) {
+00091:       // Coverage check is based on expected scenario/model/sample keys, not progress counters.
+00092:       // This catches runs where progress counters are inaccurate due retries/duplicates.
+00093:       const missingProbes = await findMissingProbes(run.id);
+00094:       const stuckMinutes = Math.floor(
+00095:         (Date.now() - run.updatedAt.getTime()) / (60 * 1000)
+00096:       );
+00097: 
+00098:       orphaned.push({
+00099:         runId: run.id,
+00100:         status: run.status,
+00101:         progress,
+00102:         pendingJobs: jobCounts.pending,
+00103:         activeJobs: jobCounts.active,
+00104:         missingProbes: missingProbes.length,
+00105:         stuckMinutes,
+00106:       });
+00107: 
+00108:       log.info(
+00109:         {
+00110:           runId: run.id,
+00111:           status: run.status,
+00112:           progress,
+00113:           missingProbes: missingProbes.length,
+00114:           stuckMinutes,
+00115:         },
+00116:         'Detected orphaned run'
+00117:       );
+00118:     }
+00119:   }
+00120: 
+00121:   return orphaned;
+00122: }
+00123: 
+00124: /**
+00125:  * Counts pending and active jobs for a specific run across all probe queues.
+00126:  */
+00127: async function countJobsForRun(runId: string): Promise<{ pending: number; active: number }> {
+00128:   // Query PgBoss job table directly for accurate counts
+00129:   const result = await db.$queryRaw<Array<{ state: string; count: bigint }>>`
+00130:     SELECT state, COUNT(*) as count
+00131:     FROM pgboss.job
+00132:     WHERE (name = 'probe_scenario' OR name LIKE 'probe_scenario_%')
+00133:       AND state IN ('created', 'retry',
+
+... [narrowed review slice: middle omitted] ...
+
+terminal.
+00364:   const requeuedCount = await requeueMissingProbes(runId, missingProbes);
+00365: 
+00366:   // Log details about missing probes (include full details if small number)
+00367:   const logDetails = missingProbes.length <= 10
+00368:     ? { runId, requeuedCount, missingProbes }
+00369:     : { runId, requeuedCount, missingCount: missingProbes.length, sample: missingProbes.slice(0, 5) };
+00370:   log.info(logDetails, 'Recovered orphaned run');
+00371: 
+00372:   return { action: 'requeued_probes', requeuedCount };
+00373: }
+00374: 
+00375: /**
+00376:  * Detects and recovers all orphaned runs.
+00377:  * This is the main entry point for scheduled recovery.
+00378:  */
+00379: export async function recoverOrphanedRuns(): Promise<RecoveryResult> {
+00380:   const result: RecoveryResult = {
+00381:     detected: [],
+00382:     recovered: [],
+00383:     errors: [],
+00384:   };
+00385: 
+00386:   try {
+00387:     // Detect orphaned runs
+00388:     result.detected = await detectOrphanedRuns();
+00389: 
+00390:     if (result.detected.length === 0) {
+00391:       log.debug('No orphaned runs detected');
+00392:       return result;
+00393:     }
+00394: 
+00395:     log.info(
+00396:       { orphanedCount: result.detected.length },
+00397:       'Recovering orphaned runs'
+00398:     );
+00399: 
+00400:     // Recover each orphaned run
+00401:     for (const orphaned of result.detected) {
+00402:       try {
+00403:         const recovery = await recoverOrphanedRun(orphaned.runId);
+00404:         result.recovered.push({
+00405:           runId: orphaned.runId,
+00406:           ...recovery,
+00407:         });
+00408:       } catch (error) {
+00409:         const errorMessage = error instanceof Error ? error.message : String(error);
+00410:         log.error({ runId: orphaned.runId, error: errorMessage }, 'Failed to recover run');
+00411:         result.errors.push({
+00412:           runId: orphaned.runId,
+00413:           error: errorMessage,
+00414:         });
+00415:       }
+00416:     }
+00417: 
+00418:     log.info(
+00419:       {
+00420:         detected: result.detected.length,
+00421:         recovered: result.recovered.length,
+00422:         errors: result.errors.length,
+00423:       },
+00424:       'Orphaned run recovery complete'
+00425:     );
+00426:   } catch (error) {
+00427:     log.error({ error }, 'Failed to run orphaned run recovery');
+00428:     throw error;
+00429:   }
+00430: 
+00431:   return result;
+00432: }
+00433: 
+00434: /**
+00435:  * Runs recovery immediately on startup.
+00436:  * Called once when the API server starts to recover any runs
+00437:  * that were orphaned during the previous shutdown.
+00438:  */
+00439: export async function runStartupRecovery(): Promise<RecoveryResult> {
+00440:   log.info('Running startup recovery for orphaned runs');
+00441:   // Run both standard recovery and zombie detection
+00442:   const result = await recoverOrphanedRuns();
+00443:   const zombieResult = await detectAndRecoverStuckJobs();
+00444: 
+00445:   if (zombieResult.recovered > 0) {
+00446:     log.info({ count: zombieResult.recovered }, 'Startup recovery killed zombie jobs');
+00447:   }
+00448: 
+00449:   return result;
+00450: }
+00451: 
+00452: /**
+00453:  * Detects and recovers stuck jobs (zombies) that have been active for too long.
+00454:  * This is a failsafe for when PgBoss expiration mechanisms fail or job handlers crash silently.
+00455:  */
+00456: export async function detectAndRecoverStuckJobs(): Promise<{ recovered: number; errors: number }> {
+00457:   // Find jobs active for > 5 minutes (user requested tight watchdog)
+00458:   const ZOMBIE_THRESHOLD_MINUTES = 5;
+00459: 
+00460:   const stuckJobs = await db.$queryRaw<Array<{ id: string; name: string; run_id: string }>>`
+00461:     SELECT id, name, data->>'runId' as run_id
+00462:     FROM pgboss.job
+00463:     WHERE state = 'active'
+00464:       AND started_on < NOW() - (${ZOMBIE_THRESHOLD_MINUTES} || ' minutes')::interval
+00465:       AND (name = 'probe_scenario' OR name LIKE 'probe_scenario_%')
+00466:   `;
+00467: 
+00468:   if (stuckJobs.length === 0) {
+00469:     return { recovered: 0, errors: 0 };
+00470:   }
+00471: 
+00472:   log.warn({ count: stuckJobs.length }, 'Detected zombie jobs (active > 5m)');
+00473: 
+00474:   let recovered = 0;
+00475:   let errors = 0;
+00476: 
+00477:   for (const job of stuckJobs) {
+00478:     try {
+00479:       // Force fail the job
+00480:       await db.$executeRaw`
+00481:         UPDATE pgboss.job 
+00482:         SET state = 'failed', 
+00483:             output = '{"error": "Zombie job detected and killed by watchdog (active > 15m)"}',
+00484:             completed_on = NOW()
+00485:         WHERE id = ${job.id}::uuid
+00486:       `;
+00487: 
+00488:       log.info({ jobId: job.id, runId: job.run_id }, 'Killed zombie job');
+00489:       recovered++;
+00490:     } catch (err) {
+00491:       log.error({ jobId: job.id, err }, 'Failed to kill zombie job');
+00492:       errors++;
+00493:     }
+00494:   }
+00495:

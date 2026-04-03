@@ -1,0 +1,201 @@
+Reading additional input from stdin...
+OpenAI Codex v0.118.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d552b-638a-7320-923e-a357302d6db0
+--------
+user
+Review this tasks artifact using a execution-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: tasks.md
+# Tasks: Domain Coverage Completeness Guard
+
+The shared helper groundwork is already in place. These slices finish wiring it
+through the remaining coverage surfaces and add the audit script.
+
+## Slice 1 [CHECKPOINT]
+
+Finish the backend completeness service and make recovery use it consistently.
+
+**Type:** backend plumbing
+
+**Estimated diff size:** 180-240 lines
+
+**Files**
+
+- `cloud/apps/api/src/services/run/coverage-completeness.ts`
+- `cloud/apps/api/src/services/run/recovery.ts`
+- `cloud/apps/api/tests/services/run/coverage-completeness.test.ts`
+
+**Work**
+
+1. Keep the shared helper pure and focused on expected-vs-present transcript
+   keys.
+2. Make the recovery path reuse the shared helper instead of any private
+   missing-key logic.
+3. Cover the important edge cases in tests:
+   - distinct keys
+   - duplicate transcript rows
+   - soft-deleted transcripts
+   - empty expected-key sets
+   - historical runs without frozen expectations
+
+**Verification**
+
+- `cd cloud && npm run test --workspace @valuerank/api -- tests/services/run/coverage-completeness.test.ts tests/services/run/recovery.test.ts`
+
+---
+
+## Slice 2 [CHECKPOINT]
+
+Update the backend coverage and status queries so they count only
+coverage-complete data and expose the new completeness fields.
+
+**Type:** backend query plumbing
+
+**Estimated diff size:** 240-320 lines
+
+**Files**
+
+- `cloud/apps/api/src/graphql/queries/domain-coverage.ts`
+- `cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts`
+- `cloud/apps/api/src/graphql/queries/domain/planning.ts`
+- `cloud/apps/api/src/graphql/queries/domain/planning-utils.ts`
+- `cloud/apps/api/src/graphql/queries/domain/shared.ts`
+- `cloud/apps/api/src/services/domain.ts`
+- `cloud/apps/api/src/graphql/queries/__tests__/domain-coverage.test.ts`
+
+**Work**
+
+1. Keep the batch-count and paired-batch-count rules aligned with the shared
+   completeness service.
+2. Expose incomplete-run metadata for coverage cells that need it.
+3. Add the new signature availability booleans and batch-status completeness
+   fields.
+4. Keep the batch-status and coverage-counting rules on the same transcript
+   source and soft-delete rule.
+5. Add query tests for:
+   - complete-only cells
+   - mixed complete/incomplete cells
+   - incomplete-only signatures
+   - batch-status completeness fields
+
+**Verification**
+
+- `cd cloud && npm run test --workspace @valuerank/api -- src/graphql/queries/__tests__/domain-coverage.test.ts`
+- `cd cloud && npx eslint apps/api/src/graphql/queries/domain-coverage.ts apps/api/src/graphql/queries/domain-coverage-utils.ts apps/api/src/graphql/queries/domain/planning.ts apps/api/src/graphql/queries/domain/planning-utils.ts apps/api/src/graphql/queries/domain/shared.ts apps/api/src/services/domain.ts`
+
+---
+
+## Slice 3 [CHECKPOINT]
+
+Update the frontend coverage and batch-status surfaces so incomplete data is
+visible instead of silent.
+
+**Type:** frontend UI
+
+**Estimated diff size:** 240-320 lines
+
+**Files**
+
+- `cloud/apps/web/src/components/domains/CoverageMatrix.tsx`
+- `cloud/apps/web/src/components/domains/CoverageCell.tsx`
+- `cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts`
+- `cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx`
+- `cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.helpers.ts`
+- `cloud/apps/web/src/api/operations/domainCoverage.ts`
+- `cloud/apps/web/src/api/operations/domainAnalysis.ts`
+- `cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx`
+- `cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx`
+
+**Work**
+
+1. Show the amber warning dot and amber popover line for incomplete batches.
+2. Label incomplete-only signatures clearly and show the warning banner when a
+   user selects one.
+3. Keep the aggregate analysis drill-down available for complete cells and
+   hide it when incomplete data would make it misleading.
+4. Show coverage completeness separately from processing progress in the batch
+   status panel.
+5. Add or update tests for:
+   - incomplete cell warnings
+   - incomplete-only signature labeling
+   - filtered batch-status link behavior
+   - batch-status coverage completeness display
+
+**Verification**
+
+- `cd cloud && npm run typecheck --workspace @valuerank/web`
+- `cd cloud && npm run test --workspace @valuerank/web -- tests/pages/DomainTrialsDashboard.test.tsx tests/pages/DomainAnalysisValueDetail.test.tsx`
+
+---
+
+## Slice 4 [CHECKPOINT]
+
+Add the read-only historical audit script and finish the rollout bookkeeping.
+
+**Type:** audit + rollout
+
+**Estimated diff size:** 120-180 lines
+
+**Files**
+
+- `cloud/scripts/audit-domain-coverage-completeness.ts`
+- `STATUS.md`
+- `docs/feature-runs/domain-coverage-completeness-guard/closeout.md`
+
+**Work**
+
+1. Add a read-only script that lists processing-complete but coverage-incomplete
+   runs.
+2. Make the output easy to inspect before any repair or rerun action.
+3. Update `STATUS.md` with the feature state once the slices are complete.
+4. Write the closeout summary after the implementation is finished.
+
+**Verification**
+
+- `cd cloud && npm run audit:domain-coverage-completeness`
+- `git diff -- docs/feature-runs/domain-coverage-completeness-guard docs/STATUS.md`
+
+---
+
+## Final Validation
+
+After all slices:
+
+- `cd cloud && npm run test --workspace @valuerank/api`
+- `cd cloud && npm run test --workspace @valuerank/web`
+- `cd cloud && npm run typecheck --workspace @valuerank/web`
+- `cd cloud && npx eslint apps/api/src/services/run/recovery.ts apps/api/src/services/run/coverage-completeness.ts apps/api/src/graphql/queries/domain-coverage.ts apps/api/src/graphql/queries/domain-coverage-utils.ts apps/api/src/graphql/queries/domain/planning.ts apps/api/src/graphql/queries/domain/planning-utils.ts apps/api/src/graphql/queries/domain/shared.ts apps/api/src/services/domain.ts apps/web/src/components/domains/CoverageMatrix.tsx apps/web/src/components/domains/CoverageCell.tsx apps/web/src/components/domains/coverageMatrixHelpers.ts apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.helpers.ts`
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+2026-04-03T21:06:40.229589Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d552b-638a-7320-923e-a357302d6db0.tmp-1775250400153775000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+codex
+## Findings
+- Medium: Slice 4’s verification command checks `git diff -- docs/feature-runs/domain-coverage-completeness-guard docs/STATUS.md`, but the work item says to update `STATUS.md` and the repo contract refers to the root status file. If the real file is at the root, this command inspects the wrong path and can miss the required bookkeeping change.
+- Medium [UNVERIFIED]: The rollout adds `cloud/scripts/audit-domain-coverage-completeness.ts`, but the artifact never says to wire it into `package.json` or another runnable command. If `npm run audit:domain-coverage-completeness` is not already defined, the required verification step will fail and the script will be effectively unreachable from the standard workflow.
+
+## Residual Risks
+- The artifact still leaves key semantics open: whether soft-deleted runs are excluded from counts, how historical runs without frozen expectations are classified, and whether “processing-complete” always means the same transcript source as coverage completeness.
+- Slice 3 leans on page-level tests to cover component behavior. That can miss regressions in the matrix and status-panel helper branches if the page tests do not exercise every path.
+- The plan assumes the new backend fields, query logic, and UI warnings all share one source of truth, but that invariant is not stated explicitly in the tasks.
+tokens used
+21,091

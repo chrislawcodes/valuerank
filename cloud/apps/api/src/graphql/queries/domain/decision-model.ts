@@ -311,8 +311,6 @@ function buildRefusalCanonicalDecision(): CanonicalDecision {
   };
 }
 
-<<<<<<< HEAD
-=======
 function canonicalDecisionScoreFromDirectionStrength(
   direction: DecisionDirection,
   strength: DecisionStrength,
@@ -566,32 +564,6 @@ export function resolveTranscriptDecisionModel(
   };
 }
 
-export function resolveLegacyDecisionCompat(
-  input: DecisionModelInput,
-  canonicalDecision: CanonicalDecision = resolveCanonicalDecision(input),
-): LegacyDecisionCompat {
-  const canonicalScore = canonicalDecisionToLegacyScore(canonicalDecision);
-  if (canonicalDecision.direction === 'unknown' || canonicalDecision.direction === 'refusal' || canonicalDecision.strength === 'unknown') {
-    return {
-      rawScore: null,
-      canonicalScore: null,
-    };
-  }
-
-  const legacyCode =
-    parseLegacyScore(input.raw.manualOverride?.previousValue)
-    ?? parseLegacyScore(input.legacyDecisionCode);
-
-  if (legacyCode != null) {
-    return { rawScore: legacyCode, canonicalScore };
-  }
-
-  return {
-    rawScore: null,
-    canonicalScore,
-  };
-}
-
 export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDecision {
   if (input.legacyDecisionCode === 'refusal') {
     return buildRefusalCanonicalDecision();
@@ -734,6 +706,32 @@ export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDe
     normalizationApplied,
     'deterministic',
   );
+}
+
+export function resolveLegacyDecisionCompat(
+  input: DecisionModelInput,
+  canonicalDecision: CanonicalDecision = resolveCanonicalDecision(input),
+): LegacyDecisionCompat {
+  const canonicalScore = canonicalDecisionToLegacyScore(canonicalDecision);
+  if (canonicalDecision.direction === 'unknown' || canonicalDecision.direction === 'refusal' || canonicalDecision.strength === 'unknown') {
+    return {
+      rawScore: null,
+      canonicalScore: null,
+    };
+  }
+
+  const legacyCode =
+    parseLegacyScore(input.raw.manualOverride?.previousValue)
+    ?? parseLegacyScore(input.legacyDecisionCode);
+
+  if (legacyCode != null) {
+    return { rawScore: legacyCode, canonicalScore };
+  }
+
+  return {
+    rawScore: null,
+    canonicalScore,
+  };
 }
 
 export function resolveDecisionModel(input: DecisionModelInput): DecisionModelResult {

@@ -8,7 +8,7 @@ module.exports = {
   parserOptions: {
     ecmaVersion: 2022,
     sourceType: 'module',
-    project: ['./apps/*/tsconfig.json', './packages/*/tsconfig.json'],
+    project: ['./apps/*/tsconfig.json', './packages/*/tsconfig.json', './scripts/tsconfig.json'],
     tsconfigRootDir: __dirname,
   },
   plugins: ['@typescript-eslint'],
@@ -100,6 +100,13 @@ module.exports = {
     {
       // Allow console in CLI tools
       files: ['apps/api/src/cli/**/*.ts'],
+      rules: {
+        'no-console': 'off',
+      },
+    },
+    {
+      // Allow console in repository scripts
+      files: ['scripts/**/*.ts'],
       rules: {
         'no-console': 'off',
       },

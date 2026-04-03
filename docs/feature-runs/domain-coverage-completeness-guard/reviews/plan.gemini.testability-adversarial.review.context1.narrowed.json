@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+  "source_artifact_sha256": "3427f708dcfab5a234fd3a51cd5af8fcf6ef4368cf147e203cdc3f207789002c",
+  "narrowed_artifact_path": "docs/feature-runs/domain-coverage-completeness-guard/reviews/plan.gemini.testability-adversarial.review.context1.narrowed.txt",
+  "narrowed_artifact_sha256": "c646ae3955cd5e9740a02fe697ba58f128237ce53dd0e7997981773648db6a83",
+  "strategy": "head-tail-numbered-lines"
+}

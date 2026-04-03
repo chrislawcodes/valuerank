@@ -1,0 +1,271 @@
+00001: import { db, resolveDefinitionContent } from '@valuerank/db';
+00002: import { formatVnewLabel, formatVnewSignature } from '@valuerank/shared/trial-signature';
+00003: import { DOMAIN_ANALYSIS_VALUE_KEYS, type DomainAnalysisValueKey, extractValuePair } from '../domain-analysis-values.js';
+00004: import { resolveTranscriptDecisionModel } from './decision-model.js';
+00005: import type { TranscriptDecisionModelResult } from './decision-model.js';
+00006: import { runMatchesSignature, selectDefaultVnewSignature } from './planning-utils.js';
+00007: export {
+00008:   buildRawDecisionEvidence,
+00009:   DECISION_MODEL_READ_RULES,
+00010:   canonicalDecisionToLegacyScore,
+00011:   resolveCanonicalDecision,
+00012:   resolveDecisionModel,
+00013:   resolveLegacyDecisionCompat,
+00014:   resolveTranscriptDecisionModel,
+00015: } from './decision-model.js';
+00016: export type {
+00017:   CanonicalDecision,
+00018:   DecisionDirection,
+00019:   DecisionReadMode,
+00020:   DecisionReadRule,
+00021:   DecisionReadSurface,
+00022:   DecisionModelInput,
+00023:   DecisionModelResult,
+00024:   DecisionPair,
+00025:   DecisionSource,
+00026:   DecisionStrength,
+00027:   LegacyDecisionCompat,
+00028:   RawDecisionEvidence,
+00029:   TranscriptDecisionModelInput,
+00030:   TranscriptDecisionModelResult,
+00031: } from './decision-model.js';
+00032: 
+00033: export { formatVnewLabel, formatVnewSignature };
+00034: 
+00035: export const MAX_LIMIT = 500;
+00036: export const DEFAULT_LIMIT = 50;
+00037: const VALUE_PAIR_RESOLVE_CHUNK_SIZE = 20;
+00038: export type DomainAnalysisScoreMethod = 'LOG_ODDS' | 'FULL_BT';
+00039: 
+00040: export type DefinitionRow = {
+00041:   id: string;
+00042:   name?: string;
+00043:   parentId: string | null;
+00044:   version: number;
+00045:   createdAt: Date;
+00046:   updatedAt: Date;
+00047: };
+00048: 
+00049: export type DomainAnalysisValueCounts = {
+00050:   prioritized: number;
+00051:   deprioritized: number;
+00052:   neutral: number;
+00053: };
+00054: 
+00055: export type DomainAnalysisValuePair = {
+00056:   valueA: DomainAnalysisValueKey;
+00057:   valueB: DomainAnalysisValueKey;
+00058: };
+00059: 
+00060: export type DomainAnalysisValueScore = {
+00061:   valueKey: DomainAnalysisValueKey;
+00062:   score: number;
+00063:   prioritized: number;
+00064:   deprioritized: number;
+00065:   neutral: number;
+00066:   totalComparisons: number;
+00067: };
+00068: 
+00069: export type DomainAnalysisUnavailableModel = {
+00070:   model: string;
+00071:   label: string;
+00072:   reason: string;
+00073: };
+00074: 
+00075: export type DomainAnalysisMissingDefinition = {
+00076:   definitionId: string;
+00077:   definitionName: string;
+00078:   reasonCode: DomainAnalysisMissingReasonCode;
+00079:   reasonLabel: string;
+00080:   missingAllModels: boolean;
+00081:   missingModelIds: string[];
+00082:   missingModelLabels: string[];
+00083: };
+00084: 
+00085: export type DomainAnalysisConditionDetail = {
+00086:   scenarioId: string | null;
+00087:   conditionName: string;
+00088:   dimensions: Record<string, string | number> | null;
+00089:   prioritized: number;
+00090:   deprioritized: number;
+00091:   neutral: number;
+00092:   totalTrials: number;
+00093:   selectedValueWinRate: number | null;
+00094:   strongly: number;
+00095:   somewhat: number;
+00096:   opponentSomewhat: number;
+00097:   opponentStrongly: number;
+00098:   unknownCount: number;
+00099: };
+00100: 
+00101: export type DomainAnalysisVignetteDetail = {
+00102:   definitionId: string;
+00103:   definitionName: string;
+00104:   definitionVersion: number;
+00105:   aggregateRunId: string | null;
+00106:   otherValueKey: DomainAnalysisValueKey;
+00107:   prioritized: number;
+00108:   deprioritized: number;
+00109:   neutral: number;
+00110:   totalTrials: number;
+00111:   selectedValueWinRate: number | null;
+00112:   conditions: DomainAnalysisConditionDetail[];
+00113: };
+00114: 
+00115: export type DomainAnalysisValueDetailResult = {
+00116:   domainId: string;
+00117:   domainName: string;
+00118:   modelId: string;
+00119:   modelLabel: string;
+00120:   valueKey: DomainAnalysisValueKey;
+00121:   score: number;
+00122:   prioritized: number;
+00123:   deprioritized: number;
+00124:   neutral: number;
+00125:   totalTrials: number;
+00126:   targetedDefinitions: number;
+00127:   coveredDefinitions: number;
+00128:   missingDefinitionIds: string[];
+00129:   vignettes: DomainAnalysisVignetteDetail[];
+00130:   generatedAt: Date;
+00131: };
+00132: 
+00133: export type DomainAvailableSignature = {
+00134:   signature: string;
+00135:   label: string;
+00136:   isVirtual: boolean;
+00137:   temperature: number | null;
+00138: };
+00139: 
+00140: export type DomainTrialPlanModel = {
+00141:   modelId: string;
+00142:   label: string;
+00143:   isDefault: boolean;
+00144:   supportsTemperature: boolean;
+00145: };
+00146: 
+00147: export type DomainTrialPlanVignette = {
+00148:   definitionId: string;
+00149:   definitionName: string;
+00150:   definitionVersion: number;
+00151:   signature: string;
+00152:   scenarioCount: number;
+00153:   existin
+
+... [narrowed review slice: middle omitted] ...
+
+pt.scenario?.orientationFlipped ?? null,
+00511:       pairOverride: pair,
+00512:     });
+00513:     const canonical = resolved.canonical;
+00514:     if (canonical.direction === 'unknown') continue;
+00515: 
+00516:     let valueMap = aggregatedByModel.get(transcript.modelId);
+00517:     if (!valueMap) {
+00518:       valueMap = new Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>();
+00519:       aggregatedByModel.set(transcript.modelId, valueMap);
+00520:     }
+00521: 
+00522:     let pairwiseWins = pairwiseWinsByModel.get(transcript.modelId);
+00523:     if (!pairwiseWins) {
+00524:       pairwiseWins = new Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>();
+00525:       pairwiseWinsByModel.set(transcript.modelId, pairwiseWins);
+00526:     }
+00527: 
+00528:     if (
+00529:       canonical.direction !== 'neutral'
+00530:       && canonical.favoredValueKey != null
+00531:       && canonical.opposedValueKey != null
+00532:     ) {
+00533:       incrementValueCount(valueMap, canonical.favoredValueKey, 'prioritized');
+00534:       incrementValueCount(valueMap, canonical.opposedValueKey, 'deprioritized');
+00535:       incrementPairwiseWin(pairwiseWins, canonical.favoredValueKey, canonical.opposedValueKey);
+00536:     } else {
+00537:       incrementValueCount(valueMap, pair.valueA, 'neutral');
+00538:       incrementValueCount(valueMap, pair.valueB, 'neutral');
+00539:     }
+00540: 
+00541:     analyzedDefinitionIds.add(definitionId);
+00542:   }
+00543: 
+00544:   return { aggregatedByModel, pairwiseWinsByModel, analyzedDefinitionIds };
+00545: }
+00546: 
+00547: function getLineageRootId(definition: DefinitionRow, definitionsById: Map<string, DefinitionRow>): string {
+00548:   let current = definition;
+00549:   const visited = new Set<string>([current.id]);
+00550: 
+00551:   while (current.parentId !== null) {
+00552:     const parent = definitionsById.get(current.parentId);
+00553:     if (!parent || visited.has(parent.id)) break;
+00554:     visited.add(parent.id);
+00555:     current = parent;
+00556:   }
+00557: 
+00558:   return current.id;
+00559: }
+00560: 
+00561: export function supportsTemperature(apiConfig: unknown): boolean {
+00562:   if (apiConfig === null || typeof apiConfig !== 'object') return true;
+00563:   const candidate = (apiConfig as Record<string, unknown>).supportsTemperature;
+00564:   if (typeof candidate === 'boolean') return candidate;
+00565:   return true;
+00566: }
+00567: 
+00568: function isNewerDefinition(left: DefinitionRow, right: DefinitionRow): boolean {
+00569:   if (left.version !== right.version) return left.version > right.version;
+00570:   const leftUpdated = left.updatedAt.getTime();
+00571:   const rightUpdated = right.updatedAt.getTime();
+00572:   if (leftUpdated !== rightUpdated) return leftUpdated > rightUpdated;
+00573:   return left.createdAt.getTime() > right.createdAt.getTime();
+00574: }
+00575: 
+00576: export function selectLatestDefinitionPerLineage(
+00577:   definitions: DefinitionRow[],
+00578:   definitionsById: Map<string, DefinitionRow> = new Map(definitions.map((definition) => [definition.id, definition])),
+00579: ): DefinitionRow[] {
+00580:   const latestByLineage = new Map<string, DefinitionRow>();
+00581: 
+00582:   for (const definition of definitions) {
+00583:     const lineageRootId = getLineageRootId(definition, definitionsById);
+00584:     const existing = latestByLineage.get(lineageRootId);
+00585:     if (!existing || isNewerDefinition(definition, existing)) {
+00586:       latestByLineage.set(lineageRootId, definition);
+00587:     }
+00588:   }
+00589: 
+00590:   return Array.from(latestByLineage.values());
+00591: }
+00592: 
+00593: export async function hydrateDefinitionAncestors(definitions: DefinitionRow[]): Promise<Map<string, DefinitionRow>> {
+00594:   const definitionsById = new Map(definitions.map((definition) => [definition.id, definition]));
+00595: 
+00596:   let missingParentIds = new Set(
+00597:     definitions
+00598:       .map((definition) => definition.parentId)
+00599:       .filter((parentId): parentId is string => parentId !== null && !definitionsById.has(parentId)),
+00600:   );
+00601: 
+00602:   while (missingParentIds.size > 0) {
+00603:     const parentIdsBatch = Array.from(missingParentIds);
+00604:     missingParentIds = new Set<string>();
+00605: 
+00606:     const missingParents = await db.definition.findMany({
+00607:       where: { id: { in: parentIdsBatch } },
+00608:       select: {
+00609:         id: true,
+00610:         parentId: true,
+00611:         version: true,
+00612:         createdAt: true,
+00613:         updatedAt: true,
+00614:       },
+00615:     });
+00616: 
+00617:     for (const parent of missingParents) {
+00618:       if (definitionsById.has(parent.id)) continue;
+00619:       definitionsById.set(parent.id, parent);
+00620:       if (parent.parentId !== null && !definitionsById.has(parent.parentId)) {
+00621:         missingParentIds.add(parent.parentId);
+00622:       }
+00623:     }
+00624:   

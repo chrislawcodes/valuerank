@@ -1,0 +1,57 @@
+{
+  "session_id": "f3ed64d2-13ce-4419-b99f-82e9b745fa33",
+  "response": "## Findings\n\n### 1. Inconsistent Completeness Definitions (Medium)\n\nThe plan correctly identifies that `RunStatus` is not a reliable indicator of data completeness, but it defers unifying the definitions of \"processing complete\" and \"coverage complete.\" The `RunStatus` is transitioned to `COMPLETED` based on simple, potentially fragile progress counters, while the proposed `coverage-completeness` service will use a much more robust, data-centric validation.\n\n- **Evidence**: `[CODE-CONFIRMED]` The `determineStatus` function in `progress.ts` uses a simple `done >= total` check on counters to move a run to `SUMMARIZING`, which is the gateway to `COMPLETED`. This is less rigorous than the key-set validation in `recovery.ts` (`findMissingProbes`) that the plan aims to centralize.\n- **Impact**: This creates a designed-in window of inconsistency. A run can be marked as `status: 'COMPLETED'` while still being `coverageComplete: false`. The system then relies on the UI to explain this discrepancy and on the `recovery.ts` service to eventually fix the underlying data. While the plan manages this risk by making the states visible, it knowingly leaves a core lifecycle mechanism dependent on a less reliable method.\n\n### 2. Latent Bug in Recovery Logic (Informational)\n\nThe plan correctly identifies a weakness in how historical data would be handled by the current recovery logic and proposes a stricter, safer implementation for the new shared service.\n\n- **Evidence**: `[CODE-CONFIRMED]` The current `findMissingProbes` function in `recovery.ts` iterates over `run.scenarioSelections`. If `scenarioSelections` is empty for a historical run, the loops will not execute, and the function will incorrectly report zero missing probes, potentially marking an incomplete run as complete.\n- **Impact**: The plan's mandate that the new service must treat runs with no expected keys as \"not coverage-complete\" is a direct improvement. It prevents this latent bug from causing mis-classification of historical runs, turning a potential flaw into a strength of the new design.\n\n### 3. Confirmation of Core Problem (Informational)\n\nThe adversarial review confirms the plan's fundamental premise: key reporting surfaces are currently misleading because they trust `RunStatus` as a proxy for data completeness.\n\n- **Evidence**: `[CODE-CONFIRMED]`\n    - The `domainValueCoverage` query in `domain-coverage.ts` selects runs where `status: 'COMPLETED'`.\n    - The `domainAvailableSignatures` query in `planning.ts` also builds its candidate list from runs where `status: 'COMPLETED'`.\n- **Impact**: This confirms the urgency and correctness of the plan's primary goal. The proposed architecture—creating a single, authoritative `coverage-completeness` service and refactoring consumers to use it—is the appropriate and necessary solution.\n\n## Residual Risks\n\nThe plan's identified risks are accurate. The following residual risks remain, stemming from the conscious decision to defer certain changes:\n\n1.  **Dependency on Reactive Recovery**: By not changing the `RunStatus` lifecycle, the system's correctness depends on the `recovery.ts` service and the new audit script reactively identifying and repairing runs that were prematurely marked `COMPLETED` by the less reliable counter-based logic. A failure or delay in this recovery cron could prolong the period of data inconsistency, potentially impacting user trust or downstream processes that haven't been updated to check for coverage completeness.\n\n2.  **Potential for User Confusion**: The plan separates \"processing status\" from \"coverage completeness\" and aims to represent both in the UI. While this is more honest, it introduces complexity. There is a risk that users will find the distinction confusing (e.g., \"Why is my batch 'COMPLETED' but also 'Incomplete'?\") if the UI and documentation are not exceptionally clear.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 60655
+        },
+        "tokens": {
+          "input": 36972,
+          "prompt": 50285,
+          "candidates": 827,
+          "total": 55410,
+          "cached": 13313,
+          "thoughts": 4298,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 60655,
+            "tokens": {
+              "input": 36972,
+              "prompt": 50285,
+              "candidates": 827,
+              "total": 55410,
+              "cached": 13313,
+              "thoughts": 4298,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

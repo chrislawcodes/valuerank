@@ -1,0 +1,334 @@
+Reading additional input from stdin...
+OpenAI Codex v0.118.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d5492-e33d-70e2-8d2c-4301f4982045
+--------
+user
+Review this spec artifact using a feasibility-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: spec.md
+# Spec: Domain Coverage Completeness Guard
+
+## Summary
+
+The Domain Coverage page should only count a batch when the batch is coverage-complete.
+
+Today the app treats `run.status = COMPLETED` as if it means the data is complete. That is too weak. A run can finish processing while still missing transcript data.
+
+This feature adds one shared definition of coverage completeness and makes Domain Coverage, the signature picker, and batch status use it.
+
+## Problem
+
+The current product mixes up two different ideas:
+
+- processing-complete: the run reached the end of its workflow
+- coverage-complete: every expected transcript exists for every condition, model, and sample
+
+Those are not the same thing.
+
+Today, the Domain Coverage report mostly trusts `status = COMPLETED`. It does not know whether transcript data is missing. That creates false confidence:
+
+- the coverage report can say a vignette is covered
+- a drill-down can still show missing data for a model and condition
+
+That is the exact trust problem this feature needs to fix.
+
+## Goals
+
+- Make Domain Coverage count only coverage-complete runs
+- Make incomplete data visible instead of silently hiding it
+- Make the signature picker honest about incomplete-only signatures
+- Make batch status show missing coverage clearly
+- Use one shared backend rule so different screens cannot disagree
+
+## User Story
+
+As a person reviewing domain coverage, I want the report to count only real complete batches and also tell me when incomplete batches exist, so I can trust what “covered” means.
+
+## In Scope
+
+- Add one shared backend completeness service for runs
+- Use that service in Domain Coverage
+- Use that service in the coverage-page signature picker
+- Use that service in domain batch status views
+- Add an audit script to find historical runs that are processing-complete but coverage-incomplete
+- Keep the rule consistent with soft-delete behavior and duplicate transcript behavior
+
+## Out of Scope
+
+- Adding a model filter to Domain Coverage
+- Changing scoring logic
+- Changing transcript rendering on the value detail page
+- Redefining the `RunStatus` enum in this feature
+- Centralizing every `COMPLETED` write path behind one lifecycle gate in this feature
+- Redesigning the whole coverage UI
+
+## Product Decisions
+
+These decisions are settled for this feature.
+
+### 1. Coverage completeness is binary
+
+Coverage counting is all-or-nothing.
+
+If even one expected transcript key is missing, that run is not coverage-complete and contributes:
+
+- `0` to `batchCount`
+- `0` to `pairedBatchCount`
+
+There is no partial credit in the coverage counts.
+
+### 2. Incomplete runs must still be visible
+
+Incomplete runs should not count toward coverage, but they also should not disappear without explanation.
+
+The coverage experience must surface that incomplete runs exist for the selected vignette/signature.
+
+### 3. Coverage completeness is based on distinct expected keys
+
+Coverage completeness is based on distinct transcript keys:
+
+- `scenarioId`
+- `modelId`
+- `sampleIndex`
+
+In product language, `scenarioId` maps to the canonical term `condition`. For this feature, implementation should keep using the existing technical field name `scenarioId` in the database and API.
+
+The expected key set is calculated once at run creation time from the frozen run configuration, using the persisted `runScenarioSelection` and the run's model/sample configuration. Coverage checks compare against that immutable expected set so later catalog changes cannot rewrite history.
+
+Duplicate transcript rows do not create extra coverage and must not hide missing keys.
+
+### 4. Soft-deleted transcripts do not count
+
+Any completeness check for this feature must use only transcripts with:
+
+- `deletedAt: null`
+
+That rule must be shared across coverage, batch status, and audit logic.
+
+### 5. A model is “affected” if any expected key is missing
+
+A model ID is included in `missingModelIds` if at least one expected `(conditionId, modelId, sampleIndex)` key is missing for that run.
+
+### 6. Batch grouping is a real aggregation unit
+
+For coverage counts, a batch is the unique batch-group key used by the existing coverage query:
+
+- `jobChoiceBatchGroupId` if present
+- otherwise `pairedBatchGroupId` if present
+- otherwise the run itself
+
+The same grouping rule applies to both complete and incomplete batch counts.
+
+### 7. Legacy runs without frozen expectations are excluded until backfilled
+
+Historical runs that do not have a persisted `runScenarioSelection` are not guessed. They are excluded from coverage counts and listed by the audit script until they are backfilled or otherwise repaired.
+
+### 8. Runs with zero expected keys are not coverage-complete
+
+If the frozen expected key set for a run is empty, the run is not treated as coverage-complete and does not count toward coverage totals.
+
+### 9. Completeness checks read fresh data
+
+Completeness results must be computed from the current database state for each request. The first version of this feature does not cache coverage-complete results.
+
+## Product Behavior
+
+### Shared completeness service
+
+The backend should expose one shared way to compute:
+
+- `coverageComplete`
+- `expectedKeyCount`
+- `presentKeyCount`
+- `missingKeyCount`
+- `duplicateKeyCount`
+- `missingModelIds`
+
+This service must support:
+
+- single-run use
+- bulk use for many runs at once
+
+### New API fields
+
+The new GraphQL field names for this feature are fixed here so implementation does not have to guess.
+
+#### `DomainValueCoverageCell`
+
+| Field | Type | Meaning |
+|---|---|---|
+| `incompleteBatchCount` | `Int!` | Number of batches excluded from `batchCount` because their runs are coverage-incomplete. This uses the same batch-depth math as `batchCount`. |
+| `incompleteRunCount` | `Int!` | Number of coverage-incomplete runs represented by the cell. |
+
+#### `DomainAvailableSignature`
+
+| Field | Type | Meaning |
+|---|---|---|
+| `hasCoverageCompleteRuns` | `Boolean!` | True if the signature has at least one coverage-complete run. |
+| `hasCoverageIncompleteRuns` | `Boolean!` | True if the signature has at least one coverage-incomplete run. |
+
+#### Domain batch status row
+
+| Field | Type | Meaning |
+|---|---|---|
+| `coverageComplete` | `Boolean!` | True only when all expected transcript keys exist. |
+| `coverageState` | `String!` | One of `COMPLETE`, `INCOMPLETE`, `LEGACY_UNAVAILABLE`, or `EMPTY_EXPECTATION`. |
+| `expectedKeyCount` | `Int!` | Expected number of distinct transcript keys for the run. |
+| `presentKeyCount` | `Int!` | Number of distinct transcript keys actually present. |
+| `missingKeyCount` | `Int!` | Number of expected keys that are missing. |
+| `duplicateKeyCount` | `Int!` | Number of extra transcript rows beyond the distinct-key set. |
+| `missingModelIds` | `[String!]!` | Models with at least one missing expected key. |
+
+### Domain Coverage behavior
+
+Domain Coverage should:
+
+- count only coverage-complete runs
+- exclude incomplete runs from `batchCount` and `pairedBatchCount`
+- surface incomplete-run metadata per cell so the user can see that data is missing
+- return incomplete-run metadata for every cell that has at least one incomplete run, even if that same cell also has complete runs
+
+Concrete UI treatment for this feature:
+
+- if `incompleteBatchCount > 0`, the cell renders a visible amber warning dot in the table without requiring a click, and the normal success indicator is suppressed for that mixed cell
+- the cell popover renders an amber line that says `{incompleteBatchCount} incomplete batch(es) not counted`
+
+Examples of acceptable visibility:
+
+- the amber warning dot in the cell
+- the amber incomplete-batch line in the popover
+- incomplete batch counts shown separately from complete counts
+
+### Signature picker behavior
+
+The signature picker on the coverage page must not offer misleading empty options.
+
+If a signature has:
+
+- at least one coverage-complete run, it behaves normally
+- zero coverage-complete runs and one or more incomplete runs, it must still be explainable to the user
+
+This feature should do both:
+
+- label the option as incomplete-only
+- show an explicit incomplete-data warning if the user selects it
+
+This keeps the missing-data knowledge visible before and after selection.
+
+Concrete UI treatment for this feature:
+
+- if `hasCoverageCompleteRuns = false` and `hasCoverageIncompleteRuns = true`, append ` (incomplete only)` to the option label
+- if the selected signature has any incomplete runs, show an amber warning banner above the matrix
+- the warning banner includes a direct link to a filtered batch-status view for the incomplete runs behind that signature
+- the filtered batch-status view uses `coverageState != COMPLETE` for the selected signature
+
+### Aggregate analysis link behavior
+
+`aggregateRunId` is a drill-down link, not a coverage proof.
+
+For this feature:
+
+- aggregate runs do not contribute to `batchCount` or `pairedBatchCount`
+- if a cell has any incomplete runs, do not render the aggregate analysis link at all
+
+This keeps the analysis link available for inspection without letting it affect counted coverage.
+
+### Batch status behavior
+
+Batch status should show:
+
+- processing status from the existing run lifecycle
+- coverage completeness as a separate signal
+- expected key count
+- present key count
+- missing key count
+- missing model IDs
+
+The UI should make it obvious that:
+
+- a run can be processing-complete
+- while still being coverage-incomplete
+
+### Audit behavior
+
+The audit script should find runs that are:
+
+- processing-complete
+- but not coverage-complete
+
+The first version of the script should be read-only.
+
+## Acceptance Criteria
+
+1. The shared completeness service computes coverage from distinct expected `(scenarioId, modelId, sampleIndex)` keys, not from raw transcript row count.
+2. The shared completeness service ignores soft-deleted transcripts by using `deletedAt: null`.
+3. If one expected transcript key is missing, `coverageComplete = false` and the run contributes `0` to coverage counts.
+4. Domain Coverage counts only coverage-complete runs.
+5. The `domainValueCoverage` response includes `incompleteBatchCount` and `incompleteRunCount` for every cell. For any cell where either value is greater than zero, the coverage UI renders a visible warning indicator without requiring a click.
+6. The coverage-page signature picker returns `hasCoverageCompleteRuns` and `hasCoverageIncompleteRuns`. If a signature has zero complete runs and one or more incomplete runs, the picker shows a visible `incomplete only` marker and selecting it shows an explicit warning message before rendering the matrix.
+7. Domain batch status shows coverage completeness separately from processing status and includes expected, present, and missing counts plus `missingModelIds`.
+8. The coverage query path uses a bulk completeness strategy rather than one extra database round-trip per run.
+9. The batch status path and the coverage path use the same completeness rule and the same soft-delete rule.
+10. A read-only audit script can list historical runs that are processing-complete but coverage-incomplete.
+11. A cell with any incomplete runs does not render the aggregate analysis link, and the signature-picker warning banner includes a direct link to the batch-status view for the incomplete runs behind that signature.
+12. Coverage counts use the batch-group rule `jobChoiceBatchGroupId` first, then `pairedBatchGroupId`, then run ID.
+13. The domain batch status row includes a `coverageState` field that explicitly distinguishes `COMPLETE`, `INCOMPLETE`, `LEGACY_UNAVAILABLE`, and `EMPTY_EXPECTATION`.
+14. A run whose frozen expected key set is empty is not considered coverage-complete and does not contribute to coverage counts.
+15. Historical runs without a persisted `runScenarioSelection` are excluded from coverage counts until they are backfilled or otherwise repaired, and the audit script lists them.
+
+## Non-Goals
+
+- Changing historical transcripts directly in this feature
+- Rewriting the launch system
+- Changing how the value detail page loads one clicked condition
+- Redefining `COMPLETED` to mean coverage-complete across the whole run lifecycle
+
+## Risks
+
+| Risk | Why it matters | Mitigation |
+|---|---|---|
+| Coverage counts drop sharply | Binary counting gives zero credit to a run with even one missing key | Call this out clearly in rollout notes and verify expected deltas in production |
+| Duplicate transcripts hide missing keys | Raw counts can lie | Base completeness on distinct keys, not row count |
+| Different pages drift again | Users lose trust quickly when counts disagree | Use one shared backend completeness service everywhere |
+| Incomplete-only signatures create confusing empty states | The picker can look broken | Surface incomplete-only signatures explicitly |
+
+## Notes
+
+- This feature is about missing-data knowledge, not about model filtering.
+- The current recovery code already thinks in terms of expected transcript keys. That idea should be promoted into a shared service, not re-implemented in several places.
+- This feature does not change the meaning of `RunStatus`. It changes what the product treats as valid coverage.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+2026-04-03T18:20:05.880767Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d5492-e33d-70e2-8d2c-4301f4982045.tmp-1775240405823349000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+codex
+## Findings
+- High: The spec does not define the rollup rule for a batch-group that contains both coverage-complete and coverage-incomplete runs. Coverage counts are grouped by `jobChoiceBatchGroupId` / `pairedBatchGroupId` / run ID, but completeness is defined per run. Without a single group-level rule, the same batch can be counted as complete, incomplete, or both depending on implementation order, which can make Domain Coverage, batch status, and the audit script disagree.
+- Medium: The signature-picker visibility contract leaves out the explicit `LEGACY_UNAVAILABLE` and `EMPTY_EXPECTATION` states. `hasCoverageCompleteRuns` and `hasCoverageIncompleteRuns` only distinguish complete vs incomplete runs, so a signature made up only of legacy-unavailable or empty-expectation runs can still appear as a normal option with no warning, even though its data is excluded from coverage counts.
+- Medium: The “filtered batch-status view for the incomplete runs” is specified as `coverageState != COMPLETE`, but that predicate also returns `LEGACY_UNAVAILABLE` and `EMPTY_EXPECTATION`. The banner/link copy says it will show incomplete runs, but the actual result set can include rows that are not incomplete. That makes the drill-down misleading unless the spec adds a narrower filter or separate labels.
+
+## Residual Risks
+- The spec still leaves some edge behavior underspecified, especially for malformed transcript rows that miss one of the key fields and for how those rows should affect `presentKeyCount`, `duplicateKeyCount`, and `missingModelIds`.
+- The audit script behavior for legacy-unavailable runs is not fully pinned down beyond “list them,” so implementation details there may still drift from the coverage UI if not tested carefully.
+- The UI treatment for zero-expected-key runs is only defined at the counting level; the visible messaging for those cases may still need a sharper product decision.
+tokens used
+12,803

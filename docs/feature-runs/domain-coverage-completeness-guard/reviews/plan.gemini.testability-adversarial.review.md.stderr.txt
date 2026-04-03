@@ -1,0 +1,17 @@
+YOLO mode is enabled. All tool calls will be automatically approved.
+Keychain initialization encountered an error: UNIX[Operation not permitted]
+Using FileKeychain fallback for secure storage.
+Loaded cached credentials.
+YOLO mode is enabled. All tool calls will be automatically approved.
+Registering notification handlers for server 'agentchattr'. Capabilities: {
+  experimental: {},
+  prompts: { listChanged: false },
+  resources: { subscribe: false, listChanged: false },
+  tools: { listChanged: false }
+}
+Server 'agentchattr' has tools but did not declare 'listChanged' capability. Listening anyway for robustness...
+Server 'agentchattr' has resources but did not declare 'listChanged' capability. Listening anyway for robustness...
+Server 'agentchattr' has prompts but did not declare 'listChanged' capability. Listening anyway for robustness...
+Scheduling MCP context refresh...
+Executing MCP context refresh...
+MCP context refresh complete.

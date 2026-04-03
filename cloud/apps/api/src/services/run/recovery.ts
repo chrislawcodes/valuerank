@@ -15,6 +15,11 @@ import { createLogger } from '@valuerank/shared';
 import { getBoss } from '../../queue/boss.js';
 import { DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
 import { getQueueNameForModel } from '../parallelism/index.js';
+import {
+  findMissingTranscriptKeys,
+  normalizeSamplesPerScenario,
+  type TranscriptKey,
+} from './coverage-completeness.js';
 
 const log = createLogger('services:run:recovery');
 
@@ -151,7 +156,7 @@ async function countJobsForRun(runId: string): Promise<{ pending: number; active
  */
 async function findMissingProbes(
   runId: string
-): Promise<Array<{ scenarioId: string; modelId: string; sampleIndex: number }>> {
+): Promise<TranscriptKey[]> {
   // Get run config to know which models were requested and samples per scenario
   const run = await db.run.findUnique({
     where: { id: runId },
@@ -169,7 +174,7 @@ async function findMissingProbes(
 
   const config = run.config as { models: string[]; samplesPerScenario?: number };
   const models = config.models ?? [];
-  const samplesPerScenario = config.samplesPerScenario ?? 1;
+  const samplesPerScenario = normalizeSamplesPerScenario(config.samplesPerScenario);
   const scenarioIds = run.scenarioSelections.map((s) => s.scenarioId);
 
   // Get existing transcripts for this run (include sampleIndex for multi-sample runs)
@@ -177,27 +182,20 @@ async function findMissingProbes(
     where: { runId },
     select: { scenarioId: true, modelId: true, sampleIndex: true },
   });
+  const existingTranscriptKeys = existingTranscripts
+    .filter((transcript): transcript is TranscriptKey => transcript.scenarioId !== null)
+    .map((transcript) => ({
+      scenarioId: transcript.scenarioId,
+      modelId: transcript.modelId,
+      sampleIndex: transcript.sampleIndex,
+    }));
 
-  // Build set of existing scenario+model+sampleIndex triples
-  const existingTriples = new Set(
-    existingTranscripts.map((t) => `${t.scenarioId}:${t.modelId}:${t.sampleIndex}`)
-  );
-
-  // Find missing triples
-  const missing: Array<{ scenarioId: string; modelId: string; sampleIndex: number }> = [];
-
-  for (const modelId of models) {
-    for (const scenarioId of scenarioIds) {
-      for (let sampleIndex = 0; sampleIndex < samplesPerScenario; sampleIndex++) {
-        const key = `${scenarioId}:${modelId}:${sampleIndex}`;
-        if (!existingTriples.has(key)) {
-          missing.push({ scenarioId, modelId, sampleIndex });
-        }
-      }
-    }
-  }
-
-  return missing;
+  return findMissingTranscriptKeys({
+    scenarioIds,
+    models,
+    samplesPerScenario,
+    existingTranscripts: existingTranscriptKeys,
+  });
 }
 
 /**
@@ -206,7 +204,7 @@ async function findMissingProbes(
  */
 async function requeueMissingProbes(
   runId: string,
-  missingProbes: Array<{ scenarioId: string; modelId: string; sampleIndex: number }>
+  missingProbes: TranscriptKey[]
 ): Promise<number> {
   const boss = getBoss();
 

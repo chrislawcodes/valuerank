@@ -122,3 +122,24 @@ export function selectPrimaryDefinitionCounts(
     pairedBatchCount,
   };
 }
+
+export function getCoverageBatchIncrement(samplesPerScenario: unknown): number {
+  return Number.isInteger(samplesPerScenario) && (samplesPerScenario as number) >= 1
+    ? (samplesPerScenario as number)
+    : 1;
+}
+
+export function getCoverageBatchGroupId(runConfig: unknown): string | null {
+  const config = runConfig as {
+    jobChoiceBatchGroupId?: unknown;
+    pairedBatchGroupId?: unknown;
+  } | null;
+
+  const raw = typeof config?.jobChoiceBatchGroupId === 'string'
+    ? config.jobChoiceBatchGroupId
+    : typeof config?.pairedBatchGroupId === 'string'
+      ? config.pairedBatchGroupId
+      : null;
+
+  return raw != null && raw.trim().length > 0 ? raw.trim() : null;
+}

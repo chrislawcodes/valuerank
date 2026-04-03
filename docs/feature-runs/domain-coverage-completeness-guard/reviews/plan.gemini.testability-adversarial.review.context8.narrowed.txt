@@ -1,0 +1,324 @@
+00001: import { gql } from 'urql';
+00002: 
+00003: import type { TranscriptDecisionModelV2 } from './runs';
+00004: 
+00005: export const DOMAIN_ANALYSIS_QUERY = gql`
+00006:   query DomainAnalysis($domainId: ID!, $scoreMethod: String, $signature: String) {
+00007:     domainAnalysis(domainId: $domainId, scoreMethod: $scoreMethod, signature: $signature) {
+00008:       domainId
+00009:       domainName
+00010:       totalDefinitions
+00011:       targetedDefinitions
+00012:       coveredDefinitions
+00013:       missingDefinitionIds
+00014:       missingDefinitions {
+00015:         definitionId
+00016:         definitionName
+00017:         reasonCode
+00018:         reasonLabel
+00019:         missingAllModels
+00020:         missingModelIds
+00021:         missingModelLabels
+00022:       }
+00023:       definitionsWithAnalysis
+00024:       generatedAt
+00025:       models {
+00026:         model
+00027:         label
+00028:         values {
+00029:           valueKey
+00030:           score
+00031:           prioritized
+00032:           deprioritized
+00033:           neutral
+00034:           totalComparisons
+00035:         }
+00036:         rankingShape {
+00037:           topStructure
+00038:           bottomStructure
+00039:           topGap
+00040:           bottomGap
+00041:           spread
+00042:           steepness
+00043:           dominanceZScore
+00044:         }
+00045:       }
+00046:       unavailableModels {
+00047:         model
+00048:         label
+00049:         reason
+00050:       }
+00051:       rankingShapeBenchmarks {
+00052:         domainMeanTopGap
+00053:         domainStdTopGap
+00054:         medianSpread
+00055:       }
+00056:       clusterAnalysis {
+00057:         skipped
+00058:         skipReason
+00059:         defaultPair
+00060:         clusters {
+00061:           id
+00062:           name
+00063:           definingValues
+00064:           centroid
+00065:           members {
+00066:             model
+00067:             label
+00068:             silhouetteScore
+00069:             isOutlier
+00070:             nearestClusterIds
+00071:             distancesToNearestClusters
+00072:           }
+00073:         }
+00074:         faultLinesByPair
+00075:       }
+00076:     }
+00077:   }
+00078: `;
+00079: 
+00080: export const DOMAIN_ANALYSIS_QUERY_LEGACY = gql`
+00081:   query DomainAnalysisLegacy($domainId: ID!) {
+00082:     domainAnalysis(domainId: $domainId) {
+00083:       domainId
+00084:       domainName
+00085:       totalDefinitions
+00086:       targetedDefinitions
+00087:       definitionsWithAnalysis
+00088:       generatedAt
+00089:       models {
+00090:         model
+00091:         label
+00092:         values {
+00093:           valueKey
+00094:           score
+00095:           prioritized
+00096:           deprioritized
+00097:           neutral
+00098:           totalComparisons
+00099:         }
+00100:       }
+00101:       unavailableModels {
+00102:         model
+00103:         label
+00104:         reason
+00105:       }
+00106:     }
+00107:   }
+00108: `;
+00109: 
+00110: export const DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY = gql`
+00111:   query DomainAnalysisValueDetail($domainId: ID!, $modelId: String!, $valueKey: String!, $scoreMethod: String, $signature: String) {
+00112:     domainAnalysisValueDetail(domainId: $domainId, modelId: $modelId, valueKey: $valueKey, scoreMethod: $scoreMethod, signature: $signature) {
+00113:       domainId
+00114:       domainName
+00115:       modelId
+00116:       modelLabel
+00117:       valueKey
+00118:       score
+00119:       prioritized
+00120:       deprioritized
+00121:       neutral
+00122:       totalTrials
+00123:       targetedDefinitions
+00124:       coveredDefinitions
+00125:       missingDefinitionIds
+00126:       generatedAt
+00127:       vignettes {
+00128:         definitionId
+00129:         definitionName
+00130:         definitionVersion
+00131:         aggregateRunId
+00132:         otherValueKey
+00133:         prioritized
+00134:         deprioritized
+00135:         neutral
+00136:         totalTrials
+00137:         selectedValueWinRate
+00138:         conditions {
+00139:           scenarioId
+00140:           conditionName
+00141:           dimensions
+00142:           prioritized
+00143:           deprioritized
+00144:           neutral
+00145:           totalTrials
+00146:           selectedValueWinRate
+00147:           strongly
+00148:           somewhat
+00149:           opponentSomewhat
+00150:           opponentStrongly
+00151:           unknownCount
+00152:         }
+00153:       }
+00154:     }
+00155:   }
+00156: `;
+00157: 
+00158: export const DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY = gql`
+00159:   query DomainAnalysisConditionTranscripts(
+00160:     $domainId: ID!
+00161:     $modelId: String!
+00162:     $valueKey: String!
+00163:     $definitionId: ID!
+00164:     $scenarioId: ID
+00165:     $limit: Int
+00166:     $signature: String
+00167:   ) {
+00168:     domainAnalysisConditionTranscripts(
+00169:       domainId: $domainId
+00170:       modelId: $modelId
+00171:       valueKey: $valueKey
+00172:       definitio
+
+... [narrowed review slice: middle omitted] ...
+
+00311:     definitionId: string;
+00312:     definitionName: string;
+00313:     reasonCode: 'NO_COMPLETED_RUNS' | 'NO_SIGNATURE_MATCH' | 'NO_TRANSCRIPTS';
+00314:     reasonLabel: string;
+00315:     missingAllModels: boolean;
+00316:     missingModelIds: string[];
+00317:     missingModelLabels: string[];
+00318:   }[];
+00319:   definitionsWithAnalysis: number;
+00320:   generatedAt: string;
+00321:   models: DomainAnalysisModel[];
+00322:   unavailableModels: DomainAnalysisUnavailableModel[];
+00323:   rankingShapeBenchmarks?: RankingShapeBenchmarks;
+00324:   clusterAnalysis?: ClusterAnalysis;
+00325: };
+00326: 
+00327: export type DomainAnalysisQueryResult = {
+00328:   domainAnalysis: DomainAnalysisResult;
+00329: };
+00330: 
+00331: export type DomainAnalysisQueryVariables = {
+00332:   domainId: string;
+00333:   scoreMethod?: 'LOG_ODDS' | 'FULL_BT';
+00334:   signature?: string;
+00335: };
+00336: 
+00337: export type DomainFindingsEligibility = {
+00338:   domainId: string;
+00339:   eligible: boolean;
+00340:   status: 'ELIGIBLE' | 'DIAGNOSTIC_ONLY';
+00341:   summary: string;
+00342:   reasons: string[];
+00343:   recommendedActions: string[];
+00344:   consideredScopeCategories: Array<'PRODUCTION' | 'REPLICATION'>;
+00345:   completedEligibleEvaluationCount: number;
+00346:   latestEligibleEvaluationId: string | null;
+00347:   latestEligibleScopeCategory: 'PRODUCTION' | 'REPLICATION' | null;
+00348:   latestEligibleCompletedAt: string | null;
+00349: };
+00350: 
+00351: export type DomainFindingsEligibilityQueryResult = {
+00352:   domainFindingsEligibility: DomainFindingsEligibility;
+00353: };
+00354: 
+00355: export type DomainFindingsEligibilityQueryVariables = {
+00356:   domainId: string;
+00357: };
+00358: 
+00359: export type DomainAnalysisValueDetailCondition = {
+00360:   scenarioId: string | null;
+00361:   conditionName: string;
+00362:   dimensions: Record<string, string | number> | null;
+00363:   prioritized: number;
+00364:   deprioritized: number;
+00365:   neutral: number;
+00366:   totalTrials: number;
+00367:   selectedValueWinRate: number | null;
+00368:   strongly: number;
+00369:   somewhat: number;
+00370:   opponentSomewhat: number;
+00371:   opponentStrongly: number;
+00372:   unknownCount: number;
+00373: };
+00374: 
+00375: export type DomainAnalysisValueDetailVignette = {
+00376:   definitionId: string;
+00377:   definitionName: string;
+00378:   definitionVersion: number;
+00379:   aggregateRunId: string | null;
+00380:   otherValueKey: string;
+00381:   prioritized: number;
+00382:   deprioritized: number;
+00383:   neutral: number;
+00384:   totalTrials: number;
+00385:   selectedValueWinRate: number | null;
+00386:   conditions: DomainAnalysisValueDetailCondition[];
+00387: };
+00388: 
+00389: export type DomainAnalysisValueDetailResult = {
+00390:   domainId: string;
+00391:   domainName: string;
+00392:   modelId: string;
+00393:   modelLabel: string;
+00394:   valueKey: string;
+00395:   score: number;
+00396:   prioritized: number;
+00397:   deprioritized: number;
+00398:   neutral: number;
+00399:   totalTrials: number;
+00400:   targetedDefinitions: number;
+00401:   coveredDefinitions: number;
+00402:   missingDefinitionIds: string[];
+00403:   generatedAt: string;
+00404:   vignettes: DomainAnalysisValueDetailVignette[];
+00405: };
+00406: 
+00407: export type DomainAvailableSignature = {
+00408:   signature: string;
+00409:   label: string;
+00410:   isVirtual: boolean;
+00411:   temperature: number | null;
+00412: };
+00413: 
+00414: export type DomainAvailableSignaturesQueryResult = {
+00415:   domainAvailableSignatures: DomainAvailableSignature[];
+00416: };
+00417: 
+00418: export type DomainAvailableSignaturesQueryVariables = {
+00419:   domainId: string;
+00420: };
+00421: 
+00422: export type DomainAnalysisValueDetailQueryResult = {
+00423:   domainAnalysisValueDetail: DomainAnalysisValueDetailResult;
+00424: };
+00425: 
+00426: export type DomainAnalysisValueDetailQueryVariables = {
+00427:   domainId: string;
+00428:   modelId: string;
+00429:   valueKey: string;
+00430:   scoreMethod?: 'LOG_ODDS' | 'FULL_BT';
+00431:   signature?: string;
+00432: };
+00433: 
+00434: export type DomainAnalysisConditionTranscript = {
+00435:   id: string;
+00436:   runId: string;
+00437:   scenarioId: string | null;
+00438:   modelId: string;
+00439:   decisionCode: string | null;
+00440:   decisionCodeSource: string | null;
+00441:   decisionModelV2?: TranscriptDecisionModelV2 | null;
+00442:   turnCount: number;
+00443:   tokenCount: number;
+00444:   durationMs: number;
+00445:   createdAt: string;
+00446:   content: unknown;
+00447: };
+00448: 
+00449: export type DomainAnalysisConditionTranscriptsQueryResult = {
+00450:   domainAnalysisConditionTranscripts: DomainAnalysisConditionTranscript[];
+00451: };
+00452: 
+00453: export type DomainAnalysisConditionTranscriptsQueryVariables = {
+00454:   domainId: string;
+00455:   modelId: string;
+00456:   valueKey: string;
+00457:   definitionId: string;
+00458:   scenarioId?: string | null;
+00459:   limi
