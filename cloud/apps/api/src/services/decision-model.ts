@@ -115,19 +115,8 @@ export function resolveAnalysisValueOutcomes(
   input: TranscriptDecisionModelInput,
   valueA: string | null,
   valueB: string | null,
-  useDecisionModelV2: boolean = config.DECISION_MODEL_V2,
+  _useDecisionModelV2: boolean = config.DECISION_MODEL_V2,
 ): Record<string, DecisionValueOutcome> | undefined {
-  const legacyScore = parseLegacyDecisionCode(input.decisionCode);
-
-  if (!useDecisionModelV2) {
-    return buildValueOutcomesFromScore(
-      legacyScore,
-      Boolean(input.orientationFlipped),
-      valueA,
-      valueB,
-    );
-  }
-
   const decisionModel = resolveTranscriptDecisionModel(input);
   const canonicalOutcomes = buildValueOutcomesFromCanonical(
     decisionModel.canonical,
@@ -139,10 +128,5 @@ export function resolveAnalysisValueOutcomes(
     return canonicalOutcomes;
   }
 
-  return buildValueOutcomesFromScore(
-    decisionModel.legacy.canonicalScore ?? decisionModel.legacy.rawScore ?? legacyScore,
-    Boolean(input.orientationFlipped),
-    valueA,
-    valueB,
-  );
+  return undefined;
 }
