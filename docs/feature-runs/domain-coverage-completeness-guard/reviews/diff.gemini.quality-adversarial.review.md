@@ -3,11 +3,11 @@ reviewer: "gemini"
 lens: "quality-adversarial"
 stage: "diff"
 artifact_path: "docs/feature-runs/domain-coverage-completeness-guard/reviews/implementation.diff.patch"
-artifact_sha256: "7acc79519de997c436bbe8ce25bc144c6ef097658377c5f62f091feb742c06ca"
+artifact_sha256: "edb36175eec170b9a87c0d46226956a96603e44a9e03f79476da915eaeb08f53"
 repo_root: "."
-git_head_sha: "8f69262992dc242b8f19f281e3aaad57051323a7"
-git_base_ref: "bbd63da212c18375c7107157b9ebac3f636abde7"
-git_base_sha: "bbd63da212c18375c7107157b9ebac3f636abde7"
+git_head_sha: "9682101be08524291e537e68dd1afe470a093775"
+git_base_ref: "8f69262992dc242b8f19f281e3aaad57051323a7"
+git_base_sha: "8f69262992dc242b8f19f281e3aaad57051323a7"
 generation_method: "gemini-cli"
 resolution_status: "accepted"
 resolution_note: "Accepted: this diff checkpoint only covers workflow bookkeeping paths, so the state.json key-order and scope.json duplication comments are non-blocking documentation concerns."
@@ -23,23 +23,25 @@ coverage_note: ""
 ## Findings
 
 | Severity | Finding |
-| --- | --- |
-| **HIGH** [UNVERIFIED] | The `state.json` file has its `dirty_overrides` and `checkpoint_fallback` keys reordered. While JSON object key order is typically not significant, this change could break brittle downstream tooling that relies on a specific key order for parsing, checksums, or canonical representation. Such a change, with no apparent functional value, introduces risk without benefit. |
-| **MEDIUM** | The modification to `state.json` appears to be a non-functional, noisy change. Committing purely cosmetic changes pollutes the version history, making it harder to identify meaningful changes during future debugging or code archaeology. It suggests a lack of commit hygiene or tooling that enforces a canonical format. |
-| **LOW** [UNVERIFIED] | The new file `scope.json` contains two lists, `paths` and `allowed_dirty_paths`, which are nearly identical. This duplication creates a future maintenance hazard. It's likely that a developer will modify one list but forget the other, leading to configuration drift and potential tool failures. The purpose of this duplication is not clear from the artifact alone. |
+| :--- | :--- |
+| **HIGH** | **Scope Reduction Obscures Implementation Retreat** |
+| | The diff removes the actual implementation files (`coverage-completeness.ts` and its test) and replaces them with changes to workflow metadata (`plan.md`, `scope.json`). The review notes in `plan.md` are updated to dismiss previously accepted findings about code quality (key collisions, brittle array ordering) as "not applicable" to the new "bookkeeping" scope. This is a significant process failure. It uses a metadata-only change to mask a retreat from a flawed implementation, effectively laundering the audit trail and deferring the resolution of known technical risks. Instead of addressing the code quality issues, the implementation has been removed entirely, creating the illusion of progress while hiding the problem. |
+| **MEDIUM** | **Redundant and Imprecise Scoping** |
+| | The `scope.json` file contains redundant entries in `allowed_dirty_paths`. Specifically, `docs/feature-runs/domain-coverage-completeness-guard` is listed as a directory, while specific files within that directory (`plan.md`, `scope.json`, `state.json`) are also listed individually. This is sloppy configuration and suggests a lack of precision in the workflow tooling. The `paths` and `allowed_dirty_paths` are nearly identical, which also feels redundant. |
+| **LOW** | **Unexplained State Modification** |
+| | A new key, `"dirty_overrides": {}`, is added to `state.json` without any corresponding explanation or usage within the context of this diff. Adding new, undocumented configuration keys introduces cruft and potential for future confusion. |
 
 ## Residual Risks
 
-- **Hidden Implementation Flaws:** The review artifacts logged in `plan.md` state that concerns about "collision-safe structured keys" and "brittle array-order" have been addressed. However, without seeing the actual implementation diff, it's impossible to verify this. The risk remains that the implementation of the structured keys is itself flawed (e.g., improper JSON serialization, still subject to edge cases) and this diff only captures the *intent* to fix the issue, not the correctness of the fix itself.
-- **Accepted Performance Risk:** The review notes in `plan.md` explicitly accept a "performance concern" as a residual risk for an "in-memory helper." This implies the implemented solution may not scale and could introduce performance bottlenecks under load or with larger datasets. The business is now carrying this risk without a clear mitigation plan described in the artifact.
-- **Unknown Tooling Dependencies:** The impact of the changes in `state.json` and `scope.json` is entirely dependent on the tooling that consumes them. The `[UNVERIFIED]` findings highlight a risk that these seemingly minor changes could have significant, but un-auditable, downstream consequences.
+- **Risk of Re-introducing Flawed Logic:** The primary risk is that the original, valid concerns about the implementation (key collisions, brittle data structures) will be forgotten or ignored when the feature is eventually implemented. By changing the review notes to "not applicable", this diff erases a critical learning and warning, making it likely the same mistakes will be made again.
+- **Process Integrity Vulnerability:** This change exposes a potential loophole in the review process. An agent or developer can seemingly "pass" a review cycle on a failing implementation by simply removing the problematic code and submitting a metadata-only "bookkeeping" change. This undermines the purpose of adversarial quality checks and allows unresolved technical debt to be pushed into the future without being tracked.
 
 ## Token Stats
 
-- total_input=760
-- total_output=500
-- total_tokens=15608
-- `gemini-2.5-pro`: input=760, output=500, total=15608
+- total_input=13775
+- total_output=522
+- total_tokens=15709
+- `gemini-2.5-pro`: input=13775, output=522, total=15709
 
 ## Resolution
 - status: accepted

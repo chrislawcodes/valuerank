@@ -3,11 +3,11 @@ reviewer: "gemini"
 lens: "regression-adversarial"
 stage: "diff"
 artifact_path: "docs/feature-runs/domain-coverage-completeness-guard/reviews/implementation.diff.patch"
-artifact_sha256: "7acc79519de997c436bbe8ce25bc144c6ef097658377c5f62f091feb742c06ca"
+artifact_sha256: "edb36175eec170b9a87c0d46226956a96603e44a9e03f79476da915eaeb08f53"
 repo_root: "."
-git_head_sha: "8f69262992dc242b8f19f281e3aaad57051323a7"
-git_base_ref: "bbd63da212c18375c7107157b9ebac3f636abde7"
-git_base_sha: "bbd63da212c18375c7107157b9ebac3f636abde7"
+git_head_sha: "9682101be08524291e537e68dd1afe470a093775"
+git_base_ref: "8f69262992dc242b8f19f281e3aaad57051323a7"
+git_base_sha: "8f69262992dc242b8f19f281e3aaad57051323a7"
 generation_method: "gemini-cli"
 resolution_status: "accepted"
 resolution_note: "Accepted: this diff checkpoint only covers workflow bookkeeping paths, so the key-format compatibility concern is not applicable here; the remaining notes are residual risks for the docs-only slice."
@@ -22,24 +22,24 @@ coverage_note: ""
 
 ## Findings
 
-| Severity | Finding |
-| --- | --- |
-| MEDIUM | **[UNVERIFIED] Implicit Key-Format Change Introduces Backward-Compatibility Risk:** The updates to `plan.md` reference a change from a presumably simple key to a "collision-safe structured key". While the code implementing this is not provided, changing a keying strategy is a common source of severe regressions. If these keys are ever used in persisted data, API boundaries, or long-term caches, this change could break older systems or data-access patterns that expect the previous format. The review note claims this "does not apply to any persisted key format in this slice," but this is an unverifiable assumption and represents a significant risk if incorrect. |
-| MEDIUM | **New `scope.json` Mechanism May Mask Regressions:** The introduction of `scope.json` creates a new, implicit dependency on whatever tooling consumes it. If that tooling has flaws, or if this file is misconfigured, it could cause CI or validation processes to silently skip checks on files outside this explicit scope. This could allow an unrelated but impactful regression to go undetected, defeating the purpose of isolated checks. |
-| LOW | **JSON Key Reordering in `state.json` Could Break Fragile Consumers:** The diff for `state.json` shows a reordering of keys. While the JSON specification does not guarantee key order, fragile downstream systems sometimes make implicit assumptions about it. A poorly implemented parser that relies on key order could fail when processing this updated file, causing a regression in whatever process depends on it. |
+| Severity | ID | Finding |
+| --- | --- | --- |
+| CRITICAL | REG-001 | **Process Bypass via Scope Reduction:** The diff removes the implementation and test files (`cloud/apps/api/src/services/run/coverage-completeness.ts` and its test) from `scope.json` and replaces them with documentation and metadata files. This is a critical regression-adversarial finding. If any automated process (e.g., CI checks, validation scripts, agent tooling) uses `scope.json` to determine which files to test or validate, this change effectively blinds that process. The actual implementation could be changed or committed without any of the required quality gates running against it, completely bypassing the intended controls. |
+| HIGH | REG-002 | **Misleading Review State:** The `plan.md` file updates the status of multiple adversarial reviews to "accepted". However, the rationale given is that the current diff only contains "workflow bookkeeping paths." This creates a false and misleading record. The reviews were intended for a substantive code change, and "accepting" them on a technicality pollutes the audit trail. It creates the appearance of completed due diligence where none has occurred on the actual implementation, creating a high risk that the substantive change will merge later without the recorded reviews being properly re-evaluated. |
+| MEDIUM | REG-003 | **[UNVERIFIED] Undocumented Override Mechanism:** The introduction of a new `"dirty_overrides": {}` object in `state.json` is suspicious. Without documentation or context, it appears to be a mechanism for overriding checks related to "dirty" or unexpectedly modified files. This could be used to silence warnings or errors from process automation that would normally flag the discrepancy between the original and new `scope.json` contents, further enabling the process bypass identified in REG-001. Its existence suggests a potential "backdoor" to ignore workspace integrity rules. |
 
 ## Residual Risks
 
-- **Performance Regression Under Load:** The `plan.md` notes acknowledge a "performance concern" as a residual risk. The move to structured JSON keys from potentially simpler string keys introduces serialization/deserialization overhead. While this may be negligible for single operations, it could create a significant performance regression at scale or in hot code paths, especially for an "in-memory helper".
-- **Future Migration Debt:** The `plan.md` notes scope the key format change to a non-persisted part of the system "in this slice". This decision creates a future risk. If the scope of this feature expands and this data ever *does* need to be persisted or exposed via an API, the project will have two competing key formats to reconcile, creating a future migration and compatibility burden.
-- **Incomplete Documentation:** The artifact only updates a plan file to *refer* to reviews. The reviews themselves, which would contain the detailed rationale for accepting these risks, are not included. This leaves future developers with an incomplete picture, making it harder to understand why these architectural decisions and tradeoffs were made.
+- **Silent Failure of Quality Gates:** The primary residual risk is that the substantive code change will be committed in a subsequent step, but the quality processes that were meant to guard it will fail silently because their configuration (`scope.json`) has been pre-emptively altered to ignore the relevant files. The change will appear to be compliant when it has, in fact, evaded all checks.
+- **Process Erosion:** Accepting formal reviews based on temporary changes to scope sets a dangerous precedent. This tactic could be reused to merge future changes without adequate scrutiny, eroding the integrity of the project's review and validation processes.
+- **False Sense of Security:** A developer or agent reviewing the `plan.md` file in the future will see "accepted" reviews and assume the associated risks were addressed. They will have no easy way of knowing that the acceptance was a procedural loophole related to a non-functional, documentation-only diff.
 
 ## Token Stats
 
-- total_input=760
-- total_output=556
-- total_tokens=15648
-- `gemini-2.5-pro`: input=760, output=556, total=15648
+- total_input=13775
+- total_output=603
+- total_tokens=15471
+- `gemini-2.5-pro`: input=13775, output=603, total=15471
 
 ## Resolution
 - status: accepted

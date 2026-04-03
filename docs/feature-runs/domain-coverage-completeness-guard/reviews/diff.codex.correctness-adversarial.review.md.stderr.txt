@@ -8,7 +8,7 @@ approval: never
 sandbox: read-only
 reasoning effort: high
 reasoning summaries: none
-session id: 019d5541-6300-7ba3-85fa-16dd22256f42
+session id: 019d5546-d9f6-7b83-961a-a6b233a10ba9
 --------
 user
 Review this diff artifact using a correctness-adversarial lens.
@@ -23,48 +23,54 @@ Keep the response concrete and ordered by severity.
 
 Artifact: implementation.diff.patch
 diff --git a/docs/feature-runs/domain-coverage-completeness-guard/plan.md b/docs/feature-runs/domain-coverage-completeness-guard/plan.md
-index b7a70824..3374d009 100644
+index 3374d009..273b8b9c 100644
 --- a/docs/feature-runs/domain-coverage-completeness-guard/plan.md
 +++ b/docs/feature-runs/domain-coverage-completeness-guard/plan.md
-@@ -114,6 +114,9 @@ Completeness results are computed from the current database state for each reque
+@@ -114,9 +114,9 @@ Completeness results are computed from the current database state for each reque
  - review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: Accepted: the spec already makes the completeness check bulk-based and records the on-demand performance tradeoff as a residual risk; the batch-integrity, mixed-cell UI, and aggregate-link concerns are all explicitly scoped in the spec's product decisions and concrete UI behavior.
  - review: reviews/spec.gemini.edge-cases-adversarial.review.md | status: accepted | note: Accepted: the spec now explicitly defines paired-batch rollup, duplicate transcript handling via distinct keys and duplicate counts, and the visible mixed-state cell treatment; the remaining race-condition and UX concerns are residual risks, not blockers.
  - review: reviews/tasks.codex.execution-adversarial.review.md | status: accepted | note: Accepted: the tasks now point at the root STATUS.md file, wire the audit script into package.json, and keep the verification steps aligned with the actual repo layout and script entry points.
-+- review: reviews/diff.gemini.regression-adversarial.review.md | status: accepted | note: Accepted: the helper now uses collision-safe structured keys, the remaining performance concern is a residual risk for this in-memory helper, and the compatibility warning does not apply to any persisted key format in this slice.
-+- review: reviews/diff.gemini.quality-adversarial.review.md | status: accepted | note: Accepted: the helper now uses structured JSON keys to avoid delimiter collisions, the brittle array-order concern is addressed, and the remaining performance/migration concerns are residual risks only.
-+- review: reviews/diff.codex.correctness-adversarial.review.md | status: accepted | note: Accepted: the helper now uses collision-safe structured keys, the test coverage includes the edge cases called out by the review, and the remaining compatibility concern is a residual risk only.
+-- review: reviews/diff.gemini.regression-adversarial.review.md | status: accepted | note: Accepted: the helper now uses collision-safe structured keys, the remaining performance concern is a residual risk for this in-memory helper, and the compatibility warning does not apply to any persisted key format in this slice.
+-- review: reviews/diff.gemini.quality-adversarial.review.md | status: accepted | note: Accepted: the helper now uses structured JSON keys to avoid delimiter collisions, the brittle array-order concern is addressed, and the remaining performance/migration concerns are residual risks only.
+-- review: reviews/diff.codex.correctness-adversarial.review.md | status: accepted | note: Accepted: the helper now uses collision-safe structured keys, the test coverage includes the edge cases called out by the review, and the remaining compatibility concern is a residual risk only.
++- review: reviews/diff.gemini.regression-adversarial.review.md | status: accepted | note: Accepted: this diff checkpoint only covers workflow bookkeeping paths, so the key-format compatibility concern is not applicable here; the remaining notes are residual risks for the docs-only slice.
++- review: reviews/diff.gemini.quality-adversarial.review.md | status: accepted | note: Accepted: this diff checkpoint only covers workflow bookkeeping paths, so the state.json key-order and scope.json duplication comments are non-blocking documentation concerns.
++- review: reviews/diff.codex.correctness-adversarial.review.md | status: accepted | note: Accepted: this diff checkpoint has no correctness findings; the remaining notes are about workflow metadata only.
  - review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: Accepted: the spec already defines the batch-group rollup rule, adds completeness-aware signature states, and deliberately uses coverageState != COMPLETE for the incomplete-data drill-down so the review's remaining concerns are covered by the current spec or explicit residual risks.
  - review: reviews/plan.gemini.architecture-adversarial.review.md | status: deferred | note: Deferred by design: this feature intentionally separates processing-complete from coverage-complete. The lifecycle fix is out of scope for this slice, and the plan documents that split explicitly.
  - review: reviews/plan.gemini.testability-adversarial.review.md | status: accepted | note: Accepted: the plan now preserves paired-batch dedupe semantics, keeps the recovery service aligned with the shared completeness rule, and explicitly defers launch-estimate coverage counts as a follow-up so the testability burden stays bounded to the reporting surfaces in scope.
 diff --git a/docs/feature-runs/domain-coverage-completeness-guard/scope.json b/docs/feature-runs/domain-coverage-completeness-guard/scope.json
-new file mode 100644
-index 00000000..f3fa25d9
---- /dev/null
+index adb9c1e7..f3fa25d9 100644
+--- a/docs/feature-runs/domain-coverage-completeness-guard/scope.json
 +++ b/docs/feature-runs/domain-coverage-completeness-guard/scope.json
-@@ -0,0 +1,13 @@
-+{
-+  "paths": [
+@@ -1,11 +1,13 @@
+ {
+   "paths": [
+-    "cloud/apps/api/src/services/run/coverage-completeness.ts",
+-    "cloud/apps/api/tests/services/run/coverage-completeness.test.ts"
 +    "docs/feature-runs/domain-coverage-completeness-guard/plan.md",
 +    "docs/feature-runs/domain-coverage-completeness-guard/scope.json",
 +    "docs/feature-runs/domain-coverage-completeness-guard/state.json"
-+  ],
-+  "allowed_dirty_paths": [
+   ],
+   "allowed_dirty_paths": [
+-    "cloud/apps/api/src/services/run/coverage-completeness.ts",
+-    "cloud/apps/api/tests/services/run/coverage-completeness.test.ts",
+-    "docs/feature-runs/domain-coverage-completeness-guard"
 +    "docs/feature-runs/domain-coverage-completeness-guard",
 +    "docs/feature-runs/domain-coverage-completeness-guard/plan.md",
 +    "docs/feature-runs/domain-coverage-completeness-guard/scope.json",
 +    "docs/feature-runs/domain-coverage-completeness-guard/state.json"
-+  ]
-+}
+   ]
+ }
 \ No newline at end of file
 diff --git a/docs/feature-runs/domain-coverage-completeness-guard/state.json b/docs/feature-runs/domain-coverage-completeness-guard/state.json
-index 7c683e1b..c78911bc 100644
+index 492d5ff1..c78911bc 100644
 --- a/docs/feature-runs/domain-coverage-completeness-guard/state.json
 +++ b/docs/feature-runs/domain-coverage-completeness-guard/state.json
-@@ -26,6 +26,6 @@
+@@ -26,5 +26,6 @@
      "unresolved": []
    },
    "delivery": {},
--  "dirty_overrides": {},
 -  "checkpoint_fallback": {}
 +  "checkpoint_fallback": {},
 +  "dirty_overrides": {}
@@ -76,14 +82,17 @@ Return only markdown with exactly these sections:
 ## Findings
 ## Residual Risks
 Do not include any other sections.
-2026-04-03T21:30:41.872223Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d5541-6300-7ba3-85fa-16dd22256f42.tmp-1775251841804378000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-04-03T21:36:40.082531Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d5546-d9f6-7b83-961a-a6b233a10ba9.tmp-1775252199954767000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+codex
+I’m reviewing the artifact only, with a bias toward failure cases and workflow breakage. Since there’s no code context, I’m treating any codebase-dependent concern as unverified and keeping it at medium severity or lower.
 codex
 ## Findings
-None.
+- [UNVERIFIED][MEDIUM] [`docs/feature-runs/domain-coverage-completeness-guard/scope.json`](/Users/chrislaw/valuerank/docs/feature-runs/domain-coverage-completeness-guard/scope.json) no longer includes the actual implementation and test files, and now scopes only the docs artifacts. If the feature-run machinery uses this file as the allowlist for the active checkpoint, this change can make the run appear valid while excluding the real code paths from coverage, review, or dirty-path enforcement. That is a correctness regression unless this checkpoint is intentionally docs-only.
+- [UNVERIFIED][MEDIUM] [`docs/feature-runs/domain-coverage-completeness-guard/state.json`](/Users/chrislaw/valuerank/docs/feature-runs/domain-coverage-completeness-guard/state.json) adds a new top-level `dirty_overrides` key without any visible schema migration or consumer update. If any loader, validator, or round-trip check expects the previous state shape, this can break deserialization or cause the state to be rejected even though the value is empty.
 
 ## Residual Risks
-- [UNVERIFIED] The new `scope.json` widens `allowed_dirty_paths` to the entire `docs/feature-runs/domain-coverage-completeness-guard` directory. If downstream validation expects a tighter allowlist, this could let unrelated files slip through.
-- [UNVERIFIED] The change is documentation/state only. It does not prove the underlying review conclusions are actually enforced by the code path that consumes this feature-run metadata.
-- The `state.json` edit is a pure key reorder. That is usually harmless, but any tooling that does raw file hashing or byte-for-byte comparison could treat it as a meaningful change.
+- The diff does not show whether the workflow engine treats docs-only scope changes as a special case, so the real impact of the `scope.json` edit remains dependent on hidden repo behavior.
+- The new `dirty_overrides` field may be harmless if consumers ignore unknown keys, but that tolerance is not provable from this artifact alone.
+- No code or test files were included here, so there is no direct evidence that the underlying implementation and verification still match the feature intent.
 tokens used
-3,393
+3,481
