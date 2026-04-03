@@ -129,6 +129,46 @@ export function getCoverageBatchIncrement(samplesPerScenario: unknown): number {
     : 1;
 }
 
+export type CoverageModelBreakdown = { modelId: string; label: string; trialCount: number };
+
+export function computePerModelTrialCounts(
+  runs: ReadonlyArray<{ config: unknown; transcripts: ReadonlyArray<{ modelId: string }> }>,
+  defaultModelIds: readonly string[],
+  modelLabelById: ReadonlyMap<string, string>,
+): { minTrialCount: number | null; maxTrialCount: number | null; modelBreakdown: CoverageModelBreakdown[] | null } {
+  if (defaultModelIds.length === 0) {
+    return { minTrialCount: null, maxTrialCount: null, modelBreakdown: null };
+  }
+
+  const trialCountByModel = new Map<string, number>(
+    defaultModelIds.map((modelId) => [modelId, 0]),
+  );
+
+  for (const run of runs) {
+    const increment = getCoverageBatchIncrement(
+      (run.config as { samplesPerScenario?: unknown } | null)?.samplesPerScenario,
+    );
+    const transcriptModelIds = new Set(run.transcripts.map((t) => t.modelId));
+    for (const modelId of defaultModelIds) {
+      if (transcriptModelIds.has(modelId)) {
+        trialCountByModel.set(modelId, (trialCountByModel.get(modelId) ?? 0) + increment);
+      }
+    }
+  }
+
+  const modelBreakdown: CoverageModelBreakdown[] = defaultModelIds.map((modelId) => ({
+    modelId,
+    label: modelLabelById.get(modelId) ?? modelId,
+    trialCount: trialCountByModel.get(modelId) ?? 0,
+  }));
+
+  const counts = modelBreakdown.map((b) => b.trialCount);
+  const minTrialCount = Math.min(...counts);
+  const maxTrialCount = Math.max(...counts);
+
+  return { minTrialCount, maxTrialCount, modelBreakdown };
+}
+
 export function getCoverageBatchGroupId(runConfig: unknown): string | null {
   const config = runConfig as {
     jobChoiceBatchGroupId?: unknown;

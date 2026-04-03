@@ -21,11 +21,26 @@ builder.mutationField('setDomainDefaults', (t) =>
       defaultLevelPresetVersionId: t.arg.id({ required: false }),
       defaultPreambleVersionId: t.arg.id({ required: false }),
       defaultContextId: t.arg.id({ required: false }),
+      defaultModelIds: t.arg.stringList({ required: false }),
     },
     resolve: async (_root, args, ctx) => {
       const id = String(args.id);
       const existing = await db.domain.findUnique({ where: { id } });
       if (!existing) throw new Error(`Domain not found: ${id}`);
+
+      const newDefaultModelIds = args.defaultModelIds != null ? args.defaultModelIds.map(String) : null;
+
+      if (newDefaultModelIds != null && newDefaultModelIds.length > 0) {
+        const activeModels = await db.llmModel.findMany({
+          where: { modelId: { in: newDefaultModelIds }, status: 'ACTIVE' },
+          select: { modelId: true },
+        });
+        const activeModelIds = new Set(activeModels.map((m) => m.modelId));
+        const invalidIds = newDefaultModelIds.filter((mid) => !activeModelIds.has(mid));
+        if (invalidIds.length > 0) {
+          throw new Error(`Invalid or inactive model IDs: ${invalidIds.join(', ')}`);
+        }
+      }
 
       const updated = await db.domain.update({
         where: { id },
@@ -39,6 +54,7 @@ builder.mutationField('setDomainDefaults', (t) =>
           defaultContextId: args.defaultContextId !== undefined
             ? (args.defaultContextId === null ? null : String(args.defaultContextId))
             : undefined,
+          ...(newDefaultModelIds != null ? { defaultModelIds: newDefaultModelIds } : {}),
         },
       });
 
@@ -57,10 +73,24 @@ builder.mutationField('setDomainSettings', (t) =>
       preambleVersionId: t.arg.id({ required: false }),
       levelPresetVersionId: t.arg.id({ required: false }),
       contextId: t.arg.id({ required: false }),
+      defaultModelIds: t.arg.stringList({ required: false }),
       valueStatements: t.arg({ type: [ValueStatementInput], required: true }),
     },
     resolve: async (_root, args) => {
       const domainId = args.domainId as string;
+      const newDefaultModelIds = args.defaultModelIds != null ? args.defaultModelIds.map(String) : null;
+
+      if (newDefaultModelIds != null && newDefaultModelIds.length > 0) {
+        const activeModels = await db.llmModel.findMany({
+          where: { modelId: { in: newDefaultModelIds }, status: 'ACTIVE' },
+          select: { modelId: true },
+        });
+        const activeModelIds = new Set(activeModels.map((m) => m.modelId));
+        const invalidIds = newDefaultModelIds.filter((mid) => !activeModelIds.has(mid));
+        if (invalidIds.length > 0) {
+          throw new Error(`Invalid or inactive model IDs: ${invalidIds.join(', ')}`);
+        }
+      }
 
       const updatedDomain = await db.$transaction(async (tx) => {
         const currentStatements = await tx.valueStatement.findMany({
@@ -108,6 +138,7 @@ builder.mutationField('setDomainSettings', (t) =>
             defaultPreambleVersionId: args.preambleVersionId != null ? String(args.preambleVersionId) : null,
             defaultLevelPresetVersionId: args.levelPresetVersionId != null ? String(args.levelPresetVersionId) : null,
             defaultContextId: args.contextId != null ? String(args.contextId) : null,
+            ...(newDefaultModelIds != null ? { defaultModelIds: newDefaultModelIds } : {}),
           },
         });
 

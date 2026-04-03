@@ -5,6 +5,12 @@ import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
 import { cn } from '../../lib/utils';
 import { VALUE_LABELS } from './domainAnalysisData';
 
+type CoverageModelBreakdownItem = {
+  modelId: string;
+  label: string;
+  trialCount: number;
+};
+
 type CoverageCellProps = {
   valueA: string;
   valueB: string;
@@ -12,6 +18,9 @@ type CoverageCellProps = {
   pairedBatchCount: number;
   definitionId: string | null;
   aggregateRunId: string | null;
+  minTrialCount?: number | null;
+  maxTrialCount?: number | null;
+  modelBreakdown?: CoverageModelBreakdownItem[] | null;
 };
 
 export function CoverageCell({
@@ -21,17 +30,26 @@ export function CoverageCell({
   pairedBatchCount,
   definitionId,
   aggregateRunId,
+  minTrialCount,
+  maxTrialCount,
+  modelBreakdown,
 }: CoverageCellProps) {
   const [isOpen, setIsOpen] = useState(false);
   const isDiagonal = valueA === valueB;
   const hasVignette = definitionId !== null;
-  const displayCount = pairedBatchCount > 0 ? pairedBatchCount : batchCount;
+  const hasPerModelData = minTrialCount !== null && minTrialCount !== undefined;
+  const displayCount = hasPerModelData ? minTrialCount : (pairedBatchCount > 0 ? pairedBatchCount : batchCount);
+  const hasMismatch = hasPerModelData && maxTrialCount !== null && maxTrialCount !== undefined && minTrialCount < maxTrialCount;
   const visibleLabel = isDiagonal || !hasVignette ? '—' : displayCount.toLocaleString();
   const xLabel = VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB;
   const yLabel = VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA;
-  const batchLabel = pairedBatchCount > 0
-    ? (displayCount === 1 ? 'paired batch' : 'paired batches')
-    : (displayCount === 1 ? 'batch' : 'batches');
+  const batchLabel = hasPerModelData
+    ? (displayCount === 1 ? 'trial (min)' : 'trials (min)')
+    : (pairedBatchCount > 0
+      ? (displayCount === 1 ? 'paired batch' : 'paired batches')
+      : (displayCount === 1 ? 'batch' : 'batches'));
+
+  const countForColor = hasPerModelData ? minTrialCount : batchCount;
 
   let bgColorClass = 'bg-gray-50';
   if (isDiagonal) {
@@ -39,13 +57,17 @@ export function CoverageCell({
       'bg-[url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxwYXRoIGQ9Ik0wLDggTDgsMCBMMCw4IFoiIHN0cm9rZT0iI2U1ZTdlYiIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9zdmc+")] bg-gray-100';
   } else if (!hasVignette) {
     bgColorClass = 'bg-gray-50';
-  } else if (batchCount < 3) {
+  } else if (countForColor < 3) {
     bgColorClass = 'bg-rose-100 hover:bg-rose-200 transition-colors text-rose-900';
-  } else if (batchCount < 10) {
+  } else if (countForColor < 10) {
     bgColorClass = 'bg-amber-100 hover:bg-amber-200 transition-colors text-amber-900';
   } else {
     bgColorClass = 'bg-emerald-500 hover:bg-emerald-600 transition-colors text-white';
   }
+
+  const tooltipBreakdown = modelBreakdown != null && modelBreakdown.length > 0
+    ? modelBreakdown.map((b) => `${b.label}: ${b.trialCount} trial${b.trialCount === 1 ? '' : 's'}`).join('\n')
+    : undefined;
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -54,6 +76,7 @@ export function CoverageCell({
         <button
           type="button"
           disabled={isDiagonal}
+          title={tooltipBreakdown}
           aria-label={
             isDiagonal
               ? 'Not applicable'
@@ -62,15 +85,21 @@ export function CoverageCell({
                 : `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}`
           }
           className={cn(
-            'w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border border-gray-100 rounded-none focus:ring-0 focus:ring-offset-0',
+            'w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border rounded-none focus:ring-0 focus:ring-offset-0',
+            hasMismatch ? 'border-orange-400 border-2' : 'border-gray-100',
             bgColorClass,
             isDiagonal && 'cursor-not-allowed text-transparent font-normal',
             !isDiagonal && !hasVignette && 'text-gray-500 cursor-pointer hover:bg-gray-100',
-            hasVignette && batchCount < 3 && 'text-rose-900',
-            hasVignette && batchCount >= 3 && batchCount < 10 && 'text-amber-900'
+            hasVignette && countForColor < 3 && 'text-rose-900',
+            hasVignette && countForColor >= 3 && countForColor < 10 && 'text-amber-900'
           )}
         >
           {visibleLabel}
+          {hasMismatch && (
+            <span className="text-[10px] text-orange-600 font-normal leading-none mt-0.5" aria-label="trial count mismatch across models">
+              ⚠
+            </span>
+          )}
         </button>
       </PopoverTrigger>
       {!isDiagonal && (
@@ -81,19 +110,33 @@ export function CoverageCell({
         >
           <div className="p-3 border-b border-gray-100 bg-gray-50/50 rounded-t-md">
             {hasVignette ? (
-              <div className="mt-2 text-xs text-gray-600 flex items-center">
-                <span
-                  className={cn(
-                    'inline-block w-2 h-2 rounded-full mr-1.5',
-                    batchCount < 3
-                      ? 'bg-rose-500'
-                      : batchCount < 10
-                        ? 'bg-amber-500'
-                        : 'bg-emerald-500'
-                  )}
-                />
-                {displayCount} {batchLabel}
-              </div>
+              <>
+                <div className="mt-2 text-xs text-gray-600 flex items-center">
+                  <span
+                    className={cn(
+                      'inline-block w-2 h-2 rounded-full mr-1.5',
+                      countForColor < 3
+                        ? 'bg-rose-500'
+                        : countForColor < 10
+                          ? 'bg-amber-500'
+                          : 'bg-emerald-500'
+                    )}
+                  />
+                  {displayCount} {batchLabel}
+                </div>
+                {modelBreakdown != null && modelBreakdown.length > 0 && (
+                  <div className="mt-2 space-y-0.5">
+                    {modelBreakdown.map((b) => (
+                      <div key={b.modelId} className="flex items-center justify-between text-xs text-gray-600">
+                        <span className="truncate mr-2">{b.label}</span>
+                        <span className={cn('font-medium', hasMismatch && b.trialCount === minTrialCount ? 'text-orange-600' : '')}>
+                          {b.trialCount}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             ) : (
               <div className="mt-2 text-xs text-gray-500">No batch for this value pair</div>
             )}

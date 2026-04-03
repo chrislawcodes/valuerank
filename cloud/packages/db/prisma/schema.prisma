@@ -168,6 +168,8 @@ model Domain {
   defaultContextId String?        @map("default_context_id")
   defaultContext   DomainContext? @relation("DomainDefaultContext", fields: [defaultContextId], references: [id])
 
+  defaultModelIds String[] @default([]) @map("default_model_ids")
+
   definitions     Definition[]
   contexts        DomainContext[] @relation("DomainContexts")
   valueStatements ValueStatement[]
