@@ -64,6 +64,7 @@ class TestAnalyzeBasicIntegration:
                     "modelId": "gpt-4",
                     "scenarioId": "s1",
                     "summary": {"values": {"Compassion": "prioritized"}, "score": 4},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}},
                     "scenario": {"dimensions": {"stakes": "low"}},
                 },
                 {
@@ -71,6 +72,7 @@ class TestAnalyzeBasicIntegration:
                     "modelId": "claude-3",
                     "scenarioId": "s1",
                     "summary": {"values": {"Compassion": "deprioritized"}, "score": 2},
+                    "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "lean"}},
                     "scenario": {"dimensions": {"stakes": "low"}},
                 },
                 {
@@ -78,6 +80,7 @@ class TestAnalyzeBasicIntegration:
                     "modelId": "gpt-4",
                     "scenarioId": "s2",
                     "summary": {"values": {"Compassion": "prioritized"}, "score": 4},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}},
                     "scenario": {"dimensions": {"stakes": "high"}},
                 },
                 {
@@ -85,6 +88,7 @@ class TestAnalyzeBasicIntegration:
                     "modelId": "claude-3",
                     "scenarioId": "s2",
                     "summary": {"values": {"Compassion": "prioritized"}, "score": 5},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
                     "scenario": {"dimensions": {"stakes": "high"}},
                 },
             ],
@@ -116,14 +120,14 @@ class TestAnalyzeBasicIntegration:
             "transcripts": [
                 # Scenario with high disagreement
                 {"id": "t1", "modelId": "m1", "scenarioId": "contested",
-                 "summary": {"score": 1}, "scenario": {"name": "Contested One"}},
+                 "summary": {"score": 1}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {"name": "Contested One"}},
                 {"id": "t2", "modelId": "m2", "scenarioId": "contested",
-                 "summary": {"score": 5}, "scenario": {"name": "Contested One"}},
+                 "summary": {"score": 5}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {"name": "Contested One"}},
                 # Scenario with low disagreement
                 {"id": "t3", "modelId": "m1", "scenarioId": "agreed",
-                 "summary": {"score": 3}, "scenario": {"name": "Agreed One"}},
+                 "summary": {"score": 3}, "decisionModelV2": {"canonical": {"direction": "neutral", "strength": "neutral"}}, "scenario": {"name": "Agreed One"}},
                 {"id": "t4", "modelId": "m2", "scenarioId": "agreed",
-                 "summary": {"score": 3}, "scenario": {"name": "Agreed One"}},
+                 "summary": {"score": 3}, "decisionModelV2": {"canonical": {"direction": "neutral", "strength": "neutral"}}, "scenario": {"name": "Agreed One"}},
             ],
         }
         result = run_analyze_basic(input_data)
@@ -247,7 +251,7 @@ class TestAnalyzeBasicIntegration:
 
         assert result["success"] is True
         per_model = result["analysis"]["perModel"]["m1"]
-        assert per_model["overall"]["mean"] == pytest.approx(4.0, abs=0.001)
+        assert per_model["overall"]["mean"] == pytest.approx(1.0, abs=0.001)
         preference = result["analysis"]["preferenceSummary"]["perModel"]["m1"]["preferenceDirection"]["overallLean"]
         assert preference == "A"
 
@@ -280,7 +284,7 @@ class TestAnalyzeBasicIntegration:
 
         assert result["success"] is True
         per_model = result["analysis"]["perModel"]["m1"]
-        assert per_model["overall"]["mean"] == pytest.approx(4.0, abs=0.001)
+        assert per_model["overall"]["mean"] == pytest.approx(1.0, abs=0.001)
         preference = result["analysis"]["preferenceSummary"]["perModel"]["m1"]["preferenceDirection"]["overallLean"]
         assert preference == "A"
 
@@ -293,11 +297,11 @@ class TestAnalyzeBasicIntegration:
                     "id": "t1",
                     "modelId": "m1",
                     "scenarioId": "s1",
-                    "orientationFlipped": True,
-                    "summary": {"values": {}, "score": 1},
+                    "summary": {"values": {}},
                     "decisionModelV2": {
-                        "legacy": {
-                            "rawScore": 1,
+                        "canonical": {
+                            "direction": "favor_first",
+                            "strength": "strong",
                         },
                     },
                     "scenario": {"dimensions": {"stakes": "high"}},
@@ -306,34 +310,11 @@ class TestAnalyzeBasicIntegration:
                     "id": "t3",
                     "modelId": "m1",
                     "scenarioId": "s2",
-                    "summary": {"values": {}, "score": 4},
+                    "summary": {"values": {}},
                     "decisionModelV2": {
-                        "legacy": {
-                            "rawScore": 4,
-                        },
-                    },
-                    "scenario": {"dimensions": {"stakes": "low"}},
-                },
-                {
-                    "id": "t2",
-                    "modelId": "m2",
-                    "scenarioId": "s1",
-                    "summary": {"values": {}, "score": 5},
-                    "decisionModelV2": {
-                        "legacy": {
-                            "canonicalScore": 5,
-                        },
-                    },
-                    "scenario": {"dimensions": {"stakes": "high"}},
-                },
-                {
-                    "id": "t4",
-                    "modelId": "m2",
-                    "scenarioId": "s2",
-                    "summary": {"values": {}, "score": 4},
-                    "decisionModelV2": {
-                        "legacy": {
-                            "canonicalScore": 4,
+                        "canonical": {
+                            "direction": "favor_first",
+                            "strength": "lean",
                         },
                     },
                     "scenario": {"dimensions": {"stakes": "low"}},
@@ -342,22 +323,50 @@ class TestAnalyzeBasicIntegration:
                     "id": "t5",
                     "modelId": "m1",
                     "scenarioId": "s3",
-                    "summary": {"values": {}, "score": 3},
+                    "summary": {"values": {}},
                     "decisionModelV2": {
-                        "legacy": {
-                            "rawScore": 3,
+                        "canonical": {
+                            "direction": "neutral",
+                            "strength": "neutral",
                         },
                     },
                     "scenario": {"dimensions": {"stakes": "medium"}},
                 },
                 {
+                    "id": "t2",
+                    "modelId": "m2",
+                    "scenarioId": "s1",
+                    "summary": {"values": {}},
+                    "decisionModelV2": {
+                        "canonical": {
+                            "direction": "favor_first",
+                            "strength": "strong",
+                        },
+                    },
+                    "scenario": {"dimensions": {"stakes": "high"}},
+                },
+                {
+                    "id": "t4",
+                    "modelId": "m2",
+                    "scenarioId": "s2",
+                    "summary": {"values": {}},
+                    "decisionModelV2": {
+                        "canonical": {
+                            "direction": "favor_first",
+                            "strength": "lean",
+                        },
+                    },
+                    "scenario": {"dimensions": {"stakes": "low"}},
+                },
+                {
                     "id": "t6",
                     "modelId": "m2",
                     "scenarioId": "s3",
-                    "summary": {"values": {}, "score": 3},
+                    "summary": {"values": {}},
                     "decisionModelV2": {
-                        "legacy": {
-                            "canonicalScore": 3,
+                        "canonical": {
+                            "direction": "neutral",
+                            "strength": "neutral",
                         },
                     },
                     "scenario": {"dimensions": {"stakes": "medium"}},
@@ -369,8 +378,8 @@ class TestAnalyzeBasicIntegration:
 
         assert result["success"] is True
         per_model = result["analysis"]["perModel"]
-        assert per_model["m1"]["overall"]["mean"] == pytest.approx(4.0, abs=0.001)
-        assert per_model["m2"]["overall"]["mean"] == pytest.approx(4.0, abs=0.001)
+        assert per_model["m1"]["overall"]["mean"] == pytest.approx(1.0, abs=0.001)
+        assert per_model["m2"]["overall"]["mean"] == pytest.approx(1.0, abs=0.001)
         pairwise = (
             result["analysis"]["modelAgreement"]["pairwise"].get("m1:m2")
             or result["analysis"]["modelAgreement"]["pairwise"].get("m2:m1")
@@ -415,6 +424,7 @@ class TestAnalyzeBasicIntegration:
                     "sampleIndex": 0,
                     "orientationFlipped": False,
                     "summary": {"score": 5, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
                     "scenario": {},
                 },
                 {
@@ -424,6 +434,7 @@ class TestAnalyzeBasicIntegration:
                     "sampleIndex": 1,
                     "orientationFlipped": False,
                     "summary": {"score": 5, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
                     "scenario": {},
                 },
                 {
@@ -433,6 +444,7 @@ class TestAnalyzeBasicIntegration:
                     "sampleIndex": 0,
                     "orientationFlipped": True,
                     "summary": {"score": 1, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
                     "scenario": {},
                 },
                 {
@@ -442,6 +454,7 @@ class TestAnalyzeBasicIntegration:
                     "sampleIndex": 0,
                     "orientationFlipped": False,
                     "summary": {"score": 3, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "neutral", "strength": "neutral"}},
                     "scenario": {},
                 },
             ],
@@ -468,6 +481,7 @@ class TestAnalyzeBasicIntegration:
                     "scenarioId": "s1",
                     "sampleIndex": 0,
                     "summary": {"score": 1, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}},
                     "scenario": {},
                 },
                 {
@@ -476,6 +490,7 @@ class TestAnalyzeBasicIntegration:
                     "scenarioId": "s2",
                     "sampleIndex": 0,
                     "summary": {"score": 5, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
                     "scenario": {},
                 },
             ],
@@ -505,6 +520,7 @@ class TestAnalyzeBasicIntegration:
                     "scenarioId": "s1",
                     "sampleIndex": 0,
                     "summary": {"score": 5, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
                     "scenario": {},
                 },
                 {
@@ -513,6 +529,7 @@ class TestAnalyzeBasicIntegration:
                     "scenarioId": "s1",
                     "sampleIndex": 1,
                     "summary": {"score": 5, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
                     "scenario": {},
                 },
                 {
@@ -521,6 +538,7 @@ class TestAnalyzeBasicIntegration:
                     "scenarioId": "s1",
                     "sampleIndex": 2,
                     "summary": {"score": 3, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "neutral", "strength": "neutral"}},
                     "scenario": {},
                 },
                 {
@@ -529,6 +547,7 @@ class TestAnalyzeBasicIntegration:
                     "scenarioId": "s2",
                     "sampleIndex": 0,
                     "summary": {"score": 1, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}},
                     "scenario": {},
                 },
                 {
@@ -537,6 +556,7 @@ class TestAnalyzeBasicIntegration:
                     "scenarioId": "s2",
                     "sampleIndex": 1,
                     "summary": {"score": 1, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}},
                     "scenario": {},
                 },
             ],
@@ -583,6 +603,7 @@ class TestAnalyzeBasicIntegration:
                     "sampleIndex": 0,
                     "orientationFlipped": False,
                     "summary": {"score": 5, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
                     "scenario": {},
                 },
                 {
@@ -593,6 +614,7 @@ class TestAnalyzeBasicIntegration:
                     "sampleIndex": 0,
                     "orientationFlipped": False,
                     "summary": {"score": 4, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}},
                     "scenario": {},
                 },
                 {
@@ -603,6 +625,7 @@ class TestAnalyzeBasicIntegration:
                     "sampleIndex": 0,
                     "orientationFlipped": False,
                     "summary": {"score": 5, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
                     "scenario": {},
                 },
                 {
@@ -613,6 +636,7 @@ class TestAnalyzeBasicIntegration:
                     "sampleIndex": 0,
                     "orientationFlipped": False,
                     "summary": {"score": 1, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}},
                     "scenario": {},
                 },
             ],
@@ -649,18 +673,18 @@ class TestAnalyzeBasicIntegration:
             },
             "transcripts": [
                 # Run A: repeated s1, s2
-                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
-                {"id": "a4", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
-                {"id": "a5", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "a4", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "a5", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
                 # Run B: repeated s3, s4, s5 with different center to trigger drift
-                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
-                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
-                {"id": "b3", "runId": "run-b", "modelId": "m1", "scenarioId": "s4", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
-                {"id": "b4", "runId": "run-b", "modelId": "m1", "scenarioId": "s4", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 2, "values": {}}, "scenario": {}},
-                {"id": "b5", "runId": "run-b", "modelId": "m1", "scenarioId": "s5", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
-                {"id": "b6", "runId": "run-b", "modelId": "m1", "scenarioId": "s5", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
+                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "b3", "runId": "run-b", "modelId": "m1", "scenarioId": "s4", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "b4", "runId": "run-b", "modelId": "m1", "scenarioId": "s4", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 2, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "lean"}}, "scenario": {}},
+                {"id": "b5", "runId": "run-b", "modelId": "m1", "scenarioId": "s5", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "b6", "runId": "run-b", "modelId": "m1", "scenarioId": "s5", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
             ],
         }
 
@@ -694,13 +718,13 @@ class TestAnalyzeBasicIntegration:
             },
             "transcripts": [
                 # Run A: repeated s1, s2
-                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 4, "values": {}}, "scenario": {}},
-                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 2, "values": {}}, "scenario": {}},
-                {"id": "a4", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
+                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 4, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}}, "scenario": {}},
+                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 2, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "lean"}}, "scenario": {}},
+                {"id": "a4", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
                 # Run B: repeated s1 again only
-                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
             ],
         }
 
@@ -730,21 +754,21 @@ class TestAnalyzeBasicIntegration:
                 "driftWarningThreshold": 0.5,
             },
             "transcripts": [
-                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "a4", "runId": "run-a", "modelId": "m1", "scenarioId": "s4", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "a5", "runId": "run-a", "modelId": "m1", "scenarioId": "s5", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "b3", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "b4", "runId": "run-b", "modelId": "m1", "scenarioId": "s4", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "b5", "runId": "run-b", "modelId": "m1", "scenarioId": "s5", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "c1", "runId": "run-c", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "c2", "runId": "run-c", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "c3", "runId": "run-c", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "c4", "runId": "run-c", "modelId": "m1", "scenarioId": "s4", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "c5", "runId": "run-c", "modelId": "m1", "scenarioId": "s5", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a4", "runId": "run-a", "modelId": "m1", "scenarioId": "s4", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a5", "runId": "run-a", "modelId": "m1", "scenarioId": "s5", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "b3", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "b4", "runId": "run-b", "modelId": "m1", "scenarioId": "s4", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "b5", "runId": "run-b", "modelId": "m1", "scenarioId": "s5", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "c1", "runId": "run-c", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "c2", "runId": "run-c", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "c3", "runId": "run-c", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "c4", "runId": "run-c", "modelId": "m1", "scenarioId": "s4", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "c5", "runId": "run-c", "modelId": "m1", "scenarioId": "s5", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
             ],
         }
         result = run_analyze_basic(input_data)
@@ -768,17 +792,17 @@ class TestAnalyzeBasicIntegration:
             },
             "transcripts": [
                 # run-a: A-side
-                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
                 # run-b: A-side
-                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "b3", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "b3", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
                 # run-c: B-side
-                {"id": "c1", "runId": "run-c", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
-                {"id": "c2", "runId": "run-c", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
-                {"id": "c3", "runId": "run-c", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
+                {"id": "c1", "runId": "run-c", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "c2", "runId": "run-c", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "c3", "runId": "run-c", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
             ],
         }
         result = run_analyze_basic(input_data)
@@ -802,12 +826,12 @@ class TestAnalyzeBasicIntegration:
             },
             "transcripts": [
                 # Single run, 2 samples each condition, consistent A-side
-                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "a4", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "a5", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "a6", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a4", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a5", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a6", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
             ],
         }
         result = run_analyze_basic(input_data)
@@ -854,17 +878,17 @@ class TestAnalyzeBasicIntegration:
             },
             "transcripts": [
                 # run-a: strong A-side (center ~2)
-                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
-                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
                 # run-b: neutral
-                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 3, "values": {}}, "scenario": {}},
-                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 3, "values": {}}, "scenario": {}},
-                {"id": "b3", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 3, "values": {}}, "scenario": {}},
+                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 3, "values": {}}, "decisionModelV2": {"canonical": {"direction": "neutral", "strength": "neutral"}}, "scenario": {}},
+                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 3, "values": {}}, "decisionModelV2": {"canonical": {"direction": "neutral", "strength": "neutral"}}, "scenario": {}},
+                {"id": "b3", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 3, "values": {}}, "decisionModelV2": {"canonical": {"direction": "neutral", "strength": "neutral"}}, "scenario": {}},
                 # run-c: strong B-side (center ~-2)
-                {"id": "c1", "runId": "run-c", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
-                {"id": "c2", "runId": "run-c", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
-                {"id": "c3", "runId": "run-c", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
+                {"id": "c1", "runId": "run-c", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "c2", "runId": "run-c", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "c3", "runId": "run-c", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
             ],
         }
         result = run_analyze_basic(input_data)
@@ -884,6 +908,7 @@ class TestAnalyzeBasicIntegration:
                     "scenarioId": "s1",
                     "sampleIndex": 0,
                     "summary": {"score": 5, "values": {"Value_A": "prioritized"}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
                     "scenario": {},
                 },
                 {
@@ -892,6 +917,7 @@ class TestAnalyzeBasicIntegration:
                     "scenarioId": "s1",
                     "sampleIndex": 1,
                     "summary": {"score": 4, "values": {"Value_A": "prioritized"}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}},
                     "scenario": {},
                 },
             ],
@@ -961,13 +987,13 @@ class TestAnalyzeBasicIntegration:
             "runId": "test-run-9",
             "transcripts": [
                 {"id": "t1", "modelId": "m1", "scenarioId": "s1",
-                 "summary": {"score": 2}, "scenario": {"dimensions": {"stakes": "low"}}},
+                 "summary": {"score": 2}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "lean"}}, "scenario": {"dimensions": {"stakes": "low"}}},
                 {"id": "t2", "modelId": "m1", "scenarioId": "s2",
-                 "summary": {"score": 2}, "scenario": {"dimensions": {"stakes": "low"}}},
+                 "summary": {"score": 2}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "lean"}}, "scenario": {"dimensions": {"stakes": "low"}}},
                 {"id": "t3", "modelId": "m1", "scenarioId": "s3",
-                 "summary": {"score": 4}, "scenario": {"dimensions": {"stakes": "high"}}},
+                 "summary": {"score": 4}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}}, "scenario": {"dimensions": {"stakes": "high"}}},
                 {"id": "t4", "modelId": "m1", "scenarioId": "s4",
-                 "summary": {"score": 5}, "scenario": {"dimensions": {"stakes": "high"}}},
+                 "summary": {"score": 5}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {"dimensions": {"stakes": "high"}}},
             ],
         }
         result = run_analyze_basic(input_data)

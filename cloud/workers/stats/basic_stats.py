@@ -10,7 +10,7 @@ from typing import Any, TypedDict
 import numpy as np
 
 from stats.confidence import wilson_score_ci, ConfidenceInterval
-from stats.decision_model import resolve_transcript_normalized_score
+from stats.decision_model import SIGNED_TO_BUCKET, resolve_transcript_signed_distance
 
 
 class ValueCounts(TypedDict):
@@ -157,27 +157,25 @@ def compute_visualization_data(
     Returns:
         VisualizationData with decision distribution and model-scenario matrix
     """
-    # Decision distribution: model -> decision code (1-5) -> count
+    # Decision distribution: model -> canonical bucket -> count
     decision_dist: dict[str, dict[str, int]] = {}
 
-    # Model-scenario scores: model -> scenario -> list of scores
+    # Model-scenario scores: model -> scenario -> list of signed distances
     model_scenario_scores: dict[str, dict[str, list[float]]] = {}
 
     for t in transcripts:
         model_id = t.get("modelId", "unknown")
         scenario_id = t.get("scenarioId", "unknown")
-        score = resolve_transcript_normalized_score(t)
+        score = resolve_transcript_signed_distance(t)
         if score is None:
             continue
 
-        score_int = int(score)
-
         # Build decision distribution
         if model_id not in decision_dist:
-            decision_dist[model_id] = {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}
-        decision_key = str(score_int)
-        if decision_key in decision_dist[model_id]:
-            decision_dist[model_id][decision_key] += 1
+            decision_dist[model_id] = {b: 0 for b in SIGNED_TO_BUCKET.values()}
+        bucket = SIGNED_TO_BUCKET.get(float(score))
+        if bucket is not None:
+            decision_dist[model_id][bucket] += 1
 
         # Build model-scenario matrix
         if model_id not in model_scenario_scores:
@@ -248,8 +246,8 @@ def aggregate_transcripts_by_model(
                 else:
                     value_counts[value_id]["neutral"] += 1
 
-            # Collect overall score if present and not null
-            score = resolve_transcript_normalized_score(t)
+            # Collect signed distance if canonical decision is present
+            score = resolve_transcript_signed_distance(t)
             if score is None:
                 continue
             scores.append(float(score))

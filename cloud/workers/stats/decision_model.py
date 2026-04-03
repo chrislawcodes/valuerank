@@ -1,107 +1,87 @@
-"""Decision model compatibility helpers for worker-side analysis."""
+"""Decision model helpers for worker-side analysis."""
 
 from __future__ import annotations
 
-import math
 from typing import Any
 
+# Signed distance: +2 = strongly favor first, −2 = strongly favor second
+_DIRECTION_STRENGTH_TO_SIGNED: dict[tuple[str, str], float] = {
+    ("favor_first", "strong"): 2.0,
+    ("favor_first", "lean"): 1.0,
+    ("neutral", "neutral"): 0.0,
+    ("favor_second", "lean"): -1.0,
+    ("favor_second", "strong"): -2.0,
+}
 
-def _parse_compat_score(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        numeric = float(value)
-    elif isinstance(value, str) and value.strip() != "":
-        try:
-            numeric = float(value)
-        except ValueError:
-            return None
-    else:
-        return None
-
-    if not math.isfinite(numeric):
-        return None
-    if numeric < 1.0 or numeric > 5.0 or not numeric.is_integer():
-        return None
-    return numeric
+# Canonical bucket names for histogram keying (matches variance_analysis directionCounts keys)
+SIGNED_TO_BUCKET: dict[float, str] = {
+    2.0: "favor_first.strong",
+    1.0: "favor_first.lean",
+    0.0: "neutral.neutral",
+    -1.0: "favor_second.lean",
+    -2.0: "favor_second.strong",
+}
 
 
-def _score_from_canonical_decision(decision: Any) -> float | None:
-    if not isinstance(decision, dict):
-        return None
-
-    direction = decision.get("direction")
-    strength = decision.get("strength")
-
-    if direction == "favor_first" and strength == "strong":
-        return 5.0
-    if direction == "favor_first" and strength == "lean":
-        return 4.0
-    if direction == "neutral" and strength == "neutral":
-        return 3.0
-    if direction == "favor_second" and strength == "lean":
-        return 2.0
-    if direction == "favor_second" and strength == "strong":
-        return 1.0
-    return None
-
-
-def normalize_resolved_score(score: float, already_normalized: bool, orientation_flipped: bool) -> float:
-    """Return the analysis-facing scalar score for a resolved transcript."""
-    if already_normalized or not orientation_flipped:
-        return float(score)
-    return float(6 - score)
-
-
-def resolve_transcript_score_details(transcript: dict[str, Any]) -> tuple[float, bool] | None:
+def resolve_transcript_score_details(
+    transcript: dict[str, Any],
+) -> tuple[str, str, str] | None:
     """
-    Resolve a transcript score and whether it is already canonicalized.
+    Resolve canonical direction and strength from a transcript.
 
-    Preference order:
-    1. `decisionModelV2.legacy.canonicalScore`
-    2. `decisionModelV2.legacy.rawScore`
-    3. `decisionModelV2.canonical.direction` + `strength`
-    4. legacy `summary.score` when it is already on the canonical 1-5 scale
-
-    The fallback preserves legacy 1-5 compatibility while letting the V2
-    envelope take precedence when available.
+    Returns (direction, strength, source) or None for unscored transcripts.
+    The TypeScript resolver has already handled legacy decisionCode → canonical
+    conversion before the job reaches Python workers.
     """
+    decision_model = transcript.get("decisionModelV2")
+    if not isinstance(decision_model, dict):
+        return None
+
+    canonical = decision_model.get("canonical")
+    if not isinstance(canonical, dict):
+        return None
+
+    direction = canonical.get("direction")
+    strength = canonical.get("strength")
+
+    if not isinstance(direction, str) or not isinstance(strength, str):
+        return None
+
+    return direction, strength, "canonical"
+
+
+def resolve_transcript_signed_distance(transcript: dict[str, Any]) -> float | None:
+    """
+    Resolve canonical decision as signed distance (−2 to +2), or None if unscored.
+
+    Resolution order:
+    1. decisionModelV2.canonical (direction + strength) — primary path for new transcripts
+    2. decisionModelV2.legacy.canonicalScore (1-5 int, already orientation-corrected) — fallback
+    3. summary.score (1-5 int, already orientation-corrected) — legacy compatibility fallback
+
+    The legacy fallbacks preserve compatibility with transcripts summarized before the
+    winner-first cache was deployed. They use the formula: signed = score - 3.0
+    (e.g. score 5 → +2, score 3 → 0, score 1 → -2).
+    """
+    resolved = resolve_transcript_score_details(transcript)
+    if resolved is not None:
+        direction, strength, _ = resolved
+        return _DIRECTION_STRENGTH_TO_SIGNED.get((direction, strength))
+
+    # Fallback 1: legacy.canonicalScore (already orientation-corrected)
     decision_model = transcript.get("decisionModelV2")
     if isinstance(decision_model, dict):
         legacy = decision_model.get("legacy")
         if isinstance(legacy, dict):
-            canonical_score = _parse_compat_score(legacy.get("canonicalScore"))
-            if canonical_score is not None:
-                return canonical_score, True
+            canonical_score = legacy.get("canonicalScore")
+            if isinstance(canonical_score, (int, float)) and 1 <= canonical_score <= 5:
+                return float(canonical_score) - 3.0
 
-            raw_score = _parse_compat_score(legacy.get("rawScore"))
-            if raw_score is not None:
-                return raw_score, False
-
-        canonical = decision_model.get("canonical")
-        canonical_score = _score_from_canonical_decision(canonical)
-        if canonical_score is not None:
-            return canonical_score, True
-
-    summary = transcript.get("summary", {})
+    # Fallback 2: summary.score (orientation-corrected by the summarization handler)
+    summary = transcript.get("summary")
     if isinstance(summary, dict):
-        score = _parse_compat_score(summary.get("score"))
-        if score is not None:
-            return score, False
+        score = summary.get("score")
+        if isinstance(score, (int, float)) and 1 <= score <= 5:
+            return float(score) - 3.0
+
     return None
-
-
-def resolve_transcript_score(transcript: dict[str, Any]) -> float | None:
-    resolved = resolve_transcript_score_details(transcript)
-    if resolved is None:
-        return None
-    score, _ = resolved
-    return score
-
-
-def resolve_transcript_normalized_score(transcript: dict[str, Any]) -> float | None:
-    resolved = resolve_transcript_score_details(transcript)
-    if resolved is None:
-        return None
-    score, already_normalized = resolved
-    return normalize_resolved_score(score, already_normalized, bool(transcript.get("orientationFlipped", False)))

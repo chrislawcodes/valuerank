@@ -109,15 +109,18 @@ class TestVarianceAnalysis:
 
     def test_multi_sample_run(self):
         """Test multi-sample run with variance computation."""
+        def _c(direction, strength):
+            return {"decisionModelV2": {"canonical": {"direction": direction, "strength": strength}}}
+
         transcripts = [
-            # Model 1, Scenario 1: 3 samples with scores 2, 3, 4
-            {"scenarioId": "s1", "modelId": "m1", "sampleIndex": 0, "summary": {"score": 2}, "scenario": {"name": "Scenario 1"}},
-            {"scenarioId": "s1", "modelId": "m1", "sampleIndex": 1, "summary": {"score": 3}, "scenario": {"name": "Scenario 1"}},
-            {"scenarioId": "s1", "modelId": "m1", "sampleIndex": 2, "summary": {"score": 4}, "scenario": {"name": "Scenario 1"}},
-            # Model 2, Scenario 1: 3 samples with identical scores (no variance)
-            {"scenarioId": "s1", "modelId": "m2", "sampleIndex": 0, "summary": {"score": 3}, "scenario": {"name": "Scenario 1"}},
-            {"scenarioId": "s1", "modelId": "m2", "sampleIndex": 1, "summary": {"score": 3}, "scenario": {"name": "Scenario 1"}},
-            {"scenarioId": "s1", "modelId": "m2", "sampleIndex": 2, "summary": {"score": 3}, "scenario": {"name": "Scenario 1"}},
+            # Model 1, Scenario 1: 3 samples at −1, 0, +1 (lean second, neutral, lean first)
+            {"scenarioId": "s1", "modelId": "m1", "sampleIndex": 0, **_c("favor_second", "lean"), "scenario": {"name": "Scenario 1"}},
+            {"scenarioId": "s1", "modelId": "m1", "sampleIndex": 1, **_c("neutral", "neutral"), "scenario": {"name": "Scenario 1"}},
+            {"scenarioId": "s1", "modelId": "m1", "sampleIndex": 2, **_c("favor_first", "lean"), "scenario": {"name": "Scenario 1"}},
+            # Model 2, Scenario 1: 3 samples all neutral (no variance)
+            {"scenarioId": "s1", "modelId": "m2", "sampleIndex": 0, **_c("neutral", "neutral"), "scenario": {"name": "Scenario 1"}},
+            {"scenarioId": "s1", "modelId": "m2", "sampleIndex": 1, **_c("neutral", "neutral"), "scenario": {"name": "Scenario 1"}},
+            {"scenarioId": "s1", "modelId": "m2", "sampleIndex": 2, **_c("neutral", "neutral"), "scenario": {"name": "Scenario 1"}},
         ]
         analysis = compute_variance_analysis(transcripts)
 
@@ -140,12 +143,12 @@ class TestVarianceAnalysis:
     def test_most_variable_scenarios(self):
         """Test that most variable scenarios are correctly identified."""
         transcripts = [
-            # High variance scenario
-            {"scenarioId": "high_var", "modelId": "m1", "sampleIndex": 0, "summary": {"score": 1}, "scenario": {"name": "High Variance"}},
-            {"scenarioId": "high_var", "modelId": "m1", "sampleIndex": 1, "summary": {"score": 5}, "scenario": {"name": "High Variance"}},
-            # Low variance scenario
-            {"scenarioId": "low_var", "modelId": "m1", "sampleIndex": 0, "summary": {"score": 3}, "scenario": {"name": "Low Variance"}},
-            {"scenarioId": "low_var", "modelId": "m1", "sampleIndex": 1, "summary": {"score": 3}, "scenario": {"name": "Low Variance"}},
+            # High variance scenario: strong second (−2) vs strong first (+2)
+            {"scenarioId": "high_var", "modelId": "m1", "sampleIndex": 0, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {"name": "High Variance"}},
+            {"scenarioId": "high_var", "modelId": "m1", "sampleIndex": 1, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {"name": "High Variance"}},
+            # Low variance scenario: both neutral (0, 0)
+            {"scenarioId": "low_var", "modelId": "m1", "sampleIndex": 0, "decisionModelV2": {"canonical": {"direction": "neutral", "strength": "neutral"}}, "scenario": {"name": "Low Variance"}},
+            {"scenarioId": "low_var", "modelId": "m1", "sampleIndex": 1, "decisionModelV2": {"canonical": {"direction": "neutral", "strength": "neutral"}}, "scenario": {"name": "Low Variance"}},
         ]
         analysis = compute_variance_analysis(transcripts)
 
@@ -156,21 +159,24 @@ class TestVarianceAnalysis:
         assert most_var["variance"] > 0
 
     def test_missing_scores(self):
-        """Test handling of transcripts with missing scores."""
+        """Test handling of transcripts with missing canonical block."""
         transcripts = [
-            {"scenarioId": "s1", "modelId": "m1", "sampleIndex": 0, "summary": {"score": 3}, "scenario": {"name": "Test"}},
+            # canonical present → scored
+            {"scenarioId": "s1", "modelId": "m1", "sampleIndex": 0, "decisionModelV2": {"canonical": {"direction": "neutral", "strength": "neutral"}}, "scenario": {"name": "Test"}},
+            # no canonical → skipped
             {"scenarioId": "s1", "modelId": "m1", "sampleIndex": 1, "summary": {"score": None}, "scenario": {"name": "Test"}},
-            {"scenarioId": "s1", "modelId": "m1", "sampleIndex": 2, "summary": {"score": 4}, "scenario": {"name": "Test"}},
+            # canonical present → scored
+            {"scenarioId": "s1", "modelId": "m1", "sampleIndex": 2, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}}, "scenario": {"name": "Test"}},
         ]
         analysis = compute_variance_analysis(transcripts)
 
-        # Should only compute variance from non-null scores
+        # Should only include transcripts with valid canonical blocks
         m1_stats = analysis["perModel"]["m1"]
         # 2 valid samples out of 3
         assert m1_stats["totalSamples"] == 2
 
-    def test_v2_scores_override_legacy_scalar_scores(self):
-        """Variance analysis should prefer the V2 compatibility scalar when present."""
+    def test_canonical_direction_used_for_variance(self):
+        """Variance analysis uses canonical direction/strength; stale scalar is ignored."""
         transcripts = [
             {
                 "scenarioId": "s1",
@@ -178,14 +184,8 @@ class TestVarianceAnalysis:
                 "sampleIndex": 0,
                 "summary": {"score": 1},
                 "decisionModelV2": {
-                    "canonical": {
-                        "direction": "favor_first",
-                        "strength": "lean",
-                    },
-                    "legacy": {
-                        "rawScore": 1,
-                        "canonicalScore": 4,
-                    },
+                    "canonical": {"direction": "favor_first", "strength": "lean"},
+                    "legacy": {"rawScore": 1, "canonicalScore": 4},
                 },
                 "scenario": {"name": "Scenario 1"},
             },
@@ -195,14 +195,8 @@ class TestVarianceAnalysis:
                 "sampleIndex": 1,
                 "summary": {"score": 1},
                 "decisionModelV2": {
-                    "canonical": {
-                        "direction": "favor_first",
-                        "strength": "lean",
-                    },
-                    "legacy": {
-                        "rawScore": 1,
-                        "canonicalScore": 4,
-                    },
+                    "canonical": {"direction": "favor_first", "strength": "lean"},
+                    "legacy": {"rawScore": 1, "canonicalScore": 4},
                 },
                 "scenario": {"name": "Scenario 1"},
             },
@@ -210,11 +204,12 @@ class TestVarianceAnalysis:
         analysis = compute_variance_analysis(transcripts)
 
         scenario_stats = analysis["perModel"]["m1"]["perScenario"]["s1"]
-        assert scenario_stats["mean"] == pytest.approx(4.0, abs=0.001)
+        # favor_first/lean → signed distance +1.0
+        assert scenario_stats["mean"] == pytest.approx(1.0, abs=0.001)
         assert scenario_stats["variance"] == 0.0
 
-    def test_v2_scores_do_not_double_flip_when_orientation_is_already_normalized(self):
-        """Canonical V2 scores should not be flipped a second time by the worker."""
+    def test_orientation_flipped_does_not_affect_canonical_result(self):
+        """orientationFlipped flag is ignored when canonical block is present."""
         transcripts = [
             {
                 "scenarioId": "s1",
@@ -223,14 +218,8 @@ class TestVarianceAnalysis:
                 "orientationFlipped": True,
                 "summary": {"score": 1},
                 "decisionModelV2": {
-                    "canonical": {
-                        "direction": "favor_first",
-                        "strength": "lean",
-                    },
-                    "legacy": {
-                        "rawScore": 1,
-                        "canonicalScore": 4,
-                    },
+                    "canonical": {"direction": "favor_first", "strength": "lean"},
+                    "legacy": {"rawScore": 1, "canonicalScore": 4},
                 },
                 "scenario": {"name": "Scenario 1"},
             },
@@ -241,14 +230,8 @@ class TestVarianceAnalysis:
                 "orientationFlipped": True,
                 "summary": {"score": 1},
                 "decisionModelV2": {
-                    "canonical": {
-                        "direction": "favor_first",
-                        "strength": "lean",
-                    },
-                    "legacy": {
-                        "rawScore": 1,
-                        "canonicalScore": 4,
-                    },
+                    "canonical": {"direction": "favor_first", "strength": "lean"},
+                    "legacy": {"rawScore": 1, "canonicalScore": 4},
                 },
                 "scenario": {"name": "Scenario 1"},
             },
@@ -256,23 +239,19 @@ class TestVarianceAnalysis:
         analysis = compute_variance_analysis(transcripts)
 
         scenario_stats = analysis["perModel"]["m1"]["perScenario"]["s1"]
-        assert scenario_stats["mean"] == pytest.approx(4.0, abs=0.001)
+        # canonical is the source of truth — orientationFlipped has no effect
+        assert scenario_stats["mean"] == pytest.approx(1.0, abs=0.001)
         assert scenario_stats["variance"] == 0.0
 
-    def test_orientation_corrected_count_only_tracks_raw_scores(self):
-        """Only raw V2 scores that actually need flipping should count as corrected."""
+    def test_orientation_corrected_count_is_always_zero(self):
+        """orientationCorrectedCount is always 0 and orientationCorrected is always False."""
         transcripts = [
             {
                 "scenarioId": "s1",
                 "modelId": "m1",
                 "sampleIndex": 0,
                 "orientationFlipped": True,
-                "summary": {"score": 1},
-                "decisionModelV2": {
-                    "legacy": {
-                        "canonicalScore": 4,
-                    },
-                },
+                "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}},
                 "scenario": {"name": "Scenario 1"},
             },
             {
@@ -280,19 +259,14 @@ class TestVarianceAnalysis:
                 "modelId": "m1",
                 "sampleIndex": 1,
                 "orientationFlipped": True,
-                "summary": {"score": 1},
-                "decisionModelV2": {
-                    "legacy": {
-                        "rawScore": 1,
-                    },
-                },
+                "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "lean"}},
                 "scenario": {"name": "Scenario 1"},
             },
         ]
         analysis = compute_variance_analysis(transcripts)
 
-        assert analysis["orientationCorrectedCount"] == 1
-        assert analysis["perModel"]["m1"]["perScenario"]["s1"]["orientationCorrected"] is True
+        assert analysis["orientationCorrectedCount"] == 0
+        assert analysis["perModel"]["m1"]["perScenario"]["s1"]["orientationCorrected"] is False
 
 
 class TestIntegration:
@@ -300,6 +274,15 @@ class TestIntegration:
 
     def test_full_multi_sample_analysis(self):
         """Test complete analysis with multiple models and scenarios."""
+        # Maps legacy 1-5 score to canonical direction/strength
+        _SCORE_TO_CANONICAL = {
+            1: ("favor_second", "strong"),
+            2: ("favor_second", "lean"),
+            3: ("neutral", "neutral"),
+            4: ("favor_first", "lean"),
+            5: ("favor_first", "strong"),
+        }
+
         transcripts = []
         models = ["claude", "gpt4", "gemini"]
         scenarios = ["ethics_1", "ethics_2", "ethics_3"]
@@ -316,11 +299,13 @@ class TestIntegration:
                         score = base_score + 1 if base_score < 5 else base_score - 1
                     else:
                         score = base_score
+                    score = max(1, min(5, score))
+                    direction, strength = _SCORE_TO_CANONICAL[score]
                     transcripts.append({
                         "scenarioId": scenario,
                         "modelId": model,
                         "sampleIndex": sample_idx,
-                        "summary": {"score": score},
+                        "decisionModelV2": {"canonical": {"direction": direction, "strength": strength}},
                         "scenario": {"name": f"Ethics Test {i + 1}"},
                     })
 

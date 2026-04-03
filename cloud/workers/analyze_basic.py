@@ -55,7 +55,7 @@ from typing import Any
 from common.errors import ErrorCode, ValidationError
 from common.logging import get_logger
 from stats.basic_stats import aggregate_transcripts_by_model, compute_visualization_data
-from stats.decision_model import resolve_transcript_normalized_score
+from stats.decision_model import resolve_transcript_signed_distance
 from stats.model_comparison import compute_model_agreement
 from stats.dimension_impact import compute_dimension_analysis
 from stats.variance_analysis import compute_variance_analysis
@@ -122,7 +122,7 @@ def extract_model_scores(transcripts: list[dict[str, Any]]) -> dict[str, list[fl
     for t in transcripts:
         scenario_id = t.get("scenarioId", "unknown")
         model_id = t.get("modelId", "unknown")
-        score = resolve_transcript_normalized_score(t)
+        score = resolve_transcript_signed_distance(t)
 
         if score is None:
             continue
@@ -168,7 +168,7 @@ def find_contested_scenarios(
         scenario_id = t.get("scenarioId", "unknown")
         model_id = t.get("modelId", "unknown")
         scenario = t.get("scenario", {})
-        score = resolve_transcript_normalized_score(t)
+        score = resolve_transcript_signed_distance(t)
 
         if score is None:
             continue
@@ -262,7 +262,7 @@ def build_preference_summary(
     for transcript in transcripts:
         model_id = transcript.get("modelId", "unknown")
         scenario_id = transcript.get("scenarioId", "unknown")
-        normalized_score = resolve_transcript_normalized_score(transcript)
+        normalized_score = resolve_transcript_signed_distance(transcript)
         if normalized_score is None:
             continue
 
@@ -287,8 +287,9 @@ def build_preference_summary(
         preference_strength: float | None = None
 
         if scenario_means:
-            signed_center = sum(mean - 3.0 for mean in scenario_means) / len(scenario_means)
-            strength = sum(abs(mean - 3.0) for mean in scenario_means) / len(scenario_means)
+            # scenario_means are already signed distances (−2 to +2)
+            signed_center = sum(scenario_means) / len(scenario_means)
+            strength = sum(abs(mean) for mean in scenario_means) / len(scenario_means)
 
             overall_signed_center = round(float(signed_center), 6)
             preference_strength = round(float(strength), 6)
@@ -437,7 +438,7 @@ def build_pooled_aggregate_reliability(
         model_id = transcript.get("modelId")
         scenario_id = transcript.get("scenarioId")
         if isinstance(model_id, str) and model_id != "" and isinstance(scenario_id, str) and scenario_id != "":
-            if resolve_transcript_normalized_score(transcript) is not None:
+            if resolve_transcript_signed_distance(transcript) is not None:
                 pooled_unique_scenarios[model_id].add(scenario_id)
                 run_model_scenario_ids[run_id][model_id].add(scenario_id)
 
