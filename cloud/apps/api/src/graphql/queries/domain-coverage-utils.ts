@@ -34,6 +34,7 @@ export function selectPrimaryDefinitionCounts(
   batchCountByDefinitionId: ReadonlyMap<string, number>,
   pairedBatchCountByDefinitionId: ReadonlyMap<string, number>,
   pairedBatchGroupIdsByDefinitionId?: ReadonlyMap<string, ReadonlySet<string>>,
+  pairedBatchIncrementsByGroupId?: ReadonlyMap<string, ReadonlyMap<string, number>>,
 ): { primaryDefinitionId: string | null; batchCount: number; pairedBatchCount: number } {
   const uniqueDefinitionIds = Array.from(new Set(definitionIds));
   if (uniqueDefinitionIds.length === 0) {
@@ -67,11 +68,32 @@ export function selectPrimaryDefinitionCounts(
     0,
   );
 
-  // Deduplicate paired batch group IDs across all definitions for this value pair.
-  // A_first and B_first companion definitions share the same group ID, so summing
-  // per-definition counts would double-count. Merge all group ID sets and count unique.
+  // Deduplicate paired batch counts across companion definitions.
+  // A_first and B_first share the same group IDs, so we merge group→increment
+  // maps and take the max increment per group (not sum). Ungrouped runs are summed.
   let pairedBatchCount: number;
-  if (pairedBatchGroupIdsByDefinitionId != null) {
+  if (pairedBatchGroupIdsByDefinitionId != null && pairedBatchIncrementsByGroupId != null) {
+    // Merge increments: for each group ID, take the max increment across definitions
+    // (companions have the same sps, so max === any, but max is safer)
+    const mergedIncrements = new Map<string, number>();
+    let ungroupedTotal = 0;
+    for (const defId of uniqueDefinitionIds) {
+      const defIncrements = pairedBatchIncrementsByGroupId.get(defId);
+      if (defIncrements != null) {
+        for (const [gid, inc] of defIncrements) {
+          mergedIncrements.set(gid, Math.max(mergedIncrements.get(gid) ?? 0, inc));
+        }
+      }
+      // Ungrouped portion: pairedBatchCount minus grouped total for this definition
+      const defPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
+      const defGroupedTotal = defIncrements != null
+        ? Array.from(defIncrements.values()).reduce((sum, v) => sum + v, 0)
+        : 0;
+      ungroupedTotal += Math.max(0, defPairedCount - defGroupedTotal);
+    }
+    pairedBatchCount = Array.from(mergedIncrements.values()).reduce((sum, v) => sum + v, 0) + ungroupedTotal;
+  } else if (pairedBatchGroupIdsByDefinitionId != null) {
+    // Legacy path: group IDs available but no increment tracking — count unique groups
     const mergedGroupIds = new Set<string>();
     let ungroupedCount = 0;
     for (const defId of uniqueDefinitionIds) {
@@ -81,14 +103,13 @@ export function selectPrimaryDefinitionCounts(
           mergedGroupIds.add(gid);
         }
       }
-      // Add any ungrouped runs (pairedBatchCount minus grouped count)
       const defPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
       const defGroupedCount = groupIds?.size ?? 0;
       ungroupedCount += Math.max(0, defPairedCount - defGroupedCount);
     }
     pairedBatchCount = mergedGroupIds.size + ungroupedCount;
   } else {
-    // Fallback: sum per-definition counts (legacy behavior)
+    // Fallback: sum per-definition counts
     pairedBatchCount = uniqueDefinitionIds.reduce(
       (total, defId) => total + (pairedBatchCountByDefinitionId.get(defId) ?? 0),
       0,
