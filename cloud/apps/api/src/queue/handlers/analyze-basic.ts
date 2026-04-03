@@ -20,6 +20,7 @@ import {
 } from '../../services/analysis/scenario-metadata.js';
 import {
   resolveAnalysisDecisionModel,
+  resolveAnalysisScore,
   resolveAnalysisValueOutcomes,
 } from '../../services/decision-model.js';
 import { parseTemperature } from '../../utils/temperature.js';
@@ -47,8 +48,10 @@ type TranscriptData = {
   decisionModelV2: {
     raw: unknown;
     canonical: unknown;
+    legacy: unknown;
   } | null;
   summary: {
+    score: number | null; // Decision code as numeric 1-5 (matches CSV "Decision Code")
     values?: Record<string, 'prioritized' | 'deprioritized' | 'neutral'>;
   };
   scenario: {
@@ -56,6 +59,33 @@ type TranscriptData = {
     dimensions: Record<string, number | string>; // Canonical analysis dimensions for grouping/effects
   };
 };
+
+function buildValueOutcomes(
+  score: number | null,
+  orientationFlipped: boolean,
+  valueA: string | null,
+  valueB: string | null
+): Record<string, 'prioritized' | 'deprioritized' | 'neutral'> | undefined {
+  if (score == null || valueA == null || valueB == null) return undefined;
+  const normalizedScore = orientationFlipped ? 6 - score : score;
+
+  if (normalizedScore >= 4) {
+    return {
+      [valueA]: 'prioritized',
+      [valueB]: 'deprioritized',
+    };
+  }
+  if (normalizedScore <= 2) {
+    return {
+      [valueA]: 'deprioritized',
+      [valueB]: 'prioritized',
+    };
+  }
+  return {
+    [valueA]: 'neutral',
+    [valueB]: 'neutral',
+  };
+}
 
 function getAssumptionKey(config: unknown): string | null {
   if (config == null || typeof config !== 'object') return null;
@@ -243,17 +273,28 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
               },
               useDecisionModelV2,
             );
-            const values = resolveAnalysisValueOutcomes(
+            const score = resolveAnalysisScore(
               {
                 decisionCode: t.decisionCode,
                 decisionMetadata: t.decisionMetadata,
                 definitionSnapshot: t.definitionSnapshot,
                 orientationFlipped,
               },
-              valueA,
-              valueB,
               useDecisionModelV2,
             );
+            const values = useDecisionModelV2
+              ? resolveAnalysisValueOutcomes(
+                  {
+                    decisionCode: t.decisionCode,
+                    decisionMetadata: t.decisionMetadata,
+                    definitionSnapshot: t.definitionSnapshot,
+                    orientationFlipped,
+                  },
+                  valueA,
+                  valueB,
+                  useDecisionModelV2,
+                )
+              : buildValueOutcomes(score, orientationFlipped, valueA, valueB);
 
             return {
               id: t.id,
@@ -265,9 +306,10 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
                 ? {
                     raw: decisionModel.raw,
                     canonical: decisionModel.canonical,
+                    legacy: decisionModel.legacy,
                   }
                 : null,
-              summary: values ? { values } : {},
+              summary: values ? { score, values } : { score },
               scenario: {
                 name: t.scenario!.name,
                 dimensions,
