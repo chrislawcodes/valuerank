@@ -10,7 +10,6 @@ export {
   canonicalDecisionToLegacyScore,
   resolveCanonicalDecision,
   resolveDecisionModel,
-  resolveLegacyDecisionCompat,
   resolveTranscriptDecisionModel,
 } from './decision-model.js';
 export type {
@@ -24,7 +23,6 @@ export type {
   DecisionPair,
   DecisionSource,
   DecisionStrength,
-  LegacyDecisionCompat,
   RawDecisionEvidence,
   TranscriptDecisionModelInput,
   TranscriptDecisionModelResult,
