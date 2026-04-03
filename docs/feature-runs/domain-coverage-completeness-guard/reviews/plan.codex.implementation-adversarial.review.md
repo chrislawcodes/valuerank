@@ -9,8 +9,8 @@ git_head_sha: "7e06a2a7970de5894586516244030f86b6c3fc3e"
 git_base_ref: "origin/030-remove-legacy-decision-code"
 git_base_sha: "7e06a2a7970de5894586516244030f86b6c3fc3e"
 generation_method: "codex-runner"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Accepted: the plan intentionally keeps historical runs without persisted runScenarioSelection out of live coverage totals and routes them through the audit script instead of inventing a third live state; the paired-batch and bulk-loading behavior are bounded by the explicit coverageState fields and the bulk-query decision already recorded in the plan."
 raw_output_path: "docs/feature-runs/domain-coverage-completeness-guard/reviews/plan.codex.implementation-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -39,5 +39,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: open
-- note: 
+- status: accepted
+- note: Accepted: the plan intentionally keeps historical runs without persisted runScenarioSelection out of live coverage totals and routes them through the audit script instead of inventing a third live state; the paired-batch and bulk-loading behavior are bounded by the explicit coverageState fields and the bulk-query decision already recorded in the plan.

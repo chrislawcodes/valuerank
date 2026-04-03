@@ -9,8 +9,8 @@ git_head_sha: "7e06a2a7970de5894586516244030f86b6c3fc3e"
 git_base_ref: "origin/030-remove-legacy-decision-code"
 git_base_sha: "7e06a2a7970de5894586516244030f86b6c3fc3e"
 generation_method: "gemini-cli"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "deferred"
+resolution_note: "Deferred by design: this feature intentionally separates processing-complete from coverage-complete. The lifecycle fix is out of scope for this slice, and the plan documents that split explicitly."
 raw_output_path: "docs/feature-runs/domain-coverage-completeness-guard/reviews/plan.gemini.architecture-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -61,5 +61,5 @@ The plan's identified risks are accurate. The following residual risks remain, s
 - `gemini-2.5-pro`: input=36972, output=827, total=55410
 
 ## Resolution
-- status: open
-- note:
+- status: deferred
+- note: Deferred by design: this feature intentionally separates processing-complete from coverage-complete. The lifecycle fix is out of scope for this slice, and the plan documents that split explicitly.

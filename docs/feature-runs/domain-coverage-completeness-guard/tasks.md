@@ -145,7 +145,7 @@ Add the read-only historical audit script and finish the rollout bookkeeping.
 **Verification**
 
 - `cd cloud && npm run audit:domain-coverage-completeness`
-- `git diff -- docs/feature-runs/domain-coverage-completeness-guard docs/STATUS.md`
+- `git diff -- docs/feature-runs/domain-coverage-completeness-guard STATUS.md`
 
 ---
 

@@ -8,7 +8,7 @@ approval: never
 sandbox: read-only
 reasoning effort: high
 reasoning summaries: none
-session id: 019d552b-638a-7320-923e-a357302d6db0
+session id: 019d552f-142a-71a0-b707-57125cbfdfa3
 --------
 user
 Review this tasks artifact using a execution-adversarial lens.
@@ -169,7 +169,7 @@ Add the read-only historical audit script and finish the rollout bookkeeping.
 **Verification**
 
 - `cd cloud && npm run audit:domain-coverage-completeness`
-- `git diff -- docs/feature-runs/domain-coverage-completeness-guard docs/STATUS.md`
+- `git diff -- docs/feature-runs/domain-coverage-completeness-guard STATUS.md`
 
 ---
 
@@ -187,15 +187,18 @@ Return only markdown with exactly these sections:
 ## Findings
 ## Residual Risks
 Do not include any other sections.
-2026-04-03T21:06:40.229589Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d552b-638a-7320-923e-a357302d6db0.tmp-1775250400153775000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-04-03T21:10:42.036350Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d552f-142a-71a0-b707-57125cbfdfa3.tmp-1775250641973605000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+codex
+I’m reviewing the task artifact itself, not the code. I’ll look for places where the plan can still fail in execution: missing edge cases, inconsistent rules between slices, and verification gaps that would let a broken implementation slip through.
 codex
 ## Findings
-- Medium: Slice 4’s verification command checks `git diff -- docs/feature-runs/domain-coverage-completeness-guard docs/STATUS.md`, but the work item says to update `STATUS.md` and the repo contract refers to the root status file. If the real file is at the root, this command inspects the wrong path and can miss the required bookkeeping change.
-- Medium [UNVERIFIED]: The rollout adds `cloud/scripts/audit-domain-coverage-completeness.ts`, but the artifact never says to wire it into `package.json` or another runnable command. If `npm run audit:domain-coverage-completeness` is not already defined, the required verification step will fail and the script will be effectively unreachable from the standard workflow.
+- [MEDIUM][UNVERIFIED] Historical completeness is underspecified. The artifact mentions “historical runs without frozen expectations,” but it never says the query layer, UI, and audit script must all use the same frozen expectation source for those runs. That leaves room for a fallback to live expectations, which would make historical coverage change after later expectation edits.
+- [MEDIUM][UNVERIFIED] The audit script has no scale or determinism requirements. It only says to list processing-complete but coverage-incomplete runs, not how to page, batch, sort, or cap results. On a large dataset, a naive implementation could time out or produce unstable output that is hard to diff and triage.
+- [LOW][UNVERIFIED] Mixed complete/incomplete cell behavior is still ambiguous on the frontend. Slice 2 calls for mixed-cell tests, but Slice 3 only says to hide the drill-down “when incomplete data would make it misleading.” It does not state whether mixed cells should allow partial drill-down, show a warning-only state, or disable the action entirely, so two implementations could both claim to satisfy the task while behaving differently.
 
 ## Residual Risks
-- The artifact still leaves key semantics open: whether soft-deleted runs are excluded from counts, how historical runs without frozen expectations are classified, and whether “processing-complete” always means the same transcript source as coverage completeness.
-- Slice 3 leans on page-level tests to cover component behavior. That can miss regressions in the matrix and status-panel helper branches if the page tests do not exercise every path.
-- The plan assumes the new backend fields, query logic, and UI warnings all share one source of truth, but that invariant is not stated explicitly in the tasks.
+- Legacy runs with missing frozen expectations may still need a backfill or explicit fallback policy if the intended behavior is “historically stable” rather than “best effort from current data.”
+- The audit script is read-only, so it will surface bad runs but does not provide a remediation path. If that is intentional, cleanup remains a manual follow-up step.
+
 tokens used
-21,091
+7,307

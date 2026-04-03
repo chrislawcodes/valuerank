@@ -9,8 +9,8 @@ git_head_sha: "7e06a2a7970de5894586516244030f86b6c3fc3e"
 git_base_ref: "origin/030-remove-legacy-decision-code"
 git_base_sha: "7e06a2a7970de5894586516244030f86b6c3fc3e"
 generation_method: "gemini-cli"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Accepted: the plan now preserves paired-batch dedupe semantics, keeps the recovery service aligned with the shared completeness rule, and explicitly defers launch-estimate coverage counts as a follow-up so the testability burden stays bounded to the reporting surfaces in scope."
 raw_output_path: "docs/feature-runs/domain-coverage-completeness-guard/reviews/plan.gemini.testability-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -75,5 +75,5 @@ The plan makes a good decision to separate "processing status" from "coverage co
 - `gemini-2.5-pro`: input=15347, output=1353, total=19414
 
 ## Resolution
-- status: open
-- note:
+- status: accepted
+- note: Accepted: the plan now preserves paired-batch dedupe semantics, keeps the recovery service aligned with the shared completeness rule, and explicitly defers launch-estimate coverage counts as a follow-up so the testability burden stays bounded to the reporting surfaces in scope.

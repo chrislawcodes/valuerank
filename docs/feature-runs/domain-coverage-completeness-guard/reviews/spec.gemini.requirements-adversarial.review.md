@@ -9,8 +9,8 @@ git_head_sha: "7e06a2a7970de5894586516244030f86b6c3fc3e"
 git_base_ref: "origin/030-remove-legacy-decision-code"
 git_base_sha: "7e06a2a7970de5894586516244030f86b6c3fc3e"
 generation_method: "gemini-cli"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Accepted: the spec already makes the completeness check bulk-based and records the on-demand performance tradeoff as a residual risk; the batch-integrity, mixed-cell UI, and aggregate-link concerns are all explicitly scoped in the spec's product decisions and concrete UI behavior."
 raw_output_path: "docs/feature-runs/domain-coverage-completeness-guard/reviews/spec.gemini.requirements-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -59,5 +59,5 @@ coverage_note: ""
 - `gemini-2.5-pro`: input=3671, output=880, total=18125
 
 ## Resolution
-- status: open
-- note:
+- status: accepted
+- note: Accepted: the spec already makes the completeness check bulk-based and records the on-demand performance tradeoff as a residual risk; the batch-integrity, mixed-cell UI, and aggregate-link concerns are all explicitly scoped in the spec's product decisions and concrete UI behavior.

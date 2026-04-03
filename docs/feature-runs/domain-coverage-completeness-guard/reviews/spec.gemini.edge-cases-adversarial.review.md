@@ -9,8 +9,8 @@ git_head_sha: "7e06a2a7970de5894586516244030f86b6c3fc3e"
 git_base_ref: "origin/030-remove-legacy-decision-code"
 git_base_sha: "7e06a2a7970de5894586516244030f86b6c3fc3e"
 generation_method: "gemini-cli"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Accepted: the spec now explicitly defines paired-batch rollup, duplicate transcript handling via distinct keys and duplicate counts, and the visible mixed-state cell treatment; the remaining race-condition and UX concerns are residual risks, not blockers."
 raw_output_path: "docs/feature-runs/domain-coverage-completeness-guard/reviews/spec.gemini.edge-cases-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -51,5 +51,5 @@ coverage_note: ""
 - `gemini-2.5-pro`: input=2042, output=1135, total=18953
 
 ## Resolution
-- status: open
-- note:
+- status: accepted
+- note: Accepted: the spec now explicitly defines paired-batch rollup, duplicate transcript handling via distinct keys and duplicate counts, and the visible mixed-state cell treatment; the remaining race-condition and UX concerns are residual risks, not blockers.

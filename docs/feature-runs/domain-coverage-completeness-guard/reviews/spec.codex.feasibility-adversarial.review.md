@@ -9,8 +9,8 @@ git_head_sha: "7e06a2a7970de5894586516244030f86b6c3fc3e"
 git_base_ref: "origin/030-remove-legacy-decision-code"
 git_base_sha: "7e06a2a7970de5894586516244030f86b6c3fc3e"
 generation_method: "codex-runner"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Accepted: the spec already defines the batch-group rollup rule, adds completeness-aware signature states, and deliberately uses coverageState != COMPLETE for the incomplete-data drill-down so the review's remaining concerns are covered by the current spec or explicit residual risks."
 raw_output_path: "docs/feature-runs/domain-coverage-completeness-guard/reviews/spec.codex.feasibility-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -38,5 +38,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: open
-- note: 
+- status: accepted
+- note: Accepted: the spec already defines the batch-group rollup rule, adds completeness-aware signature states, and deliberately uses coverageState != COMPLETE for the incomplete-data drill-down so the review's remaining concerns are covered by the current spec or explicit residual risks.
