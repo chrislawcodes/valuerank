@@ -237,7 +237,9 @@ During implementation:
 
 If implementation is large, prefer phase-by-phase progress over a single giant diff.
 
-Gemini reviews are serialized by default. Do not try to launch multiple Gemini checkpoint reviews in parallel.
+Gemini review launches are staggered by 30 seconds. The runner may overlap them, but it
+preserves that stagger. Do not start multiple Gemini checkpoint reviews at the same moment
+outside the runner.
 
 ## Closeout and Post Mortem
 

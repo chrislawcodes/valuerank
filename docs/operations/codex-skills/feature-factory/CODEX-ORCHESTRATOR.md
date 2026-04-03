@@ -24,7 +24,9 @@ In Codex Orchestrator mode, **you drive the workflow end-to-end**. You write art
 | All Codex implementation and review tasks | `gpt-5.4-mini` | `-m gpt-5.4-mini` |
 | All Gemini review and research tasks | `gemini-2.5-pro` | `-m gemini-2.5-pro` |
 
-**Gemini calls must be serial.** Do not launch multiple Gemini CLI calls concurrently in the same session. The runner enforces this via a concurrency lock in `run_gemini_review.py`. If you call Gemini directly (outside the runner), call it one at a time. Parallel Gemini calls cause rate limit failures.
+**Gemini launches must be staggered by 30 seconds.** The runner may overlap Gemini reviews,
+but it preserves that 30-second stagger. If you call Gemini directly outside the runner, do
+not start multiple Gemini calls at the same moment. Start them 30 seconds apart.
 
 ---
 
