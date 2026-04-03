@@ -56,7 +56,7 @@ export function resolveAnalysisValueOutcomes(
   input: TranscriptDecisionModelInput,
   valueA: string | null,
   valueB: string | null,
-  useDecisionModelV2: boolean = config.DECISION_MODEL_V2,
+  _useDecisionModelV2: boolean = config.DECISION_MODEL_V2,
 ): Record<string, DecisionValueOutcome> | undefined {
   const decisionModel = resolveTranscriptDecisionModel(input);
   const canonicalOutcomes = buildValueOutcomesFromCanonical(
