@@ -11,7 +11,7 @@ export type TranscriptExpectation = {
 };
 
 function transcriptKeyToString({ scenarioId, modelId, sampleIndex }: TranscriptKey): string {
-  return `${scenarioId}:${modelId}:${sampleIndex}`;
+  return JSON.stringify([scenarioId, modelId, sampleIndex]);
 }
 
 export function normalizeSamplesPerScenario(samplesPerScenario: unknown): number {
