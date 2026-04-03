@@ -8,7 +8,7 @@ to measure model consistency and response stability.
 from typing import Any, Literal, Optional, TypedDict
 import numpy as np
 
-from stats.decision_model import normalize_resolved_score, resolve_transcript_score_details
+from stats.decision_model import SIGNED_TO_BUCKET, resolve_transcript_signed_distance
 
 
 class _VarianceStatsBase(TypedDict):
@@ -25,7 +25,7 @@ class _VarianceStatsBase(TypedDict):
 class _VarianceStatsOptional(TypedDict, total=False):
     """Optional directional stability fields (populated by Waves 2 and 3)."""
 
-    scoreCounts: dict[str, int]
+    directionCounts: dict[str, int]
     direction: Optional[Literal["A", "B", "NEUTRAL"]]
     directionalAgreement: Optional[float]
     medianSignedDistance: Optional[float]
@@ -64,6 +64,21 @@ class _RunVarianceAnalysisOptional(TypedDict, total=False):
 
 class RunVarianceAnalysis(_RunVarianceAnalysisBase, _RunVarianceAnalysisOptional):
     """Complete variance analysis for a run."""
+
+
+def _canonical_to_signed(direction: str, strength: str) -> float | None:
+    """Map canonical direction/strength to signed distance (−2 to +2)."""
+    if direction == "favor_first" and strength == "strong":
+        return 2.0
+    if direction == "favor_first" and strength == "lean":
+        return 1.0
+    if direction == "neutral":
+        return 0.0
+    if direction == "favor_second" and strength == "lean":
+        return -1.0
+    if direction == "favor_second" and strength == "strong":
+        return -2.0
+    return None
 
 
 def compute_variance_stats(scores: list[float]) -> VarianceStats:
@@ -142,30 +157,25 @@ def compute_variance_analysis(
     Returns:
         RunVarianceAnalysis with per-model and per-scenario variance stats
     """
-    # Group by (scenarioId, modelId) -> list of scores
+    # Group by (scenarioId, modelId) -> list of (sampleIndex, signedDistance)
     grouped: dict[tuple[str, str], list[tuple[int, float]]] = {}
     scenario_names: dict[str, str] = {}
-    corrected_scenario_ids: set[str] = set()
 
     for t in transcripts:
         scenario_id = t.get("scenarioId", "unknown")
         model_id = t.get("modelId", "unknown")
         sample_index = t.get("sampleIndex", 0)
         scenario = t.get("scenario", {})
-        resolved = resolve_transcript_score_details(t)
-        if resolved is None:
+        signed = resolve_transcript_signed_distance(t)
+        if signed is None:
             continue
-        score, already_normalized = resolved
 
         key = (scenario_id, model_id)
         if key not in grouped:
             grouped[key] = []
             scenario_names[scenario_id] = scenario.get("name", scenario_id)
 
-        orientation_flipped = bool(t.get("orientationFlipped", False))
-        if orientation_flipped and not already_normalized:
-            corrected_scenario_ids.add(scenario_id)
-        grouped[key].append((sample_index, normalize_resolved_score(score, already_normalized, orientation_flipped)))
+        grouped[key].append((sample_index, signed))
 
     # Determine if this is a multi-sample run
     max_samples = max(len(scores) for scores in grouped.values()) if grouped else 1
@@ -192,8 +202,8 @@ def compute_variance_analysis(
         for scenario_id, scores in scenarios.items():
             stats = compute_variance_stats(scores)
             if len(scores) > 0:
-                signed = [s - 3.0 for s in scores]
-                median_sd = float(np.median(signed))
+                # scores are signed distances (−2 to +2)
+                median_sd = float(np.median(scores))
 
                 if median_sd > 0:
                     direction: Optional[Literal["A", "B", "NEUTRAL"]] = "A"
@@ -203,35 +213,37 @@ def compute_variance_analysis(
                     direction = "NEUTRAL"
 
                 if direction == "A":
-                    same_side = sum(1 for s in signed if s > 0)
+                    same_side = sum(1 for s in scores if s > 0)
                 elif direction == "B":
-                    same_side = sum(1 for s in signed if s < 0)
+                    same_side = sum(1 for s in scores if s < 0)
                 else:
-                    same_side = sum(1 for s in signed if s == 0)
+                    same_side = sum(1 for s in scores if s == 0)
 
                 n = len(scores)
                 directional_agreement = same_side / n
-                neutral_count = sum(1 for s in scores if s == 3.0)
+                neutral_count = sum(1 for s in scores if s == 0.0)
                 neutral_share = neutral_count / n
 
-                score_counts: dict[str, int] = {}
-                for sv in [1, 2, 3, 4, 5]:
-                    score_counts[str(sv)] = sum(1 for s in scores if s == sv)
+                direction_counts: dict[str, int] = {b: 0 for b in SIGNED_TO_BUCKET.values()}
+                for s in scores:
+                    bucket = SIGNED_TO_BUCKET.get(s)
+                    if bucket is not None:
+                        direction_counts[bucket] += 1
 
                 iqr_val: Optional[float] = None
                 if n >= 2:
-                    q75 = float(np.percentile(signed, 75))
-                    q25 = float(np.percentile(signed, 25))
+                    q75 = float(np.percentile(scores, 75))
+                    q25 = float(np.percentile(scores, 25))
                     iqr_val = round(q75 - q25, 6)
 
                 stats.update({
-                    "scoreCounts": score_counts,
+                    "directionCounts": direction_counts,
                     "direction": direction,
                     "directionalAgreement": round(directional_agreement, 6),
                     "medianSignedDistance": round(median_sd, 6),
                     "iqr": iqr_val,
                     "neutralShare": round(neutral_share, 6),
-                    "orientationCorrected": scenario_id in corrected_scenario_ids,
+                    "orientationCorrected": False,
                 })
 
             per_scenario[scenario_id] = stats
@@ -280,5 +292,5 @@ def compute_variance_analysis(
         perModel=per_model,
         mostVariableScenarios=most_variable,
         leastVariableScenarios=least_variable,
-        orientationCorrectedCount=len(corrected_scenario_ids),
+        orientationCorrectedCount=0,
     )

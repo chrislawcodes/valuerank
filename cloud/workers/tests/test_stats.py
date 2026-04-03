@@ -16,7 +16,7 @@ from stats.basic_stats import (
     aggregate_transcripts_by_model,
     compute_visualization_data,
 )
-from stats.decision_model import resolve_transcript_score, resolve_transcript_score_details
+from stats.decision_model import resolve_transcript_score_details, resolve_transcript_signed_distance
 from stats.model_comparison import (
     compute_effect_size,
     interpret_effect_size,
@@ -187,8 +187,8 @@ class TestBasicStats:
         assert result["model-a"]["sampleSize"] == 2
         assert result["model-b"]["sampleSize"] == 1
 
-    def test_aggregate_transcripts_prefers_v2_compatibility_score(self):
-        """V2 compatibility scores should override stale scalar values."""
+    def test_aggregate_transcripts_uses_canonical_decision(self):
+        """Canonical direction/strength is used for aggregate stats; stale scalar is ignored."""
         transcripts = [
             {
                 "modelId": "model-a",
@@ -210,16 +210,16 @@ class TestBasicStats:
             },
         ]
         result = aggregate_transcripts_by_model(transcripts)
-        assert result["model-a"]["overall"]["mean"] == pytest.approx(4.0, abs=0.001)
+        # favor_first/lean → signed distance +1.0
+        assert result["model-a"]["overall"]["mean"] == pytest.approx(1.0, abs=0.001)
 
-    def test_aggregate_transcripts_corrects_orientation_for_v2_raw_scores(self):
-        """Raw V2 scores should still be orientation-corrected in aggregate stats."""
+    def test_aggregate_transcripts_unscored_without_canonical(self):
+        """Transcripts with no canonical block and no legacy score are not scored; overall mean is 0.0."""
         transcripts = [
             {
                 "modelId": "model-a",
                 "scenarioId": "scenario-1",
                 "orientationFlipped": True,
-                "summary": {"score": 1.0},
                 "decisionModelV2": {
                     "legacy": {
                         "rawScore": 1,
@@ -228,10 +228,12 @@ class TestBasicStats:
             },
         ]
         result = aggregate_transcripts_by_model(transcripts)
-        assert result["model-a"]["overall"]["mean"] == pytest.approx(5.0, abs=0.001)
+        assert result["model-a"]["sampleSize"] == 1
+        # No canonical, no canonicalScore, no summary.score → no signed distance → mean defaults to 0.0
+        assert result["model-a"]["overall"]["mean"] == pytest.approx(0.0, abs=0.001)
 
-    def test_visualization_data_prefers_v2_compatibility_score(self):
-        """Decision distributions should use the V2 compatibility score when present."""
+    def test_visualization_data_uses_canonical_decision(self):
+        """Decision distributions use canonical direction/strength bucket keys."""
         transcripts = [
             {
                 "modelId": "model-a",
@@ -250,17 +252,17 @@ class TestBasicStats:
             },
         ]
         result = compute_visualization_data(transcripts)
-        assert result["decisionDistribution"]["model-a"]["4"] == 1
-        assert result["modelScenarioMatrix"]["model-a"]["scenario-1"] == pytest.approx(4.0, abs=0.001)
+        # favor_first/lean → bucket "favor_first.lean", signed distance 1.0
+        assert result["decisionDistribution"]["model-a"]["favor_first.lean"] == 1
+        assert result["modelScenarioMatrix"]["model-a"]["scenario-1"] == pytest.approx(1.0, abs=0.001)
 
-    def test_visualization_data_corrects_orientation_for_v2_raw_scores(self):
-        """Raw V2 scores should be orientation-corrected before visualization counts."""
+    def test_visualization_data_skips_without_canonical(self):
+        """Transcripts with no canonical block and no legacy score are excluded from visualization data."""
         transcripts = [
             {
                 "modelId": "model-a",
                 "scenarioId": "scenario-1",
                 "orientationFlipped": True,
-                "summary": {"score": 1.0},
                 "decisionModelV2": {
                     "legacy": {
                         "rawScore": 1,
@@ -269,69 +271,63 @@ class TestBasicStats:
             },
         ]
         result = compute_visualization_data(transcripts)
-        assert result["decisionDistribution"]["model-a"]["5"] == 1
-        assert result["modelScenarioMatrix"]["model-a"]["scenario-1"] == pytest.approx(5.0, abs=0.001)
+        # No canonical, no canonicalScore, no summary.score → score is None → transcript skipped entirely
+        assert "model-a" not in result["decisionDistribution"]
+        assert "model-a" not in result["modelScenarioMatrix"]
 
 
 class TestDecisionModelResolution:
-    """Tests for the worker-side decision model bridge."""
+    """Tests for the worker-side canonical decision model resolver."""
 
-    def test_prefers_v2_compatibility_score(self):
+    def test_resolves_canonical_direction_and_strength(self):
         transcript = {
-            "summary": {"score": 1.0},
             "decisionModelV2": {
-                "canonical": {
-                    "direction": "favor_first",
-                    "strength": "lean",
-                },
-                "legacy": {
-                    "rawScore": 1,
-                    "canonicalScore": 4,
-                },
+                "canonical": {"direction": "favor_first", "strength": "lean"},
             },
         }
+        result = resolve_transcript_score_details(transcript)
+        assert result == ("favor_first", "lean", "canonical")
 
-        assert resolve_transcript_score(transcript) == pytest.approx(4.0, abs=0.001)
+    def test_returns_none_for_missing_decisionmodelv2(self):
+        assert resolve_transcript_score_details({}) is None
 
-    def test_rejects_fractional_v2_scores_and_falls_back_to_legacy_scalar(self):
+    def test_returns_none_for_missing_canonical(self):
+        assert resolve_transcript_score_details({"decisionModelV2": {}}) is None
+
+    def test_returns_none_for_null_direction(self):
         transcript = {
-            "summary": {"score": 4},
             "decisionModelV2": {
-                "legacy": {
-                    "canonicalScore": 4.5,
-                },
+                "canonical": {"direction": None, "strength": "lean"},
             },
         }
+        assert resolve_transcript_score_details(transcript) is None
 
-        resolved = resolve_transcript_score_details(transcript)
-        assert resolved is not None
-        score, canonicalized = resolved
-        assert score == pytest.approx(4.0, abs=0.001)
-        assert canonicalized is False
-        assert resolve_transcript_score(transcript) == pytest.approx(4.0, abs=0.001)
-
-    def test_falls_back_to_legacy_scalar_score(self):
-        transcript = {"summary": {"score": 4}}
-
-        assert resolve_transcript_score(transcript) == pytest.approx(4.0, abs=0.001)
-
-    def test_rejects_malformed_v2_compat_scores_and_falls_back_to_legacy_scalar(self):
-        transcript = {
-            "summary": {"score": 4},
-            "decisionModelV2": {
-                "legacy": {
-                    "rawScore": 7,
-                    "canonicalScore": 0,
+    def test_signed_distance_mapping(self):
+        cases = [
+            ("favor_first", "strong", 2.0),
+            ("favor_first", "lean", 1.0),
+            ("neutral", "neutral", 0.0),
+            ("favor_second", "lean", -1.0),
+            ("favor_second", "strong", -2.0),
+        ]
+        for direction, strength, expected in cases:
+            transcript = {
+                "decisionModelV2": {
+                    "canonical": {"direction": direction, "strength": strength},
                 },
-            },
-        }
+            }
+            assert resolve_transcript_signed_distance(transcript) == pytest.approx(expected, abs=0.001)
 
-        resolved = resolve_transcript_score_details(transcript)
-        assert resolved is not None
-        score, canonicalized = resolved
-        assert score == pytest.approx(4.0, abs=0.001)
-        assert canonicalized is False
-        assert resolve_transcript_score(transcript) == pytest.approx(4.0, abs=0.001)
+    def test_signed_distance_returns_none_without_canonical(self):
+        assert resolve_transcript_signed_distance({}) is None
+        assert resolve_transcript_signed_distance({"summary": {"score": None}}) is None
+        assert resolve_transcript_signed_distance({"decisionModelV2": {"legacy": {"rawScore": 3}}}) is None
+
+    def test_signed_distance_falls_back_to_legacy_score(self):
+        """summary.score is used as a fallback when no canonical block is present."""
+        assert resolve_transcript_signed_distance({"summary": {"score": 4}}) == pytest.approx(1.0, abs=0.001)
+        assert resolve_transcript_signed_distance({"summary": {"score": 3}}) == pytest.approx(0.0, abs=0.001)
+        assert resolve_transcript_signed_distance({"summary": {"score": 1}}) == pytest.approx(-2.0, abs=0.001)
 
 
 class TestModelComparison:
@@ -443,19 +439,19 @@ class TestDimensionImpact:
         """Test computing effects for multiple dimensions."""
         transcripts = [
             {
-                "summary": {"score": 1},
+                "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}},
                 "scenario": {"dimensions": {"stakes": "low", "context": "work"}},
             },
             {
-                "summary": {"score": 2},
+                "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "lean"}},
                 "scenario": {"dimensions": {"stakes": "low", "context": "home"}},
             },
             {
-                "summary": {"score": 5},
+                "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
                 "scenario": {"dimensions": {"stakes": "high", "context": "work"}},
             },
             {
-                "summary": {"score": 4},
+                "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}},
                 "scenario": {"dimensions": {"stakes": "high", "context": "home"}},
             },
         ]
@@ -466,63 +462,33 @@ class TestDimensionImpact:
             "effectSize", 0
         )
 
-    def test_compute_dimension_effects_corrects_orientation_for_v2_raw_scores(self):
-        """Orientation-flipped V2 raw scores should be normalized before dimension analysis."""
+    def test_compute_dimension_effects_skips_without_canonical(self):
+        """Transcripts with no canonical block and no legacy score contribute nothing to dimension analysis."""
         transcripts = [
             {
-                "summary": {"score": 1.0},
                 "orientationFlipped": True,
-                "decisionModelV2": {
-                    "legacy": {
-                        "rawScore": 1,
-                    },
-                },
+                "decisionModelV2": {"legacy": {"rawScore": 1}},
                 "scenario": {"dimensions": {"stakes": "low"}},
             },
             {
-                "summary": {"score": 1.0},
                 "orientationFlipped": True,
-                "decisionModelV2": {
-                    "legacy": {
-                        "rawScore": 5,
-                    },
-                },
-                "scenario": {"dimensions": {"stakes": "high"}},
-            },
-            {
-                "summary": {"score": 1.0},
-                "orientationFlipped": True,
-                "decisionModelV2": {
-                    "legacy": {
-                        "rawScore": 1,
-                    },
-                },
-                "scenario": {"dimensions": {"stakes": "low"}},
-            },
-            {
-                "summary": {"score": 1.0},
-                "orientationFlipped": True,
-                "decisionModelV2": {
-                    "legacy": {
-                        "rawScore": 5,
-                    },
-                },
+                "decisionModelV2": {"legacy": {"rawScore": 5}},
                 "scenario": {"dimensions": {"stakes": "high"}},
             },
         ]
+        # No canonical, no canonicalScore, no summary.score → all transcripts unscored → empty result
         result = compute_dimension_effects(transcripts)
-        assert "stakes" in result
-        assert result["stakes"]["effectSize"] > 0
+        assert result == {}
 
     def test_variance_explained(self):
         """Test variance explained calculation."""
         transcripts = [
             {
-                "summary": {"score": 1.0},
+                "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}},
                 "scenario": {"dimensions": {"factor": "a"}},
             },
             {
-                "summary": {"score": 5.0},
+                "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
                 "scenario": {"dimensions": {"factor": "b"}},
             },
         ]
@@ -562,6 +528,7 @@ class TestIntegration:
         transcripts = [
             {
                 "modelId": "gpt-4",
+                "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}},
                 "summary": {
                     "score": 4,
                     "values": {
@@ -573,6 +540,7 @@ class TestIntegration:
             },
             {
                 "modelId": "gpt-4",
+                "decisionModelV2": {"canonical": {"direction": "neutral", "strength": "neutral"}},
                 "summary": {
                     "score": 3,
                     "values": {
@@ -584,6 +552,7 @@ class TestIntegration:
             },
             {
                 "modelId": "claude",
+                "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}},
                 "summary": {
                     "score": 4,
                     "values": {

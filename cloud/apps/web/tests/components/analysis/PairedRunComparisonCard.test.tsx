@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { PairedRunComparisonCard } from '../../../src/components/analysis/PairedRunComparisonCard';
+import {
+  PairedRunComparisonCard,
+  buildComparisonRows,
+} from '../../../src/components/analysis/PairedRunComparisonCard';
 import type { AnalysisResult } from '../../../src/api/operations/analysis';
 import type { Run } from '../../../src/api/operations/runs';
 
@@ -198,5 +201,17 @@ describe('PairedRunComparisonCard', () => {
     expect(cells[9]).toHaveTextContent('3');
     expect(cells[10]).toHaveTextContent('0');
     expect(cells[11]).toHaveTextContent('1');
+  });
+
+  it('uses canonical value keys for a standalone B-first run', () => {
+    const bFirstRun = createRun('run-b', 'B_first');
+    const bFirstAnalysis = createAnalysis('run-b');
+
+    const rows = buildComparisonRows(null, null, bFirstRun, bFirstAnalysis);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.modelId).toBe('gpt-4');
+    expect(rows[0]?.bFirst.first).toBe(3);
+    expect(rows[0]?.bFirst.second).toBe(1);
   });
 });
