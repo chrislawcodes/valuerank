@@ -40,11 +40,11 @@ export function buildValueOutcomes(
 }
 
 export function buildCanonicalValueOutcomes(
-  direction: 'favor_first' | 'favor_second' | 'neutral' | 'unknown',
+  direction: 'favor_first' | 'favor_second' | 'neutral' | 'refusal' | 'unknown',
   valueA: string | null,
   valueB: string | null,
 ): Record<string, 'prioritized' | 'deprioritized' | 'neutral'> | undefined {
-  if (valueA == null || valueB == null || direction === 'unknown') {
+  if (valueA == null || valueB == null || direction === 'unknown' || direction === 'refusal') {
     return undefined;
   }
 

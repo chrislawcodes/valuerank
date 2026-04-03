@@ -1,6 +1,6 @@
 import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/shared.js';
 
-export type DecisionDirection = 'favor_first' | 'favor_second' | 'neutral' | 'unknown';
+export type DecisionDirection = 'favor_first' | 'favor_second' | 'neutral' | 'refusal' | 'unknown';
 export type DecisionStrength = 'strong' | 'lean' | 'neutral' | 'unknown';
 export type DecisionReason = 'rendered' | 'parse_failed' | 'missing_metadata' | 'invalid_pair' | 'empty_input';
 export type DecisionBucketLabel =
