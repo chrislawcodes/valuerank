@@ -739,5 +739,6 @@ export function resolveDecisionModel(input: DecisionModelInput): DecisionModelRe
   return {
     raw: input.raw,
     canonical,
+    legacy: resolveLegacyDecisionCompat(input, canonical),
   };
 }
