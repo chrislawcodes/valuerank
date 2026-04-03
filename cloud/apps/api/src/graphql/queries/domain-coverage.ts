@@ -189,6 +189,7 @@ builder.queryField('domainValueCoverage', (t) =>
       const batchCountByDefinitionId = new Map<string, number>();
       const pairedBatchCountByDefinitionId = new Map<string, number>();
       const pairedBatchGroupIdsByDefinitionId = new Map<string, Set<string>>();
+      const pairedBatchIncrementsByGroupId = new Map<string, Map<string, number>>();
       const latestMatchingRunIdByDefinitionId = new Map<string, string>();
       const latestAggregateRunIdByDefinitionId = new Map<string, string>();
       const signatureScopedRunsByDefinitionId = new Map<string, Array<{
@@ -278,8 +279,12 @@ builder.queryField('domainValueCoverage', (t) =>
             pairedBatchGroupIdsByDefinitionId.set(run.definitionId, seenGroupIds);
             pairedBatchCountByDefinitionId.set(
               run.definitionId,
-              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + increment,
             );
+            // Track increment per group ID for cross-definition dedup
+            const defIncrements = pairedBatchIncrementsByGroupId.get(run.definitionId) ?? new Map<string, number>();
+            defIncrements.set(pairedBatchGroupId, increment);
+            pairedBatchIncrementsByGroupId.set(run.definitionId, defIncrements);
           }
         }
       }
@@ -337,6 +342,7 @@ builder.queryField('domainValueCoverage', (t) =>
               batchCountByDefinitionId,
               pairedBatchCountByDefinitionId,
               pairedBatchGroupIdsByDefinitionId,
+              pairedBatchIncrementsByGroupId,
             );
             const primaryDefId = primaryDefinitionId ?? '';
             const primaryPair = pairByDefinitionId.get(primaryDefId);
