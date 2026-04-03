@@ -35,6 +35,7 @@ import {
 } from './order-effect-statistics.js';
 import type { DuplicateCurrentOrderEffectSnapshotError } from './order-effect-cache.js';
 
+const VALID_DECISIONS = new Set(['1', '2', '3', '4', '5']);
 const ORDER_EFFECT_CACHE_INVARIANT_ERROR_CODE = 'ASSUMPTION_ANALYSIS_CACHE_INVARIANT';
 
 export type PairScenario = {
@@ -148,13 +149,16 @@ function _canonicalToScore(input: {
   orientationFlipped: boolean;
 }): number | null {
   const result = resolveTranscriptDecisionModel(input);
-  const { direction, strength } = result.canonical;
-  if (direction === 'favor_first' && strength === 'strong') return 5;
-  if (direction === 'favor_first' && strength === 'lean') return 4;
-  if (direction === 'neutral' && strength === 'neutral') return 3;
-  if (direction === 'favor_second' && strength === 'lean') return 2;
-  if (direction === 'favor_second' && strength === 'strong') return 1;
-  return null;
+  const canonicalScore = result.legacy.canonicalScore;
+  if (canonicalScore != null) {
+    return canonicalScore;
+  }
+
+  if (input.decisionCode == null || !VALID_DECISIONS.has(input.decisionCode)) {
+    return null;
+  }
+
+  return Number(input.decisionCode);
 }
 
 function _parseDecision(input: {
