@@ -538,7 +538,6 @@ export function aggregateValueCountsFromTranscripts(
     modelId: string;
     decisionCode: string | null;
     decisionMetadata: unknown;
-    definitionSnapshot: unknown;
     scenario: { orientationFlipped: boolean | null } | null;
   }>,
   sourceRunDefinitionById: Map<string, string>,
@@ -561,8 +560,8 @@ export function aggregateValueCountsFromTranscripts(
     const resolved = resolveTranscriptDecisionModel({
       decisionCode: transcript.decisionCode,
       decisionMetadata: transcript.decisionMetadata,
-      definitionSnapshot: transcript.definitionSnapshot,
       orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+      pairOverride: pair,
     });
     const canonical = resolved.canonical;
     if (canonical.direction === 'unknown') continue;
