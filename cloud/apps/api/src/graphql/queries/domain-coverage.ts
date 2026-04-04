@@ -21,6 +21,7 @@ import {
   getCoverageBatchIncrement,
   selectPrimaryDefinitionCounts,
   computePerModelTrialCounts,
+  deduplicateRunsByGroupId,
 } from './domain-coverage-utils.js';
 import { resolveEffectiveDefaultModelIds } from './domain/shared.js';
 
@@ -394,9 +395,12 @@ builder.queryField('domainValueCoverage', (t) =>
                 ?? latestMatchingRunIdByDefinitionId.get(primaryDefId)
                 ?? null);
 
-            // Compute per-model trial counts across all definitions for this pair
-            const allNonAggregateRunsForPair = defIdsForPair.flatMap(
-              (defId) => nonAggregateRunsByDefinitionId.get(defId) ?? [],
+            // Compute per-model trial counts across all definitions for this pair.
+            // Deduplicate by group ID first: A-first and B-first companion definitions
+            // share the same jobChoiceBatchGroupId, so flatMapping across both would
+            // double-count each paired batch.
+            const allNonAggregateRunsForPair = deduplicateRunsByGroupId(
+              defIdsForPair.flatMap((defId) => nonAggregateRunsByDefinitionId.get(defId) ?? []),
             );
             const { minTrialCount, maxTrialCount, modelBreakdown } = computePerModelTrialCounts(
               allNonAggregateRunsForPair,

@@ -6,6 +6,7 @@ import {
   selectPrimaryDefinitionCount,
   selectPrimaryDefinitionCounts,
   computePerModelTrialCounts,
+  deduplicateRunsByGroupId,
 } from '../domain-coverage-utils.js';
 
 describe('extractValuePair', () => {
@@ -334,27 +335,15 @@ describe('computePerModelTrialCounts', () => {
     ]);
   });
 
-  it('deduplicates paired runs with the same batchGroupId', () => {
-    // A-first and B-first companion definitions each produce a run with the same
-    // jobChoiceBatchGroupId. Both runs should count as ONE trial, not two.
+  it('counts paired runs as-is — caller must dedup via deduplicateRunsByGroupId first', () => {
+    // computePerModelTrialCounts does NOT deduplicate. The call site is responsible.
+    // This test documents the contract: duplicate group IDs are counted twice here.
     const runs = [
       { config: { jobChoiceBatchGroupId: 'group-1', samplesPerScenario: 1 }, transcripts: [{ modelId: 'model-a' }] },
-      { config: { jobChoiceBatchGroupId: 'group-1', samplesPerScenario: 1 }, transcripts: [{ modelId: 'model-a' }] }, // duplicate group — skip
-      { config: { jobChoiceBatchGroupId: 'group-2', samplesPerScenario: 1 }, transcripts: [{ modelId: 'model-a' }] },
+      { config: { jobChoiceBatchGroupId: 'group-1', samplesPerScenario: 1 }, transcripts: [{ modelId: 'model-a' }] },
     ];
     const result = computePerModelTrialCounts(runs, ['model-a'], labels);
-    expect(result.minTrialCount).toBe(2); // group-1 counted once + group-2 = 2
-    expect(result.maxTrialCount).toBe(2);
-  });
-
-  it('does not deduplicate runs without a batchGroupId', () => {
-    // Unpaired (ungrouped) runs each count independently
-    const runs = [
-      { config: { samplesPerScenario: 1 }, transcripts: [{ modelId: 'model-a' }] },
-      { config: { samplesPerScenario: 1 }, transcripts: [{ modelId: 'model-a' }] },
-    ];
-    const result = computePerModelTrialCounts(runs, ['model-a'], labels);
-    expect(result.minTrialCount).toBe(2);
+    expect(result.minTrialCount).toBe(2); // both counted — caller didn't dedup
   });
 
   it('respects samplesPerScenario as the increment', () => {
@@ -363,5 +352,53 @@ describe('computePerModelTrialCounts', () => {
     ];
     const result = computePerModelTrialCounts(runs, ['model-a'], labels);
     expect(result.minTrialCount).toBe(5);
+  });
+});
+
+describe('deduplicateRunsByGroupId', () => {
+  it('removes duplicate paired runs sharing the same group ID', () => {
+    const runs = [
+      { config: { jobChoiceBatchGroupId: 'group-1' }, transcripts: [] },
+      { config: { jobChoiceBatchGroupId: 'group-1' }, transcripts: [] }, // duplicate
+      { config: { jobChoiceBatchGroupId: 'group-2' }, transcripts: [] },
+    ];
+    expect(deduplicateRunsByGroupId(runs)).toHaveLength(2);
+  });
+
+  it('keeps all ungrouped runs regardless', () => {
+    const runs = [
+      { config: {}, transcripts: [] },
+      { config: {}, transcripts: [] },
+      { config: { jobChoiceBatchGroupId: 'group-1' }, transcripts: [] },
+    ];
+    expect(deduplicateRunsByGroupId(runs)).toHaveLength(3);
+  });
+
+  it('handles mixed grouped and ungrouped runs', () => {
+    const runs = [
+      { config: { jobChoiceBatchGroupId: 'g1' }, transcripts: [] },
+      { config: { jobChoiceBatchGroupId: 'g1' }, transcripts: [] }, // duplicate
+      { config: {}, transcripts: [] }, // ungrouped — keep
+      { config: { jobChoiceBatchGroupId: 'g2' }, transcripts: [] },
+    ];
+    expect(deduplicateRunsByGroupId(runs)).toHaveLength(3);
+  });
+
+  it('returns empty array for empty input', () => {
+    expect(deduplicateRunsByGroupId([])).toHaveLength(0);
+  });
+
+  it('when combined with computePerModelTrialCounts, paired companions count once', () => {
+    const labels = new Map([['model-a', 'Model A']]);
+    // Simulate A-first and B-first companion runs for the same batch group
+    const runs = [
+      { config: { jobChoiceBatchGroupId: 'group-1', samplesPerScenario: 5 }, transcripts: [{ modelId: 'model-a' }] },
+      { config: { jobChoiceBatchGroupId: 'group-1', samplesPerScenario: 5 }, transcripts: [{ modelId: 'model-a' }] },
+      { config: { jobChoiceBatchGroupId: 'group-2', samplesPerScenario: 5 }, transcripts: [{ modelId: 'model-a' }] },
+      { config: { jobChoiceBatchGroupId: 'group-2', samplesPerScenario: 5 }, transcripts: [{ modelId: 'model-a' }] },
+    ];
+    const deduped = deduplicateRunsByGroupId(runs);
+    const result = computePerModelTrialCounts(deduped, ['model-a'], labels);
+    expect(result.minTrialCount).toBe(10); // 2 groups × 5 samples each
   });
 });

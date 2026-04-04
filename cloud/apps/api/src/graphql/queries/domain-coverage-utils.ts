@@ -131,6 +131,28 @@ export function getCoverageBatchIncrement(samplesPerScenario: unknown): number {
 
 export type CoverageModelBreakdown = { modelId: string; label: string; trialCount: number };
 
+/**
+ * Deduplicate a list of runs by their paired-batch group ID.
+ *
+ * A-first and B-first companion definitions for the same value pair share the
+ * same `jobChoiceBatchGroupId` / `pairedBatchGroupId`. When runs are collected
+ * across both companion definitions and flattened into a single list, each paired
+ * batch appears twice. Call this before any aggregation (trial counts, model
+ * breakdowns, etc.) to ensure each batch is counted exactly once.
+ *
+ * Runs without a group ID (ungrouped / unpaired) are always kept.
+ */
+export function deduplicateRunsByGroupId<T extends { config: unknown }>(runs: ReadonlyArray<T>): T[] {
+  const seenGroupIds = new Set<string>();
+  return runs.filter((run) => {
+    const groupId = getCoverageBatchGroupId(run.config);
+    if (groupId === null) return true;
+    if (seenGroupIds.has(groupId)) return false;
+    seenGroupIds.add(groupId);
+    return true;
+  });
+}
+
 export function computePerModelTrialCounts(
   runs: ReadonlyArray<{ config: unknown; transcripts: ReadonlyArray<{ modelId: string }> }>,
   defaultModelIds: readonly string[],
@@ -140,22 +162,14 @@ export function computePerModelTrialCounts(
     return { minTrialCount: null, maxTrialCount: null, modelBreakdown: null };
   }
 
+  // Caller is responsible for deduplicating paired runs before passing them here.
+  // Use deduplicateRunsByGroupId() at the call site when collecting runs across
+  // companion definitions for the same value pair.
   const trialCountByModel = new Map<string, number>(
     defaultModelIds.map((modelId) => [modelId, 0]),
   );
 
-  // Deduplicate paired runs: A-first and B-first companion definitions share the
-  // same jobChoiceBatchGroupId / pairedBatchGroupId. Counting both would double
-  // the trial count for each model. Track seen group IDs and skip duplicates.
-  const seenGroupIds = new Set<string>();
-
   for (const run of runs) {
-    const groupId = getCoverageBatchGroupId(run.config);
-    if (groupId !== null) {
-      if (seenGroupIds.has(groupId)) continue;
-      seenGroupIds.add(groupId);
-    }
-
     const increment = getCoverageBatchIncrement(
       (run.config as { samplesPerScenario?: unknown } | null)?.samplesPerScenario,
     );
