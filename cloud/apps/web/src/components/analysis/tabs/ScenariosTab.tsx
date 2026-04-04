@@ -22,6 +22,8 @@ type ScenariosTabProps = {
   companionRunId?: string | null;
   currentVignetteName?: string | null;
   companionVignetteName?: string | null;
+  /** Model IDs selected by the page-level filter. Passed to child tables. */
+  selectedModels?: string[];
 };
 
 export function ScenariosTab({
@@ -36,6 +38,7 @@ export function ScenariosTab({
   companionRunId,
   currentVignetteName,
   companionVignetteName,
+  selectedModels,
 }: ScenariosTabProps) {
   const hasScenarioDimensions = Boolean(
     visualizationData?.scenarioDimensions
@@ -61,6 +64,7 @@ export function ScenariosTab({
                 transcripts={transcripts}
                 expectedAttributes={expectedAttributes}
                 companionRunId={analysisMode === 'paired' ? companionRunId ?? null : null}
+                selectedModels={selectedModels}
               />
             ) : (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
@@ -86,6 +90,7 @@ export function ScenariosTab({
                 description="Detailed breakdown of how each model scored each condition."
                 currentVignetteName={currentVignetteName}
                 companionVignetteName={companionVignetteName}
+                externalSelectedModels={selectedModels}
               />
             ) : (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">

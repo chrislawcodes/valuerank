@@ -47,6 +47,12 @@ type ConditionDecisionsTableProps = {
   description?: string | null;
   currentVignetteName?: string | null;
   companionVignetteName?: string | null;
+  /**
+   * When provided, the component operates in controlled mode: these model IDs
+   * are used directly as the visible columns and the local "AI Columns" dropdown
+   * is hidden. When omitted, the local selector remains active.
+   */
+  externalSelectedModels?: string[];
 };
 
 function inferModelFamily(modelId: string): { key: string; label: string } {
@@ -247,6 +253,7 @@ export function ConditionDecisionsTable({
   description = null,
   currentVignetteName,
   companionVignetteName,
+  externalSelectedModels,
 }: ConditionDecisionsTableProps) {
   const meanTableRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -265,7 +272,9 @@ export function ConditionDecisionsTable({
 
   const attributeA = availableAttributes[0] ?? '';
   const attributeB = availableAttributes[1] ?? availableAttributes[0] ?? '';
-  const [selectedModels, setSelectedModels] = useState<string[]>(models);
+
+  // Local model selection (used when externalSelectedModels is not provided)
+  const [localSelectedModels, setLocalSelectedModels] = useState<string[]>(models);
   const canSplitOrientations = analysisMode === 'paired' && (varianceAnalysis?.orientationCorrectedCount ?? 0) > 0;
   const [inspectionMode, setInspectionMode] = useState<OrientationInspectionMode>('pooled');
   const splitSourceLabels = canSplitOrientations
@@ -275,12 +284,14 @@ export function ConditionDecisionsTable({
       }
     : null;
 
+  // Sync local selection when models list changes (uncontrolled path only)
   useEffect(() => {
-    setSelectedModels((current) => {
+    if (externalSelectedModels != null) return;
+    setLocalSelectedModels((current) => {
       const next = current.filter((modelId) => models.includes(modelId));
       return next.length > 0 ? next : models;
     });
-  }, [models]);
+  }, [models, externalSelectedModels]);
 
   useEffect(() => {
     if (!canSplitOrientations && inspectionMode !== 'pooled') {
@@ -288,9 +299,13 @@ export function ConditionDecisionsTable({
     }
   }, [canSplitOrientations, inspectionMode]);
 
+  // Controlled path: use externalSelectedModels intersected with known models
+  // Uncontrolled path: use localSelectedModels
   const visibleModels = useMemo(
-    () => models.filter((modelId) => selectedModels.includes(modelId)),
-    [models, selectedModels],
+    () => externalSelectedModels != null
+      ? models.filter((modelId) => externalSelectedModels.includes(modelId))
+      : models.filter((modelId) => localSelectedModels.includes(modelId)),
+    [models, localSelectedModels, externalSelectedModels],
   );
   const modelHeaders = useMemo(() => buildModelHeaders(visibleModels), [visibleModels]);
   const groupedModelHeaders = useMemo(() => {
@@ -328,7 +343,7 @@ export function ConditionDecisionsTable({
   );
 
   const toggleModel = (modelId: string) => {
-    setSelectedModels((current) => {
+    setLocalSelectedModels((current) => {
       if (current.includes(modelId)) {
         return current.filter((id) => id !== modelId);
       }
@@ -418,51 +433,54 @@ export function ConditionDecisionsTable({
       </div>
 
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <label className="mb-1 block text-xs font-medium uppercase text-gray-500">AI Columns</label>
-          <details className="relative">
-            <summary className="min-w-52 cursor-pointer rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm">
-              {visibleModels.length === models.length
-                ? 'All target AIs'
-                : `${visibleModels.length} of ${models.length} selected`}
-            </summary>
-            <div className="absolute z-10 mt-2 w-64 rounded-md border border-gray-200 bg-white p-3 shadow-lg">
-              <div className="mb-2 flex items-center justify-between">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto min-h-0 px-0 py-0 text-xs font-medium text-teal-700 hover:text-teal-800"
-                  onClick={() => setSelectedModels(models)}
-                >
-                  Select all
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto min-h-0 px-0 py-0 text-xs font-medium text-gray-600 hover:text-gray-800"
-                  onClick={() => setSelectedModels([])}
-                >
-                  Clear
-                </Button>
+        {/* Local AI Columns selector — hidden when page-level filter is active */}
+        {externalSelectedModels == null && (
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase text-gray-500">AI Columns</label>
+            <details className="relative">
+              <summary className="min-w-52 cursor-pointer rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm">
+                {visibleModels.length === models.length
+                  ? 'All target AIs'
+                  : `${visibleModels.length} of ${models.length} selected`}
+              </summary>
+              <div className="absolute z-10 mt-2 w-64 rounded-md border border-gray-200 bg-white p-3 shadow-lg">
+                <div className="mb-2 flex items-center justify-between">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto min-h-0 px-0 py-0 text-xs font-medium text-teal-700 hover:text-teal-800"
+                    onClick={() => setLocalSelectedModels(models)}
+                  >
+                    Select all
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto min-h-0 px-0 py-0 text-xs font-medium text-gray-600 hover:text-gray-800"
+                    onClick={() => setLocalSelectedModels([])}
+                  >
+                    Clear
+                  </Button>
+                </div>
+                <div className="max-h-52 space-y-2 overflow-y-auto">
+                  {models.map((modelId) => (
+                    <label key={modelId} className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={localSelectedModels.includes(modelId)}
+                        onChange={() => toggleModel(modelId)}
+                        className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                      />
+                      <span className="truncate" title={modelId}>
+                        {modelId}
+                      </span>
+                    </label>
+                  ))}
+                </div>
               </div>
-              <div className="max-h-52 space-y-2 overflow-y-auto">
-                {models.map((modelId) => (
-                  <label key={modelId} className="flex items-center gap-2 text-sm text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={selectedModels.includes(modelId)}
-                      onChange={() => toggleModel(modelId)}
-                      className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-                    />
-                    <span className="truncate" title={modelId}>
-                      {modelId}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </details>
-        </div>
+            </details>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-end gap-4">
           {canSplitOrientations && (
