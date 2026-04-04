@@ -373,7 +373,7 @@ export type CreateDomainContextInput = {
   text: Scalars['String']['input'];
 };
 
-export type CreateJobChoicePairInput = {
+export type CreatePairedVignetteInput = {
   contextId: Scalars['ID']['input'];
   domainId: Scalars['ID']['input'];
   levelPresetVersionId?: InputMaybe<Scalars['ID']['input']>;
@@ -383,8 +383,8 @@ export type CreateJobChoicePairInput = {
   valueSecondId: Scalars['ID']['input'];
 };
 
-export type CreateJobChoicePairResult = {
-  __typename?: 'CreateJobChoicePairResult';
+export type CreatePairedVignetteResult = {
+  __typename?: 'CreatePairedVignetteResult';
   definitionA: Definition;
   definitionB: Definition;
 };
@@ -1356,7 +1356,7 @@ export type Mutation = {
   createDefinition: Definition;
   createDomain: Domain;
   createDomainContext: DomainContext;
-  createJobChoicePair: CreateJobChoicePairResult;
+  createJobChoicePair: CreatePairedVignetteResult;
   createLevelPreset: LevelPreset;
   /** Create a new LLM model under a provider */
   createLlmModel: LlmModel;
@@ -1545,7 +1545,7 @@ export type Mutation = {
   /** Update specific content fields of a definition. Supports clearing overrides to inherit from parent. */
   updateDefinitionContent: Definition;
   updateDomainContext: DomainContext;
-  updateJobChoicePair: CreateJobChoicePairResult;
+  updateJobChoicePair: CreatePairedVignetteResult;
   updateLevelPreset: LevelPreset;
   /** Update an LLM model (display name, costs, API config) */
   updateLlmModel: LlmModel;
@@ -1648,7 +1648,7 @@ export type MutationCreateDomainContextArgs = {
 
 
 export type MutationCreateJobChoicePairArgs = {
-  input: CreateJobChoicePairInput;
+  input: CreatePairedVignetteInput;
 };
 
 
@@ -1926,7 +1926,7 @@ export type MutationUpdateDomainContextArgs = {
 
 
 export type MutationUpdateJobChoicePairArgs = {
-  input: UpdateJobChoicePairInput;
+  input: UpdatePairedVignetteInput;
 };
 
 
@@ -3548,7 +3548,7 @@ export type UpdateDomainContextInput = {
   text: Scalars['String']['input'];
 };
 
-export type UpdateJobChoicePairInput = {
+export type UpdatePairedVignetteInput = {
   contextId: Scalars['ID']['input'];
   definitionId: Scalars['ID']['input'];
   levelPresetVersionId?: InputMaybe<Scalars['ID']['input']>;

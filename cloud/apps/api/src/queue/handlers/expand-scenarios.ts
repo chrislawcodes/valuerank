@@ -11,7 +11,7 @@ import { createLogger } from '@valuerank/shared';
 import type { ExpandScenariosJobData } from '../types.js';
 import { expandScenarios } from '../../services/scenario/expand.js';
 import { hydrateDefinitionContentWithLevelPreset } from '../../utils/definition-level-preset.js';
-import { normalizeJobChoiceDefinitionContent } from '../../utils/job-choice-definition.js';
+import { normalizePairedDefinitionContent } from '../../utils/paired-definition.js';
 
 const log = createLogger('queue:expand-scenarios');
 
@@ -44,7 +44,7 @@ export function createExpandScenariosHandler(): PgBoss.WorkHandler<ExpandScenari
         // Resolve the full definition content (with inheritance)
         const { resolvedContent } = await resolveDefinitionContent(definitionId);
         const hydratedContent = await hydrateDefinitionContentWithLevelPreset(
-          normalizeJobChoiceDefinitionContent(resolvedContent),
+          normalizePairedDefinitionContent(resolvedContent),
           definition.levelPresetVersionId,
         );
 

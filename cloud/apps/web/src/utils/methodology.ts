@@ -15,7 +15,7 @@ type DefinitionDimension = {
   name?: string;
 };
 
-type JobChoiceComponents = {
+type PairedComponents = {
   value_first?: { token?: string };
   value_second?: { token?: string };
 };
@@ -64,7 +64,7 @@ function formatValueOrderName(value: string): string {
   return looksLikeToken ? toTitleCase(normalized) : normalized;
 }
 
-function readJobChoiceComponents(content: unknown): JobChoiceComponents | null {
+function readPairedComponents(content: unknown): PairedComponents | null {
   if (!isRecord(content)) return null;
   const raw = content.components;
   if (!isRecord(raw)) return null;
@@ -183,13 +183,13 @@ export function getDecisionMetadata(value: unknown): DecisionMetadata | null {
   };
 }
 
-export function isJobChoiceMethodology(content: unknown): boolean {
+export function isPairedMethodology(content: unknown): boolean {
   return getDefinitionMethodology(content)?.family === 'job-choice';
 }
 
 export function getPairedOrientationLabels(content: unknown): PairedOrientationLabels {
   const methodology = getDefinitionMethodology(content);
-  const components = readJobChoiceComponents(content);
+  const components = readPairedComponents(content);
   const dimensions = readDefinitionDimensions(content);
 
   const componentOrder = (() => {

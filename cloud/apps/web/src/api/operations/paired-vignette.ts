@@ -1,15 +1,15 @@
 import { gql } from 'urql';
 
-export type JobChoicePairDefinition = { id: string; name: string };
+export type PairedVignetteDefinition = { id: string; name: string };
 
-export type CreateJobChoicePairResult = {
+export type CreatePairedVignetteResult = {
   createJobChoicePair: {
-    definitionA: JobChoicePairDefinition;
-    definitionB: JobChoicePairDefinition;
+    definitionA: PairedVignetteDefinition;
+    definitionB: PairedVignetteDefinition;
   };
 };
 
-export type CreateJobChoicePairVariables = {
+export type CreatePairedVignetteVariables = {
   input: {
     name: string;
     domainId: string;
@@ -21,14 +21,14 @@ export type CreateJobChoicePairVariables = {
   };
 };
 
-export type UpdateJobChoicePairResult = {
+export type UpdatePairedVignetteResult = {
   updateJobChoicePair: {
-    definitionA: JobChoicePairDefinition;
-    definitionB: JobChoicePairDefinition;
+    definitionA: PairedVignetteDefinition;
+    definitionB: PairedVignetteDefinition;
   };
 };
 
-export type UpdateJobChoicePairVariables = {
+export type UpdatePairedVignetteVariables = {
   input: {
     definitionId: string;
     name: string;
@@ -40,8 +40,8 @@ export type UpdateJobChoicePairVariables = {
   };
 };
 
-export const CREATE_JOB_CHOICE_PAIR_MUTATION = gql`
-  mutation CreateJobChoicePair($input: CreateJobChoicePairInput!) {
+export const CREATE_PAIRED_VIGNETTE_MUTATION = gql`
+  mutation CreatePairedVignette($input: CreatePairedVignetteInput!) {
     createJobChoicePair(input: $input) {
       definitionA {
         id
@@ -55,8 +55,8 @@ export const CREATE_JOB_CHOICE_PAIR_MUTATION = gql`
   }
 `;
 
-export const UPDATE_JOB_CHOICE_PAIR_MUTATION = gql`
-  mutation UpdateJobChoicePair($input: UpdateJobChoicePairInput!) {
+export const UPDATE_PAIRED_VIGNETTE_MUTATION = gql`
+  mutation UpdatePairedVignette($input: UpdatePairedVignetteInput!) {
     updateJobChoicePair(input: $input) {
       definitionA {
         id

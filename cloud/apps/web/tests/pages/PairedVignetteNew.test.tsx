@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { JobChoiceNew } from '../../src/pages/JobChoiceNew';
+import { PairedVignetteNew } from '../../src/pages/PairedVignetteNew';
 import { DEFINITION_QUERY } from '../../src/api/operations/definitions';
 import { DOMAINS_QUERY } from '../../src/api/operations/domains';
 import { DOMAIN_CONTEXTS_QUERY } from '../../src/api/operations/domain-contexts';
@@ -155,7 +155,7 @@ function mockMutationHooks(
   return { createPairMock, updatePairMock };
 }
 
-describe('JobChoiceNew', () => {
+describe('PairedVignetteNew', () => {
   beforeEach(() => {
     useQueryMock.mockReset();
     useMutationMock.mockReset();
@@ -167,8 +167,8 @@ describe('JobChoiceNew', () => {
     mockMutationHooks();
 
     const { container } = render(
-      <MemoryRouter initialEntries={['/job-choice/new?domainId=domain-a']}>
-        <JobChoiceNew />
+      <MemoryRouter initialEntries={['/paired/new?domainId=domain-a']}>
+        <PairedVignetteNew />
       </MemoryRouter>,
     );
 
@@ -181,8 +181,8 @@ describe('JobChoiceNew', () => {
     mockMutationHooks();
 
     render(
-      <MemoryRouter initialEntries={['/job-choice/new?domainId=domain-a']}>
-        <JobChoiceNew />
+      <MemoryRouter initialEntries={['/paired/new?domainId=domain-a']}>
+        <PairedVignetteNew />
       </MemoryRouter>,
     );
 
@@ -198,9 +198,9 @@ describe('JobChoiceNew', () => {
     mockMutationHooks();
 
     render(
-      <MemoryRouter initialEntries={['/job-choice/def-1/edit']}>
+      <MemoryRouter initialEntries={['/paired/def-1/edit']}>
         <Routes>
-          <Route path="/job-choice/:id/edit" element={<JobChoiceNew />} />
+          <Route path="/paired/:id/edit" element={<PairedVignetteNew />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -225,9 +225,9 @@ describe('JobChoiceNew', () => {
     );
 
     render(
-      <MemoryRouter initialEntries={['/job-choice/def-1/edit']}>
+      <MemoryRouter initialEntries={['/paired/def-1/edit']}>
         <Routes>
-          <Route path="/job-choice/:id/edit" element={<JobChoiceNew />} />
+          <Route path="/paired/:id/edit" element={<PairedVignetteNew />} />
         </Routes>
       </MemoryRouter>,
     );

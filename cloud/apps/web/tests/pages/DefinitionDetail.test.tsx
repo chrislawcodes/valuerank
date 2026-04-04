@@ -371,7 +371,7 @@ describe('DefinitionDetail', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /edit/i }));
 
-      expect(mockNavigate).toHaveBeenCalledWith('/job-choice/job-choice-1/edit');
+      expect(mockNavigate).toHaveBeenCalledWith('/paired/job-choice-1/edit');
     });
 
     it('routes job-choice vignettes to the paired batch launch page', async () => {
