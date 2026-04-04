@@ -22,6 +22,7 @@ import {
   selectPrimaryDefinitionCounts,
   computePerModelTrialCounts,
 } from './domain-coverage-utils.js';
+import { resolveEffectiveDefaultModelIds } from './domain/shared.js';
 
 type DomainValueCoverageCell = {
   valueA: string;
@@ -168,11 +169,15 @@ builder.queryField('domainValueCoverage', (t) =>
       const domain = await db.domain.findUnique({ where: { id: domainId }, select: { id: true, defaultModelIds: true } });
       if (!domain) return null;
 
-      // Pre-fetch labels for default models so we can populate model breakdown
+      // Resolve effective model IDs: use domain-specific list if set, otherwise fall back
+      // to globally defaulted models (isDefault=true, ACTIVE) from the Models settings page.
+      const effectiveModelIds = await resolveEffectiveDefaultModelIds(domain.defaultModelIds);
+
+      // Pre-fetch labels for effective models so we can populate model breakdown
       const defaultModelLabelById = new Map<string, string>();
-      if (domain.defaultModelIds.length > 0) {
+      if (effectiveModelIds.length > 0) {
         const defaultModelRows = await db.llmModel.findMany({
-          where: { modelId: { in: domain.defaultModelIds } },
+          where: { modelId: { in: effectiveModelIds } },
           select: { modelId: true, displayName: true },
         });
         for (const row of defaultModelRows) {
@@ -276,7 +281,7 @@ builder.queryField('domainValueCoverage', (t) =>
           }
 
           // Track non-aggregate runs for per-model trial count computation
-          if (domain.defaultModelIds.length > 0) {
+          if (effectiveModelIds.length > 0) {
             const nonAggregateRuns = nonAggregateRunsByDefinitionId.get(run.definitionId) ?? [];
             nonAggregateRuns.push({ config: run.config, transcripts: run.transcripts });
             nonAggregateRunsByDefinitionId.set(run.definitionId, nonAggregateRuns);
@@ -395,7 +400,7 @@ builder.queryField('domainValueCoverage', (t) =>
             );
             const { minTrialCount, maxTrialCount, modelBreakdown } = computePerModelTrialCounts(
               allNonAggregateRunsForPair,
-              domain.defaultModelIds,
+              effectiveModelIds,
               defaultModelLabelById,
             );
 

@@ -288,6 +288,23 @@ export function getMissingReasonLabel(reasonCode: DomainAnalysisMissingReasonCod
   }
 }
 
+/**
+ * Resolves the effective set of model IDs to use for coverage and analysis filtering.
+ *
+ * When the domain has explicit defaultModelIds configured, those are used as-is.
+ * When the domain list is empty, falls back to globally defaulted models
+ * (llmModel rows where isDefault=true and status=ACTIVE), which mirrors what the
+ * user sees on the Models settings page.
+ */
+export async function resolveEffectiveDefaultModelIds(domainModelIds: string[]): Promise<string[]> {
+  if (domainModelIds.length > 0) return domainModelIds;
+  const globalDefaults = await db.llmModel.findMany({
+    where: { isDefault: true, status: 'ACTIVE' },
+    select: { modelId: true },
+  });
+  return globalDefaults.map((m) => m.modelId);
+}
+
 export async function resolveSignatureRuns(
   latestDefinitionIds: string[],
   selectedSignature: string | null,
