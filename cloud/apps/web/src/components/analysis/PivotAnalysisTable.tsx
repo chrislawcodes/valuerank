@@ -36,6 +36,11 @@ type PivotAnalysisTableProps = {
     transcripts?: Transcript[];
     expectedAttributes?: string[];
     companionRunId?: string | null;
+    /**
+     * When provided, restrict the model dropdown to only these model IDs.
+     * Falls back to all models if the filtered list would be empty.
+     */
+    selectedModels?: string[];
 };
 
 type LegendCounts = {
@@ -71,6 +76,7 @@ export function PivotAnalysisTable({
     transcripts,
     expectedAttributes = [],
     companionRunId,
+    selectedModels,
 }: PivotAnalysisTableProps) {
     const tableRef = useRef<HTMLDivElement>(null);
     const navigate = useNavigate();
@@ -81,8 +87,15 @@ export function PivotAnalysisTable({
         return resolveScenarioAttributes(scenarioDimensions, expectedAttributes, modelScenarioMatrix);
     }, [expectedAttributes, scenarioDimensions, modelScenarioMatrix]);
 
-    // Models list
-    const models = useMemo(() => Object.keys(modelScenarioMatrix || {}).sort(), [modelScenarioMatrix]);
+    // All models from the matrix
+    const allModels = useMemo(() => Object.keys(modelScenarioMatrix || {}).sort(), [modelScenarioMatrix]);
+
+    // Filtered models: when selectedModels is provided, restrict to that set (non-empty fallback)
+    const models = useMemo(() => {
+        if (selectedModels == null || selectedModels.length === 0) return allModels;
+        const filtered = allModels.filter((id) => selectedModels.includes(id));
+        return filtered.length > 0 ? filtered : allModels;
+    }, [allModels, selectedModels]);
 
     // State for selected dimensions and model
     const [rowDim, setRowDim] = useState<string>(availableDimensions[0] || '');
