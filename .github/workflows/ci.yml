@@ -47,6 +47,7 @@ jobs:
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+          NODE_OPTIONS: --max-old-space-size=4096
         run: npx turbo test --filter=@valuerank/web --filter=@valuerank/shared
 
   api-tests:
