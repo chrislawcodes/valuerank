@@ -144,7 +144,18 @@ export function computePerModelTrialCounts(
     defaultModelIds.map((modelId) => [modelId, 0]),
   );
 
+  // Deduplicate paired runs: A-first and B-first companion definitions share the
+  // same jobChoiceBatchGroupId / pairedBatchGroupId. Counting both would double
+  // the trial count for each model. Track seen group IDs and skip duplicates.
+  const seenGroupIds = new Set<string>();
+
   for (const run of runs) {
+    const groupId = getCoverageBatchGroupId(run.config);
+    if (groupId !== null) {
+      if (seenGroupIds.has(groupId)) continue;
+      seenGroupIds.add(groupId);
+    }
+
     const increment = getCoverageBatchIncrement(
       (run.config as { samplesPerScenario?: unknown } | null)?.samplesPerScenario,
     );
