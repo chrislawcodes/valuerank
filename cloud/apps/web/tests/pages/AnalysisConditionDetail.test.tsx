@@ -666,9 +666,16 @@ describe('AnalysisConditionDetail', () => {
       refetch: vi.fn(),
     });
 
-    expect(() => renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired')).toThrow(
-      /AnalysisConditionDetail page: transcript tx-legacy is missing renderable canonical decisionModelV2 data\./,
-    );
+    // Suppress React's console.error for the expected throw — otherwise jsdom
+    // logs it to stderr and vitest exits non-zero even though the test passes.
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      expect(() => renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired')).toThrow(
+        /AnalysisConditionDetail page: transcript tx-legacy is missing renderable canonical decisionModelV2 data\./,
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   describe('companion run resolution', () => {
