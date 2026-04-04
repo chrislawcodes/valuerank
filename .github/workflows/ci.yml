@@ -49,7 +49,7 @@ jobs:
 
     strategy:
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        shard: [5, 1, 2, 3, 4]
         total: [5]
 
     env:
