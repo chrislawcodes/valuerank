@@ -27,10 +27,28 @@ const PREAMBLES_QUERY = `
   }
 `;
 
+const ACTIVE_MODELS_QUERY = `
+  query ActiveModelsForSettings {
+    llmModels(status: "ACTIVE") {
+      modelId
+      displayName
+    }
+  }
+`;
+
 type Preamble = {
   id: string;
   name: string;
   latestVersion: { id: string; version: string } | null;
+};
+
+type ActiveModel = {
+  modelId: string;
+  displayName: string;
+};
+
+type ActiveModelsQueryData = {
+  llmModels: ActiveModel[];
 };
 
 type PreamblesQueryData = {
@@ -63,6 +81,7 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
   const [localPreambleVersionId, setLocalPreambleVersionId] = useState<string | null>(null);
   const [localLevelPresetVersionId, setLocalLevelPresetVersionId] = useState<string | null>(null);
   const [localContextId, setLocalContextId] = useState<string | null>(null);
+  const [localDefaultModelIds, setLocalDefaultModelIds] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [editingToken, setEditingToken] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -74,12 +93,17 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
     setLocalPreambleVersionId(settings.preambleVersionId);
     setLocalLevelPresetVersionId(settings.levelPresetVersionId);
     setLocalContextId(settings.contextId);
+    setLocalDefaultModelIds(settings.defaultModelIds ?? []);
     setDrafts({});
     setEditingToken(null);
   }, [settings]);
 
   const [{ data: preamblesData }] = useQuery<PreamblesQueryData>({
     query: PREAMBLES_QUERY,
+  });
+
+  const [{ data: activeModelsData }] = useQuery<ActiveModelsQueryData>({
+    query: ACTIVE_MODELS_QUERY,
   });
 
   const [{ data: levelPresetsData }] = useQuery<LevelPresetsQueryData>({
@@ -94,6 +118,7 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
   const preambles = preamblesData?.preambles ?? [];
   const levelPresets = levelPresetsData?.levelPresets ?? [];
   const contexts = contextsData?.domainContexts ?? [];
+  const activeModels = activeModelsData?.llmModels ?? [];
 
   const handleSave = async () => {
     if (settings == null) return;
@@ -111,6 +136,7 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
       preambleVersionId: localPreambleVersionId,
       levelPresetVersionId: localLevelPresetVersionId,
       contextId: localContextId,
+      defaultModelIds: localDefaultModelIds,
       valueStatements,
     };
 
@@ -202,6 +228,38 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
           ))}
         </select>
       </div>
+
+      {/* Default models */}
+      {activeModels.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Default models for coverage</label>
+          <p className="text-xs text-gray-500 mb-2">
+            Coverage matrix cells show the minimum trial count across these models. Analysis filters to runs containing all selected models. Leave empty to use all runs.
+          </p>
+          <div className="space-y-1 max-h-48 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50">
+            {activeModels.map((model) => {
+              const checked = localDefaultModelIds.includes(model.modelId);
+              return (
+                <label key={model.modelId} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setLocalDefaultModelIds((prev) => [...prev, model.modelId]);
+                      } else {
+                        setLocalDefaultModelIds((prev) => prev.filter((id) => id !== model.modelId));
+                      }
+                    }}
+                    className="h-4 w-4 rounded border-gray-300 text-teal-600"
+                  />
+                  <span className="text-sm text-gray-700">{model.displayName}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Value statements */}
       <div>

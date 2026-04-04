@@ -9,6 +9,7 @@ export type Domain = {
   defaultLevelPresetVersionId: string | null;
   defaultPreambleVersionId: string | null;
   defaultContextId: string | null;
+  defaultModelIds: string[];
 };
 
 export const DOMAINS_QUERY = gql`
@@ -22,6 +23,7 @@ export const DOMAINS_QUERY = gql`
       defaultLevelPresetVersionId
       defaultPreambleVersionId
       defaultContextId
+      defaultModelIds
     }
   }
 `;
@@ -32,23 +34,26 @@ export const SET_DOMAIN_DEFAULTS_MUTATION = gql`
     $defaultLevelPresetVersionId: ID
     $defaultPreambleVersionId: ID
     $defaultContextId: ID
+    $defaultModelIds: [String!]
   ) {
     setDomainDefaults(
       id: $id
       defaultLevelPresetVersionId: $defaultLevelPresetVersionId
       defaultPreambleVersionId: $defaultPreambleVersionId
       defaultContextId: $defaultContextId
+      defaultModelIds: $defaultModelIds
     ) {
       id
       defaultLevelPresetVersionId
       defaultPreambleVersionId
       defaultContextId
+      defaultModelIds
     }
   }
 `;
 
 export type SetDomainDefaultsMutationResult = {
-  setDomainDefaults: Pick<Domain, 'id' | 'defaultLevelPresetVersionId' | 'defaultPreambleVersionId' | 'defaultContextId'>;
+  setDomainDefaults: Pick<Domain, 'id' | 'defaultLevelPresetVersionId' | 'defaultPreambleVersionId' | 'defaultContextId' | 'defaultModelIds'>;
 };
 
 export type SetDomainDefaultsMutationVariables = {
@@ -56,6 +61,7 @@ export type SetDomainDefaultsMutationVariables = {
   defaultLevelPresetVersionId?: string | null;
   defaultPreambleVersionId?: string | null;
   defaultContextId?: string | null;
+  defaultModelIds?: string[] | null;
 };
 
 export const CREATE_DOMAIN_MUTATION = gql`
@@ -903,6 +909,7 @@ export type DomainSettings = {
   preambleVersionId: string | null;
   levelPresetVersionId: string | null;
   contextId: string | null;
+  defaultModelIds: string[];
   valueStatements: ValueStatementWithVersions[];
 };
 
@@ -922,6 +929,7 @@ export const DOMAIN_SETTINGS_QUERY = `
       preambleVersionId
       levelPresetVersionId
       contextId
+      defaultModelIds
       valueStatements {
         id
         token
@@ -968,6 +976,7 @@ export const SET_DOMAIN_SETTINGS_MUTATION = `
     $preambleVersionId: ID
     $levelPresetVersionId: ID
     $contextId: ID
+    $defaultModelIds: [String!]
     $valueStatements: [ValueStatementInput!]!
   ) {
     setDomainSettings(
@@ -975,6 +984,7 @@ export const SET_DOMAIN_SETTINGS_MUTATION = `
       preambleVersionId: $preambleVersionId
       levelPresetVersionId: $levelPresetVersionId
       contextId: $contextId
+      defaultModelIds: $defaultModelIds
       valueStatements: $valueStatements
     ) {
       id
@@ -982,6 +992,7 @@ export const SET_DOMAIN_SETTINGS_MUTATION = `
       defaultPreambleVersionId
       defaultLevelPresetVersionId
       defaultContextId
+      defaultModelIds
     }
   }
 `;
@@ -993,6 +1004,7 @@ export type SetDomainSettingsMutationResult = {
     defaultPreambleVersionId: string | null;
     defaultLevelPresetVersionId: string | null;
     defaultContextId: string | null;
+    defaultModelIds: string[];
   };
 };
 
@@ -1001,5 +1013,6 @@ export type SetDomainSettingsMutationVariables = {
   preambleVersionId?: string | null;
   levelPresetVersionId?: string | null;
   contextId?: string | null;
+  defaultModelIds?: string[] | null;
   valueStatements: Array<{ token: string; content: string }>;
 };

@@ -53,6 +53,7 @@ builder.objectType(DomainRef, {
         return db.preambleVersion.findUnique({ where: { id: domain.defaultPreambleVersionId } });
       },
     }),
+    defaultModelIds: t.exposeStringList('defaultModelIds'),
     defaultContextId: t.exposeString('defaultContextId', { nullable: true }),
     defaultContext: t.field({
       type: DomainContextRef,
@@ -127,6 +128,7 @@ export type DomainSettingsShape = {
   preambleVersionId: string | null;
   levelPresetVersionId: string | null;
   contextId: string | null;
+  defaultModelIds: string[];
   valueStatements: ValueStatementWithVersions[];
 };
 
@@ -165,6 +167,7 @@ builder.objectType(DomainSettingsRef, {
     preambleVersionId: t.exposeString('preambleVersionId', { nullable: true }),
     levelPresetVersionId: t.exposeString('levelPresetVersionId', { nullable: true }),
     contextId: t.exposeString('contextId', { nullable: true }),
+    defaultModelIds: t.exposeStringList('defaultModelIds'),
     valueStatements: t.expose('valueStatements', {
       type: [ValueStatementWithVersionsRef],
     }),
