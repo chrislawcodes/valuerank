@@ -20,6 +20,7 @@ import {
 import { useAnalysis } from '../../hooks/useAnalysis';
 import type { PerModelStats, AnalysisResult, AnalysisWarning } from '../../api/operations/analysis';
 import type { Run, Transcript } from '../../api/operations/runs';
+import { ModelFilter } from './ModelFilter';
 import {
   deriveDecisionDimensionLabels,
   deriveScenarioAttributesFromDefinition,
@@ -351,6 +352,34 @@ export function AnalysisPanel({
     () => analysis?.perModel ?? {},
     [analysis]
   );
+
+  // Model filter state
+  const transcriptModelIds = useMemo(
+    () => [...new Set((transcripts ?? []).map((t) => t.modelId))].sort(),
+    [transcripts],
+  );
+  const noTranscriptModelIds = useMemo(
+    () => Object.keys(perModel).filter((id) => !transcriptModelIds.includes(id)).sort(),
+    [perModel, transcriptModelIds],
+  );
+  const [selectedModels, setSelectedModels] = useState<string[]>([...transcriptModelIds]);
+
+  // When the run changes, reset filter to the new default
+  useEffect(() => {
+    setSelectedModels([...transcriptModelIds]);
+  }, [runId, transcriptModelIds]);
+
+  const effectiveModels = useMemo(
+    () => (selectedModels.length > 0 ? selectedModels : transcriptModelIds),
+    [selectedModels, transcriptModelIds],
+  );
+  const filteredPerModel = useMemo<Record<string, PerModelStats>>(
+    () => Object.fromEntries(
+      Object.entries(perModel).filter(([k]) => effectiveModels.includes(k)),
+    ),
+    [effectiveModels, perModel],
+  );
+
   const scenariosTranscripts = useMemo(() => {
     const currentTranscripts = transcripts ?? currentRun?.transcripts ?? [];
 
@@ -574,6 +603,16 @@ export function AnalysisPanel({
         </div>
       )}
 
+      {/* Model filter — above tab bar */}
+      {transcriptModelIds.length > 0 && (
+        <ModelFilter
+          transcriptModelIds={transcriptModelIds}
+          noTranscriptModelIds={noTranscriptModelIds}
+          selectedModels={selectedModels}
+          onSelectedModelsChange={setSelectedModels}
+        />
+      )}
+
       <div className="border-b border-gray-200 mb-6">
         <nav className="flex gap-4 -mb-px">
           {TABS.map((tab) => (
@@ -599,7 +638,7 @@ export function AnalysisPanel({
             analysisBasePath={analysisBasePath}
             analysisSearchParams={analysisSearchParams}
             definitionContent={definitionContent}
-            perModel={perModel}
+            perModel={filteredPerModel}
             visualizationData={analysis.visualizationData}
             varianceAnalysis={analysis.varianceAnalysis}
             expectedAttributes={expectedScenarioAttributes}
@@ -632,12 +671,13 @@ export function AnalysisPanel({
             analysisSearchParams={analysisSearchParams}
             analysisMode={analysisMode}
             visualizationData={decisionsVisualizationData}
-            perModel={perModel}
+            perModel={filteredPerModel}
             transcripts={scenariosTranscripts}
             expectedAttributes={expectedScenarioAttributes}
             companionRunId={analysisMode === 'paired' ? companionRun?.id ?? null : null}
             currentVignetteName={currentRun?.definition?.name ?? null}
             companionVignetteName={companionRun?.definition?.name ?? null}
+            selectedModels={effectiveModels}
           />
         )}
       </div>
