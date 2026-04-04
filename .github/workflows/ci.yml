@@ -55,6 +55,7 @@ jobs:
     env:
       JWT_SECRET: test-secret-that-is-at-least-32-characters-long
       NODE_ENV: test
+      NODE_OPTIONS: --max-old-space-size=4096
 
     steps:
       - uses: actions/checkout@v4
@@ -84,8 +85,6 @@ jobs:
 
       - name: Run web tests (shard ${{ matrix.shard }}/${{ matrix.total }})
         working-directory: cloud/apps/web
-        env:
-          NODE_OPTIONS: --max-old-space-size=4096
         run: npx vitest run --shard=${{ matrix.shard }}/${{ matrix.total }}
 
   api-tests:
