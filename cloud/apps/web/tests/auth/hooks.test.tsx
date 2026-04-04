@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { ReactNode } from 'react';
 import { AuthProvider } from '../../src/auth/context';
@@ -10,9 +10,16 @@ function Wrapper({ children }: { children: ReactNode }) {
 
 describe('useAuth hook', () => {
   it('should throw when used outside AuthProvider', () => {
-    expect(() => {
-      renderHook(() => useAuth());
-    }).toThrow('useAuth must be used within an AuthProvider');
+    // Suppress React's console.error for the expected throw — otherwise jsdom
+    // logs it to stderr and vitest exits non-zero even though the test passes.
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      expect(() => {
+        renderHook(() => useAuth());
+      }).toThrow('useAuth must be used within an AuthProvider');
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it('should return auth context value when inside AuthProvider', () => {
