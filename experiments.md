@@ -8,6 +8,32 @@ Tracking whether adversarial reviews (Feature Factory pipeline) actually change 
 
 ---
 
+## Experiment 6 — `per-model-coverage` (2026-04-03)
+
+**Feature:** Per-model trial counts in the coverage matrix — min/max trials per cell across default models, mismatch warning (orange border + ⚠) when models have uneven coverage. Includes `defaultModelIds` on Domain, global model fallback, and `modelBreakdown` tooltip.
+
+**Direct PR:** #530 (closed, UI bugs) | **Feature Factory PR:** #532 (merged, originally #531 — rebased to clean branch due to stale commits)
+
+| | Direct Path | Feature Factory |
+|--|--------------|---------|
+| Reviews that changed code | — | Yes — Gemini spec + Codex adversarial both changed implementation |
+| Critical catch | — | 2 real UI bugs caught: (1) color threshold used `primaryCount` instead of `countForColor` (cells colored wrong in per-model mode); (2) label showed "batch" instead of "trial (min)" in per-model mode |
+| False positives | — | Low |
+| Tests | 0 new | Several new (39 total in domain-coverage.test.ts) |
+| Human interruptions | 0 | 1 (conflict resolution on stale branch) |
+| Post-merge production bugs | 3 | 3 (same bugs — introduced by feature itself, not path-specific) |
+
+**Post-merge bugs (both paths would have had these):**
+1. Empty `defaultModelIds` showed batch count instead of falling back to global defaults → PR #533
+2. Double-counting paired companion runs (gpt-5.1 showing 10 instead of 5) → PR #534
+3. Structural root cause: dedup belonged at call site, not inside `computePerModelTrialCounts` → PR #535 (`deduplicateRunsByGroupId` exported helper)
+
+**Verdict:** Feature Factory won. It caught two real UI bugs that Direct Path shipped — both were silent (no test coverage for color thresholds or label text). The post-merge production bugs were structural/domain-knowledge issues neither path would have caught without real data.
+
+**Lesson:** Full-stack features with non-obvious display logic (color thresholds, conditional labels) favor Feature Factory. The adversarial review found exactly the cases that are hard to unit-test. Post-merge bugs came from paired-run domain knowledge gaps, not from the delivery path.
+
+---
+
 ## Experiment 5 — `provider-budget` (2026-03-31)
 
 **Feature:** Per-provider balance tracking — manual entry, auto-deduct on run completion, manual sync with drift logging, soft pre-run warning gate. UI on Settings → Models.
@@ -113,10 +139,11 @@ Tracking whether adversarial reviews (Feature Factory pipeline) actually change 
 | 3 — settings-restructure | UI/nav refactor | No | 6 false positives, 0 actionable |
 | 4 — cross-run-reliability | Backend/worker fix | Yes | Codex adversarial caught silent wrong-key bug that passed tests |
 | 5 — provider-budget | Full-stack feature | Partial | Feature Factory enforced test discipline; both caught same correctness bugs; Feature Factory needed 2 human interventions |
+| 6 — per-model-coverage | Full-stack feature | Yes | Caught 2 real UI bugs (color threshold, label) that Direct Path shipped silently |
 
-**Pattern (5 data points):** Feature Factory 2/2 on backend/algorithmic work. Direct Path 2/2 on UI/nav work. Full-stack features are mixed — Feature Factory adds test coverage but introduces more process friction.
+**Pattern (6 data points):** Feature Factory 2/2 on backend/algorithmic work. Direct Path 2/2 on UI/nav work. Full-stack features: Feature Factory 2/2 on catching real bugs (though Experiment 5 was partial on process friction).
 
 **Recommendation:** Route features by type before choosing pipeline:
 - Backend algorithmic / Python worker internals → Feature Factory
 - UI / nav / component refactors → Direct Path
-- Full-stack features → Feature Factory if test coverage is the priority; Direct Path if clean execution matters more
+- Full-stack features → Feature Factory; it consistently catches display-logic bugs that are hard to unit-test

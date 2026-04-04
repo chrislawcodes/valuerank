@@ -38,15 +38,24 @@ Use this hash rule for every `artifact_*_sha256` field:
 For document stages, hash the saved artifact file.
 For the implementation stage, hash a saved scoped diff patch for that stage.
 
-Each run writes its own `experiment.md` file with this exact table:
+Each run writes its own `experiment.md` file with this exact table.
+Token counts are collected in Stage C from the JSONL session file — do not
+try to fill them in here.
 
 ```markdown
-| Stage | Artifact | stage_started_at | stage_finished_at | artifact_before_sha256 | artifact_after_sha256 | review_rounds | issues_raised | issues_accepted | artifact_revised | token_usage | cost_usage |
-|-------|----------|------------------|-------------------|------------------------|-----------------------|---------------|---------------|-----------------|------------------|-------------|------------|
-| Spec | spec.md | | | | | | | | | | |
-| Plan | plan.md | | | | | | | | | | |
-| Tasks | tasks.md | | | | | | | | | | |
-| Implement | code | | | | | | | | | | |
+| Stage | Artifact | stage_started_at | stage_finished_at | artifact_before_sha256 | artifact_after_sha256 | review_rounds | issues_raised | issues_accepted | artifact_revised |
+|-------|----------|------------------|-------------------|------------------------|-----------------------|---------------|---------------|-----------------|------------------|
+| Spec | spec.md | | | | | | | | |
+| Plan | plan.md | | | | | | | | |
+| Tasks | tasks.md | | | | | | | | |
+| Implement | code | | | | | | | | |
+```
+
+Save the path to this session's JSONL file in `experiment.md` so Stage C can
+find it:
+
+```
+Session JSONL: <absolute path to .jsonl file>
 ```
 
 ---
@@ -78,7 +87,7 @@ Use a prompt like this:
 > 7. Set `artifact_revised` to `yes` only if the two hashes differ; otherwise `no`.
 > 8. Record `review_rounds` as `1` for that self-review pass.
 > 9. Record `stage_finished_at` after the review closes.
-> 10. Leave `token_usage` and `cost_usage` blank if they are unavailable.
+> 10. Record the absolute path to this session's JSONL file in `experiment.md` under "Session JSONL:" so Stage C can count tokens.
 > If the human asked for PR creation, run preflight, push, and open a PR against `chrislawcodes/valuerank`. If not, keep the result local and report readiness.
 > Use repo-root `MEMORY.md` only as a short handoff file.
 
@@ -90,9 +99,10 @@ Use a prompt like this:
 > Follow the repo-owned Feature Factory docs and runner. Use `docs/feature-runs/<slug>-factory/state.json` as the runtime source of truth.
 > Keep notes in `docs/feature-runs/<slug>-factory/experiment.md`.
 > Use the exact `experiment.md` table template from this skill.
-> Track `stage_started_at`, `stage_finished_at`, `artifact_before_sha256`, `artifact_after_sha256`, `review_rounds`, `issues_raised`, `issues_accepted`, `artifact_revised`, and optional `token_usage` / `cost_usage`.
+> Track `stage_started_at`, `stage_finished_at`, `artifact_before_sha256`, `artifact_after_sha256`, `review_rounds`, `issues_raised`, `issues_accepted`, `artifact_revised`.
 > For document stages, hash the saved artifact file. For implementation, hash a saved scoped diff patch for that stage.
 > Set `artifact_revised` to `yes` only when the before and after hashes differ.
+> Record the absolute path to this session's JSONL file in `experiment.md` under "Session JSONL:" so Stage C can count tokens.
 > If the human asked for PR creation, run preflight, push, and open a PR against `chrislawcodes/valuerank`. If not, keep the result local and report readiness.
 > Use repo-root `MEMORY.md` only as a short handoff file.
 
@@ -101,6 +111,42 @@ Wait for both paths to finish before comparison.
 ---
 
 ## Stage C — Comparison
+
+### Count Claude tokens
+
+Each agent session writes a JSONL file. Use the Python snippet below to extract
+Claude Code token usage from those files. Ask the user for the JSONL paths if
+they were not saved in Step 0.
+
+```python
+import json, sys
+
+def count_tokens(path):
+    billed_input = cache_read = output = 0
+    with open(path) as f:
+        for line in f:
+            msg = json.loads(line)
+            usage = (msg.get("message") or {}).get("usage") or {}
+            billed_input  += usage.get("input_tokens", 0) + usage.get("cache_creation_input_tokens", 0)
+            cache_read     += usage.get("cache_read_input_tokens", 0)
+            output         += usage.get("output_tokens", 0)
+    return billed_input, cache_read, output
+
+for path in sys.argv[1:]:
+    bi, cr, out = count_tokens(path)
+    print(f"{path}")
+    print(f"  billed input : {bi:,}")
+    print(f"  cache read   : {cr:,}  (~10x cheaper)")
+    print(f"  output       : {out:,}")
+    print(f"  real-work    : {bi + out:,}  (billed_input + output)")
+```
+
+Run: `python3 /tmp/count_tokens.py <direct-jsonl> <factory-jsonl>`
+
+Record `billed_input`, `cache_read`, and `output` for each path in the
+Token Efficiency table below.
+
+### Write the comparison file
 
 Write `docs/feature-runs/<slug>-comparison.md`:
 
@@ -114,16 +160,23 @@ Write `docs/feature-runs/<slug>-comparison.md`:
 
 ## Did Reviews Change The Work?
 
-| Stage | Path | Artifact | stage_started_at | stage_finished_at | artifact_before_sha256 | artifact_after_sha256 | review_rounds | issues_raised | issues_accepted | artifact_revised | token_usage | cost_usage |
-|-------|------|----------|------------------|-------------------|------------------------|-----------------------|---------------|---------------|-----------------|------------------|-------------|------------|
-| Spec | Direct Path | spec.md | | | | | | | | | | |
-| Plan | Direct Path | plan.md | | | | | | | | | | |
-| Tasks | Direct Path | tasks.md | | | | | | | | | | |
-| Implement | Direct Path | code | | | | | | | | | | |
-| Spec | Feature Factory | spec.md | | | | | | | | | | |
-| Plan | Feature Factory | plan.md | | | | | | | | | | |
-| Tasks | Feature Factory | tasks.md | | | | | | | | | | |
-| Implement | Feature Factory | code | | | | | | | | | | |
+| Stage | Path | Artifact | artifact_revised | issues_raised | issues_accepted | review_rounds |
+|-------|------|----------|-----------------|---------------|-----------------|---------------|
+| Spec | Direct Path | spec.md | | | | |
+| Plan | Direct Path | plan.md | | | | |
+| Tasks | Direct Path | tasks.md | | | | |
+| Implement | Direct Path | code | | | | |
+| Spec | Feature Factory | spec.md | | | | |
+| Plan | Feature Factory | plan.md | | | | |
+| Tasks | Feature Factory | tasks.md | | | | |
+| Implement | Feature Factory | code | | | | |
+
+## Token Efficiency
+
+| Path | Billed Input | Cache Read | Output | Real-Work (billed+output) |
+|------|-------------|-----------|--------|--------------------------|
+| Direct Path | | | | |
+| Feature Factory | | | | |
 
 ## Outcome
 
@@ -133,9 +186,63 @@ Write `docs/feature-runs/<slug>-comparison.md`:
 - Which path would we choose next time, and why?
 ```
 
-## Step 4 — Report
+---
+
+## Step 4 — Write to experiments.md
+
+**This step is required. Do not skip it.**
+
+Append a new experiment entry to `experiments.md` in the repo root. Follow the
+format of the existing entries exactly.
+
+1. Determine the next experiment number (count existing `## Experiment N` headings + 1).
+2. Insert the new entry **above** `## Experiment 5` (i.e. newest first).
+3. Use this template:
+
+```markdown
+## Experiment N — `<slug>` (<date YYYY-MM-DD>)
+
+**Feature:** <one sentence description>
+
+**Direct PR:** #NNN (<closed/merged>) | **Feature Factory PR:** #NNN (<closed/merged>)
+
+| | Direct Path | Feature Factory |
+|--|--------------|---------|
+| Reviews that changed code | N/N (which stages) | N/N (which stages) |
+| Critical catch | <what Direct Path uniquely found, or —> | <what Feature Factory uniquely found, or —> |
+| False positives | <count or Low/None> | <count or Low/None> |
+| Tests | <N new> | <N new> |
+| Claude tokens (billed input / cache read / output) | X / X / X | X / X / X |
+| Human interruptions | <N> | <N> |
+
+**Verdict:** <2–3 sentences. Which path won and why. Any post-merge bugs and their PRs.>
+
+**Lesson:** <One concrete routing rule learned from this experiment.>
+
+---
+```
+
+4. Update the **Running Tally** table at the bottom of `experiments.md`:
+   - Add a row for the new experiment.
+   - Update the **Pattern** sentence (data point count).
+   - Update the **Recommendation** bullets if the new result changes the guidance.
+
+---
+
+## Step 5 — Update STATUS.md
+
+Mark the experiment complete in `STATUS.md`:
+
+1. Move the feature from "In Progress" or "Next" to "Recently Completed".
+2. Note which path won and the PR number(s).
+3. Update "Next" for anything now unblocked.
+
+---
+
+## Step 6 — Report to user
 
 Tell the user:
 - where the comparison file lives
 - both branch names or PR links
 - which path you recommend next time and why
+- one-line summary of token counts for each path
