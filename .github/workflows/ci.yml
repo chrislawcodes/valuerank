@@ -46,6 +46,7 @@ jobs:
     name: Web Tests (${{ matrix.shard }}/${{ matrix.total }})
     runs-on: ubuntu-latest
     needs: lint-build
+    timeout-minutes: 10
 
     strategy:
       matrix:

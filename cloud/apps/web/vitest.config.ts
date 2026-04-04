@@ -6,6 +6,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    pool: 'forks',
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.test.{ts,tsx}'],
     reporters: ['default', 'json'],
