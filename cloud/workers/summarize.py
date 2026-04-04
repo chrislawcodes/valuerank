@@ -120,7 +120,7 @@ LEADING_DECISION_PREFIX_PATTERN = re.compile(
 # Default summary model if none specified
 DEFAULT_SUMMARY_MODEL = "anthropic:claude-sonnet-4-20250514"
 LLM_FALLBACK_MODEL = "xai:grok-4-1-fast-reasoning"
-DEFAULT_SUMMARIZE_PARSER_VERSION = "job-choice-v2"
+DEFAULT_SUMMARIZE_PARSER_VERSION = "paired-v2"
 
 # Keep batch size aligned with the API-side PgBoss worker batch size ceiling.
 MAX_SUMMARIZE_BATCH_SIZE = 500

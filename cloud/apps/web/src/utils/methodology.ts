@@ -236,10 +236,13 @@ export function getPairedOrientationLabels(content: unknown): PairedOrientationL
 export function getDefinitionMethodologyLabel(
   content: unknown,
   domainName?: string | null,
-): 'Job Choice' | 'Old V1' | null {
+): string | null {
   const methodology = getDefinitionMethodology(content);
-  if (methodology?.family === 'job-choice') {
-    return 'Job Choice';
+  if (methodology?.family != null && methodology.family.length > 0) {
+    return methodology.family
+      .split('-')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
   }
 
   if (domainName?.toLowerCase() === 'professional') {
