@@ -184,7 +184,8 @@ export function getDecisionMetadata(value: unknown): DecisionMetadata | null {
 }
 
 export function isJobChoiceMethodology(content: unknown): boolean {
-  return getDefinitionMethodology(content)?.family === 'job-choice';
+  const m = getDefinitionMethodology(content);
+  return m?.family != null && m.family.length > 0 && m.pair_key != null && m.pair_key.length > 0;
 }
 
 export function getPairedOrientationLabels(content: unknown): PairedOrientationLabels {

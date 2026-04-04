@@ -92,7 +92,7 @@ describe('config', () => {
 
     const { config } = await import('../src/config.js');
 
-    expect(config.SUMMARIZE_PARSER_VERSION).toBe('job-choice-v2');
+    expect(config.SUMMARIZE_PARSER_VERSION).toBe('paired-v2');
   });
 
   it('reads SUMMARIZE_PARSER_VERSION from environment', async () => {
