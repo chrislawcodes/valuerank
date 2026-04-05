@@ -2,6 +2,32 @@ import '@testing-library/jest-dom';
 import { cleanup } from '@testing-library/react';
 import { afterEach, vi, beforeAll, afterAll } from 'vitest';
 
+// Global mock for recharts — prevents loading the full recharts + d3
+// dependency tree (~10MB) which causes OOM in CI when accumulated across
+// 140+ test files. Chart tests verify data flow, not SVG rendering.
+vi.mock('recharts', () => {
+  const stub = (name: string) => {
+    const Component = (props: Record<string, unknown>) => null;
+    Component.displayName = name;
+    return Component;
+  };
+  return {
+    BarChart: stub('BarChart'),
+    Bar: stub('Bar'),
+    LineChart: stub('LineChart'),
+    Line: stub('Line'),
+    XAxis: stub('XAxis'),
+    YAxis: stub('YAxis'),
+    CartesianGrid: stub('CartesianGrid'),
+    Tooltip: stub('Tooltip'),
+    Legend: stub('Legend'),
+    ResponsiveContainer: stub('ResponsiveContainer'),
+    Cell: stub('Cell'),
+    ReferenceLine: stub('ReferenceLine'),
+    ErrorBar: stub('ErrorBar'),
+  };
+});
+
 // Suppress React's console.error noise from intentional throw tests.
 // On Linux/jsdom, React logs expected errors to stderr before the throw
 // propagates, causing vitest to exit non-zero even when all tests pass.
