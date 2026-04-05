@@ -373,7 +373,7 @@ export type CreateDomainContextInput = {
   text: Scalars['String']['input'];
 };
 
-export type CreatePairedVignetteInput = {
+export type CreateJobChoicePairInput = {
   contextId: Scalars['ID']['input'];
   domainId: Scalars['ID']['input'];
   levelPresetVersionId?: InputMaybe<Scalars['ID']['input']>;
@@ -383,8 +383,8 @@ export type CreatePairedVignetteInput = {
   valueSecondId: Scalars['ID']['input'];
 };
 
-export type CreatePairedVignetteResult = {
-  __typename?: 'CreatePairedVignetteResult';
+export type CreateJobChoicePairResult = {
+  __typename?: 'CreateJobChoicePairResult';
   definitionA: Definition;
   definitionB: Definition;
 };
@@ -1356,10 +1356,8 @@ export type Mutation = {
   createDefinition: Definition;
   createDomain: Domain;
   createDomainContext: DomainContext;
-  /** @deprecated Use createPairedVignette instead */
-  createJobChoicePair: CreatePairedVignetteResult;
+  createJobChoicePair: CreateJobChoicePairResult;
   createLevelPreset: LevelPreset;
-  createPairedVignette: CreatePairedVignetteResult;
   /** Create a new LLM model under a provider */
   createLlmModel: LlmModel;
   /** Create a new preamble */
@@ -1547,10 +1545,8 @@ export type Mutation = {
   /** Update specific content fields of a definition. Supports clearing overrides to inherit from parent. */
   updateDefinitionContent: Definition;
   updateDomainContext: DomainContext;
-  /** @deprecated Use updatePairedVignette instead */
-  updateJobChoicePair: CreatePairedVignetteResult;
+  updateJobChoicePair: CreateJobChoicePairResult;
   updateLevelPreset: LevelPreset;
-  updatePairedVignette: CreatePairedVignetteResult;
   /** Update an LLM model (display name, costs, API config) */
   updateLlmModel: LlmModel;
   /** Update LLM provider settings (rate limits, enabled status) */
@@ -1652,7 +1648,7 @@ export type MutationCreateDomainContextArgs = {
 
 
 export type MutationCreateJobChoicePairArgs = {
-  input: CreatePairedVignetteInput;
+  input: CreateJobChoicePairInput;
 };
 
 
@@ -1930,7 +1926,7 @@ export type MutationUpdateDomainContextArgs = {
 
 
 export type MutationUpdateJobChoicePairArgs = {
-  input: UpdatePairedVignetteInput;
+  input: UpdateJobChoicePairInput;
 };
 
 
@@ -3552,7 +3548,7 @@ export type UpdateDomainContextInput = {
   text: Scalars['String']['input'];
 };
 
-export type UpdatePairedVignetteInput = {
+export type UpdateJobChoicePairInput = {
   contextId: Scalars['ID']['input'];
   definitionId: Scalars['ID']['input'];
   levelPresetVersionId?: InputMaybe<Scalars['ID']['input']>;

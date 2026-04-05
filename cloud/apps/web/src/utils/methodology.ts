@@ -15,7 +15,7 @@ type DefinitionDimension = {
   name?: string;
 };
 
-type PairedComponents = {
+type JobChoiceComponents = {
   value_first?: { token?: string };
   value_second?: { token?: string };
 };
@@ -64,7 +64,7 @@ function formatValueOrderName(value: string): string {
   return looksLikeToken ? toTitleCase(normalized) : normalized;
 }
 
-function readPairedComponents(content: unknown): PairedComponents | null {
+function readJobChoiceComponents(content: unknown): JobChoiceComponents | null {
   if (!isRecord(content)) return null;
   const raw = content.components;
   if (!isRecord(raw)) return null;
@@ -183,14 +183,13 @@ export function getDecisionMetadata(value: unknown): DecisionMetadata | null {
   };
 }
 
-export function isPairedMethodology(content: unknown): boolean {
-  const m = getDefinitionMethodology(content);
-  return m?.family != null && m.family.length > 0 && m.pair_key != null && m.pair_key.length > 0;
+export function isJobChoiceMethodology(content: unknown): boolean {
+  return getDefinitionMethodology(content)?.family === 'job-choice';
 }
 
 export function getPairedOrientationLabels(content: unknown): PairedOrientationLabels {
   const methodology = getDefinitionMethodology(content);
-  const components = readPairedComponents(content);
+  const components = readJobChoiceComponents(content);
   const dimensions = readDefinitionDimensions(content);
 
   const componentOrder = (() => {
@@ -237,13 +236,10 @@ export function getPairedOrientationLabels(content: unknown): PairedOrientationL
 export function getDefinitionMethodologyLabel(
   content: unknown,
   domainName?: string | null,
-): string | null {
+): 'Job Choice' | 'Old V1' | null {
   const methodology = getDefinitionMethodology(content);
-  if (methodology?.family != null && methodology.family.length > 0) {
-    return methodology.family
-      .split('-')
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ');
+  if (methodology?.family === 'job-choice') {
+    return 'Job Choice';
   }
 
   if (domainName?.toLowerCase() === 'professional') {

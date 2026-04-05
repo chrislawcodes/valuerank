@@ -39,7 +39,7 @@ import { Preambles } from './pages/Preambles';
 import { LevelPresets } from './pages/LevelPresets';
 import { DomainContexts } from './pages/DomainContexts';
 import { ValueStatements } from './pages/ValueStatements';
-import { PairedVignetteNew } from './pages/PairedVignetteNew';
+import { JobChoiceNew } from './pages/JobChoiceNew';
 import { NotFound } from './pages/NotFound';
 import { client } from './api/client';
 
@@ -348,18 +348,18 @@ function App() {
               }
             />
             <Route
-              path="/paired/new"
+              path="/job-choice/new"
               element={
                 <ProtectedLayout>
-                  <PairedVignetteNew />
+                  <JobChoiceNew />
                 </ProtectedLayout>
               }
             />
             <Route
-              path="/paired/:id/edit"
+              path="/job-choice/:id/edit"
               element={
                 <ProtectedLayout>
-                  <PairedVignetteNew />
+                  <JobChoiceNew />
                 </ProtectedLayout>
               }
             />

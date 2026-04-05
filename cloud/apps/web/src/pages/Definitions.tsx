@@ -24,11 +24,11 @@ export function Definitions() {
   });
 
   const handleCreateNew = () => {
-    navigate('/paired/new');
+    navigate('/job-choice/new');
   };
 
   const handleCreateNewPair = () => {
-    navigate('/paired/new');
+    navigate('/job-choice/new');
   };
 
   return (

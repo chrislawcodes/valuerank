@@ -319,7 +319,7 @@ export function DefinitionDetail() {
   const startLabel = methodology?.family === 'job-choice' ? 'Start Paired Batch' : 'Start Trial';
   const handleEdit = () => {
     if (methodology?.family === 'job-choice') {
-      navigate(`/paired/${definition.id}/edit`);
+      navigate(`/job-choice/${definition.id}/edit`);
       return;
     }
     setIsEditing(true);
