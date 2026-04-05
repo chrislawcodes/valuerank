@@ -13,7 +13,7 @@ const SOFTWARE_APPROACH_VALUE_STATEMENTS = [
   },
   {
     token: 'conformity_interpersonal',
-    body: '[level] harmony with your team and others in the company because of how it relates to maintaining smooth interactions with teammates and stakeholders',
+    body: '[level] harmony with your team and the company because of how it relates to maintaining smooth interactions with teammates and stakeholders',
   },
   {
     token: 'tradition',
