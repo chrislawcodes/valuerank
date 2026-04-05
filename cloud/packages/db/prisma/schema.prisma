@@ -170,6 +170,9 @@ model Domain {
 
   defaultModelIds String[] @default([]) @map("default_model_ids")
 
+  sentencePrefix String? @map("sentence_prefix")
+  labelPrefix    String? @map("label_prefix")
+
   definitions     Definition[]
   contexts        DomainContext[] @relation("DomainContexts")
   valueStatements ValueStatement[]
