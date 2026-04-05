@@ -8,7 +8,7 @@ const app = createServer();
 
 const CREATE_PAIRED_VIGNETTE_MUTATION = `
   mutation CreatePairedVignette($input: CreatePairedVignetteInput!) {
-    createJobChoicePair(input: $input) {
+    createPairedVignette(input: $input) {
       definitionA { id name }
       definitionB { id name }
     }
@@ -17,7 +17,7 @@ const CREATE_PAIRED_VIGNETTE_MUTATION = `
 
 const UPDATE_PAIRED_VIGNETTE_MUTATION = `
   mutation UpdatePairedVignette($input: UpdatePairedVignetteInput!) {
-    updateJobChoicePair(input: $input) {
+    updatePairedVignette(input: $input) {
       definitionA { id name }
       definitionB { id name }
     }
@@ -115,8 +115,8 @@ describe('GraphQL Paired Vignette Mutations', () => {
     expect(createResponse.status).toBe(200);
     expect(createResponse.body.errors).toBeUndefined();
 
-    const aFirstId = createResponse.body.data.createJobChoicePair.definitionA.id as string;
-    const bFirstId = createResponse.body.data.createJobChoicePair.definitionB.id as string;
+    const aFirstId = createResponse.body.data.createPairedVignette.definitionA.id as string;
+    const bFirstId = createResponse.body.data.createPairedVignette.definitionB.id as string;
     createdDefinitionIds.push(aFirstId, bFirstId);
 
     const updateResponse = await request(app)
@@ -137,8 +137,8 @@ describe('GraphQL Paired Vignette Mutations', () => {
 
     expect(updateResponse.status).toBe(200);
     expect(updateResponse.body.errors).toBeUndefined();
-    expect(updateResponse.body.data.updateJobChoicePair.definitionA.name).toBe('Care -> Fairness');
-    expect(updateResponse.body.data.updateJobChoicePair.definitionB.name).toBe('Fairness -> Care');
+    expect(updateResponse.body.data.updatePairedVignette.definitionA.name).toBe('Care -> Fairness');
+    expect(updateResponse.body.data.updatePairedVignette.definitionB.name).toBe('Fairness -> Care');
 
     const definitions = await db.definition.findMany({
       where: { id: { in: [aFirstId, bFirstId] } },
@@ -217,8 +217,8 @@ describe('GraphQL Paired Vignette Mutations', () => {
     expect(createResponse.status).toBe(200);
     expect(createResponse.body.errors).toBeUndefined();
 
-    const aFirstId = createResponse.body.data.createJobChoicePair.definitionA.id as string;
-    const bFirstId = createResponse.body.data.createJobChoicePair.definitionB.id as string;
+    const aFirstId = createResponse.body.data.createPairedVignette.definitionA.id as string;
+    const bFirstId = createResponse.body.data.createPairedVignette.definitionB.id as string;
     createdDefinitionIds.push(aFirstId, bFirstId);
 
     let definitions = await db.definition.findMany({
@@ -356,8 +356,8 @@ describe('GraphQL Paired Vignette Mutations', () => {
     expect(createResponse.status).toBe(200);
     expect(createResponse.body.errors).toBeUndefined();
 
-    const aFirstId = createResponse.body.data.createJobChoicePair.definitionA.id as string;
-    const bFirstId = createResponse.body.data.createJobChoicePair.definitionB.id as string;
+    const aFirstId = createResponse.body.data.createPairedVignette.definitionA.id as string;
+    const bFirstId = createResponse.body.data.createPairedVignette.definitionB.id as string;
     createdDefinitionIds.push(aFirstId, bFirstId);
 
     const definitions = await db.definition.findMany({

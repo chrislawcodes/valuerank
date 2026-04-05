@@ -3,7 +3,7 @@ import { gql } from 'urql';
 export type PairedVignetteDefinition = { id: string; name: string };
 
 export type CreatePairedVignetteResult = {
-  createJobChoicePair: {
+  createPairedVignette: {
     definitionA: PairedVignetteDefinition;
     definitionB: PairedVignetteDefinition;
   };
@@ -22,7 +22,7 @@ export type CreatePairedVignetteVariables = {
 };
 
 export type UpdatePairedVignetteResult = {
-  updateJobChoicePair: {
+  updatePairedVignette: {
     definitionA: PairedVignetteDefinition;
     definitionB: PairedVignetteDefinition;
   };
@@ -42,7 +42,7 @@ export type UpdatePairedVignetteVariables = {
 
 export const CREATE_PAIRED_VIGNETTE_MUTATION = gql`
   mutation CreatePairedVignette($input: CreatePairedVignetteInput!) {
-    createJobChoicePair(input: $input) {
+    createPairedVignette(input: $input) {
       definitionA {
         id
         name
@@ -57,7 +57,7 @@ export const CREATE_PAIRED_VIGNETTE_MUTATION = gql`
 
 export const UPDATE_PAIRED_VIGNETTE_MUTATION = gql`
   mutation UpdatePairedVignette($input: UpdatePairedVignetteInput!) {
-    updateJobChoicePair(input: $input) {
+    updatePairedVignette(input: $input) {
       definitionA {
         id
         name
