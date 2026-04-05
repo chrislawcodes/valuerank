@@ -277,12 +277,14 @@ function AnalysisEmpty({
   );
 }
 
+const EMPTY_TRANSCRIPTS: Transcript[] = [];
+
 export function AnalysisPanel({
   runId,
   analysisBasePath = ANALYSIS_BASE_PATH,
   analysisStatus,
   definitionContent,
-  transcripts = [],
+  transcripts = EMPTY_TRANSCRIPTS,
   isOldVersion: _isOldVersion = false,
   isAggregate,
   pendingSince,
