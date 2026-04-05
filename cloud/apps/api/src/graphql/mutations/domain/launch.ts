@@ -101,12 +101,12 @@ async function hydrateDefinitionAncestors(definitions: DefinitionRow[]): Promise
   return definitionsById;
 }
 
-type JobChoiceMethodology = {
+type PairedMethodology = {
   family: string;
   pair_key: string;
 };
 
-function extractJobChoiceMethodology(content: unknown): JobChoiceMethodology | null {
+function extractPairedMethodology(content: unknown): PairedMethodology | null {
   if (content == null || typeof content !== 'object' || Array.isArray(content)) return null;
   const m = (content as Record<string, unknown>).methodology;
   if (m == null || typeof m !== 'object' || Array.isArray(m)) return null;
@@ -221,7 +221,7 @@ function groupDefinitionsByPairKey(definitions: DefinitionRow[]): {
   const singles: DefinitionRow[] = [];
 
   for (const def of definitions) {
-    const methodology = extractJobChoiceMethodology(def.content);
+    const methodology = extractPairedMethodology(def.content);
     if (methodology) {
       const bucket = byPairKey.get(methodology.pair_key) ?? [];
       bucket.push(def);

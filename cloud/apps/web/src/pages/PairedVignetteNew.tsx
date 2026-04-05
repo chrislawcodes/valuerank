@@ -18,13 +18,13 @@ import {
   type DomainContextsQueryVariables,
 } from '../api/operations/domain-contexts';
 import {
-  CREATE_JOB_CHOICE_PAIR_MUTATION,
-  UPDATE_JOB_CHOICE_PAIR_MUTATION,
-  type CreateJobChoicePairResult,
-  type CreateJobChoicePairVariables,
-  type UpdateJobChoicePairResult,
-  type UpdateJobChoicePairVariables,
-} from '../api/operations/job-choice-pair';
+  CREATE_PAIRED_VIGNETTE_MUTATION,
+  UPDATE_PAIRED_VIGNETTE_MUTATION,
+  type CreatePairedVignetteResult,
+  type CreatePairedVignetteVariables,
+  type UpdatePairedVignetteResult,
+  type UpdatePairedVignetteVariables,
+} from '../api/operations/paired-vignette';
 import {
   VALUE_STATEMENTS_QUERY,
   type ValueStatementsQueryResult,
@@ -45,7 +45,7 @@ type Preamble = {
 
 type PreamblesQueryResult = { preambles: Preamble[] };
 
-type JobChoiceComponents = {
+type PairedVignetteComponents = {
   context_id?: string;
   value_first?: { token?: string; body?: string };
   value_second?: { token?: string; body?: string };
@@ -97,15 +97,15 @@ function buildGeneratedTitle(
   return `${formatValueOrderToken(firstToken)} -> ${formatValueOrderToken(secondToken)}`;
 }
 
-function getJobChoiceComponents(content: unknown): JobChoiceComponents | null {
+function getPairedVignetteComponents(content: unknown): PairedVignetteComponents | null {
   if (!content || typeof content !== 'object' || Array.isArray(content)) return null;
   const components = (content as Record<string, unknown>).components;
   if (!components || typeof components !== 'object' || Array.isArray(components)) return null;
-  return components as JobChoiceComponents;
+  return components as PairedVignetteComponents;
 }
 
 
-export function JobChoiceNew() {
+export function PairedVignetteNew() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { id: editDefinitionId } = useParams<{ id?: string }>();
@@ -164,11 +164,11 @@ export function JobChoiceNew() {
     query: LEVEL_PRESETS_QUERY,
   });
 
-  const [, createPair] = useMutation<CreateJobChoicePairResult, CreateJobChoicePairVariables>(
-    CREATE_JOB_CHOICE_PAIR_MUTATION,
+  const [, createPair] = useMutation<CreatePairedVignetteResult, CreatePairedVignetteVariables>(
+    CREATE_PAIRED_VIGNETTE_MUTATION,
   );
-  const [, updatePair] = useMutation<UpdateJobChoicePairResult, UpdateJobChoicePairVariables>(
-    UPDATE_JOB_CHOICE_PAIR_MUTATION,
+  const [, updatePair] = useMutation<UpdatePairedVignetteResult, UpdatePairedVignetteVariables>(
+    UPDATE_PAIRED_VIGNETTE_MUTATION,
   );
 
   const domains = useMemo(
@@ -184,7 +184,7 @@ export function JobChoiceNew() {
   const requestedDomainId = searchParams.get('domainId') ?? '';
   const editingDefinition = definitionData?.definition ?? null;
   const editingContent = editingDefinition?.resolvedContent ?? editingDefinition?.content ?? null;
-  const editingComponents = getJobChoiceComponents(editingContent);
+  const editingComponents = getPairedVignetteComponents(editingContent);
 
   const canonicalComponents = useMemo(() => {
     return editingComponents;

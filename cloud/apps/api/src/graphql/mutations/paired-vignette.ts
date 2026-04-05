@@ -14,11 +14,11 @@ import { createAuditLog } from '../../services/audit/index.js';
 import { applyLevelPresetToDefinitionContent } from '../../utils/definition-level-preset.js';
 import { findPairedCompanion } from '../../utils/auto-pair.js';
 
-type JobChoiceDefinitionContent = DefinitionContentV1 & {
+type PairedVignetteContent = DefinitionContentV1 & {
   components: DefinitionComponents;
 };
 
-type JobChoicePairResult = { definitionA: DefinitionShape; definitionB: DefinitionShape };
+type PairedVignetteResult = { definitionA: DefinitionShape; definitionB: DefinitionShape };
 
 type ResolvedPairInputs = {
   domainId: string;
@@ -35,17 +35,17 @@ type ResolvedPairInputs = {
   valueSecond: { id: string; token: string; body: string; domainId: string };
 };
 
-const CreateJobChoicePairResultRef =
-  builder.objectRef<JobChoicePairResult>('CreateJobChoicePairResult');
+const CreatePairedVignetteResultRef =
+  builder.objectRef<PairedVignetteResult>('CreatePairedVignetteResult');
 
-builder.objectType(CreateJobChoicePairResultRef, {
+builder.objectType(CreatePairedVignetteResultRef, {
   fields: (t) => ({
     definitionA: t.field({ type: DefinitionRef, resolve: (result) => result.definitionA }),
     definitionB: t.field({ type: DefinitionRef, resolve: (result) => result.definitionB }),
   }),
 });
 
-const CreateJobChoicePairInput = builder.inputType('CreateJobChoicePairInput', {
+const CreatePairedVignetteInput = builder.inputType('CreatePairedVignetteInput', {
   fields: (t) => ({
     name: t.string({ required: true }),
     domainId: t.id({ required: true }),
@@ -57,7 +57,7 @@ const CreateJobChoicePairInput = builder.inputType('CreateJobChoicePairInput', {
   }),
 });
 
-const UpdateJobChoicePairInput = builder.inputType('UpdateJobChoicePairInput', {
+const UpdatePairedVignetteInput = builder.inputType('UpdatePairedVignetteInput', {
   fields: (t) => ({
     definitionId: t.id({ required: true }),
     name: t.string({ required: true }),
@@ -90,11 +90,11 @@ function buildValueOrderLabel(firstToken: string, secondToken: string): string {
   return `${formatValueOrderToken(firstToken)} -> ${formatValueOrderToken(secondToken)}`;
 }
 
-function buildJobChoiceDefinitionName(_baseName: string, firstToken: string, secondToken: string): string {
+function buildPairedDefinitionName(_baseName: string, firstToken: string, secondToken: string): string {
   return buildValueOrderLabel(firstToken, secondToken);
 }
 
-function buildJobChoicePairContent(
+function buildPairedVignetteContent(
   pairKey: string,
   contextText: string,
   contextId: string,
@@ -117,7 +117,7 @@ function buildJobChoicePairContent(
   const templateBFirst = assembleTemplate(contextText, componentsBFirst);
   const dimensions = [{ name: valueFirst.token }, { name: valueSecond.token }];
 
-  const contentAFirst: JobChoiceDefinitionContent = applyLevelPresetToDefinitionContent({
+  const contentAFirst: PairedVignetteContent = applyLevelPresetToDefinitionContent({
     schema_version: 1,
     template: templateAFirst,
     dimensions,
@@ -128,7 +128,7 @@ function buildJobChoicePairContent(
     },
     components: componentsAFirst,
   }, levelPresetVersion);
-  const contentBFirst: JobChoiceDefinitionContent = applyLevelPresetToDefinitionContent({
+  const contentBFirst: PairedVignetteContent = applyLevelPresetToDefinitionContent({
     schema_version: 1,
     template: templateBFirst,
     dimensions,
@@ -148,7 +148,7 @@ function buildJobChoicePairContent(
   };
 }
 
-async function createJobChoiceScenarios(
+async function createPairedScenarios(
   tx: Prisma.TransactionClient,
   params: {
     definitionAId: string;
@@ -263,7 +263,7 @@ async function createJobChoiceScenarios(
   });
 }
 
-async function resolveJobChoicePairInputs(input: {
+async function resolvePairedVignetteInputs(input: {
   domainId: string;
   contextId: string;
   valueFirstId: string;
@@ -351,7 +351,7 @@ async function resolveJobChoicePairInputs(input: {
   } satisfies ResolvedPairInputs;
 }
 
-async function resolveJobChoicePair(definitionId: string) {
+async function resolvePairedVignette(definitionId: string) {
   const definition = await db.definition.findUnique({
     where: { id: definitionId },
     select: {
@@ -377,7 +377,7 @@ async function resolveJobChoicePair(definitionId: string) {
       : null;
 
   if (methodology?.family !== 'job-choice' || typeof methodology.pair_key !== 'string') {
-    throw new Error('Definition is not a paired Job Choice vignette');
+    throw new Error('Definition is not a paired vignette');
   }
 
   const candidates = await db.definition.findMany({
@@ -399,7 +399,7 @@ async function resolveJobChoicePair(definitionId: string) {
   );
 
   if (companion == null) {
-    throw new Error('Paired Job Choice vignette is missing its companion with mirrored value tokens');
+    throw new Error('Paired vignette is missing its companion with mirrored value tokens');
   }
 
   const definitionB = companion as { id: string; name: string; content: unknown };
@@ -413,21 +413,21 @@ async function resolveJobChoicePair(definitionId: string) {
 
 builder.mutationField('createJobChoicePair', (t) =>
   t.field({
-    type: CreateJobChoicePairResultRef,
-    args: { input: t.arg({ type: CreateJobChoicePairInput, required: true }) },
+    type: CreatePairedVignetteResultRef,
+    args: { input: t.arg({ type: CreatePairedVignetteInput, required: true }) },
     resolve: async (_root, { input }, ctx) => {
       const domainId = String(input.domainId);
       const contextId = String(input.contextId);
       const valueFirstId = String(input.valueFirstId);
       const valueSecondId = String(input.valueSecondId);
 
-      ctx.log.info({ domainId, contextId, valueFirstId, valueSecondId }, 'Creating job choice pair');
+      ctx.log.info({ domainId, contextId, valueFirstId, valueSecondId }, 'Creating paired vignette');
 
       const preambleVersionId =
         input.preambleVersionId != null ? String(input.preambleVersionId) : null;
       const inputLevelPresetVersionId =
         input.levelPresetVersionId != null ? String(input.levelPresetVersionId) : null;
-      const resolvedInputs = await resolveJobChoicePairInputs({
+      const resolvedInputs = await resolvePairedVignetteInputs({
         domainId,
         contextId,
         valueFirstId,
@@ -443,7 +443,7 @@ builder.mutationField('createJobChoicePair', (t) =>
         contentBFirst,
         componentsAFirst,
         componentsBFirst,
-      } = buildJobChoicePairContent(
+      } = buildPairedVignetteContent(
         pairKey,
         resolvedInputs.context.text,
         resolvedInputs.contextId,
@@ -455,7 +455,7 @@ builder.mutationField('createJobChoicePair', (t) =>
       const [defA, defB] = await db.$transaction(async (tx) => {
         const a = await tx.definition.create({
           data: {
-            name: buildJobChoiceDefinitionName(
+            name: buildPairedDefinitionName(
               input.name,
               resolvedInputs.valueFirst.token,
               resolvedInputs.valueSecond.token,
@@ -470,7 +470,7 @@ builder.mutationField('createJobChoicePair', (t) =>
         });
         const b = await tx.definition.create({
           data: {
-            name: buildJobChoiceDefinitionName(
+            name: buildPairedDefinitionName(
               input.name,
               resolvedInputs.valueSecond.token,
               resolvedInputs.valueFirst.token,
@@ -483,7 +483,7 @@ builder.mutationField('createJobChoicePair', (t) =>
             createdByUserId: ctx.user?.id ?? null,
           },
         });
-        await createJobChoiceScenarios(tx, {
+        await createPairedScenarios(tx, {
           definitionAId: a.id,
           definitionBId: b.id,
           contextText: resolvedInputs.context.text,
@@ -505,7 +505,7 @@ builder.mutationField('createJobChoicePair', (t) =>
           levelPresetVersionId: resolvedInputs.resolvedLevelPresetVersionId,
           scenarioCount: resolvedInputs.levelPresetVersion != null ? 50 : 2,
         },
-        'Job choice pair created',
+        'Paired vignette created',
       );
 
       void createAuditLog({
@@ -533,8 +533,8 @@ builder.mutationField('createJobChoicePair', (t) =>
 
 builder.mutationField('updateJobChoicePair', (t) =>
   t.field({
-    type: CreateJobChoicePairResultRef,
-    args: { input: t.arg({ type: UpdateJobChoicePairInput, required: true }) },
+    type: CreatePairedVignetteResultRef,
+    args: { input: t.arg({ type: UpdatePairedVignetteInput, required: true }) },
     resolve: async (_root, { input }, ctx) => {
       const definitionId = String(input.definitionId);
       const contextId = String(input.contextId);
@@ -545,7 +545,7 @@ builder.mutationField('updateJobChoicePair', (t) =>
       const inputLevelPresetVersionId =
         input.levelPresetVersionId != null ? String(input.levelPresetVersionId) : null;
 
-      const existingPair = await resolveJobChoicePair(definitionId);
+      const existingPair = await resolvePairedVignette(definitionId);
       const domainId = (
         await db.definition.findUnique({
           where: { id: existingPair.definitionA.id },
@@ -557,7 +557,7 @@ builder.mutationField('updateJobChoicePair', (t) =>
         throw new Error(`Definition ${definitionId} is not assigned to a domain`);
       }
 
-      const resolvedInputs = await resolveJobChoicePairInputs({
+      const resolvedInputs = await resolvePairedVignetteInputs({
         domainId,
         contextId,
         valueFirstId,
@@ -571,7 +571,7 @@ builder.mutationField('updateJobChoicePair', (t) =>
         contentBFirst,
         componentsAFirst,
         componentsBFirst,
-      } = buildJobChoicePairContent(
+      } = buildPairedVignetteContent(
         existingPair.pairKey,
         resolvedInputs.context.text,
         resolvedInputs.contextId,
@@ -589,7 +589,7 @@ builder.mutationField('updateJobChoicePair', (t) =>
           tx.definition.update({
             where: { id: existingPair.definitionA.id },
             data: {
-              name: buildJobChoiceDefinitionName(
+              name: buildPairedDefinitionName(
                 input.name,
                 resolvedInputs.valueFirst.token,
                 resolvedInputs.valueSecond.token,
@@ -603,7 +603,7 @@ builder.mutationField('updateJobChoicePair', (t) =>
           tx.definition.update({
             where: { id: existingPair.definitionB.id },
             data: {
-              name: buildJobChoiceDefinitionName(
+              name: buildPairedDefinitionName(
                 input.name,
                 resolvedInputs.valueSecond.token,
                 resolvedInputs.valueFirst.token,
@@ -616,7 +616,7 @@ builder.mutationField('updateJobChoicePair', (t) =>
           }),
         ]);
 
-        await createJobChoiceScenarios(tx, {
+        await createPairedScenarios(tx, {
           definitionAId: existingPair.definitionA.id,
           definitionBId: existingPair.definitionB.id,
           contextText: resolvedInputs.context.text,
@@ -654,7 +654,7 @@ builder.mutationField('updateJobChoicePair', (t) =>
           levelPresetVersionId: resolvedInputs.resolvedLevelPresetVersionId,
           scenarioCount: resolvedInputs.levelPresetVersion != null ? 50 : 2,
         },
-        'Job choice pair updated',
+        'Paired vignette updated',
       );
 
       return {

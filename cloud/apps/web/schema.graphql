@@ -400,7 +400,7 @@ input CreateDomainContextInput {
   text: String!
 }
 
-input CreateJobChoicePairInput {
+input CreatePairedVignetteInput {
   contextId: ID!
   domainId: ID!
   levelPresetVersionId: ID
@@ -410,7 +410,7 @@ input CreateJobChoicePairInput {
   valueSecondId: ID!
 }
 
-type CreateJobChoicePairResult {
+type CreatePairedVignetteResult {
   definitionA: Definition!
   definitionB: Definition!
 }
@@ -1462,7 +1462,7 @@ type Mutation {
   createDefinition(input: CreateDefinitionInput!): Definition!
   createDomain(name: String!): Domain!
   createDomainContext(input: CreateDomainContextInput!): DomainContext!
-  createJobChoicePair(input: CreateJobChoicePairInput!): CreateJobChoicePairResult!
+  createJobChoicePair(input: CreatePairedVignetteInput!): CreatePairedVignetteResult!
   createLevelPreset(l1: String!, l2: String!, l3: String!, l4: String!, l5: String!, name: String!): LevelPreset!
 
   """Create a new LLM model under a provider"""
@@ -1683,7 +1683,7 @@ type Mutation {
     input: UpdateDefinitionContentInput!
   ): Definition!
   updateDomainContext(id: ID!, input: UpdateDomainContextInput!): DomainContext!
-  updateJobChoicePair(input: UpdateJobChoicePairInput!): CreateJobChoicePairResult!
+  updateJobChoicePair(input: UpdatePairedVignetteInput!): CreatePairedVignetteResult!
   updateLevelPreset(id: ID!, l1: String!, l2: String!, l3: String!, l4: String!, l5: String!): LevelPreset!
 
   """Update an LLM model (display name, costs, API config)"""
@@ -3253,7 +3253,7 @@ input UpdateDomainContextInput {
   text: String!
 }
 
-input UpdateJobChoicePairInput {
+input UpdatePairedVignetteInput {
   contextId: ID!
   definitionId: ID!
   levelPresetVersionId: ID

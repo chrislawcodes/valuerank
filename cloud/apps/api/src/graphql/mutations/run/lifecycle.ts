@@ -131,7 +131,7 @@ export async function persistPairedCompanionRunIds(primaryRunId: string, compani
   });
 }
 
-async function resolvePairedJobChoiceDefinition(
+async function resolvePairedDefinition(
   definitionId: string,
 ): Promise<{ primary: { id: string; content: unknown }; companionId: string; companionContent: unknown; primaryValueFirst: string; companionValueFirst: string }> {
   const definition = await db.definition.findUnique({
@@ -280,7 +280,7 @@ builder.mutationField('startRun', (t) =>
       let pairedRunIds: string[] | undefined;
 
       if (launchMode === 'PAIRED_BATCH') {
-        const pair = await resolvePairedJobChoiceDefinition(String(input.definitionId));
+        const pair = await resolvePairedDefinition(String(input.definitionId));
         const batchGroupId = crypto.randomUUID();
 
         const primaryRun = await startRunService({

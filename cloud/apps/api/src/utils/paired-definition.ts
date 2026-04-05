@@ -1,17 +1,17 @@
 import type { DefinitionComponents, DefinitionContent } from '@valuerank/db';
 import { assembleTemplate, getJobChoiceValueStatementBody } from '@valuerank/shared';
 
-type JobChoiceContentLike = Pick<DefinitionContent, 'template' | 'components' | 'methodology'>;
+type PairedContentLike = Pick<DefinitionContent, 'template' | 'components' | 'methodology'>;
 
 const ROLE_SENTENCE_PREFIX = 'One job offers ';
 
-function extractJobChoiceIntro(template: string): string | null {
+function extractPairedIntro(template: string): string | null {
   const markerIndex = template.indexOf(ROLE_SENTENCE_PREFIX);
   if (markerIndex < 0) return null;
   return markerIndex === 0 ? '' : template.slice(0, markerIndex).trimEnd();
 }
 
-export function normalizeJobChoiceComponents(components: DefinitionComponents): DefinitionComponents {
+export function normalizePairedComponents(components: DefinitionComponents): DefinitionComponents {
   const normalizedFirstBody =
     getJobChoiceValueStatementBody(components.value_first.token) ?? components.value_first.body;
   const normalizedSecondBody =
@@ -30,12 +30,12 @@ export function normalizeJobChoiceComponents(components: DefinitionComponents): 
   };
 }
 
-function isJobChoiceContentLike(content: unknown): content is JobChoiceContentLike {
+function isPairedContentLike(content: unknown): content is PairedContentLike {
   return typeof content === 'object' && content !== null;
 }
 
-export function normalizeJobChoiceDefinitionContent<T>(content: T): T {
-  if (!isJobChoiceContentLike(content)) {
+export function normalizePairedDefinitionContent<T>(content: T): T {
+  if (!isPairedContentLike(content)) {
     return content;
   }
 
@@ -43,15 +43,15 @@ export function normalizeJobChoiceDefinitionContent<T>(content: T): T {
     return content;
   }
 
-  const intro = extractJobChoiceIntro(content.template);
+  const intro = extractPairedIntro(content.template);
   if (intro == null) {
     return {
       ...content,
-      components: normalizeJobChoiceComponents(content.components),
+      components: normalizePairedComponents(content.components),
     } as T;
   }
 
-  const normalizedComponents = normalizeJobChoiceComponents(content.components);
+  const normalizedComponents = normalizePairedComponents(content.components);
   const normalizedTemplate = assembleTemplate(intro, normalizedComponents);
 
   return {

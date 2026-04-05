@@ -6,8 +6,8 @@ import { getAuthHeader, TEST_USER } from '../../test-utils.js';
 
 const app = createServer();
 
-const CREATE_JOB_CHOICE_PAIR_MUTATION = `
-  mutation CreateJobChoicePair($input: CreateJobChoicePairInput!) {
+const CREATE_PAIRED_VIGNETTE_MUTATION = `
+  mutation CreatePairedVignette($input: CreatePairedVignetteInput!) {
     createJobChoicePair(input: $input) {
       definitionA { id name }
       definitionB { id name }
@@ -15,8 +15,8 @@ const CREATE_JOB_CHOICE_PAIR_MUTATION = `
   }
 `;
 
-const UPDATE_JOB_CHOICE_PAIR_MUTATION = `
-  mutation UpdateJobChoicePair($input: UpdateJobChoicePairInput!) {
+const UPDATE_PAIRED_VIGNETTE_MUTATION = `
+  mutation UpdatePairedVignette($input: UpdatePairedVignetteInput!) {
     updateJobChoicePair(input: $input) {
       definitionA { id name }
       definitionB { id name }
@@ -24,7 +24,7 @@ const UPDATE_JOB_CHOICE_PAIR_MUTATION = `
   }
 `;
 
-describe('GraphQL Job Choice Pair Mutations', () => {
+describe('GraphQL Paired Vignette Mutations', () => {
   const createdDomainIds: string[] = [];
   const createdDefinitionIds: string[] = [];
   const createdContextIds: string[] = [];
@@ -100,7 +100,7 @@ describe('GraphQL Job Choice Pair Mutations', () => {
       .post('/graphql')
       .set('Authorization', getAuthHeader())
       .send({
-        query: CREATE_JOB_CHOICE_PAIR_MUTATION,
+        query: CREATE_PAIRED_VIGNETTE_MUTATION,
         variables: {
           input: {
             name: 'Care vs Freedom',
@@ -123,7 +123,7 @@ describe('GraphQL Job Choice Pair Mutations', () => {
       .post('/graphql')
       .set('Authorization', getAuthHeader())
       .send({
-        query: UPDATE_JOB_CHOICE_PAIR_MUTATION,
+        query: UPDATE_PAIRED_VIGNETTE_MUTATION,
         variables: {
           input: {
             definitionId: bFirstId,
@@ -202,7 +202,7 @@ describe('GraphQL Job Choice Pair Mutations', () => {
       .post('/graphql')
       .set('Authorization', getAuthHeader())
       .send({
-        query: CREATE_JOB_CHOICE_PAIR_MUTATION,
+        query: CREATE_PAIRED_VIGNETTE_MUTATION,
         variables: {
           input: {
             name: 'Care vs Freedom',
@@ -233,7 +233,7 @@ describe('GraphQL Job Choice Pair Mutations', () => {
       .post('/graphql')
       .set('Authorization', getAuthHeader())
       .send({
-        query: UPDATE_JOB_CHOICE_PAIR_MUTATION,
+        query: UPDATE_PAIRED_VIGNETTE_MUTATION,
         variables: {
           input: {
             definitionId: aFirstId,
@@ -340,7 +340,7 @@ describe('GraphQL Job Choice Pair Mutations', () => {
       .post('/graphql')
       .set('Authorization', getAuthHeader())
       .send({
-        query: CREATE_JOB_CHOICE_PAIR_MUTATION,
+        query: CREATE_PAIRED_VIGNETTE_MUTATION,
         variables: {
           input: {
             name: 'Dependability vs Achievement',
