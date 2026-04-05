@@ -1,0 +1,811 @@
+diff --git a/cloud/apps/api/src/graphql/mutations/domain/settings.ts b/cloud/apps/api/src/graphql/mutations/domain/settings.ts
+index 471873ba..2872b52a 100644
+--- a/cloud/apps/api/src/graphql/mutations/domain/settings.ts
++++ b/cloud/apps/api/src/graphql/mutations/domain/settings.ts
+@@ -21,12 +21,31 @@ builder.mutationField('setDomainDefaults', (t) =>
+       defaultLevelPresetVersionId: t.arg.id({ required: false }),
+       defaultPreambleVersionId: t.arg.id({ required: false }),
+       defaultContextId: t.arg.id({ required: false }),
++      defaultModelIds: t.arg.stringList({ required: false }),
+     },
+     resolve: async (_root, args, ctx) => {
+       const id = String(args.id);
+       const existing = await db.domain.findUnique({ where: { id } });
+       if (!existing) throw new Error(`Domain not found: ${id}`);
+ 
++      // Validate defaultModelIds: each must be an ACTIVE llmModel
++      let validatedModelIds: string[] | undefined;
++      if (args.defaultModelIds !== undefined && args.defaultModelIds !== null) {
++        const requestedIds = args.defaultModelIds.map(String);
++        if (requestedIds.length > 0) {
++          const activeModels = await db.llmModel.findMany({
++            where: { modelId: { in: requestedIds }, status: 'ACTIVE' },
++            select: { modelId: true },
++          });
++          const activeModelIds = new Set(activeModels.map((m) => m.modelId));
++          const invalid = requestedIds.filter((mid) => !activeModelIds.has(mid));
++          if (invalid.length > 0) {
++            throw new Error(`The following model IDs are not active: ${invalid.join(', ')}`);
++          }
++        }
++        validatedModelIds = requestedIds;
++      }
++
+       const updated = await db.domain.update({
+         where: { id },
+         data: {
+@@ -39,6 +58,7 @@ builder.mutationField('setDomainDefaults', (t) =>
+           defaultContextId: args.defaultContextId !== undefined
+             ? (args.defaultContextId === null ? null : String(args.defaultContextId))
+             : undefined,
++          ...(validatedModelIds !== undefined ? { defaultModelIds: validatedModelIds } : {}),
+         },
+       });
+ 
+@@ -58,10 +78,29 @@ builder.mutationField('setDomainSettings', (t) =>
+       levelPresetVersionId: t.arg.id({ required: false }),
+       contextId: t.arg.id({ required: false }),
+       valueStatements: t.arg({ type: [ValueStatementInput], required: true }),
++      defaultModelIds: t.arg.stringList({ required: false }),
+     },
+     resolve: async (_root, args) => {
+       const domainId = args.domainId as string;
+ 
++      // Validate defaultModelIds before transaction
++      let validatedModelIds: string[] | undefined;
++      if (args.defaultModelIds !== undefined && args.defaultModelIds !== null) {
++        const requestedIds = args.defaultModelIds.map(String);
++        if (requestedIds.length > 0) {
++          const activeModels = await db.llmModel.findMany({
++            where: { modelId: { in: requestedIds }, status: 'ACTIVE' },
++            select: { modelId: true },
++          });
++          const activeModelIds = new Set(activeModels.map((m) => m.modelId));
++          const invalid = requestedIds.filter((mid) => !activeModelIds.has(mid));
++          if (invalid.length > 0) {
++            throw new Error(`The following model IDs are not active: ${invalid.join(', ')}`);
++          }
++        }
++        validatedModelIds = requestedIds;
++      }
++
+       const updatedDomain = await db.$transaction(async (tx) => {
+         const currentStatements = await tx.valueStatement.findMany({
+           where: { domainId },
+@@ -108,6 +147,7 @@ builder.mutationField('setDomainSettings', (t) =>
+             defaultPreambleVersionId: args.preambleVersionId != null ? String(args.preambleVersionId) : null,
+             defaultLevelPresetVersionId: args.levelPresetVersionId != null ? String(args.levelPresetVersionId) : null,
+             defaultContextId: args.contextId != null ? String(args.contextId) : null,
++            ...(validatedModelIds !== undefined ? { defaultModelIds: validatedModelIds } : {}),
+           },
+         });
+ 
+diff --git a/cloud/apps/api/src/graphql/queries/domain-coverage.ts b/cloud/apps/api/src/graphql/queries/domain-coverage.ts
+index ed4eb285..8167a89a 100644
+--- a/cloud/apps/api/src/graphql/queries/domain-coverage.ts
++++ b/cloud/apps/api/src/graphql/queries/domain-coverage.ts
+@@ -21,6 +21,12 @@ import {
+   selectPrimaryDefinitionCounts,
+ } from './domain-coverage-utils.js';
+ 
++type ModelTrialCount = {
++  modelId: string;
++  label: string;
++  trialCount: number;
++};
++
+ type DomainValueCoverageCell = {
+   valueA: string;
+   valueB: string;
+@@ -29,6 +35,10 @@ type DomainValueCoverageCell = {
+   definitionId: string | null;
+   definitionName: string | null;
+   aggregateRunId: string | null;
++  // Per-model trial counts (populated only when defaultModelIds is non-empty)
++  minTrialCount: number | null;
++  maxTrialCount: number | null;
++  modelTrialCounts: ModelTrialCount[];
+ };
+ 
+ type CoverageModelOption = {
+@@ -52,6 +62,16 @@ const CoverageModelOptionRef = builder
+     }),
+   });
+ 
++const ModelTrialCountRef = builder
++  .objectRef<ModelTrialCount>('ModelTrialCount')
++  .implement({
++    fields: (t) => ({
++      modelId: t.exposeString('modelId'),
++      label: t.exposeString('label'),
++      trialCount: t.exposeInt('trialCount'),
++    }),
++  });
++
+ const DomainValueCoverageCellRef = builder
+   .objectRef<DomainValueCoverageCell>('DomainValueCoverageCell')
+   .implement({
+@@ -63,6 +83,12 @@ const DomainValueCoverageCellRef = builder
+       definitionId: t.exposeString('definitionId', { nullable: true }),
+       definitionName: t.exposeString('definitionName', { nullable: true }),
+       aggregateRunId: t.exposeString('aggregateRunId', { nullable: true }),
++      minTrialCount: t.exposeInt('minTrialCount', { nullable: true }),
++      maxTrialCount: t.exposeInt('maxTrialCount', { nullable: true }),
++      modelTrialCounts: t.field({
++        type: [ModelTrialCountRef],
++        resolve: (parent) => parent.modelTrialCounts,
++      }),
+     }),
+   });
+ 
+@@ -144,9 +170,11 @@ builder.queryField('domainValueCoverage', (t) =>
+ 
+       ctx.log.debug({ domainId, filterModelIds, selectedSignature }, 'Computing domain value coverage');
+ 
+-      const domain = await db.domain.findUnique({ where: { id: domainId }, select: { id: true } });
++      const domain = await db.domain.findUnique({ where: { id: domainId }, select: { id: true, defaultModelIds: true } });
+       if (!domain) return null;
+ 
++      const defaultModelIds = domain.defaultModelIds ?? [];
++
+       // Fetch all non-deleted definitions (need IDs to resolve content)
+       const definitions = await db.definition.findMany({
+         where: { domainId, deletedAt: null },
+@@ -200,6 +228,9 @@ builder.queryField('domainValueCoverage', (t) =>
+         config: unknown;
+         transcripts: Array<{ modelId: string }>;
+       }>>();
++      // Per-model trial count tracking: definitionId -> modelId -> trialCount
++      // A trial = one transcript; each run that includes a model = samplesPerScenario trials for that model
++      const modelTrialsByDefinitionId = new Map<string, Map<string, number>>();
+ 
+       if (definitionIds.length > 0) {
+         const completedRuns = await db.run.findMany({
+@@ -251,6 +282,18 @@ builder.queryField('domainValueCoverage', (t) =>
+             (batchCountByDefinitionId.get(run.definitionId) ?? 0) + increment,
+           );
+ 
++          // Track per-model trial counts for default models
++          if (defaultModelIds.length > 0) {
++            const modelCounts = modelTrialsByDefinitionId.get(run.definitionId) ?? new Map<string, number>();
++            const runModelIds = new Set(run.transcripts.map((t) => t.modelId));
++            for (const mid of defaultModelIds) {
++              if (runModelIds.has(mid)) {
++                modelCounts.set(mid, (modelCounts.get(mid) ?? 0) + increment);
++              }
++            }
++            modelTrialsByDefinitionId.set(run.definitionId, modelCounts);
++          }
++
+           const pairedBatchGroupId = getCoverageBatchGroupId(run.config);
+ 
+           if (pairedBatchGroupId === null) {
+@@ -286,19 +329,25 @@ builder.queryField('domainValueCoverage', (t) =>
+         }
+       }
+ 
++      // Also collect display names for default models
++      const allModelIdsToFetch = new Set([...availableModelIds, ...defaultModelIds]);
+       const modelDetailRows =
+-        availableModelIds.size > 0
++        allModelIdsToFetch.size > 0
+           ? await db.llmModel.findMany({
+-            where: { modelId: { in: Array.from(availableModelIds) } },
++            where: { modelId: { in: Array.from(allModelIdsToFetch) } },
+             select: { modelId: true, displayName: true },
+             orderBy: { displayName: 'asc' },
+           })
+           : [];
+ 
+-      const availableModels: CoverageModelOption[] = modelDetailRows.map((m) => ({
+-        modelId: m.modelId,
+-        label: m.displayName,
+-      }));
++      const modelLabelById = new Map(modelDetailRows.map((m) => [m.modelId, m.displayName]));
++
++      const availableModels: CoverageModelOption[] = modelDetailRows
++        .filter((m) => availableModelIds.has(m.modelId))
++        .map((m) => ({
++          modelId: m.modelId,
++          label: m.displayName,
++        }));
+ 
+       // Build the symmetric 45-cell matrix (one cell per unique sorted pair)
+       const values = [...COVERAGE_VALUE_KEYS] as string[];
+@@ -321,6 +370,9 @@ builder.queryField('domainValueCoverage', (t) =>
+               definitionId: null,
+               definitionName: null,
+               aggregateRunId: null,
++              minTrialCount: null,
++              maxTrialCount: null,
++              modelTrialCounts: [],
+             });
+           } else {
+             // Use the total counts across all definitions for the visible cell, but
+@@ -339,6 +391,36 @@ builder.queryField('domainValueCoverage', (t) =>
+               : (latestAggregateRunIdByDefinitionId.get(primaryDefId)
+                 ?? latestMatchingRunIdByDefinitionId.get(primaryDefId)
+                 ?? null);
++
++            // Compute per-model trial counts across all definitions for this pair
++            let minTrialCount: number | null = null;
++            let maxTrialCount: number | null = null;
++            const modelTrialCounts: ModelTrialCount[] = [];
++
++            if (defaultModelIds.length > 0) {
++              // Aggregate trial counts per model across all definitions that cover this pair
++              const aggregatedModelCounts = new Map<string, number>();
++              for (const defId of defIdsForPair) {
++                const defModelCounts = modelTrialsByDefinitionId.get(defId);
++                if (defModelCounts) {
++                  for (const [mid, count] of defModelCounts) {
++                    aggregatedModelCounts.set(mid, (aggregatedModelCounts.get(mid) ?? 0) + count);
++                  }
++                }
++              }
++
++              for (const mid of defaultModelIds) {
++                const count = aggregatedModelCounts.get(mid) ?? 0;
++                modelTrialCounts.push({
++                  modelId: mid,
++                  label: modelLabelById.get(mid) ?? mid,
++                  trialCount: count,
++                });
++                if (minTrialCount === null || count < minTrialCount) minTrialCount = count;
++                if (maxTrialCount === null || count > maxTrialCount) maxTrialCount = count;
++              }
++            }
++
+             cells.push({
+               valueA,
+               valueB,
+@@ -347,6 +429,9 @@ builder.queryField('domainValueCoverage', (t) =>
+               definitionId: primaryDefId !== '' ? primaryDefId : null,
+               definitionName: primaryPair?.name ?? null,
+               aggregateRunId,
++              minTrialCount,
++              maxTrialCount,
++              modelTrialCounts,
+             });
+           }
+         }
+diff --git a/cloud/apps/api/src/graphql/queries/domain/analysis.ts b/cloud/apps/api/src/graphql/queries/domain/analysis.ts
+index 6d996c52..13eae214 100644
+--- a/cloud/apps/api/src/graphql/queries/domain/analysis.ts
++++ b/cloud/apps/api/src/graphql/queries/domain/analysis.ts
+@@ -50,7 +50,7 @@ builder.queryField('domainAnalysis', (t) =>
+       if (requestedSignature === null) {
+         ctx.log.warn({ domainId }, 'domainAnalysis called without signature; defaulting to first vnew signature');
+       }
+-      const domain = await db.domain.findUnique({ where: { id: domainId } });
++      const domain = await db.domain.findUnique({ where: { id: domainId }, select: { id: true, name: true, defaultModelIds: true } });
+       if (!domain) throw new Error(`Domain not found: ${domainId}`);
+ 
+       const definitions = await db.definition.findMany({
+@@ -101,7 +101,7 @@ builder.queryField('domainAnalysis', (t) =>
+       );
+ 
+       const valuePairByDefinition = await resolveValuePairsInChunks(latestDefinitionIds);
+-      const resolvedSignatureRuns = await resolveSignatureRuns(latestDefinitionIds, requestedSignature);
++      const resolvedSignatureRuns = await resolveSignatureRuns(latestDefinitionIds, requestedSignature, domain.defaultModelIds);
+       const filteredSourceRunIds = resolvedSignatureRuns.filteredSourceRunIds;
+       const filteredSourceRunDefinitionById = resolvedSignatureRuns.filteredSourceRunDefinitionById;
+ 
+@@ -275,7 +275,7 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
+       }
+       const valueKey = rawValueKey;
+ 
+-      const domain = await db.domain.findUnique({ where: { id: domainId } });
++      const domain = await db.domain.findUnique({ where: { id: domainId }, select: { id: true, name: true, defaultModelIds: true } });
+       if (!domain) throw new Error(`Domain not found: ${domainId}`);
+ 
+       const definitions = await db.definition.findMany({
+@@ -375,7 +375,7 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
+         latestRunByDefinition.set(run.definitionId, { id: run.id });
+       }
+ 
+-      const resolvedSignatureRuns = await resolveSignatureRuns(scoreDefinitionIds, requestedSignature);
++      const resolvedSignatureRuns = await resolveSignatureRuns(scoreDefinitionIds, requestedSignature, domain.defaultModelIds);
+       const filteredSourceRunIds = resolvedSignatureRuns.filteredSourceRunIds;
+       const filteredSourceRunDefinitionById = resolvedSignatureRuns.filteredSourceRunDefinitionById;
+       const targetDefinitionIdSet = new Set(targetDefinitionIds);
+@@ -689,10 +689,16 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
+         ctx.log.warn({ domainId, definitionId, modelId, valueKey }, 'domainAnalysisConditionTranscripts called without signature; defaulting to first vnew signature');
+       }
+ 
+-      const definition = await db.definition.findFirst({
+-        where: { id: definitionId, domainId, deletedAt: null },
+-        select: { id: true },
+-      });
++      const [definition, domain] = await Promise.all([
++        db.definition.findFirst({
++          where: { id: definitionId, domainId, deletedAt: null },
++          select: { id: true },
++        }),
++        db.domain.findUnique({
++          where: { id: domainId },
++          select: { defaultModelIds: true },
++        }),
++      ]);
+       if (!definition) return [];
+ 
+       const pairMap = await resolveValuePairsInChunks([definitionId]);
+@@ -700,7 +706,7 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
+       if (!pair) return [];
+       if (pair.valueA !== valueKey && pair.valueB !== valueKey) return [];
+ 
+-      const resolvedSignatureRuns = await resolveSignatureRuns([definitionId], requestedSignature);
++      const resolvedSignatureRuns = await resolveSignatureRuns([definitionId], requestedSignature, domain?.defaultModelIds ?? []);
+       const sourceRunIds = resolvedSignatureRuns.filteredSourceRunIds;
+       if (sourceRunIds.length === 0) return [];
+ 
+diff --git a/cloud/apps/api/src/graphql/queries/domain/shared.ts b/cloud/apps/api/src/graphql/queries/domain/shared.ts
+index fb413574..3250e4ac 100644
+--- a/cloud/apps/api/src/graphql/queries/domain/shared.ts
++++ b/cloud/apps/api/src/graphql/queries/domain/shared.ts
+@@ -281,9 +281,22 @@ export function getMissingReasonLabel(reasonCode: DomainAnalysisMissingReasonCod
+   }
+ }
+ 
++/**
++ * Returns true if the run's config.models array contains ALL of the required model IDs.
++ * When requiredModelIds is empty, every run matches (no filter applied).
++ */
++export function runModelsContainAll(runConfig: unknown, requiredModelIds: string[]): boolean {
++  if (requiredModelIds.length === 0) return true;
++  const config = runConfig as { models?: unknown } | null;
++  if (!Array.isArray(config?.models)) return false;
++  const runModels = new Set(config.models as string[]);
++  return requiredModelIds.every((id) => runModels.has(id));
++}
++
+ export async function resolveSignatureRuns(
+   latestDefinitionIds: string[],
+   selectedSignature: string | null,
++  requiredModelIds: string[] = [],
+ ): Promise<SignatureResolutionResult> {
+   if (latestDefinitionIds.length === 0) {
+     return {
+@@ -329,9 +342,17 @@ export async function resolveSignatureRuns(
+       continue;
+     }
+ 
+-    const matchedRuns = effectiveSignature === null
++    const signatureMatchedRuns = effectiveSignature === null
+       ? runs
+       : runs.filter((run) => runMatchesSignature(run.config, effectiveSignature));
++    if (signatureMatchedRuns.length === 0) {
++      missingReasonByDefinitionId.set(definitionId, 'NO_SIGNATURE_MATCH');
++      continue;
++    }
++
++    const matchedRuns = requiredModelIds.length === 0
++      ? signatureMatchedRuns
++      : signatureMatchedRuns.filter((run) => runModelsContainAll(run.config, requiredModelIds));
+     if (matchedRuns.length === 0) {
+       missingReasonByDefinitionId.set(definitionId, 'NO_SIGNATURE_MATCH');
+       continue;
+diff --git a/cloud/apps/api/src/graphql/types/domain.ts b/cloud/apps/api/src/graphql/types/domain.ts
+index 070969a9..3fc3998f 100644
+--- a/cloud/apps/api/src/graphql/types/domain.ts
++++ b/cloud/apps/api/src/graphql/types/domain.ts
+@@ -53,6 +53,7 @@ builder.objectType(DomainRef, {
+         return db.preambleVersion.findUnique({ where: { id: domain.defaultPreambleVersionId } });
+       },
+     }),
++    defaultModelIds: t.exposeStringList('defaultModelIds'),
+     defaultContextId: t.exposeString('defaultContextId', { nullable: true }),
+     defaultContext: t.field({
+       type: DomainContextRef,
+diff --git a/cloud/apps/web/src/api/operations/domainCoverage.ts b/cloud/apps/web/src/api/operations/domainCoverage.ts
+index ef9b3bd8..698d6b2e 100644
+--- a/cloud/apps/web/src/api/operations/domainCoverage.ts
++++ b/cloud/apps/web/src/api/operations/domainCoverage.ts
+@@ -13,6 +13,13 @@ export const DOMAIN_VALUE_COVERAGE_QUERY = gql`
+         definitionId
+         definitionName
+         aggregateRunId
++        minTrialCount
++        maxTrialCount
++        modelTrialCounts {
++          modelId
++          label
++          trialCount
++        }
+       }
+       availableModels {
+         modelId
+@@ -35,6 +42,13 @@ export const DOMAIN_VALUE_COVERAGE_QUERY_LEGACY = gql`
+         definitionId
+         definitionName
+         aggregateRunId
++        minTrialCount
++        maxTrialCount
++        modelTrialCounts {
++          modelId
++          label
++          trialCount
++        }
+       }
+       availableModels {
+         modelId
+@@ -44,6 +58,12 @@ export const DOMAIN_VALUE_COVERAGE_QUERY_LEGACY = gql`
+   }
+ `;
+ 
++export type ModelTrialCount = {
++  modelId: string;
++  label: string;
++  trialCount: number;
++};
++
+ export type DomainValueCoverageCell = {
+   valueA: string;
+   valueB: string;
+@@ -52,6 +72,9 @@ export type DomainValueCoverageCell = {
+   definitionId: string | null;
+   definitionName: string | null;
+   aggregateRunId: string | null;
++  minTrialCount: number | null;
++  maxTrialCount: number | null;
++  modelTrialCounts: ModelTrialCount[];
+ };
+ 
+ export type CoverageModelOption = {
+diff --git a/cloud/apps/web/src/api/operations/domains.ts b/cloud/apps/web/src/api/operations/domains.ts
+index 7643b961..b8c671e6 100644
+--- a/cloud/apps/web/src/api/operations/domains.ts
++++ b/cloud/apps/web/src/api/operations/domains.ts
+@@ -9,6 +9,7 @@ export type Domain = {
+   defaultLevelPresetVersionId: string | null;
+   defaultPreambleVersionId: string | null;
+   defaultContextId: string | null;
++  defaultModelIds: string[];
+ };
+ 
+ export const DOMAINS_QUERY = gql`
+@@ -969,6 +970,7 @@ export const SET_DOMAIN_SETTINGS_MUTATION = `
+     $levelPresetVersionId: ID
+     $contextId: ID
+     $valueStatements: [ValueStatementInput!]!
++    $defaultModelIds: [String!]
+   ) {
+     setDomainSettings(
+       domainId: $domainId
+@@ -976,12 +978,14 @@ export const SET_DOMAIN_SETTINGS_MUTATION = `
+       levelPresetVersionId: $levelPresetVersionId
+       contextId: $contextId
+       valueStatements: $valueStatements
++      defaultModelIds: $defaultModelIds
+     ) {
+       id
+       name
+       defaultPreambleVersionId
+       defaultLevelPresetVersionId
+       defaultContextId
++      defaultModelIds
+     }
+   }
+ `;
+@@ -993,6 +997,7 @@ export type SetDomainSettingsMutationResult = {
+     defaultPreambleVersionId: string | null;
+     defaultLevelPresetVersionId: string | null;
+     defaultContextId: string | null;
++    defaultModelIds: string[];
+   };
+ };
+ 
+@@ -1002,4 +1007,5 @@ export type SetDomainSettingsMutationVariables = {
+   levelPresetVersionId?: string | null;
+   contextId?: string | null;
+   valueStatements: Array<{ token: string; content: string }>;
++  defaultModelIds?: string[] | null;
+ };
+diff --git a/cloud/apps/web/src/components/domains/CoverageCell.tsx b/cloud/apps/web/src/components/domains/CoverageCell.tsx
+index 34df502f..1205814c 100644
+--- a/cloud/apps/web/src/components/domains/CoverageCell.tsx
++++ b/cloud/apps/web/src/components/domains/CoverageCell.tsx
+@@ -1,9 +1,10 @@
+ import { useState, type SVGProps } from 'react';
+ import { Link } from 'react-router-dom';
+-import { ChevronRight, FileSearch } from 'lucide-react';
++import { AlertTriangle, ChevronRight, FileSearch } from 'lucide-react';
+ import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
+ import { cn } from '../../lib/utils';
+ import { VALUE_LABELS } from './domainAnalysisData';
++import type { ModelTrialCount } from '../../api/operations/domainCoverage';
+ 
+ type CoverageCellProps = {
+   valueA: string;
+@@ -12,6 +13,9 @@ type CoverageCellProps = {
+   pairedBatchCount: number;
+   definitionId: string | null;
+   aggregateRunId: string | null;
++  minTrialCount?: number | null;
++  maxTrialCount?: number | null;
++  modelTrialCounts?: ModelTrialCount[];
+ };
+ 
+ export function CoverageCell({
+@@ -21,11 +25,22 @@ export function CoverageCell({
+   pairedBatchCount,
+   definitionId,
+   aggregateRunId,
++  minTrialCount,
++  maxTrialCount,
++  modelTrialCounts = [],
+ }: CoverageCellProps) {
+   const [isOpen, setIsOpen] = useState(false);
+   const isDiagonal = valueA === valueB;
+   const hasVignette = definitionId !== null;
+-  const displayCount = pairedBatchCount > 0 ? pairedBatchCount : batchCount;
++
++  // When per-model tracking is active (minTrialCount is not null), show min trial count
++  // Otherwise fall back to legacy batch count display
++  const hasPerModelData = minTrialCount !== null && minTrialCount !== undefined;
++  const hasMismatch = hasPerModelData && maxTrialCount !== null && maxTrialCount !== undefined && minTrialCount < maxTrialCount;
++  const displayCount = hasPerModelData
++    ? minTrialCount
++    : (pairedBatchCount > 0 ? pairedBatchCount : batchCount);
++  const primaryCount = batchCount; // still used for color thresholds
+   const visibleLabel = isDiagonal || !hasVignette ? '—' : displayCount.toLocaleString();
+   const xLabel = VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB;
+   const yLabel = VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA;
+@@ -39,9 +54,9 @@ export function CoverageCell({
+       'bg-[url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxwYXRoIGQ9Ik0wLDggTDgsMCBMMCw4IFoiIHN0cm9rZT0iI2U1ZTdlYiIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9zdmc+")] bg-gray-100';
+   } else if (!hasVignette) {
+     bgColorClass = 'bg-gray-50';
+-  } else if (batchCount < 3) {
++  } else if (primaryCount < 3) {
+     bgColorClass = 'bg-rose-100 hover:bg-rose-200 transition-colors text-rose-900';
+-  } else if (batchCount < 10) {
++  } else if (primaryCount < 10) {
+     bgColorClass = 'bg-amber-100 hover:bg-amber-200 transition-colors text-amber-900';
+   } else {
+     bgColorClass = 'bg-emerald-500 hover:bg-emerald-600 transition-colors text-white';
+@@ -59,18 +74,21 @@ export function CoverageCell({
+               ? 'Not applicable'
+               : !hasVignette
+                 ? `${xLabel} versus ${yLabel}: no vignette`
+-                : `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}`
++                : `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}${hasMismatch ? ' (mismatch)' : ''}`
+           }
+           className={cn(
+-            'w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border border-gray-100 rounded-none focus:ring-0 focus:ring-offset-0',
++            'w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border border-gray-100 rounded-none focus:ring-0 focus:ring-offset-0 relative',
+             bgColorClass,
+             isDiagonal && 'cursor-not-allowed text-transparent font-normal',
+             !isDiagonal && !hasVignette && 'text-gray-500 cursor-pointer hover:bg-gray-100',
+-            hasVignette && batchCount < 3 && 'text-rose-900',
+-            hasVignette && batchCount >= 3 && batchCount < 10 && 'text-amber-900'
++            hasVignette && primaryCount < 3 && 'text-rose-900',
++            hasVignette && primaryCount >= 3 && primaryCount < 10 && 'text-amber-900'
+           )}
+         >
+           {visibleLabel}
++          {hasMismatch && !isDiagonal && (
++            <AlertTriangle className="w-3 h-3 absolute top-1 right-1 text-amber-500" aria-hidden="true" />
++          )}
+         </button>
+       </PopoverTrigger>
+       {!isDiagonal && (
+@@ -81,19 +99,39 @@ export function CoverageCell({
+         >
+           <div className="p-3 border-b border-gray-100 bg-gray-50/50 rounded-t-md">
+             {hasVignette ? (
+-              <div className="mt-2 text-xs text-gray-600 flex items-center">
+-                <span
+-                  className={cn(
+-                    'inline-block w-2 h-2 rounded-full mr-1.5',
+-                    batchCount < 3
+-                      ? 'bg-rose-500'
+-                      : batchCount < 10
+-                        ? 'bg-amber-500'
+-                        : 'bg-emerald-500'
++              <>
++                <div className="mt-2 text-xs text-gray-600 flex items-center">
++                  <span
++                    className={cn(
++                      'inline-block w-2 h-2 rounded-full mr-1.5',
++                      primaryCount < 3
++                        ? 'bg-rose-500'
++                        : primaryCount < 10
++                          ? 'bg-amber-500'
++                          : 'bg-emerald-500'
++                    )}
++                  />
++                  {displayCount} {batchLabel}
++                  {hasMismatch && (
++                    <span className="ml-1.5 text-amber-600 font-medium">(uneven)</span>
+                   )}
+-                />
+-                {displayCount} {batchLabel}
+-              </div>
++                </div>
++                {modelTrialCounts.length > 0 && (
++                  <div className="mt-2 space-y-0.5">
++                    {modelTrialCounts.map((m) => (
++                      <div key={m.modelId} className="flex items-center justify-between text-xs text-gray-600">
++                        <span className="truncate mr-2 max-w-[140px]" title={m.label}>{m.label}</span>
++                        <span className={cn(
++                          'font-medium tabular-nums',
++                          hasMismatch && m.trialCount === minTrialCount ? 'text-amber-600' : 'text-gray-700'
++                        )}>
++                          {m.trialCount}
++                        </span>
++                      </div>
++                    ))}
++                  </div>
++                )}
++              </>
+             ) : (
+               <div className="mt-2 text-xs text-gray-500">No batch for this value pair</div>
+             )}
+diff --git a/cloud/apps/web/src/components/domains/CoverageMatrix.tsx b/cloud/apps/web/src/components/domains/CoverageMatrix.tsx
+index 371bc73b..e397f04c 100644
+--- a/cloud/apps/web/src/components/domains/CoverageMatrix.tsx
++++ b/cloud/apps/web/src/components/domains/CoverageMatrix.tsx
+@@ -294,6 +294,9 @@ export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
+                             pairedBatchCount={cell?.pairedBatchCount ?? 0}
+                             definitionId={cell?.definitionId ?? null}
+                             aggregateRunId={cell?.aggregateRunId ?? null}
++                            minTrialCount={cell?.minTrialCount ?? null}
++                            maxTrialCount={cell?.maxTrialCount ?? null}
++                            modelTrialCounts={cell?.modelTrialCounts ?? []}
+                           />
+                         </td>
+                       );
+@@ -314,10 +317,12 @@ export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
+       {!fetching && canonicalValues.length > 0 && (
+         <div className="px-1 pt-2 text-xs text-gray-500">
+           <p>
+-            Batches per cell are{' '}
++            Cell counts are{' '}
+             <span className="font-medium text-rose-700">red (&lt;3)</span>,{' '}
+             <span className="font-medium text-amber-700">yellow (3-9)</span>, or{' '}
+-            <span className="font-medium text-emerald-700">green (10+)</span>. Click any cell to add a batch.
++            <span className="font-medium text-emerald-700">green (10+)</span>.
++            {' '}When default models are configured, the number shows the minimum trials across those models.
++            A triangle warning means trial counts differ across models. Click any cell for details.
+           </p>
+         </div>
+       )}
+diff --git a/cloud/apps/web/src/components/domains/DomainSettingsPanel.tsx b/cloud/apps/web/src/components/domains/DomainSettingsPanel.tsx
+index 7306a8ec..3e47cc75 100644
+--- a/cloud/apps/web/src/components/domains/DomainSettingsPanel.tsx
++++ b/cloud/apps/web/src/components/domains/DomainSettingsPanel.tsx
+@@ -14,6 +14,33 @@ import {
+ } from '../../api/operations/domain-contexts';
+ import type { SetDomainSettingsMutationVariables } from '../../api/operations/domains';
+ 
++const DOMAIN_DEFAULT_MODEL_IDS_QUERY = `
++  query DomainDefaultModelIds($id: ID!) {
++    domain(id: $id) {
++      id
++      defaultModelIds
++    }
++  }
++`;
++
++const ACTIVE_LLM_MODELS_QUERY = `
++  query ActiveLlmModelsForSettings {
++    llmModels(status: "ACTIVE") {
++      modelId
++      displayName
++    }
++  }
++`;
++
++type ActiveLlmModel = {
++  modelId: string;
++  displayName: string;
++};
++
++type ActiveLlmModelsQueryData = {
++  llmModels: ActiveLlmModel[];
++};
++
+ const PREAMBLES_QUERY = `
+   query PreamblesForDomainSettings {
+     preambles {
+@@ -63,6 +90,7 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
+   const [localPreambleVersionId, setLocalPreambleVersionId] = useState<string | null>(null);
+   const [localLevelPresetVersionId, setLocalLevelPresetVersionId] = useState<string | null>(null);
+   const [localContextId, setLocalContextId] = useState<string | null>(null);
++  const [localDefaultModelIds, setLocalDefaultModelIds] = useState<string[]>([]);
+   const [drafts, setDrafts] = useState<Record<string, string>>({});
+   const [editingToken, setEditingToken] = useState<string | null>(null);
+   const [saveError, setSaveError] = useState<string | null>(null);
+@@ -91,9 +119,27 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
+     variables: { domainId },
+   });
+ 
++  const [{ data: activeModelsData }] = useQuery<ActiveLlmModelsQueryData>({
++    query: ACTIVE_LLM_MODELS_QUERY,
++  });
++
++  const [{ data: domainData }] = useQuery<{ domain: { id: string; defaultModelIds: string[] } | null }>({
++    query: DOMAIN_DEFAULT_MODEL_IDS_QUERY,
++    variables: { id: domainId },
++    pause: domainId === '',
++    requestPolicy: 'cache-and-network',
++  });
++
++  // Sync localDefaultModelIds from domain when it loads
++  useEffect(() => {
++    if (domainData?.domain == null) return;
++    setLocalDefaultModelIds(domainData.domain.defaultModelIds ?? []);
++  }, [domainData?.domain]);
++
+   const preambles = preamblesData?.preambles ?? [];
+   const levelPresets = levelPresetsData?.levelPresets ?? [];
+   const contexts = contextsData?.domainContexts ?? [];
++  const activeModels = activeModelsData?.llmModels ?? [];
+ 
+   const handleSave = async () => {
+     if (settings == null) return;
+@@ -112,6 +158,7 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
+       levelPresetVersionId: localLevelPresetVersionId,
+       contextId: localContextId,
+       valueStatements,
++      defaultModelIds: localDefaultModelIds,
+     };
+ 
+     try {
+@@ -203,6 +250,43 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
+         </select>
+       </div>
+ 
++      {/* Default models (for coverage matrix min-trial counting) */}
++      <div>
++        <label className="block text-sm font-medium text-gray-700 mb-1">
++          Default models
++        </label>
++        <p className="text-xs text-gray-500 mb-2">
++          When set, the coverage matrix shows the minimum trials per cell across these models, with a warning when counts differ.
++          Leave empty to use the total batch count (legacy behavior).
++        </p>
++        {activeModels.length === 0 ? (
++          <p className="text-sm text-gray-500">No active models found.</p>
++        ) : (
++          <div className="space-y-1">
++            {activeModels.map((model) => {
++              const isChecked = localDefaultModelIds.includes(model.modelId);
++              return (
++                <label key={model.modelId} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
++                  <input
++                    type="checkbox"
++                    className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
++                    checked={isChecked}
++                    onChange={(e) => {
++                      if (e.target.checked) {
++                        setLocalDefaultModelIds((prev) => [...prev, model.modelId]);
++                      } else {
++                        setLocalDefaultModelIds((prev) => prev.filter((id) => id !== model.modelId));
++                      }
++                    }}
++                  />
++                  {model.displayName}
++                </label>
++              );
++            })}
++          </div>
++        )}
++      </div>
++
+       {/* Value statements */}
+       <div>
+         <label className="block text-sm font-medium text-gray-700 mb-2">Value statements</label>
+diff --git a/cloud/packages/db/prisma/schema.prisma b/cloud/packages/db/prisma/schema.prisma
+index 64863d6e..c5ad7f4a 100644
+--- a/cloud/packages/db/prisma/schema.prisma
++++ b/cloud/packages/db/prisma/schema.prisma
+@@ -168,6 +168,8 @@ model Domain {
+   defaultContextId String?        @map("default_context_id")
+   defaultContext   DomainContext? @relation("DomainDefaultContext", fields: [defaultContextId], references: [id])
+ 
++  defaultModelIds String[] @default([]) @map("default_model_ids")
++
+   definitions     Definition[]
+   contexts        DomainContext[] @relation("DomainContexts")
+   valueStatements ValueStatement[]

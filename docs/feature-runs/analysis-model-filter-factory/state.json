@@ -1,0 +1,60 @@
+{
+  "slug": "analysis-model-filter-factory",
+  "branch": "factory/analysis-model-filter",
+  "worktree": "/tmp/wt-analysis-model-filter-factory",
+  "status": "complete",
+  "started_at": "2026-04-04T04:37:58Z",
+  "finished_at": "2026-04-04T04:52:01Z",
+  "stages": {
+    "spec": {
+      "status": "complete",
+      "started_at": "2026-04-04T04:37:58Z",
+      "finished_at": "2026-04-04T04:40:00Z",
+      "artifact": "docs/feature-runs/analysis-model-filter-factory/spec.md",
+      "sha256_before": null,
+      "sha256_after": "24cd77f2e96644e44173fa26c5a5d2cf38aa30afbdd031e9500a889a934b13ae"
+    },
+    "plan": {
+      "status": "complete",
+      "started_at": "2026-04-04T04:40:00Z",
+      "finished_at": "2026-04-04T04:42:00Z",
+      "artifact": "docs/feature-runs/analysis-model-filter-factory/plan.md",
+      "sha256_before": null,
+      "sha256_after": "80e11a5101284daddcc478bd0975097ae87884720afcf1c1c3dab487ce73ca4c"
+    },
+    "tasks": {
+      "status": "complete",
+      "started_at": "2026-04-04T04:42:00Z",
+      "finished_at": "2026-04-04T04:43:00Z",
+      "artifact": "docs/feature-runs/analysis-model-filter-factory/tasks.md",
+      "sha256_before": null,
+      "sha256_after": "f2f43244d48c41e135ceea9e40e867e6438e818e9e893ce955c3c5bad7b26df4"
+    },
+    "implement": {
+      "status": "complete",
+      "started_at": "2026-04-04T04:43:00Z",
+      "finished_at": "2026-04-04T04:52:01Z",
+      "artifact": "code",
+      "commit_sha": "152b5146d0e964522e1a97e33157bb87c7c1cfe2",
+      "sha256_before": null,
+      "sha256_after": "152b5146d0e964522e1a97e33157bb87c7c1cfe2"
+    }
+  },
+  "build": "pass",
+  "lint": "pass (0 errors, 19 pre-existing warnings not in changed files)",
+  "test": "pass (1497/1497)",
+  "review_log": [
+    {
+      "stage": "implement",
+      "issue": "ModelFilterBar used raw <button> — lint error react/forbid-elements",
+      "accepted": true,
+      "fix": "Changed to <Button variant=ghost size=sm>"
+    },
+    {
+      "stage": "implement",
+      "issue": "AnalysisPanel.test.tsx assertion expected 'Models' not in document — now it is (ModelFilterBar label)",
+      "accepted": true,
+      "fix": "Removed stale assertion; added comment explaining 'Models' is now intentionally present"
+    }
+  ]
+}
