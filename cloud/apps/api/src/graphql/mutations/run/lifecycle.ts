@@ -149,8 +149,8 @@ async function resolvePairedJobChoiceDefinition(
   }
 
   const methodology = getDefinitionMethodology(definition.content);
-  if (methodology?.family !== 'job-choice' || !methodology.pair_key) {
-    throw new ValidationError('Paired batches require a Job Choice vignette with a pair_key.');
+  if (!methodology?.pair_key) {
+    throw new ValidationError('Paired batches require a vignette with a pair_key in its methodology.');
   }
 
   const candidates = await db.definition.findMany({

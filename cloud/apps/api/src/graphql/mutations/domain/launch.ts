@@ -112,14 +112,15 @@ function extractJobChoiceMethodology(content: unknown): JobChoiceMethodology | n
   if (m == null || typeof m !== 'object' || Array.isArray(m)) return null;
   const rec = m as Record<string, unknown>;
   if (
-    rec.family !== 'job-choice' ||
+    typeof rec.family !== 'string' ||
+    rec.family === '' ||
     typeof rec.pair_key !== 'string' ||
     rec.pair_key === ''
   ) {
     return null;
   }
   return {
-    family: 'job-choice',
+    family: rec.family,
     pair_key: rec.pair_key,
   };
 }

@@ -26,6 +26,7 @@ export type {
   RawDecisionEvidence,
   TranscriptDecisionModelInput,
   TranscriptDecisionModelResult,
+  ValueStatementEntry,
 } from './decision-model.js';
 
 export { formatVnewLabel, formatVnewSignature };
