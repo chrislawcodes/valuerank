@@ -20,6 +20,10 @@ ValueRank evaluates how AI models prioritize moral values in tradeoff prompts.
 - Ask them one at a time.
 - Give your recommendation before each question when helpful.
 
+## Diagnose Before Fixing
+
+- When something breaks, follow `docs/diagnose-before-fixing.md`.
+
 ## Never Do
 
 - Push commits directly to `main`.
@@ -83,7 +87,7 @@ Read when relevant:
 
 ## Data-Critical Work
 
-- For migrations, backfills, rollout scripts, or seed changes, follow `~/.claude/rules/data-critical-waves.md`.
+- For migrations, backfills, rollout scripts, or seed changes, follow `docs/data-critical-waves.md`.
 - Do not assume production enum values or string formats.
 - Require a safe verification plan before push.
 
