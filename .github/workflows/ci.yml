@@ -46,13 +46,17 @@ jobs:
     name: Web Tests (${{ matrix.name }})
     runs-on: ubuntu-latest
     needs: lint-build
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     strategy:
       matrix:
         include:
-          - name: components-analysis
-            filter: tests/components/analysis tests/components/compare
+          - name: analysis-a-d
+            filter: tests/components/analysis/Analysis tests/components/analysis/Condition tests/components/analysis/Contested tests/components/analysis/Decision
+          - name: analysis-m-z
+            filter: tests/components/analysis/Method tests/components/analysis/Model tests/components/analysis/Overview tests/components/analysis/Paired tests/components/analysis/Pivot tests/components/analysis/Scenario tests/components/analysis/Score tests/components/analysis/Variable
+          - name: compare
+            filter: tests/components/analysis-v2 tests/components/compare
           - name: components-data
             filter: tests/components/runs tests/components/definitions tests/components/domains
           - name: components-ui
