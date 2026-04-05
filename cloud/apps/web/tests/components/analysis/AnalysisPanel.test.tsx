@@ -20,6 +20,12 @@ vi.mock('../../../src/hooks/useAnalysis', () => ({
   useAnalysis: vi.fn(),
 }));
 
+// Mock ModelFilter to avoid loading its dependency tree (lucide-react icons)
+// which adds enough memory pressure to OOM CI when combined with 141 other test files.
+vi.mock('../../../src/components/analysis/ModelFilter', () => ({
+  ModelFilter: () => null,
+}));
+
 import { useAnalysis } from '../../../src/hooks/useAnalysis';
 const mockUseAnalysis = vi.mocked(useAnalysis);
 
