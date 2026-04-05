@@ -64,6 +64,13 @@ Session JSONL: <absolute path to .jsonl file>
 
 Run both paths in parallel in separate worktrees.
 
+While the agents are running, report status to the user every 5 minutes. Each update should be brief (3–5 lines):
+- Which stage each path is currently on (Spec / Plan / Tasks / Implement / Done)
+- Any blockers or escalation signals seen so far
+- Estimated time remaining if known
+
+Format: "**[5 min update]** Direct: <stage> | Factory: <stage> | Notes: <any issues>"
+
 ### Agent 1 — Direct Path
 
 Use a prompt like this:

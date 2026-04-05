@@ -72,6 +72,8 @@ export type DecisionPair = {
   valueB: DomainAnalysisValueKey;
 };
 
+export type ValueStatementEntry = { token: string; body: string };
+
 export type DecisionModelInput = {
   pair: DecisionPair | null;
   orientationFlipped: boolean | null | undefined;
@@ -79,6 +81,7 @@ export type DecisionModelInput = {
   manualOverridePresent?: boolean;
   manualOverrideDecision?: CanonicalAppliedDecision | null;
   cachedDecision?: CachedWinnerFirstDecision | null;
+  valueStatements?: readonly ValueStatementEntry[];
 };
 
 export type DecisionModelResult = {
@@ -258,14 +261,18 @@ function parseJobChoiceStrengthFromText(text: string): DecisionStrength | null {
   return null;
 }
 
-function resolveJobChoiceValueKeyFromText(text: string): DomainAnalysisValueKey | null {
+function resolveJobChoiceValueKeyFromText(
+  text: string,
+  valueStatements?: readonly ValueStatementEntry[],
+): DomainAnalysisValueKey | null {
   const normalized = normalizeJobChoiceLabelText(text);
   if (normalized.length === 0) {
     return null;
   }
 
+  const entries: readonly ValueStatementEntry[] = valueStatements ?? JOB_CHOICE_VALUE_STATEMENTS;
   let resolved: DomainAnalysisValueKey | null = null;
-  for (const entry of JOB_CHOICE_VALUE_STATEMENTS) {
+  for (const entry of entries) {
     const valueKey = toPascalCaseKey(entry.token) as DomainAnalysisValueKey;
     const label = normalizeJobChoiceLabelText(labelFromBody(entry.body));
     if (!label || !normalized.includes(label)) {
@@ -549,7 +556,7 @@ export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDe
   }
 
   if (
-    input.raw.parserVersion === 'job-choice-v2'
+    (input.raw.parserVersion === 'job-choice-v2' || input.raw.parserVersion === 'paired-v2')
     && isJobChoiceDecisionPath(input.raw.parsePath)
   ) {
     const candidateText = input.raw.matchedLabel ?? input.raw.matchedText ?? input.raw.responseExcerpt;
@@ -571,7 +578,7 @@ export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDe
       );
     }
 
-    const favoredValueKey = resolveJobChoiceValueKeyFromText(candidateText);
+    const favoredValueKey = resolveJobChoiceValueKeyFromText(candidateText, input.valueStatements);
     if (favoredValueKey === null) {
       return buildUnknownCanonicalDecision('unknown');
     }
