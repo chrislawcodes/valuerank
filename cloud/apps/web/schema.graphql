@@ -1462,7 +1462,8 @@ type Mutation {
   createDefinition(input: CreateDefinitionInput!): Definition!
   createDomain(name: String!): Domain!
   createDomainContext(input: CreateDomainContextInput!): DomainContext!
-  createJobChoicePair(input: CreatePairedVignetteInput!): CreatePairedVignetteResult!
+  createJobChoicePair(input: CreatePairedVignetteInput!): CreatePairedVignetteResult! @deprecated(reason: "Renamed to createPairedVignette")
+  createPairedVignette(input: CreatePairedVignetteInput!): CreatePairedVignetteResult!
   createLevelPreset(l1: String!, l2: String!, l3: String!, l4: String!, l5: String!, name: String!): LevelPreset!
 
   """Create a new LLM model under a provider"""
@@ -1683,7 +1684,8 @@ type Mutation {
     input: UpdateDefinitionContentInput!
   ): Definition!
   updateDomainContext(id: ID!, input: UpdateDomainContextInput!): DomainContext!
-  updateJobChoicePair(input: UpdatePairedVignetteInput!): CreatePairedVignetteResult!
+  updateJobChoicePair(input: UpdatePairedVignetteInput!): CreatePairedVignetteResult! @deprecated(reason: "Renamed to updatePairedVignette")
+  updatePairedVignette(input: UpdatePairedVignetteInput!): CreatePairedVignetteResult!
   updateLevelPreset(id: ID!, l1: String!, l2: String!, l3: String!, l4: String!, l5: String!): LevelPreset!
 
   """Update an LLM model (display name, costs, API config)"""

@@ -211,12 +211,12 @@ describe('PairedVignetteNew', () => {
     });
   });
 
-  it('submits edit mode through updateJobChoicePair and returns to the definition page', async () => {
+  it('submits edit mode through updatePairedVignette and returns to the definition page', async () => {
     const mutationMocks = mockMutationHooks(
       vi.fn(),
       vi.fn().mockResolvedValue({
       data: {
-        updateJobChoicePair: {
+        updatePairedVignette: {
           aFirst: { id: 'def-1', name: 'Care -> Freedom' },
           bFirst: { id: 'def-2', name: 'Freedom -> Care' },
         },

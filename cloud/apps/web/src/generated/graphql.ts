@@ -1356,8 +1356,10 @@ export type Mutation = {
   createDefinition: Definition;
   createDomain: Domain;
   createDomainContext: DomainContext;
+  /** @deprecated Use createPairedVignette instead */
   createJobChoicePair: CreatePairedVignetteResult;
   createLevelPreset: LevelPreset;
+  createPairedVignette: CreatePairedVignetteResult;
   /** Create a new LLM model under a provider */
   createLlmModel: LlmModel;
   /** Create a new preamble */
@@ -1545,8 +1547,10 @@ export type Mutation = {
   /** Update specific content fields of a definition. Supports clearing overrides to inherit from parent. */
   updateDefinitionContent: Definition;
   updateDomainContext: DomainContext;
+  /** @deprecated Use updatePairedVignette instead */
   updateJobChoicePair: CreatePairedVignetteResult;
   updateLevelPreset: LevelPreset;
+  updatePairedVignette: CreatePairedVignetteResult;
   /** Update an LLM model (display name, costs, API config) */
   updateLlmModel: LlmModel;
   /** Update LLM provider settings (rate limits, enabled status) */

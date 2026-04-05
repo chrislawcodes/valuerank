@@ -356,7 +356,7 @@ export function PairedVignetteNew() {
     }
 
     if (result.data != null) {
-      navigate(`/definitions/${result.data.createJobChoicePair.definitionA.id}`);
+      navigate(`/definitions/${result.data.createPairedVignette.definitionA.id}`);
     }
   }
 
