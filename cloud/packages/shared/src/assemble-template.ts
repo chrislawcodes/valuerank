@@ -6,12 +6,21 @@ type ComponentsInput = {
   value_second: { token: string; body: string; intensity?: string };
 };
 
-export function labelFromBody(body: string): string {
+export type TemplateConfig = {
+  sentencePrefix?: string | null;  // default: "One job offers"
+  labelPrefix?: string | null;     // default: "taking the job with"
+};
+
+const DEFAULT_SENTENCE_PREFIX = 'One job offers';
+const DEFAULT_LABEL_PREFIX = 'taking the job with';
+
+export function labelFromBody(body: string, labelPrefix?: string | null): string {
   // Strip [level] token (and optional trailing space) before extracting scale label.
   // Scale labels must be stable across all 25 level-preset conditions.
   const clean = body.replace(/\[level\]\s*/g, '');
   const beforeBecause = (clean.split(' because')[0] ?? clean).trim();
-  return `taking the job with ${beforeBecause}`;
+  const prefix = labelPrefix ?? DEFAULT_LABEL_PREFIX;
+  return `${prefix} ${beforeBecause}`;
 }
 
 function buildScale(labelFirst: string, labelSecond: string): string {
@@ -30,6 +39,7 @@ export function assembleTemplate(
   contextText: string,
   components: ComponentsInput,
   levelWords?: { first?: string; second?: string },
+  config?: TemplateConfig,
 ): string {
   const { value_first, value_second } = components;
 
@@ -43,13 +53,14 @@ export function assembleTemplate(
       ? value_second.body.replaceAll('[level]', levelWords.second)
       : value_second.body;
 
-  const sentenceFirst = `One job offers ${bodyFirst}.`;
-  const sentenceSecond = `One job offers ${bodySecond}.`;
+  const sp = config?.sentencePrefix ?? DEFAULT_SENTENCE_PREFIX;
+  const sentenceFirst = `${sp} ${bodyFirst}.`;
+  const sentenceSecond = `${sp} ${bodySecond}.`;
 
   // Scale labels use the original body (stripped of [level]) so they are stable
   // regardless of which level word was substituted.
-  const labelFirst = labelFromBody(value_first.body);
-  const labelSecond = labelFromBody(value_second.body);
+  const labelFirst = labelFromBody(value_first.body, config?.labelPrefix);
+  const labelSecond = labelFromBody(value_second.body, config?.labelPrefix);
 
   return [
     contextText,
