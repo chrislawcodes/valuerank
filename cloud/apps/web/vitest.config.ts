@@ -5,8 +5,13 @@ export default defineConfig({
   plugins: [react()],
   test: {
     globals: true,
-    environment: 'jsdom',
-    pool: 'forks',
+    environment: 'happy-dom',
+    pool: 'vmForks',
+    poolOptions: {
+      vmForks: {
+        memoryLimit: '0.5',
+      },
+    },
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.test.{ts,tsx}'],
     reporters: ['default', 'json'],
