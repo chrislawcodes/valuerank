@@ -6,7 +6,7 @@ import {
   type Prisma,
   type ScenarioContent,
 } from '@valuerank/db';
-import { assembleTemplate, getJobChoiceValueStatementBody } from '@valuerank/shared';
+import { assembleTemplate, getJobChoiceValueStatementBody, type TemplateConfig } from '@valuerank/shared';
 import { builder } from '../builder.js';
 import { DefinitionRef } from '../types/refs.js';
 import type { DefinitionShape } from '../types/refs.js';
@@ -22,6 +22,9 @@ type PairedVignetteResult = { definitionA: DefinitionShape; definitionB: Definit
 
 type ResolvedPairInputs = {
   domainId: string;
+  domainNormalizedName: string;
+  domainSentencePrefix: string | null;
+  domainLabelPrefix: string | null;
   contextId: string;
   valueFirstId: string;
   valueSecondId: string;
@@ -101,6 +104,8 @@ function buildPairedVignetteContent(
   valueFirst: { token: string; body: string },
   valueSecond: { token: string; body: string },
   levelPresetVersion: ResolvedPairInputs['levelPresetVersion'],
+  familyName: string,
+  templateConfig?: TemplateConfig,
 ) {
   const componentsAFirst: DefinitionComponents = {
     context_id: contextId,
@@ -113,8 +118,8 @@ function buildPairedVignetteContent(
     value_second: { token: valueFirst.token, body: valueFirst.body },
   };
 
-  const templateAFirst = assembleTemplate(contextText, componentsAFirst);
-  const templateBFirst = assembleTemplate(contextText, componentsBFirst);
+  const templateAFirst = assembleTemplate(contextText, componentsAFirst, undefined, templateConfig);
+  const templateBFirst = assembleTemplate(contextText, componentsBFirst, undefined, templateConfig);
   const dimensions = [{ name: valueFirst.token }, { name: valueSecond.token }];
 
   const contentAFirst: PairedVignetteContent = applyLevelPresetToDefinitionContent({
@@ -122,7 +127,7 @@ function buildPairedVignetteContent(
     template: templateAFirst,
     dimensions,
     methodology: {
-      family: 'job-choice',
+      family: familyName,
       response_scale: 'option_text',
       pair_key: pairKey,
     },
@@ -133,7 +138,7 @@ function buildPairedVignetteContent(
     template: templateBFirst,
     dimensions,
     methodology: {
-      family: 'job-choice',
+      family: familyName,
       response_scale: 'option_text',
       pair_key: pairKey,
     },
@@ -159,6 +164,7 @@ async function createPairedScenarios(
     valueFirstToken: string;
     valueSecondToken: string;
     levelPresetVersion: ResolvedPairInputs['levelPresetVersion'];
+    templateConfig?: TemplateConfig;
   },
 ) {
   const {
@@ -170,6 +176,7 @@ async function createPairedScenarios(
     valueFirstToken,
     valueSecondToken,
     levelPresetVersion,
+    templateConfig,
   } = params;
 
   if (levelPresetVersion != null) {
@@ -188,11 +195,11 @@ async function createPairedScenarios(
         const promptA = assembleTemplate(contextText, componentsAFirst, {
           first: firstWord,
           second: secondWord,
-        });
+        }, templateConfig);
         const promptB = assembleTemplate(contextText, componentsBFirst, {
           first: secondWord,
           second: firstWord,
-        });
+        }, templateConfig);
 
         const scenarioContentA: ScenarioContent = {
           schema_version: 1,
@@ -237,12 +244,12 @@ async function createPairedScenarios(
 
   const scenarioAFirst: ScenarioContent = {
     schema_version: 1,
-    prompt: assembleTemplate(contextText, componentsAFirst).replace(/\[level\]\s*/g, ''),
+    prompt: assembleTemplate(contextText, componentsAFirst, undefined, templateConfig).replace(/\[level\]\s*/g, ''),
     dimension_values: {},
   };
   const scenarioBFirst: ScenarioContent = {
     schema_version: 1,
-    prompt: assembleTemplate(contextText, componentsBFirst).replace(/\[level\]\s*/g, ''),
+    prompt: assembleTemplate(contextText, componentsBFirst, undefined, templateConfig).replace(/\[level\]\s*/g, ''),
     dimension_values: {},
   };
 
@@ -293,7 +300,7 @@ async function resolvePairedVignetteInputs(input: {
     preambleVersionId == null
       ? Promise.resolve(null)
       : db.preambleVersion.findUnique({ where: { id: preambleVersionId } }),
-    db.domain.findUnique({ where: { id: domainId }, select: { id: true, defaultLevelPresetVersionId: true } }),
+    db.domain.findUnique({ where: { id: domainId }, select: { id: true, normalizedName: true, sentencePrefix: true, labelPrefix: true, defaultLevelPresetVersionId: true } }),
   ]);
 
   if (context == null) throw new Error(`DomainContext not found: ${contextId}`);
@@ -339,6 +346,9 @@ async function resolvePairedVignetteInputs(input: {
 
   return {
     domainId,
+    domainNormalizedName: domain.normalizedName,
+    domainSentencePrefix: domain.sentencePrefix,
+    domainLabelPrefix: domain.labelPrefix,
     contextId,
     valueFirstId,
     valueSecondId,
@@ -376,7 +386,7 @@ async function resolvePairedVignette(definitionId: string) {
       ? contentRecord.methodology as Record<string, unknown>
       : null;
 
-  if (methodology?.family !== 'job-choice' || typeof methodology.pair_key !== 'string') {
+  if (typeof methodology?.family !== 'string' || methodology.family === '' || typeof methodology.pair_key !== 'string') {
     throw new Error('Definition is not a paired vignette');
   }
 
@@ -438,6 +448,10 @@ builder.mutationField('createPairedVignette', (t) =>
       });
 
       const pairKey = randomUUID();
+      const domainTemplateConfig: TemplateConfig = {
+        sentencePrefix: resolvedInputs.domainSentencePrefix,
+        labelPrefix: resolvedInputs.domainLabelPrefix,
+      };
       const {
         contentAFirst,
         contentBFirst,
@@ -450,6 +464,8 @@ builder.mutationField('createPairedVignette', (t) =>
         resolvedInputs.valueFirst,
         resolvedInputs.valueSecond,
         resolvedInputs.levelPresetVersion,
+        resolvedInputs.domainNormalizedName,
+        domainTemplateConfig,
       );
 
       const [defA, defB] = await db.$transaction(async (tx) => {
@@ -492,6 +508,7 @@ builder.mutationField('createPairedVignette', (t) =>
           valueFirstToken: resolvedInputs.valueFirst.token,
           valueSecondToken: resolvedInputs.valueSecond.token,
           levelPresetVersion: resolvedInputs.levelPresetVersion,
+          templateConfig: domainTemplateConfig,
         });
 
         return [a, b] as const;
@@ -566,6 +583,10 @@ builder.mutationField('updatePairedVignette', (t) =>
         levelPresetVersionId: inputLevelPresetVersionId,
       });
 
+      const domainTemplateConfig: TemplateConfig = {
+        sentencePrefix: resolvedInputs.domainSentencePrefix,
+        labelPrefix: resolvedInputs.domainLabelPrefix,
+      };
       const {
         contentAFirst,
         contentBFirst,
@@ -578,6 +599,8 @@ builder.mutationField('updatePairedVignette', (t) =>
         resolvedInputs.valueFirst,
         resolvedInputs.valueSecond,
         resolvedInputs.levelPresetVersion,
+        resolvedInputs.domainNormalizedName,
+        domainTemplateConfig,
       );
 
       const [updatedA, updatedB] = await db.$transaction(async (tx) => {
@@ -625,6 +648,7 @@ builder.mutationField('updatePairedVignette', (t) =>
           valueFirstToken: resolvedInputs.valueFirst.token,
           valueSecondToken: resolvedInputs.valueSecond.token,
           levelPresetVersion: resolvedInputs.levelPresetVersion,
+          templateConfig: domainTemplateConfig,
         });
 
         return [updatedDefinitions[0], updatedDefinitions[1]] as const;
@@ -688,10 +712,15 @@ builder.mutationField('createJobChoicePair', (t) =>
         domainId, contextId, valueFirstId, valueSecondId, preambleVersionId,
         levelPresetVersionId: inputLevelPresetVersionId, applyDomainDefault: true,
       });
+      const domainTemplateConfig: TemplateConfig = {
+        sentencePrefix: resolvedInputs.domainSentencePrefix,
+        labelPrefix: resolvedInputs.domainLabelPrefix,
+      };
       const pairKey = randomUUID();
       const { contentAFirst, contentBFirst, componentsAFirst, componentsBFirst } = buildPairedVignetteContent(
         pairKey, resolvedInputs.context.text, resolvedInputs.contextId,
         resolvedInputs.valueFirst, resolvedInputs.valueSecond, resolvedInputs.levelPresetVersion,
+        resolvedInputs.domainNormalizedName, domainTemplateConfig,
       );
       const [defA, defB] = await db.$transaction(async (tx) => {
         const a = await tx.definition.create({
@@ -746,9 +775,14 @@ builder.mutationField('updateJobChoicePair', (t) =>
         domainId, contextId, valueFirstId, valueSecondId, preambleVersionId,
         levelPresetVersionId: inputLevelPresetVersionId,
       });
+      const domainTemplateConfig: TemplateConfig = {
+        sentencePrefix: resolvedInputs.domainSentencePrefix,
+        labelPrefix: resolvedInputs.domainLabelPrefix,
+      };
       const { contentAFirst, contentBFirst, componentsAFirst, componentsBFirst } = buildPairedVignetteContent(
         existingPair.pairKey, resolvedInputs.context.text, resolvedInputs.contextId,
         resolvedInputs.valueFirst, resolvedInputs.valueSecond, resolvedInputs.levelPresetVersion,
+        resolvedInputs.domainNormalizedName, domainTemplateConfig,
       );
       const [updatedA, updatedB] = await db.$transaction(async (tx) => {
         await tx.scenario.deleteMany({ where: { definitionId: { in: [existingPair.definitionA.id, existingPair.definitionB.id] } } });
@@ -775,6 +809,7 @@ builder.mutationField('updateJobChoicePair', (t) =>
           contextText: resolvedInputs.context.text, componentsAFirst, componentsBFirst,
           valueFirstToken: resolvedInputs.valueFirst.token, valueSecondToken: resolvedInputs.valueSecond.token,
           levelPresetVersion: resolvedInputs.levelPresetVersion,
+          templateConfig: domainTemplateConfig,
         });
         return [defs[0], defs[1]] as const;
       });
