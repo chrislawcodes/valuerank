@@ -4,8 +4,9 @@
  * Displays detailed analysis for a single run with full AnalysisPanel.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { useQuery } from 'urql';
 import { ArrowLeft, Play } from 'lucide-react';
 import { formatTrialSignature } from '@valuerank/shared/trial-signature';
 import { Button } from '../components/ui/Button';
@@ -21,6 +22,7 @@ import { getRunDefinitionContent } from '../utils/runDefinitionContent';
 import type { AnalysisTab } from '../components/analysis/tabs';
 import { ANALYSIS_BASE_PATH, buildAnalysisDetailPath, isAggregateAnalysis } from '../utils/analysisRouting';
 import { getDefinitionMethodology, getDefinitionMethodologyLabel } from '../utils/methodology';
+import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 
 function parseAnalysisTab(value: string | null): AnalysisTab {
   if (value === 'overview' || value === 'decisions' || value === 'scenarios') {
@@ -132,6 +134,16 @@ export function AnalysisDetail() {
     pause: !id,
     enablePolling: true,
   });
+
+  const [llmModelsResult] = useQuery<LlmModelsQueryResult>({
+    query: LLM_MODELS_QUERY,
+  });
+  const globalDefaultModelIds = useMemo(
+    () => (llmModelsResult.data?.llmModels ?? [])
+      .filter((m) => m.isDefault)
+      .map((m) => m.modelId),
+    [llmModelsResult.data],
+  );
 
   const { analysis } = useAnalysis({
     runId: id || '',
@@ -339,6 +351,7 @@ export function AnalysisDetail() {
             isOldVersion={isOldVersion}
             isAggregate={isAggregate}
             pendingSince={run.completedAt}
+            globalDefaultModelIds={globalDefaultModelIds}
           />
         </div>
       )}
