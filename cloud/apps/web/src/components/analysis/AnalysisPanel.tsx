@@ -316,24 +316,6 @@ export function AnalysisPanel({
   );
 
   const [showDetails, setShowDetails] = useState(false);
-  const semantics = useMemo(() => {
-    if (!analysis) {
-      return null;
-    }
-
-    return buildAnalysisSemanticsView(analysis, isAggregateAnalysis);
-  }, [analysis, isAggregateAnalysis]);
-  const overviewSemantics = useMemo(() => {
-    if (!analysis) {
-      return null;
-    }
-
-    if (analysisMode === 'paired' && companionAnalysis) {
-      return buildPairedAnalysisSemanticsView(analysis, companionAnalysis, isAggregateAnalysis);
-    }
-
-    return buildAnalysisSemanticsView(analysis, isAggregateAnalysis);
-  }, [analysis, analysisMode, companionAnalysis, isAggregateAnalysis]);
   const decisionsVisualizationData = useMemo(() => {
     if (!analysis) {
       return null;
@@ -381,6 +363,21 @@ export function AnalysisPanel({
     ),
     [effectiveModels, perModel],
   );
+
+  const filteredSemantics = useMemo(() => {
+    if (!analysis) return null;
+    const modelFilter = effectiveModels.length > 0 ? effectiveModels : undefined;
+    return buildAnalysisSemanticsView(analysis, isAggregateAnalysis, modelFilter);
+  }, [analysis, isAggregateAnalysis, effectiveModels]);
+
+  const filteredOverviewSemantics = useMemo(() => {
+    if (!analysis) return null;
+    const modelFilter = effectiveModels.length > 0 ? effectiveModels : undefined;
+    if (analysisMode === 'paired' && companionAnalysis) {
+      return buildPairedAnalysisSemanticsView(analysis, companionAnalysis, isAggregateAnalysis, modelFilter);
+    }
+    return buildAnalysisSemanticsView(analysis, isAggregateAnalysis, modelFilter);
+  }, [analysis, analysisMode, companionAnalysis, isAggregateAnalysis, effectiveModels]);
 
   const scenariosTranscripts = useMemo(() => {
     const currentTranscripts = transcripts ?? currentRun?.transcripts ?? [];
@@ -634,7 +631,7 @@ export function AnalysisPanel({
       </div>
 
       <div className="min-h-[400px]">
-        {activeTab === 'overview' && semantics && (
+        {activeTab === 'overview' && filteredSemantics && (
           <OverviewTab
             runId={runId}
             analysisBasePath={analysisBasePath}
@@ -644,7 +641,7 @@ export function AnalysisPanel({
             visualizationData={analysis.visualizationData}
             varianceAnalysis={analysis.varianceAnalysis}
             expectedAttributes={expectedScenarioAttributes}
-            semantics={overviewSemantics ?? semantics}
+            semantics={filteredOverviewSemantics ?? filteredSemantics}
             completedBatches={batches}
             aggregateSourceRunCount={aggregateSourceRunCount}
             isAggregate={isAggregateAnalysis}
@@ -657,11 +654,11 @@ export function AnalysisPanel({
             companionRun={companionRun}
           />
         )}
-        {activeTab === 'decisions' && semantics && (
+        {activeTab === 'decisions' && filteredSemantics && (
           <DecisionsTab
             visualizationData={decisionsVisualizationData}
             dimensionLabels={dimensionLabels}
-            semantics={overviewSemantics ?? semantics}
+            semantics={filteredOverviewSemantics ?? filteredSemantics}
             analysisMode={analysisMode}
             isPooledAcrossCompanionRuns={analysisMode === 'paired' && companionAnalysis != null}
           />
