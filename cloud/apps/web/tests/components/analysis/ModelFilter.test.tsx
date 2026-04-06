@@ -48,13 +48,33 @@ describe('ModelFilter — collapsed state', () => {
 });
 
 describe('ModelFilter — "Reset to default" link', () => {
-  it('calls onSelectedModelsChange with full transcriptModelIds when clicked', async () => {
+  it('calls onSelectedModelsChange with full transcriptModelIds when no defaultModelIds provided', async () => {
     const user = userEvent.setup();
     const { onSelectedModelsChange } = setup({ selectedModels: ['model-a'] });
 
     await user.click(screen.getByRole('button', { name: /reset to default/i }));
 
     expect(onSelectedModelsChange).toHaveBeenCalledWith([...TRANSCRIPT_MODELS]);
+  });
+
+  it('calls onSelectedModelsChange with defaultModelIds when provided', async () => {
+    const user = userEvent.setup();
+    const { onSelectedModelsChange } = setup({
+      defaultModelIds: ['model-a', 'model-b'],
+      selectedModels: ['model-a'],
+    });
+
+    await user.click(screen.getByRole('button', { name: /reset to default/i }));
+
+    expect(onSelectedModelsChange).toHaveBeenCalledWith(['model-a', 'model-b']);
+  });
+
+  it('shows "Default" when selection matches defaultModelIds subset', () => {
+    setup({
+      defaultModelIds: ['model-a', 'model-b'],
+      selectedModels: ['model-a', 'model-b'],
+    });
+    expect(screen.getByText('Default')).toBeInTheDocument();
   });
 });
 
