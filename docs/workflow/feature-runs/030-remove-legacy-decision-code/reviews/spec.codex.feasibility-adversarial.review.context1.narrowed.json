@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/api/src/graphql/queries/domain/shared.ts",
+  "source_artifact_sha256": "80fa9cb7d6fe0bea974ebbfb2d27d774ef706ea418f90e45197b25357427edfa",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/spec.codex.feasibility-adversarial.review.context1.narrowed.txt",
+  "narrowed_artifact_sha256": "a0d12bed91e6c83c31ef459dde53cf205e88d671c8d41c748ec31b0763e4e19e",
+  "strategy": "head-tail-numbered-lines"
+}

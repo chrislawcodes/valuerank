@@ -1,0 +1,46 @@
+{
+  "feature_slug": "summarization-cache",
+  "stage": "diff",
+  "artifact_path": "docs/workflow/feature-runs/summarization-cache/reviews/implementation.diff.patch",
+  "git_base_ref": "origin/chore/agents-md-single-source-of-truth",
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/queries/domain",
+    "cloud/apps/api/tests/graphql/queries",
+    "cloud/apps/web",
+    "docs/canonical-glossary.md",
+    "docs/workflow/feature-runs/feature-workflow-discovery-shaping",
+    "docs/workflow/feature-runs/vignette-analysis-decision-model",
+    "docs/operations/codex-skills",
+    "docs/plans",
+    "docs/valuerank_prd.yaml"
+  ],
+  "required_reviews": [
+    {
+      "reviewer": "gemini",
+      "lens": "regression-adversarial",
+      "stage": "diff",
+      "path": "docs/workflow/feature-runs/summarization-cache/reviews/diff.gemini.regression-adversarial.review.md",
+      "context_paths": [],
+      "model": "gemini-2.5-pro"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "quality-adversarial",
+      "stage": "diff",
+      "path": "docs/workflow/feature-runs/summarization-cache/reviews/diff.gemini.quality-adversarial.review.md",
+      "context_paths": [],
+      "model": "gemini-2.5-pro"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "correctness-adversarial",
+      "stage": "diff",
+      "path": "docs/workflow/feature-runs/summarization-cache/reviews/diff.codex.correctness-adversarial.review.md",
+      "context_paths": [],
+      "model": "gpt-5.4-mini"
+    }
+  ],
+  "max_artifact_chars": null,
+  "max_context_chars": null,
+  "max_total_chars": null
+}

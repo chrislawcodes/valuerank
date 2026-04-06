@@ -24,8 +24,8 @@ Create a kebab-case slug with at most 5 words. Create separate worktrees and exp
 ```bash
 git worktree add /tmp/wt-<slug>-direct -b direct/<slug>
 git worktree add /tmp/wt-<slug>-factory -b factory/<slug>
-mkdir -p docs/feature-runs/<slug>-direct
-mkdir -p docs/feature-runs/<slug>-factory
+mkdir -p docs/workflow/feature-runs/<slug>-direct
+mkdir -p docs/workflow/feature-runs/<slug>-factory
 ```
 
 Use this hash rule for every `artifact_*_sha256` field:
@@ -78,7 +78,7 @@ Use a prompt like this:
 > You are running the Direct Path experiment in `/tmp/wt-<slug>-direct` on branch `direct/<slug>`.
 > The current integrator is the AI the human is working with in this thread.
 > Build the feature directly in this worktree. Ask questions only if needed. Use plain language.
-> Keep notes in `docs/feature-runs/<slug>-direct/experiment.md`.
+> Keep notes in `docs/workflow/feature-runs/<slug>-direct/experiment.md`.
 > Use the exact `experiment.md` table template from this skill.
 > For each stage you actually use:
 > 1. Record `stage_started_at` when the stage begins.
@@ -103,8 +103,8 @@ Use a prompt like this:
 Use a prompt like this:
 
 > You are running the Feature Factory experiment in `/tmp/wt-<slug>-factory` on branch `factory/<slug>`.
-> Follow the repo-owned Feature Factory docs and runner. Use `docs/feature-runs/<slug>-factory/state.json` as the runtime source of truth.
-> Keep notes in `docs/feature-runs/<slug>-factory/experiment.md`.
+> Follow the repo-owned Feature Factory docs and runner. Use `docs/workflow/feature-runs/<slug>-factory/state.json` as the runtime source of truth.
+> Keep notes in `docs/workflow/feature-runs/<slug>-factory/experiment.md`.
 > Use the exact `experiment.md` table template from this skill.
 > Track `stage_started_at`, `stage_finished_at`, `artifact_before_sha256`, `artifact_after_sha256`, `review_rounds`, `issues_raised`, `issues_accepted`, `artifact_revised`.
 > For document stages, hash the saved artifact file. For implementation, hash a saved scoped diff patch for that stage.
@@ -155,7 +155,7 @@ Token Efficiency table below.
 
 ### Write the comparison file
 
-Write `docs/feature-runs/<slug>-comparison.md`:
+Write `docs/workflow/feature-runs/<slug>-comparison.md`:
 
 ```markdown
 # Experiment — <Feature Name>

@@ -1,7 +1,0 @@
-{
-  "source_artifact_path": "cloud/apps/api/src/graphql/queries/domain/planning.ts",
-  "source_artifact_sha256": "edf754ddf18d5bcfa1afd82fbf7beaca23310fcf79698028a43a7c5ca47597fe",
-  "narrowed_artifact_path": "docs/feature-runs/domain-coverage-completeness-guard/reviews/plan.gemini.architecture-adversarial.review.context2.narrowed.txt",
-  "narrowed_artifact_sha256": "c0b5330c455507efdb6ec947bfd13d0f68731b8366692c93aaf529d4a7a3c8c1",
-  "strategy": "head-tail-numbered-lines"
-}

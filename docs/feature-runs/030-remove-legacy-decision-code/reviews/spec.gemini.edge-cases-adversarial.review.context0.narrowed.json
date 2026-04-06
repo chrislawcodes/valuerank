@@ -1,7 +1,0 @@
-{
-  "source_artifact_path": "cloud/apps/api/src/graphql/queries/domain/decision-model.ts",
-  "source_artifact_sha256": "c61b7686dd079cc4e52f01a5ab28f1cc65287d82c7d1efa74f3ba2ca2fe7e79e",
-  "narrowed_artifact_path": "docs/feature-runs/030-remove-legacy-decision-code/reviews/spec.gemini.edge-cases-adversarial.review.context0.narrowed.txt",
-  "narrowed_artifact_sha256": "16a397fa7a0cacbeb18271f256dce3b09654fdcd988bf27c3ffaa796e8d663ec",
-  "strategy": "head-tail-numbered-lines"
-}
