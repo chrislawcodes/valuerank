@@ -254,4 +254,4 @@ The old 1–5 scale was ordinal (LLMs only ever produced whole numbers). V2's `p
 | [[CLAUDE.md]] | Project constitution |
 | [[cloud/CLAUDE.md]] | Cloud coding standards |
 | [[docs/values-summary.md]] | 19 Schwartz values reference |
-| [[docs/feature-runs/batch-depth-coverage-handoff.md]] | Batch coverage handoff context |
+| [[docs/workflow/feature-runs/batch-depth-coverage-handoff.md]] | Batch coverage handoff context |

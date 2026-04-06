@@ -1,7 +1,0 @@
-{
-  "source_artifact_path": "cloud/apps/web/src/components/domains/CoverageMatrix.tsx",
-  "source_artifact_sha256": "ac3e520272bc2a297ca4398149c99fcc58eeefef9478704ef8a06e33635a7e88",
-  "narrowed_artifact_path": "docs/feature-runs/domain-coverage-completeness-guard/reviews/plan.codex.implementation-adversarial.review.context5.narrowed.txt",
-  "narrowed_artifact_sha256": "d6192fa85f29b6ae1ea2fc81df8d60a703081474c020df439f92ca16f0443312",
-  "strategy": "head-tail-numbered-lines"
-}

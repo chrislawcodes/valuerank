@@ -1,0 +1,34 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "dd55b9051c188c024ef0cfbb215d93aaaceba09c",
+  "git_base_ref": "origin/chore/agents-md-single-source-of-truth",
+  "git_base_sha": "57b19139456a975e3209c989974fca1fc83ea75a",
+  "paths": [
+    "cloud/apps/api/src/config.ts",
+    "cloud/apps/api/src/queue/handlers/summarize-transcript.ts",
+    "cloud/apps/api/src/queue/types.ts",
+    "cloud/apps/api/src/services/run/recovery.ts",
+    "cloud/apps/api/src/services/run/summarization.ts",
+    "cloud/apps/api/tests/config.test.ts",
+    "cloud/apps/api/tests/queue/handlers/summarize-transcript.test.ts",
+    "cloud/apps/api/tests/services/run/recovery.test.ts",
+    "cloud/apps/api/tests/services/run/summarization.test.ts",
+    "cloud/packages/db/src/types.ts",
+    "cloud/workers/summarize.py",
+    "cloud/workers/tests/test_summarize.py"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/queries/domain",
+    "cloud/apps/api/tests/graphql/queries",
+    "cloud/apps/web",
+    "docs/canonical-glossary.md",
+    "docs/workflow/feature-runs/feature-workflow-discovery-shaping",
+    "docs/workflow/feature-runs/vignette-analysis-decision-model",
+    "docs/operations/codex-skills",
+    "docs/plans",
+    "docs/valuerank_prd.yaml"
+  ],
+  "untracked_files_included": [],
+  "artifact_path": "docs/workflow/feature-runs/summarization-cache/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

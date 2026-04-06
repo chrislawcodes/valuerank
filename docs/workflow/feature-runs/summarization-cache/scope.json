@@ -1,0 +1,93 @@
+{
+  "paths": [
+    "cloud/apps/api/src/config.ts",
+    "cloud/apps/api/src/queue/handlers/summarize-transcript.ts",
+    "cloud/apps/api/src/queue/types.ts",
+    "cloud/apps/api/src/services/run/recovery.ts",
+    "cloud/apps/api/src/services/run/summarization.ts",
+    "cloud/apps/api/tests/queue/handlers/summarize-transcript.test.ts",
+    "cloud/apps/api/tests/config.test.ts",
+    "cloud/apps/api/tests/services/run/recovery.test.ts",
+    "cloud/apps/api/tests/services/run/summarization.test.ts",
+    "cloud/packages/db/src/types.ts",
+    "cloud/workers/summarize.py",
+    "cloud/workers/tests/test_summarize.py"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/config.ts",
+    "cloud/apps/api/src/queue/handlers/summarize-transcript.ts",
+    "cloud/apps/api/src/queue/types.ts",
+    "cloud/apps/api/src/services/run/recovery.ts",
+    "cloud/apps/api/src/services/run/summarization.ts",
+    "cloud/apps/api/tests/queue/handlers/summarize-transcript.test.ts",
+    "cloud/apps/api/tests/config.test.ts",
+    "cloud/apps/api/tests/services/run/recovery.test.ts",
+    "cloud/apps/api/tests/services/run/summarization.test.ts",
+    "cloud/packages/db/src/types.ts",
+    "cloud/workers/summarize.py",
+    "cloud/workers/tests/test_summarize.py",
+    "docs/workflow/feature-runs/summarization-cache"
+  ],
+  "validation": {
+    "before_diff": [
+      {
+        "name": "build",
+        "command": [
+          "npm",
+          "run",
+          "build",
+          "--workspace=@valuerank/api"
+        ],
+        "cwd": "cloud"
+      }
+    ],
+    "before_pr_staging": [
+      {
+        "name": "build",
+        "command": [
+          "npm",
+          "run",
+          "build",
+          "--workspace=@valuerank/api"
+        ],
+        "cwd": "cloud"
+      },
+      {
+        "name": "lint",
+        "command": [
+          "npm",
+          "run",
+          "lint",
+          "--workspace=@valuerank/api"
+        ],
+        "cwd": "cloud"
+      },
+      {
+        "name": "test",
+        "command": [
+          "npm",
+          "run",
+          "test",
+          "--workspace=@valuerank/api",
+          "--",
+          "tests/config.test.ts",
+          "tests/queue/handlers/summarize-transcript.test.ts",
+          "tests/services/run/summarization.test.ts"
+        ],
+        "cwd": "cloud"
+      },
+      {
+        "name": "pytest",
+        "command": [
+          "env",
+          "PYTHONPATH=workers",
+          "python3",
+          "-m",
+          "pytest",
+          "workers/tests/test_summarize.py"
+        ],
+        "cwd": "cloud"
+      }
+    ]
+  }
+}

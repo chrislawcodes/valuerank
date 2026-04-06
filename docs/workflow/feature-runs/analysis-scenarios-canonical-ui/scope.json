@@ -1,0 +1,59 @@
+{
+  "paths": [
+    ".worktrees/analysis-scenarios-canonical-ui-wave"
+  ],
+  "allowed_dirty_paths": [
+    ".worktrees/analysis-scenarios-canonical-ui-wave",
+    "docs/workflow/feature-runs/analysis-scenarios-canonical-ui"
+  ],
+  "validation": {
+    "before_diff": [
+      {
+        "name": "build",
+        "command": [
+          "npm",
+          "run",
+          "build",
+          "--workspace",
+          "@valuerank/web"
+        ],
+        "cwd": "cloud"
+      }
+    ],
+    "before_pr_staging": [
+      {
+        "name": "build",
+        "command": [
+          "npm",
+          "run",
+          "build",
+          "--workspace",
+          "@valuerank/web"
+        ],
+        "cwd": "cloud"
+      },
+      {
+        "name": "lint",
+        "command": [
+          "npm",
+          "run",
+          "lint",
+          "--workspace",
+          "@valuerank/web"
+        ],
+        "cwd": "cloud"
+      },
+      {
+        "name": "test",
+        "command": [
+          "npm",
+          "run",
+          "test",
+          "--workspace",
+          "@valuerank/web"
+        ],
+        "cwd": "cloud"
+      }
+    ]
+  }
+}

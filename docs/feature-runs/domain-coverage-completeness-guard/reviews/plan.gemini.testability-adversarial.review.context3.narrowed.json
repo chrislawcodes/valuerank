@@ -1,7 +1,0 @@
-{
-  "source_artifact_path": "cloud/apps/api/src/graphql/queries/domain/shared.ts",
-  "source_artifact_sha256": "319556adbdc8922d6840f7f38de7f34c16e4788f60490d4ad502e15fa6389800",
-  "narrowed_artifact_path": "docs/feature-runs/domain-coverage-completeness-guard/reviews/plan.gemini.testability-adversarial.review.context3.narrowed.txt",
-  "narrowed_artifact_sha256": "ceecd4565697937ee296aa0de9fe2564f959640131867224fd3a642aaef6b0ff",
-  "strategy": "head-tail-numbered-lines"
-}

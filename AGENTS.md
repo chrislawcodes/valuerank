@@ -22,7 +22,7 @@ ValueRank evaluates how AI models prioritize moral values in tradeoff prompts.
 
 ## Diagnose Before Fixing
 
-- When something breaks, follow `docs/diagnose-before-fixing.md`.
+- When something breaks, follow `docs/workflow/rules/diagnose-before-fixing.md`.
 
 ## Never Do
 
@@ -69,7 +69,7 @@ Read when relevant:
 - `docs/README.md` for architecture overview
 - `experiments.md` when choosing a delivery path
 - `MEMORY.md` for the active branch handoff
-- `docs/feature-runs/<slug>/` when working in Feature Factory
+- `docs/workflow/feature-runs/<slug>/` when working in Feature Factory
 
 ## Delivery Paths
 
@@ -87,7 +87,7 @@ Read when relevant:
 
 ## Data-Critical Work
 
-- For migrations, backfills, rollout scripts, or seed changes, follow `docs/data-critical-waves.md`.
+- For migrations, backfills, rollout scripts, or seed changes, follow `docs/workflow/rules/data-critical-waves.md`.
 - Do not assume production enum values or string formats.
 - Require a safe verification plan before push.
 
@@ -96,8 +96,8 @@ Read when relevant:
 - `MEMORY.md` is a short handoff file for the active feature on the current branch.
 - Keep only: locked decisions, off-limits symbols, removed or renamed symbols, current status, and open blockers.
 - Do not use `MEMORY.md` as a long-term archive.
-- In Feature Factory, runtime state lives in `docs/feature-runs/<slug>/state.json`.
-- In Feature Factory, durable artifacts live in `docs/feature-runs/<slug>/spec.md`, `plan.md`, `tasks.md`, and `closeout.md`.
+- In Feature Factory, runtime state lives in `docs/workflow/feature-runs/<slug>/state.json`.
+- In Feature Factory, durable artifacts live in `docs/workflow/feature-runs/<slug>/spec.md`, `plan.md`, `tasks.md`, and `closeout.md`.
 - Before merge, move durable notes into feature artifacts or another normal doc.
 - Trim `MEMORY.md` back to the current active handoff.
 
