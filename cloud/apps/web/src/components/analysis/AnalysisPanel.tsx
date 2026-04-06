@@ -316,24 +316,6 @@ export function AnalysisPanel({
   );
 
   const [showDetails, setShowDetails] = useState(false);
-  const semantics = useMemo(() => {
-    if (!analysis) {
-      return null;
-    }
-
-    return buildAnalysisSemanticsView(analysis, isAggregateAnalysis);
-  }, [analysis, isAggregateAnalysis]);
-  const overviewSemantics = useMemo(() => {
-    if (!analysis) {
-      return null;
-    }
-
-    if (analysisMode === 'paired' && companionAnalysis) {
-      return buildPairedAnalysisSemanticsView(analysis, companionAnalysis, isAggregateAnalysis);
-    }
-
-    return buildAnalysisSemanticsView(analysis, isAggregateAnalysis);
-  }, [analysis, analysisMode, companionAnalysis, isAggregateAnalysis]);
   const decisionsVisualizationData = useMemo(() => {
     if (!analysis) {
       return null;
