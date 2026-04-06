@@ -17,11 +17,21 @@ async function main(): Promise<void> {
 
   let upserted = 0;
   for (const vs of JOB_CHOICE_VALUE_STATEMENTS) {
-    await db.valueStatement.upsert({
+    const statement = await db.valueStatement.upsert({
       where: { domainId_token: { domainId: domain.id, token: vs.token } },
       update: { body: vs.body },
       create: { domainId: domain.id, ...vs },
     });
+    // Ensure a ValueStatementVersion exists (the UI reads currentContent from versions)
+    const latestVersion = await db.valueStatementVersion.findFirst({
+      where: { statementId: statement.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (latestVersion == null || latestVersion.content !== vs.body) {
+      await db.valueStatementVersion.create({
+        data: { statementId: statement.id, content: vs.body },
+      });
+    }
     upserted += 1;
     log.info({ token: vs.token }, 'Upserted value statement');
   }
