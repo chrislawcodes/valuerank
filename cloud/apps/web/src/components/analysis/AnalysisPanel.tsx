@@ -57,6 +57,8 @@ type AnalysisPanelProps = {
   companionAnalysis?: AnalysisResult | null;
   currentRun?: Run | null;
   companionRun?: Run | null;
+  /** Model IDs with isDefault=true from the global LLM model list (Settings → Models). */
+  globalDefaultModelIds?: string[];
 };
 
 /**
@@ -299,6 +301,7 @@ export function AnalysisPanel({
   companionAnalysis,
   currentRun,
   companionRun,
+  globalDefaultModelIds,
 }: AnalysisPanelProps) {
   const { analysis, loading, error, recompute, recomputing } = useAnalysis({
     runId,
@@ -347,17 +350,15 @@ export function AnalysisPanel({
     [perModel, transcriptModelIds],
   );
 
-  // Default selection: domain-configured models intersected with what ran.
-  // Falls back to all transcript models if the domain has no defaults or none match.
-  const domainDefaultModelIds = useMemo(
-    () => currentRun?.definition?.domain?.defaultModelIds ?? [],
-    [currentRun],
-  );
+  // Default selection: global default models (Settings → Models, isDefault=true)
+  // intersected with what actually ran. Falls back to all transcript models if
+  // no defaults are configured or none match.
   const defaultSelectedModels = useMemo(() => {
-    if (domainDefaultModelIds.length === 0) return [...transcriptModelIds];
-    const intersection = transcriptModelIds.filter((id) => domainDefaultModelIds.includes(id));
+    const defaults = globalDefaultModelIds ?? [];
+    if (defaults.length === 0) return [...transcriptModelIds];
+    const intersection = transcriptModelIds.filter((id) => defaults.includes(id));
     return intersection.length > 0 ? intersection : [...transcriptModelIds];
-  }, [domainDefaultModelIds, transcriptModelIds]);
+  }, [globalDefaultModelIds, transcriptModelIds]);
 
   const [selectedModels, setSelectedModels] = useState<string[]>(defaultSelectedModels);
 

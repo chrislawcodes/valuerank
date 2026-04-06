@@ -203,7 +203,6 @@ export type Run = {
     content: unknown;
     domain?: {
       name: string;
-      defaultModelIds: string[];
     } | null;
   };
   tags: {
@@ -265,7 +264,6 @@ export const RUN_FRAGMENT = gql`
       version
       domain {
         name
-        defaultModelIds
       }
       tags: allTags {
         id
