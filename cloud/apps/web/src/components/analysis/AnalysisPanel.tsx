@@ -366,15 +366,17 @@ export function AnalysisPanel({
 
   const filteredSemantics = useMemo(() => {
     if (!analysis) return null;
-    return buildAnalysisSemanticsView(analysis, isAggregateAnalysis, effectiveModels);
+    const modelFilter = effectiveModels.length > 0 ? effectiveModels : undefined;
+    return buildAnalysisSemanticsView(analysis, isAggregateAnalysis, modelFilter);
   }, [analysis, isAggregateAnalysis, effectiveModels]);
 
   const filteredOverviewSemantics = useMemo(() => {
     if (!analysis) return null;
+    const modelFilter = effectiveModels.length > 0 ? effectiveModels : undefined;
     if (analysisMode === 'paired' && companionAnalysis) {
-      return buildPairedAnalysisSemanticsView(analysis, companionAnalysis, isAggregateAnalysis, effectiveModels);
+      return buildPairedAnalysisSemanticsView(analysis, companionAnalysis, isAggregateAnalysis, modelFilter);
     }
-    return buildAnalysisSemanticsView(analysis, isAggregateAnalysis, effectiveModels);
+    return buildAnalysisSemanticsView(analysis, isAggregateAnalysis, modelFilter);
   }, [analysis, analysisMode, companionAnalysis, isAggregateAnalysis, effectiveModels]);
 
   const scenariosTranscripts = useMemo(() => {
