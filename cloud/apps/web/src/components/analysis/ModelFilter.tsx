@@ -5,10 +5,11 @@
  * Sits above the tab bar and controls which models are visible across all tabs.
  *
  * Convention for selectedModels in parent:
- * - Initialized to transcriptModelIds (all checked = Default state)
- * - "Reset to default" passes transcriptModelIds back
+ * - Initialized to defaultModelIds (domain default models intersected with what ran)
+ * - "Reset to default" restores defaultModelIds
+ * - "Select all" selects all transcriptModelIds
  * - "Clear" passes []
- * - isDefault: selectedModels length and contents equal transcriptModelIds
+ * - isDefault: selectedModels exactly matches defaultModelIds
  * - isWarn: selectedModels.length === 0
  */
 
@@ -17,13 +18,19 @@ import { ChevronDown, ChevronUp, Filter } from 'lucide-react';
 import { Button } from '../ui/Button';
 
 export type ModelFilterProps = {
-  /** Models that have at least one transcript — shown checked by default */
+  /** Models that have at least one transcript — shown in the main list */
   transcriptModelIds: string[];
   /** Models in perModel that have no transcripts — shown dimmed */
   noTranscriptModelIds?: string[];
   /**
+   * The domain-configured default selection (transcript models intersected
+   * with domain defaultModelIds). "Reset to default" restores this set.
+   * Defaults to transcriptModelIds if not provided.
+   */
+  defaultModelIds?: string[];
+  /**
    * Controlled selection.
-   * Pass transcriptModelIds for "default" (all checked).
+   * Pass defaultModelIds for "default" state.
    * Pass [] for "none selected" (warn state).
    */
   selectedModels: string[];
@@ -33,15 +40,16 @@ export type ModelFilterProps = {
 export function ModelFilter({
   transcriptModelIds,
   noTranscriptModelIds = [],
+  defaultModelIds = transcriptModelIds,
   selectedModels,
   onSelectedModelsChange,
 }: ModelFilterProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const isDefault =
-    transcriptModelIds.length > 0 &&
-    selectedModels.length === transcriptModelIds.length &&
-    transcriptModelIds.every((id) => selectedModels.includes(id));
+    defaultModelIds.length > 0 &&
+    selectedModels.length === defaultModelIds.length &&
+    defaultModelIds.every((id) => selectedModels.includes(id));
 
   const isWarn = selectedModels.length === 0 && transcriptModelIds.length > 0;
   const isCustom = !isDefault && !isWarn;
@@ -62,7 +70,7 @@ export function ModelFilter({
   };
 
   const handleResetToDefault = () => {
-    onSelectedModelsChange([...transcriptModelIds]);
+    onSelectedModelsChange([...defaultModelIds]);
   };
 
   return (

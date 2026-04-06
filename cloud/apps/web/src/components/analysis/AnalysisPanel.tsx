@@ -346,12 +346,25 @@ export function AnalysisPanel({
     () => Object.keys(perModel).filter((id) => !transcriptModelIds.includes(id)).sort(),
     [perModel, transcriptModelIds],
   );
-  const [selectedModels, setSelectedModels] = useState<string[]>([...transcriptModelIds]);
+
+  // Default selection: domain-configured models intersected with what ran.
+  // Falls back to all transcript models if the domain has no defaults or none match.
+  const domainDefaultModelIds = useMemo(
+    () => currentRun?.definition?.domain?.defaultModelIds ?? [],
+    [currentRun],
+  );
+  const defaultSelectedModels = useMemo(() => {
+    if (domainDefaultModelIds.length === 0) return [...transcriptModelIds];
+    const intersection = transcriptModelIds.filter((id) => domainDefaultModelIds.includes(id));
+    return intersection.length > 0 ? intersection : [...transcriptModelIds];
+  }, [domainDefaultModelIds, transcriptModelIds]);
+
+  const [selectedModels, setSelectedModels] = useState<string[]>(defaultSelectedModels);
 
   // When the run changes, reset filter to the new default
   useEffect(() => {
-    setSelectedModels([...transcriptModelIds]);
-  }, [runId, transcriptModelIds]);
+    setSelectedModels(defaultSelectedModels);
+  }, [runId, defaultSelectedModels]);
 
   const effectiveModels = useMemo(
     () => (selectedModels.length > 0 ? selectedModels : transcriptModelIds),
@@ -607,6 +620,7 @@ export function AnalysisPanel({
         <ModelFilter
           transcriptModelIds={transcriptModelIds}
           noTranscriptModelIds={noTranscriptModelIds}
+          defaultModelIds={defaultSelectedModels}
           selectedModels={selectedModels}
           onSelectedModelsChange={setSelectedModels}
         />
