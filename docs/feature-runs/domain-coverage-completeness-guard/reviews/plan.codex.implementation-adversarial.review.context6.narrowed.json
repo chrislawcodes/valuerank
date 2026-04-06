@@ -1,7 +1,0 @@
-{
-  "source_artifact_path": "cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx",
-  "source_artifact_sha256": "418c9dfaf6f33911d553495ba58918c7a1137ba65172c596ea2b86d558cfdb8e",
-  "narrowed_artifact_path": "docs/feature-runs/domain-coverage-completeness-guard/reviews/plan.codex.implementation-adversarial.review.context6.narrowed.txt",
-  "narrowed_artifact_sha256": "283aa6aa3f67fcaf175e2937b13e654dd92e4c2ebf9a1fe173e0b81afc876511",
-  "strategy": "head-tail-numbered-lines"
-}

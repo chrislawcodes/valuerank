@@ -1,0 +1,50 @@
+---
+reviewer: "gemini"
+lens: "quality-adversarial"
+stage: "diff"
+artifact_path: "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/implementation.diff.patch"
+artifact_sha256: "f324f1e9cd692280cf8d8658d1bf90ae2fe90bdf25837549e380d644406dc336"
+repo_root: "."
+git_head_sha: "53f3fa78ee950630e61dd2428aec9ee182ff2ea0"
+git_base_ref: "4dc86542620bc735d52a00ba999649d12471ecb6"
+git_base_sha: "4dc86542620bc735d52a00ba999649d12471ecb6"
+generation_method: "gemini-cli"
+resolution_status: "accepted"
+resolution_note: "HIGH (technical debt shim) is known and intentional — _canonicalToScore with explicit TODO is a bridge pattern. Slice 3.2 will fully migrate order-effect to canonical direction/strength. MEDIUM (duplicated logic) same — accepted bridge. LOW (flag divergence) intentional; full flag removal is out of scope. UNVERIFIED (downstream consumers) addressed in subsequent slices."
+raw_output_path: "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/diff.gemini.quality-adversarial.review.md.json"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: diff quality-adversarial
+
+## Findings
+
+| Severity | Finding |
+| :--- | :--- |
+| **HIGH** | **Incomplete Refactoring Introduces Technical Debt and Inconsistency** |
+| | The primary goal of this change appears to be the removal of the numeric `score` (1-5) in favor of a canonical decision object (`{direction, strength}`). While this is accomplished in `analyze-basic.ts` and the `decision-model.ts` service, the refactoring was not carried through to `order-effect-comparison.ts`. Instead of updating this service to use the new canonical model, a private shim `_canonicalToScore` was introduced to convert the new model *back* into the deprecated numeric score. This undermines the refactoring effort, creates significant technical debt (as acknowledged by the `TODO` comment), and forces a core part of the analysis codebase to operate on a legacy data model that has been explicitly removed elsewhere. |
+| **MEDIUM** | **Duplicated Business Logic Creates Maintenance Hazard** |
+| | The logic for converting a canonical decision into a numeric score was correctly removed from its central location in `decision-model.ts` (`canonicalDecisionToScore`). However, this logic was then copied verbatim into `order-effect-comparison.ts` (`_canonicalToScore`). This duplication means that if the mapping between canonical decisions and numeric scores ever needs to change, it's highly likely the isolated copy will be missed, leading to inconsistent analysis results between the order-effect module and any other part of the system that might rely on a similar conversion in the future. |
+| **LOW** | **[UNVERIFIED] Potential Divergence Between API and Background Job Behavior** |
+| | In `analyze-basic.ts`, the code path for handling the absence of the "V2" decision model has been removed, suggesting the `DECISION_MODEL_V2` feature flag is considered obsolete or permanently enabled for background analysis. However, in `graphql/types/transcript.ts`, the resolver for `decisionModelV2` still explicitly checks this flag and returns `null` if it's disabled. This creates a potential for divergence: the background analysis job may process data assuming the V2 model is always present, while an API query for the same data could return a `null` decision model, leading to inconsistent state depending on the data access path. |
+
+## Residual Risks
+
+| Risk | Description |
+| :--- | :--- |
+| **Legacy Pattern Persistence** | The incomplete refactoring in `order-effect-comparison.ts` creates a risk that future developers will copy this pattern, re-introducing the deprecated numeric score in new features. This will increase system complexity and make it harder to fully remove the legacy model. The `TODO` comment is helpful, but the presence of the anti-pattern in the codebase is a more powerful influence. |
+| **[UNVERIFIED] Breaking Change with Unverified Consumer Impact** | The removal of the `score` field from the `summary` object in the data produced by `analyze-basic.ts` is a breaking change. The provided diff does not include changes to any downstream consumers of this data (e.g., frontend components, data export scripts, other analysis services). There is a risk that these consumers have not been updated to handle the absence of the `score` field, which could lead to runtime errors or incorrect data visualizations/calculations post-deployment. |
+
+## Token Stats
+
+- total_input=13695
+- total_output=717
+- total_tokens=16722
+- `gemini-2.5-pro`: input=13695, output=717, total=16722
+
+## Resolution
+- status: accepted
+- note: HIGH (technical debt shim) is known and intentional — _canonicalToScore with explicit TODO is a bridge pattern. Slice 3.2 will fully migrate order-effect to canonical direction/strength. MEDIUM (duplicated logic) same — accepted bridge. LOW (flag divergence) intentional; full flag removal is out of scope. UNVERIFIED (downstream consumers) addressed in subsequent slices.

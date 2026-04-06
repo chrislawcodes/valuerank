@@ -1,0 +1,39 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "e32203beb0fe429ef9af9d7e332c4f0eabbbae33",
+  "git_base_ref": "97662ecffedb936831ed31b60c6d66186679077d",
+  "git_base_sha": "97662ecffedb936831ed31b60c6d66186679077d",
+  "paths": [
+    "cloud/apps/api/src/graphql/queries/domain/planning.ts",
+    "cloud/apps/api/src/graphql/queries/domain/shared.ts",
+    "cloud/apps/api/src/graphql/queries/domain/types.ts",
+    "cloud/apps/api/src/graphql/types/run.ts",
+    "cloud/apps/api/src/services/run/analysis-status.ts",
+    "cloud/apps/api/tests/graphql/queries/domain.test.ts",
+    "cloud/apps/api/tests/services/run/analysis-status.test.ts"
+  ],
+  "allowed_dirty_paths": [
+    ".claude",
+    ".worktrees",
+    "STATUS.md",
+    "cloud/apps/api/src/graphql/dataloaders/index.ts",
+    "cloud/apps/api/src/graphql/dataloaders/run-analysis-status.ts",
+    "cloud/apps/api/src/graphql/queries/domain/planning.ts",
+    "cloud/apps/api/src/graphql/queries/domain/shared.ts",
+    "cloud/apps/api/src/graphql/queries/domain/types.ts",
+    "cloud/apps/api/src/graphql/types/run.ts",
+    "cloud/apps/api/src/services/run/analysis-status.ts",
+    "cloud/apps/api/tests/graphql/dataloaders/run.test.ts",
+    "cloud/apps/api/tests/graphql/queries/domain.test.ts",
+    "cloud/apps/api/tests/services/run/analysis-status.test.ts",
+    "cloud/scripts",
+    "docs/feature-factory-token-efficiency.md",
+    "docs/feature-runs",
+    "docs/operations",
+    "experiments.md",
+    "specs"
+  ],
+  "untracked_files_included": [],
+  "artifact_path": "docs/workflow/feature-runs/domain-evaluation-setup-state/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

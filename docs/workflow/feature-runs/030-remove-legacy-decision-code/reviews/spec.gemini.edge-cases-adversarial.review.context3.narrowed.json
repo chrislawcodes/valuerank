@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts",
+  "source_artifact_sha256": "16c378aaeb7addcc9a5f2363f4320eb236f9e48c5cf4773a253385eaa89efe46",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/spec.gemini.edge-cases-adversarial.review.context3.narrowed.txt",
+  "narrowed_artifact_sha256": "2a85a0d1bb76d710f14800b980200a9fdcfa9b62184a41159320eba1d8084268",
+  "strategy": "head-tail-numbered-lines"
+}

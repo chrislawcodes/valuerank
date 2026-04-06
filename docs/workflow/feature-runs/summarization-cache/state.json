@@ -1,0 +1,61 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "current_phase": "",
+    "open_decisions": [],
+    "deferred_items": [],
+    "context_summary": "",
+    "updated_at": 1774375416
+  },
+  "discovery": {
+    "version": 2,
+    "required": false,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [],
+    "summary": "",
+    "updated_at": 0,
+    "answers": {},
+    "non_goals": [],
+    "acceptance_criteria": [],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {
+    "allowed_dirty_paths": [
+      "cloud/apps/api/src/graphql/queries/domain",
+      "cloud/apps/api/tests/graphql/queries",
+      "cloud/apps/web",
+      "docs/canonical-glossary.md",
+      "docs/workflow/feature-runs/feature-workflow-discovery-shaping",
+      "docs/workflow/feature-runs/vignette-analysis-decision-model",
+      "docs/operations/codex-skills",
+      "docs/plans",
+      "docs/valuerank_prd.yaml"
+    ],
+    "used": true,
+    "updated_at": 1774378061
+  },
+  "diff_slice_override": {
+    "used": true,
+    "changed_lines": 566,
+    "limit": 400,
+    "reason": "explicit --allow-large-diff-slice",
+    "updated_at": 1774377791
+  },
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "checkpoint_fallback": {}
+}

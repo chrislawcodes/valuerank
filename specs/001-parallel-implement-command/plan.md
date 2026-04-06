@@ -85,14 +85,14 @@ Add a `run_factory.py implement --slug <slug>` command that reads the next `[CHE
 Changes are confined to the feature factory scripts directory and the feature-tasks skill:
 
 ```
-docs/operations/codex-skills/feature-factory/scripts/
+docs/workflow/operations/codex-skills/feature-factory/scripts/
 ├── factory_stages.py        ← ADD: parse_p_annotation(), parse_parallel_task_groups()
 ├── factory_git.py           ← ADD: create_worktree(), remove_worktree(),
 │                                        get_worktree_commits(), cherry_pick_commits()
 ├── run_factory.py           ← ADD: command_implement(), wire into CLI subparser
 └── (factory_state.py, factory_review.py, factory_deliver.py — unchanged)
 
-docs/operations/codex-skills/feature-factory/tests/
+docs/workflow/operations/codex-skills/feature-factory/tests/
 └── test_run_factory_repair.py  ← ADD: tests for new functions
 
 .claude/skills/feature-tasks/

@@ -10,9 +10,9 @@ description: Generate executable task breakdown from feature plan. Creates tasks
 If you are working in the `valuerank` / `chrislawcodes/valuerank` repository, **do not follow this skill**. This is a generic skill that references `.specify/` and constitution files that do not exist in this repo.
 
 Use the repo-specific factory workflow instead:
-- Entry point: `docs/operations/codex-skills/feature-factory/SKILL.md`
-- Codex guide: `docs/operations/codex-skills/feature-factory/CODEX-ORCHESTRATOR.md`
-- Runner: `python3 docs/operations/codex-skills/feature-factory/scripts/run_factory.py`
+- Entry point: `docs/workflow/operations/codex-skills/feature-factory/SKILL.md`
+- Codex guide: `docs/workflow/operations/codex-skills/feature-factory/CODEX-ORCHESTRATOR.md`
+- Runner: `python3 docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py`
 
 ---
 

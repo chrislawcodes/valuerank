@@ -1,7 +1,0 @@
-{
-  "source_artifact_path": "cloud/apps/web/src/pages/DomainTrialsDashboard.tsx",
-  "source_artifact_sha256": "7d8385640ec023db6693ad6e0303bad572ee03c125b08c820fbf29551ed64006",
-  "narrowed_artifact_path": "docs/feature-runs/domain-evaluation-setup-state/reviews/spec.gemini.edge-cases-adversarial.review.context0.narrowed.txt",
-  "narrowed_artifact_sha256": "b7a44b971c2ddd764863a1ff21585d73ee585e9c740efaeab77ffa764bf4f813",
-  "strategy": "head-tail-numbered-lines"
-}

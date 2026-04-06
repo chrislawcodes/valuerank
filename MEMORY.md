@@ -133,7 +133,7 @@ Do not rename these casually once implementation starts:
 ## Status
 ALL 7 WAVES COMPLETE — PR open: feat/level-set-presets
 Branch: feat/level-set-presets
-Plan: docs/plans/level-set-presets-plan.md
+Plan: docs/workflow/plans/level-set-presets-plan.md
 
 ---
 

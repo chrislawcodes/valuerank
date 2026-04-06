@@ -1,7 +1,0 @@
-{
-  "source_artifact_path": "cloud/apps/api/src/services/run/recovery.ts",
-  "source_artifact_sha256": "ea4be3e70201fa01faa2739ab2b46b1f8146bdff83f303db8f91ed4e0fd990f5",
-  "narrowed_artifact_path": "docs/feature-runs/domain-coverage-completeness-guard/reviews/plan.gemini.architecture-adversarial.review.context0.narrowed.txt",
-  "narrowed_artifact_sha256": "74e3293168b82b5993ba461fe32af59b9368ed76b5af1d9fa80c1d2bc9558cd6",
-  "strategy": "head-tail-numbered-lines"
-}

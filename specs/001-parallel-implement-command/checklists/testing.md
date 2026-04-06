@@ -4,8 +4,8 @@
 
 ## Pre-Commit (per cloud/CLAUDE.md preflight)
 
-- [ ] `python -m pytest docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py -q` — all pass
-- [ ] `python docs/operations/codex-skills/feature-factory/scripts/run_factory.py doctor` — all OK
+- [ ] `python -m pytest docs/workflow/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py -q` — all pass
+- [ ] `python docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py doctor` — all OK
 - [ ] Existing 84 tests still pass (no regressions)
 
 ## Coverage

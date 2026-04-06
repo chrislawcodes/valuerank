@@ -1,0 +1,47 @@
+---
+reviewer: "codex"
+lens: "feasibility-adversarial"
+stage: "spec"
+artifact_path: "docs/workflow/feature-runs/analysis-scenarios-canonical-ui/spec.md"
+artifact_sha256: "52f01ceb1f3e880d799d6b13dc6867b7853d5b2b815a8b5f815272eca2a97e39"
+repo_root: "."
+git_head_sha: "10bf94660675d2780d47c779703b906d451a9b22"
+git_base_ref: "origin/codex/domain-analysis-overview-ux"
+git_base_sha: "10bf94660675d2780d47c779703b906d451a9b22"
+generation_method: "codex-runner"
+resolution_status: "open"
+resolution_note: ""
+raw_output_path: ".worktrees/analysis-scenarios-canonical-ui-wave/docs/feature-runs/analysis-scenarios-canonical-ui/reviews/spec.codex.feasibility-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: spec feasibility-adversarial
+
+## Findings
+
+1. **High: The spec can leak canonical logic into the wrong surface.** `ConditionDecisionsTable` is treated as the implementation point for this wave, but the spec does not define a hard isolation boundary from the value-detail page or any other caller. If that component is shared, the new canonical scoring path can accidentally change value-detail behavior, which directly violates the stated out-of-scope constraint.
+
+2. **High: The cell scoring contract is not precise enough to implement safely.** `displayScore` is described only as “the winner’s score,” but the spec does not fully pin down the formatting and edge behavior for partial evidence, ties, or nulls. In particular, it does not say whether the displayed number is always rounded the same way as the value-detail page, or how the UI should behave when one side has resolved evidence and the other side has only unknowns. That leaves room for inconsistent rendering and brittle tests.
+
+3. **Medium: The required data path is likely to be expensive at scale.** The spec says `ConditionDecisionsTable` should filter the full `run.transcripts` array for each model-condition cell, but it does not require an index, cache, or memoized summary map. On larger runs, that creates an obvious `cells × transcripts` render cost and can make the scenarios tab sluggish.
+
+4. **Medium: The unresolved-data UX is underspecified.** The spec asks for a footnote and `unknownCount`, but it does not define where the count appears, whether it is per-cell or global, or how it behaves when all cells are resolved. As written, an implementation could technically satisfy the math while still hiding the unresolved-data issue from users.
+
+## Residual Risks
+
+- Even with the canonical math fixed, the tab will still present two different scoring systems side by side because the pivot grid stays legacy. That is a deliberate product compromise, but it will remain a source of user confusion.
+- If transcript schema details differ from the assumptions behind “canonical resolution,” the helper may silently classify some evidence as unknown and understate the cell signal.
+- Large analysis runs may still feel slow unless the implementation explicitly avoids repeated full-array scans per cell.
+- The spec does not spell out accessibility requirements for the new footnote or the blue/orange tinting, so screen-reader and contrast regressions remain possible.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: open
+- note: 
