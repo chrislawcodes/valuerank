@@ -1,0 +1,13 @@
+{
+  "paths": [
+    "docs/workflow/feature-runs/domain-coverage-completeness-guard/plan.md",
+    "docs/workflow/feature-runs/domain-coverage-completeness-guard/scope.json",
+    "docs/workflow/feature-runs/domain-coverage-completeness-guard/state.json"
+  ],
+  "allowed_dirty_paths": [
+    "docs/workflow/feature-runs/domain-coverage-completeness-guard",
+    "docs/workflow/feature-runs/domain-coverage-completeness-guard/plan.md",
+    "docs/workflow/feature-runs/domain-coverage-completeness-guard/scope.json",
+    "docs/workflow/feature-runs/domain-coverage-completeness-guard/state.json"
+  ]
+}

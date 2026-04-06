@@ -13,7 +13,8 @@ Cloud ValueRank transforms the CLI pipeline into an experiment-driven platform w
 | [Tech Stack](./architecture/tech-stack.md) | Technologies and rationale |
 | [GraphQL API](./api/graphql-schema.md) | Types, queries, mutations |
 | [MCP Tools](./api/mcp-tools.md) | AI agent integration |
-| [Local Development](./operations/local-development.md) | Getting started guide |
+| [Local Development](./workflow/operations/local-development.md) | Getting started guide |
+| [Workflow Docs](./workflow/README.md) | Agent process, plans, Feature Factory |
 
 ---
 

@@ -1,0 +1,20 @@
+{
+  "feature_slug": "domain-evaluation-setup-state",
+  "stage": "tasks",
+  "artifact_path": "docs/workflow/feature-runs/domain-evaluation-setup-state/tasks.md",
+  "git_base_ref": "",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "execution-adversarial",
+      "stage": "tasks",
+      "path": "docs/workflow/feature-runs/domain-evaluation-setup-state/reviews/tasks.codex.execution-adversarial.review.md",
+      "context_paths": [],
+      "model": "gpt-5.4-mini"
+    }
+  ],
+  "max_artifact_chars": null,
+  "max_context_chars": null,
+  "max_total_chars": null
+}

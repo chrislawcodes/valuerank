@@ -1,0 +1,66 @@
+---
+reviewer: "gemini"
+lens: "requirements-adversarial"
+stage: "spec"
+artifact_path: "docs/workflow/feature-runs/domain-evaluation-model-backfill/spec.md"
+artifact_sha256: "34ef94b8b7ca8b012b33e100a011832d22a8db185aadc29319da941f00065f97"
+repo_root: "."
+git_head_sha: "1a04471af003607a5a1370a7422196137daa0b94"
+git_base_ref: "origin/main"
+git_base_sha: "0686463ebe2c3308d4ab925f8083dc711148ab84"
+generation_method: "gemini-cli"
+resolution_status: "accepted"
+resolution_note: "Accepted the main scope and safety findings. The spec now requires an explicit domainEvaluationId, original-scope vignette handling, blocked UI for un-backfillable historical evaluations, active-model intersection, clear stale-request handling, confirmation summary, and explicit reuse of the existing status model. Rejected introducing new evaluation enum states and persistent-failure automation in this slice because they would widen the feature into a broader status-machine redesign."
+raw_output_path: "docs/workflow/feature-runs/domain-evaluation-model-backfill/reviews/spec.gemini.requirements-adversarial.review.md.json"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: spec requirements-adversarial
+
+## Findings
+
+### High Severity
+
+| ID | Finding | Recommendation |
+| :--- | :--- | :--- |
+| **H-01** | **Ambiguous State Transition for Completed Evaluations.** The spec requires that a `COMPLETED` evaluation becomes "active again" when backfill runs are started. This state transition is not defined and could have dangerous downstream consequences for analytics, reporting, or billing systems that may assume a `COMPLETED` state is terminal. Re-animating a completed entity can break data integrity assumptions in connected systems. | Define an explicit new state, such as `BACKFILLING`, for evaluations undergoing this process. This avoids overloading the meaning of "active" and prevents breaking systems that rely on `COMPLETED` being a terminal state. The evaluation should only transition from `COMPLETED` to `BACKFILLING` and then resolve to a new terminal state. |
+| **H-02** | **Overly Punitive Failure State.** The spec states an evaluation becomes `FAILED` if *any* attached member run fails, including a single backfilled run. This means a large, expensive, and 99.9% successful evaluation could be marked as a total `FAILED` state due to one minor backfill failure. This misrepresents the overall result and devalues the successful data. | Introduce a more nuanced terminal state, such as `COMPLETED_WITH_FAILURES`, to accurately represent the outcome. An evaluation should only be marked as globally `FAILED` if the failures are catastrophic or represent a majority of the work. |
+
+### Medium Severity
+
+| ID | Finding | Recommendation |
+| :--- | :--- | :--- |
+| **M-01** | **[UNVERIFIED] Legacy Evaluations May Be Un-backfillable.** The spec requires the server to reject requests for evaluations that lack "enough snapshot data." This effectively makes older evaluations that were created before this feature was conceived immutable and unfixable. Users will be blocked with no clear path to resolution, as they cannot add the required data to old snapshots. | Acknowledge that a subset of historical evaluations may not be eligible for backfill. The UI should detect this state and clearly inform the user why the backfill action is unavailable (e.g., "This evaluation was created before the backfill feature and cannot be modified"). Provide guidance to clone the evaluation's configuration into a new launch as the only path forward. |
+| **M-02** | **Ambiguous Vignette Scope.** The "Model Selection" section refers to "currently selected latest vignettes," but the "Server-Side Attach Rules" correctly lock the scope to the "evaluation's original launchable vignette IDs." This inconsistency could lead to a UI that suggests a user can backfill against new vignettes added to a domain, which the server would then reject, creating a confusing and frustrating user experience. | The UI/UX copy and logic described in the spec must be aligned with the server's strict rule. The UI should only ever consider vignettes from the original evaluation's snapshot. The phrase "latest vignettes" should be removed and replaced with "vignettes from the original launch." |
+| **M-03** | **No Guardrail for Persistent Failures.** The spec allows `FAILED` runs to be replaced, but it does not account for runs that fail for a persistent, non-transient reason (e.g., a prompt is now blocked by a model's safety filter, a model is deprecated). The system will allow a user to repeatedly launch and spend money on backfill attempts that are guaranteed to fail. | Implement a mechanism to handle persistent failures. For example, after a certain number of repeated failures for the same vignette/model combination, the system should automatically mark that cell as "un-runnable" and prevent further backfill attempts, providing a clear explanation to the user. |
+| **M-04** | **Undefined Race Condition User Experience.** The spec mandates serializing backfill requests to prevent duplicate launches, which is correct. However, it doesn't define the user experience for the sender of the second, rejected/blocked request. The user will receive an error, but with no context about why, leading them to believe the system is broken. | The API response for a rejected request due to an in-progress backfill should be a specific, user-friendly error code and message (e.g., `409 Conflict: A backfill for this evaluation is already in progress. Please wait for it to complete.`). The UI should be designed to handle this specific error. |
+
+### Low Severity
+
+| ID | Finding | Recommendation |
+| :--- | :--- | :--- |
+| **L-01** | **Unaddressed UI Impact of Mixed-Depth Evaluations.** The spec correctly allows backfills to create mixed-depth results within a single evaluation. However, it does not address how the UI should represent this complexity. A single "depth" or "samples" number for the entire evaluation is now potentially misleading. | The spec should require that any UI summarizing the evaluation be updated to handle mixed depth. This could involve displaying depth as a range (e.g., "Depth: 10-20") or providing a drill-down view showing the run depth for each model. |
+| **L-02** | **Authorization Model Is Undefined.** The spec is written from the perspective of a generic "user" but does not state who is authorized to perform a backfill. Can any user with access to the domain backfill any evaluation, or is it restricted to the original creator? This ambiguity can lead to unintended access or operational confusion. | The spec should clarify the authorization model. For example, state that "any user with 'editor' permissions on the domain is authorized to initiate a backfill for any evaluation within that domain." |
+| **L-03** | **[UNVERIFIED] Ambiguity in Model Identity.** The feature relies on matching "model IDs" from the original run. It's unclear how the system will handle cases where a provider changes a model's ID string for a new version (e.g., `-preview-0409` vs `-preview-0513`). A user may intend to backfill what they consider the "same" model, but the system might not recognize it if the ID string is not an exact match. | Clarify if the model list is based on exact string matching. If so, the risk of provider-side ID changes should be noted. Consider adding a system-level model aliasing or version-tracking feature in the future to make this more robust. |
+
+## Residual Risks
+
+| ID | Risk | Mitigation / Acceptance |
+| :--- | :--- | :--- |
+| **RR-01** | **Misinterpretation of Backfilled Data.** Even if the feature works perfectly, users may misinterpret the results. Data from a backfill run months after the original is not scientifically equivalent due to potential model updates and changes in the information landscape. Users may draw invalid conclusions by comparing the original and backfilled runs as if they were conducted simultaneously. | This is a data interpretation risk that should be accepted but mitigated. The UI must clearly and persistently label any evaluation containing backfilled runs. Displaying the date of the original launch and the date(s) of subsequent backfills is the minimum requirement. |
+| **RR-02** | **Increased State Machine Complexity.** Moving an evaluation from a `COMPLETED` state back to an active one (`BACKFILLING`) introduces new pathways and edge cases. While necessary for the feature, this permanently increases the complexity of the evaluation state machine, which could be a source of subtle bugs in the future. | This risk is inherent to the feature and must be accepted. Mitigation involves rigorous testing of all state transitions, especially around the new `BACKFILLING` state, and ensuring all downstream consumers of evaluation status are aware of and correctly handle this new state. |
+| **RR-03** | **Unintended Cost Escalation.** The feature makes it easier to re-run parts of an evaluation, which also makes it easier to incur costs. A user confused about why a backfill is failing might repeatedly retry the action, accumulating spend without realizing the failure is persistent. | Accept this risk, but mitigate by making cost estimates as clear as possible and implementing the recommendation from M-03 to add guardrails against retrying persistently failing runs. |
+
+## Token Stats
+
+- total_input=12893
+- total_output=1763
+- total_tokens=16891
+- `gemini-2.5-pro`: input=12893, output=1763, total=16891
+
+## Resolution
+- status: accepted
+- note: Accepted the main scope and safety findings. The spec now requires an explicit domainEvaluationId, original-scope vignette handling, blocked UI for un-backfillable historical evaluations, active-model intersection, clear stale-request handling, confirmation summary, and explicit reuse of the existing status model. Rejected introducing new evaluation enum states and persistent-failure automation in this slice because they would widen the feature into a broader status-machine redesign.

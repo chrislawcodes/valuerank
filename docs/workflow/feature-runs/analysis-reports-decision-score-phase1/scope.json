@@ -1,0 +1,61 @@
+{
+  "paths": [
+    "cloud/apps/web/src/pages/AnalysisConditionDetail.tsx",
+    "cloud/apps/web/src/pages/AnalysisTranscripts.tsx",
+    "cloud/apps/web/src/utils/reportDecisionDisplay.ts",
+    "cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx",
+    "cloud/apps/web/tests/pages/AnalysisTranscripts.test.tsx",
+    "cloud/apps/web/tests/utils/reportDecisionDisplay.test.ts"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/web/src/pages/AnalysisConditionDetail.tsx",
+    "cloud/apps/web/src/pages/AnalysisTranscripts.tsx",
+    "cloud/apps/web/src/utils/reportDecisionDisplay.ts",
+    "cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx",
+    "cloud/apps/web/tests/pages/AnalysisTranscripts.test.tsx",
+    "cloud/apps/web/tests/utils/reportDecisionDisplay.test.ts",
+    "docs/workflow/feature-runs/analysis-reports-decision-score-phase1"
+  ],
+  "validation": {
+    "before_diff": [
+      {
+        "name": "build",
+        "command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "cwd": "cloud"
+      }
+    ],
+    "before_pr_staging": [
+      {
+        "name": "build",
+        "command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "cwd": "cloud"
+      },
+      {
+        "name": "lint",
+        "command": [
+          "npm",
+          "run",
+          "lint"
+        ],
+        "cwd": "cloud"
+      },
+      {
+        "name": "test",
+        "command": [
+          "npm",
+          "run",
+          "test"
+        ],
+        "cwd": "cloud"
+      }
+    ]
+  }
+}

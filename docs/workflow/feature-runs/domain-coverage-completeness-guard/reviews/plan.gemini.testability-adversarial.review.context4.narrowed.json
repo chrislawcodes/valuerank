@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx",
+  "source_artifact_sha256": "271a9495459d55047b2edf0ea582a3c5356195f0fbd09ded37efc41e51e1477a",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/domain-coverage-completeness-guard/reviews/plan.gemini.testability-adversarial.review.context4.narrowed.txt",
+  "narrowed_artifact_sha256": "a013b57790d2c8522bc8e58847cff0444504d96055b95ef419090fb9a86cc830",
+  "strategy": "head-tail-numbered-lines"
+}

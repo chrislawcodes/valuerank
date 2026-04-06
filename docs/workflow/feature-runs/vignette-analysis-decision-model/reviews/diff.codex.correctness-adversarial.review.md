@@ -1,0 +1,41 @@
+---
+reviewer: "codex"
+lens: "correctness-adversarial"
+stage: "diff"
+artifact_path: "docs/workflow/feature-runs/vignette-analysis-decision-model/reviews/implementation.diff.patch"
+artifact_sha256: "a68dc461e1f1278a53ce73b76ff5ef57ca5797c5e92e83e99ff1169af1db69ee"
+repo_root: "."
+git_head_sha: "456f0e7bae9ca9995c6be5d986662cf1fb66cd74"
+git_base_ref: "fce47f73a2542524b87e0bbf199703aaf9f3c4c6"
+git_base_sha: "a6e5c2470e67aaee16564cabf4a43c226c61498d"
+generation_method: "codex-runner"
+resolution_status: "deferred"
+resolution_note: "Deferred as intentional report-level consistency. The surface keeps one decision mode per report view, and mixed conditions remain legacy until the condition is fully V2-backed."
+raw_output_path: "docs/workflow/feature-runs/vignette-analysis-decision-model/reviews/diff.codex.correctness-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: diff correctness-adversarial
+
+## Findings
+
+1. **High** - [`/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx`](/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx) now decides `reportDecisionDisplayMode` from the transcripts returned by `DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY`, but that query is still capped at `limit: 100`. If a condition has more than 100 transcripts, the page can classify it as fully V2 based on the first page alone and switch the whole surface into canonical mode even though later transcripts may still be legacy. That silently hides raw decision codes and mislabels a mixed condition.
+
+2. **Medium** - [`/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx`](/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx) and [`/Users/chrislaw/valuerank/cloud/apps/web/src/components/runs/TranscriptViewer.tsx`](/Users/chrislaw/valuerank/cloud/apps/web/src/components/runs/TranscriptViewer.tsx) now force the transcript modal to follow the condition-wide mode instead of the transcript’s own `decisionModelV2`. In any mixed condition, opening a transcript that already has canonical V2 data still renders the legacy view, so the user cannot inspect the canonical evidence for the exact transcript they clicked.
+
+## Residual Risks
+
+- There is still no regression coverage for the truncated-transcript case, so the `limit: 100` assumption remains fragile.
+- The new behavior is all-or-nothing by condition, so future changes to transcript ordering or backend pagination could change display mode without any UI warning.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: deferred
+- note: Deferred as intentional report-level consistency. The surface keeps one decision mode per report view, and mixed conditions remain legacy until the condition is fully V2-backed.

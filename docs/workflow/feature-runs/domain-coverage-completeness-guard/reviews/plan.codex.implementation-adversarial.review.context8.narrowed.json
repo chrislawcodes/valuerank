@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/src/api/operations/domainAnalysis.ts",
+  "source_artifact_sha256": "77f5265bd4188cebd7c863cfcb3f30a8ff3c022f9038fa44775c98c3ed72ee70",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/domain-coverage-completeness-guard/reviews/plan.codex.implementation-adversarial.review.context8.narrowed.txt",
+  "narrowed_artifact_sha256": "c7346ccee5f3f167937935aff77f38e69629d3c950f127f14d826475eb8cdc68",
+  "strategy": "head-tail-numbered-lines"
+}

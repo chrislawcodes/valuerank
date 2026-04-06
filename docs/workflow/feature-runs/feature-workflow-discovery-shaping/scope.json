@@ -1,0 +1,17 @@
+{
+  "paths": [
+    "docs/operations/codex-skills/feature-factory/SKILL.md",
+    "docs/operations/codex-skills/feature-factory/scripts/factory_state.py",
+    "docs/operations/codex-skills/feature-factory/scripts/run_factory.py",
+    "docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py",
+    "docs/plans/feature-workflow-plan.md"
+  ],
+  "allowed_dirty_paths": [
+    "docs/workflow/feature-runs/feature-workflow-discovery-shaping",
+    "docs/operations/codex-skills/feature-factory/SKILL.md",
+    "docs/operations/codex-skills/feature-factory/scripts/factory_state.py",
+    "docs/operations/codex-skills/feature-factory/scripts/run_factory.py",
+    "docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py",
+    "docs/plans/feature-workflow-plan.md"
+  ]
+}

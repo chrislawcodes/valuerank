@@ -1,7 +1,0 @@
-{
-  "source_artifact_path": "cloud/apps/web/src/components/domains/CoverageMatrix.tsx",
-  "source_artifact_sha256": "4e1839cfe92b14f2c8a0064c5b2af65571a16ce3d7219a50efac9394d3aaa1ca",
-  "narrowed_artifact_path": "docs/feature-runs/domain-coverage-completeness-guard/reviews/plan.gemini.architecture-adversarial.review.context3.narrowed.txt",
-  "narrowed_artifact_sha256": "f82b82af4be23d987a47f11572ca9cf57f723b08934131a8f3f3c93ee6c39517",
-  "strategy": "head-tail-numbered-lines"
-}
