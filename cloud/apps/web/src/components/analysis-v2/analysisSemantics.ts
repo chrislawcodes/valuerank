@@ -1018,8 +1018,12 @@ function buildReliabilitySection(
 export function buildAnalysisSemanticsView(
   analysis: AnalysisResult,
   isAggregate: boolean,
+  filteredModelIds?: string[],
 ): AnalysisSemanticsView {
-  const modelIds = Object.keys(analysis.perModel).sort((left, right) => left.localeCompare(right));
+  const allModelIds = Object.keys(analysis.perModel).sort((left, right) => left.localeCompare(right));
+  const modelIds = filteredModelIds
+    ? filteredModelIds.filter((id) => allModelIds.includes(id)).sort((left, right) => left.localeCompare(right))
+    : allModelIds;
 
   if (modelIds.length === 0) {
     sanitizeLog(analysis, { section: 'preference', reason: 'invalid-summary-shape' });
@@ -1043,13 +1047,17 @@ export function buildPairedAnalysisSemanticsView(
   currentAnalysis: AnalysisResult,
   companionAnalysis: AnalysisResult | null | undefined,
   isAggregate: boolean,
+  filteredModelIds?: string[],
 ): AnalysisSemanticsView {
   if (!companionAnalysis) {
-    return buildAnalysisSemanticsView(currentAnalysis, isAggregate);
+    return buildAnalysisSemanticsView(currentAnalysis, isAggregate, filteredModelIds);
   }
 
   const analyses = [currentAnalysis, companionAnalysis];
-  const modelIds = unionModelIds(currentAnalysis, companionAnalysis);
+  const allModelIds = unionModelIds(currentAnalysis, companionAnalysis);
+  const modelIds = filteredModelIds
+    ? filteredModelIds.filter((id) => allModelIds.includes(id)).sort((left, right) => left.localeCompare(right))
+    : allModelIds;
   if (modelIds.length === 0) {
     sanitizeLog(currentAnalysis, { section: 'preference', reason: 'invalid-summary-shape' });
     sanitizeLog(currentAnalysis, { section: 'reliability', reason: 'invalid-summary-shape' });

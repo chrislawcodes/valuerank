@@ -382,6 +382,19 @@ export function AnalysisPanel({
     [effectiveModels, perModel],
   );
 
+  const filteredSemantics = useMemo(() => {
+    if (!analysis) return null;
+    return buildAnalysisSemanticsView(analysis, isAggregateAnalysis, effectiveModels);
+  }, [analysis, isAggregateAnalysis, effectiveModels]);
+
+  const filteredOverviewSemantics = useMemo(() => {
+    if (!analysis) return null;
+    if (analysisMode === 'paired' && companionAnalysis) {
+      return buildPairedAnalysisSemanticsView(analysis, companionAnalysis, isAggregateAnalysis, effectiveModels);
+    }
+    return buildAnalysisSemanticsView(analysis, isAggregateAnalysis, effectiveModels);
+  }, [analysis, analysisMode, companionAnalysis, isAggregateAnalysis, effectiveModels]);
+
   const scenariosTranscripts = useMemo(() => {
     const currentTranscripts = transcripts ?? currentRun?.transcripts ?? [];
 
@@ -634,7 +647,7 @@ export function AnalysisPanel({
       </div>
 
       <div className="min-h-[400px]">
-        {activeTab === 'overview' && semantics && (
+        {activeTab === 'overview' && filteredSemantics && (
           <OverviewTab
             runId={runId}
             analysisBasePath={analysisBasePath}
@@ -644,7 +657,7 @@ export function AnalysisPanel({
             visualizationData={analysis.visualizationData}
             varianceAnalysis={analysis.varianceAnalysis}
             expectedAttributes={expectedScenarioAttributes}
-            semantics={overviewSemantics ?? semantics}
+            semantics={filteredOverviewSemantics ?? filteredSemantics}
             completedBatches={batches}
             aggregateSourceRunCount={aggregateSourceRunCount}
             isAggregate={isAggregateAnalysis}
@@ -657,11 +670,11 @@ export function AnalysisPanel({
             companionRun={companionRun}
           />
         )}
-        {activeTab === 'decisions' && semantics && (
+        {activeTab === 'decisions' && filteredSemantics && (
           <DecisionsTab
             visualizationData={decisionsVisualizationData}
             dimensionLabels={dimensionLabels}
-            semantics={overviewSemantics ?? semantics}
+            semantics={filteredOverviewSemantics ?? filteredSemantics}
             analysisMode={analysisMode}
             isPooledAcrossCompanionRuns={analysisMode === 'paired' && companionAnalysis != null}
           />
