@@ -32,6 +32,8 @@ builder.queryField('domainSettings', (t) =>
           defaultLevelPresetVersionId: true,
           defaultContextId: true,
           defaultModelIds: true,
+          sentencePrefix: true,
+          labelPrefix: true,
         },
       });
 
@@ -65,6 +67,8 @@ builder.queryField('domainSettings', (t) =>
         levelPresetVersionId: domain.defaultLevelPresetVersionId,
         contextId: domain.defaultContextId,
         defaultModelIds: domain.defaultModelIds,
+        sentencePrefix: domain.sentencePrefix,
+        labelPrefix: domain.labelPrefix,
         valueStatements,
       };
 

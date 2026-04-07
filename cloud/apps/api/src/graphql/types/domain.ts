@@ -129,6 +129,8 @@ export type DomainSettingsShape = {
   levelPresetVersionId: string | null;
   contextId: string | null;
   defaultModelIds: string[];
+  sentencePrefix: string | null;
+  labelPrefix: string | null;
   valueStatements: ValueStatementWithVersions[];
 };
 
@@ -168,6 +170,8 @@ builder.objectType(DomainSettingsRef, {
     levelPresetVersionId: t.exposeString('levelPresetVersionId', { nullable: true }),
     contextId: t.exposeString('contextId', { nullable: true }),
     defaultModelIds: t.exposeStringList('defaultModelIds'),
+    sentencePrefix: t.exposeString('sentencePrefix', { nullable: true }),
+    labelPrefix: t.exposeString('labelPrefix', { nullable: true }),
     valueStatements: t.expose('valueStatements', {
       type: [ValueStatementWithVersionsRef],
     }),
