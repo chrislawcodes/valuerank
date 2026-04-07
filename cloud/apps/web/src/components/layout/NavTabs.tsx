@@ -1,11 +1,11 @@
 import { type FocusEvent, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Archive, ChevronDown, ChevronRight, FolderTree, GitCompare, Library, Settings, ShieldCheck } from 'lucide-react';
+import { Activity, Archive, ChevronDown, ChevronRight, FolderTree, Library, Settings } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useClickOutside } from '../../hooks/useClickOutside';
 
-const utilityTabs = [
-  { name: 'Compare', path: '/compare', icon: GitCompare },
+const utilityTabs: { name: string; path: string; icon: React.ComponentType<{ className?: string }>; aliases?: string[] }[] = [
+  { name: 'Status', path: '/status', icon: Activity, aliases: ['/run-trials'] },
 ];
 
 type MenuLinkItem = {
@@ -33,17 +33,19 @@ const domainMenuItems: MenuItem[] = [
   { name: 'Manage Domains', path: '/domains/manage' },
 ];
 
-const validationMenuItems = [
-  { name: 'Overview', path: '/validation' },
-  { name: 'Temp=0 Effect', path: '/assumptions/temp-zero-effect' },
-  { name: 'Legacy Analysis', path: '/assumptions/analysis' },
-  { name: 'Analysis (old v1)', path: '/assumptions/analysis-v1' },
-];
-
-const archiveMenuItems = [
+const archiveMenuItems: MenuItem[] = [
   { name: 'Overview', path: '/archive', aliases: [] as string[] },
   { name: 'Legacy Survey Work', path: '/archive/surveys', aliases: ['/survey'] },
   { name: 'Legacy Survey Results', path: '/archive/survey-results', aliases: ['/survey-results'] },
+  {
+    name: 'Validation',
+    children: [
+      { name: 'Overview', path: '/validation' },
+      { name: 'Temp=0 Effect', path: '/assumptions/temp-zero-effect' },
+      { name: 'Legacy Analysis', path: '/assumptions/analysis' },
+      { name: 'Analysis (old v1)', path: '/assumptions/analysis-v1' },
+    ],
+  },
 ];
 
 const settingsMenuItems: MenuItem[] = [
@@ -69,12 +71,10 @@ export function NavTabs() {
   const location = useLocation();
   const [isVignettesMenuOpen, setIsVignettesMenuOpen] = useState(false);
   const [isDomainsMenuOpen, setIsDomainsMenuOpen] = useState(false);
-  const [isValidationMenuOpen, setIsValidationMenuOpen] = useState(false);
   const [isArchiveMenuOpen, setIsArchiveMenuOpen] = useState(false);
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const vignettesMenuRef = useRef<HTMLDivElement>(null);
   const domainMenuRef = useRef<HTMLDivElement>(null);
-  const validationMenuRef = useRef<HTMLDivElement>(null);
   const archiveMenuRef = useRef<HTMLDivElement>(null);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
 
@@ -94,14 +94,12 @@ export function NavTabs() {
 
   const isVignettesActive = vignettesMenuItems.some((item) => isMenuItemActive(item));
   const isDomainsActive = domainMenuItems.some((item) => isMenuItemActive(item));
-  const isValidationActive = validationMenuItems.some((item) => isTabActive(item.path));
-  const isArchiveActive = archiveMenuItems.some((item) => isTabActive(item.path, item.aliases));
+  const isArchiveActive = archiveMenuItems.some((item) => isMenuItemActive(item));
   const isSettingsActive = settingsMenuItems.some((item) => isMenuItemActive(item));
 
   useEffect(() => {
     setIsVignettesMenuOpen(false);
     setIsDomainsMenuOpen(false);
-    setIsValidationMenuOpen(false);
     setIsArchiveMenuOpen(false);
     setIsSettingsMenuOpen(false);
   }, [location.pathname, isMenuItemActive]);
@@ -112,9 +110,6 @@ export function NavTabs() {
   useClickOutside(domainMenuRef, () => {
     if (isDomainsMenuOpen) setIsDomainsMenuOpen(false);
   }, isDomainsMenuOpen);
-  useClickOutside(validationMenuRef, () => {
-    if (isValidationMenuOpen) setIsValidationMenuOpen(false);
-  }, isValidationMenuOpen);
   useClickOutside(archiveMenuRef, () => {
     if (isArchiveMenuOpen) setIsArchiveMenuOpen(false);
   }, isArchiveMenuOpen);
@@ -234,13 +229,13 @@ export function NavTabs() {
         <div className="flex gap-1">
           {renderMenu(domainMenuRef, 'Domains', '/domains', FolderTree, domainMenuItems, isDomainsActive, isDomainsMenuOpen, setIsDomainsMenuOpen)}
           {renderMenu(vignettesMenuRef, 'Vignettes', '/definitions', Library, vignettesMenuItems, isVignettesActive, isVignettesMenuOpen, setIsVignettesMenuOpen)}
-          {renderMenu(validationMenuRef, 'Validation', '/validation', ShieldCheck, validationMenuItems, isValidationActive, isValidationMenuOpen, setIsValidationMenuOpen)}
           {renderMenu(archiveMenuRef, 'Archive', '/archive', Archive, archiveMenuItems, isArchiveActive, isArchiveMenuOpen, setIsArchiveMenuOpen)}
           {renderMenu(settingsMenuRef, 'Settings', '/settings/account', Settings, settingsMenuItems, isSettingsActive, isSettingsMenuOpen, setIsSettingsMenuOpen)}
 
           {utilityTabs.map((tab) => {
             const Icon = tab.icon;
-            const isActive = isTabActive(tab.path);
+            const isActive = isTabActive(tab.path) ||
+              (tab.aliases?.some((alias) => location.pathname.includes(alias)) ?? false);
 
             return (
               <NavLink
