@@ -17,16 +17,19 @@ async function openMenu(label: string) {
 }
 
 describe('NavTabs Component', () => {
-  it('renders the new top-level navigation tabs', () => {
+  it('renders the top-level navigation tabs', () => {
     renderNavTabs();
 
     expect(screen.queryByRole('link', { name: 'Home' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Domains' })).toHaveAttribute('href', '/domains');
     expect(screen.getByRole('link', { name: 'Vignettes' })).toHaveAttribute('href', '/definitions');
-    expect(screen.getByRole('link', { name: 'Validation' })).toHaveAttribute('href', '/validation');
     expect(screen.getByRole('link', { name: 'Archive' })).toHaveAttribute('href', '/archive');
-    expect(screen.getByRole('link', { name: 'Compare' })).toHaveAttribute('href', '/compare');
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings/account');
+    expect(screen.getByRole('link', { name: 'Status' })).toHaveAttribute('href', '/status');
+    // Validation is now under Archive, not top-level
+    expect(screen.queryByRole('button', { name: 'Toggle Validation menu' })).not.toBeInTheDocument();
+    // Compare was removed
+    expect(screen.queryByRole('link', { name: 'Compare' })).not.toBeInTheDocument();
   });
 
   it('keeps the vignettes menu links available from the vignettes menu', async () => {
@@ -53,36 +56,14 @@ describe('NavTabs Component', () => {
     expect(screen.queryByText('Domain Setup')).not.toBeInTheDocument();
   });
 
-  it('keeps the validation compatibility links available from the validation menu', async () => {
-    renderNavTabs('/assumptions/analysis');
-    await openMenu('Validation');
-
-    expect(screen.getByRole('link', { name: 'Temp=0 Effect' })).toHaveAttribute('href', '/assumptions/temp-zero-effect');
-    expect(
-      screen.getAllByRole('link', { name: 'Legacy Analysis' }).some((link) => link.getAttribute('href') === '/assumptions/analysis')
-    ).toBe(true);
-    expect(screen.getByRole('link', { name: 'Legacy Analysis' })).toHaveAttribute('href', '/assumptions/analysis');
-    expect(screen.getByRole('link', { name: 'Analysis (old v1)' })).toHaveAttribute('href', '/assumptions/analysis-v1');
-  });
-
-  it('keeps the archive compatibility links available from the archive menu', async () => {
+  it('keeps the archive and validation links available from the archive menu', async () => {
     renderNavTabs('/archive');
     await openMenu('Archive');
 
     expect(screen.getByRole('link', { name: 'Legacy Survey Work' })).toHaveAttribute('href', '/archive/surveys');
     expect(screen.getByRole('link', { name: 'Legacy Survey Results' })).toHaveAttribute('href', '/archive/survey-results');
-  });
-
-  it('highlights Validation on validation compatibility routes', async () => {
-    renderNavTabs('/assumptions/analysis');
-    await openMenu('Validation');
-
-    expect(screen.getByRole('link', { name: 'Validation' }).parentElement?.className).toContain('border-teal-500');
-    expect(
-      screen.getAllByRole('link', { name: 'Legacy Analysis' }).some(
-        (link) => link.getAttribute('href') === '/assumptions/analysis' && link.className.includes('bg-teal-600/20')
-      )
-    ).toBe(true);
+    // Validation is a submenu under Archive
+    expect(screen.getByText('Validation')).toBeInTheDocument();
   });
 
   it('highlights Archive on archive compatibility routes', async () => {
@@ -93,16 +74,21 @@ describe('NavTabs Component', () => {
     expect(screen.getByRole('link', { name: 'Legacy Survey Work' }).className).toContain('bg-teal-600/20');
   });
 
-  it('renders Domains before Vignettes before Validation and Archive in the top-level order', () => {
+  it('highlights Archive when on validation routes', () => {
+    renderNavTabs('/assumptions/analysis');
+
+    // Archive tab should be highlighted since Validation is nested under it
+    expect(screen.getByRole('link', { name: 'Archive' }).parentElement?.className).toContain('border-teal-500');
+  });
+
+  it('renders Domains before Vignettes before Archive in the top-level order', () => {
     renderNavTabs();
 
     const domainsLink = screen.getByRole('link', { name: 'Domains' });
     const vignettesLink = screen.getByRole('link', { name: 'Vignettes' });
-    const validationLink = screen.getByRole('link', { name: 'Validation' });
     const archiveLink = screen.getByRole('link', { name: 'Archive' });
 
     expect(domainsLink.compareDocumentPosition(vignettesLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(vignettesLink.compareDocumentPosition(validationLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(validationLink.compareDocumentPosition(archiveLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(vignettesLink.compareDocumentPosition(archiveLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

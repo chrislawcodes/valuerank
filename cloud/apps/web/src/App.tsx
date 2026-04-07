@@ -40,6 +40,7 @@ import { LevelPresets } from './pages/LevelPresets';
 import { DomainContexts } from './pages/DomainContexts';
 import { ValueStatements } from './pages/ValueStatements';
 import { PairedVignetteNew } from './pages/PairedVignetteNew';
+import { StatusRedirect } from './pages/StatusRedirect';
 import { NotFound } from './pages/NotFound';
 import { client } from './api/client';
 
@@ -72,6 +73,14 @@ function App() {
               element={
                 <ProtectedLayout>
                   <Dashboard />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/status"
+              element={
+                <ProtectedLayout>
+                  <StatusRedirect />
                 </ProtectedLayout>
               }
             />
