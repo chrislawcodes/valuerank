@@ -13,6 +13,7 @@ import {
   type DomainContext,
 } from '../../api/operations/domain-contexts';
 import type { SetDomainSettingsMutationVariables } from '../../api/operations/domains';
+import { labelFromBody, DEFAULT_SENTENCE_PREFIX, DEFAULT_LABEL_PREFIX } from '@valuerank/shared';
 
 const PREAMBLES_QUERY = `
   query PreamblesForDomainSettings {
@@ -63,6 +64,8 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
   const [localPreambleVersionId, setLocalPreambleVersionId] = useState<string | null>(null);
   const [localLevelPresetVersionId, setLocalLevelPresetVersionId] = useState<string | null>(null);
   const [localContextId, setLocalContextId] = useState<string | null>(null);
+  const [localSentencePrefix, setLocalSentencePrefix] = useState('');
+  const [localLabelPrefix, setLocalLabelPrefix] = useState('');
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [editingToken, setEditingToken] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -74,6 +77,8 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
     setLocalPreambleVersionId(settings.preambleVersionId);
     setLocalLevelPresetVersionId(settings.levelPresetVersionId);
     setLocalContextId(settings.contextId);
+    setLocalSentencePrefix(settings.sentencePrefix ?? '');
+    setLocalLabelPrefix(settings.labelPrefix ?? '');
     setDrafts({});
     setEditingToken(null);
   }, [settings]);
@@ -111,6 +116,8 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
       preambleVersionId: localPreambleVersionId,
       levelPresetVersionId: localLevelPresetVersionId,
       contextId: localContextId,
+      sentencePrefix: localSentencePrefix !== '' ? localSentencePrefix : null,
+      labelPrefix: localLabelPrefix !== '' ? localLabelPrefix : null,
       valueStatements,
     };
 
@@ -201,6 +208,21 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
             </option>
           ))}
         </select>
+      </div>
+
+      {/* Sentence prefix */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Sentence prefix</label>
+        <p className="text-xs text-gray-500 mb-1">
+          Prepended to each value statement body in the prompt.
+        </p>
+        <input
+          type="text"
+          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+          placeholder={DEFAULT_SENTENCE_PREFIX}
+          value={localSentencePrefix}
+          onChange={(e) => setLocalSentencePrefix(e.target.value)}
+        />
       </div>
 
       {/* Value statements */}
@@ -299,6 +321,46 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
           </div>
         )}
       </div>
+
+      {/* Scale label prefix */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Scale label prefix</label>
+        <p className="text-xs text-gray-500 mb-1">
+          Prepended to each value statement in the response scale.
+        </p>
+        <input
+          type="text"
+          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+          placeholder={DEFAULT_LABEL_PREFIX}
+          value={localLabelPrefix}
+          onChange={(e) => setLocalLabelPrefix(e.target.value)}
+        />
+      </div>
+
+      {/* Scale label preview */}
+      {sortedStatements.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Scale label preview</label>
+          <p className="text-xs text-gray-500 mb-1">
+            Derived from label prefix + value statement bodies. Read-only.
+          </p>
+          <div className="rounded border border-gray-200 bg-gray-50 p-2 space-y-1">
+            {sortedStatements.map((vs) => {
+              const body = drafts[vs.token] !== undefined ? (drafts[vs.token] as string) : vs.currentContent;
+              const prefix = localLabelPrefix !== '' ? localLabelPrefix : undefined;
+              const label = labelFromBody(body, prefix);
+              return (
+                <div key={vs.token} className="flex items-start gap-2 text-xs">
+                  <span className="font-mono text-teal-700 uppercase tracking-wide shrink-0">
+                    {vs.token}
+                  </span>
+                  <span className="text-gray-600">{label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Save button */}
       <div>

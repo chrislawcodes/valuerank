@@ -11,8 +11,8 @@ export type TemplateConfig = {
   labelPrefix?: string | null;     // default: "taking the job with"
 };
 
-const DEFAULT_SENTENCE_PREFIX = 'One job offers';
-const DEFAULT_LABEL_PREFIX = 'taking the job with';
+export const DEFAULT_SENTENCE_PREFIX = 'One job offers';
+export const DEFAULT_LABEL_PREFIX = 'taking the job with';
 
 export function labelFromBody(body: string, labelPrefix?: string | null): string {
   // Strip [level] token (and optional trailing space) before extracting scale label.

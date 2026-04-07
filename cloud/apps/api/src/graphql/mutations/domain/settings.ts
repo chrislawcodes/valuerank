@@ -74,6 +74,8 @@ builder.mutationField('setDomainSettings', (t) =>
       levelPresetVersionId: t.arg.id({ required: false }),
       contextId: t.arg.id({ required: false }),
       defaultModelIds: t.arg.stringList({ required: false }),
+      sentencePrefix: t.arg.string({ required: false }),
+      labelPrefix: t.arg.string({ required: false }),
       valueStatements: t.arg({ type: [ValueStatementInput], required: true }),
     },
     resolve: async (_root, args) => {
@@ -139,6 +141,13 @@ builder.mutationField('setDomainSettings', (t) =>
             defaultLevelPresetVersionId: args.levelPresetVersionId != null ? String(args.levelPresetVersionId) : null,
             defaultContextId: args.contextId != null ? String(args.contextId) : null,
             ...(newDefaultModelIds != null ? { defaultModelIds: newDefaultModelIds } : {}),
+            // Empty string → null (revert to default); undefined → skip (no change)
+            ...(args.sentencePrefix !== undefined
+              ? { sentencePrefix: args.sentencePrefix === '' ? null : args.sentencePrefix }
+              : {}),
+            ...(args.labelPrefix !== undefined
+              ? { labelPrefix: args.labelPrefix === '' ? null : args.labelPrefix }
+              : {}),
           },
         });
 

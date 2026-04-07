@@ -910,6 +910,8 @@ export type DomainSettings = {
   levelPresetVersionId: string | null;
   contextId: string | null;
   defaultModelIds: string[];
+  sentencePrefix: string | null;
+  labelPrefix: string | null;
   valueStatements: ValueStatementWithVersions[];
 };
 
@@ -930,6 +932,8 @@ export const DOMAIN_SETTINGS_QUERY = `
       levelPresetVersionId
       contextId
       defaultModelIds
+      sentencePrefix
+      labelPrefix
       valueStatements {
         id
         token
@@ -977,6 +981,8 @@ export const SET_DOMAIN_SETTINGS_MUTATION = `
     $levelPresetVersionId: ID
     $contextId: ID
     $defaultModelIds: [String!]
+    $sentencePrefix: String
+    $labelPrefix: String
     $valueStatements: [ValueStatementInput!]!
   ) {
     setDomainSettings(
@@ -985,6 +991,8 @@ export const SET_DOMAIN_SETTINGS_MUTATION = `
       levelPresetVersionId: $levelPresetVersionId
       contextId: $contextId
       defaultModelIds: $defaultModelIds
+      sentencePrefix: $sentencePrefix
+      labelPrefix: $labelPrefix
       valueStatements: $valueStatements
     ) {
       id
@@ -1014,5 +1022,7 @@ export type SetDomainSettingsMutationVariables = {
   levelPresetVersionId?: string | null;
   contextId?: string | null;
   defaultModelIds?: string[] | null;
+  sentencePrefix?: string | null;
+  labelPrefix?: string | null;
   valueStatements: Array<{ token: string; content: string }>;
 };
