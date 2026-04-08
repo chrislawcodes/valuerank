@@ -126,7 +126,8 @@ describe('DomainEvaluationStatusPanel', () => {
     expect(screen.getByText('Jobs B')).toBeInTheDocument();
     expect(screen.getByText(/Analysis complete:/i)).toHaveTextContent('0');
 
-    await user.click(screen.getByText('Jobs A'));
+    // Click the batch ID text (not the vignette name link) to trigger the row click handler
+    await user.click(screen.getByText('Batch run-1'));
     expect(onSelectRun).toHaveBeenCalledWith('run-1');
   });
 });
