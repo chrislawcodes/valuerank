@@ -37,12 +37,14 @@ type ValueStatementsProps = {
 };
 
 export function ValueStatements({ domainId: domainIdProp }: ValueStatementsProps = {}) {
-  const isEmbedded = domainIdProp != null;
+  const searchParams = new URLSearchParams(window.location.search);
+  const resolvedDomainIdProp = domainIdProp ?? searchParams.get('domainId') ?? undefined;
+  const isEmbedded = resolvedDomainIdProp != null;
 
   // Internal state used only when no prop is provided (standalone page mode).
   const [selectedDomainId, setSelectedDomainId] = useState<string>('');
   // The effective domain to query: prop takes precedence over internal state.
-  const effectiveDomainId = domainIdProp ?? selectedDomainId;
+  const effectiveDomainId = resolvedDomainIdProp ?? selectedDomainId;
 
   const [{ data: domainsData, fetching: domainsFetching, error: domainsError }] = useQuery<
     DomainsQueryResult,
