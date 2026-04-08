@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from 'urql';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Button } from '../ui/Button';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { useDomainSettings } from '../../hooks/useDomainSettings';
@@ -186,7 +187,7 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
           {levelPresets.map((lp) =>
             lp.latestVersion != null ? (
               <option key={lp.latestVersion.id} value={lp.latestVersion.id}>
-                {lp.name} (v{lp.latestVersion.version})
+                {lp.name} ({lp.latestVersion.version})
               </option>
             ) : null
           )}
@@ -195,7 +196,15 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
 
       {/* Context picker */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Domain context</label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="block text-sm font-medium text-gray-700">Domain context</label>
+          <Link
+            to={`/domain-contexts?domainId=${domainId}`}
+            className="text-xs text-teal-600 hover:text-teal-800 flex items-center gap-1"
+          >
+            Manage <ExternalLink className="w-3 h-3" />
+          </Link>
+        </div>
         <select
           className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
           value={localContextId ?? ''}
@@ -227,7 +236,15 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
 
       {/* Value statements */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Value statements</label>
+        <div className="flex items-center justify-between mb-2">
+          <label className="block text-sm font-medium text-gray-700">Value statements</label>
+          <Link
+            to={`/value-statements?domainId=${domainId}`}
+            className="text-xs text-teal-600 hover:text-teal-800 flex items-center gap-1"
+          >
+            Manage <ExternalLink className="w-3 h-3" />
+          </Link>
+        </div>
         {sortedStatements.length === 0 ? (
           <p className="text-sm text-gray-500">No value statements for this domain.</p>
         ) : (

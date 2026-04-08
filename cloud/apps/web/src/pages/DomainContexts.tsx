@@ -28,11 +28,13 @@ type DomainContextsProps = {
 };
 
 export function DomainContexts({ domainId: domainIdProp }: DomainContextsProps = {}) {
-  const isEmbedded = domainIdProp != null;
+  const searchParams = new URLSearchParams(window.location.search);
+  const resolvedDomainIdProp = domainIdProp ?? searchParams.get('domainId') ?? undefined;
+  const isEmbedded = resolvedDomainIdProp != null;
 
   const [{ data, fetching, error }, reexecuteQuery] = useQuery<DomainContextsQueryResult, DomainContextsQueryVariables>({
     query: DOMAIN_CONTEXTS_QUERY,
-    variables: { domainId: domainIdProp },
+    variables: { domainId: resolvedDomainIdProp },
   });
   const [{ data: domainsData, fetching: domainsFetching, error: domainsError }] = useQuery<
     DomainsQueryResult,
@@ -58,7 +60,7 @@ export function DomainContexts({ domainId: domainIdProp }: DomainContextsProps =
 
   const handleOpenCreate = () => {
     setEditingContext(null);
-    setDomainId(domainIdProp ?? domains[0]?.id ?? '');
+    setDomainId(resolvedDomainIdProp ?? domains[0]?.id ?? '');
     setText('');
     setIsModalOpen(true);
   };
