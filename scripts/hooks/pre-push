@@ -1,24 +1,72 @@
 #!/bin/bash
 # Pre-push hook: Run lint, test, and build checks before allowing push.
-# This prevents pushing code that fails CI.
+# Only checks workspaces with changes (compared to origin/main).
 
 set -e
 
-echo "🔍 Running pre-push checks..."
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+CLOUD="$REPO_ROOT/cloud"
 
-# Change to cloud directory
-cd "$(git rev-parse --show-toplevel)/cloud"
+# Get changed files relative to what we're pushing against
+MERGE_BASE=$(git merge-base HEAD origin/main 2>/dev/null || echo "HEAD~1")
+CHANGED_FILES=$(git diff --name-only "$MERGE_BASE"...HEAD 2>/dev/null || git diff --name-only HEAD~1)
+
+# Detect which workspaces have changes
+SHARED=false
+DB=false
+API=false
+WEB=false
+
+for file in $CHANGED_FILES; do
+  case "$file" in
+    cloud/packages/shared/*) SHARED=true ;;
+    cloud/packages/db/*)     DB=true ;;
+    cloud/apps/api/*)        API=true ;;
+    cloud/apps/web/*)        WEB=true ;;
+    cloud/turbo.json|cloud/package.json|cloud/package-lock.json|cloud/tsconfig.json)
+      # Root config changed — check everything
+      SHARED=true; DB=true; API=true; WEB=true ;;
+  esac
+done
+
+# db changes affect api (api depends on db)
+# shared changes affect everything downstream
+if [ "$SHARED" = true ]; then
+  DB=true; API=true; WEB=true
+fi
+if [ "$DB" = true ]; then
+  API=true
+fi
+
+# Build the turbo filter flags
+FILTERS=""
+if [ "$SHARED" = true ]; then FILTERS="$FILTERS --filter=@valuerank/shared"; fi
+if [ "$DB" = true ];     then FILTERS="$FILTERS --filter=@valuerank/db"; fi
+if [ "$API" = true ];    then FILTERS="$FILTERS --filter=@valuerank/api"; fi
+if [ "$WEB" = true ];    then FILTERS="$FILTERS --filter=@valuerank/web"; fi
+
+if [ -z "$FILTERS" ]; then
+  echo "✅ No cloud workspace changes detected — skipping preflight."
+  exit 0
+fi
+
+echo "🔍 Running pre-push checks for changed workspaces..."
+echo "   Changed: shared=$SHARED db=$DB api=$API web=$WEB"
+
+cd "$CLOUD"
 
 echo "📦 Running lint..."
-npx turbo lint --force
+npx turbo lint $FILTERS
 
-echo "🗄️ Preparing test database schema..."
-npm run db:test:setup
+if [ "$API" = true ] || [ "$DB" = true ]; then
+  echo "🗄️ Preparing test database schema..."
+  npm run db:test:setup
+fi
 
 echo "🧪 Running tests..."
-npx turbo test --force
+npx turbo test $FILTERS
 
 echo "🔨 Running build..."
-npx turbo build --force
+npx turbo build $FILTERS
 
 echo "✅ Pre-push checks passed!"
