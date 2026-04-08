@@ -15,29 +15,34 @@ Repo-wide agent behavior, delivery paths, terminology policy, and memory policy 
 - For Feature Factory, use the repo-owned workflow docs and `docs/workflow/feature-runs/<slug>/state.json` as the source of truth.
 - Repo-root `MEMORY.md` is only a short handoff file for the active feature. Do not use it as long-term archive or as the source of truth for workflow state.
 
-### Pre-push Hook
+### Pre-push Hook (Preferred)
 
-A pre-push hook runs lint, test, and build checks before allowing pushes. Install once:
+The pre-push hook automatically detects which workspaces changed and runs lint, test, and build only for those. Install once:
 
 ```bash
 ./scripts/hooks/install-hooks.sh
 ```
 
-### Preflight Gate (Required Before Push/PR)
+The hook compares your branch to `origin/main` and respects the dependency graph:
+- `shared` changes → checks shared, db, api, web
+- `db` changes → checks db, api
+- `api` changes → checks api only
+- `web` changes → checks web only
+- Root config changes (`turbo.json`, `package.json`, etc.) → checks everything
 
-All code changes must pass local preflight before any `git push` or PR creation.
+### Manual Preflight (If Hook Not Installed)
 
-**Required commands (run from `cloud/`):**
-1. `npm run lint --workspace @valuerank/shared`
-2. `npm run lint --workspace @valuerank/db`
-3. `npm run lint --workspace @valuerank/api`
-4. `npm run test --workspace @valuerank/api`
-5. `npm run build --workspace @valuerank/api`
+Run from `cloud/` for the workspaces you changed:
 
-**If the change touches web:**
-1. `npm run lint --workspace @valuerank/web`
-2. `npm run test --workspace @valuerank/web`
-3. `npm run build --workspace @valuerank/web`
+```bash
+# Always run for the workspaces you touched:
+npx turbo lint --filter=@valuerank/<workspace>
+npx turbo test --filter=@valuerank/<workspace>
+npx turbo build --filter=@valuerank/<workspace>
+
+# If you touched db or api, also set up the test database first:
+npm run db:test:setup
+```
 
 **Hard rules:**
 - Do not push if any preflight command fails.
