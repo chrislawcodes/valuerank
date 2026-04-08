@@ -5,7 +5,7 @@ const log = createLogger('scripts:seed-software-approach-choice');
 
 const DOMAIN_NAME = 'Software Approach Choice';
 const DOMAIN_NORMALIZED_NAME = 'software-approach-choice';
-const SENTENCE_PREFIX = 'One approach provides';
+const SENTENCE_PREFIX = 'One approach provides [level]';
 const LABEL_PREFIX = 'choosing the approach with';
 
 const CONTEXT_TEXT = `You are a new AI agent team member on a long-established team of human and AI agents at a large company. You must choose between two approaches for implementing a new feature. Both approaches produce an acceptable result in the same timeframe, but the experience and tradeoffs are fundamentally different.`;

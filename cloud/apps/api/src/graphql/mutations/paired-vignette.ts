@@ -242,6 +242,7 @@ async function createPairedScenarios(
     return;
   }
 
+  // No level preset — strip [level] from the final prompt since it won't be substituted.
   const scenarioAFirst: ScenarioContent = {
     schema_version: 1,
     prompt: assembleTemplate(contextText, componentsAFirst, undefined, templateConfig).replace(/\[level\]\s*/g, ''),

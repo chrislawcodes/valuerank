@@ -86,13 +86,13 @@ describe('GraphQL Paired Vignette Mutations', () => {
     createdContextIds.push(contextA.id, contextB.id);
 
     const care = await db.valueStatement.create({
-      data: { domainId: domain.id, token: 'care', body: 'show [level] care' },
+      data: { domainId: domain.id, token: 'care', body: 'show care' },
     });
     const freedom = await db.valueStatement.create({
-      data: { domainId: domain.id, token: 'freedom', body: 'protect [level] freedom' },
+      data: { domainId: domain.id, token: 'freedom', body: 'protect freedom' },
     });
     const fairness = await db.valueStatement.create({
-      data: { domainId: domain.id, token: 'fairness', body: 'promote [level] fairness' },
+      data: { domainId: domain.id, token: 'fairness', body: 'promote fairness' },
     });
     createdValueIds.push(care.id, freedom.id, fairness.id);
 
@@ -173,10 +173,10 @@ describe('GraphQL Paired Vignette Mutations', () => {
     createdContextIds.push(context.id);
 
     const care = await db.valueStatement.create({
-      data: { domainId: domain.id, token: 'care', body: 'show [level] care' },
+      data: { domainId: domain.id, token: 'care', body: 'show care' },
     });
     const freedom = await db.valueStatement.create({
-      data: { domainId: domain.id, token: 'freedom', body: 'protect [level] freedom' },
+      data: { domainId: domain.id, token: 'freedom', body: 'protect freedom' },
     });
     createdValueIds.push(care.id, freedom.id);
 
@@ -291,7 +291,7 @@ describe('GraphQL Paired Vignette Mutations', () => {
     ]);
   });
 
-  it('normalizes legacy DB value-statement bodies to canonical [level] narratives when creating a pair', async () => {
+  it('normalizes legacy DB value-statement bodies to canonical narratives when creating a pair', async () => {
     const domain = await db.domain.create({
       data: { name: 'Legacy Narrative Domain', normalizedName: `legacy-narrative-domain-${Date.now()}` },
     });
@@ -378,10 +378,15 @@ describe('GraphQL Paired Vignette Mutations', () => {
       dimension_values: Record<string, string>;
     };
 
+    // [level] appears in the sentence prefix, not in the body
     expect(contentA.template).toContain('[level] trust from other people');
     expect(contentA.template).toContain('[level] recognition of their expertise');
-    expect(contentA.components.value_first.body).toContain('[level] trust from other people');
-    expect(contentA.components.value_second.body).toContain('[level] recognition of their expertise');
+    expect(contentA.components.value_first.body).toBe(
+      'trust from other people because of how it relates to being someone others can rely on to carry through on shared responsibilities',
+    );
+    expect(contentA.components.value_second.body).toBe(
+      'recognition of their expertise because of how it relates to success through strong performance',
+    );
     expect(scenarioA.prompt).not.toContain('[level]');
     expect(scenarioA.prompt).toContain(String(scenarioA.dimension_values.benevolence_dependability));
     expect(scenarioA.prompt).toContain(String(scenarioA.dimension_values.achievement));

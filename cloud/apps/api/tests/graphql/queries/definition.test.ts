@@ -451,7 +451,7 @@ describe('GraphQL Definition Query', () => {
       ]);
     });
 
-    it('normalizes legacy job-choice narratives back to shared [level] placeholders on content and resolvedContent', async () => {
+    it('normalizes legacy job-choice narratives to canonical bodies with [level] in prefix on content and resolvedContent', async () => {
       const query = `
         query GetLegacyJobChoiceDefinition($id: ID!) {
           definition(id: $id) {
@@ -488,10 +488,10 @@ describe('GraphQL Definition Query', () => {
         'One job offers [level] recognition of their expertise because of how it relates to success through strong performance.',
       );
       expect(content.components.value_first.body).toBe(
-        '[level] trust from other people because of how it relates to being someone others can rely on to carry through on shared responsibilities',
+        'trust from other people because of how it relates to being someone others can rely on to carry through on shared responsibilities',
       );
       expect(content.components.value_second.body).toBe(
-        '[level] recognition of their expertise because of how it relates to success through strong performance',
+        'recognition of their expertise because of how it relates to success through strong performance',
       );
       expect(resolvedContent.template).toContain('[level] trust from other people');
       expect(resolvedContent.template).toContain('[level] recognition of their expertise');
