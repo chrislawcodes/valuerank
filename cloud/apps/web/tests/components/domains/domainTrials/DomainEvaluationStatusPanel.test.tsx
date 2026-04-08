@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { DomainEvaluationStatusPanel } from '../../../../src/components/domains/domainTrials/DomainEvaluationStatusPanel';
 
 function makeEvaluation() {
@@ -54,6 +55,7 @@ describe('DomainEvaluationStatusPanel', () => {
     const onSelectRun = vi.fn();
 
     render(
+      <MemoryRouter>
       <DomainEvaluationStatusPanel
         domainName="Jobs"
         evaluation={makeEvaluation() as never}
@@ -113,7 +115,8 @@ describe('DomainEvaluationStatusPanel', () => {
         lastUpdatedAt={Date.now()}
         selectedRunId={null}
         onSelectRun={onSelectRun}
-      />,
+      />
+      </MemoryRouter>,
     );
 
     expect(screen.getByRole('heading', { name: /status/i })).toBeInTheDocument();
