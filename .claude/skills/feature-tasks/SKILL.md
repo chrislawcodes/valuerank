@@ -207,10 +207,11 @@ src/
 
 ### Implementation for User Story 1
 
-- [ ] T009 [P] [US1] Create [Component] in <path-from-plan>/ComponentName.ext
-- [ ] T010 [P] [US1] Create [Component2] in <path-from-plan>/Component2.ext
-- [ ] T011 [US1] Implement [Service] in <path-from-plan>/ServiceName.ext (depends on T009, T010)
+- [ ] T009 [P] [US1] Write tests for ScoreCalculator in <test-dir>/ScoreCalculator.test.ts
+- [ ] T010 [P] [US1] Create [Component] in <path-from-plan>/ComponentName.ext
+- [ ] T011 [US1] Implement ScoreCalculator in <path-from-plan>/ScoreCalculator.ts (tests from T009)
 - [ ] T012 [US1] Integrate [components] in <path-from-plan>/IntegrationPoint.ext
+- [ ] T013 [US1] Write tests for IntegrationPoint in <test-dir>/IntegrationPoint.test.ts
 
 **Checkpoint**: User Story 1 should be fully functional and testable independently
 ```
@@ -220,6 +221,8 @@ src/
 - Use [P] for tasks on different files with no dependencies
 - Use exact paths from plan.md
 - Order: Components → Services → Integration
+
+**Test ordering rule**: Place test tasks **before** implementation for pure logic (utilities, services, parsers, scoring, aggregation — anything without DB/UI/API dependencies). Place test tasks **after** implementation for UI components, GraphQL resolvers, and database queries where the shape of the code must exist first.
 
 ---
 
@@ -566,6 +569,21 @@ For output format examples (TypeScript React, Python Django, Rust microservice) 
 ✅ **Scoped**: One logical change per task
 ✅ **Organized**: Grouped by user story
 ✅ **Independent**: Stories testable standalone
+✅ **Test-first for logic**: Tests before implementation for pure functions/services
+
+### Test Task Ordering
+
+**Test-first** (test task BEFORE implementation task):
+- Pure functions, utilities, helpers
+- Business logic services (scoring, aggregation, parsing)
+- Data transforms and validators
+- Anything with no DB, UI, or API framework dependency
+
+**Test-after** (test task AFTER implementation task):
+- React components (need JSX structure to test against)
+- GraphQL resolvers and mutations (need schema + types first)
+- Database queries and repositories (need schema/migration first)
+- Integration points that wire multiple pieces together
 
 ### What to Avoid
 
@@ -574,6 +592,7 @@ For output format examples (TypeScript React, Python Django, Rust microservice) 
 ❌ **Hardcoded paths**: Using 206mp paths instead of plan.md paths
 ❌ **Dependent stories**: US2 cannot be tested without US1
 ❌ **Giant tasks**: Single task doing 5 things
+❌ **Tests always last**: Writing all tests after all code defeats the purpose
 
 ---
 
