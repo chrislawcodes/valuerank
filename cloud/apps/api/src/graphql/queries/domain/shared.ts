@@ -4,6 +4,8 @@ import { DOMAIN_ANALYSIS_VALUE_KEYS, type DomainAnalysisValueKey, extractValuePa
 import { resolveTranscriptDecisionModel } from './decision-model.js';
 import type { TranscriptDecisionModelResult } from './decision-model.js';
 import { runMatchesSignature, selectDefaultVnewSignature } from './planning-utils.js';
+export { selectLatestDefinitionPerLineage, hydrateDefinitionAncestors } from '../../../services/definition-lineage.js';
+export type { LineageDefinitionRow } from '../../../services/definition-lineage.js';
 export {
   buildRawDecisionEvidence,
   DECISION_MODEL_READ_RULES,
@@ -576,20 +578,6 @@ export function aggregateValueCountsFromTranscripts(
   return { aggregatedByModel, pairwiseWinsByModel, analyzedDefinitionIds };
 }
 
-function getLineageRootId(definition: DefinitionRow, definitionsById: Map<string, DefinitionRow>): string {
-  let current = definition;
-  const visited = new Set<string>([current.id]);
-
-  while (current.parentId !== null) {
-    const parent = definitionsById.get(current.parentId);
-    if (!parent || visited.has(parent.id)) break;
-    visited.add(parent.id);
-    current = parent;
-  }
-
-  return current.id;
-}
-
 export function supportsTemperature(apiConfig: unknown): boolean {
   if (apiConfig === null || typeof apiConfig !== 'object') return true;
   const candidate = (apiConfig as Record<string, unknown>).supportsTemperature;
@@ -597,63 +585,3 @@ export function supportsTemperature(apiConfig: unknown): boolean {
   return true;
 }
 
-function isNewerDefinition(left: DefinitionRow, right: DefinitionRow): boolean {
-  if (left.version !== right.version) return left.version > right.version;
-  const leftUpdated = left.updatedAt.getTime();
-  const rightUpdated = right.updatedAt.getTime();
-  if (leftUpdated !== rightUpdated) return leftUpdated > rightUpdated;
-  return left.createdAt.getTime() > right.createdAt.getTime();
-}
-
-export function selectLatestDefinitionPerLineage(
-  definitions: DefinitionRow[],
-  definitionsById: Map<string, DefinitionRow> = new Map(definitions.map((definition) => [definition.id, definition])),
-): DefinitionRow[] {
-  const latestByLineage = new Map<string, DefinitionRow>();
-
-  for (const definition of definitions) {
-    const lineageRootId = getLineageRootId(definition, definitionsById);
-    const existing = latestByLineage.get(lineageRootId);
-    if (!existing || isNewerDefinition(definition, existing)) {
-      latestByLineage.set(lineageRootId, definition);
-    }
-  }
-
-  return Array.from(latestByLineage.values());
-}
-
-export async function hydrateDefinitionAncestors(definitions: DefinitionRow[]): Promise<Map<string, DefinitionRow>> {
-  const definitionsById = new Map(definitions.map((definition) => [definition.id, definition]));
-
-  let missingParentIds = new Set(
-    definitions
-      .map((definition) => definition.parentId)
-      .filter((parentId): parentId is string => parentId !== null && !definitionsById.has(parentId)),
-  );
-
-  while (missingParentIds.size > 0) {
-    const parentIdsBatch = Array.from(missingParentIds);
-    missingParentIds = new Set<string>();
-
-    const missingParents = await db.definition.findMany({
-      where: { id: { in: parentIdsBatch } },
-      select: {
-        id: true,
-        parentId: true,
-        version: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-
-    for (const parent of missingParents) {
-      if (definitionsById.has(parent.id)) continue;
-      definitionsById.set(parent.id, parent);
-      if (parent.parentId !== null && !definitionsById.has(parent.parentId)) {
-        missingParentIds.add(parent.parentId);
-      }
-    }
-  }
-
-  return definitionsById;
-}

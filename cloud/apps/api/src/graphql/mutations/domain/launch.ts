@@ -13,6 +13,8 @@ import {
   type DomainTrialRunResult,
   normalizeModelSet,
 } from './types.js';
+import { selectLatestDefinitionPerLineage, hydrateDefinitionAncestors } from '../../../services/definition-lineage.js';
+
 type DefinitionRow = {
   id: string;
   name: string;
@@ -23,83 +25,6 @@ type DefinitionRow = {
   createdByUserId?: string | null;
   content: unknown;
 };
-
-function getLineageRootId(definition: DefinitionRow, definitionsById: Map<string, DefinitionRow>): string {
-  let current = definition;
-  const visited = new Set<string>([current.id]);
-
-  while (current.parentId !== null) {
-    const parent = definitionsById.get(current.parentId);
-    if (!parent || visited.has(parent.id)) break;
-    visited.add(parent.id);
-    current = parent;
-  }
-
-  return current.id;
-}
-
-function isNewerDefinition(left: DefinitionRow, right: DefinitionRow): boolean {
-  if (left.version !== right.version) return left.version > right.version;
-  const leftUpdated = left.updatedAt.getTime();
-  const rightUpdated = right.updatedAt.getTime();
-  if (leftUpdated !== rightUpdated) return leftUpdated > rightUpdated;
-  return left.createdAt.getTime() > right.createdAt.getTime();
-}
-
-function selectLatestDefinitionPerLineage(
-  definitions: DefinitionRow[],
-  definitionsById: Map<string, DefinitionRow> = new Map(definitions.map((definition) => [definition.id, definition]))
-): DefinitionRow[] {
-  const latestByLineage = new Map<string, DefinitionRow>();
-
-  for (const definition of definitions) {
-    const lineageRootId = getLineageRootId(definition, definitionsById);
-    const existing = latestByLineage.get(lineageRootId);
-    if (!existing || isNewerDefinition(definition, existing)) {
-      latestByLineage.set(lineageRootId, definition);
-    }
-  }
-
-  return Array.from(latestByLineage.values());
-}
-
-async function hydrateDefinitionAncestors(definitions: DefinitionRow[]): Promise<Map<string, DefinitionRow>> {
-  const definitionsById = new Map(definitions.map((definition) => [definition.id, definition]));
-
-  let missingParentIds = new Set(
-    definitions
-      .map((definition) => definition.parentId)
-      .filter((parentId): parentId is string => parentId !== null && !definitionsById.has(parentId))
-  );
-
-  while (missingParentIds.size > 0) {
-    const parentIdsBatch = Array.from(missingParentIds);
-    missingParentIds = new Set<string>();
-
-    const missingParents = await db.definition.findMany({
-      where: { id: { in: parentIdsBatch } },
-      select: {
-        id: true,
-        name: true,
-        parentId: true,
-        version: true,
-        createdAt: true,
-        updatedAt: true,
-        content: true,
-      },
-    });
-
-    for (const parent of missingParents) {
-      if (definitionsById.has(parent.id)) continue;
-      definitionsById.set(parent.id, parent);
-      if (parent.parentId !== null && !definitionsById.has(parent.parentId)) {
-        missingParentIds.add(parent.parentId);
-      }
-    }
-  }
-
-  return definitionsById;
-}
 
 type PairedMethodology = {
   family: string;
@@ -611,7 +536,7 @@ export async function launchDomainEvaluation(input: DomainEvaluationLaunchInput)
   const domain = await db.domain.findUnique({ where: { id: domainId } });
   if (!domain) throw new Error(`Domain not found: ${domainId}`);
 
-  const definitions = await db.definition.findMany({
+  const definitions: DefinitionRow[] = await db.definition.findMany({
     where: { domainId, deletedAt: null },
     select: {
       id: true,
