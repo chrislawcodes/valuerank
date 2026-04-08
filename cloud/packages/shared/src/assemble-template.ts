@@ -56,8 +56,13 @@ export function assembleTemplate(
       ? rawPrefix.replaceAll('[level]', levelWords.second)
       : rawPrefix;
 
-  const sentenceFirst = `${spFirst} ${value_first.body}.`;
-  const sentenceSecond = `${spSecond} ${value_second.body}.`;
+  // Defensively strip [level] from bodies in case of legacy/un-migrated data.
+  // This prevents double [level] when both prefix and body contain the token.
+  const cleanFirstBody = value_first.body.replace(/\[level\]\s*/g, '');
+  const cleanSecondBody = value_second.body.replace(/\[level\]\s*/g, '');
+
+  const sentenceFirst = `${spFirst} ${cleanFirstBody}.`;
+  const sentenceSecond = `${spSecond} ${cleanSecondBody}.`;
 
   // Scale labels use the original body (stripped of [level]) so they are stable
   // regardless of which level word was substituted.

@@ -90,7 +90,7 @@ describe('assembleTemplate', () => {
 
   // --- Backward compatibility: bodies with [level] (legacy data) ---
 
-  it('labelFromBody defensively strips [level] from legacy bodies', () => {
+  it('defensively strips [level] from legacy bodies to prevent double [level]', () => {
     const legacyComponents = {
       context_id: 'ctx-1',
       value_first: {
@@ -102,11 +102,27 @@ describe('assembleTemplate', () => {
         body: '[level] enjoyment because of how it relates to pleasure',
       },
     };
-    const result = assembleTemplate(CONTEXT, legacyComponents);
+
+    // With level words: [level] in prefix is substituted, [level] in body is stripped
+    const withLevel = assembleTemplate(CONTEXT, legacyComponents, {
+      first: 'full',
+      second: 'negligible',
+    });
+    expect(withLevel).toContain('One job offers full recognition of their expertise');
+    expect(withLevel).toContain('One job offers negligible enjoyment');
+    // Must NOT have double [level] or leftover [level]
+    expect(withLevel).not.toContain('[level]');
+
+    // Without level words: [level] in prefix stays (base template mode), body [level] is stripped
+    const withoutLevel = assembleTemplate(CONTEXT, legacyComponents);
+    expect(withoutLevel).toContain('One job offers [level] recognition of their expertise');
+    // Body [level] must be stripped — no double [level] in the sentence
+    expect(withoutLevel).not.toContain('[level] [level]');
+
     // Scale labels should NOT contain [level]
-    expect(result).toContain(
+    expect(withoutLevel).toContain(
       '- Strongly support taking the job with recognition of their expertise',
     );
-    expect(result).not.toContain('taking the job with [level]');
+    expect(withoutLevel).not.toContain('taking the job with [level]');
   });
 });
