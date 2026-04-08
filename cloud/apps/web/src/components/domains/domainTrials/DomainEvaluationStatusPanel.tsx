@@ -1,4 +1,5 @@
 import { ChevronRight, Clock3, Loader2, AlertTriangle } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Badge } from '../../ui/Badge';
 import { getBatchRuntimeState, getBatchStageLabel } from './launch-state';
 import {
@@ -201,7 +202,13 @@ export function DomainEvaluationStatusPanel({
                       onClick={() => onSelectRun(row.runId)}
                     >
                       <td className="px-4 py-3 align-top">
-                        <div className="font-medium text-gray-900">{row.definitionName}</div>
+                        <Link
+                          to={`/runs/${row.runId}`}
+                          className="font-medium text-teal-700 hover:text-teal-900 hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {row.definitionName}
+                        </Link>
                         <div className="text-xs text-gray-500">Batch {row.runId.slice(-8)}</div>
                       </td>
                       <td className="px-4 py-3 align-top">
@@ -270,7 +277,13 @@ export function DomainEvaluationStatusPanel({
                       onClick={() => onSelectRun(row.runId)}
                     >
                       <td className="px-4 py-3 align-top">
-                        <div className="font-medium text-gray-900">{row.definitionName}</div>
+                        <Link
+                          to={`/runs/${row.runId}`}
+                          className="font-medium text-teal-700 hover:text-teal-900 hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {row.definitionName}
+                        </Link>
                         <div className="text-xs text-gray-500">Batch {row.runId.slice(-8)}</div>
                       </td>
                       <td className="px-4 py-3 align-top">

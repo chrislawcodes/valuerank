@@ -869,7 +869,8 @@ describe('DomainTrialsDashboard', () => {
     expect(screen.getByRole('heading', { name: /needs attention/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /review & start paired batches/i })).toBeDisabled();
 
-    await user.click(screen.getByText('Jobs A'));
+    // Click the batch ID text (not the vignette name link) to open the drawer
+    await user.click(screen.getByText('Batch run-1'));
 
     expect(screen.getByText('Run progress mock')).toBeInTheDocument();
     expect(screen.getByText('Recent task log')).toBeInTheDocument();
