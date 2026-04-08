@@ -40,16 +40,16 @@ describe('transformJobChoiceDefinition', () => {
     expect(result.content.components).toMatchObject({
       value_first: {
         token: 'achievement',
-        body: '[level] recognition of their expertise because of how it relates to success through strong performance',
+        body: 'recognition of their expertise because of how it relates to success through strong performance',
       },
       value_second: {
         token: 'hedonism',
-        body: '[level] enjoyment in their daily experience because of how it relates to pleasure and comfort in everyday work',
+        body: 'enjoyment in their daily experience because of how it relates to pleasure and comfort in everyday work',
       },
     });
   });
 
-  it('assembles the template from components using "One job offers" wording and preserves [level] placeholders', () => {
+  it('assembles the template from components using "One job offers [level]" prefix', () => {
     const result = transformJobChoiceDefinition(SAMPLE_CONTENT);
 
     expect(result.content.template).toContain(

@@ -581,7 +581,7 @@ describe('decision model', () => {
     // In a paired batch, the same vignette is shown as A_first and B_first.
     // When Achievement wins in both runs, both should produce direction=favor_first.
     // Achievement label derived from JOB_CHOICE_VALUE_STATEMENTS body for 'achievement' token:
-    // body = '[level] recognition of their expertise because of ...'
+    // body = 'recognition of their expertise because of ...'
     // labelFromBody → 'taking the job with recognition of their expertise'
     const achievementLabel = 'Strongly support taking the job with recognition of their expertise';
 

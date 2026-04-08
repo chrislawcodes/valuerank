@@ -244,12 +244,12 @@ async function createPairedScenarios(
 
   const scenarioAFirst: ScenarioContent = {
     schema_version: 1,
-    prompt: assembleTemplate(contextText, componentsAFirst, undefined, templateConfig).replace(/\[level\]\s*/g, ''),
+    prompt: assembleTemplate(contextText, componentsAFirst, undefined, templateConfig),
     dimension_values: {},
   };
   const scenarioBFirst: ScenarioContent = {
     schema_version: 1,
-    prompt: assembleTemplate(contextText, componentsBFirst, undefined, templateConfig).replace(/\[level\]\s*/g, ''),
+    prompt: assembleTemplate(contextText, componentsBFirst, undefined, templateConfig),
     dimension_values: {},
   };
 

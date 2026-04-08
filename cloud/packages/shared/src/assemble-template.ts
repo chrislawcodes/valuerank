@@ -7,16 +7,17 @@ type ComponentsInput = {
 };
 
 export type TemplateConfig = {
-  sentencePrefix?: string | null;  // default: "One job offers"
+  sentencePrefix?: string | null;  // e.g. "One job offers [level]"
   labelPrefix?: string | null;     // default: "taking the job with"
 };
 
-export const DEFAULT_SENTENCE_PREFIX = 'One job offers';
+export const DEFAULT_SENTENCE_PREFIX = 'One job offers [level]';
 export const DEFAULT_LABEL_PREFIX = 'taking the job with';
 
 export function labelFromBody(body: string, labelPrefix?: string | null): string {
-  // Strip [level] token (and optional trailing space) before extracting scale label.
-  // Scale labels must be stable across all 25 level-preset conditions.
+  // Extract a stable scale label from the value statement body.
+  // Bodies should not contain [level] (it belongs in sentencePrefix),
+  // but strip it defensively for backward compatibility.
   const clean = body.replace(/\[level\]\s*/g, '');
   const beforeBecause = (clean.split(' because')[0] ?? clean).trim();
   const prefix = labelPrefix ?? DEFAULT_LABEL_PREFIX;
@@ -43,19 +44,20 @@ export function assembleTemplate(
 ): string {
   const { value_first, value_second } = components;
 
-  // Substitute [level] with the provided word, or leave as-is (base template mode).
-  const bodyFirst =
-    levelWords?.first != null
-      ? value_first.body.replaceAll('[level]', levelWords.first)
-      : value_first.body;
-  const bodySecond =
-    levelWords?.second != null
-      ? value_second.body.replaceAll('[level]', levelWords.second)
-      : value_second.body;
+  const rawPrefix = config?.sentencePrefix ?? DEFAULT_SENTENCE_PREFIX;
 
-  const sp = config?.sentencePrefix ?? DEFAULT_SENTENCE_PREFIX;
-  const sentenceFirst = `${sp} ${bodyFirst}.`;
-  const sentenceSecond = `${sp} ${bodySecond}.`;
+  // Substitute [level] in the sentence prefix, not the body.
+  const spFirst =
+    levelWords?.first != null
+      ? rawPrefix.replaceAll('[level]', levelWords.first)
+      : rawPrefix;
+  const spSecond =
+    levelWords?.second != null
+      ? rawPrefix.replaceAll('[level]', levelWords.second)
+      : rawPrefix;
+
+  const sentenceFirst = `${spFirst} ${value_first.body}.`;
+  const sentenceSecond = `${spSecond} ${value_second.body}.`;
 
   // Scale labels use the original body (stripped of [level]) so they are stable
   // regardless of which level word was substituted.
