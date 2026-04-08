@@ -3,7 +3,7 @@ import { createLogger } from '@valuerank/shared';
 import { DEFAULT_JOB_OPTIONS } from '../types.js';
 import { triggerBasicAnalysis } from '../../services/analysis/index.js';
 import { incrementSummarizeCompleted, incrementSummarizeFailed } from '../../services/run/progress.js';
-import { deductProviderBalancesForRun } from '../../services/budget/deduct.js';
+import { deductActualProviderBalancesForRun } from '../../services/budget/deduct.js';
 import {
   buildDecisionMetadataForPersist,
   isPlainJsonObject,
@@ -131,7 +131,7 @@ export async function maybeCompleteRun(runId: string): Promise<void> {
     }
 
     try {
-      await deductProviderBalancesForRun(runId);
+      await deductActualProviderBalancesForRun(runId);
     } catch (error) {
       log.error({ runId, err: error }, 'Failed to deduct provider balances');
     }

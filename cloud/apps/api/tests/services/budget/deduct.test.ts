@@ -19,6 +19,12 @@ vi.mock('@valuerank/db', async (importOriginal) => {
       llmProvider: {
         findFirst: vi.fn(),
       },
+      llmModel: {
+        findMany: vi.fn(),
+      },
+      transcript: {
+        findMany: vi.fn(),
+      },
       $executeRaw: vi.fn(),
     },
   };
@@ -29,6 +35,7 @@ import {
   groupCostByProvider,
   atomicDeduct,
   deductProviderBalancesForRun,
+  deductActualProviderBalancesForRun,
 } from '../../../src/services/budget/deduct.js';
 
 describe('groupCostByProvider', () => {
@@ -229,5 +236,144 @@ describe('deductProviderBalancesForRun', () => {
 
     await expect(deductProviderBalancesForRun('nonexistent')).resolves.toBeUndefined();
     expect(executeRawMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('deductActualProviderBalancesForRun', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('deducts actual costs grouped by provider', async () => {
+    const transcriptFindManyMock = vi.mocked(db.transcript.findMany);
+    const modelFindManyMock = vi.mocked(db.llmModel.findMany);
+    const executeRawMock = vi.mocked(db.$executeRaw);
+
+    transcriptFindManyMock.mockResolvedValue([
+      { modelId: 'gpt-5.1', content: { costSnapshot: { estimatedCost: 0.05 } } },
+      { modelId: 'gpt-5.1', content: { costSnapshot: { estimatedCost: 0.03 } } },
+      { modelId: 'claude-sonnet-4-5', content: { costSnapshot: { estimatedCost: 0.10 } } },
+    ] as never);
+
+    modelFindManyMock.mockResolvedValue([
+      { modelId: 'gpt-5.1', provider: { name: 'openai', balance: new Prisma.Decimal(10) } },
+      { modelId: 'claude-sonnet-4-5', provider: { name: 'anthropic', balance: new Prisma.Decimal(20) } },
+    ] as never);
+
+    executeRawMock.mockResolvedValue(1);
+
+    await deductActualProviderBalancesForRun('run-actual-1');
+
+    // Two providers → two deductions
+    expect(executeRawMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips when run has no transcripts', async () => {
+    const transcriptFindManyMock = vi.mocked(db.transcript.findMany);
+    const executeRawMock = vi.mocked(db.$executeRaw);
+
+    transcriptFindManyMock.mockResolvedValue([]);
+
+    await deductActualProviderBalancesForRun('run-empty');
+
+    expect(executeRawMock).not.toHaveBeenCalled();
+  });
+
+  it('skips when transcripts have no costSnapshot', async () => {
+    const transcriptFindManyMock = vi.mocked(db.transcript.findMany);
+    const executeRawMock = vi.mocked(db.$executeRaw);
+
+    transcriptFindManyMock.mockResolvedValue([
+      { modelId: 'gpt-5.1', content: { turns: [] } },
+      { modelId: 'gpt-5.1', content: null },
+    ] as never);
+
+    await deductActualProviderBalancesForRun('run-no-cost');
+
+    expect(executeRawMock).not.toHaveBeenCalled();
+  });
+
+  it('skips provider when balance is null', async () => {
+    const transcriptFindManyMock = vi.mocked(db.transcript.findMany);
+    const modelFindManyMock = vi.mocked(db.llmModel.findMany);
+    const executeRawMock = vi.mocked(db.$executeRaw);
+
+    transcriptFindManyMock.mockResolvedValue([
+      { modelId: 'gpt-5.1', content: { costSnapshot: { estimatedCost: 0.05 } } },
+    ] as never);
+
+    modelFindManyMock.mockResolvedValue([
+      { modelId: 'gpt-5.1', provider: { name: 'openai', balance: null } },
+    ] as never);
+
+    await deductActualProviderBalancesForRun('run-null-balance');
+
+    expect(executeRawMock).not.toHaveBeenCalled();
+  });
+
+  it('skips unknown models gracefully', async () => {
+    const transcriptFindManyMock = vi.mocked(db.transcript.findMany);
+    const modelFindManyMock = vi.mocked(db.llmModel.findMany);
+    const executeRawMock = vi.mocked(db.$executeRaw);
+
+    transcriptFindManyMock.mockResolvedValue([
+      { modelId: 'unknown-model', content: { costSnapshot: { estimatedCost: 0.05 } } },
+      { modelId: 'gpt-5.1', content: { costSnapshot: { estimatedCost: 0.03 } } },
+    ] as never);
+
+    modelFindManyMock.mockResolvedValue([
+      { modelId: 'gpt-5.1', provider: { name: 'openai', balance: new Prisma.Decimal(10) } },
+    ] as never);
+
+    executeRawMock.mockResolvedValue(1);
+
+    await deductActualProviderBalancesForRun('run-unknown-model');
+
+    // Only one provider deducted (unknown-model skipped)
+    expect(executeRawMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('continues deducting other providers when one fails', async () => {
+    const transcriptFindManyMock = vi.mocked(db.transcript.findMany);
+    const modelFindManyMock = vi.mocked(db.llmModel.findMany);
+    const executeRawMock = vi.mocked(db.$executeRaw);
+
+    transcriptFindManyMock.mockResolvedValue([
+      { modelId: 'gpt-5.1', content: { costSnapshot: { estimatedCost: 0.05 } } },
+      { modelId: 'claude-sonnet-4-5', content: { costSnapshot: { estimatedCost: 0.10 } } },
+    ] as never);
+
+    modelFindManyMock.mockResolvedValue([
+      { modelId: 'gpt-5.1', provider: { name: 'openai', balance: new Prisma.Decimal(10) } },
+      { modelId: 'claude-sonnet-4-5', provider: { name: 'anthropic', balance: new Prisma.Decimal(20) } },
+    ] as never);
+
+    executeRawMock.mockRejectedValueOnce(new Error('DB error')).mockResolvedValueOnce(1);
+
+    await expect(deductActualProviderBalancesForRun('run-partial-fail')).resolves.toBeUndefined();
+    expect(executeRawMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('aggregates multiple transcripts for same model into one deduction', async () => {
+    const transcriptFindManyMock = vi.mocked(db.transcript.findMany);
+    const modelFindManyMock = vi.mocked(db.llmModel.findMany);
+    const executeRawMock = vi.mocked(db.$executeRaw);
+
+    transcriptFindManyMock.mockResolvedValue([
+      { modelId: 'gpt-5.1', content: { costSnapshot: { estimatedCost: 0.01 } } },
+      { modelId: 'gpt-5.1', content: { costSnapshot: { estimatedCost: 0.02 } } },
+      { modelId: 'gpt-5.1', content: { costSnapshot: { estimatedCost: 0.03 } } },
+    ] as never);
+
+    modelFindManyMock.mockResolvedValue([
+      { modelId: 'gpt-5.1', provider: { name: 'openai', balance: new Prisma.Decimal(10) } },
+    ] as never);
+
+    executeRawMock.mockResolvedValue(1);
+
+    await deductActualProviderBalancesForRun('run-aggregate');
+
+    // Single provider → one deduction call (aggregated cost)
+    expect(executeRawMock).toHaveBeenCalledTimes(1);
   });
 });

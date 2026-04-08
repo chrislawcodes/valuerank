@@ -40,11 +40,104 @@ export async function atomicDeduct(providerName: string, cost: number): Promise<
 }
 
 /**
+ * Extract the actual cost from a transcript's content.costSnapshot.
+ * Returns 0 if the costSnapshot is missing or malformed.
+ */
+function extractTranscriptCost(content: unknown): number {
+  if (content == null || typeof content !== 'object') return 0;
+  const record = content as Record<string, unknown>;
+  const snapshot = record.costSnapshot;
+  if (snapshot == null || typeof snapshot !== 'object') return 0;
+  const snap = snapshot as Record<string, unknown>;
+  const cost = snap.estimatedCost;
+  return typeof cost === 'number' && cost > 0 ? cost : 0;
+}
+
+/**
+ * Deduct provider balances for a completed run using actual transcript costs.
+ *
+ * Reads costSnapshot.estimatedCost from each transcript, groups costs by
+ * provider (via modelId → LlmModel → LlmProvider lookup), then atomically
+ * deducts each provider's share.
+ *
+ * This replaces the estimated-cost approach which relied on a `providerName`
+ * field that was missing from older run configs, causing silent deduction failures.
+ *
+ * Never throws — all errors are logged so the completion flow is never blocked.
+ */
+export async function deductActualProviderBalancesForRun(runId: string): Promise<void> {
+  try {
+    const transcripts = await db.transcript.findMany({
+      where: { runId },
+      select: { modelId: true, content: true },
+    });
+
+    if (transcripts.length === 0) {
+      log.debug({ runId }, 'Run has no transcripts — skipping budget deduction');
+      return;
+    }
+
+    // Aggregate cost by modelId
+    const costByModel = new Map<string, number>();
+    for (const t of transcripts) {
+      const cost = extractTranscriptCost(t.content);
+      if (cost > 0) {
+        costByModel.set(t.modelId, (costByModel.get(t.modelId) ?? 0) + cost);
+      }
+    }
+
+    if (costByModel.size === 0) {
+      log.debug({ runId }, 'No transcript cost data — skipping budget deduction');
+      return;
+    }
+
+    // Look up modelId → providerName via DB
+    const modelIds = [...costByModel.keys()];
+    const models = await db.llmModel.findMany({
+      where: { modelId: { in: modelIds } },
+      select: { modelId: true, provider: { select: { name: true, balance: true } } },
+    });
+    const modelToProvider = new Map(models.map((m) => [m.modelId, m.provider]));
+
+    // Aggregate cost by provider, tracking balance availability
+    const providerBalanceKnown = new Map<string, boolean>();
+    const costByProvider = new Map<string, number>();
+    for (const [modelId, cost] of costByModel) {
+      const provider = modelToProvider.get(modelId);
+      if (provider == null) {
+        log.warn({ runId, modelId }, 'Model not found in DB — skipping deduction for this model');
+        continue;
+      }
+      costByProvider.set(provider.name, (costByProvider.get(provider.name) ?? 0) + cost);
+      providerBalanceKnown.set(provider.name, provider.balance != null);
+    }
+
+    // Deduct per provider
+    for (const [providerName, cost] of costByProvider) {
+      try {
+        if (!providerBalanceKnown.get(providerName)) {
+          log.debug({ runId, providerName }, 'Provider balance is null — skipping deduction');
+          continue;
+        }
+
+        await atomicDeduct(providerName, cost);
+        log.info({ runId, providerName, cost }, 'Deducted provider balance (actual cost)');
+      } catch (err) {
+        log.error({ runId, providerName, err }, 'Failed to deduct provider balance');
+      }
+    }
+  } catch (err) {
+    log.error({ runId, err }, 'Failed to deduct actual provider balances for run');
+  }
+}
+
+/**
  * Deduct provider balances for a completed run.
  *
  * Reads `estimatedCosts.perModel` from the run's JSON config, groups costs by
  * provider prefix, then atomically deducts each provider's share.
  *
+ * @deprecated Use deductActualProviderBalancesForRun instead.
  * Never throws — all errors are logged so the completion flow is never blocked.
  */
 export async function deductProviderBalancesForRun(runId: string): Promise<void> {
