@@ -11,7 +11,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { db, Prisma } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
 import { logAuditEvent } from '../../services/mcp/index.js';
-import { formatError, formatSuccess, createOperationsAudit } from './helpers.js';
+import { formatError, formatSuccess, createOperationsAudit, getMcpUserId } from './helpers.js';
 import { addToolRegistrar } from './registry.js';
 
 const log = createLogger('mcp:tools:get-unsummarized-transcripts');
@@ -80,7 +80,7 @@ how many exist even if only 'limit' are returned.`,
     },
     async (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
-      const userId = 'mcp-user'; // TODO: Extract from auth context when available
+      const userId = getMcpUserId();
       const includeFailed = args.include_failed ?? false;
       const limit = Math.min(args.limit ?? 50, 100); // Cap at 100
       const offset = args.offset ?? 0;

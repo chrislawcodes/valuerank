@@ -12,6 +12,7 @@ import { deprecateModel, getModelWithProvider } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
 import { logAuditEvent, createLlmAudit } from '../../services/mcp/index.js';
 import { addToolRegistrar } from './registry.js';
+import { getMcpUserId } from './helpers.js';
 
 const log = createLogger('mcp:tools:deprecate-llm-model');
 
@@ -82,7 +83,7 @@ Returns the deprecated model and the new default (if one was promoted).`,
     },
     async (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
-      const userId = 'mcp-user';
+      const userId = getMcpUserId();
 
       log.debug({ requestId, id: args.id }, 'deprecate_llm_model called');
 

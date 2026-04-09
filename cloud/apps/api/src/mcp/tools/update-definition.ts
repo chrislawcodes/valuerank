@@ -12,6 +12,7 @@ import { db, type Prisma } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import { logAuditEvent } from '../../services/mcp/index.js';
 import { addToolRegistrar } from './registry.js';
+import { getMcpUserId } from './helpers.js';
 
 const log = createLogger('mcp:tools:update-definition');
 
@@ -95,7 +96,7 @@ Example - rename only:
     },
     async (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
-      const userId = 'mcp-user';
+      const userId = getMcpUserId();
 
       log.debug(
         { definitionId: args.definition_id, requestId },

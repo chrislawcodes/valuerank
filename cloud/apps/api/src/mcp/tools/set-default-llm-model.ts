@@ -11,6 +11,7 @@ import { setDefaultModel, getModelWithProvider } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
 import { logAuditEvent, createLlmAudit } from '../../services/mcp/index.js';
 import { addToolRegistrar } from './registry.js';
+import { getMcpUserId } from './helpers.js';
 
 const log = createLogger('mcp:tools:set-default-llm-model');
 
@@ -84,7 +85,7 @@ Returns the new default model and the previous default (if changed).`,
     },
     async (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
-      const userId = 'mcp-user';
+      const userId = getMcpUserId();
 
       log.debug({ requestId, id: args.id }, 'set_default_llm_model called');
 

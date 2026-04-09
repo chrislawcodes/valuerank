@@ -57,6 +57,18 @@ export function formatSuccess(data: unknown): McpResponse {
 }
 
 // ============================================================================
+// AUTH HELPERS
+// ============================================================================
+
+/**
+ * Returns the current MCP user ID for audit logging.
+ * TODO: Extract from auth context when MCP authentication is implemented.
+ */
+export function getMcpUserId(): string {
+  return 'mcp-user';
+}
+
+// ============================================================================
 // AUDIT HELPERS
 // ============================================================================
 
