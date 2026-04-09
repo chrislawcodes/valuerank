@@ -74,6 +74,8 @@ npm run db:test:setup
 
 **When a file exceeds limits:** extract helpers, split into sub-modules, or create a folder with `index.ts` re-exporting.
 
+**Anti-regrowth rule:** When adding >50 lines to a file already over 400 lines, extract the new logic into its own module with typed input/output. Don't grow the file — decompose it. This applies to feature work, not just refactoring.
+
 ---
 
 ## TypeScript Standards
