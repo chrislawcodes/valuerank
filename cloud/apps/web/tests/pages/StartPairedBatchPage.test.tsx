@@ -75,6 +75,7 @@ function createDefinition(overrides: Partial<Record<string, unknown>> = {}) {
       dimensions: [],
       methodology: {
         family: 'job-choice',
+        pair_key: 'test-pair',
       },
     },
     resolvedContent: {
@@ -83,6 +84,7 @@ function createDefinition(overrides: Partial<Record<string, unknown>> = {}) {
       dimensions: [],
       methodology: {
         family: 'job-choice',
+        pair_key: 'test-pair',
       },
     },
     scenarioCount: 8,

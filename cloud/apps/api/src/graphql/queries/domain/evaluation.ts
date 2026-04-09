@@ -483,7 +483,7 @@ function toShape(
   };
 }
 
-function extractJobChoicePairKey(content: unknown): string | null {
+function extractPairKey(content: unknown): string | null {
   if (content == null || typeof content !== 'object' || Array.isArray(content)) {
     return null;
   }
@@ -494,7 +494,7 @@ function extractJobChoicePairKey(content: unknown): string | null {
   }
 
   const record = methodology as Record<string, unknown>;
-  if (record.family !== 'job-choice' || typeof record.pair_key !== 'string' || record.pair_key.trim() === '') {
+  if (typeof record.family !== 'string' || record.family === '' || typeof record.pair_key !== 'string' || record.pair_key.trim() === '') {
     return null;
   }
 
@@ -523,7 +523,7 @@ async function resolveLaunchableDefinitions(
       definition.id,
       {
         definitionName: definition.name ?? 'Untitled vignette',
-        pairKey: extractJobChoicePairKey(definition.content),
+        pairKey: extractPairKey(definition.content),
       },
     ]),
   );

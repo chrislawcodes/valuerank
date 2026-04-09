@@ -97,7 +97,7 @@ export async function launchDomainEvaluation(input: DomainEvaluationLaunchInput)
   for (const pairKey of incompletePairKeys) {
     log.warn(
       { domainId, pairKey },
-      'Incomplete job-choice pair: companion definition not found. Launching as individual run.'
+      'Incomplete pair: companion definition not found. Launching as individual run.'
     );
   }
 

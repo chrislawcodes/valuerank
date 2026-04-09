@@ -426,6 +426,7 @@ describe('RunDetail', () => {
         content: {
           methodology: {
             family: 'job-choice',
+            pair_key: 'test-pair',
           },
         },
       },
@@ -459,6 +460,7 @@ describe('RunDetail', () => {
         content: {
           methodology: {
             family: 'job-choice',
+            pair_key: 'test-pair',
           },
         },
         domain: {
