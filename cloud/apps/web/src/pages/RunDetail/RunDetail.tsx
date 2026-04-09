@@ -284,8 +284,8 @@ export function RunDetail() {
     run.definition?.content,
     run.definition?.domain?.name ?? null,
   );
-  const isJobChoiceRun = methodology?.family === 'job-choice';
-  const launchModeLabel = isJobChoiceRun
+  const isPairedRun = methodology?.pair_key != null;
+  const launchModeLabel = isPairedRun
     ? run.config?.jobChoiceLaunchMode === 'AD_HOC_BATCH'
       ? 'Ad Hoc Batch'
       : run.config?.jobChoiceLaunchMode === 'PAIRED_BATCH'
@@ -409,7 +409,7 @@ export function RunDetail() {
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-4">
             <h3 className="text-sm font-medium text-gray-700">Progress</h3>
-            {isJobChoiceRun && run.config?.jobChoiceLaunchMode === 'PAIRED_BATCH' && (
+            {isPairedRun && run.config?.jobChoiceLaunchMode === 'PAIRED_BATCH' && (
               <span className="text-xs font-medium text-teal-600">· 1 of 2 vignettes</span>
             )}
           </div>
@@ -457,7 +457,7 @@ export function RunDetail() {
               run={run}
               onExport={() => void handleExport()}
               isExporting={isExporting}
-              onExportAdjudication={isJobChoiceRun ? () => void handleExportAdjudication() : undefined}
+              onExportAdjudication={isPairedRun ? () => void handleExportAdjudication() : undefined}
               isExportingAdjudication={isExportingAdjudication}
               onExportTranscripts={() => void handleExportTranscripts()}
               isExportingTranscripts={isExportingTranscripts}

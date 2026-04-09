@@ -81,7 +81,7 @@ export function RunForm({
   });
 
   const methodology = getDefinitionMethodology(definitionContent);
-  const isJobChoiceDefinition = methodology?.family === 'job-choice';
+  const isPairedDefinition = methodology?.pair_key != null;
   const { models, loading: loadingModels, error: modelsError } = useAvailableModels({
     onlyAvailable: false,
     requestPolicy: 'cache-and-network',
@@ -115,7 +115,7 @@ export function RunForm({
     onSubmit: async (input) => {
       await onSubmit({
         ...input,
-        launchMode: isJobChoiceDefinition ? formState.launchMode : 'STANDARD',
+        launchMode: isPairedDefinition ? formState.launchMode : 'STANDARD',
       });
     },
     models,
@@ -223,7 +223,7 @@ export function RunForm({
         )}
       </div>
 
-      {isJobChoiceDefinition && (
+      {isPairedDefinition && (
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -336,7 +336,7 @@ export function RunForm({
           }
         >
           {isSubmitting ? (
-            isJobChoiceDefinition
+            isPairedDefinition
               ? formState.launchMode === 'PAIRED_BATCH'
                 ? 'Starting Paired Batch...'
                 : 'Starting Ad Hoc Batch...'
@@ -344,7 +344,7 @@ export function RunForm({
           ) : (
             <>
               <Play className="w-4 h-4 mr-2" />
-              {isJobChoiceDefinition
+              {isPairedDefinition
                 ? formState.launchMode === 'PAIRED_BATCH'
                   ? 'Start Paired Batch'
                   : 'Start Ad Hoc Batch'

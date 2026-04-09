@@ -788,6 +788,7 @@ describe('AnalysisDetail', () => {
             content: {
               methodology: {
                 family: 'job-choice',
+                pair_key: 'test-pair',
               },
             },
             domain: {

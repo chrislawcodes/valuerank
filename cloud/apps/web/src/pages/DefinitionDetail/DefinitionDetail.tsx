@@ -185,7 +185,7 @@ export function DefinitionDetail() {
 
   const handleStartRun = () => {
     if (!definition) return;
-    if (methodology?.family === 'job-choice') {
+    if (methodology?.pair_key != null) {
       navigate(`/definitions/${definition.id}/start-paired-batch`, {
         state: {
           returnLabel: 'Back to Vignette',
@@ -316,9 +316,9 @@ export function DefinitionDetail() {
   const resolvedContent = definition.resolvedContent ?? definition.content;
   const methodology = getDefinitionMethodology(resolvedContent);
   const methodologyLabel = getDefinitionMethodologyLabel(resolvedContent, definition.domain?.name ?? null);
-  const startLabel = methodology?.family === 'job-choice' ? 'Start Paired Batch' : 'Start Trial';
+  const startLabel = methodology?.pair_key != null ? 'Start Paired Batch' : 'Start Trial';
   const handleEdit = () => {
-    if (methodology?.family === 'job-choice') {
+    if (methodology?.pair_key != null) {
       navigate(`/paired/${definition.id}/edit`);
       return;
     }
