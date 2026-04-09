@@ -8,7 +8,7 @@ import {
   DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,
   DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
 } from '../../../services/run/config.js';
-import { backfillDomainEvaluationModels, launchDomainEvaluation } from './launch.js';
+import { backfillDomainEvaluationModels, launchDomainEvaluation } from './launch/index.js';
 import {
   DomainTrialRunResultRef,
   RetryDomainTrialCellResultRef,
