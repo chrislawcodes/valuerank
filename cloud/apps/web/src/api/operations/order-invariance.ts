@@ -198,10 +198,6 @@ export type OrderInvarianceLaunchStatus = {
   failureSummaries: string[];
 };
 
-export type OrderInvarianceQueryResult = {
-  assumptionsOrderInvariance: OrderInvarianceResult;
-};
-
 export type OrderInvarianceAnalysisQueryResult = {
   assumptionsOrderInvariance: OrderInvarianceAnalysisResult;
 };
@@ -265,72 +261,6 @@ export type ReviewOrderInvariancePairVariables = {
 export type LaunchOrderInvarianceVariables = {
   force?: boolean | null;
 };
-
-export const ORDER_INVARIANCE_QUERY = gql`
-  query AssumptionsOrderInvariance($directionOnly: Boolean, $trimOutliers: Boolean) {
-    assumptionsOrderInvariance(directionOnly: $directionOnly, trimOutliers: $trimOutliers) {
-      generatedAt
-      summary {
-        status
-        matchRate
-        exactMatchRate
-        totalCandidatePairs
-        qualifyingPairs
-        missingPairs
-        comparablePairs
-        matchComparablePairs
-        presentationComparablePairs
-        scaleComparablePairs
-        presentationMissingPairs
-        scaleMissingPairs
-        sensitiveModelCount
-        sensitiveVignetteCount
-        presentationEffectMAD
-        scaleEffectMAD
-        excludedPairs {
-          reason
-          count
-        }
-      }
-      modelMetrics {
-        modelId
-        modelLabel
-        matchRate
-        matchCount
-        matchEligibleCount
-        valueOrderReversalRate
-        valueOrderEligibleCount
-        valueOrderExcludedCount
-        valueOrderPull
-        scaleOrderReversalRate
-        scaleOrderEligibleCount
-        scaleOrderExcludedCount
-        scaleOrderPull
-        withinCellDisagreementRate
-        pairLevelMarginSummary {
-          mean
-          median
-          p25
-          p75
-        }
-      }
-      rows {
-        modelId
-        modelLabel
-        vignetteId
-        vignetteTitle
-        conditionKey
-        majorityVoteBaseline
-        majorityVoteFlipped
-        rawScore
-        mismatchType
-        ordinalDistance
-        isMatch
-        variantType
-      }
-    }
-  }
-`;
 
 export const ORDER_INVARIANCE_LEGACY_QUERY = gql`
   query AssumptionsOrderInvarianceLegacy($directionOnly: Boolean, $trimOutliers: Boolean) {

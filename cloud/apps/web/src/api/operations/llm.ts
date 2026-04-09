@@ -109,17 +109,6 @@ export const LLM_MODELS_QUERY = gql`
   ${LLM_PROVIDER_FRAGMENT}
 `;
 
-export const SYSTEM_SETTINGS_QUERY = gql`
-  query SystemSettings {
-    systemSettings {
-      id
-      key
-      value
-      updatedAt
-    }
-  }
-`;
-
 export const INFRA_MODEL_QUERY = gql`
   query InfraModel($purpose: String!) {
     infraModel(purpose: $purpose) {
@@ -253,10 +242,6 @@ export type LlmProvidersQueryResult = {
 
 export type LlmModelsQueryResult = {
   llmModels: LlmModel[];
-};
-
-export type SystemSettingsQueryResult = {
-  systemSettings: SystemSetting[];
 };
 
 export type InfraModelQueryResult = {

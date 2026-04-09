@@ -57,18 +57,6 @@ export const SCENARIO_COUNT_QUERY = gql`
   }
 `;
 
-export const SCENARIO_QUERY = gql`
-  query Scenario($id: ID!) {
-    scenario(id: $id) {
-      id
-      definitionId
-      name
-      content
-      createdAt
-    }
-  }
-`;
-
 export const RUN_CONDITION_GRID_QUERY = gql`
   query RunConditionGrid($definitionId: ID!) {
     runConditionGrid(definitionId: $definitionId) {
@@ -107,14 +95,6 @@ export type ScenarioCountQueryResult = {
 
 export type ScenarioCountQueryVariables = {
   definitionId: string;
-};
-
-export type ScenarioQueryResult = {
-  scenario: Scenario | null;
-};
-
-export type ScenarioQueryVariables = {
-  id: string;
 };
 
 export type RunConditionGridQueryResult = {

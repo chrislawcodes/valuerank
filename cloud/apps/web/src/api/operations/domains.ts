@@ -28,42 +28,6 @@ export const DOMAINS_QUERY = gql`
   }
 `;
 
-export const SET_DOMAIN_DEFAULTS_MUTATION = gql`
-  mutation SetDomainDefaults(
-    $id: ID!
-    $defaultLevelPresetVersionId: ID
-    $defaultPreambleVersionId: ID
-    $defaultContextId: ID
-    $defaultModelIds: [String!]
-  ) {
-    setDomainDefaults(
-      id: $id
-      defaultLevelPresetVersionId: $defaultLevelPresetVersionId
-      defaultPreambleVersionId: $defaultPreambleVersionId
-      defaultContextId: $defaultContextId
-      defaultModelIds: $defaultModelIds
-    ) {
-      id
-      defaultLevelPresetVersionId
-      defaultPreambleVersionId
-      defaultContextId
-      defaultModelIds
-    }
-  }
-`;
-
-export type SetDomainDefaultsMutationResult = {
-  setDomainDefaults: Pick<Domain, 'id' | 'defaultLevelPresetVersionId' | 'defaultPreambleVersionId' | 'defaultContextId' | 'defaultModelIds'>;
-};
-
-export type SetDomainDefaultsMutationVariables = {
-  id: string;
-  defaultLevelPresetVersionId?: string | null;
-  defaultPreambleVersionId?: string | null;
-  defaultContextId?: string | null;
-  defaultModelIds?: string[] | null;
-};
-
 export const CREATE_DOMAIN_MUTATION = gql`
   mutation CreateDomain($name: String!) {
     createDomain(name: $name) {
@@ -293,22 +257,6 @@ export const DOMAIN_EVALUATION_QUERY = gql`
   }
 `;
 
-export const DOMAIN_EVALUATION_MEMBERS_QUERY = gql`
-  query DomainEvaluationMembers($id: ID!) {
-    domainEvaluationMembers(id: $id) {
-      runId
-      definitionIdAtLaunch
-      definitionNameAtLaunch
-      domainIdAtLaunch
-      createdAt
-      runStatus
-      runCategory
-      runStartedAt
-      runCompletedAt
-    }
-  }
-`;
-
 export const DOMAIN_EVALUATION_STATUS_QUERY = gql`
   query DomainEvaluationStatus($id: ID!) {
     domainEvaluationStatus(id: $id) {
@@ -320,35 +268,6 @@ export const DOMAIN_EVALUATION_STATUS_QUERY = gql`
       completedRuns
       failedRuns
       cancelledRuns
-    }
-  }
-`;
-
-export const DOMAIN_RUN_SUMMARY_QUERY = gql`
-  query DomainRunSummary($domainId: ID!, $scopeCategory: String) {
-    domainRunSummary(domainId: $domainId, scopeCategory: $scopeCategory) {
-      domainId
-      scopeCategory
-      totalEvaluations
-      pendingEvaluations
-      runningEvaluations
-      completedEvaluations
-      failedEvaluations
-      cancelledEvaluations
-      totalMemberRuns
-      pendingMemberRuns
-      runningMemberRuns
-      completedMemberRuns
-      failedMemberRuns
-      cancelledMemberRuns
-      pilotEvaluations
-      productionEvaluations
-      replicationEvaluations
-      validationEvaluations
-      latestEvaluationId
-      latestEvaluationStatus
-      latestScopeCategory
-      latestEvaluationCreatedAt
     }
   }
 `;
@@ -460,30 +379,6 @@ export const DOMAIN_TRIAL_RUNS_STATUS_QUERY = gql`
         summarizationTotal
         latestErrorMessage
       }
-    }
-  }
-`;
-
-export const RETRY_DOMAIN_TRIAL_CELL_MUTATION = gql`
-  mutation RetryDomainTrialCell(
-    $domainId: ID!
-    $definitionId: ID!
-    $modelId: String!
-    $temperature: Float
-    $scopeCategory: String
-  ) {
-    retryDomainTrialCell(
-      domainId: $domainId
-      definitionId: $definitionId
-      modelId: $modelId
-      temperature: $temperature
-      scopeCategory: $scopeCategory
-    ) {
-      success
-      definitionId
-      modelId
-      runId
-      message
     }
   }
 `;
@@ -682,31 +577,6 @@ export type DomainEvaluationStatus = {
   cancelledRuns: number;
 };
 
-export type DomainRunSummary = {
-  domainId: string;
-  scopeCategory: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION' | null;
-  totalEvaluations: number;
-  pendingEvaluations: number;
-  runningEvaluations: number;
-  completedEvaluations: number;
-  failedEvaluations: number;
-  cancelledEvaluations: number;
-  totalMemberRuns: number;
-  pendingMemberRuns: number;
-  runningMemberRuns: number;
-  completedMemberRuns: number;
-  failedMemberRuns: number;
-  cancelledMemberRuns: number;
-  pilotEvaluations: number;
-  productionEvaluations: number;
-  replicationEvaluations: number;
-  validationEvaluations: number;
-  latestEvaluationId: string | null;
-  latestEvaluationStatus: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | null;
-  latestScopeCategory: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION' | null;
-  latestEvaluationCreatedAt: string | null;
-};
-
 export type DomainEvaluationsQueryResult = {
   domainEvaluations: DomainEvaluation[];
 };
@@ -727,29 +597,12 @@ export type DomainEvaluationQueryVariables = {
   id: string;
 };
 
-export type DomainEvaluationMembersQueryResult = {
-  domainEvaluationMembers: DomainEvaluationMember[];
-};
-
-export type DomainEvaluationMembersQueryVariables = {
-  id: string;
-};
-
 export type DomainEvaluationStatusQueryResult = {
   domainEvaluationStatus: DomainEvaluationStatus | null;
 };
 
 export type DomainEvaluationStatusQueryVariables = {
   id: string;
-};
-
-export type DomainRunSummaryQueryResult = {
-  domainRunSummary: DomainRunSummary;
-};
-
-export type DomainRunSummaryQueryVariables = {
-  domainId: string;
-  scopeCategory?: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION';
 };
 
 export type RunTrialsForDomainMutationVariables = {
@@ -873,24 +726,6 @@ export type DomainTrialRunsStatusQueryResult = {
 
 export type DomainTrialRunsStatusQueryVariables = {
   runIds: string[];
-};
-
-export type RetryDomainTrialCellMutationResult = {
-  retryDomainTrialCell: {
-    success: boolean;
-    definitionId: string;
-    modelId: string;
-    runId: string | null;
-    message: string | null;
-  };
-};
-
-export type RetryDomainTrialCellMutationVariables = {
-  domainId: string;
-  definitionId: string;
-  modelId: string;
-  temperature?: number;
-  scopeCategory?: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION';
 };
 
 // ============================================================================
