@@ -73,41 +73,10 @@ export const ESTIMATE_COST_QUERY = gql`
   }
 `;
 
-export const MODEL_TOKEN_STATS_QUERY = gql`
-  query ModelTokenStats($modelIds: [String!]) {
-    modelTokenStats(modelIds: $modelIds) {
-      modelId
-      avgInputTokens
-      avgOutputTokens
-      sampleCount
-      lastUpdatedAt
-    }
-  }
-`;
-
-export const ALL_MODEL_TOKEN_AVERAGE_QUERY = gql`
-  query AllModelTokenAverage {
-    allModelTokenAverage {
-      modelId
-      avgInputTokens
-      avgOutputTokens
-      sampleCount
-    }
-  }
-`;
-
 // ============================================================================
 // RESULT TYPES
 // ============================================================================
 
 export type EstimateCostQueryResult = {
   estimateCost: CostEstimate;
-};
-
-export type ModelTokenStatsQueryResult = {
-  modelTokenStats: ModelTokenStats[];
-};
-
-export type AllModelTokenAverageQueryResult = {
-  allModelTokenAverage: ModelTokenStats | null;
 };

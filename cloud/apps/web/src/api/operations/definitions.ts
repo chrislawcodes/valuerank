@@ -397,26 +397,6 @@ export const FORK_DEFINITION_MUTATION = gql`
   }
 `;
 
-// Update specific content fields with inheritance support
-export const UPDATE_DEFINITION_CONTENT_MUTATION = gql`
-  mutation UpdateDefinitionContent($id: String!, $input: UpdateDefinitionContentInput!) {
-    updateDefinitionContent(id: $id, input: $input) {
-      id
-      name
-      content
-      updatedAt
-      resolvedContent
-      localContent
-      overrides {
-
-        template
-        dimensions
-        matchingRules
-      }
-    }
-  }
-`;
-
 // Detach a forked definition from its parent
 export const UNFORK_DEFINITION_MUTATION = gql`
   mutation UnforkDefinition($id: String!) {
@@ -564,19 +544,6 @@ export type ForkDefinitionInput = {
 
 export type ForkDefinitionResult = {
   forkDefinition: Definition;
-};
-
-export type UpdateDefinitionContentInput = {
-  preamble?: string;
-  template?: string;
-  dimensions?: Dimension[];
-  matchingRules?: string;
-  /** List of fields to clear override for (inherit from parent) */
-  clearOverrides?: ('template' | 'dimensions' | 'matching_rules')[];
-};
-
-export type UpdateDefinitionContentResult = {
-  updateDefinitionContent: Definition;
 };
 
 export type UnforkDefinitionResult = {

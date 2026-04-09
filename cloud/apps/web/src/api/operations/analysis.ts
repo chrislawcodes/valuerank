@@ -268,15 +268,6 @@ export const ANALYSIS_QUERY = gql`
   ${ANALYSIS_RESULT_FRAGMENT}
 `;
 
-export const ANALYSIS_HISTORY_QUERY = gql`
-  query AnalysisHistory($runId: ID!, $limit: Int) {
-    analysisHistory(runId: $runId, limit: $limit) {
-      ...AnalysisResultFields
-    }
-  }
-  ${ANALYSIS_RESULT_FRAGMENT}
-`;
-
 // ============================================================================
 // MUTATIONS
 // ============================================================================
@@ -300,15 +291,6 @@ export type AnalysisQueryVariables = {
 
 export type AnalysisQueryResult = {
   analysis: AnalysisResult | null;
-};
-
-export type AnalysisHistoryQueryVariables = {
-  runId: string;
-  limit?: number;
-};
-
-export type AnalysisHistoryQueryResult = {
-  analysisHistory: AnalysisResult[];
 };
 
 export type RecomputeAnalysisMutationVariables = {
