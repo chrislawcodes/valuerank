@@ -13,7 +13,7 @@ Repo-wide agent behavior, delivery paths, terminology policy, and memory policy 
 ## Workflow State
 
 - For Feature Factory, use the repo-owned workflow docs and `docs/workflow/feature-runs/<slug>/state.json` as the source of truth.
-- Repo-root `MEMORY.md` is only a short handoff file for the active feature. Do not use it as long-term archive or as the source of truth for workflow state.
+- Repo-root `MEMORY.md` is a persistent reference index. Keep it lean — no shipped feature history or long-term archives.
 
 ### Pre-push Hook (Preferred)
 
