@@ -6,7 +6,12 @@ import {
   type Prisma,
   type ScenarioContent,
 } from '@valuerank/db';
-import { assembleTemplate, getJobChoiceValueStatementBody, type TemplateConfig } from '@valuerank/shared';
+import {
+  assembleTemplate,
+  getJobChoiceValueStatementBody,
+  getSoftwareApproachValueStatementBody,
+  type TemplateConfig,
+} from '@valuerank/shared';
 import { builder } from '../builder.js';
 import { DefinitionRef } from '../types/refs.js';
 import type { DefinitionShape } from '../types/refs.js';
@@ -336,13 +341,16 @@ async function resolvePairedVignetteInputs(input: {
     }
   }
 
+  const bodyLookup = domain.normalizedName === 'software-approach-choice'
+    ? getSoftwareApproachValueStatementBody
+    : getJobChoiceValueStatementBody;
   const normalizedValueFirst = {
     ...valueFirst,
-    body: getJobChoiceValueStatementBody(valueFirst.token) ?? valueFirst.body,
+    body: bodyLookup(valueFirst.token) ?? valueFirst.body,
   };
   const normalizedValueSecond = {
     ...valueSecond,
-    body: getJobChoiceValueStatementBody(valueSecond.token) ?? valueSecond.body,
+    body: bodyLookup(valueSecond.token) ?? valueSecond.body,
   };
 
   return {
