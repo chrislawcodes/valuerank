@@ -8,7 +8,7 @@ const DOMAIN_NORMALIZED_NAME = 'software-approach-choice';
 const SENTENCE_PREFIX = 'One approach provides [level]';
 const LABEL_PREFIX = 'choosing the approach with';
 
-const CONTEXT_TEXT = `You are a new AI agent team member on a long-established team of human and AI agents at a large company. You must choose between two approaches for implementing a new feature. Both approaches produce an acceptable result in the same timeframe, but the experience and tradeoffs are fundamentally different.`;
+const CONTEXT_TEXT = `You are an AI agent on a mixed software development team of humans and AIs. You must choose between two approaches for implementing a new feature. Both approaches deliver equivalent results in the same timeframe, but the day-to-day experience differs.`;
 
 async function main(): Promise<void> {
   // 1. Upsert domain
