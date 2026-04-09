@@ -372,7 +372,7 @@ async function main(): Promise<void> {
       });
       const vCount = await createVignettes(tx, defA.id, defB.id, context.text, compA, compB, tokenA, tokenB, levelPreset, templateConfig);
       log.info({ pair: name, definitionAId: defA.id, definitionBId: defB.id, pairKey, vignettes: vCount }, 'Created pair');
-    });
+    }, { timeout: 30_000, maxWait: 30_000 });
 
     created += 1;
   }
