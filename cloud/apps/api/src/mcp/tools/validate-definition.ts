@@ -17,6 +17,7 @@ import {
   createValidationAudit,
 } from '../../services/mcp/index.js';
 import { addToolRegistrar } from './registry.js';
+import { getMcpUserId } from './helpers.js';
 
 const log = createLogger('mcp:tools:validate-definition');
 
@@ -91,7 +92,7 @@ Validation limits:
     },
     (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
-      const userId = 'mcp-user'; // TODO: Extract from auth context when available
+      const userId = getMcpUserId();
 
       log.debug({ requestId }, 'validate_definition called');
 

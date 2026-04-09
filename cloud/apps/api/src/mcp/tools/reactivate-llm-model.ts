@@ -11,6 +11,7 @@ import { reactivateModel, getModelWithProvider } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
 import { logAuditEvent, createLlmAudit } from '../../services/mcp/index.js';
 import { addToolRegistrar } from './registry.js';
+import { getMcpUserId } from './helpers.js';
 
 const log = createLogger('mcp:tools:reactivate-llm-model');
 
@@ -77,7 +78,7 @@ Restore a previously deprecated model that is now supported again.
     },
     async (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
-      const userId = 'mcp-user';
+      const userId = getMcpUserId();
 
       log.debug({ requestId, id: args.id }, 'reactivate_llm_model called');
 

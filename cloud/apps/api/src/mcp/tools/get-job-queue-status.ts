@@ -11,7 +11,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createLogger, NotFoundError } from '@valuerank/shared';
 import { getJobQueueStatus } from '../../services/run/job-queue.js';
 import { logAuditEvent } from '../../services/mcp/index.js';
-import { formatError, formatSuccess, createOperationsAudit } from './helpers.js';
+import { formatError, formatSuccess, createOperationsAudit, getMcpUserId } from './helpers.js';
 import { addToolRegistrar } from './registry.js';
 
 const log = createLogger('mcp:tools:get-job-queue-status');
@@ -67,7 +67,7 @@ function registerGetJobQueueStatusTool(server: McpServer): void {
     },
     async (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
-      const userId = 'mcp-user'; // TODO: Extract from auth context when available
+      const userId = getMcpUserId();
       const includeRecentFailures = args.include_recent_failures ?? false;
 
       log.debug({

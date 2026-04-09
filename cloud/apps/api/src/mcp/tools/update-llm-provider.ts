@@ -13,6 +13,7 @@ import { logAuditEvent, createLlmAudit } from '../../services/mcp/index.js';
 import { addToolRegistrar } from './registry.js';
 import { getBoss, isBossRunning } from '../../queue/boss.js';
 import { reregisterProviderHandler } from '../../queue/handlers/index.js';
+import { getMcpUserId } from './helpers.js';
 
 const log = createLogger('mcp:tools:update-llm-provider');
 
@@ -109,7 +110,7 @@ function registerUpdateLlmProviderTool(server: McpServer): void {
     },
     async (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
-      const userId = 'mcp-user';
+      const userId = getMcpUserId();
 
       log.debug(
         {

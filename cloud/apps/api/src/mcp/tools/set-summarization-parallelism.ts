@@ -11,6 +11,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createLogger } from '@valuerank/shared';
 import { logAuditEvent, createLlmAudit } from '../../services/mcp/index.js';
 import { addToolRegistrar } from './registry.js';
+import { getMcpUserId } from './helpers.js';
 
 const log = createLogger('mcp:tools:set-summarization-parallelism');
 
@@ -90,7 +91,7 @@ function registerSetSummarizationParallelismTool(server: McpServer): void {
     },
     async (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
-      const userId = 'mcp-user';
+      const userId = getMcpUserId();
       const maxParallel = args.max_parallel;
 
       log.debug(
