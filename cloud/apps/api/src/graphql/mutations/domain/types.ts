@@ -125,6 +125,6 @@ export function parseOptionalId(value: string | number | null | undefined, argNa
 export function normalizeModelSet(models: unknown): string[] {
   if (!Array.isArray(models)) return [];
   return models
-    .filter((model): model is string => typeof model === 'string')
+    .filter((model): model is string => typeof model === 'string' && model.trim() !== '')
     .sort((left, right) => left.localeCompare(right));
 }
