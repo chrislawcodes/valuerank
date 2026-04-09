@@ -5,6 +5,7 @@ import { startRun as startRunService } from '../../services/run/index.js';
 import { createAuditLog } from '../../services/audit/index.js';
 import { parseTemperature } from '../../utils/temperature.js';
 import { LOCKED_ASSUMPTION_VIGNETTES } from '../assumptions-constants.js';
+import { normalizeModelSet } from './domain/types.js';
 
 type LaunchAssumptionsTempZeroPayload = {
   startedRuns: number;
@@ -39,14 +40,6 @@ type ExistingTranscriptRecord = {
     tags: Array<{ tag: { name: string } }>;
   };
 };
-
-function normalizeModelSet(models: unknown): string[] {
-  if (!Array.isArray(models)) return [];
-  return models
-    .filter((value): value is string => typeof value === 'string' && value.trim() !== '')
-    .slice()
-    .sort((left, right) => left.localeCompare(right));
-}
 
 function matchesAssumptionsTempZeroPackage(runConfig: unknown, modelIds: string[]): boolean {
   const config = runConfig as {
