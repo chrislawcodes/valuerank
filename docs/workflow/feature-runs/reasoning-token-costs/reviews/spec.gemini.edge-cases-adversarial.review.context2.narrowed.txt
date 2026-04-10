@@ -1,0 +1,226 @@
+00001: """
+00002: DeepSeek API adapter (OpenAI-compatible with streaming support).
+00003: """
+00004: 
+00005: from dataclasses import dataclass
+00006: import json
+00007: from typing import Any, Generator, Optional
+00008: 
+00009: import requests
+00010: 
+00011: from ...config import get_config
+00012: from ...errors import ErrorCode, LLMError
+00013: from ...logging import get_logger
+00014: from ..base import BaseLLMAdapter, post_json
+00015: from ..config_utils import get_config_value, resolve_max_tokens, resolve_temperature
+00016: from ..constants import DEFAULT_TIMEOUT, normalize_finish_reason
+00017: from ..types import LLMResponse, StreamChunk
+00018: 
+00019: log = get_logger("llm_adapters.deepseek")
+00020: 
+00021: 
+00022: @dataclass
+00023: class DeepSeekAdapter(BaseLLMAdapter):
+00024:     """Adapter for DeepSeek API (OpenAI-compatible)."""
+00025: 
+00026:     api_key: Optional[str] = None
+00027:     base_url: str = "https://api.deepseek.com/v1/chat/completions"
+00028:     timeout: int = DEFAULT_TIMEOUT
+00029: 
+00030:     def __post_init__(self) -> None:
+00031:         if self.api_key is None:
+00032:             self.api_key = get_config().deepseek_api_key
+00033: 
+00034:     def generate(
+00035:         self,
+00036:         model: str,
+00037:         messages: list[dict[str, str]],
+00038:         *,
+00039:         temperature: Optional[float] = None,
+00040:         max_tokens: int = 1024,
+00041:         model_config: Optional[dict] = None,
+00042:         seed: Optional[int] = None,
+00043:         timeout: Optional[int] = None,
+00044:     ) -> LLMResponse:
+00045:         if not self.api_key:
+00046:             raise LLMError(
+00047:                 message="DEEPSEEK_API_KEY is not set",
+00048:                 code=ErrorCode.MISSING_API_KEY,
+00049:             )
+00050: 
+00051:         headers = {
+00052:             "Authorization": f"Bearer {self.api_key}",
+00053:             "Content-Type": "application/json",
+00054:         }
+00055: 
+00056:         # Resolve config values (model_config overrides function args)
+00057:         resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+00058:         resolved_temperature = resolve_temperature(model_config, temperature)
+00059: 
+00060:         # DeepSeek max_tokens limits vary by model:
+00061:         # - deepseek-reasoner: 64K (65536)
+00062:         # - deepseek-chat and others: 8K (8192)
+00063:         if resolved_max_tokens is not None:
+00064:             max_limit = 65536 if "reasoner" in model else 8192
+00065:             resolved_max_tokens = min(resolved_max_tokens, max_limit)
+00066: 
+00067:         payload: dict[str, Any] = {
+00068:             "model": model,
+00069:             "messages": messages,
+00070:         }
+00071: 
+00072:         if resolved_temperature is not None:
+00073:             payload["temperature"] = resolved_temperature
+00074: 
+00075:         # Only add max_tokens if not unlimited (None)
+00076:         if resolved_max_tokens is not None:
+00077:             payload["max_tokens"] = resolved_max_tokens
+00078: 
+00079:         if seed is not None:
+00080:             payload["seed"] = seed
+00081: 
+00082:         # Add optional config values (DeepSeek supports all OpenAI-compatible options)
+00083:         top_p = get_config_value(model_config, "topP", float, 0, 1)
+00084:         if top_p is not None:
+00085:             payload["top_p"] = top_p
+00086: 
+00087:         freq_penalty = get_config_value(model_config, "frequencyPenalty", float, -2, 2)
+00088:         if freq_penalty is not None:
+00089:             payload["frequency_penalty"] = freq_penalty
+00090: 
+00091:         pres_penalty = get_config_value(model_config, "presencePenalty", float, -2, 2)
+00092:         if pres_penalty is not None:
+00093:             payload["presence_penalty"] = pres_penalty
+00094: 
+00095:         stop_seqs = get_config_value(model_config, "stopSequences", list)
+00096:         if stop_seqs is not None and len(stop_seqs) > 0:
+00097:             payload["stop"] = stop_seqs
+00098: 
+00099:         # Use provided timeout or fall back to adapter default
+00100:         effective_timeout = timeout if timeout is not None else self.timeout
+00101:         log.debug(
+00102:             "Calling DeepSeek API",
+00103:             model=model,
+00104:             max_tokens=resolved_max_tokens,
+00105:             timeout=effective_timeout,
+00106:         )
+00107:         data = post_json(self.base_url, headers, payload, timeout=effective_timeout)
+00108: 
+00109:         try:
+00110:             choice = data["choices"][0]
+00111:             content = choice["message"]["content"]
+00112:             usage = data.get("usage", {})
+00113: 
+00114:             # Capture provider metadata (OpenAI-compatible format)
+00115:             raw_finish_reason = choice.get("finish_reason")
+00116:             provider_metadata = {
+00117:                 "provider": "deepseek",
+00118:                 "finishReason": normalize_finish_reason("deepseek", raw_finish_reason),
+00119:                 "
+
+... [narrowed review slice: middle omitted] ...
+
+put_tokens = None
+00246:         model_version = None
+00247:         finish_reason = None
+00248:         chunk_count = 0
+00249: 
+00250:         try:
+00251:             for line in response.iter_lines():
+00252:                 if not line:
+00253:                     continue
+00254: 
+00255:                 line_str = line.decode("utf-8")
+00256:                 if not line_str.startswith("data: "):
+00257:                     continue
+00258: 
+00259:                 data_str = line_str[6:]  # Remove "data: " prefix
+00260:                 if data_str == "[DONE]":
+00261:                     # Final chunk - include normalized finish_reason
+00262:                     normalized_finish = normalize_finish_reason("deepseek", finish_reason)
+00263:                     yield StreamChunk(
+00264:                         content=accumulated_content,
+00265:                         output_tokens=output_tokens,
+00266:                         done=True,
+00267:                         input_tokens=input_tokens,
+00268:                         model_version=model_version,
+00269:                         finish_reason=normalized_finish,
+00270:                     )
+00271:                     return
+00272: 
+00273:                 try:
+00274:                     data = json.loads(data_str)
+00275:                 except json.JSONDecodeError:
+00276:                     continue
+00277: 
+00278:                 chunk_count += 1
+00279: 
+00280:                 # Extract model version from first chunk
+00281:                 if model_version is None:
+00282:                     model_version = data.get("model")
+00283: 
+00284:                 # Handle usage info (comes in final chunk with stream_options)
+00285:                 usage = data.get("usage")
+00286:                 if usage:
+00287:                     input_tokens = usage.get("prompt_tokens")
+00288:                     output_tokens = usage.get("completion_tokens", output_tokens)
+00289: 
+00290:                 # Extract content delta and finish_reason
+00291:                 choices = data.get("choices", [])
+00292:                 if choices:
+00293:                     choice = choices[0]
+00294:                     delta = choice.get("delta", {})
+00295:                     content_delta = delta.get("content", "")
+00296: 
+00297:                     # Check for finish_reason (indicates why generation stopped)
+00298:                     if choice.get("finish_reason"):
+00299:                         finish_reason = choice.get("finish_reason")
+00300: 
+00301:                     if content_delta:
+00302:                         accumulated_content += content_delta
+00303:                         # Estimate tokens (roughly 4 chars per token)
+00304:                         output_tokens = max(output_tokens, len(accumulated_content) // 4)
+00305: 
+00306:                         yield StreamChunk(
+00307:                             content=accumulated_content,
+00308:                             output_tokens=output_tokens,
+00309:                             done=False,
+00310:                         )
+00311: 
+00312:             # Stream ended without [DONE] - log details and yield final chunk
+00313:             log.warn(
+00314:                 "DeepSeek stream ended without [DONE]",
+00315:                 model=model,
+00316:                 chunk_count=chunk_count,
+00317:                 content_length=len(accumulated_content),
+00318:                 output_tokens=output_tokens,
+00319:                 finish_reason=finish_reason,
+00320:             )
+00321:             normalized_finish = normalize_finish_reason("deepseek", finish_reason)
+00322:             yield StreamChunk(
+00323:                 content=accumulated_content,
+00324:                 output_tokens=output_tokens,
+00325:                 done=True,
+00326:                 input_tokens=input_tokens,
+00327:                 model_version=model_version,
+00328:                 finish_reason=normalized_finish,
+00329:             )
+00330: 
+00331:         except Exception as exc:
+00332:             # Log details about partial response before raising error
+00333:             log.error(
+00334:                 "DeepSeek stream failed",
+00335:                 model=model,
+00336:                 error=str(exc),
+00337:                 chunk_count=chunk_count,
+00338:                 content_length=len(accumulated_content),
+00339:                 output_tokens=output_tokens,
+00340:                 finish_reason=finish_reason,
+00341:                 partial_content_preview=accumulated_content[-500:] if accumulated_content else None,
+00342:             )
+00343:             raise LLMError(
+00344:                 message=f"Error reading DeepSeek stream: {exc}",
+00345:                 code=ErrorCode.NETWORK_ERROR,
+00346:                 details=(
+00347:                     f"chunks={chunk_count}, tokens~{output_tokens}, "
+00348:                     f"finish={finish_reason}, content_len={len(accumulated_conten
