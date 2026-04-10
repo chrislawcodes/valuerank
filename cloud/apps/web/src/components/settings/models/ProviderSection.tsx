@@ -55,11 +55,6 @@ export function ProviderSection({
               No budget set
             </span>
           )}
-          {provider.lastSyncedAt != null ? (
-            <span className="text-xs text-gray-400">
-              Last synced: {new Date(provider.lastSyncedAt).toLocaleDateString()}
-            </span>
-          ) : null}
           <span
             className={`px-2 py-1 text-xs rounded-full ${
               provider.isEnabled

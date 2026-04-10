@@ -14,7 +14,6 @@ export type LlmProvider = {
   requestsPerMinute: number;
   isEnabled: boolean;
   balance: number | null;
-  lastSyncedAt: string | null;
   createdAt: string;
   updatedAt: string;
   models: LlmModel[];
@@ -73,7 +72,6 @@ export const LLM_PROVIDER_FRAGMENT = gql`
     requestsPerMinute
     isEnabled
     balance
-    lastSyncedAt
     createdAt
     updatedAt
   }
@@ -219,19 +217,6 @@ export const SET_PROVIDER_BALANCE_MUTATION = gql`
   ${LLM_PROVIDER_FRAGMENT}
 `;
 
-export const SYNC_PROVIDER_BALANCE_MUTATION = gql`
-  mutation SyncProviderBalance($providerId: String!, $realBalance: Float!) {
-    syncProviderBalance(providerId: $providerId, realBalance: $realBalance) {
-      id
-      providerId
-      systemBalanceAtSync
-      enteredBalance
-      delta
-      syncedAt
-    }
-  }
-`;
-
 // ============================================================================
 // RESULT TYPES
 // ============================================================================
@@ -297,10 +282,6 @@ export type ProviderBalanceSyncLog = {
 
 export type SetProviderBalanceMutationResult = {
   setProviderBalance: LlmProvider;
-};
-
-export type SyncProviderBalanceMutationResult = {
-  syncProviderBalance: ProviderBalanceSyncLog;
 };
 
 // ============================================================================
