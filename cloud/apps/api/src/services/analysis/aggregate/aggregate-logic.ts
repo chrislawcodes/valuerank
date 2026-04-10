@@ -178,10 +178,58 @@ export function aggregateAnalysesLogic(
       };
     });
 
+    // Aggregate overall stats from source runs using sample-weighted pooling
+    const overallMeans: number[] = [];
+    const overallWeights: number[] = [];
+    let overallMin = Infinity;
+    let overallMax = -Infinity;
+
+    validAnalyses.forEach((analysis) => {
+      const stats = analysis.perModel[modelId];
+      if (stats?.overall == null) return;
+      const n = stats.sampleSize ?? 0;
+      if (n <= 0) return;
+      if (!Number.isFinite(stats.overall.mean) || !Number.isFinite(stats.overall.stdDev)) return;
+      overallMeans.push(stats.overall.mean);
+      overallWeights.push(n);
+      if (Number.isFinite(stats.overall.min) && stats.overall.min < overallMin) overallMin = stats.overall.min;
+      if (Number.isFinite(stats.overall.max) && stats.overall.max > overallMax) overallMax = stats.overall.max;
+    });
+
+    let pooledMean = 0;
+    let pooledStdDev = 0;
+    const totalWeight = overallWeights.reduce((s, w) => s + w, 0);
+
+    if (totalWeight > 0 && overallMeans.length > 0) {
+      // Sample-weighted mean
+      pooledMean = overallMeans.reduce((s, m, i) => s + m * overallWeights[i]!, 0) / totalWeight;
+
+      // Pooled stdDev: combine within-run variance + between-run variance of means
+      let pooledVariance = 0;
+      validAnalyses.forEach((analysis) => {
+        const stats = analysis.perModel[modelId];
+        if (stats?.overall == null) return;
+        const n = stats.sampleSize ?? 0;
+        if (n <= 0) return;
+        if (!Number.isFinite(stats.overall.mean) || !Number.isFinite(stats.overall.stdDev)) return;
+        const w = n / totalWeight;
+        // Within-run variance contribution
+        pooledVariance += w * (stats.overall.stdDev * stats.overall.stdDev);
+        // Between-run mean deviation contribution
+        pooledVariance += w * Math.pow(stats.overall.mean - pooledMean, 2);
+      });
+      pooledStdDev = Math.sqrt(pooledVariance);
+    }
+
     aggregatedPerModel[modelId] = {
       sampleSize: totalModelSamples,
       values: aggregatedValues,
-      overall: { mean: 0, stdDev: 0, min: 0, max: 0 },
+      overall: {
+        mean: pooledMean,
+        stdDev: pooledStdDev,
+        min: overallMin === Infinity ? 0 : overallMin,
+        max: overallMax === -Infinity ? 0 : overallMax,
+      },
     };
   });
 

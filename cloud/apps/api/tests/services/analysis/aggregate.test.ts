@@ -869,4 +869,110 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
       strongly: 1,
     });
   });
+
+  it('computes pooled overall stats from multiple source runs', () => {
+    const analyses: AnalysisOutput[] = [
+      {
+        perModel: {
+          'gpt-4': {
+            sampleSize: 10,
+            values: {},
+            overall: { mean: 2, stdDev: 0.5, min: 1, max: 3 },
+          },
+        },
+        modelAgreement: {},
+      },
+      {
+        perModel: {
+          'gpt-4': {
+            sampleSize: 20,
+            values: {},
+            overall: { mean: 4, stdDev: 0.8, min: 2, max: 5 },
+          },
+        },
+        modelAgreement: {},
+      },
+    ];
+
+    const scenarios = [{ id: 's1', name: 'S1', content: { name: 'S1' } }];
+
+    const result = aggregateAnalysesLogic(analyses, [], scenarios);
+    const overall = result.perModel['gpt-4']?.overall;
+
+    expect(overall).toBeDefined();
+    // Weighted mean: (2*10 + 4*20) / 30 = 100/30 ≈ 3.333
+    expect(overall!.mean).toBeCloseTo(3.333, 2);
+    // min/max across sources
+    expect(overall!.min).toBe(1);
+    expect(overall!.max).toBe(5);
+    // stdDev should be positive and incorporate both within-run and between-run variance
+    expect(overall!.stdDev).toBeGreaterThan(0);
+    // Pooled variance = w1*(σ1² + (μ1-μ̄)²) + w2*(σ2² + (μ2-μ̄)²)
+    // = (10/30)*(0.25 + 1.778) + (20/30)*(0.64 + 0.444)
+    // = 0.333*2.028 + 0.667*1.084 ≈ 0.676 + 0.723 = 1.399
+    // stdDev = √1.399 ≈ 1.183
+    expect(overall!.stdDev).toBeCloseTo(1.183, 2);
+    // Total sample size
+    expect(result.perModel['gpt-4']?.sampleSize).toBe(30);
+  });
+
+  it('handles single source run overall stats correctly', () => {
+    const analyses: AnalysisOutput[] = [
+      {
+        perModel: {
+          'gpt-4': {
+            sampleSize: 25,
+            values: {},
+            overall: { mean: 1.5, stdDev: 0.9, min: -2, max: 2 },
+          },
+        },
+        modelAgreement: {},
+      },
+    ];
+
+    const scenarios = [{ id: 's1', name: 'S1', content: { name: 'S1' } }];
+    const result = aggregateAnalysesLogic(analyses, [], scenarios);
+    const overall = result.perModel['gpt-4']?.overall;
+
+    // Single source: overall should pass through unchanged
+    expect(overall!.mean).toBe(1.5);
+    expect(overall!.stdDev).toBe(0.9);
+    expect(overall!.min).toBe(-2);
+    expect(overall!.max).toBe(2);
+  });
+
+  it('skips NaN overall stats without poisoning aggregate', () => {
+    const analyses: AnalysisOutput[] = [
+      {
+        perModel: {
+          'gpt-4': {
+            sampleSize: 10,
+            values: {},
+            overall: { mean: NaN, stdDev: 0.5, min: 1, max: 3 },
+          },
+        },
+        modelAgreement: {},
+      },
+      {
+        perModel: {
+          'gpt-4': {
+            sampleSize: 20,
+            values: {},
+            overall: { mean: 1.5, stdDev: 0.8, min: 0, max: 2 },
+          },
+        },
+        modelAgreement: {},
+      },
+    ];
+
+    const scenarios = [{ id: 's1', name: 'S1', content: { name: 'S1' } }];
+    const result = aggregateAnalysesLogic(analyses, [], scenarios);
+    const overall = result.perModel['gpt-4']?.overall;
+
+    // NaN source skipped; only the second run contributes
+    expect(overall!.mean).toBe(1.5);
+    expect(overall!.stdDev).toBe(0.8);
+    expect(Number.isFinite(overall!.mean)).toBe(true);
+    expect(Number.isFinite(overall!.stdDev)).toBe(true);
+  });
 });
