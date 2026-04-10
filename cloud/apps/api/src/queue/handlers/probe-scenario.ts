@@ -656,12 +656,14 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       const estimatedCost =
         (inputTokens * costInputPerMillion) / 1_000_000 +
         (outputTokens * costOutputPerMillion) / 1_000_000;
+      const reasoningTokens = output.transcript.totalReasoningTokens;
       costSnapshot = {
         inputTokens,
         outputTokens,
         estimatedCost,
         costInputPerMillion,
         costOutputPerMillion,
+        ...(reasoningTokens != null && reasoningTokens > 0 && { reasoningTokens }),
       };
     }
 

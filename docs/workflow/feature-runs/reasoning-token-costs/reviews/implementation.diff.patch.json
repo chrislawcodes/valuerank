@@ -1,0 +1,21 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "42447c2bb72b41b6bae7e1f16f631c9bfdb8f38b",
+  "git_base_ref": "origin/main",
+  "git_base_sha": "489849cbced674725c5f8ada21de706c3bc0f223",
+  "paths": [
+    "cloud/apps/api/src/services/transcript/create.ts",
+    "cloud/workers/common/cost.py",
+    "cloud/workers/common/llm_adapters/providers/deepseek.py",
+    "cloud/workers/common/llm_adapters/providers/google.py",
+    "cloud/workers/common/llm_adapters/providers/openai.py",
+    "cloud/workers/common/llm_adapters/providers/xai.py",
+    "cloud/workers/common/llm_adapters/types.py",
+    "cloud/workers/probe.py",
+    "cloud/workers/tests/test_cost_tracking.py"
+  ],
+  "allowed_dirty_paths": [],
+  "untracked_files_included": [],
+  "artifact_path": "docs/workflow/feature-runs/reasoning-token-costs/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

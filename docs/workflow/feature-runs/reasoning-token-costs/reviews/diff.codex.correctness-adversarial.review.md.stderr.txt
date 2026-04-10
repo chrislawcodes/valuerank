@@ -1,0 +1,475 @@
+Reading additional input from stdin...
+OpenAI Codex v0.118.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d754c-bc25-7653-882a-60d0ae3275c6
+--------
+user
+Review this diff artifact using a correctness-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/apps/api/src/services/transcript/create.ts b/cloud/apps/api/src/services/transcript/create.ts
+index c016b055..d73e7ef4 100644
+--- a/cloud/apps/api/src/services/transcript/create.ts
++++ b/cloud/apps/api/src/services/transcript/create.ts
+@@ -39,6 +39,7 @@ export type ProbeTranscript = {
+   turns: TranscriptTurn[];
+   totalInputTokens: number;
+   totalOutputTokens: number;
++  totalReasoningTokens?: number;
+   modelVersion?: string | null;
+   startedAt: string;
+   completedAt: string;
+@@ -53,6 +54,7 @@ export type CostSnapshot = {
+   estimatedCost: number;
+   costInputPerMillion: number;
+   costOutputPerMillion: number;
++  reasoningTokens?: number;
+ };
+ 
+ /**
+@@ -86,6 +88,10 @@ export async function createTranscript(input: CreateTranscriptInput) {
+     turns: transcript.turns,
+   };
+ 
++  if (transcript.totalReasoningTokens != null && transcript.totalReasoningTokens > 0) {
++    content.totalReasoningTokens = transcript.totalReasoningTokens;
++  }
++
+   if (costSnapshot !== undefined) {
+     content.costSnapshot = costSnapshot;
+   }
+diff --git a/cloud/workers/common/cost.py b/cloud/workers/common/cost.py
+index 2d1c80d7..5000a40f 100644
+--- a/cloud/workers/common/cost.py
++++ b/cloud/workers/common/cost.py
+@@ -79,16 +79,20 @@ class CostSnapshot:
+     input_tokens: int
+     output_tokens: int
+     estimated_cost: float
++    reasoning_tokens: Optional[int] = None
+ 
+     def to_dict(self) -> dict:
+         """Convert to dictionary for JSON output."""
+-        return {
++        result = {
+             "costInputPerMillion": self.cost_input_per_million,
+             "costOutputPerMillion": self.cost_output_per_million,
+             "inputTokens": self.input_tokens,
+             "outputTokens": self.output_tokens,
+             "estimatedCost": round(self.estimated_cost, 6),  # Round to 6 decimal places
+         }
++        if self.reasoning_tokens is not None:
++            result["reasoningTokens"] = self.reasoning_tokens
++        return result
+ 
+ 
+ def create_cost_snapshot(
+@@ -96,6 +100,7 @@ def create_cost_snapshot(
+     output_tokens: int,
+     cost_input_per_million: float,
+     cost_output_per_million: float,
++    reasoning_tokens: Optional[int] = None,
+ ) -> CostSnapshot:
+     """
+     Create a cost snapshot with calculated estimated cost.
+@@ -119,4 +124,5 @@ def create_cost_snapshot(
+         input_tokens=input_tokens,
+         output_tokens=output_tokens,
+         estimated_cost=estimated_cost,
++        reasoning_tokens=reasoning_tokens,
+     )
+diff --git a/cloud/workers/common/llm_adapters/providers/deepseek.py b/cloud/workers/common/llm_adapters/providers/deepseek.py
+index 0a600e6a..cbc73b5c 100644
+--- a/cloud/workers/common/llm_adapters/providers/deepseek.py
++++ b/cloud/workers/common/llm_adapters/providers/deepseek.py
+@@ -110,6 +110,8 @@ class DeepSeekAdapter(BaseLLMAdapter):
+             choice = data["choices"][0]
+             content = choice["message"]["content"]
+             usage = data.get("usage", {})
++            completion_details = usage.get("completion_tokens_details") or {}
++            reasoning_tokens = completion_details.get("reasoning_tokens")
+ 
+             # Capture provider metadata (OpenAI-compatible format)
+             raw_finish_reason = choice.get("finish_reason")
+@@ -136,6 +138,8 @@ class DeepSeekAdapter(BaseLLMAdapter):
+                 output_tokens=usage.get("completion_tokens"),
+                 model_version=data.get("model"),
+                 provider_metadata=provider_metadata,
++                reasoning_tokens=reasoning_tokens,
++                reasoning_tokens_included_in_output=True,
+             )
+         except (KeyError, IndexError, TypeError) as exc:
+             raise LLMError(
+diff --git a/cloud/workers/common/llm_adapters/providers/google.py b/cloud/workers/common/llm_adapters/providers/google.py
+index 0834527f..7a4cd8f8 100644
+--- a/cloud/workers/common/llm_adapters/providers/google.py
++++ b/cloud/workers/common/llm_adapters/providers/google.py
+@@ -141,12 +141,15 @@ class GeminiAdapter(BaseLLMAdapter):
+                 )
+                 # Return empty content with metadata explaining why
+                 usage = data.get("usageMetadata", {})
++                thoughts_tokens = usage.get("thoughtsTokenCount")
+                 return LLMResponse(
+                     content="",
+                     input_tokens=usage.get("promptTokenCount"),
+                     output_tokens=0,
+                     model_version=None,
+                     provider_metadata=provider_metadata,
++                    reasoning_tokens=thoughts_tokens,
++                    reasoning_tokens_included_in_output=False,
+                 )
+ 
+             candidates = data.get("candidates", [])
+@@ -162,12 +165,15 @@ class GeminiAdapter(BaseLLMAdapter):
+                 }
+                 log.warn("Gemini response missing candidates", model=model)
+                 usage = data.get("usageMetadata", {})
++                thoughts_tokens = usage.get("thoughtsTokenCount")
+                 return LLMResponse(
+                     content="",
+                     input_tokens=usage.get("promptTokenCount"),
+                     output_tokens=0,
+                     model_version=None,
+                     provider_metadata=provider_metadata,
++                    reasoning_tokens=thoughts_tokens,
++                    reasoning_tokens_included_in_output=False,
+                 )
+ 
+             candidate = candidates[0]
+@@ -180,6 +186,7 @@ class GeminiAdapter(BaseLLMAdapter):
+ 
+             # Gemini includes usage metadata
+             usage = data.get("usageMetadata", {})
++            thoughts_tokens = usage.get("thoughtsTokenCount")
+ 
+             # Build comprehensive provider metadata
+             provider_metadata = {
+@@ -208,6 +215,8 @@ class GeminiAdapter(BaseLLMAdapter):
+                 output_tokens=usage.get("candidatesTokenCount"),
+                 model_version=None,  # Gemini doesn't return model version
+                 provider_metadata=provider_metadata,
++                reasoning_tokens=thoughts_tokens,
++                reasoning_tokens_included_in_output=False,
+             )
+         except (KeyError, TypeError) as exc:
+             raise LLMError(
+diff --git a/cloud/workers/common/llm_adapters/providers/openai.py b/cloud/workers/common/llm_adapters/providers/openai.py
+index a4f8010a..1f1563dc 100644
+--- a/cloud/workers/common/llm_adapters/providers/openai.py
++++ b/cloud/workers/common/llm_adapters/providers/openai.py
+@@ -108,6 +108,8 @@ class OpenAIAdapter(BaseLLMAdapter):
+             choice = data["choices"][0]
+             content = choice["message"]["content"]
+             usage = data.get("usage", {})
++            completion_details = usage.get("completion_tokens_details") or {}
++            reasoning_tokens = completion_details.get("reasoning_tokens")
+             model_version = data.get("model")  # OpenAI returns resolved model ID
+ 
+             # Capture provider metadata
+@@ -137,6 +139,8 @@ class OpenAIAdapter(BaseLLMAdapter):
+                 output_tokens=usage.get("completion_tokens"),
+                 model_version=model_version,
+                 provider_metadata=provider_metadata,
++                reasoning_tokens=reasoning_tokens,
++                reasoning_tokens_included_in_output=True,
+             )
+         except (KeyError, IndexError, TypeError) as exc:
+             raise LLMError(
+diff --git a/cloud/workers/common/llm_adapters/providers/xai.py b/cloud/workers/common/llm_adapters/providers/xai.py
+index 5bf34fbc..513641d2 100644
+--- a/cloud/workers/common/llm_adapters/providers/xai.py
++++ b/cloud/workers/common/llm_adapters/providers/xai.py
+@@ -94,6 +94,8 @@ class XAIAdapter(BaseLLMAdapter):
+             choice = data["choices"][0]
+             content = choice["message"]["content"]
+             usage = data.get("usage", {})
++            completion_details = usage.get("completion_tokens_details") or {}
++            reasoning_tokens = completion_details.get("reasoning_tokens")
+ 
+             # Capture provider metadata (OpenAI-compatible format)
+             raw_finish_reason = choice.get("finish_reason")
+@@ -113,6 +115,8 @@ class XAIAdapter(BaseLLMAdapter):
+                 output_tokens=usage.get("completion_tokens"),
+                 model_version=data.get("model"),
+                 provider_metadata=provider_metadata,
++                reasoning_tokens=reasoning_tokens,
++                reasoning_tokens_included_in_output=False,
+             )
+         except (KeyError, IndexError, TypeError) as exc:
+             raise LLMError(
+diff --git a/cloud/workers/common/llm_adapters/types.py b/cloud/workers/common/llm_adapters/types.py
+index 4e8129d5..2aae9b00 100644
+--- a/cloud/workers/common/llm_adapters/types.py
++++ b/cloud/workers/common/llm_adapters/types.py
+@@ -21,6 +21,9 @@ class LLMResponse:
+     seed_sent: Optional[bool] = None
+     seed_value: Optional[int] = None
+     adapter_mode: Optional[str] = None
++    reasoning_tokens: Optional[int] = None
++    # Defaults to True (safe: under-tracks rather than over-bills if an adapter omits this flag)
++    reasoning_tokens_included_in_output: bool = True
+ 
+     def __post_init__(self) -> None:
+         """Backfill request instrumentation from the shared adapter context."""
+@@ -65,6 +68,8 @@ class LLMResponse:
+             result["seedValue"] = self.seed_value
+         if self.adapter_mode is not None:
+             result["adapterMode"] = self.adapter_mode
++        if self.reasoning_tokens is not None:
++            result["reasoningTokens"] = self.reasoning_tokens
+         return result
+ 
+ 
+diff --git a/cloud/workers/probe.py b/cloud/workers/probe.py
+index f1674caf..967292fc 100644
+--- a/cloud/workers/probe.py
++++ b/cloud/workers/probe.py
+@@ -146,10 +146,11 @@ class Transcript:
+     started_at: Optional[datetime] = None
+     completed_at: Optional[datetime] = None
+     cost_snapshot: Optional[CostSnapshot] = None
++    total_reasoning_tokens: int = 0
+ 
+     def to_dict(self) -> dict[str, Any]:
+         """Convert to dictionary for JSON output."""
+-        result = {
++        result: dict[str, Any] = {
+             "turns": [t.to_dict() for t in self.turns],
+             "totalInputTokens": self.total_input_tokens,
+             "totalOutputTokens": self.total_output_tokens,
+@@ -157,10 +158,28 @@ class Transcript:
+             "startedAt": self.started_at.isoformat() if self.started_at else None,
+             "completedAt": self.completed_at.isoformat() if self.completed_at else None,
+         }
++        if self.total_reasoning_tokens > 0:
++            result["totalReasoningTokens"] = self.total_reasoning_tokens
+         if self.cost_snapshot is not None:
+             result["costSnapshot"] = self.cost_snapshot.to_dict()
+         return result
+ 
++    def accumulate_response(self, response: "LLMResponse") -> None:
++        """Accumulate token counts from an LLM response into this transcript."""
++        if response.input_tokens:
++            self.total_input_tokens += response.input_tokens
++        # Add output tokens unconditionally so extra reasoning tokens are always billed
++        # (e.g. Google blocked responses with output_tokens=0 but non-zero thoughtsTokenCount)
++        base_output = response.output_tokens or 0
++        extra_reasoning = (response.reasoning_tokens or 0) if (
++            response.reasoning_tokens and not response.reasoning_tokens_included_in_output
++        ) else 0
++        self.total_output_tokens += base_output + extra_reasoning
++        if response.reasoning_tokens:
++            self.total_reasoning_tokens += response.reasoning_tokens
++        if response.model_version and not self.model_version:
++            self.model_version = response.model_version
++
+ 
+ def estimate_tokens(text: str, model: str) -> int:
+     """
+@@ -281,13 +300,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
+             provider_metadata=build_provider_metadata(response),
+         )
+         transcript.turns.append(turn)
+-
+-        if response.input_tokens:
+-            transcript.total_input_tokens += response.input_tokens
+-        if response.output_tokens:
+-            transcript.total_output_tokens += response.output_tokens
+-        if response.model_version:
+-            transcript.model_version = response.model_version
++        transcript.accumulate_response(response)
+ 
+         # Add assistant response to conversation
+         messages.append({"role": "assistant", "content": response.content})
+@@ -323,13 +336,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
+                 provider_metadata=build_provider_metadata(response),
+             )
+             transcript.turns.append(turn)
+-
+-            if response.input_tokens:
+-                transcript.total_input_tokens += response.input_tokens
+-            if response.output_tokens:
+-                transcript.total_output_tokens += response.output_tokens
+-            if response.model_version and not transcript.model_version:
+-                transcript.model_version = response.model_version
++            transcript.accumulate_response(response)
+ 
+             # Add response to conversation
+             messages.append({"role": "assistant", "content": response.content})
+@@ -345,6 +352,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
+                 output_tokens=transcript.total_output_tokens,
+                 cost_input_per_million=cost_input,
+                 cost_output_per_million=cost_output,
++                reasoning_tokens=transcript.total_reasoning_tokens or None,
+             )
+ 
+         log.info(
+diff --git a/cloud/workers/tests/test_cost_tracking.py b/cloud/workers/tests/test_cost_tracking.py
+index 046c1223..f0834a97 100644
+--- a/cloud/workers/tests/test_cost_tracking.py
++++ b/cloud/workers/tests/test_cost_tracking.py
+@@ -8,6 +8,7 @@ from common.cost import (
+     calculate_cost,
+     create_cost_snapshot,
+ )
++from common.llm_adapters import LLMResponse
+ 
+ 
+ class TestModelCost:
+@@ -110,6 +111,22 @@ class TestCostSnapshot:
+         assert result["inputTokens"] == 1000
+         assert result["outputTokens"] == 500
+         assert result["estimatedCost"] == 0.0075
++        assert "reasoningTokens" not in result
++
++    def test_to_dict_with_reasoning_tokens(self) -> None:
++        """Test serialization includes reasoning tokens."""
++        snapshot = CostSnapshot(
++            cost_input_per_million=2.5,
++            cost_output_per_million=10.0,
++            input_tokens=1000,
++            output_tokens=500,
++            estimated_cost=0.0075,
++            reasoning_tokens=300,
++        )
++
++        result = snapshot.to_dict()
++
++        assert result["reasoningTokens"] == 300
+ 
+     def test_to_dict_rounding(self) -> None:
+         """Test that estimated cost is rounded to 6 decimal places."""
+@@ -142,6 +159,20 @@ class TestCreateCostSnapshot:
+         assert snapshot.cost_input_per_million == 2.5
+         assert snapshot.cost_output_per_million == 10.0
+         assert abs(snapshot.estimated_cost - 0.0075) < 0.0001
++        assert snapshot.reasoning_tokens is None
++
++    def test_create_cost_snapshot_stores_reasoning_tokens(self) -> None:
++        """Test that create_cost_snapshot stores reasoning tokens."""
++        snapshot = create_cost_snapshot(
++            input_tokens=1000,
++            output_tokens=500,
++            cost_input_per_million=2.5,
++            cost_output_per_million=10.0,
++            reasoning_tokens=300,
++        )
++
++        assert snapshot.reasoning_tokens == 300
++        assert abs(snapshot.estimated_cost - 0.0075) < 0.0001
+ 
+     def test_create_cost_snapshot_with_large_values(self) -> None:
+         """Test with realistic large token counts."""
+@@ -184,3 +215,80 @@ class TestCostIntegration:
+         assert isinstance(result["inputTokens"], int)
+         assert isinstance(result["outputTokens"], int)
+         assert isinstance(result["estimatedCost"], (int, float))
++
++
++class TestReasoningTokenTracking:
++    """Tests for reasoning token serialization and probe accumulation."""
++
++    def test_llm_response_to_dict_includes_reasoning_tokens(self) -> None:
++        """Test LLMResponse serialization includes reasoning tokens when present."""
++        response = LLMResponse(
++            content="Hello",
++            reasoning_tokens=400,
++            reasoning_tokens_included_in_output=False,
++        )
++
++        result = response.to_dict()
++
++        assert result["reasoningTokens"] == 400
++        assert "reasoning_tokens_included_in_output" not in result
++
++    def test_llm_response_to_dict_omits_reasoning_tokens_when_missing(self) -> None:
++        """Test LLMResponse serialization omits missing reasoning tokens."""
++        response = LLMResponse(content="Hello")
++
++        result = response.to_dict()
++
++        assert "reasoningTokens" not in result
++
++    def test_probe_accumulation_counts_reasoning_tokens_separately(self) -> None:
++        """Test probe accumulation for xAI-style responses (reasoning not in output)."""
++        from probe import Transcript
++
++        transcript = Transcript()
++        response = LLMResponse(
++            content="Answer",
++            output_tokens=100,
++            reasoning_tokens=400,
++            reasoning_tokens_included_in_output=False,
++        )
++
++        transcript.accumulate_response(response)
++
++        assert transcript.total_output_tokens == 500
++        assert transcript.total_reasoning_tokens == 400
++
++    def test_probe_accumulation_does_not_double_count_included_reasoning_tokens(self) -> None:
++        """Test probe accumulation for OpenAI-style responses (reasoning already in output)."""
++        from probe import Transcript
++
++        transcript = Transcript()
++        response = LLMResponse(
++            content="Answer",
++            output_tokens=500,
++            reasoning_tokens=400,
++            reasoning_tokens_included_in_output=True,
++        )
++
++        transcript.accumulate_response(response)
++
++        assert transcript.total_output_tokens == 500
++        assert transcript.total_reasoning_tokens == 400
++
++    def test_probe_accumulation_bills_reasoning_tokens_when_output_is_zero(self) -> None:
++        """Test reasoning tokens are billed even when visible output is zero (e.g. Google blocked)."""
++        from probe import Transcript
++
++        transcript = Transcript()
++        response = LLMResponse(
++            content="",
++            output_tokens=0,
++            reasoning_tokens=100,
++            reasoning_tokens_included_in_output=False,
++        )
++
++        transcript.accumulate_response(response)
++
++        # reasoning tokens (not included in output) must be added to total_output_tokens for billing
++        assert transcript.total_output_tokens == 100
++        assert transcript.total_reasoning_tokens == 100
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+- [UNVERIFIED] MEDIUM: `cloud/workers/probe.py::Transcript.accumulate_response()` now folds non-included reasoning tokens into `totalOutputTokens`. That changes the meaning of `totalOutputTokens` from raw assistant output to billable output, but the field name did not change. Any downstream consumer, export, or report that still treats this as visible output will now be wrong.
+- [UNVERIFIED] MEDIUM: `cloud/workers/common/llm_adapters/types.py::LLMResponse.reasoning_tokens_included_in_output` defaults to `True`, and there is no validation that every producer sets it correctly. If any current or future `LLMResponse` path populates `reasoning_tokens` but forgets the flag, the probe will silently undercount billable tokens.
+- [UNVERIFIED] MEDIUM: `cloud/workers/common/cost.py::create_cost_snapshot()` accepts `reasoning_tokens`, but `estimated_cost` still ignores it. If a caller passes the new field without also folding it into `output_tokens`, the snapshot will record reasoning tokens while charging for none of them.
+
+## Residual Risks
+- I did not verify provider API semantics or units for `reasoning_tokens` versus `completion_tokens`, so one of the provider mappings may still double count or undercount.
+- I did not inspect other `LLMResponse` construction sites, so there may be additional adapters or helpers that need the new `reasoning_tokens_included_in_output` flag.
+tokens used
+14,416

@@ -79,16 +79,20 @@ class CostSnapshot:
     input_tokens: int
     output_tokens: int
     estimated_cost: float
+    reasoning_tokens: Optional[int] = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON output."""
-        return {
+        result = {
             "costInputPerMillion": self.cost_input_per_million,
             "costOutputPerMillion": self.cost_output_per_million,
             "inputTokens": self.input_tokens,
             "outputTokens": self.output_tokens,
             "estimatedCost": round(self.estimated_cost, 6),  # Round to 6 decimal places
         }
+        if self.reasoning_tokens is not None:
+            result["reasoningTokens"] = self.reasoning_tokens
+        return result
 
 
 def create_cost_snapshot(
@@ -96,6 +100,7 @@ def create_cost_snapshot(
     output_tokens: int,
     cost_input_per_million: float,
     cost_output_per_million: float,
+    reasoning_tokens: Optional[int] = None,
 ) -> CostSnapshot:
     """
     Create a cost snapshot with calculated estimated cost.
@@ -119,4 +124,5 @@ def create_cost_snapshot(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         estimated_cost=estimated_cost,
+        reasoning_tokens=reasoning_tokens,
     )

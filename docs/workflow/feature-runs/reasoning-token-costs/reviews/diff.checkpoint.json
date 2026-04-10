@@ -1,0 +1,36 @@
+{
+  "feature_slug": "reasoning-token-costs",
+  "stage": "diff",
+  "artifact_path": "docs/workflow/feature-runs/reasoning-token-costs/reviews/implementation.diff.patch",
+  "git_base_ref": "origin/main",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "gemini",
+      "lens": "regression-adversarial",
+      "stage": "diff",
+      "path": "docs/workflow/feature-runs/reasoning-token-costs/reviews/diff.gemini.regression-adversarial.review.md",
+      "context_paths": [],
+      "model": "gemini-2.5-pro"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "quality-adversarial",
+      "stage": "diff",
+      "path": "docs/workflow/feature-runs/reasoning-token-costs/reviews/diff.gemini.quality-adversarial.review.md",
+      "context_paths": [],
+      "model": "gemini-2.5-pro"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "correctness-adversarial",
+      "stage": "diff",
+      "path": "docs/workflow/feature-runs/reasoning-token-costs/reviews/diff.codex.correctness-adversarial.review.md",
+      "context_paths": [],
+      "model": "gpt-5.4-mini"
+    }
+  ],
+  "max_artifact_chars": null,
+  "max_context_chars": null,
+  "max_total_chars": 120000
+}

@@ -39,6 +39,7 @@ export type ProbeTranscript = {
   turns: TranscriptTurn[];
   totalInputTokens: number;
   totalOutputTokens: number;
+  totalReasoningTokens?: number;
   modelVersion?: string | null;
   startedAt: string;
   completedAt: string;
@@ -53,6 +54,7 @@ export type CostSnapshot = {
   estimatedCost: number;
   costInputPerMillion: number;
   costOutputPerMillion: number;
+  reasoningTokens?: number;
 };
 
 /**
@@ -85,6 +87,10 @@ export async function createTranscript(input: CreateTranscriptInput) {
     schemaVersion: 1,
     turns: transcript.turns,
   };
+
+  if (transcript.totalReasoningTokens != null && transcript.totalReasoningTokens > 0) {
+    content.totalReasoningTokens = transcript.totalReasoningTokens;
+  }
 
   if (costSnapshot !== undefined) {
     content.costSnapshot = costSnapshot;

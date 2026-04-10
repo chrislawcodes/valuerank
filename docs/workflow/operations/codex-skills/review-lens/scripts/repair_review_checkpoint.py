@@ -16,7 +16,7 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from workflow_utils import normalized_artifact_hash, resolve_stored_path
 
-REPO_ROOT = SCRIPT_DIR.parents[4]
+REPO_ROOT = SCRIPT_DIR.parents[5]
 
 
 def sha256_file(path: Path) -> str:
