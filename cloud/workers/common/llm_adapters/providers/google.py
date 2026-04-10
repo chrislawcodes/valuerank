@@ -141,12 +141,15 @@ class GeminiAdapter(BaseLLMAdapter):
                 )
                 # Return empty content with metadata explaining why
                 usage = data.get("usageMetadata", {})
+                thoughts_tokens = usage.get("thoughtsTokenCount")
                 return LLMResponse(
                     content="",
                     input_tokens=usage.get("promptTokenCount"),
                     output_tokens=0,
                     model_version=None,
                     provider_metadata=provider_metadata,
+                    reasoning_tokens=thoughts_tokens,
+                    reasoning_tokens_included_in_output=False,
                 )
 
             candidates = data.get("candidates", [])
@@ -162,12 +165,15 @@ class GeminiAdapter(BaseLLMAdapter):
                 }
                 log.warn("Gemini response missing candidates", model=model)
                 usage = data.get("usageMetadata", {})
+                thoughts_tokens = usage.get("thoughtsTokenCount")
                 return LLMResponse(
                     content="",
                     input_tokens=usage.get("promptTokenCount"),
                     output_tokens=0,
                     model_version=None,
                     provider_metadata=provider_metadata,
+                    reasoning_tokens=thoughts_tokens,
+                    reasoning_tokens_included_in_output=False,
                 )
 
             candidate = candidates[0]
@@ -180,6 +186,7 @@ class GeminiAdapter(BaseLLMAdapter):
 
             # Gemini includes usage metadata
             usage = data.get("usageMetadata", {})
+            thoughts_tokens = usage.get("thoughtsTokenCount")
 
             # Build comprehensive provider metadata
             provider_metadata = {
@@ -208,6 +215,8 @@ class GeminiAdapter(BaseLLMAdapter):
                 output_tokens=usage.get("candidatesTokenCount"),
                 model_version=None,  # Gemini doesn't return model version
                 provider_metadata=provider_metadata,
+                reasoning_tokens=thoughts_tokens,
+                reasoning_tokens_included_in_output=False,
             )
         except (KeyError, TypeError) as exc:
             raise LLMError(

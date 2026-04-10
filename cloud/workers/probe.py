@@ -146,6 +146,7 @@ class Transcript:
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     cost_snapshot: Optional[CostSnapshot] = None
+    total_reasoning_tokens: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON output."""
@@ -154,11 +155,14 @@ class Transcript:
             "totalInputTokens": self.total_input_tokens,
             "totalOutputTokens": self.total_output_tokens,
             "modelVersion": self.model_version,
+            "totalReasoningTokens": self.total_reasoning_tokens if self.total_reasoning_tokens > 0 else None,
             "startedAt": self.started_at.isoformat() if self.started_at else None,
             "completedAt": self.completed_at.isoformat() if self.completed_at else None,
         }
         if self.cost_snapshot is not None:
             result["costSnapshot"] = self.cost_snapshot.to_dict()
+        if result["totalReasoningTokens"] is None:
+            del result["totalReasoningTokens"]
         return result
 
 
@@ -285,8 +289,13 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
         if response.input_tokens:
             transcript.total_input_tokens += response.input_tokens
         if response.output_tokens:
-            transcript.total_output_tokens += response.output_tokens
-        if response.model_version:
+            extra = response.reasoning_tokens if (
+                response.reasoning_tokens and not response.reasoning_tokens_included_in_output
+            ) else 0
+            transcript.total_output_tokens += response.output_tokens + extra
+        if response.reasoning_tokens:
+            transcript.total_reasoning_tokens += response.reasoning_tokens
+        if response.model_version and not transcript.model_version:
             transcript.model_version = response.model_version
 
         # Add assistant response to conversation
@@ -327,7 +336,12 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
             if response.input_tokens:
                 transcript.total_input_tokens += response.input_tokens
             if response.output_tokens:
-                transcript.total_output_tokens += response.output_tokens
+                extra = response.reasoning_tokens if (
+                    response.reasoning_tokens and not response.reasoning_tokens_included_in_output
+                ) else 0
+                transcript.total_output_tokens += response.output_tokens + extra
+            if response.reasoning_tokens:
+                transcript.total_reasoning_tokens += response.reasoning_tokens
             if response.model_version and not transcript.model_version:
                 transcript.model_version = response.model_version
 
@@ -345,6 +359,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
                 output_tokens=transcript.total_output_tokens,
                 cost_input_per_million=cost_input,
                 cost_output_per_million=cost_output,
+                reasoning_tokens=transcript.total_reasoning_tokens or None,
             )
 
         log.info(
