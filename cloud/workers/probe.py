@@ -335,11 +335,13 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
 
             if response.input_tokens:
                 transcript.total_input_tokens += response.input_tokens
-            if response.output_tokens:
-                extra = response.reasoning_tokens if (
-                    response.reasoning_tokens and not response.reasoning_tokens_included_in_output
-                ) else 0
-                transcript.total_output_tokens += response.output_tokens + extra
+            # Add output tokens unconditionally so extra reasoning tokens are always billed
+            # (e.g. Google blocked responses with output_tokens=0 but non-zero thoughtsTokenCount)
+            base_output = response.output_tokens or 0
+            extra_reasoning = (response.reasoning_tokens or 0) if (
+                response.reasoning_tokens and not response.reasoning_tokens_included_in_output
+            ) else 0
+            transcript.total_output_tokens += base_output + extra_reasoning
             if response.reasoning_tokens:
                 transcript.total_reasoning_tokens += response.reasoning_tokens
             if response.model_version and not transcript.model_version:

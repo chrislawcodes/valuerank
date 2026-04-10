@@ -242,7 +242,7 @@ class TestReasoningTokenTracking:
         assert "reasoningTokens" not in result
 
     def test_probe_accumulation_counts_reasoning_tokens_separately(self) -> None:
-        """Test probe accumulation for xAI-style responses."""
+        """Test probe accumulation for xAI-style responses (reasoning not in output)."""
         from probe import Transcript
 
         transcript = Transcript()
@@ -253,11 +253,11 @@ class TestReasoningTokenTracking:
             reasoning_tokens_included_in_output=False,
         )
 
-        if response.output_tokens:
-            extra = response.reasoning_tokens if (
-                response.reasoning_tokens and not response.reasoning_tokens_included_in_output
-            ) else 0
-            transcript.total_output_tokens += response.output_tokens + extra
+        base_output = response.output_tokens or 0
+        extra_reasoning = (response.reasoning_tokens or 0) if (
+            response.reasoning_tokens and not response.reasoning_tokens_included_in_output
+        ) else 0
+        transcript.total_output_tokens += base_output + extra_reasoning
         if response.reasoning_tokens:
             transcript.total_reasoning_tokens += response.reasoning_tokens
 
@@ -265,7 +265,7 @@ class TestReasoningTokenTracking:
         assert transcript.total_reasoning_tokens == 400
 
     def test_probe_accumulation_does_not_double_count_included_reasoning_tokens(self) -> None:
-        """Test probe accumulation for OpenAI-style responses."""
+        """Test probe accumulation for OpenAI-style responses (reasoning already in output)."""
         from probe import Transcript
 
         transcript = Transcript()
@@ -276,19 +276,19 @@ class TestReasoningTokenTracking:
             reasoning_tokens_included_in_output=True,
         )
 
-        if response.output_tokens:
-            extra = response.reasoning_tokens if (
-                response.reasoning_tokens and not response.reasoning_tokens_included_in_output
-            ) else 0
-            transcript.total_output_tokens += response.output_tokens + extra
+        base_output = response.output_tokens or 0
+        extra_reasoning = (response.reasoning_tokens or 0) if (
+            response.reasoning_tokens and not response.reasoning_tokens_included_in_output
+        ) else 0
+        transcript.total_output_tokens += base_output + extra_reasoning
         if response.reasoning_tokens:
             transcript.total_reasoning_tokens += response.reasoning_tokens
 
         assert transcript.total_output_tokens == 500
         assert transcript.total_reasoning_tokens == 400
 
-    def test_probe_accumulation_counts_reasoning_tokens_without_output_tokens(self) -> None:
-        """Test reasoning tokens are counted even when output tokens are zero."""
+    def test_probe_accumulation_bills_reasoning_tokens_when_output_is_zero(self) -> None:
+        """Test reasoning tokens are billed even when visible output is zero (e.g. Google blocked)."""
         from probe import Transcript
 
         transcript = Transcript()
@@ -299,13 +299,14 @@ class TestReasoningTokenTracking:
             reasoning_tokens_included_in_output=False,
         )
 
-        if response.output_tokens:
-            extra = response.reasoning_tokens if (
-                response.reasoning_tokens and not response.reasoning_tokens_included_in_output
-            ) else 0
-            transcript.total_output_tokens += response.output_tokens + extra
+        base_output = response.output_tokens or 0
+        extra_reasoning = (response.reasoning_tokens or 0) if (
+            response.reasoning_tokens and not response.reasoning_tokens_included_in_output
+        ) else 0
+        transcript.total_output_tokens += base_output + extra_reasoning
         if response.reasoning_tokens:
             transcript.total_reasoning_tokens += response.reasoning_tokens
 
-        assert transcript.total_output_tokens == 0
+        # reasoning tokens (not included in output) must be added to total_output_tokens for billing
+        assert transcript.total_output_tokens == 100
         assert transcript.total_reasoning_tokens == 100
