@@ -9,6 +9,9 @@
 - review: reviews/plan.gemini.testability-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
 - review: reviews/plan.codex.implementation-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
 - review: reviews/tasks.codex.execution-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
+- review: reviews/diff.gemini.regression-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
+- review: reviews/diff.gemini.quality-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
+- review: reviews/diff.codex.correctness-adversarial.review.md | status: accepted | note: All three findings are UNVERIFIED and reflect documented design decisions: totalOutputTokens is intentionally billable-output not raw-output; True default is the intentional safe failure mode; estimated_cost correctly ignores reasoningTokens because output_tokens is pre-adjusted by accumulate_response.
 
 ## Architecture Decisions
 

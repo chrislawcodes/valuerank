@@ -6,7 +6,9 @@
     "cloud/workers/common/llm_adapters/providers/google.py",
     "cloud/workers/common/llm_adapters/providers/openai.py",
     "cloud/workers/common/llm_adapters/providers/xai.py",
-    "cloud/workers/common/llm_adapters/types.py"
+    "cloud/workers/common/llm_adapters/types.py",
+    "cloud/workers/probe.py",
+    "cloud/workers/tests/test_cost_tracking.py"
   ],
   "allowed_dirty_paths": [
     "cloud/apps/api/src/services/transcript/create.ts",
@@ -16,6 +18,8 @@
     "cloud/workers/common/llm_adapters/providers/openai.py",
     "cloud/workers/common/llm_adapters/providers/xai.py",
     "cloud/workers/common/llm_adapters/types.py",
+    "cloud/workers/probe.py",
+    "cloud/workers/tests/test_cost_tracking.py",
     "docs/workflow/feature-runs/reasoning-token-costs"
   ]
 }
