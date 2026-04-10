@@ -73,7 +73,7 @@ export type CreateTranscriptInput = {
 /**
  * Create a transcript record from probe worker output.
  */
-export async function createTranscript(input: CreateTranscriptInput) {
+export async function createTranscript(input: CreateTranscriptInput, txClient?: Prisma.TransactionClient) {
   const { runId, scenarioId, modelId, sampleIndex = 0, transcript, definitionSnapshot, costSnapshot } = input;
 
   // Calculate duration from timestamps
@@ -107,7 +107,8 @@ export async function createTranscript(input: CreateTranscriptInput) {
     'Creating transcript'
   );
 
-  const record = await db.transcript.create({
+  const client = txClient ?? db;
+  const record = await client.transcript.create({
     data: {
       runId,
       scenarioId,
