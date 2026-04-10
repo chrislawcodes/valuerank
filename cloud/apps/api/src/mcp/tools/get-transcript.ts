@@ -74,6 +74,7 @@ type TranscriptOutput = {
       estimatedCost: number;
       costInputPerMillion: number;
       costOutputPerMillion: number;
+      reasoningTokens?: number;
     };
   };
 };
@@ -121,6 +122,7 @@ type CostSnapshot = {
   estimatedCost: number;
   costInputPerMillion: number;
   costOutputPerMillion: number;
+  reasoningTokens?: number;
 };
 
 /**
@@ -141,6 +143,7 @@ function extractCostSnapshot(content: unknown): CostSnapshot | undefined {
     estimatedCost: typeof cs.estimatedCost === 'number' ? cs.estimatedCost : 0,
     costInputPerMillion: typeof cs.costInputPerMillion === 'number' ? cs.costInputPerMillion : 0,
     costOutputPerMillion: typeof cs.costOutputPerMillion === 'number' ? cs.costOutputPerMillion : 0,
+    ...(typeof cs.reasoningTokens === 'number' && { reasoningTokens: cs.reasoningTokens }),
   };
 }
 

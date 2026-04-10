@@ -39,6 +39,7 @@ export type ProbeTranscript = {
   turns: TranscriptTurn[];
   totalInputTokens: number;
   totalOutputTokens: number;
+  totalReasoningTokens?: number | null;
   modelVersion?: string | null;
   startedAt: string;
   completedAt: string;
@@ -53,6 +54,7 @@ export type CostSnapshot = {
   estimatedCost: number;
   costInputPerMillion: number;
   costOutputPerMillion: number;
+  reasoningTokens?: number;
 };
 
 /**
