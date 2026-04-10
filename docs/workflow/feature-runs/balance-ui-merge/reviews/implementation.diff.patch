@@ -1,0 +1,153 @@
+diff --git a/cloud/apps/web/src/components/settings/models/ModelsPanel.tsx b/cloud/apps/web/src/components/settings/models/ModelsPanel.tsx
+index 6778fd27..c80c2968 100644
+--- a/cloud/apps/web/src/components/settings/models/ModelsPanel.tsx
++++ b/cloud/apps/web/src/components/settings/models/ModelsPanel.tsx
+@@ -24,7 +24,6 @@ import {
+   UNSET_DEFAULT_LLM_MODEL_MUTATION,
+   UPDATE_LLM_PROVIDER_MUTATION,
+   SET_PROVIDER_BALANCE_MUTATION,
+-  SYNC_PROVIDER_BALANCE_MUTATION,
+ } from '../../../api/operations/llm';
+ 
+ export function ModelsPanel() {
+@@ -46,7 +45,6 @@ export function ModelsPanel() {
+   const [, unsetDefaultModel] = useMutation(UNSET_DEFAULT_LLM_MODEL_MUTATION);
+   const [, updateProvider] = useMutation(UPDATE_LLM_PROVIDER_MUTATION);
+   const [, setProviderBalance] = useMutation(SET_PROVIDER_BALANCE_MUTATION);
+-  const [, syncProviderBalance] = useMutation(SYNC_PROVIDER_BALANCE_MUTATION);
+ 
+   const toggleProvider = (providerId: string) => {
+     setExpandedProviders((prev) => {
+@@ -106,11 +104,6 @@ export function ModelsPanel() {
+     reexecuteQuery({ requestPolicy: 'network-only' });
+   };
+ 
+-  const handleSyncProvider = async (id: string, realBalance: number) => {
+-    await syncProviderBalance({ providerId: id, realBalance });
+-    reexecuteQuery({ requestPolicy: 'network-only' });
+-  };
+-
+   const openAddModel = (provider: LlmProvider) => {
+     setSelectedProvider(provider);
+     setIsAddModelOpen(true);
+@@ -182,7 +175,6 @@ export function ModelsPanel() {
+           provider={editingProvider}
+           onClose={() => setEditingProvider(null)}
+           onSave={(input) => handleUpdateProvider(editingProvider.id, input)}
+-          onSync={(realBalance) => handleSyncProvider(editingProvider.id, realBalance)}
+         />
+       )}
+     </>
+diff --git a/cloud/apps/web/src/components/settings/models/ProviderSection.tsx b/cloud/apps/web/src/components/settings/models/ProviderSection.tsx
+index 13a5cee4..2cdaa207 100644
+--- a/cloud/apps/web/src/components/settings/models/ProviderSection.tsx
++++ b/cloud/apps/web/src/components/settings/models/ProviderSection.tsx
+@@ -55,11 +55,6 @@ export function ProviderSection({
+               No budget set
+             </span>
+           )}
+-          {provider.lastSyncedAt != null ? (
+-            <span className="text-xs text-gray-400">
+-              Last synced: {new Date(provider.lastSyncedAt).toLocaleDateString()}
+-            </span>
+-          ) : null}
+           <span
+             className={`px-2 py-1 text-xs rounded-full ${
+               provider.isEnabled
+diff --git a/cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx b/cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx
+index 01214fe4..53a7754d 100644
+--- a/cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx
++++ b/cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx
+@@ -14,7 +14,6 @@ export function ProviderSettingsModal({
+   provider,
+   onClose,
+   onSave,
+-  onSync,
+ }: ProviderSettingsModalProps) {
+   const [requestsPerMinute, setRequestsPerMinute] = useState(provider.requestsPerMinute.toString());
+   const [maxParallelRequests, setMaxParallelRequests] = useState(
+@@ -24,9 +23,6 @@ export function ProviderSettingsModal({
+   const [balanceInput, setBalanceInput] = useState(
+     provider.balance != null ? provider.balance.toFixed(2) : ''
+   );
+-  // Sync section: separate input for entering the real provider balance
+-  const [syncInput, setSyncInput] = useState('');
+-  const [isSyncing, setIsSyncing] = useState(false);
+   const [isSaving, setIsSaving] = useState(false);
+ 
+   const parsedBalance = balanceInput.trim() === '' ? null : parseFloat(balanceInput);
+@@ -47,17 +43,6 @@ export function ProviderSettingsModal({
+     setIsSaving(false);
+   };
+ 
+-  const parsedSyncBalance = syncInput.trim() === '' ? null : parseFloat(syncInput);
+-  const syncIsValid = parsedSyncBalance !== null && !isNaN(parsedSyncBalance) && parsedSyncBalance >= 0;
+-
+-  const handleSync = async () => {
+-    if (!onSync || !syncIsValid || parsedSyncBalance === null) return;
+-    setIsSyncing(true);
+-    await onSync(parsedSyncBalance);
+-    setSyncInput('');
+-    setIsSyncing(false);
+-  };
+-
+   const hasChanges =
+     parseInt(requestsPerMinute, 10) !== provider.requestsPerMinute ||
+     parseInt(maxParallelRequests, 10) !== provider.maxParallelRequests ||
+@@ -118,42 +103,10 @@ export function ProviderSettingsModal({
+             value={balanceInput}
+             onChange={(e) => setBalanceInput(e.target.value)}
+           />
+-
+-          {onSync && provider.balance != null && (
+-            <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+-              <p className="text-sm font-medium text-gray-700">Sync with real balance</p>
+-              <p className="text-xs text-gray-500">
+-                Enter the actual balance shown on your {provider.displayName} dashboard to correct drift.
+-              </p>
+-              {provider.lastSyncedAt && (
+-                <p className="text-xs text-gray-400">
+-                  Last synced: {new Date(provider.lastSyncedAt).toLocaleString()}
+-                </p>
+-              )}
+-              <div className="flex gap-2 items-end">
+-                <div className="flex-1">
+-                  <Input
+-                    label=""
+-                    type="number"
+-                    min="0"
+-                    step="0.01"
+-                    placeholder="Real balance ($)"
+-                    value={syncInput}
+-                    onChange={(e) => setSyncInput(e.target.value)}
+-                  />
+-                </div>
+-                <Button
+-                  type="button"
+-                  variant="secondary"
+-                  size="sm"
+-                  disabled={!syncIsValid || isSyncing}
+-                  isLoading={isSyncing}
+-                  onClick={handleSync}
+-                >
+-                  Sync
+-                </Button>
+-              </div>
+-            </div>
++          {provider.balance != null && (
++            <p className="text-xs text-gray-500 mt-1">
++              ValueRank balance: ${provider.balance.toFixed(2)}
++            </p>
+           )}
+ 
+           <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+diff --git a/cloud/apps/web/src/components/settings/models/types.ts b/cloud/apps/web/src/components/settings/models/types.ts
+index 782645b2..e5837e9b 100644
+--- a/cloud/apps/web/src/components/settings/models/types.ts
++++ b/cloud/apps/web/src/components/settings/models/types.ts
+@@ -43,5 +43,4 @@ export type ProviderSettingsModalProps = {
+     maxParallelRequests?: number;
+     balance?: number | null;
+   }) => Promise<void>;
+-  onSync?: (realBalance: number) => Promise<void>;
+ };

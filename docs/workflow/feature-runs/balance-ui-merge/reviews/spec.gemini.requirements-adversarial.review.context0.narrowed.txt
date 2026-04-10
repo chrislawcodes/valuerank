@@ -1,0 +1,258 @@
+00001: /**
+00002:  * LLM Provider & Model Mutations
+00003:  *
+00004:  * GraphQL mutations for managing LLM providers, models, and system settings.
+00005:  */
+00006: 
+00007: import { builder } from '../builder.js';
+00008: import { LlmModelRef, LlmProviderRef, SystemSettingRef, ProviderBalanceSyncLogRef } from '../types/refs.js';
+00009: import {
+00010:   CreateLlmModelInput,
+00011:   UpdateLlmModelInput,
+00012:   UpdateLlmProviderInput,
+00013:   UpdateSystemSettingInput,
+00014: } from '../types/inputs/llm.js';
+00015: import type { LlmModel } from '@valuerank/db';
+00016: import { db, Prisma } from '@valuerank/db';
+00017: import {
+00018:   createModel,
+00019:   updateModel,
+00020:   deprecateModel,
+00021:   reactivateModel,
+00022:   setDefaultModel,
+00023:   unsetDefaultModel,
+00024:   updateProvider,
+00025:   upsertSetting,
+00026: } from '@valuerank/db';
+00027: import { createAuditLog } from '../../services/audit/index.js';
+00028: import { getBoss, isBossRunning } from '../../queue/boss.js';
+00029: import { reregisterProviderHandler } from '../../queue/handlers/index.js';
+00030: import { NotFoundError, ValidationError } from '@valuerank/shared';
+00031: 
+00032: // Result type for model deprecation
+00033: type DeprecateModelResultShape = {
+00034:   model: LlmModel;
+00035:   newDefault: LlmModel | null;
+00036: };
+00037: 
+00038: const DeprecateModelResultRef = builder.objectRef<DeprecateModelResultShape>('DeprecateModelResult');
+00039: 
+00040: builder.objectType(DeprecateModelResultRef, {
+00041:   description: 'Result of deprecating a model',
+00042:   fields: (t) => ({
+00043:     model: t.field({
+00044:       type: LlmModelRef,
+00045:       description: 'The deprecated model',
+00046:       resolve: (parent) => parent.model,
+00047:     }),
+00048:     newDefault: t.field({
+00049:       type: LlmModelRef,
+00050:       nullable: true,
+00051:       description: 'The new default model (if previous default was deprecated)',
+00052:       resolve: (parent) => parent.newDefault,
+00053:     }),
+00054:   }),
+00055: });
+00056: 
+00057: // Result type for setting default model
+00058: type SetDefaultResultShape = {
+00059:   model: LlmModel;
+00060:   previousDefault: LlmModel | null;
+00061: };
+00062: 
+00063: const SetDefaultResultRef = builder.objectRef<SetDefaultResultShape>('SetDefaultModelResult');
+00064: 
+00065: builder.objectType(SetDefaultResultRef, {
+00066:   description: 'Result of setting a default model',
+00067:   fields: (t) => ({
+00068:     model: t.field({
+00069:       type: LlmModelRef,
+00070:       description: 'The new default model',
+00071:       resolve: (parent) => parent.model,
+00072:     }),
+00073:     previousDefault: t.field({
+00074:       type: LlmModelRef,
+00075:       nullable: true,
+00076:       description: 'Always null when multiple defaults are allowed',
+00077:       resolve: (parent) => parent.previousDefault,
+00078:     }),
+00079:   }),
+00080: });
+00081: 
+00082: // Mutation: createLlmModel
+00083: builder.mutationField('createLlmModel', (t) =>
+00084:   t.field({
+00085:     type: LlmModelRef,
+00086:     description: 'Create a new LLM model under a provider',
+00087:     args: {
+00088:       input: t.arg({ type: CreateLlmModelInput, required: true }),
+00089:     },
+00090:     resolve: async (_root, args, ctx) => {
+00091:       ctx.log.debug({ providerId: args.input.providerId, modelId: args.input.modelId }, 'Creating LLM model');
+00092: 
+00093:       const model = await createModel({
+00094:         providerId: args.input.providerId,
+00095:         modelId: args.input.modelId,
+00096:         displayName: args.input.displayName,
+00097:         costInputPerMillion: args.input.costInputPerMillion,
+00098:         costOutputPerMillion: args.input.costOutputPerMillion,
+00099:         setAsDefault: args.input.setAsDefault ?? false,
+00100:         createdByUserId: ctx.user?.id ?? null,
+00101:       });
+00102: 
+00103:       ctx.log.info({ modelId: model.id, apiModelId: model.modelId }, 'LLM model created');
+00104: 
+00105:       // Audit log (non-blocking)
+00106:       void createAuditLog({
+00107:         action: 'CREATE',
+00108:         entityType: 'LlmModel',
+00109:         entityId: model.id,
+00110:         userId: ctx.user?.id ?? null,
+00111:         metadata: { modelId: model.modelId, displayName: model.displayName },
+00112:       });
+00113: 
+00114:       return model;
+00115:     },
+00116:   })
+00117: );
+00118: 
+00119: // Mutation: updateLlmModel
+00120: builder.mutationField('updateLlmModel', (t) =>
+00121:   t.field({
+00122:     type: LlmModelRef,
+00123:     description: 'Update an LLM model (display name, costs, API config)',
+00124:     args: {
+00125:       id: t.arg.string({ required: true, description: 'Model ID to update' }),
+00126:       input: t.arg({ type: UpdateLlmModelInput, required: true }),
+00127:     },
+00128:     resolve: async (_root, args, ctx) => {
+00129:       ctx.log.debug({ id: args.id }, 'Updating LLM model');
+00130: 
+00131:       // Build update data - only include fields that were provi
+
+... [narrowed review slice: middle omitted] ...
+
+.id, balance: args.balance }, 'Provider balance set');
+00379: 
+00380:       void createAuditLog({
+00381:         action: 'ACTION',
+00382:         entityType: 'LlmProvider',
+00383:         entityId: provider.id,
+00384:         userId: ctx.user?.id ?? null,
+00385:         metadata: { action: 'set_provider_balance', balance: args.balance },
+00386:       });
+00387: 
+00388:       return provider;
+00389:     },
+00390:   })
+00391: );
+00392: 
+00393: // Mutation: syncProviderBalance
+00394: builder.mutationField('syncProviderBalance', (t) =>
+00395:   t.field({
+00396:     type: ProviderBalanceSyncLogRef,
+00397:     description: 'Sync the provider balance with the real balance from the provider dashboard',
+00398:     args: {
+00399:       providerId: t.arg.string({ required: true, description: 'Provider ID' }),
+00400:       realBalance: t.arg.float({ required: true, description: 'Real balance in dollars from provider dashboard' }),
+00401:     },
+00402:     resolve: async (_root, args, ctx) => {
+00403:       if (args.realBalance < 0) {
+00404:         throw new ValidationError('Real balance must be greater than or equal to 0');
+00405:       }
+00406: 
+00407:       const provider = await db.llmProvider.findUnique({ where: { id: args.providerId } });
+00408:       if (!provider) {
+00409:         throw new NotFoundError('LlmProvider', args.providerId);
+00410:       }
+00411: 
+00412:       const systemBalanceAtSync = provider.balance ?? new Prisma.Decimal(0);
+00413:       const enteredBalance = new Prisma.Decimal(args.realBalance);
+00414:       const delta = enteredBalance.minus(systemBalanceAtSync);
+00415: 
+00416:       const [syncLog] = await db.$transaction([
+00417:         db.providerBalanceSyncLog.create({
+00418:           data: {
+00419:             providerId: args.providerId,
+00420:             systemBalanceAtSync,
+00421:             enteredBalance,
+00422:             delta,
+00423:             createdByUserId: ctx.user?.id ?? null,
+00424:           },
+00425:         }),
+00426:         db.llmProvider.update({
+00427:           where: { id: args.providerId },
+00428:           data: { balance: enteredBalance },
+00429:         }),
+00430:       ]);
+00431: 
+00432:       ctx.log.info(
+00433:         { providerId: args.providerId, realBalance: args.realBalance, delta: delta.toNumber() },
+00434:         'Provider balance synced'
+00435:       );
+00436: 
+00437:       void createAuditLog({
+00438:         action: 'ACTION',
+00439:         entityType: 'LlmProvider',
+00440:         entityId: args.providerId,
+00441:         userId: ctx.user?.id ?? null,
+00442:         metadata: {
+00443:           action: 'sync_provider_balance',
+00444:           realBalance: args.realBalance,
+00445:           delta: delta.toNumber(),
+00446:         },
+00447:       });
+00448: 
+00449:       return syncLog;
+00450:     },
+00451:   })
+00452: );
+00453: 
+00454: // Mutation: updateSystemSetting
+00455: builder.mutationField('updateSystemSetting', (t) =>
+00456:   t.field({
+00457:     type: SystemSettingRef,
+00458:     description: 'Update a system setting (creates if not exists)',
+00459:     args: {
+00460:       input: t.arg({ type: UpdateSystemSettingInput, required: true }),
+00461:     },
+00462:     resolve: async (_root, args, ctx) => {
+00463:       ctx.log.debug({ key: args.input.key }, 'Updating system setting');
+00464: 
+00465:       const setting = await upsertSetting(args.input.key, args.input.value as Record<string, unknown>);
+00466: 
+00467:       ctx.log.info({ key: setting.key }, 'System setting updated');
+00468: 
+00469:       // Hot-reload summarize handler if parallelism setting changed
+00470:       if (args.input.key === 'infra_max_parallel_summarizations' && isBossRunning()) {
+00471:         try {
+00472:           const { reregisterSummarizeHandler } = await import('../../queue/handlers/index.js');
+00473:           const { clearSummarizationCache } = await import(
+00474:             '../../services/summarization-parallelism/index.js'
+00475:           );
+00476: 
+00477:           // Clear cache to ensure fresh value is used
+00478:           clearSummarizationCache();
+00479: 
+00480:           const boss = getBoss();
+00481:           await reregisterSummarizeHandler(boss);
+00482:           ctx.log.info('Summarize handler re-registered with new parallelism setting');
+00483:         } catch (err) {
+00484:           // Log but don't fail - settings are saved, restart will apply them
+00485:           ctx.log.error(
+00486:             { err },
+00487:             'Failed to re-register summarize handler (settings saved, restart required)'
+00488:           );
+00489:         }
+00490:       }
+00491: 
+00492:       // Audit log (non-blocking)
+00493:       void createAuditLog({
+00494:         action: 'UPDATE',
+00495:         entityType: 'SystemSetting',
+00496:         entityId: setting.id,
+00497:         userId: ctx.user?.id ?? null,
+00498:         metadata: { key: setting.key },
+00499:       });
+00500: 
+00501:       
