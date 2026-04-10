@@ -17,12 +17,21 @@ const COMPONENTS = {
   },
 };
 
-describe('assembleTemplate', () => {
-  // --- Default prefix (includes [level]) ---
+const JOB_CHOICE_CONFIG = {
+  sentencePrefix: 'One job offers [level]',
+  labelPrefix: 'taking the job with',
+};
 
-  it('produces the correct sentence structure with default prefix', () => {
-    const result = assembleTemplate(CONTEXT, COMPONENTS);
-    // Default prefix is "One job offers [level]" — without levelWords, [level] stays
+const SOFTWARE_APPROACH_CONFIG = {
+  sentencePrefix: 'One approach provides [level]',
+  labelPrefix: 'choosing the approach relating to',
+};
+
+describe('assembleTemplate', () => {
+  // --- Job-choice domain ---
+
+  it('produces the correct sentence structure with job-choice config', () => {
+    const result = assembleTemplate(CONTEXT, COMPONENTS, undefined, JOB_CHOICE_CONFIG);
     expect(result).toContain('One job offers [level] recognition of their expertise');
     expect(result).toContain('One job offers [level] enjoyment in their daily experience');
   });
@@ -31,7 +40,7 @@ describe('assembleTemplate', () => {
     const result = assembleTemplate(CONTEXT, COMPONENTS, {
       first: 'moderate',
       second: 'substantial',
-    });
+    }, JOB_CHOICE_CONFIG);
     expect(result).toContain('One job offers moderate recognition of their expertise');
     expect(result).toContain('One job offers substantial enjoyment in their daily experience');
     expect(result).not.toContain('[level]');
@@ -41,7 +50,7 @@ describe('assembleTemplate', () => {
     const result = assembleTemplate(CONTEXT, COMPONENTS, {
       first: 'negligible',
       second: 'full',
-    });
+    }, JOB_CHOICE_CONFIG);
     expect(result).toContain(
       '- Strongly support taking the job with recognition of their expertise',
     );
@@ -54,20 +63,17 @@ describe('assembleTemplate', () => {
   });
 
   it('includes the context text at the top', () => {
-    const result = assembleTemplate(CONTEXT, COMPONENTS);
+    const result = assembleTemplate(CONTEXT, COMPONENTS, undefined, JOB_CHOICE_CONFIG);
     expect(result.startsWith(CONTEXT)).toBe(true);
   });
 
-  // --- Custom prefix (domain-specific) ---
+  // --- Software-approach-choice domain ---
 
-  it('uses custom sentencePrefix with [level] substitution', () => {
+  it('uses software-approach-choice config correctly', () => {
     const result = assembleTemplate(CONTEXT, COMPONENTS, {
       first: 'full',
       second: 'negligible',
-    }, {
-      sentencePrefix: 'One approach provides [level]',
-      labelPrefix: 'choosing the approach relating to',
-    });
+    }, SOFTWARE_APPROACH_CONFIG);
     expect(result).toContain('One approach provides full recognition of their expertise');
     expect(result).toContain('One approach provides negligible enjoyment in their daily experience');
     expect(result).toContain(
@@ -76,12 +82,27 @@ describe('assembleTemplate', () => {
     expect(result).not.toContain('[level]');
   });
 
+  // --- No config (empty prefix) ---
+
+  it('uses default sentence prefix when no config provided', () => {
+    const result = assembleTemplate(CONTEXT, COMPONENTS);
+    // DEFAULT_SENTENCE_PREFIX is 'One job offers [level]'
+    expect(result).toContain('One job offers [level] recognition of their expertise');
+  });
+
+  it('produces scale labels with empty prefix when no config provided', () => {
+    const result = assembleTemplate(CONTEXT, COMPONENTS);
+    // No labelPrefix → empty string → label is just the truncated body
+    expect(result).toContain('- Strongly support  recognition of their expertise');
+  });
+
   it('handles prefix without [level] (backward compat)', () => {
     const result = assembleTemplate(CONTEXT, COMPONENTS, {
       first: 'full',
       second: 'negligible',
     }, {
       sentencePrefix: 'One job offers',
+      labelPrefix: 'taking the job with',
     });
     // No [level] in prefix means level words don't appear — prefix is used as-is
     expect(result).toContain('One job offers recognition of their expertise');
@@ -107,14 +128,14 @@ describe('assembleTemplate', () => {
     const withLevel = assembleTemplate(CONTEXT, legacyComponents, {
       first: 'full',
       second: 'negligible',
-    });
+    }, JOB_CHOICE_CONFIG);
     expect(withLevel).toContain('One job offers full recognition of their expertise');
     expect(withLevel).toContain('One job offers negligible enjoyment');
     // Must NOT have double [level] or leftover [level]
     expect(withLevel).not.toContain('[level]');
 
     // Without level words: [level] in prefix stays (base template mode), body [level] is stripped
-    const withoutLevel = assembleTemplate(CONTEXT, legacyComponents);
+    const withoutLevel = assembleTemplate(CONTEXT, legacyComponents, undefined, JOB_CHOICE_CONFIG);
     expect(withoutLevel).toContain('One job offers [level] recognition of their expertise');
     // Body [level] must be stripped — no double [level] in the sentence
     expect(withoutLevel).not.toContain('[level] [level]');

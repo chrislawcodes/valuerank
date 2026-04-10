@@ -54,6 +54,8 @@ builder.objectType(DomainRef, {
       },
     }),
     defaultModelIds: t.exposeStringList('defaultModelIds'),
+    sentencePrefix: t.exposeString('sentencePrefix', { nullable: true }),
+    labelPrefix: t.exposeString('labelPrefix', { nullable: true }),
     defaultContextId: t.exposeString('defaultContextId', { nullable: true }),
     defaultContext: t.field({
       type: DomainContextRef,

@@ -20,6 +20,37 @@ const PAIR: DecisionPair = {
   valueB: 'Benevolence_Dependability',
 };
 
+// Realistic job-choice snapshot with components + template so snapshot-based
+// extraction can derive value statements and label prefix.
+const JOB_CHOICE_COMPONENTS = {
+  value_first: {
+    token: 'achievement',
+    body: 'recognition of their expertise because of how it relates to success through strong performance',
+  },
+  value_second: {
+    token: 'benevolence_dependability',
+    body: 'trust from other people because of how it relates to being someone others can rely on to carry through on shared responsibilities',
+  },
+};
+
+const JOB_CHOICE_TEMPLATE_LINES = [
+  '- Strongly support taking the job with recognition of their expertise',
+  '- Somewhat support taking the job with recognition of their expertise',
+  '- Neutral / Unsure',
+  '- Somewhat support taking the job with trust from other people',
+  '- Strongly support taking the job with trust from other people',
+].join('\n');
+
+function jobChoiceSnapshot(presentationOrder: string, overrides: Record<string, unknown> = {}) {
+  return {
+    dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
+    methodology: { presentation_order: presentationOrder },
+    components: JOB_CHOICE_COMPONENTS,
+    template: `Some preamble\n${JOB_CHOICE_TEMPLATE_LINES}`,
+    ...overrides,
+  };
+}
+
 function buildManualOverride(
   overrides: Partial<NonNullable<RawDecisionEvidence['manualOverride']>> = {},
 ): NonNullable<RawDecisionEvidence['manualOverride']> {
@@ -164,12 +195,7 @@ describe('decision model', () => {
         responseExcerpt: '**Strongly support taking the job with trust from other people** ...',
         matchedLabel: null,
       },
-      definitionSnapshot: {
-        dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
-        methodology: {
-          presentation_order: 'A_first',
-        },
-      },
+      definitionSnapshot: jobChoiceSnapshot('A_first'),
       orientationFlipped: true,
     });
 
@@ -200,12 +226,7 @@ describe('decision model', () => {
         matchedLabel: 'Strongly support taking the job with trust from other people',
         responseExcerpt: 'Level of Support: Strongly support taking the job with trust from other people ...',
       },
-      definitionSnapshot: {
-        dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
-        methodology: {
-          presentation_order: 'B_first',
-        },
-      },
+      definitionSnapshot: jobChoiceSnapshot('B_first'),
       orientationFlipped: true,
     });
 
@@ -594,10 +615,7 @@ describe('decision model', () => {
         matchedLabel: achievementLabel,
         responseExcerpt: `Level of Support: ${achievementLabel}`,
       },
-      definitionSnapshot: {
-        dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
-        methodology: { presentation_order: 'A_first' },
-      },
+      definitionSnapshot: jobChoiceSnapshot('A_first'),
       orientationFlipped: false,
     });
 
@@ -610,10 +628,7 @@ describe('decision model', () => {
         matchedLabel: achievementLabel,
         responseExcerpt: `Level of Support: ${achievementLabel}`,
       },
-      definitionSnapshot: {
-        dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
-        methodology: { presentation_order: 'B_first' },
-      },
+      definitionSnapshot: jobChoiceSnapshot('B_first'),
       orientationFlipped: true,
     });
 

@@ -1,5 +1,5 @@
 import { DOMAIN_ANALYSIS_VALUE_KEYS, extractValuePair, toPascalCaseKey, type DomainAnalysisValueKey, type DomainAnalysisValuePair } from '../domain-analysis-values.js';
-import { JOB_CHOICE_VALUE_STATEMENTS, labelFromBody } from '@valuerank/shared';
+import { labelFromBody } from '@valuerank/shared';
 
 export type DecisionDirection = 'favor_first' | 'favor_second' | 'neutral' | 'refusal' | 'unknown';
 export type DecisionStrength = 'strong' | 'lean' | 'neutral' | 'unknown';
@@ -82,6 +82,7 @@ export type DecisionModelInput = {
   manualOverrideDecision?: CanonicalAppliedDecision | null;
   cachedDecision?: CachedWinnerFirstDecision | null;
   valueStatements?: readonly ValueStatementEntry[];
+  labelPrefix?: string | null;
 };
 
 export type DecisionModelResult = {
@@ -261,20 +262,25 @@ function parseJobChoiceStrengthFromText(text: string): DecisionStrength | null {
   return null;
 }
 
-function resolveJobChoiceValueKeyFromText(
+function resolveValueKeyFromText(
   text: string,
-  valueStatements?: readonly ValueStatementEntry[],
+  valueStatements: readonly ValueStatementEntry[] | undefined,
+  labelPrefix: string | null,
 ): DomainAnalysisValueKey | null {
+  if (valueStatements == null || valueStatements.length === 0) {
+    return null;
+  }
+
   const normalized = normalizeJobChoiceLabelText(text);
   if (normalized.length === 0) {
     return null;
   }
 
-  const entries: readonly ValueStatementEntry[] = valueStatements ?? JOB_CHOICE_VALUE_STATEMENTS;
+  const prefix = labelPrefix ?? '';
   let resolved: DomainAnalysisValueKey | null = null;
-  for (const entry of entries) {
+  for (const entry of valueStatements) {
     const valueKey = toPascalCaseKey(entry.token) as DomainAnalysisValueKey;
-    const label = normalizeJobChoiceLabelText(labelFromBody(entry.body));
+    const label = normalizeJobChoiceLabelText(labelFromBody(entry.body, prefix));
     if (!label || !normalized.includes(label)) {
       continue;
     }
@@ -477,6 +483,59 @@ export function buildRawDecisionEvidence(
   };
 }
 
+function extractValueStatementsFromSnapshot(snapshot: unknown): ValueStatementEntry[] | undefined {
+  if (snapshot === null || typeof snapshot !== 'object' || Array.isArray(snapshot)) return undefined;
+  const components = (snapshot as { components?: unknown }).components;
+  if (components === null || typeof components !== 'object' || Array.isArray(components)) return undefined;
+
+  const vf = (components as { value_first?: unknown }).value_first;
+  const vs = (components as { value_second?: unknown }).value_second;
+  if (!isRecord(vf) || !isRecord(vs)) return undefined;
+
+  const tokenFirst = typeof vf.token === 'string' ? vf.token : null;
+  const bodyFirst = typeof vf.body === 'string' ? vf.body : null;
+  const tokenSecond = typeof vs.token === 'string' ? vs.token : null;
+  const bodySecond = typeof vs.body === 'string' ? vs.body : null;
+
+  if (tokenFirst == null || bodyFirst == null || tokenSecond == null || bodySecond == null) return undefined;
+  return [
+    { token: tokenFirst, body: bodyFirst },
+    { token: tokenSecond, body: bodySecond },
+  ];
+}
+
+const LABEL_PREFIX_REGEX = /^(?:Strongly|Somewhat) support (.+)$/;
+
+function extractLabelPrefixFromSnapshot(snapshot: unknown): string | undefined {
+  if (snapshot === null || typeof snapshot !== 'object' || Array.isArray(snapshot)) return undefined;
+  const template = (snapshot as { template?: unknown }).template;
+  if (typeof template !== 'string') return undefined;
+
+  const components = (snapshot as { components?: unknown }).components;
+  if (components === null || typeof components !== 'object' || Array.isArray(components)) return undefined;
+  const vf = (components as { value_first?: unknown }).value_first;
+  if (!isRecord(vf) || typeof vf.body !== 'string') return undefined;
+
+  // Extract the short body (before "because") to find it in the scale label
+  const shortBody = (vf.body.split(' because')[0] ?? vf.body).trim();
+  if (shortBody.length === 0) return undefined;
+
+  // Find a scale label line that ends with the short body
+  const lines = template.split('\n');
+  for (const line of lines) {
+    const trimmed = line.replace(/^- /, '').trim();
+    const match = LABEL_PREFIX_REGEX.exec(trimmed);
+    if (match == null) continue;
+    const afterStrength = match[1] ?? '';
+    if (afterStrength.endsWith(shortBody)) {
+      const prefix = afterStrength.slice(0, afterStrength.length - shortBody.length).trimEnd();
+      if (prefix.length > 0) return prefix;
+    }
+  }
+
+  return undefined;
+}
+
 export function resolveTranscriptDecisionModel(
   input: TranscriptDecisionModelInput,
 ): TranscriptDecisionModelResult {
@@ -484,6 +543,10 @@ export function resolveTranscriptDecisionModel(
   const raw = buildRawDecisionEvidence(input.decisionMetadata);
   const manualOverrideDecision = extractManualOverrideDecision(input.decisionMetadata);
   const cachedDecision = extractCachedWinnerFirstDecision(input.decisionMetadata);
+
+  const valueStatements = extractValueStatementsFromSnapshot(input.definitionSnapshot);
+  const labelPrefix = extractLabelPrefixFromSnapshot(input.definitionSnapshot) ?? null;
+
   const resolved = resolveDecisionModel({
     pair,
     orientationFlipped: input.orientationFlipped,
@@ -491,6 +554,8 @@ export function resolveTranscriptDecisionModel(
     manualOverridePresent: manualOverrideDecision !== null,
     manualOverrideDecision,
     cachedDecision,
+    valueStatements,
+    labelPrefix,
   });
 
   return resolved;
@@ -517,10 +582,11 @@ export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDe
 
   const parsedPath = parseDecisionPath(input.raw.parsePath);
   const cachedDecision = input.cachedDecision ?? null;
-  if (cachedDecision) {
-    if (cachedDecision.decisionState === 'unknown') {
-      return buildUnknownCanonicalDecision('unknown');
-    }
+  if (cachedDecision && cachedDecision.decisionState !== 'unknown') {
+    // When cachedDecision.decisionState is 'unknown', skip the cache and
+    // fall through to re-resolve from raw evidence. This handles cases where
+    // the cache was built with incorrect config (e.g. wrong value statements
+    // or label prefix for the domain family).
 
     if (cachedDecision.decisionState === 'neutral') {
       return buildCanonicalDecisionFromPair(
@@ -578,7 +644,7 @@ export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDe
       );
     }
 
-    const favoredValueKey = resolveJobChoiceValueKeyFromText(candidateText, input.valueStatements);
+    const favoredValueKey = resolveValueKeyFromText(candidateText, input.valueStatements, input.labelPrefix ?? null);
     if (favoredValueKey === null) {
       return buildUnknownCanonicalDecision('unknown');
     }

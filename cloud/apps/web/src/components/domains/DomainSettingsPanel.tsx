@@ -14,7 +14,7 @@ import {
   type DomainContext,
 } from '../../api/operations/domain-contexts';
 import type { SetDomainSettingsMutationVariables } from '../../api/operations/domains';
-import { labelFromBody, DEFAULT_SENTENCE_PREFIX, DEFAULT_LABEL_PREFIX } from '@valuerank/shared';
+import { labelFromBody, DEFAULT_SENTENCE_PREFIX } from '@valuerank/shared';
 
 const PREAMBLES_QUERY = `
   query PreamblesForDomainSettings {
@@ -348,7 +348,7 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
         <input
           type="text"
           className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
-          placeholder={DEFAULT_LABEL_PREFIX}
+          placeholder="e.g. taking the job with"
           value={localLabelPrefix}
           onChange={(e) => setLocalLabelPrefix(e.target.value)}
         />
@@ -364,8 +364,7 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
           <div className="rounded border border-gray-200 bg-gray-50 p-2 space-y-1">
             {sortedStatements.map((vs) => {
               const body = drafts[vs.token] !== undefined ? (drafts[vs.token] as string) : vs.currentContent;
-              const prefix = localLabelPrefix !== '' ? localLabelPrefix : undefined;
-              const label = labelFromBody(body, prefix);
+              const label = labelFromBody(body, localLabelPrefix);
               return (
                 <div key={vs.token} className="flex items-start gap-2 text-xs">
                   <span className="font-mono text-teal-700 uppercase tracking-wide shrink-0">

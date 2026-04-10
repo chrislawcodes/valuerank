@@ -10,6 +10,8 @@ export type Domain = {
   defaultPreambleVersionId: string | null;
   defaultContextId: string | null;
   defaultModelIds: string[];
+  sentencePrefix: string | null;
+  labelPrefix: string | null;
 };
 
 export const DOMAINS_QUERY = gql`
@@ -24,6 +26,8 @@ export const DOMAINS_QUERY = gql`
       defaultPreambleVersionId
       defaultContextId
       defaultModelIds
+      sentencePrefix
+      labelPrefix
     }
   }
 `;
