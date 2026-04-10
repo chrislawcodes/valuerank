@@ -206,6 +206,44 @@ async function transitionStatus(
 }
 
 /**
+ * Wait for transcript rows to settle before counting.
+ *
+ * When the last probe job triggers SUMMARIZING, other probe jobs may still
+ * be committing their transcript rows. This polls briefly (up to 5 seconds)
+ * until the DB transcript count matches the expected total from probe progress,
+ * so the summarization denominator is accurate.
+ */
+const SETTLE_POLL_INTERVAL_MS = 500;
+const SETTLE_MAX_WAIT_MS = 5_000;
+
+async function waitForTranscriptSettle(
+  runId: string,
+  expectedCompleted: number,
+): Promise<number> {
+  const deadline = Date.now() + SETTLE_MAX_WAIT_MS;
+
+  while (Date.now() < deadline) {
+    const count = await db.transcript.count({ where: { runId } });
+    if (count >= expectedCompleted) {
+      return count;
+    }
+    log.debug(
+      { runId, dbCount: count, expected: expectedCompleted },
+      'Waiting for in-flight transcript commits to settle'
+    );
+    await new Promise((resolve) => setTimeout(resolve, SETTLE_POLL_INTERVAL_MS));
+  }
+
+  // Timed out — return whatever we have
+  const finalCount = await db.transcript.count({ where: { runId } });
+  log.warn(
+    { runId, dbCount: finalCount, expected: expectedCompleted },
+    'Transcript settle timed out — proceeding with current count'
+  );
+  return finalCount;
+}
+
+/**
  * Queues summarize jobs for all transcripts in a run.
  */
 async function queueSummarizeJobs(runId: string): Promise<void> {
@@ -214,6 +252,19 @@ async function queueSummarizeJobs(runId: string): Promise<void> {
   const { DEFAULT_JOB_OPTIONS } = await import('../../queue/types.js');
 
   const boss = getBoss();
+
+  // Read the probe progress to know how many successful transcripts to expect
+  const run = await db.run.findUnique({
+    where: { id: runId },
+    select: { progress: true },
+  });
+  const probeProgress = run?.progress as ProgressData | null;
+  const expectedCompleted = probeProgress?.completed ?? 0;
+
+  // Wait for in-flight transcript commits before counting
+  if (expectedCompleted > 0) {
+    await waitForTranscriptSettle(runId, expectedCompleted);
+  }
 
   // Get all transcripts for this run
   const transcripts = await db.transcript.findMany({
