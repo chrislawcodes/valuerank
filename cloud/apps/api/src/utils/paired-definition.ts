@@ -3,6 +3,7 @@ import {
   assembleTemplate,
   getJobChoiceValueStatementBody,
   getSoftwareApproachValueStatementBody,
+  type TemplateConfig,
 } from '@valuerank/shared';
 
 type PairedContentLike = Pick<DefinitionContent, 'template' | 'components' | 'methodology'>;
@@ -10,6 +11,11 @@ type PairedContentLike = Pick<DefinitionContent, 'template' | 'components' | 'me
 const SENTENCE_PREFIX_BY_FAMILY: Record<string, string> = {
   'job-choice': 'One job offers ',
   'software-approach-choice': 'One approach provides ',
+};
+
+const TEMPLATE_CONFIG_BY_FAMILY: Record<string, TemplateConfig> = {
+  'job-choice': { sentencePrefix: 'One job offers [level]', labelPrefix: 'taking the job with' },
+  'software-approach-choice': { sentencePrefix: 'One approach provides [level]', labelPrefix: 'choosing the approach relating to' },
 };
 
 type BodyLookup = (token: string) => string | undefined;
@@ -71,7 +77,8 @@ export function normalizePairedDefinitionContent<T>(content: T): T {
   }
 
   const normalizedComponents = normalizePairedComponents(content.components, family);
-  const normalizedTemplate = assembleTemplate(intro, normalizedComponents);
+  const templateConfig = TEMPLATE_CONFIG_BY_FAMILY[family];
+  const normalizedTemplate = assembleTemplate(intro, normalizedComponents, undefined, templateConfig);
 
   return {
     ...content,

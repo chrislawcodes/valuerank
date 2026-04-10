@@ -12,16 +12,14 @@ export type TemplateConfig = {
 };
 
 export const DEFAULT_SENTENCE_PREFIX = 'One job offers [level]';
-export const DEFAULT_LABEL_PREFIX = 'taking the job with';
 
-export function labelFromBody(body: string, labelPrefix?: string | null): string {
+export function labelFromBody(body: string, labelPrefix: string): string {
   // Extract a stable scale label from the value statement body.
   // Bodies should not contain [level] (it belongs in sentencePrefix),
   // but strip it defensively for backward compatibility.
   const clean = body.replace(/\[level\]\s*/g, '');
   const beforeBecause = (clean.split(' because')[0] ?? clean).trim();
-  const prefix = labelPrefix ?? DEFAULT_LABEL_PREFIX;
-  return `${prefix} ${beforeBecause}`;
+  return `${labelPrefix} ${beforeBecause}`;
 }
 
 function buildScale(labelFirst: string, labelSecond: string): string {
@@ -66,8 +64,10 @@ export function assembleTemplate(
 
   // Scale labels use the original body (stripped of [level]) so they are stable
   // regardless of which level word was substituted.
-  const labelFirst = labelFromBody(value_first.body, config?.labelPrefix);
-  const labelSecond = labelFromBody(value_second.body, config?.labelPrefix);
+  // labelPrefix is required — callers must provide config with a labelPrefix.
+  const lp = config?.labelPrefix ?? '';
+  const labelFirst = labelFromBody(value_first.body, lp);
+  const labelSecond = labelFromBody(value_second.body, lp);
 
   return [
     contextText,

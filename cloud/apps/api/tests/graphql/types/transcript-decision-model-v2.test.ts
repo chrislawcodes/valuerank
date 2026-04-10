@@ -112,6 +112,24 @@ describe('Transcript decisionModelV2 GraphQL field', () => {
           methodology: {
             presentation_order: 'B_first',
           },
+          components: {
+            value_first: {
+              token: 'achievement',
+              body: 'recognition of their expertise because of how it relates to success through strong performance',
+            },
+            value_second: {
+              token: 'benevolence_dependability',
+              body: 'trust from other people because of how it relates to being someone others can rely on to carry through on shared responsibilities',
+            },
+          },
+          template: [
+            'Some preamble',
+            '- Strongly support taking the job with recognition of their expertise',
+            '- Somewhat support taking the job with recognition of their expertise',
+            '- Neutral / Unsure',
+            '- Somewhat support taking the job with trust from other people',
+            '- Strongly support taking the job with trust from other people',
+          ].join('\n'),
         },
         content: { turns: [] },
         turnCount: 1,

@@ -1,4 +1,4 @@
-import { assembleTemplate } from '@valuerank/shared';
+import { assembleTemplate, type TemplateConfig } from '@valuerank/shared';
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { gql, useMutation, useQuery } from 'urql';
@@ -218,12 +218,17 @@ export function PairedVignetteNew() {
     const levelWords = selectedLevelPresetVersion != null
       ? { first: selectedLevelPresetVersion.l3, second: selectedLevelPresetVersion.l3 }
       : undefined;
+    const selectedDomain = domains.find((d) => d.id === selectedDomainId);
+    const templateConfig: TemplateConfig | undefined =
+      selectedDomain?.sentencePrefix != null || selectedDomain?.labelPrefix != null
+        ? { sentencePrefix: selectedDomain.sentencePrefix ?? undefined, labelPrefix: selectedDomain.labelPrefix ?? undefined }
+        : undefined;
     return assembleTemplate(selectedContext.text, {
       context_id: selectedContextId,
       value_first: { token: valueFirst.token, body: valueFirst.body },
       value_second: { token: valueSecond.token, body: valueSecond.body },
-    }, levelWords);
-  }, [selectedContext, selectedContextId, valueFirst, valueSecond, selectedLevelPresetVersion]);
+    }, levelWords, templateConfig);
+  }, [selectedContext, selectedContextId, valueFirst, valueSecond, selectedLevelPresetVersion, domains, selectedDomainId]);
 
   const loadingError =
     definitionError?.message ??

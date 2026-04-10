@@ -52,14 +52,81 @@ const LEVEL_WORD_TO_NUMBER: Record<string, number> = {
   negligible: 1,
 };
 
+const STRENGTH_PREFIXES = ['Strongly support', 'Somewhat support'];
+
 /**
  * Extracts the short direction phrase from a full scale label.
- * "Strongly support taking the job with..." → "Strongly support"
- * "Neutral / Unsure" → "Neutral / Unsure" (no truncation)
+ * "Strongly support choosing the approach relating to..." → "Strongly support"
+ * "Neutral / Unsure" → "Neutral / Unsure"
  */
 function extractShortDirection(fullLabel: string): string {
-  const idx = fullLabel.toLowerCase().indexOf(' taking ');
-  return idx !== -1 ? fullLabel.slice(0, idx) : fullLabel;
+  for (const prefix of STRENGTH_PREFIXES) {
+    if (fullLabel.startsWith(prefix)) return prefix;
+  }
+  return fullLabel;
+}
+
+/**
+ * Extracts the value subject from a scale label by stripping the strength prefix
+ * and any domain-specific label prefix.
+ * E.g. "Strongly support taking the job with recognition of their expertise"
+ *   → "recognition of their expertise"
+ * Works for any domain by detecting the label prefix from the scale labels.
+ */
+function extractSubjectFromLabel(
+  labelText: string,
+  scaleLabels: Array<{ code: string; label: string }>,
+): string | null {
+  // Find a non-neutral scale label to detect the label prefix pattern
+  const sampleLabel = scaleLabels.find((entry) =>
+    entry.label.startsWith('Strongly support') || entry.label.startsWith('Somewhat support'),
+  )?.label;
+  if (sampleLabel == null) return null;
+
+  // Find which strength prefix this label uses
+  let strengthPrefix: string | null = null;
+  for (const prefix of STRENGTH_PREFIXES) {
+    if (labelText.startsWith(prefix)) {
+      strengthPrefix = prefix;
+      break;
+    }
+  }
+  if (strengthPrefix == null) return null;
+
+  // The text after "Strongly support " or "Somewhat support " includes the
+  // label prefix + the value body. We need to find where the body starts.
+  // Strategy: find the label prefix by comparing two different scale labels.
+  const afterStrength = labelText.slice(strengthPrefix.length).trimStart();
+
+  // Find two non-neutral labels to detect the common prefix
+  const nonNeutralLabels = scaleLabels
+    .filter((entry) => entry.label.startsWith('Strongly support') || entry.label.startsWith('Somewhat support'))
+    .map((entry) => {
+      for (const prefix of STRENGTH_PREFIXES) {
+        if (entry.label.startsWith(prefix)) {
+          return entry.label.slice(prefix.length).trimStart();
+        }
+      }
+      return entry.label;
+    });
+
+  if (nonNeutralLabels.length < 2) return afterStrength.length > 0 ? afterStrength : null;
+
+  // Find the common prefix among all non-neutral labels — that's the label prefix
+  let commonPrefix = '';
+  const first = nonNeutralLabels[0] ?? '';
+  for (let i = 0; i < first.length; i++) {
+    const char = first[i];
+    if (nonNeutralLabels.every((label) => label[i] === char)) {
+      commonPrefix += char;
+    } else {
+      break;
+    }
+  }
+
+  // The subject is what comes after the common prefix (the label prefix)
+  const subject = afterStrength.slice(commonPrefix.length).trim();
+  return subject.length > 0 ? subject : null;
 }
 
 
@@ -102,15 +169,14 @@ function getLegacyDecisionDisplay(
     : (rawMatchedLabel ?? decisionScaleEntry?.label ?? null);
   const shortDirection = labelText != null ? extractShortDirection(labelText) : null;
   const primaryDimKey = dimensions != null ? (Object.keys(dimensions)[0] ?? null) : null;
-  const jobWithMarker = ' taking the job with ';
-  const jobWithIdx = labelText?.toLowerCase().indexOf(jobWithMarker) ?? -1;
-  const jobSubject = jobWithIdx >= 0 && labelText != null
-    ? formatDisplayLabel(labelText.slice(jobWithIdx + jobWithMarker.length))
+  const subject = labelText != null
+    ? extractSubjectFromLabel(labelText, decisionScaleLabels)
     : null;
+  const formattedSubject = subject != null ? formatDisplayLabel(subject) : null;
 
   return shortDirection != null
-    ? (jobSubject != null
-        ? `${normalizedDecision} - ${shortDirection} (${jobSubject})`
+    ? (formattedSubject != null
+        ? `${normalizedDecision} - ${shortDirection} (${formattedSubject})`
         : (primaryDimKey != null ? `${normalizedDecision} - ${shortDirection} ${formatDisplayLabel(primaryDimKey)}` : `${normalizedDecision} - ${shortDirection}`))
     : String(normalizedDecision);
 }
