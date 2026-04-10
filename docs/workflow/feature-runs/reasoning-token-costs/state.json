@@ -31,5 +31,6 @@
     "markers_sha": "",
     "last_diff_head_sha": ""
   },
-  "checkpoint_fallback": {}
+  "checkpoint_fallback": {},
+  "dirty_overrides": {}
 }
