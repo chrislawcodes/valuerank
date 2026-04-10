@@ -16,8 +16,8 @@ from pathlib import Path
 # Repository root + canonical subdirectory roots
 # ---------------------------------------------------------------------------
 
-REPO_ROOT: Path = Path(__file__).resolve().parents[5]
-FACTORY_RUNS_ROOT: Path = REPO_ROOT / "docs" / "feature-runs"
+REPO_ROOT: Path = Path(__file__).resolve().parents[6]
+FACTORY_RUNS_ROOT: Path = REPO_ROOT / "docs" / "workflow" / "feature-runs"
 
 # ---------------------------------------------------------------------------
 # String constants used as workflow-state dictionary keys
