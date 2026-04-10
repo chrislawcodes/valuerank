@@ -667,14 +667,37 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       };
     }
 
-    const transcriptRecord = await createTranscript({
-      runId,
-      scenarioId,
-      modelId,
-      sampleIndex,
-      transcript: output.transcript,
-      definitionSnapshot: scenario.definition.content as Prisma.InputJsonValue,
-      costSnapshot,
+    // Use an advisory lock to prevent concurrent probe jobs from creating
+    // duplicate transcripts for the same (runId, scenarioId, modelId, sampleIndex).
+    // Without this, two retries can both pass the "existing transcript?" check
+    // before either finishes inserting, producing duplicate rows.
+    const probeKey = `${runId}:${scenarioId}:${modelId}:${sampleIndex}`;
+    const transcriptRecord = await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${probeKey}))`;
+
+      // Re-check inside the lock — another job may have inserted while we waited
+      const alreadyCreated = await tx.transcript.findFirst({
+        where: { runId, scenarioId, modelId, sampleIndex, deletedAt: null },
+        select: { id: true, durationMs: true, tokenCount: true, content: true },
+      });
+
+      if (alreadyCreated !== null) {
+        log.info(
+          { runId, scenarioId, modelId, sampleIndex, existingId: alreadyCreated.id },
+          'Transcript already created by concurrent job — skipping duplicate insert'
+        );
+        return alreadyCreated;
+      }
+
+      return createTranscript({
+        runId,
+        scenarioId,
+        modelId,
+        sampleIndex,
+        transcript: output.transcript,
+        definitionSnapshot: scenario.definition.content as Prisma.InputJsonValue,
+        costSnapshot,
+      }, tx);
     });
 
     // Record probe success in results table
