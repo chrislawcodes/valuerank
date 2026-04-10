@@ -253,13 +253,7 @@ class TestReasoningTokenTracking:
             reasoning_tokens_included_in_output=False,
         )
 
-        base_output = response.output_tokens or 0
-        extra_reasoning = (response.reasoning_tokens or 0) if (
-            response.reasoning_tokens and not response.reasoning_tokens_included_in_output
-        ) else 0
-        transcript.total_output_tokens += base_output + extra_reasoning
-        if response.reasoning_tokens:
-            transcript.total_reasoning_tokens += response.reasoning_tokens
+        transcript.accumulate_response(response)
 
         assert transcript.total_output_tokens == 500
         assert transcript.total_reasoning_tokens == 400
@@ -276,13 +270,7 @@ class TestReasoningTokenTracking:
             reasoning_tokens_included_in_output=True,
         )
 
-        base_output = response.output_tokens or 0
-        extra_reasoning = (response.reasoning_tokens or 0) if (
-            response.reasoning_tokens and not response.reasoning_tokens_included_in_output
-        ) else 0
-        transcript.total_output_tokens += base_output + extra_reasoning
-        if response.reasoning_tokens:
-            transcript.total_reasoning_tokens += response.reasoning_tokens
+        transcript.accumulate_response(response)
 
         assert transcript.total_output_tokens == 500
         assert transcript.total_reasoning_tokens == 400
@@ -299,13 +287,7 @@ class TestReasoningTokenTracking:
             reasoning_tokens_included_in_output=False,
         )
 
-        base_output = response.output_tokens or 0
-        extra_reasoning = (response.reasoning_tokens or 0) if (
-            response.reasoning_tokens and not response.reasoning_tokens_included_in_output
-        ) else 0
-        transcript.total_output_tokens += base_output + extra_reasoning
-        if response.reasoning_tokens:
-            transcript.total_reasoning_tokens += response.reasoning_tokens
+        transcript.accumulate_response(response)
 
         # reasoning tokens (not included in output) must be added to total_output_tokens for billing
         assert transcript.total_output_tokens == 100
