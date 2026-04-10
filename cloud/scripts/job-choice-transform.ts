@@ -7,6 +7,7 @@ import {
   assembleTemplate,
   getJobChoiceValueStatementBody,
   labelFromBody,
+  type TemplateConfig,
 } from '@valuerank/shared';
 
 
@@ -66,7 +67,11 @@ export function transformJobChoiceDefinition(
     value_second: { token: secondToken, body: secondBody },
   };
 
-  const assembledTemplate = assembleTemplate(intro, components);
+  const JOB_CHOICE_CONFIG: TemplateConfig = {
+    sentencePrefix: 'One job offers [level]',
+    labelPrefix: 'taking the job with',
+  };
+  const assembledTemplate = assembleTemplate(intro, components, undefined, JOB_CHOICE_CONFIG);
 
   const labelFirst = labelFromBody(firstBody, 'taking the job with');
   const labelSecond = labelFromBody(secondBody, 'taking the job with');
