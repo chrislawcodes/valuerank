@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/api/src/graphql/mutations/llm.ts",
+  "source_artifact_sha256": "340991418d8d292d07af287f3b629686c9d28f1b37bd92e145b7f06e0f0db465",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/balance-ui-merge/reviews/spec.codex.feasibility-adversarial.review.context0.narrowed.txt",
+  "narrowed_artifact_sha256": "d5ef9233e82da04f3de12849b922595bbdeeb4643d509b35c8e906d4dd454a11",
+  "strategy": "head-tail-numbered-lines"
+}

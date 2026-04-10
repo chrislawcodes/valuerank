@@ -14,7 +14,6 @@ export function ProviderSettingsModal({
   provider,
   onClose,
   onSave,
-  onSync,
 }: ProviderSettingsModalProps) {
   const [requestsPerMinute, setRequestsPerMinute] = useState(provider.requestsPerMinute.toString());
   const [maxParallelRequests, setMaxParallelRequests] = useState(
@@ -24,9 +23,6 @@ export function ProviderSettingsModal({
   const [balanceInput, setBalanceInput] = useState(
     provider.balance != null ? provider.balance.toFixed(2) : ''
   );
-  // Sync section: separate input for entering the real provider balance
-  const [syncInput, setSyncInput] = useState('');
-  const [isSyncing, setIsSyncing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const parsedBalance = balanceInput.trim() === '' ? null : parseFloat(balanceInput);
@@ -45,17 +41,6 @@ export function ProviderSettingsModal({
     });
 
     setIsSaving(false);
-  };
-
-  const parsedSyncBalance = syncInput.trim() === '' ? null : parseFloat(syncInput);
-  const syncIsValid = parsedSyncBalance !== null && !isNaN(parsedSyncBalance) && parsedSyncBalance >= 0;
-
-  const handleSync = async () => {
-    if (!onSync || !syncIsValid || parsedSyncBalance === null) return;
-    setIsSyncing(true);
-    await onSync(parsedSyncBalance);
-    setSyncInput('');
-    setIsSyncing(false);
   };
 
   const hasChanges =
@@ -118,42 +103,10 @@ export function ProviderSettingsModal({
             value={balanceInput}
             onChange={(e) => setBalanceInput(e.target.value)}
           />
-
-          {onSync && provider.balance != null && (
-            <div className="border border-gray-200 rounded-lg p-3 space-y-2">
-              <p className="text-sm font-medium text-gray-700">Sync with real balance</p>
-              <p className="text-xs text-gray-500">
-                Enter the actual balance shown on your {provider.displayName} dashboard to correct drift.
-              </p>
-              {provider.lastSyncedAt && (
-                <p className="text-xs text-gray-400">
-                  Last synced: {new Date(provider.lastSyncedAt).toLocaleString()}
-                </p>
-              )}
-              <div className="flex gap-2 items-end">
-                <div className="flex-1">
-                  <Input
-                    label=""
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="Real balance ($)"
-                    value={syncInput}
-                    onChange={(e) => setSyncInput(e.target.value)}
-                  />
-                </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={!syncIsValid || isSyncing}
-                  isLoading={isSyncing}
-                  onClick={handleSync}
-                >
-                  Sync
-                </Button>
-              </div>
-            </div>
+          {provider.balance != null && (
+            <p className="text-xs text-gray-500 mt-1">
+              ValueRank balance: ${provider.balance.toFixed(2)}
+            </p>
           )}
 
           <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700">

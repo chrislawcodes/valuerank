@@ -373,22 +373,6 @@ export type CreateDomainContextInput = {
   text: Scalars['String']['input'];
 };
 
-export type CreatePairedVignetteInput = {
-  contextId: Scalars['ID']['input'];
-  domainId: Scalars['ID']['input'];
-  levelPresetVersionId?: InputMaybe<Scalars['ID']['input']>;
-  name: Scalars['String']['input'];
-  preambleVersionId?: InputMaybe<Scalars['ID']['input']>;
-  valueFirstId: Scalars['ID']['input'];
-  valueSecondId: Scalars['ID']['input'];
-};
-
-export type CreatePairedVignetteResult = {
-  __typename?: 'CreatePairedVignetteResult';
-  definitionA: Definition;
-  definitionB: Definition;
-};
-
 export type CreateLevelPresetInput = {
   l1: Scalars['String']['input'];
   l2: Scalars['String']['input'];
@@ -412,6 +396,22 @@ export type CreateLlmModelInput = {
   providerId: Scalars['String']['input'];
   /** Set as default for this provider */
   setAsDefault?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+export type CreatePairedVignetteInput = {
+  contextId: Scalars['ID']['input'];
+  domainId: Scalars['ID']['input'];
+  levelPresetVersionId?: InputMaybe<Scalars['ID']['input']>;
+  name: Scalars['String']['input'];
+  preambleVersionId?: InputMaybe<Scalars['ID']['input']>;
+  valueFirstId: Scalars['ID']['input'];
+  valueSecondId: Scalars['ID']['input'];
+};
+
+export type CreatePairedVignetteResult = {
+  __typename?: 'CreatePairedVignetteResult';
+  definitionA: Definition;
+  definitionB: Definition;
 };
 
 export type CreatePreambleInput = {
@@ -1356,12 +1356,12 @@ export type Mutation = {
   createDefinition: Definition;
   createDomain: Domain;
   createDomainContext: DomainContext;
-  /** @deprecated Use createPairedVignette instead */
+  /** @deprecated Renamed to createPairedVignette */
   createJobChoicePair: CreatePairedVignetteResult;
   createLevelPreset: LevelPreset;
-  createPairedVignette: CreatePairedVignetteResult;
   /** Create a new LLM model under a provider */
   createLlmModel: LlmModel;
+  createPairedVignette: CreatePairedVignetteResult;
   /** Create a new preamble */
   createPreamble: Preamble;
   /** Create a survey with a backing definition and one scenario per question. */
@@ -1547,14 +1547,14 @@ export type Mutation = {
   /** Update specific content fields of a definition. Supports clearing overrides to inherit from parent. */
   updateDefinitionContent: Definition;
   updateDomainContext: DomainContext;
-  /** @deprecated Use updatePairedVignette instead */
+  /** @deprecated Renamed to updatePairedVignette */
   updateJobChoicePair: CreatePairedVignetteResult;
   updateLevelPreset: LevelPreset;
-  updatePairedVignette: CreatePairedVignetteResult;
   /** Update an LLM model (display name, costs, API config) */
   updateLlmModel: LlmModel;
   /** Update LLM provider settings (rate limits, enabled status) */
   updateLlmProvider: LlmProvider;
+  updatePairedVignette: CreatePairedVignetteResult;
   /** Update a preamble (creates a new version) */
   updatePreamble: Preamble;
   /**
@@ -1668,6 +1668,11 @@ export type MutationCreateLevelPresetArgs = {
 
 export type MutationCreateLlmModelArgs = {
   input: CreateLlmModelInput;
+};
+
+
+export type MutationCreatePairedVignetteArgs = {
+  input: CreatePairedVignetteInput;
 };
 
 
@@ -1953,6 +1958,11 @@ export type MutationUpdateLlmModelArgs = {
 export type MutationUpdateLlmProviderArgs = {
   id: Scalars['String']['input'];
   input: UpdateLlmProviderInput;
+};
+
+
+export type MutationUpdatePairedVignetteArgs = {
+  input: UpdatePairedVignetteInput;
 };
 
 
@@ -3552,16 +3562,6 @@ export type UpdateDomainContextInput = {
   text: Scalars['String']['input'];
 };
 
-export type UpdatePairedVignetteInput = {
-  contextId: Scalars['ID']['input'];
-  definitionId: Scalars['ID']['input'];
-  levelPresetVersionId?: InputMaybe<Scalars['ID']['input']>;
-  name: Scalars['String']['input'];
-  preambleVersionId?: InputMaybe<Scalars['ID']['input']>;
-  valueFirstId: Scalars['ID']['input'];
-  valueSecondId: Scalars['ID']['input'];
-};
-
 export type UpdateLevelPresetInput = {
   l1: Scalars['String']['input'];
   l2: Scalars['String']['input'];
@@ -3590,6 +3590,16 @@ export type UpdateLlmProviderInput = {
   maxParallelRequests?: InputMaybe<Scalars['Int']['input']>;
   /** Rate limit (requests per minute) */
   requestsPerMinute?: InputMaybe<Scalars['Int']['input']>;
+};
+
+export type UpdatePairedVignetteInput = {
+  contextId: Scalars['ID']['input'];
+  definitionId: Scalars['ID']['input'];
+  levelPresetVersionId?: InputMaybe<Scalars['ID']['input']>;
+  name: Scalars['String']['input'];
+  preambleVersionId?: InputMaybe<Scalars['ID']['input']>;
+  valueFirstId: Scalars['ID']['input'];
+  valueSecondId: Scalars['ID']['input'];
 };
 
 export type UpdatePreambleInput = {

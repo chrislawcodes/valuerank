@@ -1,0 +1,11 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/mutations/llm.ts",
+    "cloud/apps/web/src/components/settings/models"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/mutations/llm.ts",
+    "cloud/apps/web/src/components/settings/models",
+    "docs/workflow/feature-runs/balance-ui-merge"
+  ]
+}

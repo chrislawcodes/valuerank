@@ -1,0 +1,2058 @@
+Reading additional input from stdin...
+OpenAI Codex v0.118.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d7516-b6b9-7201-b9f2-ddf0b104afb4
+--------
+user
+Review this diff artifact using a correctness-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/apps/web/src/components/settings/models/ModelsPanel.tsx b/cloud/apps/web/src/components/settings/models/ModelsPanel.tsx
+index 6778fd27..c80c2968 100644
+--- a/cloud/apps/web/src/components/settings/models/ModelsPanel.tsx
++++ b/cloud/apps/web/src/components/settings/models/ModelsPanel.tsx
+@@ -24,7 +24,6 @@ import {
+   UNSET_DEFAULT_LLM_MODEL_MUTATION,
+   UPDATE_LLM_PROVIDER_MUTATION,
+   SET_PROVIDER_BALANCE_MUTATION,
+-  SYNC_PROVIDER_BALANCE_MUTATION,
+ } from '../../../api/operations/llm';
+ 
+ export function ModelsPanel() {
+@@ -46,7 +45,6 @@ export function ModelsPanel() {
+   const [, unsetDefaultModel] = useMutation(UNSET_DEFAULT_LLM_MODEL_MUTATION);
+   const [, updateProvider] = useMutation(UPDATE_LLM_PROVIDER_MUTATION);
+   const [, setProviderBalance] = useMutation(SET_PROVIDER_BALANCE_MUTATION);
+-  const [, syncProviderBalance] = useMutation(SYNC_PROVIDER_BALANCE_MUTATION);
+ 
+   const toggleProvider = (providerId: string) => {
+     setExpandedProviders((prev) => {
+@@ -106,11 +104,6 @@ export function ModelsPanel() {
+     reexecuteQuery({ requestPolicy: 'network-only' });
+   };
+ 
+-  const handleSyncProvider = async (id: string, realBalance: number) => {
+-    await syncProviderBalance({ providerId: id, realBalance });
+-    reexecuteQuery({ requestPolicy: 'network-only' });
+-  };
+-
+   const openAddModel = (provider: LlmProvider) => {
+     setSelectedProvider(provider);
+     setIsAddModelOpen(true);
+@@ -182,7 +175,6 @@ export function ModelsPanel() {
+           provider={editingProvider}
+           onClose={() => setEditingProvider(null)}
+           onSave={(input) => handleUpdateProvider(editingProvider.id, input)}
+-          onSync={(realBalance) => handleSyncProvider(editingProvider.id, realBalance)}
+         />
+       )}
+     </>
+diff --git a/cloud/apps/web/src/components/settings/models/ProviderSection.tsx b/cloud/apps/web/src/components/settings/models/ProviderSection.tsx
+index 13a5cee4..2cdaa207 100644
+--- a/cloud/apps/web/src/components/settings/models/ProviderSection.tsx
++++ b/cloud/apps/web/src/components/settings/models/ProviderSection.tsx
+@@ -55,11 +55,6 @@ export function ProviderSection({
+               No budget set
+             </span>
+           )}
+-          {provider.lastSyncedAt != null ? (
+-            <span className="text-xs text-gray-400">
+-              Last synced: {new Date(provider.lastSyncedAt).toLocaleDateString()}
+-            </span>
+-          ) : null}
+           <span
+             className={`px-2 py-1 text-xs rounded-full ${
+               provider.isEnabled
+diff --git a/cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx b/cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx
+index 01214fe4..53a7754d 100644
+--- a/cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx
++++ b/cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx
+@@ -14,7 +14,6 @@ export function ProviderSettingsModal({
+   provider,
+   onClose,
+   onSave,
+-  onSync,
+ }: ProviderSettingsModalProps) {
+   const [requestsPerMinute, setRequestsPerMinute] = useState(provider.requestsPerMinute.toString());
+   const [maxParallelRequests, setMaxParallelRequests] = useState(
+@@ -24,9 +23,6 @@ export function ProviderSettingsModal({
+   const [balanceInput, setBalanceInput] = useState(
+     provider.balance != null ? provider.balance.toFixed(2) : ''
+   );
+-  // Sync section: separate input for entering the real provider balance
+-  const [syncInput, setSyncInput] = useState('');
+-  const [isSyncing, setIsSyncing] = useState(false);
+   const [isSaving, setIsSaving] = useState(false);
+ 
+   const parsedBalance = balanceInput.trim() === '' ? null : parseFloat(balanceInput);
+@@ -47,17 +43,6 @@ export function ProviderSettingsModal({
+     setIsSaving(false);
+   };
+ 
+-  const parsedSyncBalance = syncInput.trim() === '' ? null : parseFloat(syncInput);
+-  const syncIsValid = parsedSyncBalance !== null && !isNaN(parsedSyncBalance) && parsedSyncBalance >= 0;
+-
+-  const handleSync = async () => {
+-    if (!onSync || !syncIsValid || parsedSyncBalance === null) return;
+-    setIsSyncing(true);
+-    await onSync(parsedSyncBalance);
+-    setSyncInput('');
+-    setIsSyncing(false);
+-  };
+-
+   const hasChanges =
+     parseInt(requestsPerMinute, 10) !== provider.requestsPerMinute ||
+     parseInt(maxParallelRequests, 10) !== provider.maxParallelRequests ||
+@@ -118,42 +103,10 @@ export function ProviderSettingsModal({
+             value={balanceInput}
+             onChange={(e) => setBalanceInput(e.target.value)}
+           />
+-
+-          {onSync && provider.balance != null && (
+-            <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+-              <p className="text-sm font-medium text-gray-700">Sync with real balance</p>
+-              <p className="text-xs text-gray-500">
+-                Enter the actual balance shown on your {provider.displayName} dashboard to correct drift.
+-              </p>
+-              {provider.lastSyncedAt && (
+-                <p className="text-xs text-gray-400">
+-                  Last synced: {new Date(provider.lastSyncedAt).toLocaleString()}
+-                </p>
+-              )}
+-              <div className="flex gap-2 items-end">
+-                <div className="flex-1">
+-                  <Input
+-                    label=""
+-                    type="number"
+-                    min="0"
+-                    step="0.01"
+-                    placeholder="Real balance ($)"
+-                    value={syncInput}
+-                    onChange={(e) => setSyncInput(e.target.value)}
+-                  />
+-                </div>
+-                <Button
+-                  type="button"
+-                  variant="secondary"
+-                  size="sm"
+-                  disabled={!syncIsValid || isSyncing}
+-                  isLoading={isSyncing}
+-                  onClick={handleSync}
+-                >
+-                  Sync
+-                </Button>
+-              </div>
+-            </div>
++          {provider.balance != null && (
++            <p className="text-xs text-gray-500 mt-1">
++              ValueRank balance: ${provider.balance.toFixed(2)}
++            </p>
+           )}
+ 
+           <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+diff --git a/cloud/apps/web/src/components/settings/models/types.ts b/cloud/apps/web/src/components/settings/models/types.ts
+index 782645b2..e5837e9b 100644
+--- a/cloud/apps/web/src/components/settings/models/types.ts
++++ b/cloud/apps/web/src/components/settings/models/types.ts
+@@ -43,5 +43,4 @@ export type ProviderSettingsModalProps = {
+     maxParallelRequests?: number;
+     balance?: number | null;
+   }) => Promise<void>;
+-  onSync?: (realBalance: number) => Promise<void>;
+ };
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m reviewing the patch adversarially and keeping it scoped to what the diff itself proves. I’ll separate concrete regressions from anything that depends on how the rest of the codebase is wired, and I’ll mark those assumptions clearly.
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+/**
+ * Provider Settings Modal
+ *
+ * Modal for editing provider rate limit settings.
+ */
+
+import { useState } from 'react';
+import { X } from 'lucide-react';
+import { Button } from '../../ui/Button';
+import { Input } from '../../ui/Input';
+import type { ProviderSettingsModalProps } from './types';
+
+export function ProviderSettingsModal({
+  provider,
+  onClose,
+  onSave,
+}: ProviderSettingsModalProps) {
+  const [requestsPerMinute, setRequestsPerMinute] = useState(provider.requestsPerMinute.toString());
+  const [maxParallelRequests, setMaxParallelRequests] = useState(
+    provider.maxParallelRequests.toString()
+  );
+  // Budget balance: empty string = no budget set (null); numeric string = tracked balance
+  const [balanceInput, setBalanceInput] = useState(
+    provider.balance != null ? provider.balance.toFixed(2) : ''
+  );
+  const [isSaving, setIsSaving] = useState(false);
+
+  const parsedBalance = balanceInput.trim() === '' ? null : parseFloat(balanceInput);
+  const balanceIsValid =
+    balanceInput.trim() === '' || (!isNaN(parsedBalance!) && parsedBalance! >= 0);
+  const balanceChanged = parsedBalance !== provider.balance;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+
+    await onSave({
+      requestsPerMinute: parseInt(requestsPerMinute, 10),
+      maxParallelRequests: parseInt(maxParallelRequests, 10),
+      balance: parsedBalance,
+    });
+
+    setIsSaving(false);
+  };
+
+  const hasChanges =
+    parseInt(requestsPerMinute, 10) !== provider.requestsPerMinute ||
+    parseInt(maxParallelRequests, 10) !== provider.maxParallelRequests ||
+    balanceChanged;
+
+  const isValid =
+    !!requestsPerMinute &&
+    !!maxParallelRequests &&
+    parseInt(requestsPerMinute, 10) > 0 &&
+    parseInt(maxParallelRequests, 10) > 0 &&
+    balanceIsValid;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-medium text-gray-900">
+            {provider.displayName} Settings
+          </h3>
+          <Button
+            onClick={onClose}
+            variant="ghost"
+            size="icon"
+            className="text-gray-400 hover:text-gray-600 hover:bg-transparent"
+            aria-label="Close modal"
+          >
+            <X className="w-5 h-5" />
+          </Button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <Input
+            label="Rate Limit (requests/minute)"
+            type="number"
+            min="1"
+            max="10000"
+            value={requestsPerMinute}
+            onChange={(e) => setRequestsPerMinute(e.target.value)}
+            required
+          />
+
+          <Input
+            label="Max Parallel Requests"
+            type="number"
+            min="1"
+            max="100"
+            value={maxParallelRequests}
+            onChange={(e) => setMaxParallelRequests(e.target.value)}
+            required
+          />
+
+          <Input
+            label="Budget Balance ($)"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Leave empty to disable budget tracking"
+            value={balanceInput}
+            onChange={(e) => setBalanceInput(e.target.value)}
+          />
+          {provider.balance != null && (
+            <p className="text-xs text-gray-500 mt-1">
+              ValueRank balance: ${provider.balance.toFixed(2)}
+            </p>
+          )}
+
+          <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+            <p>
+              <strong>Rate Limit:</strong> Maximum API calls per minute to this provider.
+            </p>
+            <p className="mt-1">
+              <strong>Parallel Requests:</strong> Maximum concurrent API calls. Set to 1 for
+              conservative usage that avoids rate limit errors.
+            </p>
+            <p className="mt-1">
+              <strong>Budget Balance:</strong> Track remaining spend for this provider.
+              Leave empty to disable tracking. Balance is automatically decremented when runs complete.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={!isValid || !hasChanges || isSaving}
+              isLoading={isSaving}
+            >
+              Save Settings
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/web/src/components/settings/models/ModelsPanel.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+/**
+ * Models Panel
+ *
+ * Settings panel for managing LLM providers and their models.
+ */
+
+import { useState } from 'react';
+import { useQuery, useMutation } from 'urql';
+import { Cpu } from 'lucide-react';
+import { Loading } from '../../ui/Loading';
+import { EmptyState } from '../../ui/EmptyState';
+import { ErrorMessage } from '../../ui/ErrorMessage';
+import { ProviderSection } from './ProviderSection';
+import { ModelFormModal } from './ModelForm';
+import { ProviderSettingsModal } from './ProviderSettingsModal';
+import type { LlmProvidersQueryResult, LlmProvider, LlmModel, CreateLlmModelInput, UpdateLlmModelInput } from '../../../api/operations/llm';
+import {
+  LLM_PROVIDERS_QUERY,
+  CREATE_LLM_MODEL_MUTATION,
+  UPDATE_LLM_MODEL_MUTATION,
+  DEPRECATE_LLM_MODEL_MUTATION,
+  REACTIVATE_LLM_MODEL_MUTATION,
+  SET_DEFAULT_LLM_MODEL_MUTATION,
+  UNSET_DEFAULT_LLM_MODEL_MUTATION,
+  UPDATE_LLM_PROVIDER_MUTATION,
+  SET_PROVIDER_BALANCE_MUTATION,
+} from '../../../api/operations/llm';
+
+export function ModelsPanel() {
+  const [expandedProviders, setExpandedProviders] = useState<Set<string>>(new Set());
+  const [isAddModelOpen, setIsAddModelOpen] = useState(false);
+  const [editingModel, setEditingModel] = useState<LlmModel | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<LlmProvider | null>(null);
+  const [editingProvider, setEditingProvider] = useState<LlmProvider | null>(null);
+
+  const [{ data, fetching, error }, reexecuteQuery] = useQuery<LlmProvidersQueryResult>({
+    query: LLM_PROVIDERS_QUERY,
+  });
+
+  const [, createModel] = useMutation(CREATE_LLM_MODEL_MUTATION);
+  const [, updateModel] = useMutation(UPDATE_LLM_MODEL_MUTATION);
+  const [, deprecateModel] = useMutation(DEPRECATE_LLM_MODEL_MUTATION);
+  const [, reactivateModel] = useMutation(REACTIVATE_LLM_MODEL_MUTATION);
+  const [, setDefaultModel] = useMutation(SET_DEFAULT_LLM_MODEL_MUTATION);
+  const [, unsetDefaultModel] = useMutation(UNSET_DEFAULT_LLM_MODEL_MUTATION);
+  const [, updateProvider] = useMutation(UPDATE_LLM_PROVIDER_MUTATION);
+  const [, setProviderBalance] = useMutation(SET_PROVIDER_BALANCE_MUTATION);
+
+  const toggleProvider = (providerId: string) => {
+    setExpandedProviders((prev) => {
+      const next = new Set(prev);
+      if (next.has(providerId)) {
+        next.delete(providerId);
+      } else {
+        next.add(providerId);
+      }
+      return next;
+    });
+  };
+
+  const handleCreateModel = async (input: CreateLlmModelInput) => {
+    await createModel({ input });
+    setIsAddModelOpen(false);
+    setSelectedProvider(null);
+    reexecuteQuery({ requestPolicy: 'network-only' });
+  };
+
+  const handleUpdateModel = async (id: string, input: UpdateLlmModelInput) => {
+    await updateModel({ id, input });
+    setEditingModel(null);
+    reexecuteQuery({ requestPolicy: 'network-only' });
+  };
+
+  const handleDeprecateModel = async (id: string) => {
+    await deprecateModel({ id });
+    reexecuteQuery({ requestPolicy: 'network-only' });
+  };
+
+  const handleReactivateModel = async (id: string) => {
+    await reactivateModel({ id });
+    reexecuteQuery({ requestPolicy: 'network-only' });
+  };
+
+  const handleSetDefault = async (id: string) => {
+    await setDefaultModel({ id });
+    reexecuteQuery({ requestPolicy: 'network-only' });
+  };
+
+  const handleUnsetDefault = async (id: string) => {
+    await unsetDefaultModel({ id });
+    reexecuteQuery({ requestPolicy: 'network-only' });
+  };
+
+  const handleUpdateProvider = async (
+    id: string,
+    input: { requestsPerMinute?: number; maxParallelRequests?: number; balance?: number | null }
+  ) => {
+    const { balance, ...providerInput } = input;
+    await updateProvider({ id, input: providerInput });
+    if (balance !== undefined) {
+      await setProviderBalance({ providerId: id, balance });
+    }
+    setEditingProvider(null);
+    reexecuteQuery({ requestPolicy: 'network-only' });
+  };
+
+  const openAddModel = (provider: LlmProvider) => {
+    setSelectedProvider(provider);
+    setIsAddModelOpen(true);
+  };
+
+  if (fetching) return <Loading text="Loading models..." />;
+  if (error) {
+    return (
+      <ErrorMessage
+        message={error.message}
+        onRetry={() => reexecuteQuery({ requestPolicy: 'network-only' })}
+      />
+    );
+  }
+
+  const providers = data?.llmProviders ?? [];
+
+  if (providers.length === 0) {
+    return (
+      <EmptyState
+        icon={Cpu}
+        title="No providers configured"
+        description="LLM providers need to be seeded in the database"
+      />
+    );
+  }
+
+  return (
+    <>
+      <div className="space-y-4">
+        {providers.map((provider) => (
+          <ProviderSection
+            key={provider.id}
+            provider={provider}
+            isExpanded={expandedProviders.has(provider.id)}
+            onToggle={() => toggleProvider(provider.id)}
+            onAddModel={() => openAddModel(provider)}
+            onEditModel={setEditingModel}
+            onDeprecateModel={handleDeprecateModel}
+            onReactivateModel={handleReactivateModel}
+            onSetDefault={handleSetDefault}
+            onUnsetDefault={handleUnsetDefault}
+            onEditSettings={() => setEditingProvider(provider)}
+          />
+        ))}
+      </div>
+
+      {isAddModelOpen && selectedProvider && (
+        <ModelFormModal
+          provider={selectedProvider}
+          onClose={() => {
+            setIsAddModelOpen(false);
+            setSelectedProvider(null);
+          }}
+          onSave={handleCreateModel as (input: CreateLlmModelInput | UpdateLlmModelInput) => Promise<void>}
+        />
+      )}
+
+      {editingModel && (
+        <ModelFormModal
+          model={editingModel}
+          onClose={() => setEditingModel(null)}
+          onSave={(input) => handleUpdateModel(editingModel.id, input as UpdateLlmModelInput)}
+        />
+      )}
+
+      {editingProvider && (
+        <ProviderSettingsModal
+          provider={editingProvider}
+          onClose={() => setEditingProvider(null)}
+          onSave={(input) => handleUpdateProvider(editingProvider.id, input)}
+        />
+      )}
+    </>
+  );
+}
+
+exec
+/bin/zsh -lc 'rg -n "SYNC_PROVIDER_BALANCE_MUTATION|lastSyncedAt|onSync|Sync with real balance|ValueRank balance" cloud/apps/web/src -S' in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+cloud/apps/web/src/generated/graphql.ts:1248:  lastSyncedAt?: Maybe<Scalars['DateTime']['output']>;
+cloud/apps/web/src/generated/graphql.ts:1903:export type MutationSyncProviderBalanceArgs = {
+cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx:108:              ValueRank balance: ${provider.balance.toFixed(2)}
+
+codex
+I’ve confirmed the patch is not just UI cleanup: it removes the only visible sync path and also stops surfacing freshness metadata. I’m checking whether that creates a functional dead end or a misleading state in the provider settings flow.
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/web/src/components/settings/models/ProviderSection.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+/**
+ * Provider Section
+ *
+ * Accordion-style section for a single LLM provider showing its models.
+ */
+
+import { Plus, ChevronDown, ChevronRight, Settings } from 'lucide-react';
+import { Button } from '../../ui/Button';
+import { ModelRow } from './ModelRow';
+import type { ProviderSectionProps } from './types';
+
+export function ProviderSection({
+  provider,
+  isExpanded,
+  onToggle,
+  onAddModel,
+  onEditModel,
+  onDeprecateModel,
+  onReactivateModel,
+  onSetDefault,
+  onUnsetDefault,
+  onEditSettings,
+}: ProviderSectionProps) {
+  const activeModels = provider.models.filter((m) => m.status === 'ACTIVE');
+  const deprecatedModels = provider.models.filter((m) => m.status === 'DEPRECATED');
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      {/* eslint-disable-next-line react/forbid-elements -- Accordion toggle requires custom semantic button styling */}
+      <button
+        onClick={onToggle}
+        className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          {isExpanded ? (
+            <ChevronDown className="w-5 h-5 text-gray-400" />
+          ) : (
+            <ChevronRight className="w-5 h-5 text-gray-400" />
+          )}
+          <div className="text-left">
+            <h3 className="font-medium text-gray-900">{provider.displayName}</h3>
+            <p className="text-sm text-gray-500">
+              {activeModels.length} active model{activeModels.length !== 1 ? 's' : ''}
+              {deprecatedModels.length > 0 && `, ${deprecatedModels.length} deprecated`}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {provider.balance != null ? (
+            <span className="px-2 py-1 text-xs rounded-full bg-yellow-50 text-yellow-700 border border-yellow-200">
+              ${provider.balance.toFixed(2)} remaining
+            </span>
+          ) : (
+            <span className="px-2 py-1 text-xs rounded-full bg-gray-50 text-gray-400 border border-gray-200">
+              No budget set
+            </span>
+          )}
+          <span
+            className={`px-2 py-1 text-xs rounded-full ${
+              provider.isEnabled
+                ? 'bg-green-100 text-green-700'
+                : 'bg-gray-100 text-gray-500'
+            }`}
+          >
+            {provider.isEnabled ? 'Enabled' : 'Disabled'}
+          </span>
+        </div>
+      </button>
+
+      {isExpanded && (
+        <div className="border-t border-gray-200">
+          <div className="px-6 py-3 bg-gray-50 flex justify-between items-center">
+            <Button
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditSettings();
+              }}
+              variant="ghost"
+              size="sm"
+              className="text-gray-500 hover:text-gray-700 hover:bg-transparent px-0 group"
+              title="Edit rate limits"
+            >
+              <Settings className="w-4 h-4 text-gray-400 group-hover:text-gray-600 mr-1" />
+              Rate limit: {provider.requestsPerMinute}/min, {provider.maxParallelRequests} parallel
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onAddModel}>
+              <Plus className="w-4 h-4 mr-1" />
+              Add Model
+            </Button>
+          </div>
+
+          <div className="divide-y divide-gray-100">
+            {provider.models.map((model) => (
+              <ModelRow
+                key={model.id}
+                model={model}
+                onEdit={() => onEditModel(model)}
+                onDeprecate={() => onDeprecateModel(model.id)}
+                onReactivate={() => onReactivateModel(model.id)}
+                onSetDefault={() => onSetDefault(model.id)}
+                onUnsetDefault={() => onUnsetDefault(model.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+exec
+/bin/zsh -lc "sed -n '1880,1935p' cloud/apps/web/src/generated/graphql.ts" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+  balance?: InputMaybe<Scalars['Float']['input']>;
+  providerId: Scalars['String']['input'];
+};
+
+
+export type MutationStartDomainEvaluationArgs = {
+  definitionIds?: InputMaybe<Array<Scalars['ID']['input']>>;
+  domainId: Scalars['ID']['input'];
+  maxBudgetUsd?: InputMaybe<Scalars['Float']['input']>;
+  modelIds?: InputMaybe<Array<Scalars['String']['input']>>;
+  samplePercentage?: InputMaybe<Scalars['Int']['input']>;
+  samplesPerScenario?: InputMaybe<Scalars['Int']['input']>;
+  scopeCategory?: InputMaybe<Scalars['String']['input']>;
+  targetBatchCount?: InputMaybe<Scalars['Int']['input']>;
+  temperature?: InputMaybe<Scalars['Float']['input']>;
+};
+
+
+export type MutationStartRunArgs = {
+  input: StartRunInput;
+};
+
+
+export type MutationSyncProviderBalanceArgs = {
+  providerId: Scalars['String']['input'];
+  realBalance: Scalars['Float']['input'];
+};
+
+
+export type MutationUnforkDefinitionArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type MutationUnsetDefaultLlmModelArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type MutationUpdateDefinitionArgs = {
+  id: Scalars['String']['input'];
+  input: UpdateDefinitionInput;
+};
+
+
+export type MutationUpdateDefinitionContentArgs = {
+  id: Scalars['String']['input'];
+  input: UpdateDefinitionContentInput;
+};
+
+
+export type MutationUpdateDomainContextArgs = {
+  id: Scalars['ID']['input'];
+  input: UpdateDomainContextInput;
+};
+
+
+exec
+/bin/zsh -lc 'rg -n "syncProviderBalance|lastSyncedAt" cloud -S' in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+cloud/apps/api/src/graphql/types/llm-provider.ts:61:    lastSyncedAt: t.field({
+cloud/apps/web/src/generated/graphql.ts:1248:  lastSyncedAt?: Maybe<Scalars['DateTime']['output']>;
+cloud/apps/web/src/generated/graphql.ts:1527:  syncProviderBalance: ProviderBalanceSyncLog;
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:4: * Tests setProviderBalance and syncProviderBalance against a real server and DB.
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:27:    syncProviderBalance(providerId: $providerId, realBalance: $realBalance) {
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:227:  describe('syncProviderBalance', () => {
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:248:      const syncLog = res.body.data.syncProviderBalance;
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:289:      const syncLog = res.body.data.syncProviderBalance;
+cloud/apps/web/schema.graphql:1336:  lastSyncedAt: DateTime
+cloud/apps/web/schema.graphql:1644:  syncProviderBalance(
+cloud/apps/api/src/graphql/mutations/llm.ts:438:// Mutation: syncProviderBalance
+cloud/apps/api/src/graphql/mutations/llm.ts:439:builder.mutationField('syncProviderBalance', (t) =>
+cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx:170:                lastSyncedAt: NOW,
+cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx:197:                lastSyncedAt: NOW,
+cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx:636:                lastSyncedAt: NOW,
+cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx:663:                lastSyncedAt: NOW,
+cloud/apps/web/tests/components/runs/BudgetWarningDialog.test.tsx:90:    lastSyncedAt: null,
+cloud/apps/web/tests/components/domains/domainTrials/launch-state.test.ts:27:      lastSyncedAt: null,
+cloud/apps/web/tests/components/domains/domainTrials/launch-state.test.ts:51:            lastSyncedAt: null,
+cloud/apps/web/tests/components/domains/domainTrials/launch-state.test.ts:70:            lastSyncedAt: null,
+
+codex
+The backend still exposes `syncProviderBalance` and `lastSyncedAt`, so this patch is not just hiding an unused field. I’m checking whether that creates a mismatch where the UI now shows stale or incomplete state with no recovery path.
+exec
+/bin/zsh -lc "sed -n '420,520p' cloud/apps/api/src/graphql/mutations/llm.ts" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+        return updated;
+      });
+
+      ctx.log.info({ providerId: provider.id, balance: balanceDecimal.toNumber() }, 'Provider balance set');
+
+      void createAuditLog({
+        action: 'ACTION',
+        entityType: 'LlmProvider',
+        entityId: provider.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { action: 'set_provider_balance', balance: args.balance },
+      });
+
+      return provider;
+    },
+  })
+);
+
+// Mutation: syncProviderBalance
+builder.mutationField('syncProviderBalance', (t) =>
+  t.field({
+    type: ProviderBalanceSyncLogRef,
+    description: 'Sync the provider balance with the real balance from the provider dashboard',
+    args: {
+      providerId: t.arg.string({ required: true, description: 'Provider ID' }),
+      realBalance: t.arg.float({ required: true, description: 'Real balance in dollars from provider dashboard' }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (args.realBalance < 0) {
+        throw new ValidationError('Real balance must be greater than or equal to 0');
+      }
+
+      const provider = await db.llmProvider.findUnique({ where: { id: args.providerId } });
+      if (!provider) {
+        throw new NotFoundError('LlmProvider', args.providerId);
+      }
+
+      const systemBalanceAtSync = provider.balance ?? new Prisma.Decimal(0);
+      const enteredBalance = new Prisma.Decimal(args.realBalance);
+      const delta = enteredBalance.minus(systemBalanceAtSync);
+
+      const [syncLog] = await db.$transaction([
+        db.providerBalanceSyncLog.create({
+          data: {
+            providerId: args.providerId,
+            systemBalanceAtSync,
+            enteredBalance,
+            delta,
+            createdByUserId: ctx.user?.id ?? null,
+          },
+        }),
+        db.llmProvider.update({
+          where: { id: args.providerId },
+          data: { balance: enteredBalance },
+        }),
+      ]);
+
+      ctx.log.info(
+        { providerId: args.providerId, realBalance: args.realBalance, delta: delta.toNumber() },
+        'Provider balance synced'
+      );
+
+      void createAuditLog({
+        action: 'ACTION',
+        entityType: 'LlmProvider',
+        entityId: args.providerId,
+        userId: ctx.user?.id ?? null,
+        metadata: {
+          action: 'sync_provider_balance',
+          realBalance: args.realBalance,
+          delta: delta.toNumber(),
+        },
+      });
+
+      return syncLog;
+    },
+  })
+);
+
+// Mutation: updateSystemSetting
+builder.mutationField('updateSystemSetting', (t) =>
+  t.field({
+    type: SystemSettingRef,
+    description: 'Update a system setting (creates if not exists)',
+    args: {
+      input: t.arg({ type: UpdateSystemSettingInput, required: true }),
+    },
+    resolve: async (_root, args, ctx) => {
+      ctx.log.debug({ key: args.input.key }, 'Updating system setting');
+
+      const setting = await upsertSetting(args.input.key, args.input.value as Record<string, unknown>);
+
+      ctx.log.info({ key: setting.key }, 'System setting updated');
+
+      // Hot-reload summarize handler if parallelism setting changed
+      if (args.input.key === 'infra_max_parallel_summarizations' && isBossRunning()) {
+        try {
+          const { reregisterSummarizeHandler } = await import('../../queue/handlers/index.js');
+          const { clearSummarizationCache } = await import(
+            '../../services/summarization-parallelism/index.js'
+          );
+
+exec
+/bin/zsh -lc "sed -n '1,340p' cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+exec
+/bin/zsh -lc "sed -n '1,140p' cloud/apps/api/src/graphql/types/llm-provider.ts" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+/**
+ * LlmProvider GraphQL Type
+ *
+ * Represents an LLM API provider (e.g., OpenAI, Anthropic) with rate limiting settings.
+ */
+
+import { db } from '@valuerank/db';
+import { LlmProviderRef, LlmModelRef, ProviderBalanceSyncLogRef } from './refs.js';
+
+// ProviderBalanceSyncLog GQL object type
+ProviderBalanceSyncLogRef.implement({
+  description: 'A record of a manual balance sync for a provider',
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    providerId: t.exposeString('providerId'),
+    systemBalanceAtSync: t.field({
+      type: 'Float',
+      description: 'System-tracked balance at the time of sync',
+      resolve: (log) => log.systemBalanceAtSync.toNumber(),
+    }),
+    enteredBalance: t.field({
+      type: 'Float',
+      description: 'Real balance entered by the user',
+      resolve: (log) => log.enteredBalance.toNumber(),
+    }),
+    delta: t.field({
+      type: 'Float',
+      description: 'Difference: enteredBalance - systemBalanceAtSync',
+      resolve: (log) => log.delta.toNumber(),
+    }),
+    syncedAt: t.expose('syncedAt', { type: 'DateTime' }),
+    createdByUserId: t.exposeString('createdByUserId', { nullable: true }),
+  }),
+});
+
+LlmProviderRef.implement({
+  description: 'An LLM API provider with rate limiting and parallelism settings',
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    name: t.exposeString('name', {
+      description: 'Provider identifier (e.g., "openai", "anthropic")',
+    }),
+    displayName: t.exposeString('displayName', {
+      description: 'Human-readable name (e.g., "OpenAI")',
+    }),
+    maxParallelRequests: t.exposeInt('maxParallelRequests', {
+      description: 'Maximum concurrent API requests allowed',
+    }),
+    requestsPerMinute: t.exposeInt('requestsPerMinute', {
+      description: 'Rate limit (requests per minute)',
+    }),
+    isEnabled: t.exposeBoolean('isEnabled', {
+      description: 'Whether the provider is available for use',
+    }),
+    balance: t.field({
+      type: 'Float',
+      nullable: true,
+      description: 'Remaining budget balance in dollars (null = budget tracking disabled)',
+      resolve: (provider) => (provider.balance !== null ? provider.balance.toNumber() : null),
+    }),
+    lastSyncedAt: t.field({
+      type: 'DateTime',
+      nullable: true,
+      description: 'Timestamp of the most recent manual balance sync (null = never synced)',
+      resolve: async (provider) => {
+        const latest = await db.providerBalanceSyncLog.findFirst({
+          where: { providerId: provider.id },
+          orderBy: { syncedAt: 'desc' },
+          select: { syncedAt: true },
+        });
+        return latest?.syncedAt ?? null;
+      },
+    }),
+    createdAt: t.expose('createdAt', { type: 'DateTime' }),
+    updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
+
+    // Relations
+    models: t.field({
+      type: [LlmModelRef],
+      description: 'All models belonging to this provider',
+      resolve: async (provider) => {
+        return db.llmModel.findMany({
+          where: { providerId: provider.id },
+          orderBy: { displayName: 'asc' },
+        });
+      },
+    }),
+
+    activeModels: t.field({
+      type: [LlmModelRef],
+      description: 'Active models only (excludes deprecated)',
+      resolve: async (provider) => {
+        return db.llmModel.findMany({
+          where: { providerId: provider.id, status: 'ACTIVE' },
+          orderBy: { displayName: 'asc' },
+        });
+      },
+    }),
+
+    defaultModel: t.field({
+      type: LlmModelRef,
+      nullable: true,
+      description: 'The default model for this provider',
+      resolve: async (provider) => {
+        return db.llmModel.findFirst({
+          where: { providerId: provider.id, isDefault: true },
+        });
+      },
+    }),
+  }),
+});
+
+ succeeded in 0ms:
+/**
+ * Integration tests for provider balance mutations.
+ *
+ * Tests setProviderBalance and syncProviderBalance against a real server and DB.
+ */
+
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import request from 'supertest';
+import { db } from '@valuerank/db';
+import { createServer } from '../../../src/server.js';
+import { getAuthHeader, TEST_USER } from '../../test-utils.js';
+
+const app = createServer();
+
+const SET_PROVIDER_BALANCE_MUTATION = `
+  mutation SetProviderBalance($providerId: String!, $balance: Float) {
+    setProviderBalance(providerId: $providerId, balance: $balance) {
+      id
+      name
+      balance
+    }
+  }
+`;
+
+const SYNC_PROVIDER_BALANCE_MUTATION = `
+  mutation SyncProviderBalance($providerId: String!, $realBalance: Float!) {
+    syncProviderBalance(providerId: $providerId, realBalance: $realBalance) {
+      id
+      providerId
+      systemBalanceAtSync
+      enteredBalance
+      delta
+      syncedAt
+    }
+  }
+`;
+
+describe('provider balance mutations', () => {
+  let testProviderId: string;
+  const createdSyncLogIds: string[] = [];
+
+  beforeAll(async () => {
+    await db.user.upsert({
+      where: { id: TEST_USER.id },
+      create: { id: TEST_USER.id, email: TEST_USER.email, passwordHash: 'test-hash' },
+      update: {},
+    });
+
+    const provider = await db.llmProvider.upsert({
+      where: { name: 'test-provider-balance' },
+      create: { name: 'test-provider-balance', displayName: 'Test Provider Balance' },
+      update: {},
+    });
+    testProviderId = provider.id;
+  });
+
+  afterEach(async () => {
+    await db.llmProvider.update({
+      where: { id: testProviderId },
+      data: { balance: null },
+    });
+    await db.providerBalanceSyncLog.deleteMany({
+      where: { providerId: testProviderId },
+    });
+  });
+
+  describe('setProviderBalance', () => {
+    it('creates a sync log when balance changes', async () => {
+      const res = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SET_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: testProviderId, balance: 50.0 },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeUndefined();
+      expect(res.body.data.setProviderBalance.balance).toBeCloseTo(50.0);
+
+      const updated = await db.llmProvider.findUnique({ where: { id: testProviderId } });
+      expect(updated?.balance?.toNumber()).toBeCloseTo(50.0);
+
+      const syncLog = await db.providerBalanceSyncLog.findFirst({
+        where: { providerId: testProviderId },
+        orderBy: { syncedAt: 'desc' },
+      });
+
+      expect(syncLog).not.toBeNull();
+      expect(syncLog?.systemBalanceAtSync.toNumber()).toBeCloseTo(0);
+      expect(syncLog?.enteredBalance.toNumber()).toBeCloseTo(50.0);
+      expect(syncLog?.delta.toNumber()).toBeCloseTo(50.0);
+    });
+
+    it('uses zero as the system balance when setting from null', async () => {
+      await db.llmProvider.update({
+        where: { id: testProviderId },
+        data: { balance: null },
+      });
+
+      const res = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SET_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: testProviderId, balance: 100.0 },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeUndefined();
+      expect(res.body.data.setProviderBalance.balance).toBeCloseTo(100.0);
+
+      const updated = await db.llmProvider.findUnique({ where: { id: testProviderId } });
+      expect(updated?.balance?.toNumber()).toBeCloseTo(100.0);
+
+      const syncLog = await db.providerBalanceSyncLog.findFirst({
+        where: { providerId: testProviderId },
+        orderBy: { syncedAt: 'desc' },
+      });
+
+      expect(syncLog).not.toBeNull();
+      expect(syncLog?.systemBalanceAtSync.toNumber()).toBeCloseTo(0);
+      expect(syncLog?.enteredBalance.toNumber()).toBeCloseTo(100.0);
+      expect(syncLog?.delta.toNumber()).toBeCloseTo(100.0);
+    });
+
+    it('does not create a sync log when the balance is unchanged', async () => {
+      const initialRes = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SET_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: testProviderId, balance: 25.0 },
+        });
+
+      expect(initialRes.status).toBe(200);
+      expect(initialRes.body.errors).toBeUndefined();
+      expect(initialRes.body.data.setProviderBalance.balance).toBeCloseTo(25.0);
+
+      const countBefore = await db.providerBalanceSyncLog.count({
+        where: { providerId: testProviderId },
+      });
+
+      const res = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SET_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: testProviderId, balance: 25.0 },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeUndefined();
+      expect(res.body.data.setProviderBalance.balance).toBeCloseTo(25.0);
+
+      const countAfter = await db.providerBalanceSyncLog.count({
+        where: { providerId: testProviderId },
+      });
+
+      expect(countAfter).toBe(countBefore);
+
+      const updated = await db.llmProvider.findUnique({ where: { id: testProviderId } });
+      expect(updated?.balance?.toNumber()).toBeCloseTo(25.0);
+    });
+
+    it('does not create a sync log when setting balance to null', async () => {
+      await db.llmProvider.update({
+        where: { id: testProviderId },
+        data: { balance: 30.0 },
+      });
+
+      const countBefore = await db.providerBalanceSyncLog.count({
+        where: { providerId: testProviderId },
+      });
+
+      const res = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SET_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: testProviderId, balance: null },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeUndefined();
+      expect(res.body.data.setProviderBalance.balance).toBeNull();
+
+      const countAfter = await db.providerBalanceSyncLog.count({
+        where: { providerId: testProviderId },
+      });
+
+      expect(countAfter).toBe(countBefore);
+
+      const updated = await db.llmProvider.findUnique({ where: { id: testProviderId } });
+      expect(updated?.balance).toBeNull();
+    });
+
+    it('rejects negative balance with a validation error', async () => {
+      const res = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SET_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: testProviderId, balance: -1 },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeDefined();
+      expect(res.body.errors[0].message).toMatch(/[Bb]alance/);
+    });
+
+    it('returns a not found error for a missing provider', async () => {
+      const res = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SET_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: 'missing-provider-id', balance: 12.5 },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeDefined();
+      expect(res.body.errors[0].message).toContain('not found');
+    });
+  });
+
+  describe('syncProviderBalance', () => {
+    beforeAll(async () => {
+      // Give the provider a starting balance of 7.50
+      await db.llmProvider.update({
+        where: { id: testProviderId },
+        data: { balance: 7.5 },
+      });
+    });
+
+    it('creates a sync log with correct delta and updates balance', async () => {
+      const res = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SYNC_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: testProviderId, realBalance: 8.1 },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeUndefined();
+
+      const syncLog = res.body.data.syncProviderBalance;
+      createdSyncLogIds.push(syncLog.id);
+
+      expect(syncLog.systemBalanceAtSync).toBeCloseTo(7.5);
+      expect(syncLog.enteredBalance).toBeCloseTo(8.1);
+      expect(syncLog.delta).toBeCloseTo(0.6);
+
+      // Balance updated in DB
+      const updated = await db.llmProvider.findUnique({ where: { id: testProviderId } });
+      expect(updated?.balance?.toNumber()).toBeCloseTo(8.1);
+    });
+
+    it('rejects negative real balance with a validation error', async () => {
+      const res = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SYNC_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: testProviderId, realBalance: -5 },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeDefined();
+      expect(res.body.errors[0].message).toMatch(/[Bb]alance/);
+    });
+
+    it('handles sync when provider has no existing balance (defaults to 0)', async () => {
+      // Temporarily clear balance
+      await db.llmProvider.update({ where: { id: testProviderId }, data: { balance: null } });
+
+      const res = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SYNC_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: testProviderId, realBalance: 25.0 },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeUndefined();
+
+      const syncLog = res.body.data.syncProviderBalance;
+      createdSyncLogIds.push(syncLog.id);
+
+      expect(syncLog.systemBalanceAtSync).toBeCloseTo(0);
+      expect(syncLog.enteredBalance).toBeCloseTo(25.0);
+      expect(syncLog.delta).toBeCloseTo(25.0);
+    });
+  });
+});
+
+exec
+/bin/zsh -lc "sed -n '1,180p' cloud/apps/web/tests/components/runs/BudgetWarningDialog.test.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+/**
+ * Unit tests for BudgetWarningDialog component and checkBudgetOverdraft helper
+ */
+
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { BudgetWarningDialog } from '../../../src/components/runs/BudgetWarningDialog';
+import { checkBudgetOverdraft } from '../../../src/components/runs/RunForm';
+
+// ============================================================================
+// BudgetWarningDialog component tests (T029)
+// ============================================================================
+
+describe('BudgetWarningDialog', () => {
+  const overdraftProviders = [
+    { name: 'openai', displayName: 'OpenAI', estimatedCost: 5.0, balance: 2.0 },
+  ];
+
+  it('renders provider rows with correct data', () => {
+    render(
+      <BudgetWarningDialog
+        overdraftProviders={overdraftProviders}
+        onProceed={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('OpenAI')).toBeInTheDocument();
+    expect(screen.getByText('$5.00')).toBeInTheDocument();
+    expect(screen.getByText('$2.00')).toBeInTheDocument();
+  });
+
+  it('calls onProceed when Proceed Anyway button is clicked', async () => {
+    const onProceed = vi.fn();
+    render(
+      <BudgetWarningDialog
+        overdraftProviders={overdraftProviders}
+        onProceed={onProceed}
+        onCancel={vi.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /proceed anyway/i }));
+    expect(onProceed).toHaveBeenCalledOnce();
+  });
+
+  it('calls onCancel when Cancel button is clicked', async () => {
+    const onCancel = vi.fn();
+    render(
+      <BudgetWarningDialog
+        overdraftProviders={overdraftProviders}
+        onProceed={vi.fn()}
+        onCancel={onCancel}
+      />
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    expect(onCancel).toHaveBeenCalledOnce();
+  });
+
+  it('renders multiple overdraft providers', () => {
+    const multiProviders = [
+      { name: 'openai', displayName: 'OpenAI', estimatedCost: 5.0, balance: 2.0 },
+      { name: 'anthropic', displayName: 'Anthropic', estimatedCost: 3.0, balance: 1.0 },
+    ];
+    render(
+      <BudgetWarningDialog
+        overdraftProviders={multiProviders}
+        onProceed={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('OpenAI')).toBeInTheDocument();
+    expect(screen.getByText('Anthropic')).toBeInTheDocument();
+  });
+});
+
+// ============================================================================
+// checkBudgetOverdraft helper tests (T030)
+// ============================================================================
+
+describe('checkBudgetOverdraft', () => {
+  const makeProvider = (name: string, displayName: string, balance: number | null) => ({
+    id: `provider-${name}`,
+    name,
+    displayName,
+    balance,
+    lastSyncedAt: null,
+    maxParallelRequests: 5,
+    requestsPerMinute: 60,
+    isEnabled: true,
+    createdAt: '',
+    updatedAt: '',
+    models: [],
+  });
+
+  it('returns empty array when no provider is overdrawn', () => {
+    const providers = [makeProvider('openai', 'OpenAI', 100.0)];
+    const costEstimate = {
+      total: 5.0,
+      perModel: [{ modelId: 'openai:gpt-4o', totalCost: 5.0, displayName: '', scenarioCount: 1, inputTokens: 0, outputTokens: 0, inputCost: 0, outputCost: 0, avgInputPerProbe: 0, avgOutputPerProbe: 0, sampleCount: 1, isUsingFallback: false }],
+      scenarioCount: 1,
+      basedOnSampleCount: 1,
+      isUsingFallback: false,
+    };
+
+    const result = checkBudgetOverdraft(costEstimate, providers);
+    expect(result).toHaveLength(0);
+  });
+
+  it('returns overdraft entry when provider balance is insufficient', () => {
+    const providers = [makeProvider('openai', 'OpenAI', 1.0)];
+    const costEstimate = {
+      total: 5.0,
+      perModel: [{ modelId: 'openai:gpt-4o', totalCost: 5.0, displayName: '', scenarioCount: 1, inputTokens: 0, outputTokens: 0, inputCost: 0, outputCost: 0, avgInputPerProbe: 0, avgOutputPerProbe: 0, sampleCount: 1, isUsingFallback: false }],
+      scenarioCount: 1,
+      basedOnSampleCount: 1,
+      isUsingFallback: false,
+    };
+
+    const result = checkBudgetOverdraft(costEstimate, providers);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('openai');
+    expect(result[0].estimatedCost).toBeCloseTo(5.0);
+    expect(result[0].balance).toBeCloseTo(1.0);
+  });
+
+  it('does not include provider with null balance', () => {
+    const providers = [makeProvider('openai', 'OpenAI', null)];
+    const costEstimate = {
+      total: 5.0,
+      perModel: [{ modelId: 'openai:gpt-4o', totalCost: 5.0, displayName: '', scenarioCount: 1, inputTokens: 0, outputTokens: 0, inputCost: 0, outputCost: 0, avgInputPerProbe: 0, avgOutputPerProbe: 0, sampleCount: 1, isUsingFallback: false }],
+      scenarioCount: 1,
+      basedOnSampleCount: 1,
+      isUsingFallback: false,
+    };
+
+    const result = checkBudgetOverdraft(costEstimate, providers);
+    expect(result).toHaveLength(0);
+  });
+
+  it('handles multi-provider scenario — only includes overdrawn ones', () => {
+    const providers = [
+      makeProvider('openai', 'OpenAI', 100.0),
+      makeProvider('anthropic', 'Anthropic', 1.0),
+    ];
+    const costEstimate = {
+      total: 8.0,
+      perModel: [
+        { modelId: 'openai:gpt-4o', totalCost: 3.0, displayName: '', scenarioCount: 1, inputTokens: 0, outputTokens: 0, inputCost: 0, outputCost: 0, avgInputPerProbe: 0, avgOutputPerProbe: 0, sampleCount: 1, isUsingFallback: false },
+        { modelId: 'anthropic:claude-3', totalCost: 5.0, displayName: '', scenarioCount: 1, inputTokens: 0, outputTokens: 0, inputCost: 0, outputCost: 0, avgInputPerProbe: 0, avgOutputPerProbe: 0, sampleCount: 1, isUsingFallback: false },
+      ],
+      scenarioCount: 1,
+      basedOnSampleCount: 1,
+      isUsingFallback: false,
+    };
+
+    const result = checkBudgetOverdraft(costEstimate, providers);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('anthropic');
+  });
+
+  it('returns empty array when costEstimate has no perModel', () => {
+    const providers = [makeProvider('openai', 'OpenAI', 5.0)];
+    const costEstimate = {
+      total: 0,
+      perModel: [],
+      scenarioCount: 0,
+      basedOnSampleCount: 0,
+      isUsingFallback: false,
+    };
+
+    const result = checkBudgetOverdraft(costEstimate, providers);
+    expect(result).toHaveLength(0);
+  });
+});
+
+exec
+/bin/zsh -lc 'rg -n "lastSyncedAt" cloud/apps/web/src cloud/apps/api/src -S' in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+cloud/apps/web/src/generated/graphql.ts:1248:  lastSyncedAt?: Maybe<Scalars['DateTime']['output']>;
+cloud/apps/api/src/graphql/types/llm-provider.ts:61:    lastSyncedAt: t.field({
+
+exec
+/bin/zsh -lc "sed -n '1,160p' cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { DomainTrialsDashboard } from '../../src/pages/DomainTrialsDashboard';
+import {
+  BACKFILL_DOMAIN_EVALUATION_MODELS_MUTATION,
+  DOMAIN_EVALUATIONS_QUERY,
+  DOMAIN_EVALUATION_QUERY,
+  DOMAIN_EVALUATION_STATUS_QUERY,
+  DOMAIN_TRIAL_RUNS_STATUS_QUERY,
+  DOMAIN_TRIALS_PLAN_QUERY,
+  ESTIMATE_DOMAIN_EVALUATION_COST_QUERY,
+  START_DOMAIN_EVALUATION_MUTATION,
+} from '../../src/api/operations/domains';
+import { LLM_MODELS_QUERY } from '../../src/api/operations/llm';
+
+const useQueryMock = vi.fn();
+const useMutationMock = vi.fn();
+const useRunMock = vi.fn();
+const startDomainEvaluationMock = vi.fn();
+const backfillDomainEvaluationModelsMock = vi.fn();
+const NOW = new Date().toISOString();
+
+vi.mock('urql', async () => {
+  const actual = await vi.importActual<typeof import('urql')>('urql');
+  return {
+    ...actual,
+    useQuery: (args: unknown) => useQueryMock(args),
+    useMutation: (query: unknown) => useMutationMock(query),
+  };
+});
+
+vi.mock('../../src/hooks/useRun', () => ({
+  useRun: (...args: unknown[]) => useRunMock(...args),
+}));
+
+vi.mock('../../src/components/runs/RunProgress', () => ({
+  RunProgress: () => <div>Run progress mock</div>,
+}));
+
+function renderDomainTrialsDashboard(initialEntries: string[] = ['/domains/domain-a/run-trials']) {
+  return render(
+    <MemoryRouter initialEntries={initialEntries}>
+      <Routes>
+        <Route path="/domains/:domainId/run-trials" element={<DomainTrialsDashboard />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+function makeRunDetails(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'run-1',
+    definitionId: 'def-1',
+    experimentId: null,
+    status: 'RUNNING',
+    config: {
+      models: ['model-1', 'model-2'],
+      samplePercentage: 100,
+    },
+    runProgress: { total: 25, completed: 10, failed: 0, percentComplete: 40 },
+    summarizeProgress: null,
+    executionMetrics: null,
+    startedAt: '2026-03-15T12:01:00.000Z',
+    completedAt: null,
+    createdAt: '2026-03-15T12:00:00.000Z',
+    updatedAt: '2026-03-15T12:03:00.000Z',
+    lastAccessedAt: null,
+    transcripts: [],
+    transcriptCount: 0,
+    recentTasks: [],
+    definition: {
+      id: 'def-1',
+      name: 'Jobs A',
+    },
+    runCategory: 'PRODUCTION',
+    analysisStatus: 'computing',
+    stalledModels: [],
+    ...overrides,
+  };
+}
+
+function mockSetupQueries() {
+  useQueryMock.mockImplementation((args: { query: unknown }) => {
+    if (args.query === DOMAIN_TRIALS_PLAN_QUERY) {
+      return [{
+        data: {
+          domainTrialsPlan: {
+            domainId: 'domain-a',
+            domainName: 'Job domain',
+            vignettes: [
+              { definitionId: 'def-1', definitionName: 'Jobs A', definitionVersion: 1, signature: 'sig-a', scenarioCount: 25, existingBatchCount: 0 },
+              { definitionId: 'def-2', definitionName: 'Jobs B', definitionVersion: 1, signature: 'sig-b', scenarioCount: 25, existingBatchCount: 0 },
+            ],
+            models: [
+              { modelId: 'model-1', label: 'Model One', isDefault: true, supportsTemperature: true },
+              { modelId: 'model-2', label: 'Model Two', isDefault: false, supportsTemperature: true },
+            ],
+            cellEstimates: [
+              { definitionId: 'def-1', modelId: 'model-1', estimatedCost: 42 },
+              { definitionId: 'def-1', modelId: 'model-2', estimatedCost: 42 },
+              { definitionId: 'def-2', modelId: 'model-1', estimatedCost: 42 },
+              { definitionId: 'def-2', modelId: 'model-2', estimatedCost: 42 },
+            ],
+            totalEstimatedCost: 84,
+            existingTemperatures: [],
+            defaultTemperature: null,
+            temperatureWarning: null,
+          },
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === ESTIMATE_DOMAIN_EVALUATION_COST_QUERY) {
+      return [{
+        data: {
+          estimateDomainEvaluationCost: {
+            domainId: 'domain-a',
+            domainName: 'Job domain',
+            scopeCategory: 'PRODUCTION',
+            targetedDefinitions: 2,
+            totalScenarioCount: 50,
+            totalEstimatedCost: 84,
+            basedOnSampleCount: 50,
+            isUsingFallback: false,
+            fallbackReason: null,
+            estimateConfidence: 'HIGH',
+            knownExclusions: [],
+            models: [
+              { modelId: 'model-1', label: 'Model One', isDefault: true, supportsTemperature: true, estimatedCost: 42, basedOnSampleCount: 50, isUsingFallback: false },
+              { modelId: 'model-2', label: 'Model Two', isDefault: false, supportsTemperature: true, estimatedCost: 42, basedOnSampleCount: 50, isUsingFallback: false },
+            ],
+            definitions: [],
+            existingTemperatures: [],
+            defaultTemperature: null,
+            temperatureWarning: null,
+          },
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === LLM_MODELS_QUERY) {
+      return [{
+        data: {
+          llmModels: [
+            {
+              id: 'model-1-id',
+              providerId: 'openai',
+              modelId: 'model-1',
+              displayName: 'Model One',
+              costInputPerMillion: 1,
+              costOutputPerMillion: 2,
+              status: 'ACTIVE',
+              isDefault: true,
+              isAvailable: true,
+              apiConfig: null,
+              createdAt: '2026-03-01T00:00:00.000Z',
+
+codex
+I have the main risk pinned down. I’m grabbing exact line references now so the review can point at the regression precisely instead of speaking in generalities.
+exec
+/bin/zsh -lc "nl -ba cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx | sed -n '1,220p'" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+exec
+/bin/zsh -lc "nl -ba cloud/apps/web/src/components/settings/models/ModelsPanel.tsx | sed -n '1,240p'" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+     1	/**
+     2	 * Provider Settings Modal
+     3	 *
+     4	 * Modal for editing provider rate limit settings.
+     5	 */
+     6	
+     7	import { useState } from 'react';
+     8	import { X } from 'lucide-react';
+     9	import { Button } from '../../ui/Button';
+    10	import { Input } from '../../ui/Input';
+    11	import type { ProviderSettingsModalProps } from './types';
+    12	
+    13	export function ProviderSettingsModal({
+    14	  provider,
+    15	  onClose,
+    16	  onSave,
+    17	}: ProviderSettingsModalProps) {
+    18	  const [requestsPerMinute, setRequestsPerMinute] = useState(provider.requestsPerMinute.toString());
+    19	  const [maxParallelRequests, setMaxParallelRequests] = useState(
+    20	    provider.maxParallelRequests.toString()
+    21	  );
+    22	  // Budget balance: empty string = no budget set (null); numeric string = tracked balance
+    23	  const [balanceInput, setBalanceInput] = useState(
+    24	    provider.balance != null ? provider.balance.toFixed(2) : ''
+    25	  );
+    26	  const [isSaving, setIsSaving] = useState(false);
+    27	
+    28	  const parsedBalance = balanceInput.trim() === '' ? null : parseFloat(balanceInput);
+    29	  const balanceIsValid =
+    30	    balanceInput.trim() === '' || (!isNaN(parsedBalance!) && parsedBalance! >= 0);
+    31	  const balanceChanged = parsedBalance !== provider.balance;
+    32	
+    33	  const handleSubmit = async (e: React.FormEvent) => {
+    34	    e.preventDefault();
+    35	    setIsSaving(true);
+    36	
+    37	    await onSave({
+    38	      requestsPerMinute: parseInt(requestsPerMinute, 10),
+    39	      maxParallelRequests: parseInt(maxParallelRequests, 10),
+    40	      balance: parsedBalance,
+    41	    });
+    42	
+    43	    setIsSaving(false);
+    44	  };
+    45	
+    46	  const hasChanges =
+    47	    parseInt(requestsPerMinute, 10) !== provider.requestsPerMinute ||
+    48	    parseInt(maxParallelRequests, 10) !== provider.maxParallelRequests ||
+    49	    balanceChanged;
+    50	
+    51	  const isValid =
+    52	    !!requestsPerMinute &&
+    53	    !!maxParallelRequests &&
+    54	    parseInt(requestsPerMinute, 10) > 0 &&
+    55	    parseInt(maxParallelRequests, 10) > 0 &&
+    56	    balanceIsValid;
+    57	
+    58	  return (
+    59	    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+    60	      <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+    61	        <div className="flex justify-between items-center mb-4">
+    62	          <h3 className="text-lg font-medium text-gray-900">
+    63	            {provider.displayName} Settings
+    64	          </h3>
+    65	          <Button
+    66	            onClick={onClose}
+    67	            variant="ghost"
+    68	            size="icon"
+    69	            className="text-gray-400 hover:text-gray-600 hover:bg-transparent"
+    70	            aria-label="Close modal"
+    71	          >
+    72	            <X className="w-5 h-5" />
+    73	          </Button>
+    74	        </div>
+    75	
+    76	        <form onSubmit={handleSubmit} className="space-y-4">
+    77	          <Input
+    78	            label="Rate Limit (requests/minute)"
+    79	            type="number"
+    80	            min="1"
+    81	            max="10000"
+    82	            value={requestsPerMinute}
+    83	            onChange={(e) => setRequestsPerMinute(e.target.value)}
+    84	            required
+    85	          />
+    86	
+    87	          <Input
+    88	            label="Max Parallel Requests"
+    89	            type="number"
+    90	            min="1"
+    91	            max="100"
+    92	            value={maxParallelRequests}
+    93	            onChange={(e) => setMaxParallelRequests(e.target.value)}
+    94	            required
+    95	          />
+    96	
+    97	          <Input
+    98	            label="Budget Balance ($)"
+    99	            type="number"
+   100	            min="0"
+   101	            step="0.01"
+   102	            placeholder="Leave empty to disable budget tracking"
+   103	            value={balanceInput}
+   104	            onChange={(e) => setBalanceInput(e.target.value)}
+   105	          />
+   106	          {provider.balance != null && (
+   107	            <p className="text-xs text-gray-500 mt-1">
+   108	              ValueRank balance: ${provider.balance.toFixed(2)}
+   109	            </p>
+   110	          )}
+   111	
+   112	          <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+   113	            <p>
+   114	              <strong>Rate Limit:</strong> Maximum API calls per minute to this provider.
+   115	            </p>
+   116	            <p className="mt-1">
+   117	              <strong>Parallel Requests:</strong> Maximum concurrent API calls. Set to 1 for
+   118	              conservative usage that avoids rate limit errors.
+   119	            </p>
+   120	            <p className="mt-1">
+   121	              <strong>Budget Balance:</strong> Track remaining spend for this provider.
+   122	              Leave empty to disable tracking. Balance is automatically decremented when runs complete.
+   123	            </p>
+   124	          </div>
+   125	
+   126	          <div className="flex justify-end gap-3 pt-4">
+   127	            <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
+   128	              Cancel
+   129	            </Button>
+   130	            <Button
+   131	              type="submit"
+   132	              variant="primary"
+   133	              disabled={!isValid || !hasChanges || isSaving}
+   134	              isLoading={isSaving}
+   135	            >
+   136	              Save Settings
+   137	            </Button>
+   138	          </div>
+   139	        </form>
+   140	      </div>
+   141	    </div>
+   142	  );
+   143	}
+
+ succeeded in 0ms:
+     1	/**
+     2	 * Models Panel
+     3	 *
+     4	 * Settings panel for managing LLM providers and their models.
+     5	 */
+     6	
+     7	import { useState } from 'react';
+     8	import { useQuery, useMutation } from 'urql';
+     9	import { Cpu } from 'lucide-react';
+    10	import { Loading } from '../../ui/Loading';
+    11	import { EmptyState } from '../../ui/EmptyState';
+    12	import { ErrorMessage } from '../../ui/ErrorMessage';
+    13	import { ProviderSection } from './ProviderSection';
+    14	import { ModelFormModal } from './ModelForm';
+    15	import { ProviderSettingsModal } from './ProviderSettingsModal';
+    16	import type { LlmProvidersQueryResult, LlmProvider, LlmModel, CreateLlmModelInput, UpdateLlmModelInput } from '../../../api/operations/llm';
+    17	import {
+    18	  LLM_PROVIDERS_QUERY,
+    19	  CREATE_LLM_MODEL_MUTATION,
+    20	  UPDATE_LLM_MODEL_MUTATION,
+    21	  DEPRECATE_LLM_MODEL_MUTATION,
+    22	  REACTIVATE_LLM_MODEL_MUTATION,
+    23	  SET_DEFAULT_LLM_MODEL_MUTATION,
+    24	  UNSET_DEFAULT_LLM_MODEL_MUTATION,
+    25	  UPDATE_LLM_PROVIDER_MUTATION,
+    26	  SET_PROVIDER_BALANCE_MUTATION,
+    27	} from '../../../api/operations/llm';
+    28	
+    29	export function ModelsPanel() {
+    30	  const [expandedProviders, setExpandedProviders] = useState<Set<string>>(new Set());
+    31	  const [isAddModelOpen, setIsAddModelOpen] = useState(false);
+    32	  const [editingModel, setEditingModel] = useState<LlmModel | null>(null);
+    33	  const [selectedProvider, setSelectedProvider] = useState<LlmProvider | null>(null);
+    34	  const [editingProvider, setEditingProvider] = useState<LlmProvider | null>(null);
+    35	
+    36	  const [{ data, fetching, error }, reexecuteQuery] = useQuery<LlmProvidersQueryResult>({
+    37	    query: LLM_PROVIDERS_QUERY,
+    38	  });
+    39	
+    40	  const [, createModel] = useMutation(CREATE_LLM_MODEL_MUTATION);
+    41	  const [, updateModel] = useMutation(UPDATE_LLM_MODEL_MUTATION);
+    42	  const [, deprecateModel] = useMutation(DEPRECATE_LLM_MODEL_MUTATION);
+    43	  const [, reactivateModel] = useMutation(REACTIVATE_LLM_MODEL_MUTATION);
+    44	  const [, setDefaultModel] = useMutation(SET_DEFAULT_LLM_MODEL_MUTATION);
+    45	  const [, unsetDefaultModel] = useMutation(UNSET_DEFAULT_LLM_MODEL_MUTATION);
+    46	  const [, updateProvider] = useMutation(UPDATE_LLM_PROVIDER_MUTATION);
+    47	  const [, setProviderBalance] = useMutation(SET_PROVIDER_BALANCE_MUTATION);
+    48	
+    49	  const toggleProvider = (providerId: string) => {
+    50	    setExpandedProviders((prev) => {
+    51	      const next = new Set(prev);
+    52	      if (next.has(providerId)) {
+    53	        next.delete(providerId);
+    54	      } else {
+    55	        next.add(providerId);
+    56	      }
+    57	      return next;
+    58	    });
+    59	  };
+    60	
+    61	  const handleCreateModel = async (input: CreateLlmModelInput) => {
+    62	    await createModel({ input });
+    63	    setIsAddModelOpen(false);
+    64	    setSelectedProvider(null);
+    65	    reexecuteQuery({ requestPolicy: 'network-only' });
+    66	  };
+    67	
+    68	  const handleUpdateModel = async (id: string, input: UpdateLlmModelInput) => {
+    69	    await updateModel({ id, input });
+    70	    setEditingModel(null);
+    71	    reexecuteQuery({ requestPolicy: 'network-only' });
+    72	  };
+    73	
+    74	  const handleDeprecateModel = async (id: string) => {
+    75	    await deprecateModel({ id });
+    76	    reexecuteQuery({ requestPolicy: 'network-only' });
+    77	  };
+    78	
+    79	  const handleReactivateModel = async (id: string) => {
+    80	    await reactivateModel({ id });
+    81	    reexecuteQuery({ requestPolicy: 'network-only' });
+    82	  };
+    83	
+    84	  const handleSetDefault = async (id: string) => {
+    85	    await setDefaultModel({ id });
+    86	    reexecuteQuery({ requestPolicy: 'network-only' });
+    87	  };
+    88	
+    89	  const handleUnsetDefault = async (id: string) => {
+    90	    await unsetDefaultModel({ id });
+    91	    reexecuteQuery({ requestPolicy: 'network-only' });
+    92	  };
+    93	
+    94	  const handleUpdateProvider = async (
+    95	    id: string,
+    96	    input: { requestsPerMinute?: number; maxParallelRequests?: number; balance?: number | null }
+    97	  ) => {
+    98	    const { balance, ...providerInput } = input;
+    99	    await updateProvider({ id, input: providerInput });
+   100	    if (balance !== undefined) {
+   101	      await setProviderBalance({ providerId: id, balance });
+   102	    }
+   103	    setEditingProvider(null);
+   104	    reexecuteQuery({ requestPolicy: 'network-only' });
+   105	  };
+   106	
+   107	  const openAddModel = (provider: LlmProvider) => {
+   108	    setSelectedProvider(provider);
+   109	    setIsAddModelOpen(true);
+   110	  };
+   111	
+   112	  if (fetching) return <Loading text="Loading models..." />;
+   113	  if (error) {
+   114	    return (
+   115	      <ErrorMessage
+   116	        message={error.message}
+   117	        onRetry={() => reexecuteQuery({ requestPolicy: 'network-only' })}
+   118	      />
+   119	    );
+   120	  }
+   121	
+   122	  const providers = data?.llmProviders ?? [];
+   123	
+   124	  if (providers.length === 0) {
+   125	    return (
+   126	      <EmptyState
+   127	        icon={Cpu}
+   128	        title="No providers configured"
+   129	        description="LLM providers need to be seeded in the database"
+   130	      />
+   131	    );
+   132	  }
+   133	
+   134	  return (
+   135	    <>
+   136	      <div className="space-y-4">
+   137	        {providers.map((provider) => (
+   138	          <ProviderSection
+   139	            key={provider.id}
+   140	            provider={provider}
+   141	            isExpanded={expandedProviders.has(provider.id)}
+   142	            onToggle={() => toggleProvider(provider.id)}
+   143	            onAddModel={() => openAddModel(provider)}
+   144	            onEditModel={setEditingModel}
+   145	            onDeprecateModel={handleDeprecateModel}
+   146	            onReactivateModel={handleReactivateModel}
+   147	            onSetDefault={handleSetDefault}
+   148	            onUnsetDefault={handleUnsetDefault}
+   149	            onEditSettings={() => setEditingProvider(provider)}
+   150	          />
+   151	        ))}
+   152	      </div>
+   153	
+   154	      {isAddModelOpen && selectedProvider && (
+   155	        <ModelFormModal
+   156	          provider={selectedProvider}
+   157	          onClose={() => {
+   158	            setIsAddModelOpen(false);
+   159	            setSelectedProvider(null);
+   160	          }}
+   161	          onSave={handleCreateModel as (input: CreateLlmModelInput | UpdateLlmModelInput) => Promise<void>}
+   162	        />
+   163	      )}
+   164	
+   165	      {editingModel && (
+   166	        <ModelFormModal
+   167	          model={editingModel}
+   168	          onClose={() => setEditingModel(null)}
+   169	          onSave={(input) => handleUpdateModel(editingModel.id, input as UpdateLlmModelInput)}
+   170	        />
+   171	      )}
+   172	
+   173	      {editingProvider && (
+   174	        <ProviderSettingsModal
+   175	          provider={editingProvider}
+   176	          onClose={() => setEditingProvider(null)}
+   177	          onSave={(input) => handleUpdateProvider(editingProvider.id, input)}
+   178	        />
+   179	      )}
+   180	    </>
+   181	  );
+   182	}
+
+exec
+/bin/zsh -lc "nl -ba cloud/apps/web/src/components/settings/models/ProviderSection.tsx | sed -n '1,180p'" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+     1	/**
+     2	 * Provider Section
+     3	 *
+     4	 * Accordion-style section for a single LLM provider showing its models.
+     5	 */
+     6	
+     7	import { Plus, ChevronDown, ChevronRight, Settings } from 'lucide-react';
+     8	import { Button } from '../../ui/Button';
+     9	import { ModelRow } from './ModelRow';
+    10	import type { ProviderSectionProps } from './types';
+    11	
+    12	export function ProviderSection({
+    13	  provider,
+    14	  isExpanded,
+    15	  onToggle,
+    16	  onAddModel,
+    17	  onEditModel,
+    18	  onDeprecateModel,
+    19	  onReactivateModel,
+    20	  onSetDefault,
+    21	  onUnsetDefault,
+    22	  onEditSettings,
+    23	}: ProviderSectionProps) {
+    24	  const activeModels = provider.models.filter((m) => m.status === 'ACTIVE');
+    25	  const deprecatedModels = provider.models.filter((m) => m.status === 'DEPRECATED');
+    26	
+    27	  return (
+    28	    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+    29	      {/* eslint-disable-next-line react/forbid-elements -- Accordion toggle requires custom semantic button styling */}
+    30	      <button
+    31	        onClick={onToggle}
+    32	        className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+    33	      >
+    34	        <div className="flex items-center gap-3">
+    35	          {isExpanded ? (
+    36	            <ChevronDown className="w-5 h-5 text-gray-400" />
+    37	          ) : (
+    38	            <ChevronRight className="w-5 h-5 text-gray-400" />
+    39	          )}
+    40	          <div className="text-left">
+    41	            <h3 className="font-medium text-gray-900">{provider.displayName}</h3>
+    42	            <p className="text-sm text-gray-500">
+    43	              {activeModels.length} active model{activeModels.length !== 1 ? 's' : ''}
+    44	              {deprecatedModels.length > 0 && `, ${deprecatedModels.length} deprecated`}
+    45	            </p>
+    46	          </div>
+    47	        </div>
+    48	        <div className="flex items-center gap-2">
+    49	          {provider.balance != null ? (
+    50	            <span className="px-2 py-1 text-xs rounded-full bg-yellow-50 text-yellow-700 border border-yellow-200">
+    51	              ${provider.balance.toFixed(2)} remaining
+    52	            </span>
+    53	          ) : (
+    54	            <span className="px-2 py-1 text-xs rounded-full bg-gray-50 text-gray-400 border border-gray-200">
+    55	              No budget set
+    56	            </span>
+    57	          )}
+    58	          <span
+    59	            className={`px-2 py-1 text-xs rounded-full ${
+    60	              provider.isEnabled
+    61	                ? 'bg-green-100 text-green-700'
+    62	                : 'bg-gray-100 text-gray-500'
+    63	            }`}
+    64	          >
+    65	            {provider.isEnabled ? 'Enabled' : 'Disabled'}
+    66	          </span>
+    67	        </div>
+    68	      </button>
+    69	
+    70	      {isExpanded && (
+    71	        <div className="border-t border-gray-200">
+    72	          <div className="px-6 py-3 bg-gray-50 flex justify-between items-center">
+    73	            <Button
+    74	              onClick={(e) => {
+    75	                e.stopPropagation();
+    76	                onEditSettings();
+    77	              }}
+    78	              variant="ghost"
+    79	              size="sm"
+    80	              className="text-gray-500 hover:text-gray-700 hover:bg-transparent px-0 group"
+    81	              title="Edit rate limits"
+    82	            >
+    83	              <Settings className="w-4 h-4 text-gray-400 group-hover:text-gray-600 mr-1" />
+    84	              Rate limit: {provider.requestsPerMinute}/min, {provider.maxParallelRequests} parallel
+    85	            </Button>
+    86	            <Button variant="ghost" size="sm" onClick={onAddModel}>
+    87	              <Plus className="w-4 h-4 mr-1" />
+    88	              Add Model
+    89	            </Button>
+    90	          </div>
+    91	
+    92	          <div className="divide-y divide-gray-100">
+    93	            {provider.models.map((model) => (
+    94	              <ModelRow
+    95	                key={model.id}
+    96	                model={model}
+    97	                onEdit={() => onEditModel(model)}
+    98	                onDeprecate={() => onDeprecateModel(model.id)}
+    99	                onReactivate={() => onReactivateModel(model.id)}
+   100	                onSetDefault={() => onSetDefault(model.id)}
+   101	                onUnsetDefault={() => onUnsetDefault(model.id)}
+   102	              />
+   103	            ))}
+   104	          </div>
+   105	        </div>
+   106	      )}
+   107	    </div>
+   108	  );
+   109	}
+
+codex
+## Findings
+1. [UNVERIFIED] MEDIUM - Removing the `onSync` path from [`ModelsPanel.tsx`](/Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur/cloud/apps/web/src/components/settings/models/ModelsPanel.tsx) and [`ProviderSettingsModal.tsx`](/Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur/cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx) drops the only frontend way to invoke `syncProviderBalance`, even though the backend mutation still exists. If manual reconciliation is still part of the intended workflow, the UI now leaves operators with no way to correct balance drift from the app, which can make budget checks and overdraft warnings wrong.
+
+2. [UNVERIFIED] MEDIUM - Removing the `lastSyncedAt` display from [`ProviderSection.tsx`](/Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur/cloud/apps/web/src/components/settings/models/ProviderSection.tsx) while replacing the modal copy with a bare `ValueRank balance` line hides freshness information. The screen now presents a dollar amount without any timestamp or sync context, so a stale stored balance can look authoritative even when it is not current.
+
+## Residual Risks
+- I could not verify whether another screen or admin flow still exposes balance sync, so the real impact may be narrower if this panel was not the last entry point.
+- The backend sync mutation and sync-log behavior still appear to exist, so the main risk here is UI-level drift and misleading state presentation rather than data loss.
+tokens used
+31,953
