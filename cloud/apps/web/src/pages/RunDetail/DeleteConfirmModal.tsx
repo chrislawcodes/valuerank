@@ -23,7 +23,7 @@ export function DeleteConfirmModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/50" aria-hidden="true" onClick={onClose} />
       <div className="relative bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
         <h3 className="text-lg font-medium text-gray-900 mb-2">Delete Trial?</h3>
         <p className="text-sm text-gray-500 mb-4">

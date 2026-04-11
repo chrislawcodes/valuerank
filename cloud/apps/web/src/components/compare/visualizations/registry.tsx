@@ -22,6 +22,9 @@
 
 import { LayoutDashboard, BarChart3, TrendingUp, LineChart, FileText } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { createLogger } from '@valuerank/shared';
+
+const log = createLogger('visualization-registry');
 import type { VisualizationType, ComparisonVisualizationProps } from '../types';
 import { OverviewViz } from './OverviewViz';
 import { DecisionsViz } from './DecisionsViz';
@@ -60,8 +63,7 @@ const visualizationRegistry = new Map<VisualizationType, VisualizationRegistrati
  */
 export function registerVisualization(registration: VisualizationRegistration): void {
   if (visualizationRegistry.has(registration.id)) {
-    // eslint-disable-next-line no-console
-    console.warn(`Visualization '${registration.id}' is already registered. Overwriting.`);
+    log.warn({ id: registration.id }, 'Visualization already registered, overwriting');
   }
   visualizationRegistry.set(registration.id, registration);
 }
