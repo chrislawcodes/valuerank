@@ -53,6 +53,9 @@ fi
 echo "🔍 Running pre-push checks for changed workspaces..."
 echo "   Changed: shared=$SHARED db=$DB api=$API web=$WEB"
 
+echo "📏 Checking file sizes..."
+"$CLOUD/scripts/check-file-sizes.sh"
+
 cd "$CLOUD"
 
 echo "📦 Running lint..."
