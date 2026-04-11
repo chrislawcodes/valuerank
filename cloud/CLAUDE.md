@@ -178,17 +178,24 @@ Always use structured data (object + message), never string interpolation.
 
 ```
 apps/api/src/
-├── routes/       # Express route handlers
+├── auth/         # Authentication middleware and JWT handling
+├── cli/          # Admin scripts (create-user, normalize, shadow)
+├── config/       # Server configuration
+├── graphql/      # GraphQL schema, queries, mutations, types
+├── mcp/          # MCP server tools and OAuth
+├── middleware/    # Express middleware
+├── queue/        # PgBoss job handlers and queue orchestration
+├── routes/       # Express route handlers (REST, CSV, OData)
 ├── services/     # Business logic
-├── middleware/   # Express middleware
-├── jobs/         # PgBoss job handlers
-└── types/        # TypeScript types
+└── utils/        # Pure utility functions
 
 apps/web/src/
+├── api/          # GraphQL operations and client setup
 ├── components/   # React components
 ├── hooks/        # Custom hooks
+├── lib/          # Shared libraries (statistics, formatting)
 ├── pages/        # Route pages
-└── types/        # TypeScript types
+└── utils/        # Pure utility functions
 ```
 
 ---

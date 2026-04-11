@@ -8,6 +8,9 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Download, ChevronDown, FileText, FileCode } from 'lucide-react';
+import { createLogger } from '@valuerank/shared';
+
+const log = createLogger('export-button');
 import { Button } from '../ui/Button';
 import { exportDefinitionAsMd, exportScenariosAsYaml } from '../../api/export';
 
@@ -58,8 +61,7 @@ export function ExportButton({
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Export failed';
       setError(message);
-      // eslint-disable-next-line no-console
-      console.error('Export error:', err);
+      log.error({ err }, 'Export failed');
     } finally {
       setIsExporting(false);
     }
