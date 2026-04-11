@@ -80,7 +80,6 @@ describe('Queue Status Query', () => {
 
     expect(typeNames).toContain('probe_scenario');
     expect(typeNames).toContain('analyze_basic');
-    expect(typeNames).toContain('analyze_deep');
   });
 
   it('returns valid count structure', async () => {

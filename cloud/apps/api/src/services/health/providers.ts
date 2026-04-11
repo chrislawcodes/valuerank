@@ -532,10 +532,6 @@ export async function getProviderHealth(forceRefresh = false): Promise<ProviderH
   return result;
 }
 
-/**
- * Clear the health check cache.
- * Useful for testing or forcing immediate re-check.
- */
 export function clearProviderHealthCache(): void {
   cachedResult = null;
   cacheTimestamp = 0;

@@ -13,7 +13,6 @@ import type {
   ProbeScenarioJobData,
   SummarizeTranscriptJobData,
   AnalyzeBasicJobData,
-  AnalyzeDeepJobData,
   ExpandScenariosJobData,
   ComputeTokenStatsJobData,
   ProbeDeadLetterJobData,
@@ -22,7 +21,6 @@ import type {
 import { createProbeScenarioHandler } from './probe-scenario.js';
 import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
 import { createAnalyzeBasicHandler } from './analyze-basic.js';
-import { createAnalyzeDeepHandler } from './analyze-deep.js';
 import { createExpandScenariosHandler } from './expand-scenarios.js';
 import { createComputeTokenStatsHandler } from './compute-token-stats.js';
 import { createProbeDeadLetterHandler } from './probe-dead-letter.js';
@@ -35,7 +33,7 @@ import {
 const log = createLogger('queue:handlers');
 
 // Re-export job data types for handlers
-export type { ProbeScenarioJobData, SummarizeTranscriptJobData, AnalyzeBasicJobData, AnalyzeDeepJobData, ExpandScenariosJobData, ComputeTokenStatsJobData, ProbeDeadLetterJobData, AggregateAnalysisJobData };
+export type { ProbeScenarioJobData, SummarizeTranscriptJobData, AnalyzeBasicJobData, ExpandScenariosJobData, ComputeTokenStatsJobData, ProbeDeadLetterJobData, AggregateAnalysisJobData };
 
 // Dead letter queue name for probe jobs
 const PROBE_DEAD_LETTER_QUEUE = 'probe_dead_letter';
@@ -75,16 +73,6 @@ const handlerRegistrations: HandlerRegistration[] = [
         'analyze_basic',
         { batchSize },
         createAnalyzeBasicHandler()
-      );
-    },
-  },
-  {
-    name: 'analyze_deep',
-    register: async (boss, batchSize) => {
-      await boss.work<AnalyzeDeepJobData>(
-        'analyze_deep',
-        { batchSize },
-        createAnalyzeDeepHandler()
       );
     },
   },
