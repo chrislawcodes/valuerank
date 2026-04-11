@@ -50,6 +50,7 @@ describe('GraphQL domain analysis', () => {
       data: {
         name: `Job Choice Analysis Fix ${Date.now()}`,
         normalizedName: `job-choice-analysis-fix-${Date.now()}`,
+        defaultModelIds: ['job-choice-analysis-model'],
       },
     });
     createdDomainIds.push(domain.id);
@@ -126,7 +127,7 @@ describe('GraphQL domain analysis', () => {
       data: {
         definitionId: aFirstDefinition.id,
         status: 'COMPLETED',
-        config: { temperature: null },
+        config: { temperature: null, models: ['job-choice-analysis-model'] },
         progress: { completed: 1, total: 1 },
         startedAt: new Date(),
         completedAt: new Date(),
@@ -154,7 +155,7 @@ describe('GraphQL domain analysis', () => {
       data: {
         definitionId: bFirstDefinition.id,
         status: 'COMPLETED',
-        config: { temperature: null },
+        config: { temperature: null, models: ['job-choice-analysis-model'] },
         progress: { completed: 1, total: 1 },
         startedAt: new Date(),
         completedAt: new Date(),
