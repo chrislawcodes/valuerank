@@ -15,8 +15,8 @@ export type Scalars = {
   Boolean: { input: boolean; output: boolean; }
   Int: { input: number; output: number; }
   Float: { input: number; output: number; }
-  DateTime: { input: any; output: any; }
-  JSON: { input: any; output: any; }
+  DateTime: { input: string; output: string; }
+  JSON: { input: unknown; output: unknown; }
 };
 
 /** Actual cost summary for a completed run */
@@ -114,10 +114,9 @@ export type AnalysisResult = {
 };
 
 /** Status of an analysis result */
-export enum AnalysisStatus {
-  Current = 'CURRENT',
-  Superseded = 'SUPERSEDED'
-}
+export type AnalysisStatus =
+  | 'CURRENT'
+  | 'SUPERSEDED';
 
 /** Warning about statistical assumptions or data quality */
 export type AnalysisWarning = {
@@ -155,12 +154,11 @@ export type AssumptionsTempZeroResult = {
 };
 
 /** Type of action that was audited */
-export enum AuditAction {
-  Action = 'ACTION',
-  Create = 'CREATE',
-  Delete = 'DELETE',
-  Update = 'UPDATE'
-}
+export type AuditAction =
+  | 'ACTION'
+  | 'CREATE'
+  | 'DELETE'
+  | 'UPDATE';
 
 /** An audit log entry recording a mutation */
 export type AuditLog = {
@@ -1035,18 +1033,17 @@ export type ExecutionMetrics = {
 };
 
 /** Status of a scenario expansion job */
-export enum ExpansionJobStatus {
+export type ExpansionJobStatus =
   /** Job is currently running */
-  Active = 'ACTIVE',
+  | 'ACTIVE'
   /** Job completed successfully */
-  Completed = 'COMPLETED',
+  | 'COMPLETED'
   /** Job failed */
-  Failed = 'FAILED',
+  | 'FAILED'
   /** No expansion job exists */
-  None = 'NONE',
+  | 'NONE'
   /** Job is queued and waiting to run */
-  Pending = 'PENDING'
-}
+  | 'PENDING';
 
 /** Real-time progress during scenario expansion */
 export type ExpansionProgress = {
@@ -1224,10 +1221,9 @@ export type LlmModel = {
 };
 
 /** Lifecycle status of an LLM model */
-export enum LlmModelStatus {
-  Active = 'ACTIVE',
-  Deprecated = 'DEPRECATED'
-}
+export type LlmModelStatus =
+  | 'ACTIVE'
+  | 'DEPRECATED';
 
 /** An LLM API provider with rate limiting and parallelism settings */
 export type LlmProvider = {
@@ -3225,11 +3221,10 @@ export type RunConditionGridCell = {
 };
 
 /** Priority level for run execution (affects job queue ordering) */
-export enum RunPriority {
-  High = 'HIGH',
-  Low = 'LOW',
-  Normal = 'NORMAL'
-}
+export type RunPriority =
+  | 'HIGH'
+  | 'LOW'
+  | 'NORMAL';
 
 /** Progress information for a run */
 export type RunProgress = {
@@ -3247,13 +3242,12 @@ export type RunProgress = {
 };
 
 /** Status of a run execution */
-export enum RunStatus {
-  Cancelled = 'CANCELLED',
-  Completed = 'COMPLETED',
-  Failed = 'FAILED',
-  Pending = 'PENDING',
-  Running = 'RUNNING'
-}
+export type RunStatus =
+  | 'CANCELLED'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'PENDING'
+  | 'RUNNING';
 
 /** A generated scenario from a definition */
 export type Scenario = {
@@ -3375,12 +3369,11 @@ export type TaskResult = {
 };
 
 /** Status of an individual task/job */
-export enum TaskStatus {
-  Completed = 'COMPLETED',
-  Failed = 'FAILED',
-  Pending = 'PENDING',
-  Running = 'RUNNING'
-}
+export type TaskStatus =
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'PENDING'
+  | 'RUNNING';
 
 export type TempZeroDecision = {
   __typename?: 'TempZeroDecision';
@@ -3712,22 +3705,141 @@ export type WorkerHealth = {
   warnings: Array<Scalars['String']['output']>;
 };
 
+export type ApiKeysQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ApiKeysQuery = { __typename?: 'Query', apiKeys: Array<{ __typename?: 'ApiKey', id: string, name: string, keyPrefix: string, lastUsedAt?: string | null, expiresAt?: string | null, createdAt: string }> };
+
+export type CreateApiKeyMutationVariables = Exact<{
+  input: CreateApiKeyInput;
+}>;
+
+
+export type CreateApiKeyMutation = { __typename?: 'Mutation', createApiKey: { __typename?: 'CreateApiKeyResult', key: string, apiKey: { __typename?: 'ApiKey', id: string, name: string, keyPrefix: string, lastUsedAt?: string | null, expiresAt?: string | null, createdAt: string } } };
+
+export type RevokeApiKeyMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type RevokeApiKeyMutation = { __typename?: 'Mutation', revokeApiKey: boolean };
+
 export type MeQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type MeQuery = { __typename?: 'Query', me?: { __typename?: 'User', id: string, email: string, name?: string | null, lastLoginAt?: any | null, createdAt: any } | null };
+export type MeQuery = { __typename?: 'Query', me?: { __typename?: 'User', id: string, email: string, name?: string | null, lastLoginAt?: string | null, createdAt: string } | null };
+
+export type EstimateCostQueryVariables = Exact<{
+  definitionId: Scalars['ID']['input'];
+  models: Array<Scalars['String']['input']> | Scalars['String']['input'];
+  samplePercentage?: InputMaybe<Scalars['Int']['input']>;
+  samplesPerScenario?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type EstimateCostQuery = { __typename?: 'Query', estimateCost: { __typename?: 'CostEstimate', total: number, scenarioCount: number, basedOnSampleCount: number, isUsingFallback: boolean, fallbackReason?: string | null, perModel: Array<{ __typename?: 'ModelCostEstimate', modelId: string, displayName: string, scenarioCount: number, inputTokens: number, outputTokens: number, inputCost: number, outputCost: number, totalCost: number, avgInputPerProbe: number, avgOutputPerProbe: number, sampleCount: number, isUsingFallback: boolean }> } };
 
 export type AvailableModelsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
 export type AvailableModelsQuery = { __typename?: 'Query', availableModels: Array<{ __typename?: 'AvailableModel', id: string, providerId: string, displayName: string, versions: Array<string>, defaultVersion?: string | null, isAvailable: boolean, isDefault: boolean }> };
 
+export type TagsQueryVariables = Exact<{
+  search?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type TagsQuery = { __typename?: 'Query', tags: Array<{ __typename?: 'Tag', id: string, name: string, createdAt: string, definitionCount: number }> };
+
+export type CreateTagMutationVariables = Exact<{
+  name: Scalars['String']['input'];
+}>;
+
+
+export type CreateTagMutation = { __typename?: 'Mutation', createTag: { __typename?: 'Tag', id: string, name: string, createdAt: string } };
+
+export type DeleteTagMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type DeleteTagMutation = { __typename?: 'Mutation', deleteTag: { __typename?: 'DeleteTagResult', success: boolean, affectedDefinitions: number } };
+
+export type AddTagToDefinitionMutationVariables = Exact<{
+  definitionId: Scalars['String']['input'];
+  tagId: Scalars['String']['input'];
+}>;
+
+
+export type AddTagToDefinitionMutation = { __typename?: 'Mutation', addTagToDefinition: { __typename?: 'Definition', id: string, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } };
+
+export type RemoveTagFromDefinitionMutationVariables = Exact<{
+  definitionId: Scalars['String']['input'];
+  tagId: Scalars['String']['input'];
+}>;
+
+
+export type RemoveTagFromDefinitionMutation = { __typename?: 'Mutation', removeTagFromDefinition: { __typename?: 'Definition', id: string, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } };
+
+export type CreateAndAssignTagMutationVariables = Exact<{
+  definitionId: Scalars['String']['input'];
+  tagName: Scalars['String']['input'];
+}>;
+
+
+export type CreateAndAssignTagMutation = { __typename?: 'Mutation', createAndAssignTag: { __typename?: 'Definition', id: string, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } };
+
 export type TempZeroVerificationReportQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type TempZeroVerificationReportQuery = { __typename?: 'Query', tempZeroVerificationReport?: { __typename?: 'TempZeroVerificationReport', generatedAt: any, transcriptCount: number, batchTimestamp?: any | null, models: Array<{ __typename?: 'TempZeroModelVerification', modelId: string, transcriptCount: number, adapterModes: Array<string>, promptHashStabilityPct?: number | null, fingerprintDriftPct?: number | null, decisionMatchRatePct?: number | null }> } | null };
+export type TempZeroVerificationReportQuery = { __typename?: 'Query', tempZeroVerificationReport?: { __typename?: 'TempZeroVerificationReport', generatedAt: string, transcriptCount: number, batchTimestamp?: string | null, models: Array<{ __typename?: 'TempZeroModelVerification', modelId: string, transcriptCount: number, adapterModes: Array<string>, promptHashStabilityPct?: number | null, fingerprintDriftPct?: number | null, decisionMatchRatePct?: number | null }> } | null };
 
 
+export const ApiKeysDocument = gql`
+    query ApiKeys {
+  apiKeys {
+    id
+    name
+    keyPrefix
+    lastUsedAt
+    expiresAt
+    createdAt
+  }
+}
+    `;
+
+export function useApiKeysQuery(options?: Omit<Urql.UseQueryArgs<ApiKeysQueryVariables>, 'query'>) {
+  return Urql.useQuery<ApiKeysQuery, ApiKeysQueryVariables>({ query: ApiKeysDocument, ...options });
+};
+export const CreateApiKeyDocument = gql`
+    mutation CreateApiKey($input: CreateApiKeyInput!) {
+  createApiKey(input: $input) {
+    apiKey {
+      id
+      name
+      keyPrefix
+      lastUsedAt
+      expiresAt
+      createdAt
+    }
+    key
+  }
+}
+    `;
+
+export function useCreateApiKeyMutation() {
+  return Urql.useMutation<CreateApiKeyMutation, CreateApiKeyMutationVariables>(CreateApiKeyDocument);
+};
+export const RevokeApiKeyDocument = gql`
+    mutation RevokeApiKey($id: ID!) {
+  revokeApiKey(id: $id)
+}
+    `;
+
+export function useRevokeApiKeyMutation() {
+  return Urql.useMutation<RevokeApiKeyMutation, RevokeApiKeyMutationVariables>(RevokeApiKeyDocument);
+};
 export const MeDocument = gql`
     query Me {
   me {
@@ -3742,6 +3854,40 @@ export const MeDocument = gql`
 
 export function useMeQuery(options?: Omit<Urql.UseQueryArgs<MeQueryVariables>, 'query'>) {
   return Urql.useQuery<MeQuery, MeQueryVariables>({ query: MeDocument, ...options });
+};
+export const EstimateCostDocument = gql`
+    query EstimateCost($definitionId: ID!, $models: [String!]!, $samplePercentage: Int, $samplesPerScenario: Int) {
+  estimateCost(
+    definitionId: $definitionId
+    models: $models
+    samplePercentage: $samplePercentage
+    samplesPerScenario: $samplesPerScenario
+  ) {
+    total
+    scenarioCount
+    basedOnSampleCount
+    isUsingFallback
+    fallbackReason
+    perModel {
+      modelId
+      displayName
+      scenarioCount
+      inputTokens
+      outputTokens
+      inputCost
+      outputCost
+      totalCost
+      avgInputPerProbe
+      avgOutputPerProbe
+      sampleCount
+      isUsingFallback
+    }
+  }
+}
+    `;
+
+export function useEstimateCostQuery(options: Omit<Urql.UseQueryArgs<EstimateCostQueryVariables>, 'query'>) {
+  return Urql.useQuery<EstimateCostQuery, EstimateCostQueryVariables>({ query: EstimateCostDocument, ...options });
 };
 export const AvailableModelsDocument = gql`
     query AvailableModels {
@@ -3759,6 +3905,90 @@ export const AvailableModelsDocument = gql`
 
 export function useAvailableModelsQuery(options?: Omit<Urql.UseQueryArgs<AvailableModelsQueryVariables>, 'query'>) {
   return Urql.useQuery<AvailableModelsQuery, AvailableModelsQueryVariables>({ query: AvailableModelsDocument, ...options });
+};
+export const TagsDocument = gql`
+    query Tags($search: String, $limit: Int) {
+  tags(search: $search, limit: $limit) {
+    id
+    name
+    createdAt
+    definitionCount
+  }
+}
+    `;
+
+export function useTagsQuery(options?: Omit<Urql.UseQueryArgs<TagsQueryVariables>, 'query'>) {
+  return Urql.useQuery<TagsQuery, TagsQueryVariables>({ query: TagsDocument, ...options });
+};
+export const CreateTagDocument = gql`
+    mutation CreateTag($name: String!) {
+  createTag(name: $name) {
+    id
+    name
+    createdAt
+  }
+}
+    `;
+
+export function useCreateTagMutation() {
+  return Urql.useMutation<CreateTagMutation, CreateTagMutationVariables>(CreateTagDocument);
+};
+export const DeleteTagDocument = gql`
+    mutation DeleteTag($id: String!) {
+  deleteTag(id: $id) {
+    success
+    affectedDefinitions
+  }
+}
+    `;
+
+export function useDeleteTagMutation() {
+  return Urql.useMutation<DeleteTagMutation, DeleteTagMutationVariables>(DeleteTagDocument);
+};
+export const AddTagToDefinitionDocument = gql`
+    mutation AddTagToDefinition($definitionId: String!, $tagId: String!) {
+  addTagToDefinition(definitionId: $definitionId, tagId: $tagId) {
+    id
+    tags {
+      id
+      name
+    }
+  }
+}
+    `;
+
+export function useAddTagToDefinitionMutation() {
+  return Urql.useMutation<AddTagToDefinitionMutation, AddTagToDefinitionMutationVariables>(AddTagToDefinitionDocument);
+};
+export const RemoveTagFromDefinitionDocument = gql`
+    mutation RemoveTagFromDefinition($definitionId: String!, $tagId: String!) {
+  removeTagFromDefinition(definitionId: $definitionId, tagId: $tagId) {
+    id
+    tags {
+      id
+      name
+    }
+  }
+}
+    `;
+
+export function useRemoveTagFromDefinitionMutation() {
+  return Urql.useMutation<RemoveTagFromDefinitionMutation, RemoveTagFromDefinitionMutationVariables>(RemoveTagFromDefinitionDocument);
+};
+export const CreateAndAssignTagDocument = gql`
+    mutation CreateAndAssignTag($definitionId: String!, $tagName: String!) {
+  createAndAssignTag(definitionId: $definitionId, tagName: $tagName) {
+    id
+    tags {
+      id
+      name
+    }
+  }
+}
+    `;
+
+export function useCreateAndAssignTagMutation() {
+  return Urql.useMutation<CreateAndAssignTagMutation, CreateAndAssignTagMutationVariables>(CreateAndAssignTagDocument);
 };
 export const TempZeroVerificationReportDocument = gql`
     query TempZeroVerificationReport {

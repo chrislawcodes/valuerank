@@ -11,6 +11,11 @@ const config: CodegenConfig = {
       config: {
         withHooks: true,
         urqlImportFrom: 'urql',
+        scalars: {
+          DateTime: 'string',
+          JSON: 'unknown',
+        },
+        enumsAsTypes: true,
       },
     },
   },
