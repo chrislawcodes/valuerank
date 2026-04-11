@@ -45,7 +45,7 @@ export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
     query: DOMAIN_AVAILABLE_SIGNATURES_QUERY,
     variables: { domainId },
     pause: domainId === '',
-    requestPolicy: 'cache-and-network',
+    requestPolicy: 'network-only',
   });
 
   const signatureOptions = useMemo<DomainAvailableSignature[]>(
@@ -93,7 +93,7 @@ export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
       signature: selectedSignature === '' ? undefined : selectedSignature,
     },
     pause: domainId === '' || !signatureSelectionReady || useLegacyQuery,
-    requestPolicy: 'cache-and-network',
+    requestPolicy: 'network-only',
   });
 
   const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<
@@ -105,7 +105,7 @@ export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
       domainId,
     },
     pause: domainId === '' || !signatureSelectionReady || !useLegacyQuery,
-    requestPolicy: 'cache-and-network',
+    requestPolicy: 'network-only',
   });
 
   useEffect(() => {
