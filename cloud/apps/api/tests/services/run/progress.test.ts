@@ -28,8 +28,11 @@ describe('progress service', () => {
   const createdRunIds: string[] = [];
 
   afterEach(async () => {
-    // Clean up runs first
+    // Clean up transcripts, run selections, runs, scenarios, definitions (order matters for FK)
     if (createdRunIds.length > 0) {
+      await db.transcript.deleteMany({
+        where: { runId: { in: createdRunIds } },
+      });
       await db.runScenarioSelection.deleteMany({
         where: { runId: { in: createdRunIds } },
       });
@@ -39,7 +42,13 @@ describe('progress service', () => {
       createdRunIds.length = 0;
     }
 
-    // Clean up definitions
+    if (createdScenarioIds.length > 0) {
+      await db.scenario.deleteMany({
+        where: { id: { in: createdScenarioIds } },
+      });
+      createdScenarioIds.length = 0;
+    }
+
     if (createdDefinitionIds.length > 0) {
       await db.definition.deleteMany({
         where: { id: { in: createdDefinitionIds } },
@@ -48,7 +57,12 @@ describe('progress service', () => {
     }
   });
 
-  async function createTestRun(progress: { total: number; completed: number; failed: number }) {
+  const createdScenarioIds: string[] = [];
+
+  async function createTestRun(
+    progress: { total: number; completed: number; failed: number },
+    opts?: { transcriptCount?: number },
+  ) {
     const definition = await db.definition.create({
       data: {
         name: 'Test Definition',
@@ -66,6 +80,32 @@ describe('progress service', () => {
       },
     });
     createdRunIds.push(run.id);
+
+    // Create transcripts if requested (needed for tests that trigger SUMMARIZING)
+    if (opts?.transcriptCount != null && opts.transcriptCount > 0) {
+      const scenario = await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'test-scenario-' + Date.now(),
+          content: { schema_version: 1, prompt: 'Test', dimension_values: { test: 'value' } },
+        },
+      });
+      createdScenarioIds.push(scenario.id);
+
+      for (let i = 0; i < opts.transcriptCount; i++) {
+        await db.transcript.create({
+          data: {
+            runId: run.id,
+            scenarioId: scenario.id,
+            modelId: 'openai:gpt-4',
+            content: { schema_version: 1, messages: [] },
+            turnCount: 1,
+            tokenCount: 100,
+            durationMs: 1000,
+          },
+        });
+      }
+    }
 
     return run;
   }
@@ -141,7 +181,8 @@ describe('progress service', () => {
     });
 
     it('transitions RUNNING to SUMMARIZING when all jobs done', async () => {
-      const run = await createTestRun({ total: 3, completed: 2, failed: 0 });
+      // Create 3 transcripts so waitForTranscriptSettle resolves immediately
+      const run = await createTestRun({ total: 3, completed: 2, failed: 0 }, { transcriptCount: 3 });
       // Update to RUNNING first
       await db.run.update({
         where: { id: run.id },
@@ -156,7 +197,8 @@ describe('progress service', () => {
     });
 
     it('transitions to SUMMARIZING even with failures', async () => {
-      const run = await createTestRun({ total: 3, completed: 1, failed: 1 });
+      // Create 1 transcript matching completed count so settle resolves immediately
+      const run = await createTestRun({ total: 3, completed: 1, failed: 1 }, { transcriptCount: 1 });
       await db.run.update({
         where: { id: run.id },
         data: { status: 'RUNNING', startedAt: new Date() },
