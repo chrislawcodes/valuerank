@@ -1,0 +1,23 @@
+query EstimateCost($definitionId: ID!, $models: [String!]!, $samplePercentage: Int, $samplesPerScenario: Int) {
+  estimateCost(definitionId: $definitionId, models: $models, samplePercentage: $samplePercentage, samplesPerScenario: $samplesPerScenario) {
+    total
+    scenarioCount
+    basedOnSampleCount
+    isUsingFallback
+    fallbackReason
+    perModel {
+      modelId
+      displayName
+      scenarioCount
+      inputTokens
+      outputTokens
+      inputCost
+      outputCost
+      totalCost
+      avgInputPerProbe
+      avgOutputPerProbe
+      sampleCount
+      isUsingFallback
+    }
+  }
+}

@@ -1,0 +1,53 @@
+query Tags($search: String, $limit: Int) {
+  tags(search: $search, limit: $limit) {
+    id
+    name
+    createdAt
+    definitionCount
+  }
+}
+
+mutation CreateTag($name: String!) {
+  createTag(name: $name) {
+    id
+    name
+    createdAt
+  }
+}
+
+mutation DeleteTag($id: String!) {
+  deleteTag(id: $id) {
+    success
+    affectedDefinitions
+  }
+}
+
+mutation AddTagToDefinition($definitionId: String!, $tagId: String!) {
+  addTagToDefinition(definitionId: $definitionId, tagId: $tagId) {
+    id
+    tags {
+      id
+      name
+    }
+  }
+}
+
+mutation RemoveTagFromDefinition($definitionId: String!, $tagId: String!) {
+  removeTagFromDefinition(definitionId: $definitionId, tagId: $tagId) {
+    id
+    tags {
+      id
+      name
+    }
+  }
+}
+
+mutation CreateAndAssignTag($definitionId: String!, $tagName: String!) {
+  createAndAssignTag(definitionId: $definitionId, tagName: $tagName) {
+    id
+    tags {
+      id
+      name
+    }
+  }
+}

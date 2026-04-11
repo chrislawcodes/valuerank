@@ -1,68 +1,37 @@
-import { gql } from 'urql';
+import type {
+  ApiKeysQuery as GeneratedApiKeysQuery,
+  CreateApiKeyMutation as GeneratedCreateApiKeyMutation,
+  RevokeApiKeyMutation as GeneratedRevokeApiKeyMutation,
+} from '../../generated/graphql';
 
-// List all API keys for current user
-export const API_KEYS_QUERY = gql`
-  query ApiKeys {
-    apiKeys {
-      id
-      name
-      keyPrefix
-      lastUsedAt
-      expiresAt
-      createdAt
-    }
-  }
-`;
+// ============================================================================
+// TYPES
+// ============================================================================
 
-// Create a new API key
-export const CREATE_API_KEY_MUTATION = gql`
-  mutation CreateApiKey($input: CreateApiKeyInput!) {
-    createApiKey(input: $input) {
-      apiKey {
-        id
-        name
-        keyPrefix
-        lastUsedAt
-        expiresAt
-        createdAt
-      }
-      key
-    }
-  }
-`;
+export type ApiKey = GeneratedApiKeysQuery['apiKeys'][number];
 
-// Revoke (delete) an API key
-export const REVOKE_API_KEY_MUTATION = gql`
-  mutation RevokeApiKey($id: ID!) {
-    revokeApiKey(id: $id)
-  }
-`;
-
-// Types
-export type ApiKey = {
-  id: string;
-  name: string;
-  keyPrefix: string;
-  lastUsedAt: string | null;
-  expiresAt: string | null;
-  createdAt: string;
-};
-
-export type ApiKeysQueryResult = {
-  apiKeys: ApiKey[];
-};
-
+// Manual input type — not in the schema as a standalone type here
 export type CreateApiKeyInput = {
   name: string;
 };
 
-export type CreateApiKeyResult = {
-  createApiKey: {
-    apiKey: ApiKey;
-    key: string; // Full key value - only returned at creation
-  };
-};
+// ============================================================================
+// QUERIES
+// ============================================================================
 
-export type RevokeApiKeyResult = {
-  revokeApiKey: boolean;
-};
+export { ApiKeysDocument as API_KEYS_QUERY } from '../../generated/graphql';
+
+// ============================================================================
+// MUTATIONS
+// ============================================================================
+
+export { CreateApiKeyDocument as CREATE_API_KEY_MUTATION } from '../../generated/graphql';
+export { RevokeApiKeyDocument as REVOKE_API_KEY_MUTATION } from '../../generated/graphql';
+
+// ============================================================================
+// RESULT TYPES
+// ============================================================================
+
+export type ApiKeysQueryResult = GeneratedApiKeysQuery;
+export type CreateApiKeyResult = GeneratedCreateApiKeyMutation;
+export type RevokeApiKeyResult = GeneratedRevokeApiKeyMutation;
