@@ -64,7 +64,6 @@ describe('Queue Orchestrator Integration', () => {
       const jobTypes = getJobTypes();
       expect(jobTypes).toContain('probe_scenario');
       expect(jobTypes).toContain('analyze_basic');
-      expect(jobTypes).toContain('analyze_deep');
     });
   });
 
@@ -212,21 +211,5 @@ describe('Queue Orchestrator Integration', () => {
       expect(typeof jobId).toBe('string');
     });
 
-    it('can queue analyze_deep jobs', async () => {
-      await orchestratorModule.startOrchestrator();
-      const boss = bossModule.getBoss();
-
-      // Ensure queue exists
-      await boss.createQueue('analyze_deep');
-
-      // Send a job
-      const jobId = await boss.send('analyze_deep', {
-        runId: 'test-run-id',
-        analysisType: 'pairwise',
-      });
-
-      expect(jobId).toBeDefined();
-      expect(typeof jobId).toBe('string');
-    });
   });
 });

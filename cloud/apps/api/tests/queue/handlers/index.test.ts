@@ -43,12 +43,11 @@ describe('Handler Registration', () => {
       expect(jobTypes).toContain('probe_scenario');
       expect(jobTypes).toContain('summarize_transcript');
       expect(jobTypes).toContain('analyze_basic');
-      expect(jobTypes).toContain('analyze_deep');
       expect(jobTypes).toContain('expand_scenarios');
       expect(jobTypes).toContain('compute_token_stats');
       expect(jobTypes).toContain('probe_dead_letter');
       expect(jobTypes).toContain('aggregate_analysis');
-      expect(jobTypes).toHaveLength(8);
+      expect(jobTypes).toHaveLength(7);
     });
   });
 
@@ -59,7 +58,6 @@ describe('Handler Registration', () => {
       // Ensure queues exist (work() should create them but add explicit create for safety)
       await boss.createQueue('probe_scenario');
       await boss.createQueue('analyze_basic');
-      await boss.createQueue('analyze_deep');
 
       // Verify handlers are registered by checking if we can send jobs
       // to each job type (they won't throw if handlers are registered)
@@ -76,12 +74,6 @@ describe('Handler Registration', () => {
         transcriptIds: [],
       });
       expect(basicJobId).toBeDefined();
-
-      const deepJobId = await boss.send('analyze_deep', {
-        runId: 'test',
-        analysisType: 'pairwise',
-      });
-      expect(deepJobId).toBeDefined();
     });
 
     it('can be called multiple times without error', async () => {
@@ -101,7 +93,7 @@ describe('Handler Registration', () => {
 
       // Should still work
       const jobTypes = getJobTypes();
-      expect(jobTypes).toHaveLength(8);
+      expect(jobTypes).toHaveLength(7);
     });
   });
 

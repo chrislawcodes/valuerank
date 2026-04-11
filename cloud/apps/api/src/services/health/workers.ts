@@ -171,11 +171,8 @@ export async function getWorkerHealth(forceRefresh = false): Promise<WorkerHealt
   }
 }
 
-/**
- * Clear the health check cache.
- * Useful for testing or forcing immediate re-check.
- */
 export function clearWorkerHealthCache(): void {
   cachedResult = null;
   cacheTimestamp = 0;
 }
+

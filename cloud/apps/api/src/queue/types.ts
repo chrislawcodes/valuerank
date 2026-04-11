@@ -5,7 +5,7 @@
  */
 
 // Job type union
-export type JobType = 'probe_scenario' | 'summarize_transcript' | 'analyze_basic' | 'analyze_deep' | 'expand_scenarios' | 'compute_token_stats' | 'probe_dead_letter' | 'aggregate_analysis';
+export type JobType = 'probe_scenario' | 'summarize_transcript' | 'analyze_basic' | 'expand_scenarios' | 'compute_token_stats' | 'probe_dead_letter' | 'aggregate_analysis';
 
 // Job data interfaces
 export type ProbeScenarioJobData = {
@@ -34,11 +34,6 @@ export type AnalyzeBasicJobData = {
   force?: boolean; // Force recomputation even if cached
 };
 
-export type AnalyzeDeepJobData = {
-  runId: string;
-  analysisType: 'correlations' | 'pca' | 'outliers';
-};
-
 export type ExpandScenariosJobData = {
   definitionId: string;
   triggeredBy: 'create' | 'update' | 'fork';
@@ -61,7 +56,7 @@ export type AggregateAnalysisJobData = {
 export type ProbeDeadLetterJobData = ProbeScenarioJobData;
 
 // Job data union type (ProbeDeadLetterJobData is same as ProbeScenarioJobData, so not duplicated here)
-export type JobData = ProbeScenarioJobData | SummarizeTranscriptJobData | AnalyzeBasicJobData | AnalyzeDeepJobData | ExpandScenariosJobData | ComputeTokenStatsJobData | AggregateAnalysisJobData;
+export type JobData = ProbeScenarioJobData | SummarizeTranscriptJobData | AnalyzeBasicJobData | ExpandScenariosJobData | ComputeTokenStatsJobData | AggregateAnalysisJobData;
 
 // Job options interface
 export type JobOptions = {
@@ -92,12 +87,6 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
     retryDelay: 10,
     retryBackoff: true,
     expireInSeconds: 600, // 10 minutes
-  },
-  'analyze_deep': {
-    retryLimit: 2,
-    retryDelay: 30,
-    retryBackoff: true,
-    expireInSeconds: 1800, // 30 minutes
   },
   'expand_scenarios': {
     retryLimit: 2,
