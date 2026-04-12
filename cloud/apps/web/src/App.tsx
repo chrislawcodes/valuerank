@@ -302,8 +302,8 @@ function App() {
                 </ProtectedLayout>
               }
             />
-            <Route path="/survey" element={<LegacyRouteRedirect to="/archive/surveys" />} />
-            <Route path="/survey-results" element={<LegacyRouteRedirect to="/archive/survey-results" />} />
+            <Route path="/survey" element={<Navigate to="/archive/surveys" replace />} />
+            <Route path="/survey-results" element={<Navigate to="/archive/survey-results" replace />} />
             <Route path="/experiments" element={<Navigate to="/archive" replace />} />
             <Route path="/settings" element={<Navigate to="/settings/account" replace />} />
             <Route
