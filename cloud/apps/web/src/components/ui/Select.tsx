@@ -1,4 +1,4 @@
-import type { ReactNode, KeyboardEvent } from 'react';
+import type { ReactNode } from 'react';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import { cva, type VariantProps } from 'class-variance-authority';
@@ -92,7 +92,7 @@ export function Select<T extends string = string>({
   }, [isOpen, options, value]);
 
   const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
+    (e: React.KeyboardEvent<HTMLElement>) => {
       if (disabled) return;
 
       switch (e.key) {
@@ -195,7 +195,7 @@ export function Select<T extends string = string>({
           disabled && 'opacity-50 cursor-not-allowed bg-gray-50'
         )}
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        onKeyDown={handleKeyDown as unknown as React.KeyboardEventHandler<HTMLButtonElement>}
+        onKeyDown={handleKeyDown}
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
