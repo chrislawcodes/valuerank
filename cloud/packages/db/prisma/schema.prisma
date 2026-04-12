@@ -420,6 +420,7 @@ model DomainEvaluation {
   startedAt        DateTime?                     @map("started_at")
   completedAt      DateTime?                     @map("completed_at")
   createdByUserId  String?                       @map("created_by_user_id")
+  deletedAt        DateTime?                     @map("deleted_at")
 
   domain    Domain               @relation(fields: [domainId], references: [id], onDelete: Cascade)
   createdBy User?                @relation("DomainEvaluationCreator", fields: [createdByUserId], references: [id])
@@ -440,6 +441,7 @@ model DomainEvaluationRun {
   definitionNameAtLaunch String  @map("definition_name_at_launch")
   domainIdAtLaunch      String   @map("domain_id_at_launch")
   createdAt             DateTime @default(now()) @map("created_at")
+  deletedAt             DateTime? @map("deleted_at")
 
   domainEvaluation DomainEvaluation @relation(fields: [domainEvaluationId], references: [id], onDelete: Cascade)
   run              Run              @relation(fields: [runId], references: [id], onDelete: Cascade)
@@ -620,6 +622,7 @@ model ProbeResult {
   // Timestamps
   createdAt    DateTime         @default(now()) @map("created_at")
   completedAt  DateTime?        @map("completed_at")
+  deletedAt    DateTime?        @map("deleted_at")
 
   run      Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
   scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
