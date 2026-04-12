@@ -1,3 +1,5 @@
+import { formatTrialSignature } from '@valuerank/shared/trial-signature';
+
 type DefinitionContentShape = {
   dimensions?: unknown;
   template?: unknown;
@@ -52,4 +54,33 @@ export function getRunDefinitionContent(run: RunWithDefinitionContent | null | u
   }
 
   return run?.definition?.content;
+}
+
+type RunWithConfig = {
+  config?: unknown;
+  definitionVersion?: number | null;
+};
+
+/**
+ * Derive the trial signature (definition version + temperature) for a run.
+ */
+export function deriveRunTrialMeta(run: RunWithConfig | null | undefined): {
+  trialSignature: string;
+} {
+  const config = run?.config as {
+    definitionSnapshot?: { _meta?: { definitionVersion?: unknown }; version?: unknown };
+    temperature?: unknown;
+  } | null;
+
+  const runDefinitionVersion =
+    typeof config?.definitionSnapshot?._meta?.definitionVersion === 'number'
+      ? config.definitionSnapshot._meta.definitionVersion
+      : typeof config?.definitionSnapshot?.version === 'number'
+        ? config.definitionSnapshot.version
+        : typeof run?.definitionVersion === 'number'
+          ? run.definitionVersion
+          : null;
+
+  const runTemperature = typeof config?.temperature === 'number' ? config.temperature : null;
+  return { trialSignature: formatTrialSignature(runDefinitionVersion, runTemperature) };
 }
