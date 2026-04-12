@@ -1,6 +1,6 @@
 // NOTE: The term "Vignette" is used throughout the UI for user-friendliness.
 // However, the underlying codebase, API, and database still use the term "Definition".
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Provider } from 'urql';
 import { AuthProvider } from './auth/context';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -55,6 +55,10 @@ function ProtectedLayout({ children, fullWidth = false }: { children: React.Reac
   );
 }
 
+function RedirectPreservingParams({ to }: { to: string }) {
+  const { search, hash } = useLocation();
+  return <Navigate to={`${to}${search}${hash}`} replace />;
+}
 
 function App() {
   return (
@@ -302,8 +306,8 @@ function App() {
                 </ProtectedLayout>
               }
             />
-            <Route path="/survey" element={<Navigate to="/archive/surveys" replace />} />
-            <Route path="/survey-results" element={<Navigate to="/archive/survey-results" replace />} />
+            <Route path="/survey" element={<RedirectPreservingParams to="/archive/surveys" />} />
+            <Route path="/survey-results" element={<RedirectPreservingParams to="/archive/survey-results" />} />
             <Route path="/experiments" element={<Navigate to="/archive" replace />} />
             <Route path="/settings" element={<Navigate to="/settings/account" replace />} />
             <Route
@@ -381,14 +385,7 @@ function App() {
             {['/paired/new', '/paired/:id/edit'].map((path) => (
               <Route key={path} path={path} element={<ProtectedLayout><PairedVignetteNew /></ProtectedLayout>} />
             ))}
-            <Route
-              path="*"
-              element={
-                <ProtectedLayout>
-                  <NotFound />
-                </ProtectedLayout>
-              }
-            />
+            <Route path="*" element={<ProtectedLayout><NotFound /></ProtectedLayout>} />
           </Routes>
         </AuthProvider>
       </Provider>
