@@ -1,4 +1,6 @@
-import { gql } from 'urql';
+// ============================================================================
+// TYPES (manual — JSON scalar fields need typed shapes)
+// ============================================================================
 
 export type SurveyQuestion = {
   id: string;
@@ -41,71 +43,48 @@ export type Survey = {
   runCount: number;
 };
 
-export const SURVEYS_QUERY = gql`
-  query Surveys($search: String) {
-    surveys(search: $search) {
-      id
-      name
-      hypothesis
-      analysisPlan
-      createdAt
-      updatedAt
-      runCount
-    }
-  }
-`;
+// ============================================================================
+// QUERIES
+// ============================================================================
 
-export const CREATE_SURVEY_MUTATION = gql`
-  mutation CreateSurvey($input: CreateSurveyInput!) {
-    createSurvey(input: $input) {
-      id
-      name
-      hypothesis
-      analysisPlan
-      createdAt
-      updatedAt
-      runCount
-    }
-  }
-`;
+export { SurveysDocument as SURVEYS_QUERY } from '../../generated/graphql';
 
-export const UPDATE_SURVEY_MUTATION = gql`
-  mutation UpdateSurvey($id: ID!, $input: UpdateSurveyInput!) {
-    updateSurvey(id: $id, input: $input) {
-      id
-      name
-      hypothesis
-      analysisPlan
-      createdAt
-      updatedAt
-      runCount
-    }
-  }
-`;
+// ============================================================================
+// MUTATIONS
+// ============================================================================
 
-export const DELETE_SURVEY_MUTATION = gql`
-  mutation DeleteSurvey($id: ID!) {
-    deleteSurvey(id: $id)
-  }
-`;
+export { CreateSurveyDocument as CREATE_SURVEY_MUTATION } from '../../generated/graphql';
+export { UpdateSurveyDocument as UPDATE_SURVEY_MUTATION } from '../../generated/graphql';
+export { DeleteSurveyDocument as DELETE_SURVEY_MUTATION } from '../../generated/graphql';
+export { DuplicateSurveyDocument as DUPLICATE_SURVEY_MUTATION } from '../../generated/graphql';
 
-export const DUPLICATE_SURVEY_MUTATION = gql`
-  mutation DuplicateSurvey($id: ID!, $name: String) {
-    duplicateSurvey(id: $id, name: $name) {
-      id
-      name
-      hypothesis
-      analysisPlan
-      createdAt
-      updatedAt
-      runCount
-    }
-  }
-`;
+// ============================================================================
+// RESULT TYPES (manual — preserves app-level types without __typename)
+// ============================================================================
 
 export type SurveysQueryResult = {
   surveys: Survey[];
 };
+
+export type CreateSurveyMutationResult = {
+  createSurvey: Survey;
+};
+
+export type UpdateSurveyMutationResult = {
+  updateSurvey: Survey;
+};
+
+export type DeleteSurveyMutationResult = {
+  deleteSurvey: boolean;
+};
+
+export type DuplicateSurveyMutationResult = {
+  duplicateSurvey: Survey;
+};
+
+// ============================================================================
+// INPUT TYPES (manual — not from schema)
+// ============================================================================
 
 export type CreateSurveyInput = {
   name: string;
@@ -129,20 +108,4 @@ export type UpdateSurveyInput = {
   questions?: Array<{
     text: string;
   }>;
-};
-
-export type CreateSurveyMutationResult = {
-  createSurvey: Survey;
-};
-
-export type UpdateSurveyMutationResult = {
-  updateSurvey: Survey;
-};
-
-export type DeleteSurveyMutationResult = {
-  deleteSurvey: boolean;
-};
-
-export type DuplicateSurveyMutationResult = {
-  duplicateSurvey: Survey;
 };

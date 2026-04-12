@@ -1,0 +1,51 @@
+query Surveys($search: String) {
+  surveys(search: $search) {
+    id
+    name
+    hypothesis
+    analysisPlan
+    createdAt
+    updatedAt
+    runCount
+  }
+}
+
+mutation CreateSurvey($input: CreateSurveyInput!) {
+  createSurvey(input: $input) {
+    id
+    name
+    hypothesis
+    analysisPlan
+    createdAt
+    updatedAt
+    runCount
+  }
+}
+
+mutation UpdateSurvey($id: ID!, $input: UpdateSurveyInput!) {
+  updateSurvey(id: $id, input: $input) {
+    id
+    name
+    hypothesis
+    analysisPlan
+    createdAt
+    updatedAt
+    runCount
+  }
+}
+
+mutation DeleteSurvey($id: ID!) {
+  deleteSurvey(id: $id)
+}
+
+mutation DuplicateSurvey($id: ID!, $name: String) {
+  duplicateSurvey(id: $id, name: $name) {
+    id
+    name
+    hypothesis
+    analysisPlan
+    createdAt
+    updatedAt
+    runCount
+  }
+}

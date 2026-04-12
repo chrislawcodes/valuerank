@@ -1,0 +1,71 @@
+fragment ComparisonRunListFields on Run {
+  id
+  name
+  definitionId
+  status
+  config
+  progress
+  startedAt
+  completedAt
+  createdAt
+  transcriptCount
+  analysisStatus
+  definition {
+    id
+    name
+    tags {
+      id
+      name
+    }
+  }
+}
+
+fragment ComparisonRunFullFields on Run {
+  id
+  name
+  definitionId
+  status
+  config
+  progress
+  startedAt
+  completedAt
+  createdAt
+  transcriptCount
+  analysisStatus
+  definition {
+    id
+    name
+    parentId
+    resolvedContent
+    tags {
+      id
+      name
+    }
+  }
+}
+
+query RunsWithAnalysis($ids: [ID!]!) {
+  runsWithAnalysis(ids: $ids) {
+    ...ComparisonRunFullFields
+    analysis {
+      ...AnalysisResultFields
+    }
+  }
+}
+
+query ComparisonRunsList(
+  $definitionId: String
+  $analysisStatus: String
+  $limit: Int
+  $offset: Int
+) {
+  runs(
+    hasAnalysis: true
+    definitionId: $definitionId
+    analysisStatus: $analysisStatus
+    limit: $limit
+    offset: $offset
+  ) {
+    ...ComparisonRunListFields
+  }
+}

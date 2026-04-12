@@ -1,7 +1,5 @@
-import { gql } from 'urql';
-
 // ============================================================================
-// TYPES
+// TYPES (manual — JSON scalar fields need typed shapes)
 // ============================================================================
 
 export type ContestedScenario = {
@@ -209,80 +207,22 @@ export type AnalysisResult = {
 // FRAGMENTS
 // ============================================================================
 
-export const ANALYSIS_RESULT_FRAGMENT = gql`
-  fragment AnalysisResultFields on AnalysisResult {
-    id
-    runId
-    analysisType
-    status
-    codeVersion
-    inputHash
-    createdAt
-    computedAt
-    durationMs
-    perModel
-    preferenceSummary {
-      perModel
-    }
-    reliabilitySummary {
-      perModel
-    }
-    aggregateMetadata {
-      aggregateEligibility
-      aggregateIneligibilityReason
-      sourceRunCount
-      sourceRunIds
-      conditionCoverage
-      perModelRepeatCoverage
-      perModelDrift
-    }
-    modelAgreement
-    dimensionAnalysis
-    visualizationData
-    varianceAnalysis
-    mostContestedScenarios {
-      scenarioId
-      scenarioName
-      variance
-      modelScores
-    }
-    methodsUsed
-    warnings {
-      code
-      message
-      recommendation
-    }
-  }
-`;
+export { AnalysisResultFieldsFragmentDoc as ANALYSIS_RESULT_FRAGMENT } from '../../generated/graphql';
 
 // ============================================================================
 // QUERIES
 // ============================================================================
 
-export const ANALYSIS_QUERY = gql`
-  query Analysis($runId: ID!) {
-    analysis(runId: $runId) {
-      ...AnalysisResultFields
-    }
-  }
-  ${ANALYSIS_RESULT_FRAGMENT}
-`;
+export { AnalysisDocument as ANALYSIS_QUERY } from '../../generated/graphql';
 
 // ============================================================================
 // MUTATIONS
 // ============================================================================
 
-export const RECOMPUTE_ANALYSIS_MUTATION = gql`
-  mutation RecomputeAnalysis($runId: ID!) {
-    recomputeAnalysis(runId: $runId) {
-      ...AnalysisResultFields
-    }
-  }
-  ${ANALYSIS_RESULT_FRAGMENT}
-`;
+export { RecomputeAnalysisDocument as RECOMPUTE_ANALYSIS_MUTATION } from '../../generated/graphql';
 
 // ============================================================================
-// QUERY/MUTATION TYPES
+// QUERY/MUTATION TYPES (manual — preserves app-level types without __typename)
 // ============================================================================
 
 export type AnalysisQueryVariables = {
