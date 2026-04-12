@@ -1,4 +1,4 @@
-import type { ReactNode, KeyboardEvent } from 'react';
+import type { ReactNode } from 'react';
 import { useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
@@ -59,7 +59,7 @@ export function Modal({
 
   // Handle escape key
   const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
+    (e: React.KeyboardEvent<HTMLElement>) => {
       if (closeOnEscape && e.key === 'Escape') {
         e.preventDefault();
         onClose();
@@ -144,7 +144,7 @@ export function Modal({
   const modalContent = (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      onKeyDown={handleKeyDown as unknown as React.KeyboardEventHandler<HTMLDivElement>}
+      onKeyDown={handleKeyDown}
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? 'modal-title' : undefined}
