@@ -1,0 +1,202 @@
+query DomainAnalysis($domainId: ID!, $scoreMethod: String, $signature: String) {
+  domainAnalysis(domainId: $domainId, scoreMethod: $scoreMethod, signature: $signature) {
+    domainId
+    domainName
+    totalDefinitions
+    targetedDefinitions
+    coveredDefinitions
+    missingDefinitionIds
+    missingDefinitions {
+      definitionId
+      definitionName
+      reasonCode
+      reasonLabel
+      missingAllModels
+      missingModelIds
+      missingModelLabels
+    }
+    definitionsWithAnalysis
+    generatedAt
+    models {
+      model
+      label
+      values {
+        valueKey
+        score
+        prioritized
+        deprioritized
+        neutral
+        totalComparisons
+      }
+      rankingShape {
+        topStructure
+        bottomStructure
+        topGap
+        bottomGap
+        spread
+        steepness
+        dominanceZScore
+      }
+    }
+    unavailableModels {
+      model
+      label
+      reason
+    }
+    rankingShapeBenchmarks {
+      domainMeanTopGap
+      domainStdTopGap
+      medianSpread
+    }
+    clusterAnalysis {
+      skipped
+      skipReason
+      defaultPair
+      clusters {
+        id
+        name
+        definingValues
+        centroid
+        members {
+          model
+          label
+          silhouetteScore
+          isOutlier
+          nearestClusterIds
+          distancesToNearestClusters
+        }
+      }
+      faultLinesByPair
+    }
+  }
+}
+
+query DomainAnalysisLegacy($domainId: ID!) {
+  domainAnalysis(domainId: $domainId) {
+    domainId
+    domainName
+    totalDefinitions
+    targetedDefinitions
+    definitionsWithAnalysis
+    generatedAt
+    models {
+      model
+      label
+      values {
+        valueKey
+        score
+        prioritized
+        deprioritized
+        neutral
+        totalComparisons
+      }
+    }
+    unavailableModels {
+      model
+      label
+      reason
+    }
+  }
+}
+
+query DomainAnalysisValueDetail($domainId: ID!, $modelId: String!, $valueKey: String!, $scoreMethod: String, $signature: String) {
+  domainAnalysisValueDetail(domainId: $domainId, modelId: $modelId, valueKey: $valueKey, scoreMethod: $scoreMethod, signature: $signature) {
+    domainId
+    domainName
+    modelId
+    modelLabel
+    valueKey
+    score
+    prioritized
+    deprioritized
+    neutral
+    totalTrials
+    targetedDefinitions
+    coveredDefinitions
+    missingDefinitionIds
+    generatedAt
+    vignettes {
+      definitionId
+      definitionName
+      definitionVersion
+      aggregateRunId
+      otherValueKey
+      prioritized
+      deprioritized
+      neutral
+      totalTrials
+      selectedValueWinRate
+      conditions {
+        scenarioId
+        conditionName
+        dimensions
+        prioritized
+        deprioritized
+        neutral
+        totalTrials
+        selectedValueWinRate
+        strongly
+        somewhat
+        opponentSomewhat
+        opponentStrongly
+        unknownCount
+      }
+    }
+  }
+}
+
+query DomainAnalysisConditionTranscripts(
+  $domainId: ID!
+  $modelId: String!
+  $valueKey: String!
+  $definitionId: ID!
+  $scenarioId: ID
+  $limit: Int
+  $signature: String
+) {
+  domainAnalysisConditionTranscripts(
+    domainId: $domainId
+    modelId: $modelId
+    valueKey: $valueKey
+    definitionId: $definitionId
+    scenarioId: $scenarioId
+    limit: $limit
+    signature: $signature
+  ) {
+    id
+    runId
+    scenarioId
+    modelId
+    decisionModelV2
+    turnCount
+    tokenCount
+    durationMs
+    createdAt
+    content
+  }
+}
+
+query DomainAvailableSignatures($domainId: ID!) {
+  domainAvailableSignatures(domainId: $domainId) {
+    signature
+    label
+    isVirtual
+    temperature
+  }
+}
+
+query DomainFindingsEligibility($domainId: ID!) {
+  domainFindingsEligibility(domainId: $domainId) {
+    domainId
+    eligible
+    status
+    summary
+    reasons
+    recommendedActions
+    consideredScopeCategories
+    completedEligibleEvaluationCount
+    latestEligibleEvaluationId
+    latestEligibleScopeCategory
+    latestEligibleCompletedAt
+  }
+}

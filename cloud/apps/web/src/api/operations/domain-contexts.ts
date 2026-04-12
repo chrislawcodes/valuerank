@@ -1,62 +1,37 @@
-import { gql } from 'urql';
+import type {
+  DomainContextsQuery as GeneratedDomainContextsQuery,
+  CreateDomainContextMutation as GeneratedCreateDomainContextMutation,
+  UpdateDomainContextMutation as GeneratedUpdateDomainContextMutation,
+  DeleteDomainContextMutation as GeneratedDeleteDomainContextMutation,
+  DomainContextsQueryVariables as GeneratedDomainContextsQueryVariables,
+} from '../../generated/graphql';
 
-export type DomainContext = {
-  id: string;
-  domainId: string;
-  domain?: { id: string; name: string } | null;
-  text: string;
-  version: number;
-  createdAt?: string;
-  updatedAt: string;
-};
+// ============================================================================
+// TYPES
+// ============================================================================
 
-export const DOMAIN_CONTEXTS_QUERY = gql`
-  query DomainContexts($domainId: String) {
-    domainContexts(domainId: $domainId) {
-      id
-      domainId
-      domain {
-        id
-        name
-      }
-      text
-      version
-      updatedAt
-    }
-  }
-`;
+export type DomainContext = GeneratedDomainContextsQuery['domainContexts'][number];
 
-export const CREATE_DOMAIN_CONTEXT_MUTATION = gql`
-  mutation CreateDomainContext($input: CreateDomainContextInput!) {
-    createDomainContext(input: $input) {
-      id
-      domainId
-      text
-      version
-      updatedAt
-    }
-  }
-`;
+// ============================================================================
+// QUERIES
+// ============================================================================
 
-export const UPDATE_DOMAIN_CONTEXT_MUTATION = gql`
-  mutation UpdateDomainContext($id: ID!, $input: UpdateDomainContextInput!) {
-    updateDomainContext(id: $id, input: $input) {
-      id
-      domainId
-      text
-      version
-      updatedAt
-    }
-  }
-`;
+export { DomainContextsDocument as DOMAIN_CONTEXTS_QUERY } from '../../generated/graphql';
 
-export const DELETE_DOMAIN_CONTEXT_MUTATION = gql`
-  mutation DeleteDomainContext($id: ID!) {
-    deleteDomainContext(id: $id)
-  }
-`;
+// ============================================================================
+// MUTATIONS
+// ============================================================================
 
-export type DomainContextsQueryResult = { domainContexts: DomainContext[] };
-export type DomainContextsQueryVariables = { domainId?: string };
-export type CreateDomainContextResult = { createDomainContext: DomainContext };
-export type UpdateDomainContextResult = { updateDomainContext: DomainContext };
+export { CreateDomainContextDocument as CREATE_DOMAIN_CONTEXT_MUTATION } from '../../generated/graphql';
+export { UpdateDomainContextDocument as UPDATE_DOMAIN_CONTEXT_MUTATION } from '../../generated/graphql';
+export { DeleteDomainContextDocument as DELETE_DOMAIN_CONTEXT_MUTATION } from '../../generated/graphql';
+
+// ============================================================================
+// RESULT TYPES
+// ============================================================================
+
+export type DomainContextsQueryVariables = GeneratedDomainContextsQueryVariables;
+export type DomainContextsQueryResult = GeneratedDomainContextsQuery;
+export type CreateDomainContextResult = GeneratedCreateDomainContextMutation;
+export type UpdateDomainContextResult = GeneratedUpdateDomainContextMutation;
+export type DeleteDomainContextResult = GeneratedDeleteDomainContextMutation;

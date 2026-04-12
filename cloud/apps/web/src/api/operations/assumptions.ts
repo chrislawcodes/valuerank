@@ -1,4 +1,12 @@
-import { gql } from 'urql';
+import type {
+  AssumptionsTempZeroQueryVariables as GeneratedAssumptionsTempZeroQueryVariables,
+  LaunchAssumptionsTempZeroMutation as GeneratedLaunchAssumptionsTempZeroMutation,
+  LaunchAssumptionsTempZeroMutationVariables as GeneratedLaunchAssumptionsTempZeroMutationVariables,
+} from '../../generated/graphql';
+
+// ============================================================================
+// MANUAL TYPES (kept manual — decisions.content is JSON/unknown scalar)
+// ============================================================================
 
 export type AssumptionStatus = 'COMPUTED' | 'INSUFFICIENT_DATA';
 export type TempZeroMismatchType = 'decision_flip' | 'missing_trial' | null;
@@ -80,10 +88,6 @@ export type AssumptionsTempZeroQueryResult = {
   assumptionsTempZero: AssumptionsTempZeroResult;
 };
 
-export type AssumptionsTempZeroQueryVariables = {
-  directionOnly?: boolean;
-};
-
 export type LaunchAssumptionsTempZeroResult = {
   launchAssumptionsTempZero: {
     startedRuns: number;
@@ -94,83 +98,22 @@ export type LaunchAssumptionsTempZeroResult = {
   };
 };
 
-export type LaunchAssumptionsTempZeroVariables = {
-  force?: boolean | null;
-};
+// ============================================================================
+// QUERIES
+// ============================================================================
 
-export const ASSUMPTIONS_TEMP_ZERO_QUERY = gql`
-  query AssumptionsTempZero($directionOnly: Boolean) {
-    assumptionsTempZero(directionOnly: $directionOnly) {
-      domainName
-      note
-      generatedAt
-      preflight {
-        title
-        runsToLaunch
-        totalBatchesToRun
-        projectedPromptCount
-        projectedComparisons
-        estimatedInputTokens
-        estimatedOutputTokens
-        estimatedCostUsd
-        selectedSignature
-        models {
-          modelId
-          label
-          adapterMode
-        }
-        vignettes {
-          vignetteId
-          title
-          conditionCount
-          rationale
-          batchesToRun
-        }
-      }
-      summary {
-        title
-        status
-        matchRate
-        differenceRate
-        comparisons
-        excludedComparisons
-        batchesRun
-        modelsTested
-        vignettesTested
-        worstModelId
-        worstModelLabel
-        worstModelMatchRate
-      }
-      rows {
-        modelId
-        modelLabel
-        vignetteId
-        vignetteTitle
-        conditionKey
-        batch1
-        batch2
-        batch3
-        isMatch
-        mismatchType
-        decisions {
-          label
-          transcriptId
-          decision
-          content
-        }
-      }
-    }
-  }
-`;
+export { AssumptionsTempZeroDocument as ASSUMPTIONS_TEMP_ZERO_QUERY } from '../../generated/graphql';
 
-export const LAUNCH_ASSUMPTIONS_TEMP_ZERO_MUTATION = gql`
-  mutation LaunchAssumptionsTempZero($force: Boolean) {
-    launchAssumptionsTempZero(force: $force) {
-      startedRuns
-      totalVignettes
-      modelCount
-      runIds
-      failedVignetteIds
-    }
-  }
-`;
+// ============================================================================
+// MUTATIONS
+// ============================================================================
+
+export { LaunchAssumptionsTempZeroDocument as LAUNCH_ASSUMPTIONS_TEMP_ZERO_MUTATION } from '../../generated/graphql';
+
+// ============================================================================
+// VARIABLES TYPES
+// ============================================================================
+
+export type AssumptionsTempZeroQueryVariables = GeneratedAssumptionsTempZeroQueryVariables;
+export type LaunchAssumptionsTempZeroVariables = GeneratedLaunchAssumptionsTempZeroMutationVariables;
+export type LaunchAssumptionsTempZeroMutationResult = GeneratedLaunchAssumptionsTempZeroMutation;

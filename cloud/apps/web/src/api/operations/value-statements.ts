@@ -1,58 +1,37 @@
-import { gql } from 'urql';
+import type {
+  ValueStatementsQuery as GeneratedValueStatementsQuery,
+  CreateValueStatementMutation as GeneratedCreateValueStatementMutation,
+  UpdateValueStatementMutation as GeneratedUpdateValueStatementMutation,
+  DeleteValueStatementMutation as GeneratedDeleteValueStatementMutation,
+  ValueStatementsQueryVariables as GeneratedValueStatementsQueryVariables,
+} from '../../generated/graphql';
 
-export type ValueStatement = {
-  id: string;
-  domainId: string;
-  token: string;
-  body: string;
-  createdAt?: string;
-  updatedAt: string;
-};
+// ============================================================================
+// TYPES
+// ============================================================================
 
-export type ValueStatementsQueryVariables = { domainId: string };
+export type ValueStatement = GeneratedValueStatementsQuery['valueStatements'][number];
 
-export const VALUE_STATEMENTS_QUERY = gql`
-  query ValueStatements($domainId: ID!) {
-    valueStatements(domainId: $domainId) {
-      id
-      domainId
-      token
-      body
-      updatedAt
-    }
-  }
-`;
+// ============================================================================
+// QUERIES
+// ============================================================================
 
-export const CREATE_VALUE_STATEMENT_MUTATION = gql`
-  mutation CreateValueStatement($input: CreateValueStatementInput!) {
-    createValueStatement(input: $input) {
-      id
-      domainId
-      token
-      body
-      updatedAt
-    }
-  }
-`;
+export { ValueStatementsDocument as VALUE_STATEMENTS_QUERY } from '../../generated/graphql';
 
-export const UPDATE_VALUE_STATEMENT_MUTATION = gql`
-  mutation UpdateValueStatement($id: ID!, $input: UpdateValueStatementInput!) {
-    updateValueStatement(id: $id, input: $input) {
-      id
-      domainId
-      token
-      body
-      updatedAt
-    }
-  }
-`;
+// ============================================================================
+// MUTATIONS
+// ============================================================================
 
-export const DELETE_VALUE_STATEMENT_MUTATION = gql`
-  mutation DeleteValueStatement($id: ID!) {
-    deleteValueStatement(id: $id)
-  }
-`;
+export { CreateValueStatementDocument as CREATE_VALUE_STATEMENT_MUTATION } from '../../generated/graphql';
+export { UpdateValueStatementDocument as UPDATE_VALUE_STATEMENT_MUTATION } from '../../generated/graphql';
+export { DeleteValueStatementDocument as DELETE_VALUE_STATEMENT_MUTATION } from '../../generated/graphql';
 
-export type ValueStatementsQueryResult = { valueStatements: ValueStatement[] };
-export type CreateValueStatementResult = { createValueStatement: ValueStatement };
-export type UpdateValueStatementResult = { updateValueStatement: ValueStatement };
+// ============================================================================
+// RESULT TYPES
+// ============================================================================
+
+export type ValueStatementsQueryVariables = GeneratedValueStatementsQueryVariables;
+export type ValueStatementsQueryResult = GeneratedValueStatementsQuery;
+export type CreateValueStatementResult = GeneratedCreateValueStatementMutation;
+export type UpdateValueStatementResult = GeneratedUpdateValueStatementMutation;
+export type DeleteValueStatementResult = GeneratedDeleteValueStatementMutation;

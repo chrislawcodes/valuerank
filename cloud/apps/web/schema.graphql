@@ -358,6 +358,12 @@ type CostEstimate {
   total: Float!
 }
 
+type CoverageModelBreakdown {
+  label: String!
+  modelId: String!
+  trialCount: Int!
+}
+
 type CoverageModelOption {
   label: String!
   modelId: String!
@@ -1051,6 +1057,10 @@ type DomainValueCoverageCell {
   batchCount: Int!
   definitionId: String
   definitionName: String
+  maxTrialCount: Int
+  minTrialCount: Int
+  modelBreakdown: [CoverageModelBreakdown!]
+  pairedBatchCount: Int!
   valueA: String!
   valueB: String!
 }

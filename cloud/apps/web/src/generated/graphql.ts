@@ -335,6 +335,13 @@ export type CostEstimate = {
   total: Scalars['Float']['output'];
 };
 
+export type CoverageModelBreakdown = {
+  __typename?: 'CoverageModelBreakdown';
+  label: Scalars['String']['output'];
+  modelId: Scalars['String']['output'];
+  trialCount: Scalars['Int']['output'];
+};
+
 export type CoverageModelOption = {
   __typename?: 'CoverageModelOption';
   label: Scalars['String']['output'];
@@ -1005,6 +1012,10 @@ export type DomainValueCoverageCell = {
   batchCount: Scalars['Int']['output'];
   definitionId?: Maybe<Scalars['String']['output']>;
   definitionName?: Maybe<Scalars['String']['output']>;
+  maxTrialCount?: Maybe<Scalars['Int']['output']>;
+  minTrialCount?: Maybe<Scalars['Int']['output']>;
+  modelBreakdown?: Maybe<Array<CoverageModelBreakdown>>;
+  pairedBatchCount: Scalars['Int']['output'];
   valueA: Scalars['String']['output'];
   valueB: Scalars['String']['output'];
 };
@@ -3740,6 +3751,20 @@ export type RevokeApiKeyMutationVariables = Exact<{
 
 export type RevokeApiKeyMutation = { __typename?: 'Mutation', revokeApiKey: boolean };
 
+export type AssumptionsTempZeroQueryVariables = Exact<{
+  directionOnly?: InputMaybe<Scalars['Boolean']['input']>;
+}>;
+
+
+export type AssumptionsTempZeroQuery = { __typename?: 'Query', assumptionsTempZero: { __typename?: 'AssumptionsTempZeroResult', domainName: string, note?: string | null, generatedAt: string, preflight: { __typename?: 'TempZeroPreflight', title: string, runsToLaunch: number, totalBatchesToRun: number, projectedPromptCount: number, projectedComparisons: number, estimatedInputTokens?: number | null, estimatedOutputTokens?: number | null, estimatedCostUsd?: number | null, selectedSignature?: string | null, models: Array<{ __typename?: 'TempZeroPreflightModel', modelId: string, label: string, adapterMode?: string | null }>, vignettes: Array<{ __typename?: 'TempZeroPreflightVignette', vignetteId: string, title: string, conditionCount: number, rationale: string, batchesToRun: number }> }, summary: { __typename?: 'TempZeroSummary', title: string, status: string, matchRate?: number | null, differenceRate?: number | null, comparisons: number, excludedComparisons: number, batchesRun: number, modelsTested: number, vignettesTested: number, worstModelId?: string | null, worstModelLabel?: string | null, worstModelMatchRate?: number | null }, rows: Array<{ __typename?: 'TempZeroRow', modelId: string, modelLabel: string, vignetteId: string, vignetteTitle: string, conditionKey: string, batch1?: string | null, batch2?: string | null, batch3?: string | null, isMatch: boolean, mismatchType?: string | null, decisions: Array<{ __typename?: 'TempZeroDecision', label: string, transcriptId?: string | null, decision?: string | null, content?: unknown | null }> }> } };
+
+export type LaunchAssumptionsTempZeroMutationVariables = Exact<{
+  force?: InputMaybe<Scalars['Boolean']['input']>;
+}>;
+
+
+export type LaunchAssumptionsTempZeroMutation = { __typename?: 'Mutation', launchAssumptionsTempZero: { __typename?: 'LaunchAssumptionsTempZeroPayload', startedRuns: number, totalVignettes: number, modelCount: number, runIds: Array<string>, failedVignetteIds: Array<string> } };
+
 export type MeQueryVariables = Exact<{ [key: string]: never; }>;
 
 
@@ -3874,6 +3899,106 @@ export type CancelScenarioExpansionMutationVariables = Exact<{
 
 
 export type CancelScenarioExpansionMutation = { __typename?: 'Mutation', cancelScenarioExpansion: { __typename?: 'CancelExpansionResult', definitionId: string, cancelled: boolean, jobId?: string | null, message: string } };
+
+export type DomainContextsQueryVariables = Exact<{
+  domainId?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type DomainContextsQuery = { __typename?: 'Query', domainContexts: Array<{ __typename?: 'DomainContext', id: string, domainId: string, text: string, version: number, updatedAt: string, domain?: { __typename?: 'Domain', id: string, name: string } | null }> };
+
+export type CreateDomainContextMutationVariables = Exact<{
+  input: CreateDomainContextInput;
+}>;
+
+
+export type CreateDomainContextMutation = { __typename?: 'Mutation', createDomainContext: { __typename?: 'DomainContext', id: string, domainId: string, text: string, version: number, updatedAt: string } };
+
+export type UpdateDomainContextMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+  input: UpdateDomainContextInput;
+}>;
+
+
+export type UpdateDomainContextMutation = { __typename?: 'Mutation', updateDomainContext: { __typename?: 'DomainContext', id: string, domainId: string, text: string, version: number, updatedAt: string } };
+
+export type DeleteDomainContextMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type DeleteDomainContextMutation = { __typename?: 'Mutation', deleteDomainContext: boolean };
+
+export type DomainAnalysisQueryVariables = Exact<{
+  domainId: Scalars['ID']['input'];
+  scoreMethod?: InputMaybe<Scalars['String']['input']>;
+  signature?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type DomainAnalysisQuery = { __typename?: 'Query', domainAnalysis: { __typename?: 'DomainAnalysisResult', domainId: string, domainName: string, totalDefinitions: number, targetedDefinitions: number, coveredDefinitions: number, missingDefinitionIds: Array<string>, definitionsWithAnalysis: number, generatedAt: string, missingDefinitions: Array<{ __typename?: 'DomainAnalysisMissingDefinition', definitionId: string, definitionName: string, reasonCode: string, reasonLabel: string, missingAllModels: boolean, missingModelIds: Array<string>, missingModelLabels: Array<string> }>, models: Array<{ __typename?: 'DomainAnalysisModel', model: string, label: string, values: Array<{ __typename?: 'DomainAnalysisValueScore', valueKey: string, score: number, prioritized: number, deprioritized: number, neutral: number, totalComparisons: number }>, rankingShape: { __typename?: 'RankingShape', topStructure: string, bottomStructure: string, topGap: number, bottomGap: number, spread: number, steepness: number, dominanceZScore?: number | null } }>, unavailableModels: Array<{ __typename?: 'DomainAnalysisUnavailableModel', model: string, label: string, reason: string }>, rankingShapeBenchmarks: { __typename?: 'RankingShapeBenchmarks', domainMeanTopGap: number, domainStdTopGap?: number | null, medianSpread: number }, clusterAnalysis: { __typename?: 'ClusterAnalysis', skipped: boolean, skipReason?: string | null, defaultPair?: Array<string> | null, faultLinesByPair: unknown, clusters: Array<{ __typename?: 'DomainCluster', id: string, name: string, definingValues: Array<string>, centroid: unknown, members: Array<{ __typename?: 'ClusterMember', model: string, label: string, silhouetteScore: number, isOutlier: boolean, nearestClusterIds?: Array<string> | null, distancesToNearestClusters?: Array<number> | null }> }> } } };
+
+export type DomainAnalysisLegacyQueryVariables = Exact<{
+  domainId: Scalars['ID']['input'];
+}>;
+
+
+export type DomainAnalysisLegacyQuery = { __typename?: 'Query', domainAnalysis: { __typename?: 'DomainAnalysisResult', domainId: string, domainName: string, totalDefinitions: number, targetedDefinitions: number, definitionsWithAnalysis: number, generatedAt: string, models: Array<{ __typename?: 'DomainAnalysisModel', model: string, label: string, values: Array<{ __typename?: 'DomainAnalysisValueScore', valueKey: string, score: number, prioritized: number, deprioritized: number, neutral: number, totalComparisons: number }> }>, unavailableModels: Array<{ __typename?: 'DomainAnalysisUnavailableModel', model: string, label: string, reason: string }> } };
+
+export type DomainAnalysisValueDetailQueryVariables = Exact<{
+  domainId: Scalars['ID']['input'];
+  modelId: Scalars['String']['input'];
+  valueKey: Scalars['String']['input'];
+  scoreMethod?: InputMaybe<Scalars['String']['input']>;
+  signature?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type DomainAnalysisValueDetailQuery = { __typename?: 'Query', domainAnalysisValueDetail: { __typename?: 'DomainAnalysisValueDetailResult', domainId: string, domainName: string, modelId: string, modelLabel: string, valueKey: string, score: number, prioritized: number, deprioritized: number, neutral: number, totalTrials: number, targetedDefinitions: number, coveredDefinitions: number, missingDefinitionIds: Array<string>, generatedAt: string, vignettes: Array<{ __typename?: 'DomainAnalysisVignetteDetail', definitionId: string, definitionName: string, definitionVersion: number, aggregateRunId?: string | null, otherValueKey: string, prioritized: number, deprioritized: number, neutral: number, totalTrials: number, selectedValueWinRate?: number | null, conditions: Array<{ __typename?: 'DomainAnalysisConditionDetail', scenarioId?: string | null, conditionName: string, dimensions?: unknown | null, prioritized: number, deprioritized: number, neutral: number, totalTrials: number, selectedValueWinRate?: number | null, strongly: number, somewhat: number, opponentSomewhat: number, opponentStrongly: number, unknownCount: number }> }> } };
+
+export type DomainAnalysisConditionTranscriptsQueryVariables = Exact<{
+  domainId: Scalars['ID']['input'];
+  modelId: Scalars['String']['input'];
+  valueKey: Scalars['String']['input'];
+  definitionId: Scalars['ID']['input'];
+  scenarioId?: InputMaybe<Scalars['ID']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  signature?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type DomainAnalysisConditionTranscriptsQuery = { __typename?: 'Query', domainAnalysisConditionTranscripts: Array<{ __typename?: 'DomainAnalysisConditionTranscript', id: string, runId: string, scenarioId?: string | null, modelId: string, decisionModelV2?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, createdAt: string, content: unknown }> };
+
+export type DomainAvailableSignaturesQueryVariables = Exact<{
+  domainId: Scalars['ID']['input'];
+}>;
+
+
+export type DomainAvailableSignaturesQuery = { __typename?: 'Query', domainAvailableSignatures: Array<{ __typename?: 'DomainAvailableSignature', signature: string, label: string, isVirtual: boolean, temperature?: number | null }> };
+
+export type DomainFindingsEligibilityQueryVariables = Exact<{
+  domainId: Scalars['ID']['input'];
+}>;
+
+
+export type DomainFindingsEligibilityQuery = { __typename?: 'Query', domainFindingsEligibility: { __typename?: 'DomainFindingsEligibility', domainId: string, eligible: boolean, status: string, summary: string, reasons: Array<string>, recommendedActions: Array<string>, consideredScopeCategories: Array<string>, completedEligibleEvaluationCount: number, latestEligibleEvaluationId?: string | null, latestEligibleScopeCategory?: string | null, latestEligibleCompletedAt?: string | null } };
+
+export type DomainValueCoverageQueryVariables = Exact<{
+  domainId: Scalars['ID']['input'];
+  modelIds?: InputMaybe<Array<Scalars['String']['input']> | Scalars['String']['input']>;
+  signature?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type DomainValueCoverageQuery = { __typename?: 'Query', domainValueCoverage?: { __typename?: 'DomainValueCoverageResult', domainId: string, values: Array<string>, cells: Array<{ __typename?: 'DomainValueCoverageCell', valueA: string, valueB: string, batchCount: number, pairedBatchCount: number, definitionId?: string | null, definitionName?: string | null, aggregateRunId?: string | null, minTrialCount?: number | null, maxTrialCount?: number | null, modelBreakdown?: Array<{ __typename?: 'CoverageModelBreakdown', modelId: string, label: string, trialCount: number }> | null }>, availableModels: Array<{ __typename?: 'CoverageModelOption', modelId: string, label: string }> } | null };
+
+export type DomainValueCoverageLegacyQueryVariables = Exact<{
+  domainId: Scalars['ID']['input'];
+  modelIds?: InputMaybe<Array<Scalars['String']['input']> | Scalars['String']['input']>;
+}>;
+
+
+export type DomainValueCoverageLegacyQuery = { __typename?: 'Query', domainValueCoverage?: { __typename?: 'DomainValueCoverageResult', domainId: string, values: Array<string>, cells: Array<{ __typename?: 'DomainValueCoverageCell', valueA: string, valueB: string, batchCount: number, pairedBatchCount: number, definitionId?: string | null, definitionName?: string | null, aggregateRunId?: string | null }>, availableModels: Array<{ __typename?: 'CoverageModelOption', modelId: string, label: string }> } | null };
 
 export type DomainsQueryVariables = Exact<{
   search?: InputMaybe<Scalars['String']['input']>;
@@ -4171,6 +4296,73 @@ export type AvailableModelsQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type AvailableModelsQuery = { __typename?: 'Query', availableModels: Array<{ __typename?: 'AvailableModel', id: string, providerId: string, displayName: string, versions: Array<string>, defaultVersion?: string | null, isAvailable: boolean, isDefault: boolean }> };
 
+export type AssumptionsOrderInvarianceLegacyQueryVariables = Exact<{
+  directionOnly?: InputMaybe<Scalars['Boolean']['input']>;
+  trimOutliers?: InputMaybe<Scalars['Boolean']['input']>;
+}>;
+
+
+export type AssumptionsOrderInvarianceLegacyQuery = { __typename?: 'Query', assumptionsOrderInvariance: { __typename?: 'OrderInvarianceResult', generatedAt: string, summary: { __typename?: 'OrderInvarianceSummary', status: string, matchRate?: number | null, exactMatchRate?: number | null, totalCandidatePairs: number, qualifyingPairs: number, missingPairs: number, comparablePairs: number, sensitiveModelCount: number, sensitiveVignetteCount: number, presentationEffectMAD?: number | null, scaleEffectMAD?: number | null, excludedPairs: Array<{ __typename?: 'OrderInvarianceExclusionCount', reason: string, count: number }> }, rows: Array<{ __typename?: 'OrderInvarianceRow', modelId: string, modelLabel: string, vignetteId: string, vignetteTitle: string, conditionKey: string, majorityVoteBaseline?: number | null, majorityVoteFlipped?: number | null, mismatchType?: string | null, ordinalDistance?: number | null, isMatch?: boolean | null, variantType?: string | null }> } };
+
+export type AssumptionsOrderInvarianceAnalysisQueryVariables = Exact<{
+  directionOnly?: InputMaybe<Scalars['Boolean']['input']>;
+  trimOutliers?: InputMaybe<Scalars['Boolean']['input']>;
+}>;
+
+
+export type AssumptionsOrderInvarianceAnalysisQuery = { __typename?: 'Query', assumptionsOrderInvariance: { __typename?: 'OrderInvarianceResult', generatedAt: string, modelMetrics: Array<{ __typename?: 'OrderInvarianceModelMetrics', modelId: string, modelLabel: string, matchRate?: number | null, matchCount: number, matchEligibleCount: number, valueOrderReversalRate?: number | null, valueOrderEligibleCount: number, valueOrderExcludedCount: number, valueOrderPull: string, scaleOrderReversalRate?: number | null, scaleOrderEligibleCount: number, scaleOrderExcludedCount: number, scaleOrderPull: string, withinCellDisagreementRate?: number | null, pairLevelMarginSummary?: { __typename?: 'PairLevelMarginSummary', mean?: number | null, median?: number | null, p25?: number | null, p75?: number | null } | null }>, rows: Array<{ __typename?: 'OrderInvarianceRow', modelId: string, modelLabel: string, vignetteId: string, vignetteTitle: string, conditionKey: string, majorityVoteBaseline?: number | null, majorityVoteFlipped?: number | null, ordinalDistance?: number | null, isMatch?: boolean | null, variantType?: string | null }> } };
+
+export type AssumptionsOrderInvarianceReviewQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type AssumptionsOrderInvarianceReviewQuery = { __typename?: 'Query', assumptionsOrderInvarianceReview: { __typename?: 'OrderInvarianceReviewResult', generatedAt: string, summary: { __typename?: 'OrderInvarianceReviewSummary', totalVignettes: number, reviewedVignettes: number, approvedVignettes: number, rejectedVignettes: number, pendingVignettes: number, launchReady: boolean }, vignettes: Array<{ __typename?: 'OrderInvarianceReviewVignette', pairId: string, vignetteId: string, vignetteTitle: string, conditionKey: string, conditionPairCount: number, sourceScenarioId: string, variantScenarioId: string, baselineName: string, flippedName: string, baselineText: string, flippedText: string, variantType?: string | null, reviewStatus: string, reviewedBy?: string | null, reviewedAt?: string | null, reviewNotes?: string | null }> } };
+
+export type AssumptionsOrderInvarianceTranscriptsQueryVariables = Exact<{
+  vignetteId: Scalars['ID']['input'];
+  modelId: Scalars['String']['input'];
+  conditionKey: Scalars['String']['input'];
+}>;
+
+
+export type AssumptionsOrderInvarianceTranscriptsQuery = { __typename?: 'Query', assumptionsOrderInvarianceTranscripts: { __typename?: 'OrderInvarianceTranscriptResult', generatedAt: string, vignetteId: string, vignetteTitle: string, modelId: string, modelLabel: string, conditionKey: string, attributeALabel?: string | null, attributeBLabel?: string | null, transcripts: Array<{ __typename?: 'OrderInvarianceTranscript', id: string, runId: string, scenarioId: string, modelId: string, modelVersion?: string | null, content?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, estimatedCost?: number | null, createdAt: string, lastAccessedAt?: string | null, orderLabel: string, attributeALevel?: number | null, attributeBLevel?: number | null }> } };
+
+export type AssumptionsOrderInvarianceLaunchStatusQueryVariables = Exact<{
+  runIds: Array<Scalars['ID']['input']> | Scalars['ID']['input'];
+}>;
+
+
+export type AssumptionsOrderInvarianceLaunchStatusQuery = { __typename?: 'Query', assumptionsOrderInvarianceLaunchStatus: { __typename?: 'OrderInvarianceLaunchStatus', generatedAt: string, totalRuns: number, activeRuns: number, completedRuns: number, failedRuns: number, targetedTrials: number, completedTrials: number, failedTrials: number, percentComplete: number, isComplete: boolean, stalledModels: Array<string>, failureSummaries: Array<string>, runs: Array<{ __typename?: 'OrderInvarianceLaunchRun', runId: string, status: string, targetedTrials: number, completedTrials: number, failedTrials: number, percentComplete: number, startedAt?: string | null, completedAt?: string | null, isStalled: boolean }> } };
+
+export type ReviewOrderInvariancePairMutationVariables = Exact<{
+  pairId: Scalars['ID']['input'];
+  reviewStatus: Scalars['String']['input'];
+  reviewNotes?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type ReviewOrderInvariancePairMutation = { __typename?: 'Mutation', reviewOrderInvariancePair: { __typename?: 'ReviewOrderInvariancePairPayload', pairId: string, reviewStatus: string, reviewedAt: string } };
+
+export type LaunchOrderInvarianceMutationVariables = Exact<{
+  force?: InputMaybe<Scalars['Boolean']['input']>;
+}>;
+
+
+export type LaunchOrderInvarianceMutation = { __typename?: 'Mutation', launchOrderInvariance: { __typename?: 'LaunchOrderInvariancePayload', startedRuns: number, runsByVariantType: unknown, approvedPairs: number, modelCount: number, runIds: Array<string>, failedDefinitionIds: Array<string> } };
+
+export type CreatePairedVignetteMutationVariables = Exact<{
+  input: CreatePairedVignetteInput;
+}>;
+
+
+export type CreatePairedVignetteMutation = { __typename?: 'Mutation', createPairedVignette: { __typename?: 'CreatePairedVignetteResult', definitionA: { __typename?: 'Definition', id: string, name: string }, definitionB: { __typename?: 'Definition', id: string, name: string } } };
+
+export type UpdatePairedVignetteMutationVariables = Exact<{
+  input: UpdatePairedVignetteInput;
+}>;
+
+
+export type UpdatePairedVignetteMutation = { __typename?: 'Mutation', updatePairedVignette: { __typename?: 'CreatePairedVignetteResult', definitionA: { __typename?: 'Definition', id: string, name: string }, definitionB: { __typename?: 'Definition', id: string, name: string } } };
+
 export type RunFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null };
 
 export type RunWithTranscriptsFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, failedProbes: Array<{ __typename?: 'ProbeResult', modelId: string, errorCode?: string | null, errorMessage?: string | null }>, transcripts: Array<{ __typename?: 'Transcript', id: string, runId: string, scenarioId?: string | null, modelId: string, modelVersion?: string | null, content: unknown, decisionMetadata?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, estimatedCost?: number | null, createdAt: string, lastAccessedAt?: string | null, dimensionValues?: unknown | null, decisionModelV2?: unknown | null }>, analysis?: { __typename?: 'AnalysisResult', actualCost?: { __typename?: 'ActualCost', total: number, perModel: Array<{ __typename?: 'ActualModelCost', modelId: string, inputTokens: number, outputTokens: number, cost: number, probeCount: number }> } | null } | null, recentTasks: Array<{ __typename?: 'TaskResult', scenarioId: string, modelId: string, status: string, error?: string | null, completedAt?: string | null }>, executionMetrics?: { __typename?: 'ExecutionMetrics', totalActive: number, totalQueued: number, estimatedSecondsRemaining?: number | null, totalRetries: number, providers: Array<{ __typename?: 'ProviderExecutionMetrics', provider: string, activeJobs: number, queuedJobs: number, maxParallel: number, requestsPerMinute: number, activeModelIds: Array<string>, recentCompletions: Array<{ __typename?: 'CompletionEvent', modelId: string, scenarioId: string, success: boolean, completedAt: string, durationMs: number }> }> } | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null };
@@ -4399,6 +4591,35 @@ export type TempZeroVerificationReportQueryVariables = Exact<{ [key: string]: ne
 
 
 export type TempZeroVerificationReportQuery = { __typename?: 'Query', tempZeroVerificationReport?: { __typename?: 'TempZeroVerificationReport', generatedAt: string, transcriptCount: number, batchTimestamp?: string | null, models: Array<{ __typename?: 'TempZeroModelVerification', modelId: string, transcriptCount: number, adapterModes: Array<string>, promptHashStabilityPct?: number | null, fingerprintDriftPct?: number | null, decisionMatchRatePct?: number | null }> } | null };
+
+export type ValueStatementsQueryVariables = Exact<{
+  domainId: Scalars['ID']['input'];
+}>;
+
+
+export type ValueStatementsQuery = { __typename?: 'Query', valueStatements: Array<{ __typename?: 'ValueStatement', id: string, domainId: string, token: string, body: string, updatedAt: string }> };
+
+export type CreateValueStatementMutationVariables = Exact<{
+  input: CreateValueStatementInput;
+}>;
+
+
+export type CreateValueStatementMutation = { __typename?: 'Mutation', createValueStatement: { __typename?: 'ValueStatement', id: string, domainId: string, token: string, body: string, updatedAt: string } };
+
+export type UpdateValueStatementMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+  input: UpdateValueStatementInput;
+}>;
+
+
+export type UpdateValueStatementMutation = { __typename?: 'Mutation', updateValueStatement: { __typename?: 'ValueStatement', id: string, domainId: string, token: string, body: string, updatedAt: string } };
+
+export type DeleteValueStatementMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type DeleteValueStatementMutation = { __typename?: 'Mutation', deleteValueStatement: boolean };
 
 export const AnalysisResultFieldsFragmentDoc = gql`
     fragment AnalysisResultFields on AnalysisResult {
@@ -4713,6 +4934,89 @@ export const RevokeApiKeyDocument = gql`
 
 export function useRevokeApiKeyMutation() {
   return Urql.useMutation<RevokeApiKeyMutation, RevokeApiKeyMutationVariables>(RevokeApiKeyDocument);
+};
+export const AssumptionsTempZeroDocument = gql`
+    query AssumptionsTempZero($directionOnly: Boolean) {
+  assumptionsTempZero(directionOnly: $directionOnly) {
+    domainName
+    note
+    generatedAt
+    preflight {
+      title
+      runsToLaunch
+      totalBatchesToRun
+      projectedPromptCount
+      projectedComparisons
+      estimatedInputTokens
+      estimatedOutputTokens
+      estimatedCostUsd
+      selectedSignature
+      models {
+        modelId
+        label
+        adapterMode
+      }
+      vignettes {
+        vignetteId
+        title
+        conditionCount
+        rationale
+        batchesToRun
+      }
+    }
+    summary {
+      title
+      status
+      matchRate
+      differenceRate
+      comparisons
+      excludedComparisons
+      batchesRun
+      modelsTested
+      vignettesTested
+      worstModelId
+      worstModelLabel
+      worstModelMatchRate
+    }
+    rows {
+      modelId
+      modelLabel
+      vignetteId
+      vignetteTitle
+      conditionKey
+      batch1
+      batch2
+      batch3
+      isMatch
+      mismatchType
+      decisions {
+        label
+        transcriptId
+        decision
+        content
+      }
+    }
+  }
+}
+    `;
+
+export function useAssumptionsTempZeroQuery(options?: Omit<Urql.UseQueryArgs<AssumptionsTempZeroQueryVariables>, 'query'>) {
+  return Urql.useQuery<AssumptionsTempZeroQuery, AssumptionsTempZeroQueryVariables>({ query: AssumptionsTempZeroDocument, ...options });
+};
+export const LaunchAssumptionsTempZeroDocument = gql`
+    mutation LaunchAssumptionsTempZero($force: Boolean) {
+  launchAssumptionsTempZero(force: $force) {
+    startedRuns
+    totalVignettes
+    modelCount
+    runIds
+    failedVignetteIds
+  }
+}
+    `;
+
+export function useLaunchAssumptionsTempZeroMutation() {
+  return Urql.useMutation<LaunchAssumptionsTempZeroMutation, LaunchAssumptionsTempZeroMutationVariables>(LaunchAssumptionsTempZeroDocument);
 };
 export const MeDocument = gql`
     query Me {
@@ -5109,6 +5413,360 @@ export const CancelScenarioExpansionDocument = gql`
 
 export function useCancelScenarioExpansionMutation() {
   return Urql.useMutation<CancelScenarioExpansionMutation, CancelScenarioExpansionMutationVariables>(CancelScenarioExpansionDocument);
+};
+export const DomainContextsDocument = gql`
+    query DomainContexts($domainId: String) {
+  domainContexts(domainId: $domainId) {
+    id
+    domainId
+    domain {
+      id
+      name
+    }
+    text
+    version
+    updatedAt
+  }
+}
+    `;
+
+export function useDomainContextsQuery(options?: Omit<Urql.UseQueryArgs<DomainContextsQueryVariables>, 'query'>) {
+  return Urql.useQuery<DomainContextsQuery, DomainContextsQueryVariables>({ query: DomainContextsDocument, ...options });
+};
+export const CreateDomainContextDocument = gql`
+    mutation CreateDomainContext($input: CreateDomainContextInput!) {
+  createDomainContext(input: $input) {
+    id
+    domainId
+    text
+    version
+    updatedAt
+  }
+}
+    `;
+
+export function useCreateDomainContextMutation() {
+  return Urql.useMutation<CreateDomainContextMutation, CreateDomainContextMutationVariables>(CreateDomainContextDocument);
+};
+export const UpdateDomainContextDocument = gql`
+    mutation UpdateDomainContext($id: ID!, $input: UpdateDomainContextInput!) {
+  updateDomainContext(id: $id, input: $input) {
+    id
+    domainId
+    text
+    version
+    updatedAt
+  }
+}
+    `;
+
+export function useUpdateDomainContextMutation() {
+  return Urql.useMutation<UpdateDomainContextMutation, UpdateDomainContextMutationVariables>(UpdateDomainContextDocument);
+};
+export const DeleteDomainContextDocument = gql`
+    mutation DeleteDomainContext($id: ID!) {
+  deleteDomainContext(id: $id)
+}
+    `;
+
+export function useDeleteDomainContextMutation() {
+  return Urql.useMutation<DeleteDomainContextMutation, DeleteDomainContextMutationVariables>(DeleteDomainContextDocument);
+};
+export const DomainAnalysisDocument = gql`
+    query DomainAnalysis($domainId: ID!, $scoreMethod: String, $signature: String) {
+  domainAnalysis(
+    domainId: $domainId
+    scoreMethod: $scoreMethod
+    signature: $signature
+  ) {
+    domainId
+    domainName
+    totalDefinitions
+    targetedDefinitions
+    coveredDefinitions
+    missingDefinitionIds
+    missingDefinitions {
+      definitionId
+      definitionName
+      reasonCode
+      reasonLabel
+      missingAllModels
+      missingModelIds
+      missingModelLabels
+    }
+    definitionsWithAnalysis
+    generatedAt
+    models {
+      model
+      label
+      values {
+        valueKey
+        score
+        prioritized
+        deprioritized
+        neutral
+        totalComparisons
+      }
+      rankingShape {
+        topStructure
+        bottomStructure
+        topGap
+        bottomGap
+        spread
+        steepness
+        dominanceZScore
+      }
+    }
+    unavailableModels {
+      model
+      label
+      reason
+    }
+    rankingShapeBenchmarks {
+      domainMeanTopGap
+      domainStdTopGap
+      medianSpread
+    }
+    clusterAnalysis {
+      skipped
+      skipReason
+      defaultPair
+      clusters {
+        id
+        name
+        definingValues
+        centroid
+        members {
+          model
+          label
+          silhouetteScore
+          isOutlier
+          nearestClusterIds
+          distancesToNearestClusters
+        }
+      }
+      faultLinesByPair
+    }
+  }
+}
+    `;
+
+export function useDomainAnalysisQuery(options: Omit<Urql.UseQueryArgs<DomainAnalysisQueryVariables>, 'query'>) {
+  return Urql.useQuery<DomainAnalysisQuery, DomainAnalysisQueryVariables>({ query: DomainAnalysisDocument, ...options });
+};
+export const DomainAnalysisLegacyDocument = gql`
+    query DomainAnalysisLegacy($domainId: ID!) {
+  domainAnalysis(domainId: $domainId) {
+    domainId
+    domainName
+    totalDefinitions
+    targetedDefinitions
+    definitionsWithAnalysis
+    generatedAt
+    models {
+      model
+      label
+      values {
+        valueKey
+        score
+        prioritized
+        deprioritized
+        neutral
+        totalComparisons
+      }
+    }
+    unavailableModels {
+      model
+      label
+      reason
+    }
+  }
+}
+    `;
+
+export function useDomainAnalysisLegacyQuery(options: Omit<Urql.UseQueryArgs<DomainAnalysisLegacyQueryVariables>, 'query'>) {
+  return Urql.useQuery<DomainAnalysisLegacyQuery, DomainAnalysisLegacyQueryVariables>({ query: DomainAnalysisLegacyDocument, ...options });
+};
+export const DomainAnalysisValueDetailDocument = gql`
+    query DomainAnalysisValueDetail($domainId: ID!, $modelId: String!, $valueKey: String!, $scoreMethod: String, $signature: String) {
+  domainAnalysisValueDetail(
+    domainId: $domainId
+    modelId: $modelId
+    valueKey: $valueKey
+    scoreMethod: $scoreMethod
+    signature: $signature
+  ) {
+    domainId
+    domainName
+    modelId
+    modelLabel
+    valueKey
+    score
+    prioritized
+    deprioritized
+    neutral
+    totalTrials
+    targetedDefinitions
+    coveredDefinitions
+    missingDefinitionIds
+    generatedAt
+    vignettes {
+      definitionId
+      definitionName
+      definitionVersion
+      aggregateRunId
+      otherValueKey
+      prioritized
+      deprioritized
+      neutral
+      totalTrials
+      selectedValueWinRate
+      conditions {
+        scenarioId
+        conditionName
+        dimensions
+        prioritized
+        deprioritized
+        neutral
+        totalTrials
+        selectedValueWinRate
+        strongly
+        somewhat
+        opponentSomewhat
+        opponentStrongly
+        unknownCount
+      }
+    }
+  }
+}
+    `;
+
+export function useDomainAnalysisValueDetailQuery(options: Omit<Urql.UseQueryArgs<DomainAnalysisValueDetailQueryVariables>, 'query'>) {
+  return Urql.useQuery<DomainAnalysisValueDetailQuery, DomainAnalysisValueDetailQueryVariables>({ query: DomainAnalysisValueDetailDocument, ...options });
+};
+export const DomainAnalysisConditionTranscriptsDocument = gql`
+    query DomainAnalysisConditionTranscripts($domainId: ID!, $modelId: String!, $valueKey: String!, $definitionId: ID!, $scenarioId: ID, $limit: Int, $signature: String) {
+  domainAnalysisConditionTranscripts(
+    domainId: $domainId
+    modelId: $modelId
+    valueKey: $valueKey
+    definitionId: $definitionId
+    scenarioId: $scenarioId
+    limit: $limit
+    signature: $signature
+  ) {
+    id
+    runId
+    scenarioId
+    modelId
+    decisionModelV2
+    turnCount
+    tokenCount
+    durationMs
+    createdAt
+    content
+  }
+}
+    `;
+
+export function useDomainAnalysisConditionTranscriptsQuery(options: Omit<Urql.UseQueryArgs<DomainAnalysisConditionTranscriptsQueryVariables>, 'query'>) {
+  return Urql.useQuery<DomainAnalysisConditionTranscriptsQuery, DomainAnalysisConditionTranscriptsQueryVariables>({ query: DomainAnalysisConditionTranscriptsDocument, ...options });
+};
+export const DomainAvailableSignaturesDocument = gql`
+    query DomainAvailableSignatures($domainId: ID!) {
+  domainAvailableSignatures(domainId: $domainId) {
+    signature
+    label
+    isVirtual
+    temperature
+  }
+}
+    `;
+
+export function useDomainAvailableSignaturesQuery(options: Omit<Urql.UseQueryArgs<DomainAvailableSignaturesQueryVariables>, 'query'>) {
+  return Urql.useQuery<DomainAvailableSignaturesQuery, DomainAvailableSignaturesQueryVariables>({ query: DomainAvailableSignaturesDocument, ...options });
+};
+export const DomainFindingsEligibilityDocument = gql`
+    query DomainFindingsEligibility($domainId: ID!) {
+  domainFindingsEligibility(domainId: $domainId) {
+    domainId
+    eligible
+    status
+    summary
+    reasons
+    recommendedActions
+    consideredScopeCategories
+    completedEligibleEvaluationCount
+    latestEligibleEvaluationId
+    latestEligibleScopeCategory
+    latestEligibleCompletedAt
+  }
+}
+    `;
+
+export function useDomainFindingsEligibilityQuery(options: Omit<Urql.UseQueryArgs<DomainFindingsEligibilityQueryVariables>, 'query'>) {
+  return Urql.useQuery<DomainFindingsEligibilityQuery, DomainFindingsEligibilityQueryVariables>({ query: DomainFindingsEligibilityDocument, ...options });
+};
+export const DomainValueCoverageDocument = gql`
+    query DomainValueCoverage($domainId: ID!, $modelIds: [String!], $signature: String) {
+  domainValueCoverage(
+    domainId: $domainId
+    modelIds: $modelIds
+    signature: $signature
+  ) {
+    domainId
+    values
+    cells {
+      valueA
+      valueB
+      batchCount
+      pairedBatchCount
+      definitionId
+      definitionName
+      aggregateRunId
+      minTrialCount
+      maxTrialCount
+      modelBreakdown {
+        modelId
+        label
+        trialCount
+      }
+    }
+    availableModels {
+      modelId
+      label
+    }
+  }
+}
+    `;
+
+export function useDomainValueCoverageQuery(options: Omit<Urql.UseQueryArgs<DomainValueCoverageQueryVariables>, 'query'>) {
+  return Urql.useQuery<DomainValueCoverageQuery, DomainValueCoverageQueryVariables>({ query: DomainValueCoverageDocument, ...options });
+};
+export const DomainValueCoverageLegacyDocument = gql`
+    query DomainValueCoverageLegacy($domainId: ID!, $modelIds: [String!]) {
+  domainValueCoverage(domainId: $domainId, modelIds: $modelIds) {
+    domainId
+    values
+    cells {
+      valueA
+      valueB
+      batchCount
+      pairedBatchCount
+      definitionId
+      definitionName
+      aggregateRunId
+    }
+    availableModels {
+      modelId
+      label
+    }
+  }
+}
+    `;
+
+export function useDomainValueCoverageLegacyQuery(options: Omit<Urql.UseQueryArgs<DomainValueCoverageLegacyQueryVariables>, 'query'>) {
+  return Urql.useQuery<DomainValueCoverageLegacyQuery, DomainValueCoverageLegacyQueryVariables>({ query: DomainValueCoverageLegacyDocument, ...options });
 };
 export const DomainsDocument = gql`
     query Domains($search: String, $limit: Int, $offset: Int) {
@@ -5828,6 +6486,276 @@ export const AvailableModelsDocument = gql`
 export function useAvailableModelsQuery(options?: Omit<Urql.UseQueryArgs<AvailableModelsQueryVariables>, 'query'>) {
   return Urql.useQuery<AvailableModelsQuery, AvailableModelsQueryVariables>({ query: AvailableModelsDocument, ...options });
 };
+export const AssumptionsOrderInvarianceLegacyDocument = gql`
+    query AssumptionsOrderInvarianceLegacy($directionOnly: Boolean, $trimOutliers: Boolean) {
+  assumptionsOrderInvariance(
+    directionOnly: $directionOnly
+    trimOutliers: $trimOutliers
+  ) {
+    generatedAt
+    summary {
+      status
+      matchRate
+      exactMatchRate
+      totalCandidatePairs
+      qualifyingPairs
+      missingPairs
+      comparablePairs
+      sensitiveModelCount
+      sensitiveVignetteCount
+      presentationEffectMAD
+      scaleEffectMAD
+      excludedPairs {
+        reason
+        count
+      }
+    }
+    rows {
+      modelId
+      modelLabel
+      vignetteId
+      vignetteTitle
+      conditionKey
+      majorityVoteBaseline
+      majorityVoteFlipped
+      mismatchType
+      ordinalDistance
+      isMatch
+      variantType
+    }
+  }
+}
+    `;
+
+export function useAssumptionsOrderInvarianceLegacyQuery(options?: Omit<Urql.UseQueryArgs<AssumptionsOrderInvarianceLegacyQueryVariables>, 'query'>) {
+  return Urql.useQuery<AssumptionsOrderInvarianceLegacyQuery, AssumptionsOrderInvarianceLegacyQueryVariables>({ query: AssumptionsOrderInvarianceLegacyDocument, ...options });
+};
+export const AssumptionsOrderInvarianceAnalysisDocument = gql`
+    query AssumptionsOrderInvarianceAnalysis($directionOnly: Boolean, $trimOutliers: Boolean) {
+  assumptionsOrderInvariance(
+    directionOnly: $directionOnly
+    trimOutliers: $trimOutliers
+  ) {
+    generatedAt
+    modelMetrics {
+      modelId
+      modelLabel
+      matchRate
+      matchCount
+      matchEligibleCount
+      valueOrderReversalRate
+      valueOrderEligibleCount
+      valueOrderExcludedCount
+      valueOrderPull
+      scaleOrderReversalRate
+      scaleOrderEligibleCount
+      scaleOrderExcludedCount
+      scaleOrderPull
+      withinCellDisagreementRate
+      pairLevelMarginSummary {
+        mean
+        median
+        p25
+        p75
+      }
+    }
+    rows {
+      modelId
+      modelLabel
+      vignetteId
+      vignetteTitle
+      conditionKey
+      majorityVoteBaseline
+      majorityVoteFlipped
+      ordinalDistance
+      isMatch
+      variantType
+    }
+  }
+}
+    `;
+
+export function useAssumptionsOrderInvarianceAnalysisQuery(options?: Omit<Urql.UseQueryArgs<AssumptionsOrderInvarianceAnalysisQueryVariables>, 'query'>) {
+  return Urql.useQuery<AssumptionsOrderInvarianceAnalysisQuery, AssumptionsOrderInvarianceAnalysisQueryVariables>({ query: AssumptionsOrderInvarianceAnalysisDocument, ...options });
+};
+export const AssumptionsOrderInvarianceReviewDocument = gql`
+    query AssumptionsOrderInvarianceReview {
+  assumptionsOrderInvarianceReview {
+    generatedAt
+    summary {
+      totalVignettes
+      reviewedVignettes
+      approvedVignettes
+      rejectedVignettes
+      pendingVignettes
+      launchReady
+    }
+    vignettes {
+      pairId
+      vignetteId
+      vignetteTitle
+      conditionKey
+      conditionPairCount
+      sourceScenarioId
+      variantScenarioId
+      baselineName
+      flippedName
+      baselineText
+      flippedText
+      variantType
+      reviewStatus
+      reviewedBy
+      reviewedAt
+      reviewNotes
+    }
+  }
+}
+    `;
+
+export function useAssumptionsOrderInvarianceReviewQuery(options?: Omit<Urql.UseQueryArgs<AssumptionsOrderInvarianceReviewQueryVariables>, 'query'>) {
+  return Urql.useQuery<AssumptionsOrderInvarianceReviewQuery, AssumptionsOrderInvarianceReviewQueryVariables>({ query: AssumptionsOrderInvarianceReviewDocument, ...options });
+};
+export const AssumptionsOrderInvarianceTranscriptsDocument = gql`
+    query AssumptionsOrderInvarianceTranscripts($vignetteId: ID!, $modelId: String!, $conditionKey: String!) {
+  assumptionsOrderInvarianceTranscripts(
+    vignetteId: $vignetteId
+    modelId: $modelId
+    conditionKey: $conditionKey
+  ) {
+    generatedAt
+    vignetteId
+    vignetteTitle
+    modelId
+    modelLabel
+    conditionKey
+    attributeALabel
+    attributeBLabel
+    transcripts {
+      id
+      runId
+      scenarioId
+      modelId
+      modelVersion
+      content
+      turnCount
+      tokenCount
+      durationMs
+      estimatedCost
+      createdAt
+      lastAccessedAt
+      orderLabel
+      attributeALevel
+      attributeBLevel
+    }
+  }
+}
+    `;
+
+export function useAssumptionsOrderInvarianceTranscriptsQuery(options: Omit<Urql.UseQueryArgs<AssumptionsOrderInvarianceTranscriptsQueryVariables>, 'query'>) {
+  return Urql.useQuery<AssumptionsOrderInvarianceTranscriptsQuery, AssumptionsOrderInvarianceTranscriptsQueryVariables>({ query: AssumptionsOrderInvarianceTranscriptsDocument, ...options });
+};
+export const AssumptionsOrderInvarianceLaunchStatusDocument = gql`
+    query AssumptionsOrderInvarianceLaunchStatus($runIds: [ID!]!) {
+  assumptionsOrderInvarianceLaunchStatus(runIds: $runIds) {
+    generatedAt
+    totalRuns
+    activeRuns
+    completedRuns
+    failedRuns
+    targetedTrials
+    completedTrials
+    failedTrials
+    percentComplete
+    isComplete
+    stalledModels
+    failureSummaries
+    runs {
+      runId
+      status
+      targetedTrials
+      completedTrials
+      failedTrials
+      percentComplete
+      startedAt
+      completedAt
+      isStalled
+    }
+  }
+}
+    `;
+
+export function useAssumptionsOrderInvarianceLaunchStatusQuery(options: Omit<Urql.UseQueryArgs<AssumptionsOrderInvarianceLaunchStatusQueryVariables>, 'query'>) {
+  return Urql.useQuery<AssumptionsOrderInvarianceLaunchStatusQuery, AssumptionsOrderInvarianceLaunchStatusQueryVariables>({ query: AssumptionsOrderInvarianceLaunchStatusDocument, ...options });
+};
+export const ReviewOrderInvariancePairDocument = gql`
+    mutation ReviewOrderInvariancePair($pairId: ID!, $reviewStatus: String!, $reviewNotes: String) {
+  reviewOrderInvariancePair(
+    pairId: $pairId
+    reviewStatus: $reviewStatus
+    reviewNotes: $reviewNotes
+  ) {
+    pairId
+    reviewStatus
+    reviewedAt
+  }
+}
+    `;
+
+export function useReviewOrderInvariancePairMutation() {
+  return Urql.useMutation<ReviewOrderInvariancePairMutation, ReviewOrderInvariancePairMutationVariables>(ReviewOrderInvariancePairDocument);
+};
+export const LaunchOrderInvarianceDocument = gql`
+    mutation LaunchOrderInvariance($force: Boolean) {
+  launchOrderInvariance(force: $force) {
+    startedRuns
+    runsByVariantType
+    approvedPairs
+    modelCount
+    runIds
+    failedDefinitionIds
+  }
+}
+    `;
+
+export function useLaunchOrderInvarianceMutation() {
+  return Urql.useMutation<LaunchOrderInvarianceMutation, LaunchOrderInvarianceMutationVariables>(LaunchOrderInvarianceDocument);
+};
+export const CreatePairedVignetteDocument = gql`
+    mutation CreatePairedVignette($input: CreatePairedVignetteInput!) {
+  createPairedVignette(input: $input) {
+    definitionA {
+      id
+      name
+    }
+    definitionB {
+      id
+      name
+    }
+  }
+}
+    `;
+
+export function useCreatePairedVignetteMutation() {
+  return Urql.useMutation<CreatePairedVignetteMutation, CreatePairedVignetteMutationVariables>(CreatePairedVignetteDocument);
+};
+export const UpdatePairedVignetteDocument = gql`
+    mutation UpdatePairedVignette($input: UpdatePairedVignetteInput!) {
+  updatePairedVignette(input: $input) {
+    definitionA {
+      id
+      name
+    }
+    definitionB {
+      id
+      name
+    }
+  }
+}
+    `;
+
+export function useUpdatePairedVignetteMutation() {
+  return Urql.useMutation<UpdatePairedVignetteMutation, UpdatePairedVignetteMutationVariables>(UpdatePairedVignetteDocument);
+};
 export const RunsDocument = gql`
     query Runs($definitionId: String, $experimentId: String, $status: String, $runCategory: String, $hasAnalysis: Boolean, $analysisStatus: String, $runType: String, $limit: Int, $offset: Int) {
   runs(
@@ -6256,4 +7184,58 @@ export const TempZeroVerificationReportDocument = gql`
 
 export function useTempZeroVerificationReportQuery(options?: Omit<Urql.UseQueryArgs<TempZeroVerificationReportQueryVariables>, 'query'>) {
   return Urql.useQuery<TempZeroVerificationReportQuery, TempZeroVerificationReportQueryVariables>({ query: TempZeroVerificationReportDocument, ...options });
+};
+export const ValueStatementsDocument = gql`
+    query ValueStatements($domainId: ID!) {
+  valueStatements(domainId: $domainId) {
+    id
+    domainId
+    token
+    body
+    updatedAt
+  }
+}
+    `;
+
+export function useValueStatementsQuery(options: Omit<Urql.UseQueryArgs<ValueStatementsQueryVariables>, 'query'>) {
+  return Urql.useQuery<ValueStatementsQuery, ValueStatementsQueryVariables>({ query: ValueStatementsDocument, ...options });
+};
+export const CreateValueStatementDocument = gql`
+    mutation CreateValueStatement($input: CreateValueStatementInput!) {
+  createValueStatement(input: $input) {
+    id
+    domainId
+    token
+    body
+    updatedAt
+  }
+}
+    `;
+
+export function useCreateValueStatementMutation() {
+  return Urql.useMutation<CreateValueStatementMutation, CreateValueStatementMutationVariables>(CreateValueStatementDocument);
+};
+export const UpdateValueStatementDocument = gql`
+    mutation UpdateValueStatement($id: ID!, $input: UpdateValueStatementInput!) {
+  updateValueStatement(id: $id, input: $input) {
+    id
+    domainId
+    token
+    body
+    updatedAt
+  }
+}
+    `;
+
+export function useUpdateValueStatementMutation() {
+  return Urql.useMutation<UpdateValueStatementMutation, UpdateValueStatementMutationVariables>(UpdateValueStatementDocument);
+};
+export const DeleteValueStatementDocument = gql`
+    mutation DeleteValueStatement($id: ID!) {
+  deleteValueStatement(id: $id)
+}
+    `;
+
+export function useDeleteValueStatementMutation() {
+  return Urql.useMutation<DeleteValueStatementMutation, DeleteValueStatementMutationVariables>(DeleteValueStatementDocument);
 };

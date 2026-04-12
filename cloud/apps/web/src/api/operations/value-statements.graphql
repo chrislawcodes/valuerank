@@ -1,0 +1,33 @@
+query ValueStatements($domainId: ID!) {
+  valueStatements(domainId: $domainId) {
+    id
+    domainId
+    token
+    body
+    updatedAt
+  }
+}
+
+mutation CreateValueStatement($input: CreateValueStatementInput!) {
+  createValueStatement(input: $input) {
+    id
+    domainId
+    token
+    body
+    updatedAt
+  }
+}
+
+mutation UpdateValueStatement($id: ID!, $input: UpdateValueStatementInput!) {
+  updateValueStatement(id: $id, input: $input) {
+    id
+    domainId
+    token
+    body
+    updatedAt
+  }
+}
+
+mutation DeleteValueStatement($id: ID!) {
+  deleteValueStatement(id: $id)
+}
