@@ -48,8 +48,8 @@ const navItems: NavItem[] = [
     path: '/archive',
     icon: Archive,
     children: [
-      { name: 'Legacy Survey Work', path: '/archive/surveys', icon: Archive, aliases: ['/survey'] },
-      { name: 'Legacy Survey Results', path: '/archive/survey-results', icon: Archive, aliases: ['/survey-results'] },
+      { name: 'Legacy Survey Work', path: '/archive/surveys', icon: Archive },
+      { name: 'Legacy Survey Results', path: '/archive/survey-results', icon: Archive },
     ],
   },
   { name: 'Compare', path: '/compare', icon: GitCompare },

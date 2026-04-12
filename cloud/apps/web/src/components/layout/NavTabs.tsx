@@ -35,8 +35,8 @@ const domainMenuItems: MenuItem[] = [
 
 const archiveMenuItems: MenuItem[] = [
   { name: 'Overview', path: '/archive', aliases: [] as string[] },
-  { name: 'Legacy Survey Work', path: '/archive/surveys', aliases: ['/survey'] },
-  { name: 'Legacy Survey Results', path: '/archive/survey-results', aliases: ['/survey-results'] },
+  { name: 'Legacy Survey Work', path: '/archive/surveys' },
+  { name: 'Legacy Survey Results', path: '/archive/survey-results' },
   {
     name: 'Validation',
     children: [
