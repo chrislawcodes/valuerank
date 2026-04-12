@@ -1,7 +1,5 @@
-import { gql } from 'urql';
-
 // ============================================================================
-// TYPES
+// TYPES (manual — content is a JSON scalar)
 // ============================================================================
 
 export type ScenarioContent = {
@@ -39,44 +37,12 @@ export type RunConditionGrid = {
 // QUERIES
 // ============================================================================
 
-export const SCENARIOS_QUERY = gql`
-  query Scenarios($definitionId: ID!, $limit: Int, $offset: Int) {
-    scenarios(definitionId: $definitionId, limit: $limit, offset: $offset) {
-      id
-      definitionId
-      name
-      content
-      createdAt
-    }
-  }
-`;
-
-export const SCENARIO_COUNT_QUERY = gql`
-  query ScenarioCount($definitionId: ID!) {
-    scenarioCount(definitionId: $definitionId)
-  }
-`;
-
-export const RUN_CONDITION_GRID_QUERY = gql`
-  query RunConditionGrid($definitionId: ID!) {
-    runConditionGrid(definitionId: $definitionId) {
-      attributeA
-      attributeB
-      rowLevels
-      colLevels
-      cells {
-        rowLevel
-        colLevel
-        trialCount
-        scenarioCount
-        scenarioIds
-      }
-    }
-  }
-`;
+export { ScenariosDocument as SCENARIOS_QUERY } from '../../generated/graphql';
+export { ScenarioCountDocument as SCENARIO_COUNT_QUERY } from '../../generated/graphql';
+export { RunConditionGridDocument as RUN_CONDITION_GRID_QUERY } from '../../generated/graphql';
 
 // ============================================================================
-// RESULT TYPES
+// RESULT TYPES (manual — preserves app-level types without __typename)
 // ============================================================================
 
 export type ScenariosQueryResult = {

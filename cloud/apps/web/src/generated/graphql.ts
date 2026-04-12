@@ -3705,6 +3705,22 @@ export type WorkerHealth = {
   warnings: Array<Scalars['String']['output']>;
 };
 
+export type AnalysisResultFieldsFragment = { __typename?: 'AnalysisResult', id: string, runId: string, analysisType: string, status: string, codeVersion: string, inputHash: string, createdAt: string, computedAt?: string | null, durationMs?: number | null, perModel: unknown, modelAgreement: unknown, dimensionAnalysis?: unknown | null, visualizationData?: unknown | null, varianceAnalysis?: unknown | null, methodsUsed: unknown, preferenceSummary?: { __typename?: 'PreferenceSummary', perModel: unknown } | null, reliabilitySummary?: { __typename?: 'ReliabilitySummary', perModel: unknown } | null, aggregateMetadata?: { __typename?: 'AggregateMetadata', aggregateEligibility: string, aggregateIneligibilityReason?: string | null, sourceRunCount: number, sourceRunIds: Array<string>, conditionCoverage: unknown, perModelRepeatCoverage: unknown, perModelDrift: unknown } | null, mostContestedScenarios: Array<{ __typename?: 'ContestedScenario', scenarioId: string, scenarioName: string, variance: number, modelScores: unknown }>, warnings: Array<{ __typename?: 'AnalysisWarning', code: string, message: string, recommendation: string }> };
+
+export type AnalysisQueryVariables = Exact<{
+  runId: Scalars['ID']['input'];
+}>;
+
+
+export type AnalysisQuery = { __typename?: 'Query', analysis?: { __typename?: 'AnalysisResult', id: string, runId: string, analysisType: string, status: string, codeVersion: string, inputHash: string, createdAt: string, computedAt?: string | null, durationMs?: number | null, perModel: unknown, modelAgreement: unknown, dimensionAnalysis?: unknown | null, visualizationData?: unknown | null, varianceAnalysis?: unknown | null, methodsUsed: unknown, preferenceSummary?: { __typename?: 'PreferenceSummary', perModel: unknown } | null, reliabilitySummary?: { __typename?: 'ReliabilitySummary', perModel: unknown } | null, aggregateMetadata?: { __typename?: 'AggregateMetadata', aggregateEligibility: string, aggregateIneligibilityReason?: string | null, sourceRunCount: number, sourceRunIds: Array<string>, conditionCoverage: unknown, perModelRepeatCoverage: unknown, perModelDrift: unknown } | null, mostContestedScenarios: Array<{ __typename?: 'ContestedScenario', scenarioId: string, scenarioName: string, variance: number, modelScores: unknown }>, warnings: Array<{ __typename?: 'AnalysisWarning', code: string, message: string, recommendation: string }> } | null };
+
+export type RecomputeAnalysisMutationVariables = Exact<{
+  runId: Scalars['ID']['input'];
+}>;
+
+
+export type RecomputeAnalysisMutation = { __typename?: 'Mutation', recomputeAnalysis?: { __typename?: 'AnalysisResult', id: string, runId: string, analysisType: string, status: string, codeVersion: string, inputHash: string, createdAt: string, computedAt?: string | null, durationMs?: number | null, perModel: unknown, modelAgreement: unknown, dimensionAnalysis?: unknown | null, visualizationData?: unknown | null, varianceAnalysis?: unknown | null, methodsUsed: unknown, preferenceSummary?: { __typename?: 'PreferenceSummary', perModel: unknown } | null, reliabilitySummary?: { __typename?: 'ReliabilitySummary', perModel: unknown } | null, aggregateMetadata?: { __typename?: 'AggregateMetadata', aggregateEligibility: string, aggregateIneligibilityReason?: string | null, sourceRunCount: number, sourceRunIds: Array<string>, conditionCoverage: unknown, perModelRepeatCoverage: unknown, perModelDrift: unknown } | null, mostContestedScenarios: Array<{ __typename?: 'ContestedScenario', scenarioId: string, scenarioName: string, variance: number, modelScores: unknown }>, warnings: Array<{ __typename?: 'AnalysisWarning', code: string, message: string, recommendation: string }> } | null };
+
 export type ApiKeysQueryVariables = Exact<{ [key: string]: never; }>;
 
 
@@ -3729,6 +3745,27 @@ export type MeQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type MeQuery = { __typename?: 'Query', me?: { __typename?: 'User', id: string, email: string, name?: string | null, lastLoginAt?: string | null, createdAt: string } | null };
 
+export type ComparisonRunListFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, status: string, config: unknown, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, transcriptCount: number, analysisStatus?: string | null, definition?: { __typename?: 'Definition', id: string, name: string, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null };
+
+export type ComparisonRunFullFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, status: string, config: unknown, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, transcriptCount: number, analysisStatus?: string | null, definition?: { __typename?: 'Definition', id: string, name: string, parentId?: string | null, resolvedContent: unknown, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null };
+
+export type RunsWithAnalysisQueryVariables = Exact<{
+  ids: Array<Scalars['ID']['input']> | Scalars['ID']['input'];
+}>;
+
+
+export type RunsWithAnalysisQuery = { __typename?: 'Query', runsWithAnalysis: Array<{ __typename?: 'Run', id: string, name?: string | null, definitionId: string, status: string, config: unknown, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, transcriptCount: number, analysisStatus?: string | null, analysis?: { __typename?: 'AnalysisResult', id: string, runId: string, analysisType: string, status: string, codeVersion: string, inputHash: string, createdAt: string, computedAt?: string | null, durationMs?: number | null, perModel: unknown, modelAgreement: unknown, dimensionAnalysis?: unknown | null, visualizationData?: unknown | null, varianceAnalysis?: unknown | null, methodsUsed: unknown, preferenceSummary?: { __typename?: 'PreferenceSummary', perModel: unknown } | null, reliabilitySummary?: { __typename?: 'ReliabilitySummary', perModel: unknown } | null, aggregateMetadata?: { __typename?: 'AggregateMetadata', aggregateEligibility: string, aggregateIneligibilityReason?: string | null, sourceRunCount: number, sourceRunIds: Array<string>, conditionCoverage: unknown, perModelRepeatCoverage: unknown, perModelDrift: unknown } | null, mostContestedScenarios: Array<{ __typename?: 'ContestedScenario', scenarioId: string, scenarioName: string, variance: number, modelScores: unknown }>, warnings: Array<{ __typename?: 'AnalysisWarning', code: string, message: string, recommendation: string }> } | null, definition?: { __typename?: 'Definition', id: string, name: string, parentId?: string | null, resolvedContent: unknown, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null }> };
+
+export type ComparisonRunsListQueryVariables = Exact<{
+  definitionId?: InputMaybe<Scalars['String']['input']>;
+  analysisStatus?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type ComparisonRunsListQuery = { __typename?: 'Query', runs: Array<{ __typename?: 'Run', id: string, name?: string | null, definitionId: string, status: string, config: unknown, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, transcriptCount: number, analysisStatus?: string | null, definition?: { __typename?: 'Definition', id: string, name: string, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null }> };
+
 export type EstimateCostQueryVariables = Exact<{
   definitionId: Scalars['ID']['input'];
   models: Array<Scalars['String']['input']> | Scalars['String']['input'];
@@ -3739,10 +3776,203 @@ export type EstimateCostQueryVariables = Exact<{
 
 export type EstimateCostQuery = { __typename?: 'Query', estimateCost: { __typename?: 'CostEstimate', total: number, scenarioCount: number, basedOnSampleCount: number, isUsingFallback: boolean, fallbackReason?: string | null, perModel: Array<{ __typename?: 'ModelCostEstimate', modelId: string, displayName: string, scenarioCount: number, inputTokens: number, outputTokens: number, inputCost: number, outputCost: number, totalCost: number, avgInputPerProbe: number, avgOutputPerProbe: number, sampleCount: number, isUsingFallback: boolean }> } };
 
+export type SystemHealthQueryVariables = Exact<{
+  refresh?: InputMaybe<Scalars['Boolean']['input']>;
+}>;
+
+
+export type SystemHealthQuery = { __typename?: 'Query', systemHealth: { __typename?: 'SystemHealth', providers: { __typename?: 'ProviderHealth', checkedAt: string, providers: Array<{ __typename?: 'ProviderHealthStatus', id: string, name: string, configured: boolean, connected: boolean, error?: string | null, remainingBudgetUsd?: number | null, lastChecked?: string | null }> }, queue: { __typename?: 'QueueHealth', isHealthy: boolean, isRunning: boolean, isPaused: boolean, activeJobs: number, pendingJobs: number, completedLast24h: number, failedLast24h: number, successRate?: number | null, error?: string | null, checkedAt: string, jobTypes?: Array<{ __typename?: 'JobTypeStatus', type: string, pending: number, active: number, completed: number, failed: number }> | null }, worker: { __typename?: 'WorkerHealth', isHealthy: boolean, pythonVersion?: string | null, packages: unknown, apiKeys: unknown, warnings: Array<string>, error?: string | null, checkedAt: string } } };
+
+export type GetLevelPresetsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type GetLevelPresetsQuery = { __typename?: 'Query', levelPresets: Array<{ __typename?: 'LevelPreset', id: string, name: string, updatedAt: string, latestVersion?: { __typename?: 'LevelPresetVersion', id: string, version: string, l1: string, l2: string, l3: string, l4: string, l5: string, createdAt: string } | null }> };
+
+export type CreateLevelPresetMutationVariables = Exact<{
+  name: Scalars['String']['input'];
+  l1: Scalars['String']['input'];
+  l2: Scalars['String']['input'];
+  l3: Scalars['String']['input'];
+  l4: Scalars['String']['input'];
+  l5: Scalars['String']['input'];
+}>;
+
+
+export type CreateLevelPresetMutation = { __typename?: 'Mutation', createLevelPreset: { __typename?: 'LevelPreset', id: string, name: string, latestVersion?: { __typename?: 'LevelPresetVersion', id: string, version: string, l1: string, l2: string, l3: string, l4: string, l5: string } | null } };
+
+export type UpdateLevelPresetMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+  l1: Scalars['String']['input'];
+  l2: Scalars['String']['input'];
+  l3: Scalars['String']['input'];
+  l4: Scalars['String']['input'];
+  l5: Scalars['String']['input'];
+}>;
+
+
+export type UpdateLevelPresetMutation = { __typename?: 'Mutation', updateLevelPreset: { __typename?: 'LevelPreset', id: string, name: string, updatedAt: string, latestVersion?: { __typename?: 'LevelPresetVersion', id: string, version: string, l1: string, l2: string, l3: string, l4: string, l5: string } | null } };
+
+export type DeleteLevelPresetMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type DeleteLevelPresetMutation = { __typename?: 'Mutation', deleteLevelPreset: { __typename?: 'DeleteLevelPresetResult', id: string } };
+
+export type LlmModelFieldsFragment = { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string };
+
+export type LlmProviderFieldsFragment = { __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: string, updatedAt: string };
+
+export type LlmProvidersQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type LlmProvidersQuery = { __typename?: 'Query', llmProviders: Array<{ __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: string, updatedAt: string, models: Array<{ __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string }> }> };
+
+export type LlmModelsQueryVariables = Exact<{
+  providerId?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type LlmModelsQuery = { __typename?: 'Query', llmModels: Array<{ __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string, provider: { __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: string, updatedAt: string } }> };
+
+export type InfraModelQueryVariables = Exact<{
+  purpose: Scalars['String']['input'];
+}>;
+
+
+export type InfraModelQuery = { __typename?: 'Query', infraModel?: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string, provider: { __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: string, updatedAt: string } } | null };
+
+export type CreateLlmModelMutationVariables = Exact<{
+  input: CreateLlmModelInput;
+}>;
+
+
+export type CreateLlmModelMutation = { __typename?: 'Mutation', createLlmModel: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string } };
+
+export type UpdateLlmModelMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  input: UpdateLlmModelInput;
+}>;
+
+
+export type UpdateLlmModelMutation = { __typename?: 'Mutation', updateLlmModel: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string } };
+
+export type DeprecateLlmModelMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type DeprecateLlmModelMutation = { __typename?: 'Mutation', deprecateLlmModel: { __typename?: 'DeprecateModelResult', model: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string }, newDefault?: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string } | null } };
+
+export type ReactivateLlmModelMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type ReactivateLlmModelMutation = { __typename?: 'Mutation', reactivateLlmModel: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string } };
+
+export type SetDefaultLlmModelMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type SetDefaultLlmModelMutation = { __typename?: 'Mutation', setDefaultLlmModel: { __typename?: 'SetDefaultModelResult', model: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string }, previousDefault?: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string } | null } };
+
+export type UnsetDefaultLlmModelMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type UnsetDefaultLlmModelMutation = { __typename?: 'Mutation', unsetDefaultLlmModel: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string } };
+
+export type UpdateLlmProviderMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  input: UpdateLlmProviderInput;
+}>;
+
+
+export type UpdateLlmProviderMutation = { __typename?: 'Mutation', updateLlmProvider: { __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: string, updatedAt: string } };
+
+export type UpdateSystemSettingMutationVariables = Exact<{
+  input: UpdateSystemSettingInput;
+}>;
+
+
+export type UpdateSystemSettingMutation = { __typename?: 'Mutation', updateSystemSetting: { __typename?: 'SystemSetting', id: string, key: string, value: unknown, updatedAt: string } };
+
+export type SetProviderBalanceMutationVariables = Exact<{
+  providerId: Scalars['String']['input'];
+  balance?: InputMaybe<Scalars['Float']['input']>;
+}>;
+
+
+export type SetProviderBalanceMutation = { __typename?: 'Mutation', setProviderBalance: { __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: string, updatedAt: string } };
+
 export type AvailableModelsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
 export type AvailableModelsQuery = { __typename?: 'Query', availableModels: Array<{ __typename?: 'AvailableModel', id: string, providerId: string, displayName: string, versions: Array<string>, defaultVersion?: string | null, isAvailable: boolean, isDefault: boolean }> };
+
+export type ScenariosQueryVariables = Exact<{
+  definitionId: Scalars['ID']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type ScenariosQuery = { __typename?: 'Query', scenarios: Array<{ __typename?: 'Scenario', id: string, definitionId: string, name: string, content: unknown, createdAt: string }> };
+
+export type ScenarioCountQueryVariables = Exact<{
+  definitionId: Scalars['ID']['input'];
+}>;
+
+
+export type ScenarioCountQuery = { __typename?: 'Query', scenarioCount: number };
+
+export type RunConditionGridQueryVariables = Exact<{
+  definitionId: Scalars['ID']['input'];
+}>;
+
+
+export type RunConditionGridQuery = { __typename?: 'Query', runConditionGrid?: { __typename?: 'RunConditionGrid', attributeA: string, attributeB: string, rowLevels: Array<string>, colLevels: Array<string>, cells: Array<{ __typename?: 'RunConditionGridCell', rowLevel: string, colLevel: string, trialCount: number, scenarioCount: number, scenarioIds: Array<string> }> } | null };
+
+export type SurveysQueryVariables = Exact<{
+  search?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type SurveysQuery = { __typename?: 'Query', surveys: Array<{ __typename?: 'Experiment', id: string, name: string, hypothesis?: string | null, analysisPlan?: unknown | null, createdAt: string, updatedAt: string, runCount: number }> };
+
+export type CreateSurveyMutationVariables = Exact<{
+  input: CreateSurveyInput;
+}>;
+
+
+export type CreateSurveyMutation = { __typename?: 'Mutation', createSurvey: { __typename?: 'Experiment', id: string, name: string, hypothesis?: string | null, analysisPlan?: unknown | null, createdAt: string, updatedAt: string, runCount: number } };
+
+export type UpdateSurveyMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+  input: UpdateSurveyInput;
+}>;
+
+
+export type UpdateSurveyMutation = { __typename?: 'Mutation', updateSurvey: { __typename?: 'Experiment', id: string, name: string, hypothesis?: string | null, analysisPlan?: unknown | null, createdAt: string, updatedAt: string, runCount: number } };
+
+export type DeleteSurveyMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type DeleteSurveyMutation = { __typename?: 'Mutation', deleteSurvey: boolean };
+
+export type DuplicateSurveyMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+  name?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type DuplicateSurveyMutation = { __typename?: 'Mutation', duplicateSurvey: { __typename?: 'Experiment', id: string, name: string, hypothesis?: string | null, analysisPlan?: unknown | null, createdAt: string, updatedAt: string, runCount: number } };
 
 export type TagsQueryVariables = Exact<{
   search?: InputMaybe<Scalars['String']['input']>;
@@ -3795,7 +4025,150 @@ export type TempZeroVerificationReportQueryVariables = Exact<{ [key: string]: ne
 
 export type TempZeroVerificationReportQuery = { __typename?: 'Query', tempZeroVerificationReport?: { __typename?: 'TempZeroVerificationReport', generatedAt: string, transcriptCount: number, batchTimestamp?: string | null, models: Array<{ __typename?: 'TempZeroModelVerification', modelId: string, transcriptCount: number, adapterModes: Array<string>, promptHashStabilityPct?: number | null, fingerprintDriftPct?: number | null, decisionMatchRatePct?: number | null }> } | null };
 
+export const AnalysisResultFieldsFragmentDoc = gql`
+    fragment AnalysisResultFields on AnalysisResult {
+  id
+  runId
+  analysisType
+  status
+  codeVersion
+  inputHash
+  createdAt
+  computedAt
+  durationMs
+  perModel
+  preferenceSummary {
+    perModel
+  }
+  reliabilitySummary {
+    perModel
+  }
+  aggregateMetadata {
+    aggregateEligibility
+    aggregateIneligibilityReason
+    sourceRunCount
+    sourceRunIds
+    conditionCoverage
+    perModelRepeatCoverage
+    perModelDrift
+  }
+  modelAgreement
+  dimensionAnalysis
+  visualizationData
+  varianceAnalysis
+  mostContestedScenarios {
+    scenarioId
+    scenarioName
+    variance
+    modelScores
+  }
+  methodsUsed
+  warnings {
+    code
+    message
+    recommendation
+  }
+}
+    `;
+export const ComparisonRunListFieldsFragmentDoc = gql`
+    fragment ComparisonRunListFields on Run {
+  id
+  name
+  definitionId
+  status
+  config
+  progress
+  startedAt
+  completedAt
+  createdAt
+  transcriptCount
+  analysisStatus
+  definition {
+    id
+    name
+    tags {
+      id
+      name
+    }
+  }
+}
+    `;
+export const ComparisonRunFullFieldsFragmentDoc = gql`
+    fragment ComparisonRunFullFields on Run {
+  id
+  name
+  definitionId
+  status
+  config
+  progress
+  startedAt
+  completedAt
+  createdAt
+  transcriptCount
+  analysisStatus
+  definition {
+    id
+    name
+    parentId
+    resolvedContent
+    tags {
+      id
+      name
+    }
+  }
+}
+    `;
+export const LlmModelFieldsFragmentDoc = gql`
+    fragment LlmModelFields on LlmModel {
+  id
+  providerId
+  modelId
+  displayName
+  costInputPerMillion
+  costOutputPerMillion
+  status
+  isDefault
+  isAvailable
+  apiConfig
+  createdAt
+  updatedAt
+}
+    `;
+export const LlmProviderFieldsFragmentDoc = gql`
+    fragment LlmProviderFields on LlmProvider {
+  id
+  name
+  displayName
+  maxParallelRequests
+  requestsPerMinute
+  isEnabled
+  balance
+  createdAt
+  updatedAt
+}
+    `;
+export const AnalysisDocument = gql`
+    query Analysis($runId: ID!) {
+  analysis(runId: $runId) {
+    ...AnalysisResultFields
+  }
+}
+    ${AnalysisResultFieldsFragmentDoc}`;
 
+export function useAnalysisQuery(options: Omit<Urql.UseQueryArgs<AnalysisQueryVariables>, 'query'>) {
+  return Urql.useQuery<AnalysisQuery, AnalysisQueryVariables>({ query: AnalysisDocument, ...options });
+};
+export const RecomputeAnalysisDocument = gql`
+    mutation RecomputeAnalysis($runId: ID!) {
+  recomputeAnalysis(runId: $runId) {
+    ...AnalysisResultFields
+  }
+}
+    ${AnalysisResultFieldsFragmentDoc}`;
+
+export function useRecomputeAnalysisMutation() {
+  return Urql.useMutation<RecomputeAnalysisMutation, RecomputeAnalysisMutationVariables>(RecomputeAnalysisDocument);
+};
 export const ApiKeysDocument = gql`
     query ApiKeys {
   apiKeys {
@@ -3855,6 +4228,38 @@ export const MeDocument = gql`
 export function useMeQuery(options?: Omit<Urql.UseQueryArgs<MeQueryVariables>, 'query'>) {
   return Urql.useQuery<MeQuery, MeQueryVariables>({ query: MeDocument, ...options });
 };
+export const RunsWithAnalysisDocument = gql`
+    query RunsWithAnalysis($ids: [ID!]!) {
+  runsWithAnalysis(ids: $ids) {
+    ...ComparisonRunFullFields
+    analysis {
+      ...AnalysisResultFields
+    }
+  }
+}
+    ${ComparisonRunFullFieldsFragmentDoc}
+${AnalysisResultFieldsFragmentDoc}`;
+
+export function useRunsWithAnalysisQuery(options: Omit<Urql.UseQueryArgs<RunsWithAnalysisQueryVariables>, 'query'>) {
+  return Urql.useQuery<RunsWithAnalysisQuery, RunsWithAnalysisQueryVariables>({ query: RunsWithAnalysisDocument, ...options });
+};
+export const ComparisonRunsListDocument = gql`
+    query ComparisonRunsList($definitionId: String, $analysisStatus: String, $limit: Int, $offset: Int) {
+  runs(
+    hasAnalysis: true
+    definitionId: $definitionId
+    analysisStatus: $analysisStatus
+    limit: $limit
+    offset: $offset
+  ) {
+    ...ComparisonRunListFields
+  }
+}
+    ${ComparisonRunListFieldsFragmentDoc}`;
+
+export function useComparisonRunsListQuery(options?: Omit<Urql.UseQueryArgs<ComparisonRunsListQueryVariables>, 'query'>) {
+  return Urql.useQuery<ComparisonRunsListQuery, ComparisonRunsListQueryVariables>({ query: ComparisonRunsListDocument, ...options });
+};
 export const EstimateCostDocument = gql`
     query EstimateCost($definitionId: ID!, $models: [String!]!, $samplePercentage: Int, $samplesPerScenario: Int) {
   estimateCost(
@@ -3889,6 +4294,290 @@ export const EstimateCostDocument = gql`
 export function useEstimateCostQuery(options: Omit<Urql.UseQueryArgs<EstimateCostQueryVariables>, 'query'>) {
   return Urql.useQuery<EstimateCostQuery, EstimateCostQueryVariables>({ query: EstimateCostDocument, ...options });
 };
+export const SystemHealthDocument = gql`
+    query SystemHealth($refresh: Boolean) {
+  systemHealth(refresh: $refresh) {
+    providers {
+      providers {
+        id
+        name
+        configured
+        connected
+        error
+        remainingBudgetUsd
+        lastChecked
+      }
+      checkedAt
+    }
+    queue {
+      isHealthy
+      isRunning
+      isPaused
+      activeJobs
+      pendingJobs
+      completedLast24h
+      failedLast24h
+      successRate
+      jobTypes {
+        type
+        pending
+        active
+        completed
+        failed
+      }
+      error
+      checkedAt
+    }
+    worker {
+      isHealthy
+      pythonVersion
+      packages
+      apiKeys
+      warnings
+      error
+      checkedAt
+    }
+  }
+}
+    `;
+
+export function useSystemHealthQuery(options?: Omit<Urql.UseQueryArgs<SystemHealthQueryVariables>, 'query'>) {
+  return Urql.useQuery<SystemHealthQuery, SystemHealthQueryVariables>({ query: SystemHealthDocument, ...options });
+};
+export const GetLevelPresetsDocument = gql`
+    query GetLevelPresets {
+  levelPresets {
+    id
+    name
+    updatedAt
+    latestVersion {
+      id
+      version
+      l1
+      l2
+      l3
+      l4
+      l5
+      createdAt
+    }
+  }
+}
+    `;
+
+export function useGetLevelPresetsQuery(options?: Omit<Urql.UseQueryArgs<GetLevelPresetsQueryVariables>, 'query'>) {
+  return Urql.useQuery<GetLevelPresetsQuery, GetLevelPresetsQueryVariables>({ query: GetLevelPresetsDocument, ...options });
+};
+export const CreateLevelPresetDocument = gql`
+    mutation CreateLevelPreset($name: String!, $l1: String!, $l2: String!, $l3: String!, $l4: String!, $l5: String!) {
+  createLevelPreset(name: $name, l1: $l1, l2: $l2, l3: $l3, l4: $l4, l5: $l5) {
+    id
+    name
+    latestVersion {
+      id
+      version
+      l1
+      l2
+      l3
+      l4
+      l5
+    }
+  }
+}
+    `;
+
+export function useCreateLevelPresetMutation() {
+  return Urql.useMutation<CreateLevelPresetMutation, CreateLevelPresetMutationVariables>(CreateLevelPresetDocument);
+};
+export const UpdateLevelPresetDocument = gql`
+    mutation UpdateLevelPreset($id: ID!, $l1: String!, $l2: String!, $l3: String!, $l4: String!, $l5: String!) {
+  updateLevelPreset(id: $id, l1: $l1, l2: $l2, l3: $l3, l4: $l4, l5: $l5) {
+    id
+    name
+    updatedAt
+    latestVersion {
+      id
+      version
+      l1
+      l2
+      l3
+      l4
+      l5
+    }
+  }
+}
+    `;
+
+export function useUpdateLevelPresetMutation() {
+  return Urql.useMutation<UpdateLevelPresetMutation, UpdateLevelPresetMutationVariables>(UpdateLevelPresetDocument);
+};
+export const DeleteLevelPresetDocument = gql`
+    mutation DeleteLevelPreset($id: ID!) {
+  deleteLevelPreset(id: $id) {
+    id
+  }
+}
+    `;
+
+export function useDeleteLevelPresetMutation() {
+  return Urql.useMutation<DeleteLevelPresetMutation, DeleteLevelPresetMutationVariables>(DeleteLevelPresetDocument);
+};
+export const LlmProvidersDocument = gql`
+    query LlmProviders {
+  llmProviders {
+    ...LlmProviderFields
+    models {
+      ...LlmModelFields
+    }
+  }
+}
+    ${LlmProviderFieldsFragmentDoc}
+${LlmModelFieldsFragmentDoc}`;
+
+export function useLlmProvidersQuery(options?: Omit<Urql.UseQueryArgs<LlmProvidersQueryVariables>, 'query'>) {
+  return Urql.useQuery<LlmProvidersQuery, LlmProvidersQueryVariables>({ query: LlmProvidersDocument, ...options });
+};
+export const LlmModelsDocument = gql`
+    query LlmModels($providerId: String, $status: String) {
+  llmModels(providerId: $providerId, status: $status) {
+    ...LlmModelFields
+    provider {
+      ...LlmProviderFields
+    }
+  }
+}
+    ${LlmModelFieldsFragmentDoc}
+${LlmProviderFieldsFragmentDoc}`;
+
+export function useLlmModelsQuery(options?: Omit<Urql.UseQueryArgs<LlmModelsQueryVariables>, 'query'>) {
+  return Urql.useQuery<LlmModelsQuery, LlmModelsQueryVariables>({ query: LlmModelsDocument, ...options });
+};
+export const InfraModelDocument = gql`
+    query InfraModel($purpose: String!) {
+  infraModel(purpose: $purpose) {
+    ...LlmModelFields
+    provider {
+      ...LlmProviderFields
+    }
+  }
+}
+    ${LlmModelFieldsFragmentDoc}
+${LlmProviderFieldsFragmentDoc}`;
+
+export function useInfraModelQuery(options: Omit<Urql.UseQueryArgs<InfraModelQueryVariables>, 'query'>) {
+  return Urql.useQuery<InfraModelQuery, InfraModelQueryVariables>({ query: InfraModelDocument, ...options });
+};
+export const CreateLlmModelDocument = gql`
+    mutation CreateLlmModel($input: CreateLlmModelInput!) {
+  createLlmModel(input: $input) {
+    ...LlmModelFields
+  }
+}
+    ${LlmModelFieldsFragmentDoc}`;
+
+export function useCreateLlmModelMutation() {
+  return Urql.useMutation<CreateLlmModelMutation, CreateLlmModelMutationVariables>(CreateLlmModelDocument);
+};
+export const UpdateLlmModelDocument = gql`
+    mutation UpdateLlmModel($id: String!, $input: UpdateLlmModelInput!) {
+  updateLlmModel(id: $id, input: $input) {
+    ...LlmModelFields
+  }
+}
+    ${LlmModelFieldsFragmentDoc}`;
+
+export function useUpdateLlmModelMutation() {
+  return Urql.useMutation<UpdateLlmModelMutation, UpdateLlmModelMutationVariables>(UpdateLlmModelDocument);
+};
+export const DeprecateLlmModelDocument = gql`
+    mutation DeprecateLlmModel($id: String!) {
+  deprecateLlmModel(id: $id) {
+    model {
+      ...LlmModelFields
+    }
+    newDefault {
+      ...LlmModelFields
+    }
+  }
+}
+    ${LlmModelFieldsFragmentDoc}`;
+
+export function useDeprecateLlmModelMutation() {
+  return Urql.useMutation<DeprecateLlmModelMutation, DeprecateLlmModelMutationVariables>(DeprecateLlmModelDocument);
+};
+export const ReactivateLlmModelDocument = gql`
+    mutation ReactivateLlmModel($id: String!) {
+  reactivateLlmModel(id: $id) {
+    ...LlmModelFields
+  }
+}
+    ${LlmModelFieldsFragmentDoc}`;
+
+export function useReactivateLlmModelMutation() {
+  return Urql.useMutation<ReactivateLlmModelMutation, ReactivateLlmModelMutationVariables>(ReactivateLlmModelDocument);
+};
+export const SetDefaultLlmModelDocument = gql`
+    mutation SetDefaultLlmModel($id: String!) {
+  setDefaultLlmModel(id: $id) {
+    model {
+      ...LlmModelFields
+    }
+    previousDefault {
+      ...LlmModelFields
+    }
+  }
+}
+    ${LlmModelFieldsFragmentDoc}`;
+
+export function useSetDefaultLlmModelMutation() {
+  return Urql.useMutation<SetDefaultLlmModelMutation, SetDefaultLlmModelMutationVariables>(SetDefaultLlmModelDocument);
+};
+export const UnsetDefaultLlmModelDocument = gql`
+    mutation UnsetDefaultLlmModel($id: String!) {
+  unsetDefaultLlmModel(id: $id) {
+    ...LlmModelFields
+  }
+}
+    ${LlmModelFieldsFragmentDoc}`;
+
+export function useUnsetDefaultLlmModelMutation() {
+  return Urql.useMutation<UnsetDefaultLlmModelMutation, UnsetDefaultLlmModelMutationVariables>(UnsetDefaultLlmModelDocument);
+};
+export const UpdateLlmProviderDocument = gql`
+    mutation UpdateLlmProvider($id: String!, $input: UpdateLlmProviderInput!) {
+  updateLlmProvider(id: $id, input: $input) {
+    ...LlmProviderFields
+  }
+}
+    ${LlmProviderFieldsFragmentDoc}`;
+
+export function useUpdateLlmProviderMutation() {
+  return Urql.useMutation<UpdateLlmProviderMutation, UpdateLlmProviderMutationVariables>(UpdateLlmProviderDocument);
+};
+export const UpdateSystemSettingDocument = gql`
+    mutation UpdateSystemSetting($input: UpdateSystemSettingInput!) {
+  updateSystemSetting(input: $input) {
+    id
+    key
+    value
+    updatedAt
+  }
+}
+    `;
+
+export function useUpdateSystemSettingMutation() {
+  return Urql.useMutation<UpdateSystemSettingMutation, UpdateSystemSettingMutationVariables>(UpdateSystemSettingDocument);
+};
+export const SetProviderBalanceDocument = gql`
+    mutation SetProviderBalance($providerId: String!, $balance: Float) {
+  setProviderBalance(providerId: $providerId, balance: $balance) {
+    ...LlmProviderFields
+  }
+}
+    ${LlmProviderFieldsFragmentDoc}`;
+
+export function useSetProviderBalanceMutation() {
+  return Urql.useMutation<SetProviderBalanceMutation, SetProviderBalanceMutationVariables>(SetProviderBalanceDocument);
+};
 export const AvailableModelsDocument = gql`
     query AvailableModels {
   availableModels {
@@ -3905,6 +4594,128 @@ export const AvailableModelsDocument = gql`
 
 export function useAvailableModelsQuery(options?: Omit<Urql.UseQueryArgs<AvailableModelsQueryVariables>, 'query'>) {
   return Urql.useQuery<AvailableModelsQuery, AvailableModelsQueryVariables>({ query: AvailableModelsDocument, ...options });
+};
+export const ScenariosDocument = gql`
+    query Scenarios($definitionId: ID!, $limit: Int, $offset: Int) {
+  scenarios(definitionId: $definitionId, limit: $limit, offset: $offset) {
+    id
+    definitionId
+    name
+    content
+    createdAt
+  }
+}
+    `;
+
+export function useScenariosQuery(options: Omit<Urql.UseQueryArgs<ScenariosQueryVariables>, 'query'>) {
+  return Urql.useQuery<ScenariosQuery, ScenariosQueryVariables>({ query: ScenariosDocument, ...options });
+};
+export const ScenarioCountDocument = gql`
+    query ScenarioCount($definitionId: ID!) {
+  scenarioCount(definitionId: $definitionId)
+}
+    `;
+
+export function useScenarioCountQuery(options: Omit<Urql.UseQueryArgs<ScenarioCountQueryVariables>, 'query'>) {
+  return Urql.useQuery<ScenarioCountQuery, ScenarioCountQueryVariables>({ query: ScenarioCountDocument, ...options });
+};
+export const RunConditionGridDocument = gql`
+    query RunConditionGrid($definitionId: ID!) {
+  runConditionGrid(definitionId: $definitionId) {
+    attributeA
+    attributeB
+    rowLevels
+    colLevels
+    cells {
+      rowLevel
+      colLevel
+      trialCount
+      scenarioCount
+      scenarioIds
+    }
+  }
+}
+    `;
+
+export function useRunConditionGridQuery(options: Omit<Urql.UseQueryArgs<RunConditionGridQueryVariables>, 'query'>) {
+  return Urql.useQuery<RunConditionGridQuery, RunConditionGridQueryVariables>({ query: RunConditionGridDocument, ...options });
+};
+export const SurveysDocument = gql`
+    query Surveys($search: String) {
+  surveys(search: $search) {
+    id
+    name
+    hypothesis
+    analysisPlan
+    createdAt
+    updatedAt
+    runCount
+  }
+}
+    `;
+
+export function useSurveysQuery(options?: Omit<Urql.UseQueryArgs<SurveysQueryVariables>, 'query'>) {
+  return Urql.useQuery<SurveysQuery, SurveysQueryVariables>({ query: SurveysDocument, ...options });
+};
+export const CreateSurveyDocument = gql`
+    mutation CreateSurvey($input: CreateSurveyInput!) {
+  createSurvey(input: $input) {
+    id
+    name
+    hypothesis
+    analysisPlan
+    createdAt
+    updatedAt
+    runCount
+  }
+}
+    `;
+
+export function useCreateSurveyMutation() {
+  return Urql.useMutation<CreateSurveyMutation, CreateSurveyMutationVariables>(CreateSurveyDocument);
+};
+export const UpdateSurveyDocument = gql`
+    mutation UpdateSurvey($id: ID!, $input: UpdateSurveyInput!) {
+  updateSurvey(id: $id, input: $input) {
+    id
+    name
+    hypothesis
+    analysisPlan
+    createdAt
+    updatedAt
+    runCount
+  }
+}
+    `;
+
+export function useUpdateSurveyMutation() {
+  return Urql.useMutation<UpdateSurveyMutation, UpdateSurveyMutationVariables>(UpdateSurveyDocument);
+};
+export const DeleteSurveyDocument = gql`
+    mutation DeleteSurvey($id: ID!) {
+  deleteSurvey(id: $id)
+}
+    `;
+
+export function useDeleteSurveyMutation() {
+  return Urql.useMutation<DeleteSurveyMutation, DeleteSurveyMutationVariables>(DeleteSurveyDocument);
+};
+export const DuplicateSurveyDocument = gql`
+    mutation DuplicateSurvey($id: ID!, $name: String) {
+  duplicateSurvey(id: $id, name: $name) {
+    id
+    name
+    hypothesis
+    analysisPlan
+    createdAt
+    updatedAt
+    runCount
+  }
+}
+    `;
+
+export function useDuplicateSurveyMutation() {
+  return Urql.useMutation<DuplicateSurveyMutation, DuplicateSurveyMutationVariables>(DuplicateSurveyDocument);
 };
 export const TagsDocument = gql`
     query Tags($search: String, $limit: Int) {

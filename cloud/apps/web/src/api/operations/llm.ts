@@ -1,7 +1,5 @@
-import { gql } from 'urql';
-
 // ============================================================================
-// TYPES
+// TYPES (manual — keeps app-level shapes consumers expect)
 // ============================================================================
 
 export type LlmModelStatus = 'ACTIVE' | 'DEPRECATED';
@@ -43,182 +41,38 @@ export type SystemSetting = {
 };
 
 // ============================================================================
-// FRAGMENTS
+// FRAGMENTS (re-exported as named constants for backward compat)
 // ============================================================================
 
-export const LLM_MODEL_FRAGMENT = gql`
-  fragment LlmModelFields on LlmModel {
-    id
-    providerId
-    modelId
-    displayName
-    costInputPerMillion
-    costOutputPerMillion
-    status
-    isDefault
-    isAvailable
-    apiConfig
-    createdAt
-    updatedAt
-  }
-`;
-
-export const LLM_PROVIDER_FRAGMENT = gql`
-  fragment LlmProviderFields on LlmProvider {
-    id
-    name
-    displayName
-    maxParallelRequests
-    requestsPerMinute
-    isEnabled
-    balance
-    createdAt
-    updatedAt
-  }
-`;
+export {
+  LlmModelFieldsFragmentDoc as LLM_MODEL_FRAGMENT,
+  LlmProviderFieldsFragmentDoc as LLM_PROVIDER_FRAGMENT,
+} from '../../generated/graphql';
 
 // ============================================================================
 // QUERIES
 // ============================================================================
 
-export const LLM_PROVIDERS_QUERY = gql`
-  query LlmProviders {
-    llmProviders {
-      ...LlmProviderFields
-      models {
-        ...LlmModelFields
-      }
-    }
-  }
-  ${LLM_PROVIDER_FRAGMENT}
-  ${LLM_MODEL_FRAGMENT}
-`;
-
-export const LLM_MODELS_QUERY = gql`
-  query LlmModels($providerId: String, $status: String) {
-    llmModels(providerId: $providerId, status: $status) {
-      ...LlmModelFields
-      provider {
-        ...LlmProviderFields
-      }
-    }
-  }
-  ${LLM_MODEL_FRAGMENT}
-  ${LLM_PROVIDER_FRAGMENT}
-`;
-
-export const INFRA_MODEL_QUERY = gql`
-  query InfraModel($purpose: String!) {
-    infraModel(purpose: $purpose) {
-      ...LlmModelFields
-      provider {
-        ...LlmProviderFields
-      }
-    }
-  }
-  ${LLM_MODEL_FRAGMENT}
-  ${LLM_PROVIDER_FRAGMENT}
-`;
+export { LlmProvidersDocument as LLM_PROVIDERS_QUERY } from '../../generated/graphql';
+export { LlmModelsDocument as LLM_MODELS_QUERY } from '../../generated/graphql';
+export { InfraModelDocument as INFRA_MODEL_QUERY } from '../../generated/graphql';
 
 // ============================================================================
 // MUTATIONS
 // ============================================================================
 
-export const CREATE_LLM_MODEL_MUTATION = gql`
-  mutation CreateLlmModel($input: CreateLlmModelInput!) {
-    createLlmModel(input: $input) {
-      ...LlmModelFields
-    }
-  }
-  ${LLM_MODEL_FRAGMENT}
-`;
-
-export const UPDATE_LLM_MODEL_MUTATION = gql`
-  mutation UpdateLlmModel($id: String!, $input: UpdateLlmModelInput!) {
-    updateLlmModel(id: $id, input: $input) {
-      ...LlmModelFields
-    }
-  }
-  ${LLM_MODEL_FRAGMENT}
-`;
-
-export const DEPRECATE_LLM_MODEL_MUTATION = gql`
-  mutation DeprecateLlmModel($id: String!) {
-    deprecateLlmModel(id: $id) {
-      model {
-        ...LlmModelFields
-      }
-      newDefault {
-        ...LlmModelFields
-      }
-    }
-  }
-  ${LLM_MODEL_FRAGMENT}
-`;
-
-export const REACTIVATE_LLM_MODEL_MUTATION = gql`
-  mutation ReactivateLlmModel($id: String!) {
-    reactivateLlmModel(id: $id) {
-      ...LlmModelFields
-    }
-  }
-  ${LLM_MODEL_FRAGMENT}
-`;
-
-export const SET_DEFAULT_LLM_MODEL_MUTATION = gql`
-  mutation SetDefaultLlmModel($id: String!) {
-    setDefaultLlmModel(id: $id) {
-      model {
-        ...LlmModelFields
-      }
-      previousDefault {
-        ...LlmModelFields
-      }
-    }
-  }
-  ${LLM_MODEL_FRAGMENT}
-`;
-
-export const UNSET_DEFAULT_LLM_MODEL_MUTATION = gql`
-  mutation UnsetDefaultLlmModel($id: String!) {
-    unsetDefaultLlmModel(id: $id) {
-      ...LlmModelFields
-    }
-  }
-  ${LLM_MODEL_FRAGMENT}
-`;
-
-export const UPDATE_LLM_PROVIDER_MUTATION = gql`
-  mutation UpdateLlmProvider($id: String!, $input: UpdateLlmProviderInput!) {
-    updateLlmProvider(id: $id, input: $input) {
-      ...LlmProviderFields
-    }
-  }
-  ${LLM_PROVIDER_FRAGMENT}
-`;
-
-export const UPDATE_SYSTEM_SETTING_MUTATION = gql`
-  mutation UpdateSystemSetting($input: UpdateSystemSettingInput!) {
-    updateSystemSetting(input: $input) {
-      id
-      key
-      value
-      updatedAt
-    }
-  }
-`;
-
-export const SET_PROVIDER_BALANCE_MUTATION = gql`
-  mutation SetProviderBalance($providerId: String!, $balance: Float) {
-    setProviderBalance(providerId: $providerId, balance: $balance) {
-      ...LlmProviderFields
-    }
-  }
-  ${LLM_PROVIDER_FRAGMENT}
-`;
+export { CreateLlmModelDocument as CREATE_LLM_MODEL_MUTATION } from '../../generated/graphql';
+export { UpdateLlmModelDocument as UPDATE_LLM_MODEL_MUTATION } from '../../generated/graphql';
+export { DeprecateLlmModelDocument as DEPRECATE_LLM_MODEL_MUTATION } from '../../generated/graphql';
+export { ReactivateLlmModelDocument as REACTIVATE_LLM_MODEL_MUTATION } from '../../generated/graphql';
+export { SetDefaultLlmModelDocument as SET_DEFAULT_LLM_MODEL_MUTATION } from '../../generated/graphql';
+export { UnsetDefaultLlmModelDocument as UNSET_DEFAULT_LLM_MODEL_MUTATION } from '../../generated/graphql';
+export { UpdateLlmProviderDocument as UPDATE_LLM_PROVIDER_MUTATION } from '../../generated/graphql';
+export { UpdateSystemSettingDocument as UPDATE_SYSTEM_SETTING_MUTATION } from '../../generated/graphql';
+export { SetProviderBalanceDocument as SET_PROVIDER_BALANCE_MUTATION } from '../../generated/graphql';
 
 // ============================================================================
-// RESULT TYPES
+// RESULT TYPES (manual — preserves app-level types without __typename)
 // ============================================================================
 
 export type LlmProvidersQueryResult = {
@@ -285,7 +139,7 @@ export type SetProviderBalanceMutationResult = {
 };
 
 // ============================================================================
-// INPUT TYPES
+// INPUT TYPES (manual — consumer-facing shapes)
 // ============================================================================
 
 export type CreateLlmModelInput = {

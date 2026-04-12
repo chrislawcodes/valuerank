@@ -1,0 +1,29 @@
+query Scenarios($definitionId: ID!, $limit: Int, $offset: Int) {
+  scenarios(definitionId: $definitionId, limit: $limit, offset: $offset) {
+    id
+    definitionId
+    name
+    content
+    createdAt
+  }
+}
+
+query ScenarioCount($definitionId: ID!) {
+  scenarioCount(definitionId: $definitionId)
+}
+
+query RunConditionGrid($definitionId: ID!) {
+  runConditionGrid(definitionId: $definitionId) {
+    attributeA
+    attributeB
+    rowLevels
+    colLevels
+    cells {
+      rowLevel
+      colLevel
+      trialCount
+      scenarioCount
+      scenarioIds
+    }
+  }
+}

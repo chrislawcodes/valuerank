@@ -1,7 +1,5 @@
-import { gql } from 'urql';
-
 // ============================================================================
-// TYPES
+// TYPES (manual — JSON scalar fields need typed shapes)
 // ============================================================================
 
 export type ProviderHealthStatus = {
@@ -61,55 +59,10 @@ export type SystemHealth = {
 // QUERIES
 // ============================================================================
 
-export const SYSTEM_HEALTH_QUERY = gql`
-  query SystemHealth($refresh: Boolean) {
-    systemHealth(refresh: $refresh) {
-      providers {
-        providers {
-          id
-          name
-          configured
-          connected
-          error
-          remainingBudgetUsd
-          lastChecked
-        }
-        checkedAt
-      }
-      queue {
-        isHealthy
-        isRunning
-        isPaused
-        activeJobs
-        pendingJobs
-        completedLast24h
-        failedLast24h
-        successRate
-        jobTypes {
-          type
-          pending
-          active
-          completed
-          failed
-        }
-        error
-        checkedAt
-      }
-      worker {
-        isHealthy
-        pythonVersion
-        packages
-        apiKeys
-        warnings
-        error
-        checkedAt
-      }
-    }
-  }
-`;
+export { SystemHealthDocument as SYSTEM_HEALTH_QUERY } from '../../generated/graphql';
 
 // ============================================================================
-// RESULT TYPES
+// RESULT TYPES (manual — preserves app-level types without __typename)
 // ============================================================================
 
 export type SystemHealthQueryResult = {
