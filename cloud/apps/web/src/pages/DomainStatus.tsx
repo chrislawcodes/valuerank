@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from 'urql';
 import { Plus } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
+import { DomainSwitcher } from '../components/domains/DomainSwitcher';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { DomainEvaluationStatusPanel } from '../components/domains/domainTrials/DomainEvaluationStatusPanel';
 import { DomainEvaluationStatusDrawer } from '../components/domains/domainTrials/DomainEvaluationStatusDrawer';
@@ -204,7 +205,7 @@ export function DomainStatus() {
         <div className="space-y-2">
           <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Domain Status</div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">{domainName}</h1>
+            <DomainSwitcher currentDomainId={domainId} basePath="/domains/status" />
             {statusHeader != null && (
               <Badge variant={hasLiveRows ? 'warning' : 'success'} size="count">
                 {statusHeader}
@@ -213,7 +214,7 @@ export function DomainStatus() {
           </div>
         </div>
         <Link
-          to={`/domains/${domainId}/start`}
+          to={`/domains/start/${domainId}`}
           className="inline-flex items-center gap-1.5 rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800"
         >
           <Plus className="h-4 w-4" />
@@ -230,7 +231,7 @@ export function DomainStatus() {
             {modelGaps.map((gap) => (
               <Link
                 key={gap.modelId}
-                to={`/domains/${domainId}/start?evaluationId=${currentEvaluation.id}&models=${encodeURIComponent(gap.modelId)}&depth=${currentEvaluation.targetBatchCount ?? 1}`}
+                to={`/domains/start/${domainId}?evaluationId=${currentEvaluation.id}&models=${encodeURIComponent(gap.modelId)}&depth=${currentEvaluation.targetBatchCount ?? 1}`}
                 className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100"
               >
                 {gap.modelName}: {gap.missing} missing

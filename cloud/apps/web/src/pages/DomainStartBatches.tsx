@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from 'urql';
+import { DomainSwitcher } from '../components/domains/DomainSwitcher';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { LaunchConfirmModal } from '../components/domains/domainTrials/LaunchConfirmModal';
 import { LaunchControlsPanel } from '../components/domains/domainTrials/LaunchControlsPanel';
@@ -217,7 +218,7 @@ export function DomainStartBatches() {
       }
 
       setShowLaunchConfirm(false);
-      navigate(`/domains/${domainId}/status?evaluationId=${backfillEvaluationId}`);
+      navigate(`/domains/status/${domainId}?evaluationId=${backfillEvaluationId}`);
 
       if (payload.startedRuns === 0) {
         setRunError('No new runs were started. The gap may already be filled or still in flight.');
@@ -264,7 +265,7 @@ export function DomainStartBatches() {
     }
 
     setShowLaunchConfirm(false);
-    navigate(`/domains/${domainId}/status?evaluationId=${payload.domainEvaluationId}`);
+    navigate(`/domains/status/${domainId}?evaluationId=${payload.domainEvaluationId}`);
   };
 
   // --- Render ---
@@ -277,7 +278,7 @@ export function DomainStartBatches() {
     <div className="space-y-6">
       <div className="space-y-2">
         <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Start Paired Batches</div>
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">{domainName}</h1>
+        <DomainSwitcher currentDomainId={domainId} basePath="/domains/start" />
       </div>
 
       {displayError != null && <ErrorMessage message={`Failed to load launch data: ${displayError.message ?? 'Unknown error'}`} />}

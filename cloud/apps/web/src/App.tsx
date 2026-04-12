@@ -1,6 +1,6 @@
 // NOTE: The term "Vignette" is used throughout the UI for user-friendliness.
 // However, the underlying codebase, API, and database still use the term "Definition".
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Provider } from 'urql';
 import { AuthProvider } from './auth/context';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -41,6 +41,7 @@ import { LevelPresets } from './pages/LevelPresets';
 import { DomainContexts } from './pages/DomainContexts';
 import { ValueStatements } from './pages/ValueStatements';
 import { PairedVignetteNew } from './pages/PairedVignetteNew';
+import { StartRedirect } from './pages/StartRedirect';
 import { StatusRedirect } from './pages/StatusRedirect';
 import { NotFound } from './pages/NotFound';
 import { client } from './api/client';
@@ -54,11 +55,9 @@ function ProtectedLayout({ children, fullWidth = false }: { children: React.Reac
   );
 }
 
-function LegacyRouteRedirect({ to }: { to: string }) {
-  const params = useParams();
-  const location = useLocation();
-  const resolved = Object.entries(params).reduce((path, [key, val]) => path.replace(`:${key}`, val ?? ''), to);
-  return <Navigate to={`${resolved}${location.search}${location.hash}`} replace />;
+function RedirectPreservingParams({ to }: { to: string }) {
+  const { search, hash } = useLocation();
+  return <Navigate to={`${to}${search}${hash}`} replace />;
 }
 
 function App() {
@@ -128,7 +127,7 @@ function App() {
               }
             />
             <Route
-              path="/domains/:domainId/start"
+              path="/domains/start/:domainId"
               element={
                 <ProtectedLayout>
                   <DomainStartBatches />
@@ -136,7 +135,15 @@ function App() {
               }
             />
             <Route
-              path="/domains/:domainId/status"
+              path="/domains/start"
+              element={
+                <ProtectedLayout>
+                  <StartRedirect />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/domains/status/:domainId"
               element={
                 <ProtectedLayout>
                   <DomainStatus />
@@ -144,8 +151,12 @@ function App() {
               }
             />
             <Route
-              path="/domains/:domainId/run-trials"
-              element={<LegacyRouteRedirect to="/domains/:domainId/status" />}
+              path="/domains/status"
+              element={
+                <ProtectedLayout>
+                  <StatusRedirect />
+                </ProtectedLayout>
+              }
             />
             <Route
               path="/domains/analysis"
@@ -295,8 +306,8 @@ function App() {
                 </ProtectedLayout>
               }
             />
-            <Route path="/survey" element={<LegacyRouteRedirect to="/archive/surveys" />} />
-            <Route path="/survey-results" element={<LegacyRouteRedirect to="/archive/survey-results" />} />
+            <Route path="/survey" element={<RedirectPreservingParams to="/archive/surveys" />} />
+            <Route path="/survey-results" element={<RedirectPreservingParams to="/archive/survey-results" />} />
             <Route path="/experiments" element={<Navigate to="/archive" replace />} />
             <Route path="/settings" element={<Navigate to="/settings/account" replace />} />
             <Route
@@ -374,14 +385,7 @@ function App() {
             {['/paired/new', '/paired/:id/edit'].map((path) => (
               <Route key={path} path={path} element={<ProtectedLayout><PairedVignetteNew /></ProtectedLayout>} />
             ))}
-            <Route
-              path="*"
-              element={
-                <ProtectedLayout>
-                  <NotFound />
-                </ProtectedLayout>
-              }
-            />
+            <Route path="*" element={<ProtectedLayout><NotFound /></ProtectedLayout>} />
           </Routes>
         </AuthProvider>
       </Provider>
