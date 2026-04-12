@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { isRetryableError } from '../../../src/queue/handlers/probe-scenario.js';
+import { isRetryableError } from '../../../src/queue/handlers/probe-scenario/index.js';
 
 describe('isRetryableError', () => {
   describe('retryable errors', () => {
