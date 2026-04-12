@@ -170,6 +170,12 @@ export type AggregateWorkerTranscript = {
   summary: {
     values?: Record<string, 'prioritized' | 'deprioritized' | 'neutral'>;
   };
+  decisionModelV2?: {
+    canonical: {
+      direction: string;
+      strength: string;
+    };
+  } | null;
   scenario: {
     name: string;
     dimensions: Record<string, number | string>;
