@@ -1,0 +1,270 @@
+query Definitions(
+  $rootOnly: Boolean
+  $search: String
+  $tagIds: [ID!]
+  $hasRuns: Boolean
+  $domainId: ID
+  $withoutDomain: Boolean
+  $limit: Int
+  $offset: Int
+) {
+  definitions(
+    rootOnly: $rootOnly
+    search: $search
+    tagIds: $tagIds
+    hasRuns: $hasRuns
+    domainId: $domainId
+    withoutDomain: $withoutDomain
+    limit: $limit
+    offset: $offset
+  ) {
+    id
+    name
+    domainId
+    domain {
+      id
+      name
+    }
+    parentId
+    content
+    createdAt
+    updatedAt
+    lastAccessedAt
+    version
+    runCount
+    trialCount
+    trialConfig {
+      definitionVersion
+      temperature
+      signature
+      signatureBreakdown {
+        signature
+        definitionVersion
+        temperature
+        trialCount
+      }
+      isConsistent
+      message
+    }
+    tags {
+      id
+      name
+    }
+    allTags {
+      id
+      name
+    }
+  }
+}
+
+query Definition($id: ID!) {
+  definition(id: $id) {
+    id
+    name
+    domainId
+    domainContextId
+    domain {
+      id
+      name
+    }
+    parentId
+    content
+    createdAt
+    updatedAt
+    lastAccessedAt
+    version
+    runCount
+    trialCount
+    trialConfig {
+      definitionVersion
+      temperature
+      signature
+      signatureBreakdown {
+        signature
+        definitionVersion
+        temperature
+        trialCount
+      }
+      isConsistent
+      message
+    }
+    scenarioCount
+    preambleVersionId
+    levelPresetVersionId
+    preambleVersion {
+      id
+      version
+      content
+      preamble {
+        name
+      }
+    }
+    tags {
+      id
+      name
+      createdAt
+    }
+    parent {
+      id
+      name
+    }
+    children {
+      id
+      name
+      createdAt
+    }
+    isForked
+    resolvedContent
+    localContent
+    overrides {
+      template
+      dimensions
+      matchingRules
+    }
+    inheritedTags {
+      id
+      name
+      createdAt
+    }
+    allTags {
+      id
+      name
+      createdAt
+    }
+    expansionStatus {
+      status
+      jobId
+      triggeredBy
+      createdAt
+      completedAt
+      error
+      scenarioCount
+      progress {
+        phase
+        expectedScenarios
+        generatedScenarios
+        inputTokens
+        outputTokens
+        message
+        updatedAt
+      }
+    }
+  }
+}
+
+query DefinitionAncestors($id: ID!, $maxDepth: Int) {
+  definitionAncestors(id: $id, maxDepth: $maxDepth) {
+    id
+    name
+    parentId
+    createdAt
+  }
+}
+
+query DefinitionDescendants($id: ID!, $maxDepth: Int) {
+  definitionDescendants(id: $id, maxDepth: $maxDepth) {
+    id
+    name
+    parentId
+    createdAt
+  }
+}
+
+query DefinitionCount(
+  $rootOnly: Boolean
+  $search: String
+  $tagIds: [ID!]
+  $hasRuns: Boolean
+  $domainId: ID
+  $withoutDomain: Boolean
+) {
+  definitionCount(
+    rootOnly: $rootOnly
+    search: $search
+    tagIds: $tagIds
+    hasRuns: $hasRuns
+    domainId: $domainId
+    withoutDomain: $withoutDomain
+  )
+}
+
+mutation CreateDefinition($input: CreateDefinitionInput!) {
+  createDefinition(input: $input) {
+    id
+    name
+    parentId
+    content
+    createdAt
+    updatedAt
+  }
+}
+
+mutation UpdateDefinition($id: String!, $input: UpdateDefinitionInput!) {
+  updateDefinition(id: $id, input: $input) {
+    id
+    name
+    content
+    updatedAt
+  }
+}
+
+mutation ForkDefinition($input: ForkDefinitionInput!) {
+  forkDefinition(input: $input) {
+    id
+    name
+    parentId
+    content
+    createdAt
+    isForked
+    resolvedContent
+    localContent
+    overrides {
+      template
+      dimensions
+      matchingRules
+    }
+  }
+}
+
+mutation UnforkDefinition($id: String!) {
+  unforkDefinition(id: $id) {
+    id
+    name
+    parentId
+    content
+    updatedAt
+    version
+    isForked
+    resolvedContent
+    localContent
+    overrides {
+      template
+      dimensions
+      matchingRules
+    }
+  }
+}
+
+mutation DeleteDefinition($id: String!) {
+  deleteDefinition(id: $id) {
+    deletedIds
+    count
+  }
+}
+
+mutation RegenerateScenarios($definitionId: String!) {
+  regenerateScenarios(definitionId: $definitionId) {
+    definitionId
+    jobId
+    queued
+  }
+}
+
+mutation CancelScenarioExpansion($definitionId: String!) {
+  cancelScenarioExpansion(definitionId: $definitionId) {
+    definitionId
+    cancelled
+    jobId
+    message
+  }
+}

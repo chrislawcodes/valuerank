@@ -1,7 +1,21 @@
-import { gql } from 'urql';
+import type {
+  RunsQueryVariables as GeneratedRunsQueryVariables,
+  RunCountQueryVariables as GeneratedRunCountQueryVariables,
+  AnalysisFolderCountsQueryVariables as GeneratedAnalysisFolderCountsQueryVariables,
+  RunQueryVariables as GeneratedRunQueryVariables,
+  StartRunMutationVariables as GeneratedStartRunMutationVariables,
+  PauseRunMutationVariables as GeneratedPauseRunMutationVariables,
+  ResumeRunMutationVariables as GeneratedResumeRunMutationVariables,
+  CancelRunMutationVariables as GeneratedCancelRunMutationVariables,
+  DeleteRunMutationVariables as GeneratedDeleteRunMutationVariables,
+  UpdateRunMutationVariables as GeneratedUpdateRunMutationVariables,
+  CancelSummarizationMutationVariables as GeneratedCancelSummarizationMutationVariables,
+  RestartSummarizationMutationVariables as GeneratedRestartSummarizationMutationVariables,
+  UpdateTranscriptDecisionMutationVariables as GeneratedUpdateTranscriptDecisionMutationVariables,
+} from '../../generated/graphql';
 
 // ============================================================================
-// TYPES
+// TYPES — JSON scalar fields require manual types; codegen types them as unknown
 // ============================================================================
 
 export type RunStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUMMARIZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
@@ -165,7 +179,7 @@ export type Run = {
   id: string;
   name: string | null;
   definitionId: string;
-  definitionVersion: number | null; // Added
+  definitionVersion: number | null;
   experimentId: string | null;
   companionRunId: string | null;
   status: RunStatus;
@@ -212,356 +226,6 @@ export type Run = {
 };
 
 // ============================================================================
-// FRAGMENTS
-// ============================================================================
-
-export const RUN_FRAGMENT = gql`
-  fragment RunFields on Run {
-    id
-    name
-    definitionId
-    definitionVersion
-    experimentId
-    status
-    runCategory
-    config
-    stalledModels
-    companionRunId
-    batchCount
-    pairedBatchGroupId
-    progress
-    runProgress {
-      total
-      completed
-      failed
-      percentComplete
-      byModel {
-        modelId
-        completed
-        failed
-      }
-    }
-    summarizeProgress {
-      total
-      completed
-      failed
-      percentComplete
-    }
-    startedAt
-    completedAt
-    createdAt
-    updatedAt
-    lastAccessedAt
-    transcriptCount
-    analysisStatus
-    tags {
-      id
-      name
-    }
-    definition {
-      id
-      name
-      version
-      domain {
-        name
-      }
-      tags: allTags {
-        id
-        name
-      }
-      content
-    }
-    definitionSnapshot
-  }
-`;
-
-export const RUN_WITH_TRANSCRIPTS_FRAGMENT = gql`
-  fragment RunWithTranscriptsFields on Run {
-    ...RunFields
-    failedProbes {
-      modelId
-      errorCode
-      errorMessage
-    }
-    transcripts {
-      id
-      runId
-      scenarioId
-      modelId
-      modelVersion
-      content
-      decisionMetadata
-      turnCount
-      tokenCount
-      durationMs
-      estimatedCost
-      createdAt
-      lastAccessedAt
-      dimensionValues
-      decisionModelV2
-    }
-    analysis {
-      actualCost {
-        total
-        perModel {
-          modelId
-          inputTokens
-          outputTokens
-          cost
-          probeCount
-        }
-      }
-    }
-    recentTasks(limit: 10) {
-      scenarioId
-      modelId
-      status
-      error
-      completedAt
-    }
-    executionMetrics {
-      providers {
-        provider
-        activeJobs
-        queuedJobs
-        maxParallel
-        requestsPerMinute
-        activeModelIds
-        recentCompletions {
-          modelId
-          scenarioId
-          success
-          completedAt
-          durationMs
-        }
-      }
-      totalActive
-      totalQueued
-      estimatedSecondsRemaining
-      totalRetries
-    }
-  }
-  ${RUN_FRAGMENT}
-`;
-
-// ============================================================================
-// QUERIES
-// ============================================================================
-
-export const RUNS_QUERY = gql`
-  query Runs(
-    $definitionId: String
-    $experimentId: String
-    $status: String
-    $runCategory: String
-    $hasAnalysis: Boolean
-    $analysisStatus: String
-    $runType: String
-    $limit: Int
-    $offset: Int
-  ) {
-    runs(
-      definitionId: $definitionId
-      experimentId: $experimentId
-      status: $status
-      runCategory: $runCategory
-      hasAnalysis: $hasAnalysis
-      analysisStatus: $analysisStatus
-      runType: $runType
-      limit: $limit
-      offset: $offset
-    ) {
-      ...RunFields
-    }
-  }
-  ${RUN_FRAGMENT}
-`;
-
-export const RUN_COUNT_QUERY = gql`
-  query RunCount(
-    $definitionId: String
-    $experimentId: String
-    $status: String
-    $runCategory: String
-    $hasAnalysis: Boolean
-    $analysisStatus: String
-    $runType: String
-  ) {
-    runCount(
-      definitionId: $definitionId
-      experimentId: $experimentId
-      status: $status
-      runCategory: $runCategory
-      hasAnalysis: $hasAnalysis
-      analysisStatus: $analysisStatus
-      runType: $runType
-    )
-  }
-`;
-
-export const ANALYSIS_FOLDER_COUNTS_QUERY = gql`
-  query AnalysisFolderCounts(
-    $definitionId: String
-    $definitionTagIds: [ID!]
-    $experimentId: String
-    $status: String
-    $runCategory: String
-    $analysisStatus: String
-    $runType: String
-  ) {
-    analysisFolderCounts(
-      definitionId: $definitionId
-      definitionTagIds: $definitionTagIds
-      experimentId: $experimentId
-      status: $status
-      runCategory: $runCategory
-      analysisStatus: $analysisStatus
-      runType: $runType
-    ) {
-      aggregateCount
-      untaggedCount
-      aggregateUntaggedCount
-      tagCounts {
-        tagId
-        name
-        count
-      }
-      aggregateTagCounts {
-        tagId
-        name
-        count
-      }
-    }
-  }
-`;
-
-export const RUN_QUERY = gql`
-  query Run($id: ID!) {
-    run(id: $id) {
-      ...RunWithTranscriptsFields
-    }
-  }
-  ${RUN_WITH_TRANSCRIPTS_FRAGMENT}
-`;
-
-export type AnalysisFolderCountsQueryVariables = {
-  definitionId?: string;
-  definitionTagIds?: string[];
-  experimentId?: string;
-  status?: string;
-  runCategory?: string;
-  analysisStatus?: string;
-  runType?: string;
-};
-
-export type AnalysisFolderCountsQueryResult = {
-  analysisFolderCounts: AnalysisFolderCounts;
-};
-
-// ============================================================================
-// MUTATIONS
-// ============================================================================
-
-export const START_RUN_MUTATION = gql`
-  mutation StartRun($input: StartRunInput!) {
-    startRun(input: $input) {
-      run {
-        ...RunFields
-      }
-      jobCount
-      pairedRunIds
-    }
-  }
-  ${RUN_FRAGMENT}
-`;
-
-export const PAUSE_RUN_MUTATION = gql`
-  mutation PauseRun($runId: ID!) {
-    pauseRun(runId: $runId) {
-      ...RunFields
-    }
-  }
-  ${RUN_FRAGMENT}
-`;
-
-export const RESUME_RUN_MUTATION = gql`
-  mutation ResumeRun($runId: ID!) {
-    resumeRun(runId: $runId) {
-      ...RunFields
-    }
-  }
-  ${RUN_FRAGMENT}
-`;
-
-export const CANCEL_RUN_MUTATION = gql`
-  mutation CancelRun($runId: ID!) {
-    cancelRun(runId: $runId) {
-      ...RunFields
-    }
-  }
-  ${RUN_FRAGMENT}
-`;
-
-export const DELETE_RUN_MUTATION = gql`
-  mutation DeleteRun($runId: ID!) {
-    deleteRun(runId: $runId)
-  }
-`;
-
-export const UPDATE_RUN_MUTATION = gql`
-  mutation UpdateRun($runId: ID!, $input: UpdateRunInput!) {
-    updateRun(runId: $runId, input: $input) {
-      ...RunFields
-    }
-  }
-  ${RUN_FRAGMENT}
-`;
-
-export const CANCEL_SUMMARIZATION_MUTATION = gql`
-  mutation CancelSummarization($runId: ID!) {
-    cancelSummarization(runId: $runId) {
-      run {
-        ...RunFields
-      }
-      cancelledCount
-    }
-  }
-  ${RUN_FRAGMENT}
-`;
-
-export const RESTART_SUMMARIZATION_MUTATION = gql`
-  mutation RestartSummarization($runId: ID!, $force: Boolean) {
-    restartSummarization(runId: $runId, force: $force) {
-      run {
-        ...RunFields
-      }
-      queuedCount
-    }
-  }
-  ${RUN_FRAGMENT}
-`;
-
-export const UPDATE_TRANSCRIPT_DECISION_MUTATION = gql`
-  mutation UpdateTranscriptDecision($transcriptId: ID!, $decisionCode: String!) {
-    updateTranscriptDecision(transcriptId: $transcriptId, decisionCode: $decisionCode) {
-      id
-      runId
-      scenarioId
-      modelId
-      modelVersion
-      content
-      decisionMetadata
-      turnCount
-      tokenCount
-      durationMs
-      estimatedCost
-      createdAt
-      lastAccessedAt
-    }
-  }
-`;
-
-// ============================================================================
 // INPUT TYPES
 // ============================================================================
 
@@ -580,51 +244,81 @@ export type StartRunInput = {
   launchMode?: 'STANDARD' | 'PAIRED_BATCH' | 'AD_HOC_BATCH';
 };
 
+export type UpdateRunInput = {
+  name?: string | null;
+};
+
 // ============================================================================
-// RESULT TYPES
+// FRAGMENTS + DOCUMENTS — re-exported from generated
 // ============================================================================
 
-export type RunsQueryVariables = {
-  definitionId?: string;
-  experimentId?: string;
-  status?: string;
-  runCategory?: RunCategory;
-  hasAnalysis?: boolean;
-  analysisStatus?: 'CURRENT' | 'SUPERSEDED';
-  runType?: 'ALL' | 'SURVEY' | 'NON_SURVEY';
-  limit?: number;
-  offset?: number;
-};
+export {
+  RunFieldsFragmentDoc as RUN_FRAGMENT,
+  RunWithTranscriptsFieldsFragmentDoc as RUN_WITH_TRANSCRIPTS_FRAGMENT,
+  RunsDocument as RUNS_QUERY,
+  RunCountDocument as RUN_COUNT_QUERY,
+  AnalysisFolderCountsDocument as ANALYSIS_FOLDER_COUNTS_QUERY,
+  RunDocument as RUN_QUERY,
+  StartRunDocument as START_RUN_MUTATION,
+  PauseRunDocument as PAUSE_RUN_MUTATION,
+  ResumeRunDocument as RESUME_RUN_MUTATION,
+  CancelRunDocument as CANCEL_RUN_MUTATION,
+  DeleteRunDocument as DELETE_RUN_MUTATION,
+  UpdateRunDocument as UPDATE_RUN_MUTATION,
+  CancelSummarizationDocument as CANCEL_SUMMARIZATION_MUTATION,
+  RestartSummarizationDocument as RESTART_SUMMARIZATION_MUTATION,
+  UpdateTranscriptDecisionDocument as UPDATE_TRANSCRIPT_DECISION_MUTATION,
+} from '../../generated/graphql';
+
+// ============================================================================
+// QUERY VARIABLE TYPES
+// ============================================================================
+
+export type RunsQueryVariables = GeneratedRunsQueryVariables;
+export type RunCountQueryVariables = GeneratedRunCountQueryVariables;
+export type AnalysisFolderCountsQueryVariables = GeneratedAnalysisFolderCountsQueryVariables;
+export type RunQueryVariables = GeneratedRunQueryVariables;
+
+// ============================================================================
+// QUERY RESULT TYPES
+// Redefine result types to use our typed Run/Transcript instead of generated unknown fields.
+// ============================================================================
 
 export type RunsQueryResult = {
   runs: Run[];
-};
-
-export type RunCountQueryVariables = {
-  definitionId?: string;
-  experimentId?: string;
-  status?: string;
-  runCategory?: RunCategory;
-  hasAnalysis?: boolean;
-  analysisStatus?: 'CURRENT' | 'SUPERSEDED';
-  runType?: 'ALL' | 'SURVEY' | 'NON_SURVEY';
 };
 
 export type RunCountQueryResult = {
   runCount: number;
 };
 
-export type RunQueryVariables = {
-  id: string;
+export type AnalysisFolderCountsQueryResult = {
+  analysisFolderCounts: AnalysisFolderCounts;
 };
 
 export type RunQueryResult = {
   run: Run | null;
 };
 
-export type StartRunMutationVariables = {
-  input: StartRunInput;
-};
+// ============================================================================
+// MUTATION VARIABLE TYPES
+// ============================================================================
+
+export type StartRunMutationVariables = GeneratedStartRunMutationVariables;
+export type PauseRunMutationVariables = GeneratedPauseRunMutationVariables;
+export type ResumeRunMutationVariables = GeneratedResumeRunMutationVariables;
+export type CancelRunMutationVariables = GeneratedCancelRunMutationVariables;
+export type DeleteRunMutationVariables = GeneratedDeleteRunMutationVariables;
+export type UpdateRunMutationVariables = GeneratedUpdateRunMutationVariables;
+export type CancelSummarizationMutationVariables = GeneratedCancelSummarizationMutationVariables;
+export type RestartSummarizationMutationVariables = GeneratedRestartSummarizationMutationVariables;
+export type UpdateTranscriptDecisionMutationVariables =
+  GeneratedUpdateTranscriptDecisionMutationVariables;
+
+// ============================================================================
+// MUTATION RESULT TYPES
+// Redefine result types to use our typed Run/Transcript instead of generated unknown fields.
+// ============================================================================
 
 export type StartRunMutationResult = {
   startRun: {
@@ -634,53 +328,24 @@ export type StartRunMutationResult = {
   };
 };
 
-export type PauseRunMutationVariables = {
-  runId: string;
-};
-
 export type PauseRunMutationResult = {
   pauseRun: Run;
-};
-
-export type ResumeRunMutationVariables = {
-  runId: string;
 };
 
 export type ResumeRunMutationResult = {
   resumeRun: Run;
 };
 
-export type CancelRunMutationVariables = {
-  runId: string;
-};
-
 export type CancelRunMutationResult = {
   cancelRun: Run;
-};
-
-export type DeleteRunMutationVariables = {
-  runId: string;
 };
 
 export type DeleteRunMutationResult = {
   deleteRun: boolean;
 };
 
-export type UpdateRunInput = {
-  name?: string | null;
-};
-
-export type UpdateRunMutationVariables = {
-  runId: string;
-  input: UpdateRunInput;
-};
-
 export type UpdateRunMutationResult = {
   updateRun: Run;
-};
-
-export type CancelSummarizationMutationVariables = {
-  runId: string;
 };
 
 export type CancelSummarizationMutationResult = {
@@ -690,21 +355,11 @@ export type CancelSummarizationMutationResult = {
   };
 };
 
-export type RestartSummarizationMutationVariables = {
-  runId: string;
-  force?: boolean;
-};
-
 export type RestartSummarizationMutationResult = {
   restartSummarization: {
     run: Run;
     queuedCount: number;
   };
-};
-
-export type UpdateTranscriptDecisionMutationVariables = {
-  transcriptId: string;
-  decisionCode: string;
 };
 
 export type UpdateTranscriptDecisionMutationResult = {
