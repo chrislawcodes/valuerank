@@ -99,7 +99,7 @@ describe('Domains page', () => {
     renderDomainsPage();
 
     const launchLink = screen.getByRole('link', { name: /add paired batches for all vignettes/i });
-    expect(launchLink).toHaveAttribute('href', '/domains/domain-a/start');
+    expect(launchLink).toHaveAttribute('href', '/domains/start/domain-a');
   });
 
   it('renders the coverage copy control beside the value coverage header', () => {
@@ -116,7 +116,7 @@ describe('Domains page', () => {
     await user.selectOptions(screen.getAllByRole('combobox')[0]!, 'domain-b');
 
     expect(screen.getByRole('link', { name: /add paired batches for all vignettes/i }))
-      .toHaveAttribute('href', '/domains/domain-b/start');
+      .toHaveAttribute('href', '/domains/start/domain-b');
   });
 
   it('does not show a manage domains action', () => {

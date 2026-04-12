@@ -211,7 +211,7 @@ export function DomainAnalysis() {
       const t = parseTemperatureFromSignature(selectedSignature);
       if (t !== null) query.set('temperature', String(t));
     }
-    navigate(`/domains/${selectedDomainId}/status?${query.toString()}`);
+    navigate(`/domains/status/${selectedDomainId}?${query.toString()}`);
   };
 
   return (

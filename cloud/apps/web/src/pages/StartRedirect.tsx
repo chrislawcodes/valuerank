@@ -5,10 +5,10 @@ import { useDomains } from '../hooks/useDomains';
 const LAST_DOMAIN_KEY = 'valuerank:lastSelectedDomainId';
 
 /**
- * Redirects /status (or /domains/status) to the last-used domain's status page.
+ * Redirects /domains/start to the last-used domain's start page.
  * Falls back to the first domain if no last-used domain is stored.
  */
-export function StatusRedirect() {
+export function StartRedirect() {
   const { domains, queryLoading } = useDomains();
   const navigate = useNavigate();
 
@@ -18,7 +18,7 @@ export function StatusRedirect() {
     const lastDomain = lastId != null ? domains.find((d) => d.id === lastId) : null;
     const domain = lastDomain ?? domains[0];
     if (domain != null) {
-      navigate(`/domains/status/${domain.id}`, { replace: true });
+      navigate(`/domains/start/${domain.id}`, { replace: true });
     }
   }, [domains, queryLoading, navigate]);
 
