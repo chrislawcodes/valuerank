@@ -103,7 +103,9 @@ export function buildProviderBudgetEstimates(input: {
     const key = provider.id || provider.name;
     const existing = providerRows.get(key);
     const remainingBatchCount = Math.max(0, targetCount - (existingBatchCountByDefinitionId.get(cell.definitionId) ?? 0));
-    const nextSpend = cell.estimatedCost * (remainingBatchCount / targetCount);
+    // cellEstimates represent 1-batch cost (backend uses samplesPerScenario=1).
+    // Multiply by remaining batches to get total expected spend.
+    const nextSpend = cell.estimatedCost * remainingBatchCount;
     const expectedSpendUsd = (existing?.expectedSpendUsd ?? 0) + nextSpend;
     const budgetBalanceUsd = existing?.budgetBalanceUsd ?? provider.balance ?? null;
 

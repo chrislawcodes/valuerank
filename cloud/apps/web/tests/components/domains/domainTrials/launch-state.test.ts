@@ -34,7 +34,7 @@ function makeModel(overrides: Partial<LlmModel> = {}): LlmModel {
 }
 
 describe('buildProviderBudgetEstimates', () => {
-  it('scales spend by batches still needed for each vignette', () => {
+  it('multiplies per-batch cost by remaining batches needed for each vignette', () => {
     const estimates = buildProviderBudgetEstimates({
       selectedModels: [
         makeModel({
@@ -87,17 +87,20 @@ describe('buildProviderBudgetEstimates', () => {
     });
 
     expect(estimates).toHaveLength(2);
+    // cellEstimates are per-batch costs (backend uses samplesPerScenario=1).
+    // def-1: existing=2, target=5, remaining=3 → Anthropic: 50*3=150, OpenAI: 100*3=300
+    // def-2: existing=5, target=5, remaining=0 → OpenAI: 40*0=0
     expect(estimates[0]).toMatchObject({
       providerDisplayName: 'Anthropic',
-      expectedSpendUsd: 30,
+      expectedSpendUsd: 150,
       budgetBalanceUsd: 50,
-      budgetReady: true,
+      budgetReady: false,
     });
     expect(estimates[1]).toMatchObject({
       providerDisplayName: 'OpenAI',
-      expectedSpendUsd: 60,
+      expectedSpendUsd: 300,
       budgetBalanceUsd: 100,
-      budgetReady: true,
+      budgetReady: false,
     });
   });
 });
