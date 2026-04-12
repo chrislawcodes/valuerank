@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { db } from '@valuerank/db';
-import { createProbeScenarioHandler, resetHealthCheck } from '../../../src/queue/handlers/probe-scenario.js';
+import { createProbeScenarioHandler, resetHealthCheck } from '../../../src/queue/handlers/probe-scenario/index.js';
 import type { ProbeScenarioJobData } from '../../../src/queue/types.js';
 import type { Job } from 'pg-boss';
 
