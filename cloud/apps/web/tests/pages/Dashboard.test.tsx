@@ -19,7 +19,6 @@ describe('Dashboard', () => {
 
     expect(screen.getByRole('heading', { name: /domain-first workspace/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /domains/i })).toHaveAttribute('href', '/domains');
-    expect(screen.getByRole('link', { name: /validation/i })).toHaveAttribute('href', '/validation');
     expect(screen.getByRole('link', { name: /archive/i })).toHaveAttribute('href', '/archive');
     expect(screen.getByRole('heading', { name: /resume active domain work/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /open domain level batches/i })).toHaveAttribute('href', '/domains/status/domain-a');

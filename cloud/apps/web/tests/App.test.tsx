@@ -49,22 +49,6 @@ describe('App Routing', () => {
     });
   });
 
-  it('redirects /assumptions to the Validation landing page for authenticated users', async () => {
-    localStorage.setItem('valuerank_token', 'valid-token');
-    window.history.pushState({}, '', '/assumptions');
-    global.fetch = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ id: '1', email: 'test@example.com', name: 'Test', createdAt: '2024-01-01', lastLoginAt: null }),
-    });
-
-    render(<App />);
-
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /^validation$/i })).toBeInTheDocument();
-    });
-    expect(window.location.pathname).toBe('/validation');
-  });
-
   it('redirects /experiments to the Archive landing page for authenticated users', async () => {
     localStorage.setItem('valuerank_token', 'valid-token');
     window.history.pushState({}, '', '/experiments');

@@ -202,27 +202,6 @@ describe('Runs Page', () => {
     expect(screen.getByRole('button', { name: 'Go to Vignettes' })).toBeInTheDocument();
   });
 
-  it('shows validation-specific empty state when the runCategory filter comes from the URL', async () => {
-    const mockExecuteQuery = vi.fn(() =>
-      fromValue({
-        data: { runs: [] },
-        error: undefined,
-        stale: false,
-        hasNext: false,
-      })
-    );
-    const mockClient = createMockClient(mockExecuteQuery);
-    renderRunsAt(mockClient, '/runs?runCategory=VALIDATION');
-
-    await waitFor(() => {
-      expect(screen.getByText(/validation run history/i)).toBeInTheDocument();
-    });
-
-    expect(screen.getByText(/no validation runs yet/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /show all runs/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /go to domains/i })).toBeInTheDocument();
-  });
-
   it('shows filtered empty state when filter applied', async () => {
     const user = userEvent.setup();
     const mockExecuteQuery = vi.fn(() =>

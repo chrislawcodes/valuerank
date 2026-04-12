@@ -7,7 +7,6 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/layout/Layout';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
-import { ValidationHome } from './pages/ValidationHome';
 import { ArchiveHome } from './pages/ArchiveHome';
 import { Definitions } from './pages/Definitions';
 import { Domains } from './pages/Domains';
@@ -16,9 +15,6 @@ import { DomainStartBatches } from './pages/DomainStartBatches';
 import { DomainStatus } from './pages/DomainStatus';
 import { DomainAnalysis } from './pages/DomainAnalysis';
 import { DomainCoverage } from './pages/DomainCoverage';
-import { TempZeroEffectAssumptions } from './pages/TempZeroEffectAssumptions';
-import { AnalysisAssumptions } from './pages/AnalysisAssumptions';
-import { OrderEffectAssumptions } from './pages/OrderEffectAssumptions';
 import { DomainAnalysisValueDetail } from './pages/DomainAnalysisValueDetail';
 import { DefinitionDetail } from './pages/DefinitionDetail';
 import { StartPairedBatchPage } from './pages/DefinitionDetail/StartPairedBatchPage';
@@ -111,14 +107,6 @@ function App() {
               }
             />
             <Route
-              path="/validation"
-              element={
-                <ProtectedLayout>
-                  <ValidationHome />
-                </ProtectedLayout>
-              }
-            />
-            <Route
               path="/archive"
               element={
                 <ProtectedLayout>
@@ -173,42 +161,6 @@ function App() {
                   <DomainCoverage />
                 </ProtectedLayout>
               }
-            />
-            <Route
-              path="/assumptions"
-              element={<Navigate to="/validation" replace />}
-            />
-            <Route
-              path="/assumptions/temp-zero"
-              element={<Navigate to="/assumptions/temp-zero-effect" replace />}
-            />
-            <Route
-              path="/assumptions/temp-zero-effect"
-              element={
-                <ProtectedLayout fullWidth>
-                  <TempZeroEffectAssumptions />
-                </ProtectedLayout>
-              }
-            />
-            <Route
-              path="/assumptions/analysis"
-              element={
-                <ProtectedLayout fullWidth>
-                  <AnalysisAssumptions />
-                </ProtectedLayout>
-              }
-            />
-            <Route
-              path="/assumptions/analysis-v1"
-              element={
-                <ProtectedLayout fullWidth>
-                  <OrderEffectAssumptions />
-                </ProtectedLayout>
-              }
-            />
-            <Route
-              path="/assumptions/order-effect"
-              element={<Navigate to="/assumptions/analysis-v1" replace />}
             />
             <Route
               path="/domains/analysis/value-detail"
