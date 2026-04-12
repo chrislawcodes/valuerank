@@ -1,0 +1,348 @@
+query Domains($search: String, $limit: Int, $offset: Int) {
+  domains(search: $search, limit: $limit, offset: $offset) {
+    id
+    name
+    createdAt
+    updatedAt
+    definitionCount
+    defaultLevelPresetVersionId
+    defaultPreambleVersionId
+    defaultContextId
+  }
+}
+
+mutation CreateDomain($name: String!) {
+  createDomain(name: $name) {
+    id
+    name
+    createdAt
+    updatedAt
+    definitionCount
+  }
+}
+
+mutation RenameDomain($id: ID!, $name: String!) {
+  renameDomain(id: $id, name: $name) {
+    id
+    name
+    createdAt
+    updatedAt
+    definitionCount
+  }
+}
+
+mutation DeleteDomain($id: ID!) {
+  deleteDomain(id: $id) {
+    success
+    affectedDefinitions
+  }
+}
+
+mutation AssignDomainToDefinitions($definitionIds: [ID!]!, $domainId: ID) {
+  assignDomainToDefinitions(definitionIds: $definitionIds, domainId: $domainId) {
+    success
+    affectedDefinitions
+  }
+}
+
+mutation AssignDomainToDefinitionsByFilter(
+  $domainId: ID
+  $rootOnly: Boolean
+  $search: String
+  $tagIds: [ID!]
+  $hasRuns: Boolean
+  $sourceDomainId: ID
+  $withoutDomain: Boolean
+) {
+  assignDomainToDefinitionsByFilter(
+    domainId: $domainId
+    rootOnly: $rootOnly
+    search: $search
+    tagIds: $tagIds
+    hasRuns: $hasRuns
+    sourceDomainId: $sourceDomainId
+    withoutDomain: $withoutDomain
+  ) {
+    success
+    affectedDefinitions
+  }
+}
+
+mutation RunTrialsForDomain($domainId: ID!, $temperature: Float, $maxBudgetUsd: Float, $definitionIds: [ID!]) {
+  runTrialsForDomain(domainId: $domainId, temperature: $temperature, maxBudgetUsd: $maxBudgetUsd, definitionIds: $definitionIds) {
+    domainEvaluationId
+    success
+    totalDefinitions
+    targetedDefinitions
+    startedRuns
+    failedDefinitions
+    skippedForBudget
+    projectedCostUsd
+    blockedByActiveLaunch
+    runs {
+      definitionId
+      runId
+      modelIds
+    }
+  }
+}
+
+mutation StartDomainEvaluation(
+  $domainId: ID!
+  $scopeCategory: String
+  $temperature: Float
+  $maxBudgetUsd: Float
+  $definitionIds: [ID!]
+  $modelIds: [String!]
+  $samplePercentage: Int
+  $samplesPerScenario: Int
+  $targetBatchCount: Int
+) {
+  startDomainEvaluation(
+    domainId: $domainId
+    scopeCategory: $scopeCategory
+    temperature: $temperature
+    maxBudgetUsd: $maxBudgetUsd
+    definitionIds: $definitionIds
+    modelIds: $modelIds
+    samplePercentage: $samplePercentage
+    samplesPerScenario: $samplesPerScenario
+    targetBatchCount: $targetBatchCount
+  ) {
+    domainEvaluationId
+    scopeCategory
+    success
+    totalDefinitions
+    targetedDefinitions
+    startedRuns
+    failedDefinitions
+    skippedForBudget
+    projectedCostUsd
+    blockedByActiveLaunch
+    runs {
+      definitionId
+      runId
+      modelIds
+    }
+  }
+}
+
+
+query DomainEvaluations($domainId: ID!, $scopeCategory: String, $status: String, $limit: Int, $offset: Int) {
+  domainEvaluations(domainId: $domainId, scopeCategory: $scopeCategory, status: $status, limit: $limit, offset: $offset) {
+    id
+    domainId
+    domainNameAtLaunch
+    scopeCategory
+    status
+    createdAt
+    startedAt
+    completedAt
+    startedRuns
+    failedDefinitions
+    skippedForBudget
+    projectedCostUsd
+    models
+    temperature
+    maxBudgetUsd
+    memberCount
+  }
+}
+
+query DomainEvaluation($id: ID!) {
+  domainEvaluation(id: $id) {
+    id
+    domainId
+    domainNameAtLaunch
+    scopeCategory
+    status
+    createdAt
+    startedAt
+    completedAt
+    startedRuns
+    failedDefinitions
+    skippedForBudget
+    projectedCostUsd
+    models
+    temperature
+    maxBudgetUsd
+    memberCount
+    members {
+      runId
+      definitionIdAtLaunch
+      definitionNameAtLaunch
+      domainIdAtLaunch
+      createdAt
+      runStatus
+      runCategory
+      runStartedAt
+      runCompletedAt
+    }
+  }
+}
+
+query DomainEvaluationStatus($id: ID!) {
+  domainEvaluationStatus(id: $id) {
+    id
+    status
+    totalRuns
+    pendingRuns
+    runningRuns
+    completedRuns
+    failedRuns
+    cancelledRuns
+  }
+}
+
+query DomainTrialsPlan($domainId: ID!, $temperature: Float, $definitionIds: [ID!], $scopeCategory: String) {
+  domainTrialsPlan(domainId: $domainId, temperature: $temperature, definitionIds: $definitionIds, scopeCategory: $scopeCategory) {
+    domainId
+    domainName
+    vignettes {
+      definitionId
+      definitionName
+      definitionVersion
+      signature
+      scenarioCount
+      existingBatchCount
+    }
+    models {
+      modelId
+      label
+      isDefault
+      supportsTemperature
+    }
+    cellEstimates {
+      definitionId
+      modelId
+      estimatedCost
+    }
+    totalEstimatedCost
+    existingTemperatures
+    defaultTemperature
+    temperatureWarning
+  }
+}
+
+query EstimateDomainEvaluationCost(
+  $domainId: ID!
+  $definitionIds: [ID!]
+  $modelIds: [String!]
+  $temperature: Float
+  $samplePercentage: Int
+  $samplesPerScenario: Int
+  $scopeCategory: String
+) {
+  estimateDomainEvaluationCost(
+    domainId: $domainId
+    definitionIds: $definitionIds
+    modelIds: $modelIds
+    temperature: $temperature
+    samplePercentage: $samplePercentage
+    samplesPerScenario: $samplesPerScenario
+    scopeCategory: $scopeCategory
+  ) {
+    domainId
+    domainName
+    scopeCategory
+    targetedDefinitions
+    totalScenarioCount
+    totalEstimatedCost
+    basedOnSampleCount
+    isUsingFallback
+    fallbackReason
+    estimateConfidence
+    knownExclusions
+    models {
+      modelId
+      label
+      isDefault
+      supportsTemperature
+      estimatedCost
+      basedOnSampleCount
+      isUsingFallback
+    }
+    definitions {
+      definitionId
+      definitionName
+      definitionVersion
+      signature
+      scenarioCount
+      estimatedCost
+      basedOnSampleCount
+      isUsingFallback
+    }
+    existingTemperatures
+    defaultTemperature
+    temperatureWarning
+  }
+}
+
+query DomainTrialRunsStatus($runIds: [ID!]!) {
+  domainTrialRunsStatus(runIds: $runIds) {
+    runId
+    definitionId
+    status
+    updatedAt
+    stalledModels
+    analysisStatus
+    modelStatuses {
+      modelId
+      generationCompleted
+      generationFailed
+      generationTotal
+      summarizationCompleted
+      summarizationFailed
+      summarizationTotal
+      latestErrorMessage
+    }
+  }
+}
+
+query DomainSettings($domainId: ID!) {
+  domainSettings(domainId: $domainId) {
+    domainId
+    preambleVersionId
+    levelPresetVersionId
+    contextId
+    valueStatements {
+      id
+      token
+      currentContent
+      previousContent
+    }
+  }
+}
+
+query DomainConfigSnapshots($domainId: ID!, $limit: Int) {
+  domainConfigSnapshots(domainId: $domainId, limit: $limit) {
+    id
+    createdAt
+    preambleLabel
+    levelPresetLabel
+    contextLabel
+    valueStatementCount
+  }
+}
+
+mutation SetDomainSettings(
+  $domainId: ID!
+  $preambleVersionId: ID
+  $levelPresetVersionId: ID
+  $contextId: ID
+  $valueStatements: [ValueStatementInput!]!
+) {
+  setDomainSettings(
+    domainId: $domainId
+    preambleVersionId: $preambleVersionId
+    levelPresetVersionId: $levelPresetVersionId
+    contextId: $contextId
+    valueStatements: $valueStatements
+  ) {
+    id
+    name
+    defaultPreambleVersionId
+    defaultLevelPresetVersionId
+    defaultContextId
+  }
+}

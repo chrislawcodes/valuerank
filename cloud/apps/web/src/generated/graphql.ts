@@ -3776,6 +3776,263 @@ export type EstimateCostQueryVariables = Exact<{
 
 export type EstimateCostQuery = { __typename?: 'Query', estimateCost: { __typename?: 'CostEstimate', total: number, scenarioCount: number, basedOnSampleCount: number, isUsingFallback: boolean, fallbackReason?: string | null, perModel: Array<{ __typename?: 'ModelCostEstimate', modelId: string, displayName: string, scenarioCount: number, inputTokens: number, outputTokens: number, inputCost: number, outputCost: number, totalCost: number, avgInputPerProbe: number, avgOutputPerProbe: number, sampleCount: number, isUsingFallback: boolean }> } };
 
+export type DefinitionsQueryVariables = Exact<{
+  rootOnly?: InputMaybe<Scalars['Boolean']['input']>;
+  search?: InputMaybe<Scalars['String']['input']>;
+  tagIds?: InputMaybe<Array<Scalars['ID']['input']> | Scalars['ID']['input']>;
+  hasRuns?: InputMaybe<Scalars['Boolean']['input']>;
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  withoutDomain?: InputMaybe<Scalars['Boolean']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type DefinitionsQuery = { __typename?: 'Query', definitions: Array<{ __typename?: 'Definition', id: string, name: string, domainId?: string | null, parentId?: string | null, content: unknown, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, version: number, runCount: number, trialCount: number, domain?: { __typename?: 'Domain', id: string, name: string } | null, trialConfig: { __typename?: 'TrialConfigSummary', definitionVersion?: number | null, temperature?: number | null, signature?: string | null, isConsistent: boolean, message?: string | null, signatureBreakdown: Array<{ __typename?: 'TrialSignatureBreakdown', signature: string, definitionVersion?: number | null, temperature?: number | null, trialCount: number }> }, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, allTags: Array<{ __typename?: 'Tag', id: string, name: string }> }> };
+
+export type DefinitionQueryVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type DefinitionQuery = { __typename?: 'Query', definition?: { __typename?: 'Definition', id: string, name: string, domainId?: string | null, domainContextId?: string | null, parentId?: string | null, content: unknown, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, version: number, runCount: number, trialCount: number, scenarioCount: number, preambleVersionId?: string | null, levelPresetVersionId?: string | null, isForked: boolean, resolvedContent: unknown, localContent: unknown, domain?: { __typename?: 'Domain', id: string, name: string } | null, trialConfig: { __typename?: 'TrialConfigSummary', definitionVersion?: number | null, temperature?: number | null, signature?: string | null, isConsistent: boolean, message?: string | null, signatureBreakdown: Array<{ __typename?: 'TrialSignatureBreakdown', signature: string, definitionVersion?: number | null, temperature?: number | null, trialCount: number }> }, preambleVersion?: { __typename?: 'PreambleVersion', id: string, version: string, content: string, preamble?: { __typename?: 'Preamble', name: string } | null } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string, createdAt: string }>, parent?: { __typename?: 'Definition', id: string, name: string } | null, children: Array<{ __typename?: 'Definition', id: string, name: string, createdAt: string }>, overrides: { __typename?: 'DefinitionOverrides', template: boolean, dimensions: boolean, matchingRules: boolean }, inheritedTags: Array<{ __typename?: 'Tag', id: string, name: string, createdAt: string }>, allTags: Array<{ __typename?: 'Tag', id: string, name: string, createdAt: string }>, expansionStatus: { __typename?: 'ExpansionStatus', status: ExpansionJobStatus, jobId?: string | null, triggeredBy?: string | null, createdAt?: string | null, completedAt?: string | null, error?: string | null, scenarioCount: number, progress?: { __typename?: 'ExpansionProgress', phase: string, expectedScenarios: number, generatedScenarios: number, inputTokens: number, outputTokens: number, message: string, updatedAt: string } | null } } | null };
+
+export type DefinitionAncestorsQueryVariables = Exact<{
+  id: Scalars['ID']['input'];
+  maxDepth?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type DefinitionAncestorsQuery = { __typename?: 'Query', definitionAncestors: Array<{ __typename?: 'Definition', id: string, name: string, parentId?: string | null, createdAt: string }> };
+
+export type DefinitionDescendantsQueryVariables = Exact<{
+  id: Scalars['ID']['input'];
+  maxDepth?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type DefinitionDescendantsQuery = { __typename?: 'Query', definitionDescendants: Array<{ __typename?: 'Definition', id: string, name: string, parentId?: string | null, createdAt: string }> };
+
+export type DefinitionCountQueryVariables = Exact<{
+  rootOnly?: InputMaybe<Scalars['Boolean']['input']>;
+  search?: InputMaybe<Scalars['String']['input']>;
+  tagIds?: InputMaybe<Array<Scalars['ID']['input']> | Scalars['ID']['input']>;
+  hasRuns?: InputMaybe<Scalars['Boolean']['input']>;
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  withoutDomain?: InputMaybe<Scalars['Boolean']['input']>;
+}>;
+
+
+export type DefinitionCountQuery = { __typename?: 'Query', definitionCount: number };
+
+export type CreateDefinitionMutationVariables = Exact<{
+  input: CreateDefinitionInput;
+}>;
+
+
+export type CreateDefinitionMutation = { __typename?: 'Mutation', createDefinition: { __typename?: 'Definition', id: string, name: string, parentId?: string | null, content: unknown, createdAt: string, updatedAt: string } };
+
+export type UpdateDefinitionMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  input: UpdateDefinitionInput;
+}>;
+
+
+export type UpdateDefinitionMutation = { __typename?: 'Mutation', updateDefinition: { __typename?: 'Definition', id: string, name: string, content: unknown, updatedAt: string } };
+
+export type ForkDefinitionMutationVariables = Exact<{
+  input: ForkDefinitionInput;
+}>;
+
+
+export type ForkDefinitionMutation = { __typename?: 'Mutation', forkDefinition: { __typename?: 'Definition', id: string, name: string, parentId?: string | null, content: unknown, createdAt: string, isForked: boolean, resolvedContent: unknown, localContent: unknown, overrides: { __typename?: 'DefinitionOverrides', template: boolean, dimensions: boolean, matchingRules: boolean } } };
+
+export type UnforkDefinitionMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type UnforkDefinitionMutation = { __typename?: 'Mutation', unforkDefinition: { __typename?: 'Definition', id: string, name: string, parentId?: string | null, content: unknown, updatedAt: string, version: number, isForked: boolean, resolvedContent: unknown, localContent: unknown, overrides: { __typename?: 'DefinitionOverrides', template: boolean, dimensions: boolean, matchingRules: boolean } } };
+
+export type DeleteDefinitionMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type DeleteDefinitionMutation = { __typename?: 'Mutation', deleteDefinition: { __typename?: 'DeleteDefinitionResult', deletedIds: Array<string>, count: number } };
+
+export type RegenerateScenariosMutationVariables = Exact<{
+  definitionId: Scalars['String']['input'];
+}>;
+
+
+export type RegenerateScenariosMutation = { __typename?: 'Mutation', regenerateScenarios: { __typename?: 'RegenerateScenariosResult', definitionId: string, jobId?: string | null, queued: boolean } };
+
+export type CancelScenarioExpansionMutationVariables = Exact<{
+  definitionId: Scalars['String']['input'];
+}>;
+
+
+export type CancelScenarioExpansionMutation = { __typename?: 'Mutation', cancelScenarioExpansion: { __typename?: 'CancelExpansionResult', definitionId: string, cancelled: boolean, jobId?: string | null, message: string } };
+
+export type DomainsQueryVariables = Exact<{
+  search?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type DomainsQuery = { __typename?: 'Query', domains: Array<{ __typename?: 'Domain', id: string, name: string, createdAt: string, updatedAt: string, definitionCount: number, defaultLevelPresetVersionId?: string | null, defaultPreambleVersionId?: string | null, defaultContextId?: string | null }> };
+
+export type CreateDomainMutationVariables = Exact<{
+  name: Scalars['String']['input'];
+}>;
+
+
+export type CreateDomainMutation = { __typename?: 'Mutation', createDomain: { __typename?: 'Domain', id: string, name: string, createdAt: string, updatedAt: string, definitionCount: number } };
+
+export type RenameDomainMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+  name: Scalars['String']['input'];
+}>;
+
+
+export type RenameDomainMutation = { __typename?: 'Mutation', renameDomain: { __typename?: 'Domain', id: string, name: string, createdAt: string, updatedAt: string, definitionCount: number } };
+
+export type DeleteDomainMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type DeleteDomainMutation = { __typename?: 'Mutation', deleteDomain: { __typename?: 'DomainMutationResult', success: boolean, affectedDefinitions: number } };
+
+export type AssignDomainToDefinitionsMutationVariables = Exact<{
+  definitionIds: Array<Scalars['ID']['input']> | Scalars['ID']['input'];
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+}>;
+
+
+export type AssignDomainToDefinitionsMutation = { __typename?: 'Mutation', assignDomainToDefinitions: { __typename?: 'DomainMutationResult', success: boolean, affectedDefinitions: number } };
+
+export type AssignDomainToDefinitionsByFilterMutationVariables = Exact<{
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  rootOnly?: InputMaybe<Scalars['Boolean']['input']>;
+  search?: InputMaybe<Scalars['String']['input']>;
+  tagIds?: InputMaybe<Array<Scalars['ID']['input']> | Scalars['ID']['input']>;
+  hasRuns?: InputMaybe<Scalars['Boolean']['input']>;
+  sourceDomainId?: InputMaybe<Scalars['ID']['input']>;
+  withoutDomain?: InputMaybe<Scalars['Boolean']['input']>;
+}>;
+
+
+export type AssignDomainToDefinitionsByFilterMutation = { __typename?: 'Mutation', assignDomainToDefinitionsByFilter: { __typename?: 'DomainMutationResult', success: boolean, affectedDefinitions: number } };
+
+export type RunTrialsForDomainMutationVariables = Exact<{
+  domainId: Scalars['ID']['input'];
+  temperature?: InputMaybe<Scalars['Float']['input']>;
+  maxBudgetUsd?: InputMaybe<Scalars['Float']['input']>;
+  definitionIds?: InputMaybe<Array<Scalars['ID']['input']> | Scalars['ID']['input']>;
+}>;
+
+
+export type RunTrialsForDomainMutation = { __typename?: 'Mutation', runTrialsForDomain: { __typename?: 'DomainTrialRunResult', domainEvaluationId?: string | null, success: boolean, totalDefinitions: number, targetedDefinitions: number, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, blockedByActiveLaunch: boolean, runs: Array<{ __typename?: 'DomainTrialRunEntry', definitionId: string, runId: string, modelIds: Array<string> }> } };
+
+export type StartDomainEvaluationMutationVariables = Exact<{
+  domainId: Scalars['ID']['input'];
+  scopeCategory?: InputMaybe<Scalars['String']['input']>;
+  temperature?: InputMaybe<Scalars['Float']['input']>;
+  maxBudgetUsd?: InputMaybe<Scalars['Float']['input']>;
+  definitionIds?: InputMaybe<Array<Scalars['ID']['input']> | Scalars['ID']['input']>;
+  modelIds?: InputMaybe<Array<Scalars['String']['input']> | Scalars['String']['input']>;
+  samplePercentage?: InputMaybe<Scalars['Int']['input']>;
+  samplesPerScenario?: InputMaybe<Scalars['Int']['input']>;
+  targetBatchCount?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type StartDomainEvaluationMutation = { __typename?: 'Mutation', startDomainEvaluation: { __typename?: 'DomainTrialRunResult', domainEvaluationId?: string | null, scopeCategory: string, success: boolean, totalDefinitions: number, targetedDefinitions: number, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, blockedByActiveLaunch: boolean, runs: Array<{ __typename?: 'DomainTrialRunEntry', definitionId: string, runId: string, modelIds: Array<string> }> } };
+
+export type DomainEvaluationsQueryVariables = Exact<{
+  domainId: Scalars['ID']['input'];
+  scopeCategory?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type DomainEvaluationsQuery = { __typename?: 'Query', domainEvaluations: Array<{ __typename?: 'DomainEvaluation', id: string, domainId: string, domainNameAtLaunch: string, scopeCategory: string, status: string, createdAt: string, startedAt?: string | null, completedAt?: string | null, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, models: Array<string>, temperature?: number | null, maxBudgetUsd?: number | null, memberCount: number }> };
+
+export type DomainEvaluationQueryVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type DomainEvaluationQuery = { __typename?: 'Query', domainEvaluation?: { __typename?: 'DomainEvaluation', id: string, domainId: string, domainNameAtLaunch: string, scopeCategory: string, status: string, createdAt: string, startedAt?: string | null, completedAt?: string | null, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, models: Array<string>, temperature?: number | null, maxBudgetUsd?: number | null, memberCount: number, members: Array<{ __typename?: 'DomainEvaluationMember', runId: string, definitionIdAtLaunch: string, definitionNameAtLaunch: string, domainIdAtLaunch: string, createdAt: string, runStatus: string, runCategory: string, runStartedAt?: string | null, runCompletedAt?: string | null }> } | null };
+
+export type DomainEvaluationStatusQueryVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type DomainEvaluationStatusQuery = { __typename?: 'Query', domainEvaluationStatus?: { __typename?: 'DomainEvaluationStatus', id: string, status: string, totalRuns: number, pendingRuns: number, runningRuns: number, completedRuns: number, failedRuns: number, cancelledRuns: number } | null };
+
+export type DomainTrialsPlanQueryVariables = Exact<{
+  domainId: Scalars['ID']['input'];
+  temperature?: InputMaybe<Scalars['Float']['input']>;
+  definitionIds?: InputMaybe<Array<Scalars['ID']['input']> | Scalars['ID']['input']>;
+  scopeCategory?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type DomainTrialsPlanQuery = { __typename?: 'Query', domainTrialsPlan: { __typename?: 'DomainTrialPlanResult', domainId: string, domainName: string, totalEstimatedCost: number, existingTemperatures: Array<number>, defaultTemperature?: number | null, temperatureWarning?: string | null, vignettes: Array<{ __typename?: 'DomainTrialPlanVignette', definitionId: string, definitionName: string, definitionVersion: number, signature: string, scenarioCount: number, existingBatchCount: number }>, models: Array<{ __typename?: 'DomainTrialPlanModel', modelId: string, label: string, isDefault: boolean, supportsTemperature: boolean }>, cellEstimates: Array<{ __typename?: 'DomainTrialPlanCellEstimate', definitionId: string, modelId: string, estimatedCost: number }> } };
+
+export type EstimateDomainEvaluationCostQueryVariables = Exact<{
+  domainId: Scalars['ID']['input'];
+  definitionIds?: InputMaybe<Array<Scalars['ID']['input']> | Scalars['ID']['input']>;
+  modelIds?: InputMaybe<Array<Scalars['String']['input']> | Scalars['String']['input']>;
+  temperature?: InputMaybe<Scalars['Float']['input']>;
+  samplePercentage?: InputMaybe<Scalars['Int']['input']>;
+  samplesPerScenario?: InputMaybe<Scalars['Int']['input']>;
+  scopeCategory?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type EstimateDomainEvaluationCostQuery = { __typename?: 'Query', estimateDomainEvaluationCost: { __typename?: 'DomainEvaluationCostEstimate', domainId: string, domainName: string, scopeCategory: string, targetedDefinitions: number, totalScenarioCount: number, totalEstimatedCost: number, basedOnSampleCount: number, isUsingFallback: boolean, fallbackReason?: string | null, estimateConfidence: string, knownExclusions: Array<string>, existingTemperatures: Array<number>, defaultTemperature?: number | null, temperatureWarning?: string | null, models: Array<{ __typename?: 'DomainEvaluationEstimateModel', modelId: string, label: string, isDefault: boolean, supportsTemperature: boolean, estimatedCost: number, basedOnSampleCount: number, isUsingFallback: boolean }>, definitions: Array<{ __typename?: 'DomainEvaluationEstimateDefinition', definitionId: string, definitionName: string, definitionVersion: number, signature: string, scenarioCount: number, estimatedCost: number, basedOnSampleCount: number, isUsingFallback: boolean }> } };
+
+export type DomainTrialRunsStatusQueryVariables = Exact<{
+  runIds: Array<Scalars['ID']['input']> | Scalars['ID']['input'];
+}>;
+
+
+export type DomainTrialRunsStatusQuery = { __typename?: 'Query', domainTrialRunsStatus: Array<{ __typename?: 'DomainTrialRunStatus', runId: string, definitionId: string, status: string, updatedAt: string, stalledModels: Array<string>, analysisStatus?: string | null, modelStatuses: Array<{ __typename?: 'DomainTrialModelStatus', modelId: string, generationCompleted: number, generationFailed: number, generationTotal: number, summarizationCompleted: number, summarizationFailed: number, summarizationTotal: number, latestErrorMessage?: string | null }> }> };
+
+export type DomainSettingsQueryVariables = Exact<{
+  domainId: Scalars['ID']['input'];
+}>;
+
+
+export type DomainSettingsQuery = { __typename?: 'Query', domainSettings?: { __typename?: 'DomainSettings', domainId: string, preambleVersionId?: string | null, levelPresetVersionId?: string | null, contextId?: string | null, valueStatements: Array<{ __typename?: 'ValueStatementWithVersions', id: string, token: string, currentContent: string, previousContent?: string | null }> } | null };
+
+export type DomainConfigSnapshotsQueryVariables = Exact<{
+  domainId: Scalars['ID']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type DomainConfigSnapshotsQuery = { __typename?: 'Query', domainConfigSnapshots: Array<{ __typename?: 'DomainConfigSnapshotSummary', id: string, createdAt: string, preambleLabel?: string | null, levelPresetLabel?: string | null, contextLabel?: string | null, valueStatementCount: number }> };
+
+export type SetDomainSettingsMutationVariables = Exact<{
+  domainId: Scalars['ID']['input'];
+  preambleVersionId?: InputMaybe<Scalars['ID']['input']>;
+  levelPresetVersionId?: InputMaybe<Scalars['ID']['input']>;
+  contextId?: InputMaybe<Scalars['ID']['input']>;
+  valueStatements: Array<ValueStatementInput> | ValueStatementInput;
+}>;
+
+
+export type SetDomainSettingsMutation = { __typename?: 'Mutation', setDomainSettings: { __typename?: 'Domain', id: string, name: string, defaultPreambleVersionId?: string | null, defaultLevelPresetVersionId?: string | null, defaultContextId?: string | null } };
+
 export type SystemHealthQueryVariables = Exact<{
   refresh?: InputMaybe<Scalars['Boolean']['input']>;
 }>;
@@ -3913,6 +4170,124 @@ export type AvailableModelsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
 export type AvailableModelsQuery = { __typename?: 'Query', availableModels: Array<{ __typename?: 'AvailableModel', id: string, providerId: string, displayName: string, versions: Array<string>, defaultVersion?: string | null, isAvailable: boolean, isDefault: boolean }> };
+
+export type RunFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null };
+
+export type RunWithTranscriptsFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, failedProbes: Array<{ __typename?: 'ProbeResult', modelId: string, errorCode?: string | null, errorMessage?: string | null }>, transcripts: Array<{ __typename?: 'Transcript', id: string, runId: string, scenarioId?: string | null, modelId: string, modelVersion?: string | null, content: unknown, decisionMetadata?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, estimatedCost?: number | null, createdAt: string, lastAccessedAt?: string | null, dimensionValues?: unknown | null, decisionModelV2?: unknown | null }>, analysis?: { __typename?: 'AnalysisResult', actualCost?: { __typename?: 'ActualCost', total: number, perModel: Array<{ __typename?: 'ActualModelCost', modelId: string, inputTokens: number, outputTokens: number, cost: number, probeCount: number }> } | null } | null, recentTasks: Array<{ __typename?: 'TaskResult', scenarioId: string, modelId: string, status: string, error?: string | null, completedAt?: string | null }>, executionMetrics?: { __typename?: 'ExecutionMetrics', totalActive: number, totalQueued: number, estimatedSecondsRemaining?: number | null, totalRetries: number, providers: Array<{ __typename?: 'ProviderExecutionMetrics', provider: string, activeJobs: number, queuedJobs: number, maxParallel: number, requestsPerMinute: number, activeModelIds: Array<string>, recentCompletions: Array<{ __typename?: 'CompletionEvent', modelId: string, scenarioId: string, success: boolean, completedAt: string, durationMs: number }> }> } | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null };
+
+export type RunsQueryVariables = Exact<{
+  definitionId?: InputMaybe<Scalars['String']['input']>;
+  experimentId?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  runCategory?: InputMaybe<Scalars['String']['input']>;
+  hasAnalysis?: InputMaybe<Scalars['Boolean']['input']>;
+  analysisStatus?: InputMaybe<Scalars['String']['input']>;
+  runType?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type RunsQuery = { __typename?: 'Query', runs: Array<{ __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null }> };
+
+export type RunCountQueryVariables = Exact<{
+  definitionId?: InputMaybe<Scalars['String']['input']>;
+  experimentId?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  runCategory?: InputMaybe<Scalars['String']['input']>;
+  hasAnalysis?: InputMaybe<Scalars['Boolean']['input']>;
+  analysisStatus?: InputMaybe<Scalars['String']['input']>;
+  runType?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type RunCountQuery = { __typename?: 'Query', runCount: number };
+
+export type AnalysisFolderCountsQueryVariables = Exact<{
+  definitionId?: InputMaybe<Scalars['String']['input']>;
+  definitionTagIds?: InputMaybe<Array<Scalars['ID']['input']> | Scalars['ID']['input']>;
+  experimentId?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  runCategory?: InputMaybe<Scalars['String']['input']>;
+  analysisStatus?: InputMaybe<Scalars['String']['input']>;
+  runType?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type AnalysisFolderCountsQuery = { __typename?: 'Query', analysisFolderCounts: { __typename?: 'AnalysisFolderCounts', aggregateCount: number, untaggedCount: number, aggregateUntaggedCount: number, tagCounts: Array<{ __typename?: 'AnalysisFolderTagCount', tagId: string, name: string, count: number }>, aggregateTagCounts: Array<{ __typename?: 'AnalysisFolderTagCount', tagId: string, name: string, count: number }> } };
+
+export type RunQueryVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type RunQuery = { __typename?: 'Query', run?: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, failedProbes: Array<{ __typename?: 'ProbeResult', modelId: string, errorCode?: string | null, errorMessage?: string | null }>, transcripts: Array<{ __typename?: 'Transcript', id: string, runId: string, scenarioId?: string | null, modelId: string, modelVersion?: string | null, content: unknown, decisionMetadata?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, estimatedCost?: number | null, createdAt: string, lastAccessedAt?: string | null, dimensionValues?: unknown | null, decisionModelV2?: unknown | null }>, analysis?: { __typename?: 'AnalysisResult', actualCost?: { __typename?: 'ActualCost', total: number, perModel: Array<{ __typename?: 'ActualModelCost', modelId: string, inputTokens: number, outputTokens: number, cost: number, probeCount: number }> } | null } | null, recentTasks: Array<{ __typename?: 'TaskResult', scenarioId: string, modelId: string, status: string, error?: string | null, completedAt?: string | null }>, executionMetrics?: { __typename?: 'ExecutionMetrics', totalActive: number, totalQueued: number, estimatedSecondsRemaining?: number | null, totalRetries: number, providers: Array<{ __typename?: 'ProviderExecutionMetrics', provider: string, activeJobs: number, queuedJobs: number, maxParallel: number, requestsPerMinute: number, activeModelIds: Array<string>, recentCompletions: Array<{ __typename?: 'CompletionEvent', modelId: string, scenarioId: string, success: boolean, completedAt: string, durationMs: number }> }> } | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } | null };
+
+export type StartRunMutationVariables = Exact<{
+  input: StartRunInput;
+}>;
+
+
+export type StartRunMutation = { __typename?: 'Mutation', startRun: { __typename?: 'StartRunPayload', jobCount: number, pairedRunIds?: Array<string> | null, run: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } } };
+
+export type PauseRunMutationVariables = Exact<{
+  runId: Scalars['ID']['input'];
+}>;
+
+
+export type PauseRunMutation = { __typename?: 'Mutation', pauseRun: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } };
+
+export type ResumeRunMutationVariables = Exact<{
+  runId: Scalars['ID']['input'];
+}>;
+
+
+export type ResumeRunMutation = { __typename?: 'Mutation', resumeRun: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } };
+
+export type CancelRunMutationVariables = Exact<{
+  runId: Scalars['ID']['input'];
+}>;
+
+
+export type CancelRunMutation = { __typename?: 'Mutation', cancelRun: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } };
+
+export type DeleteRunMutationVariables = Exact<{
+  runId: Scalars['ID']['input'];
+}>;
+
+
+export type DeleteRunMutation = { __typename?: 'Mutation', deleteRun: boolean };
+
+export type UpdateRunMutationVariables = Exact<{
+  runId: Scalars['ID']['input'];
+  input: UpdateRunInput;
+}>;
+
+
+export type UpdateRunMutation = { __typename?: 'Mutation', updateRun: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } };
+
+export type CancelSummarizationMutationVariables = Exact<{
+  runId: Scalars['ID']['input'];
+}>;
+
+
+export type CancelSummarizationMutation = { __typename?: 'Mutation', cancelSummarization: { __typename?: 'CancelSummarizationPayload', cancelledCount: number, run: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } } };
+
+export type RestartSummarizationMutationVariables = Exact<{
+  runId: Scalars['ID']['input'];
+  force?: InputMaybe<Scalars['Boolean']['input']>;
+}>;
+
+
+export type RestartSummarizationMutation = { __typename?: 'Mutation', restartSummarization: { __typename?: 'RestartSummarizationPayload', queuedCount: number, run: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } } };
+
+export type UpdateTranscriptDecisionMutationVariables = Exact<{
+  transcriptId: Scalars['ID']['input'];
+  decisionCode: Scalars['String']['input'];
+}>;
+
+
+export type UpdateTranscriptDecisionMutation = { __typename?: 'Mutation', updateTranscriptDecision: { __typename?: 'Transcript', id: string, runId: string, scenarioId?: string | null, modelId: string, modelVersion?: string | null, content: unknown, decisionMetadata?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, estimatedCost?: number | null, createdAt: string, lastAccessedAt?: string | null } };
 
 export type ScenariosQueryVariables = Exact<{
   definitionId: Scalars['ID']['input'];
@@ -4147,6 +4522,132 @@ export const LlmProviderFieldsFragmentDoc = gql`
   updatedAt
 }
     `;
+export const RunFieldsFragmentDoc = gql`
+    fragment RunFields on Run {
+  id
+  name
+  definitionId
+  definitionVersion
+  experimentId
+  status
+  runCategory
+  config
+  stalledModels
+  companionRunId
+  batchCount
+  pairedBatchGroupId
+  progress
+  runProgress {
+    total
+    completed
+    failed
+    percentComplete
+    byModel {
+      modelId
+      completed
+      failed
+    }
+  }
+  summarizeProgress {
+    total
+    completed
+    failed
+    percentComplete
+  }
+  startedAt
+  completedAt
+  createdAt
+  updatedAt
+  lastAccessedAt
+  transcriptCount
+  analysisStatus
+  tags {
+    id
+    name
+  }
+  definition {
+    id
+    name
+    version
+    domain {
+      name
+    }
+    tags: allTags {
+      id
+      name
+    }
+    content
+  }
+  definitionSnapshot
+}
+    `;
+export const RunWithTranscriptsFieldsFragmentDoc = gql`
+    fragment RunWithTranscriptsFields on Run {
+  ...RunFields
+  failedProbes {
+    modelId
+    errorCode
+    errorMessage
+  }
+  transcripts {
+    id
+    runId
+    scenarioId
+    modelId
+    modelVersion
+    content
+    decisionMetadata
+    turnCount
+    tokenCount
+    durationMs
+    estimatedCost
+    createdAt
+    lastAccessedAt
+    dimensionValues
+    decisionModelV2
+  }
+  analysis {
+    actualCost {
+      total
+      perModel {
+        modelId
+        inputTokens
+        outputTokens
+        cost
+        probeCount
+      }
+    }
+  }
+  recentTasks(limit: 10) {
+    scenarioId
+    modelId
+    status
+    error
+    completedAt
+  }
+  executionMetrics {
+    providers {
+      provider
+      activeJobs
+      queuedJobs
+      maxParallel
+      requestsPerMinute
+      activeModelIds
+      recentCompletions {
+        modelId
+        scenarioId
+        success
+        completedAt
+        durationMs
+      }
+    }
+    totalActive
+    totalQueued
+    estimatedSecondsRemaining
+    totalRetries
+  }
+}
+    ${RunFieldsFragmentDoc}`;
 export const AnalysisDocument = gql`
     query Analysis($runId: ID!) {
   analysis(runId: $runId) {
@@ -4293,6 +4794,738 @@ export const EstimateCostDocument = gql`
 
 export function useEstimateCostQuery(options: Omit<Urql.UseQueryArgs<EstimateCostQueryVariables>, 'query'>) {
   return Urql.useQuery<EstimateCostQuery, EstimateCostQueryVariables>({ query: EstimateCostDocument, ...options });
+};
+export const DefinitionsDocument = gql`
+    query Definitions($rootOnly: Boolean, $search: String, $tagIds: [ID!], $hasRuns: Boolean, $domainId: ID, $withoutDomain: Boolean, $limit: Int, $offset: Int) {
+  definitions(
+    rootOnly: $rootOnly
+    search: $search
+    tagIds: $tagIds
+    hasRuns: $hasRuns
+    domainId: $domainId
+    withoutDomain: $withoutDomain
+    limit: $limit
+    offset: $offset
+  ) {
+    id
+    name
+    domainId
+    domain {
+      id
+      name
+    }
+    parentId
+    content
+    createdAt
+    updatedAt
+    lastAccessedAt
+    version
+    runCount
+    trialCount
+    trialConfig {
+      definitionVersion
+      temperature
+      signature
+      signatureBreakdown {
+        signature
+        definitionVersion
+        temperature
+        trialCount
+      }
+      isConsistent
+      message
+    }
+    tags {
+      id
+      name
+    }
+    allTags {
+      id
+      name
+    }
+  }
+}
+    `;
+
+export function useDefinitionsQuery(options?: Omit<Urql.UseQueryArgs<DefinitionsQueryVariables>, 'query'>) {
+  return Urql.useQuery<DefinitionsQuery, DefinitionsQueryVariables>({ query: DefinitionsDocument, ...options });
+};
+export const DefinitionDocument = gql`
+    query Definition($id: ID!) {
+  definition(id: $id) {
+    id
+    name
+    domainId
+    domainContextId
+    domain {
+      id
+      name
+    }
+    parentId
+    content
+    createdAt
+    updatedAt
+    lastAccessedAt
+    version
+    runCount
+    trialCount
+    trialConfig {
+      definitionVersion
+      temperature
+      signature
+      signatureBreakdown {
+        signature
+        definitionVersion
+        temperature
+        trialCount
+      }
+      isConsistent
+      message
+    }
+    scenarioCount
+    preambleVersionId
+    levelPresetVersionId
+    preambleVersion {
+      id
+      version
+      content
+      preamble {
+        name
+      }
+    }
+    tags {
+      id
+      name
+      createdAt
+    }
+    parent {
+      id
+      name
+    }
+    children {
+      id
+      name
+      createdAt
+    }
+    isForked
+    resolvedContent
+    localContent
+    overrides {
+      template
+      dimensions
+      matchingRules
+    }
+    inheritedTags {
+      id
+      name
+      createdAt
+    }
+    allTags {
+      id
+      name
+      createdAt
+    }
+    expansionStatus {
+      status
+      jobId
+      triggeredBy
+      createdAt
+      completedAt
+      error
+      scenarioCount
+      progress {
+        phase
+        expectedScenarios
+        generatedScenarios
+        inputTokens
+        outputTokens
+        message
+        updatedAt
+      }
+    }
+  }
+}
+    `;
+
+export function useDefinitionQuery(options: Omit<Urql.UseQueryArgs<DefinitionQueryVariables>, 'query'>) {
+  return Urql.useQuery<DefinitionQuery, DefinitionQueryVariables>({ query: DefinitionDocument, ...options });
+};
+export const DefinitionAncestorsDocument = gql`
+    query DefinitionAncestors($id: ID!, $maxDepth: Int) {
+  definitionAncestors(id: $id, maxDepth: $maxDepth) {
+    id
+    name
+    parentId
+    createdAt
+  }
+}
+    `;
+
+export function useDefinitionAncestorsQuery(options: Omit<Urql.UseQueryArgs<DefinitionAncestorsQueryVariables>, 'query'>) {
+  return Urql.useQuery<DefinitionAncestorsQuery, DefinitionAncestorsQueryVariables>({ query: DefinitionAncestorsDocument, ...options });
+};
+export const DefinitionDescendantsDocument = gql`
+    query DefinitionDescendants($id: ID!, $maxDepth: Int) {
+  definitionDescendants(id: $id, maxDepth: $maxDepth) {
+    id
+    name
+    parentId
+    createdAt
+  }
+}
+    `;
+
+export function useDefinitionDescendantsQuery(options: Omit<Urql.UseQueryArgs<DefinitionDescendantsQueryVariables>, 'query'>) {
+  return Urql.useQuery<DefinitionDescendantsQuery, DefinitionDescendantsQueryVariables>({ query: DefinitionDescendantsDocument, ...options });
+};
+export const DefinitionCountDocument = gql`
+    query DefinitionCount($rootOnly: Boolean, $search: String, $tagIds: [ID!], $hasRuns: Boolean, $domainId: ID, $withoutDomain: Boolean) {
+  definitionCount(
+    rootOnly: $rootOnly
+    search: $search
+    tagIds: $tagIds
+    hasRuns: $hasRuns
+    domainId: $domainId
+    withoutDomain: $withoutDomain
+  )
+}
+    `;
+
+export function useDefinitionCountQuery(options?: Omit<Urql.UseQueryArgs<DefinitionCountQueryVariables>, 'query'>) {
+  return Urql.useQuery<DefinitionCountQuery, DefinitionCountQueryVariables>({ query: DefinitionCountDocument, ...options });
+};
+export const CreateDefinitionDocument = gql`
+    mutation CreateDefinition($input: CreateDefinitionInput!) {
+  createDefinition(input: $input) {
+    id
+    name
+    parentId
+    content
+    createdAt
+    updatedAt
+  }
+}
+    `;
+
+export function useCreateDefinitionMutation() {
+  return Urql.useMutation<CreateDefinitionMutation, CreateDefinitionMutationVariables>(CreateDefinitionDocument);
+};
+export const UpdateDefinitionDocument = gql`
+    mutation UpdateDefinition($id: String!, $input: UpdateDefinitionInput!) {
+  updateDefinition(id: $id, input: $input) {
+    id
+    name
+    content
+    updatedAt
+  }
+}
+    `;
+
+export function useUpdateDefinitionMutation() {
+  return Urql.useMutation<UpdateDefinitionMutation, UpdateDefinitionMutationVariables>(UpdateDefinitionDocument);
+};
+export const ForkDefinitionDocument = gql`
+    mutation ForkDefinition($input: ForkDefinitionInput!) {
+  forkDefinition(input: $input) {
+    id
+    name
+    parentId
+    content
+    createdAt
+    isForked
+    resolvedContent
+    localContent
+    overrides {
+      template
+      dimensions
+      matchingRules
+    }
+  }
+}
+    `;
+
+export function useForkDefinitionMutation() {
+  return Urql.useMutation<ForkDefinitionMutation, ForkDefinitionMutationVariables>(ForkDefinitionDocument);
+};
+export const UnforkDefinitionDocument = gql`
+    mutation UnforkDefinition($id: String!) {
+  unforkDefinition(id: $id) {
+    id
+    name
+    parentId
+    content
+    updatedAt
+    version
+    isForked
+    resolvedContent
+    localContent
+    overrides {
+      template
+      dimensions
+      matchingRules
+    }
+  }
+}
+    `;
+
+export function useUnforkDefinitionMutation() {
+  return Urql.useMutation<UnforkDefinitionMutation, UnforkDefinitionMutationVariables>(UnforkDefinitionDocument);
+};
+export const DeleteDefinitionDocument = gql`
+    mutation DeleteDefinition($id: String!) {
+  deleteDefinition(id: $id) {
+    deletedIds
+    count
+  }
+}
+    `;
+
+export function useDeleteDefinitionMutation() {
+  return Urql.useMutation<DeleteDefinitionMutation, DeleteDefinitionMutationVariables>(DeleteDefinitionDocument);
+};
+export const RegenerateScenariosDocument = gql`
+    mutation RegenerateScenarios($definitionId: String!) {
+  regenerateScenarios(definitionId: $definitionId) {
+    definitionId
+    jobId
+    queued
+  }
+}
+    `;
+
+export function useRegenerateScenariosMutation() {
+  return Urql.useMutation<RegenerateScenariosMutation, RegenerateScenariosMutationVariables>(RegenerateScenariosDocument);
+};
+export const CancelScenarioExpansionDocument = gql`
+    mutation CancelScenarioExpansion($definitionId: String!) {
+  cancelScenarioExpansion(definitionId: $definitionId) {
+    definitionId
+    cancelled
+    jobId
+    message
+  }
+}
+    `;
+
+export function useCancelScenarioExpansionMutation() {
+  return Urql.useMutation<CancelScenarioExpansionMutation, CancelScenarioExpansionMutationVariables>(CancelScenarioExpansionDocument);
+};
+export const DomainsDocument = gql`
+    query Domains($search: String, $limit: Int, $offset: Int) {
+  domains(search: $search, limit: $limit, offset: $offset) {
+    id
+    name
+    createdAt
+    updatedAt
+    definitionCount
+    defaultLevelPresetVersionId
+    defaultPreambleVersionId
+    defaultContextId
+  }
+}
+    `;
+
+export function useDomainsQuery(options?: Omit<Urql.UseQueryArgs<DomainsQueryVariables>, 'query'>) {
+  return Urql.useQuery<DomainsQuery, DomainsQueryVariables>({ query: DomainsDocument, ...options });
+};
+export const CreateDomainDocument = gql`
+    mutation CreateDomain($name: String!) {
+  createDomain(name: $name) {
+    id
+    name
+    createdAt
+    updatedAt
+    definitionCount
+  }
+}
+    `;
+
+export function useCreateDomainMutation() {
+  return Urql.useMutation<CreateDomainMutation, CreateDomainMutationVariables>(CreateDomainDocument);
+};
+export const RenameDomainDocument = gql`
+    mutation RenameDomain($id: ID!, $name: String!) {
+  renameDomain(id: $id, name: $name) {
+    id
+    name
+    createdAt
+    updatedAt
+    definitionCount
+  }
+}
+    `;
+
+export function useRenameDomainMutation() {
+  return Urql.useMutation<RenameDomainMutation, RenameDomainMutationVariables>(RenameDomainDocument);
+};
+export const DeleteDomainDocument = gql`
+    mutation DeleteDomain($id: ID!) {
+  deleteDomain(id: $id) {
+    success
+    affectedDefinitions
+  }
+}
+    `;
+
+export function useDeleteDomainMutation() {
+  return Urql.useMutation<DeleteDomainMutation, DeleteDomainMutationVariables>(DeleteDomainDocument);
+};
+export const AssignDomainToDefinitionsDocument = gql`
+    mutation AssignDomainToDefinitions($definitionIds: [ID!]!, $domainId: ID) {
+  assignDomainToDefinitions(definitionIds: $definitionIds, domainId: $domainId) {
+    success
+    affectedDefinitions
+  }
+}
+    `;
+
+export function useAssignDomainToDefinitionsMutation() {
+  return Urql.useMutation<AssignDomainToDefinitionsMutation, AssignDomainToDefinitionsMutationVariables>(AssignDomainToDefinitionsDocument);
+};
+export const AssignDomainToDefinitionsByFilterDocument = gql`
+    mutation AssignDomainToDefinitionsByFilter($domainId: ID, $rootOnly: Boolean, $search: String, $tagIds: [ID!], $hasRuns: Boolean, $sourceDomainId: ID, $withoutDomain: Boolean) {
+  assignDomainToDefinitionsByFilter(
+    domainId: $domainId
+    rootOnly: $rootOnly
+    search: $search
+    tagIds: $tagIds
+    hasRuns: $hasRuns
+    sourceDomainId: $sourceDomainId
+    withoutDomain: $withoutDomain
+  ) {
+    success
+    affectedDefinitions
+  }
+}
+    `;
+
+export function useAssignDomainToDefinitionsByFilterMutation() {
+  return Urql.useMutation<AssignDomainToDefinitionsByFilterMutation, AssignDomainToDefinitionsByFilterMutationVariables>(AssignDomainToDefinitionsByFilterDocument);
+};
+export const RunTrialsForDomainDocument = gql`
+    mutation RunTrialsForDomain($domainId: ID!, $temperature: Float, $maxBudgetUsd: Float, $definitionIds: [ID!]) {
+  runTrialsForDomain(
+    domainId: $domainId
+    temperature: $temperature
+    maxBudgetUsd: $maxBudgetUsd
+    definitionIds: $definitionIds
+  ) {
+    domainEvaluationId
+    success
+    totalDefinitions
+    targetedDefinitions
+    startedRuns
+    failedDefinitions
+    skippedForBudget
+    projectedCostUsd
+    blockedByActiveLaunch
+    runs {
+      definitionId
+      runId
+      modelIds
+    }
+  }
+}
+    `;
+
+export function useRunTrialsForDomainMutation() {
+  return Urql.useMutation<RunTrialsForDomainMutation, RunTrialsForDomainMutationVariables>(RunTrialsForDomainDocument);
+};
+export const StartDomainEvaluationDocument = gql`
+    mutation StartDomainEvaluation($domainId: ID!, $scopeCategory: String, $temperature: Float, $maxBudgetUsd: Float, $definitionIds: [ID!], $modelIds: [String!], $samplePercentage: Int, $samplesPerScenario: Int, $targetBatchCount: Int) {
+  startDomainEvaluation(
+    domainId: $domainId
+    scopeCategory: $scopeCategory
+    temperature: $temperature
+    maxBudgetUsd: $maxBudgetUsd
+    definitionIds: $definitionIds
+    modelIds: $modelIds
+    samplePercentage: $samplePercentage
+    samplesPerScenario: $samplesPerScenario
+    targetBatchCount: $targetBatchCount
+  ) {
+    domainEvaluationId
+    scopeCategory
+    success
+    totalDefinitions
+    targetedDefinitions
+    startedRuns
+    failedDefinitions
+    skippedForBudget
+    projectedCostUsd
+    blockedByActiveLaunch
+    runs {
+      definitionId
+      runId
+      modelIds
+    }
+  }
+}
+    `;
+
+export function useStartDomainEvaluationMutation() {
+  return Urql.useMutation<StartDomainEvaluationMutation, StartDomainEvaluationMutationVariables>(StartDomainEvaluationDocument);
+};
+export const DomainEvaluationsDocument = gql`
+    query DomainEvaluations($domainId: ID!, $scopeCategory: String, $status: String, $limit: Int, $offset: Int) {
+  domainEvaluations(
+    domainId: $domainId
+    scopeCategory: $scopeCategory
+    status: $status
+    limit: $limit
+    offset: $offset
+  ) {
+    id
+    domainId
+    domainNameAtLaunch
+    scopeCategory
+    status
+    createdAt
+    startedAt
+    completedAt
+    startedRuns
+    failedDefinitions
+    skippedForBudget
+    projectedCostUsd
+    models
+    temperature
+    maxBudgetUsd
+    memberCount
+  }
+}
+    `;
+
+export function useDomainEvaluationsQuery(options: Omit<Urql.UseQueryArgs<DomainEvaluationsQueryVariables>, 'query'>) {
+  return Urql.useQuery<DomainEvaluationsQuery, DomainEvaluationsQueryVariables>({ query: DomainEvaluationsDocument, ...options });
+};
+export const DomainEvaluationDocument = gql`
+    query DomainEvaluation($id: ID!) {
+  domainEvaluation(id: $id) {
+    id
+    domainId
+    domainNameAtLaunch
+    scopeCategory
+    status
+    createdAt
+    startedAt
+    completedAt
+    startedRuns
+    failedDefinitions
+    skippedForBudget
+    projectedCostUsd
+    models
+    temperature
+    maxBudgetUsd
+    memberCount
+    members {
+      runId
+      definitionIdAtLaunch
+      definitionNameAtLaunch
+      domainIdAtLaunch
+      createdAt
+      runStatus
+      runCategory
+      runStartedAt
+      runCompletedAt
+    }
+  }
+}
+    `;
+
+export function useDomainEvaluationQuery(options: Omit<Urql.UseQueryArgs<DomainEvaluationQueryVariables>, 'query'>) {
+  return Urql.useQuery<DomainEvaluationQuery, DomainEvaluationQueryVariables>({ query: DomainEvaluationDocument, ...options });
+};
+export const DomainEvaluationStatusDocument = gql`
+    query DomainEvaluationStatus($id: ID!) {
+  domainEvaluationStatus(id: $id) {
+    id
+    status
+    totalRuns
+    pendingRuns
+    runningRuns
+    completedRuns
+    failedRuns
+    cancelledRuns
+  }
+}
+    `;
+
+export function useDomainEvaluationStatusQuery(options: Omit<Urql.UseQueryArgs<DomainEvaluationStatusQueryVariables>, 'query'>) {
+  return Urql.useQuery<DomainEvaluationStatusQuery, DomainEvaluationStatusQueryVariables>({ query: DomainEvaluationStatusDocument, ...options });
+};
+export const DomainTrialsPlanDocument = gql`
+    query DomainTrialsPlan($domainId: ID!, $temperature: Float, $definitionIds: [ID!], $scopeCategory: String) {
+  domainTrialsPlan(
+    domainId: $domainId
+    temperature: $temperature
+    definitionIds: $definitionIds
+    scopeCategory: $scopeCategory
+  ) {
+    domainId
+    domainName
+    vignettes {
+      definitionId
+      definitionName
+      definitionVersion
+      signature
+      scenarioCount
+      existingBatchCount
+    }
+    models {
+      modelId
+      label
+      isDefault
+      supportsTemperature
+    }
+    cellEstimates {
+      definitionId
+      modelId
+      estimatedCost
+    }
+    totalEstimatedCost
+    existingTemperatures
+    defaultTemperature
+    temperatureWarning
+  }
+}
+    `;
+
+export function useDomainTrialsPlanQuery(options: Omit<Urql.UseQueryArgs<DomainTrialsPlanQueryVariables>, 'query'>) {
+  return Urql.useQuery<DomainTrialsPlanQuery, DomainTrialsPlanQueryVariables>({ query: DomainTrialsPlanDocument, ...options });
+};
+export const EstimateDomainEvaluationCostDocument = gql`
+    query EstimateDomainEvaluationCost($domainId: ID!, $definitionIds: [ID!], $modelIds: [String!], $temperature: Float, $samplePercentage: Int, $samplesPerScenario: Int, $scopeCategory: String) {
+  estimateDomainEvaluationCost(
+    domainId: $domainId
+    definitionIds: $definitionIds
+    modelIds: $modelIds
+    temperature: $temperature
+    samplePercentage: $samplePercentage
+    samplesPerScenario: $samplesPerScenario
+    scopeCategory: $scopeCategory
+  ) {
+    domainId
+    domainName
+    scopeCategory
+    targetedDefinitions
+    totalScenarioCount
+    totalEstimatedCost
+    basedOnSampleCount
+    isUsingFallback
+    fallbackReason
+    estimateConfidence
+    knownExclusions
+    models {
+      modelId
+      label
+      isDefault
+      supportsTemperature
+      estimatedCost
+      basedOnSampleCount
+      isUsingFallback
+    }
+    definitions {
+      definitionId
+      definitionName
+      definitionVersion
+      signature
+      scenarioCount
+      estimatedCost
+      basedOnSampleCount
+      isUsingFallback
+    }
+    existingTemperatures
+    defaultTemperature
+    temperatureWarning
+  }
+}
+    `;
+
+export function useEstimateDomainEvaluationCostQuery(options: Omit<Urql.UseQueryArgs<EstimateDomainEvaluationCostQueryVariables>, 'query'>) {
+  return Urql.useQuery<EstimateDomainEvaluationCostQuery, EstimateDomainEvaluationCostQueryVariables>({ query: EstimateDomainEvaluationCostDocument, ...options });
+};
+export const DomainTrialRunsStatusDocument = gql`
+    query DomainTrialRunsStatus($runIds: [ID!]!) {
+  domainTrialRunsStatus(runIds: $runIds) {
+    runId
+    definitionId
+    status
+    updatedAt
+    stalledModels
+    analysisStatus
+    modelStatuses {
+      modelId
+      generationCompleted
+      generationFailed
+      generationTotal
+      summarizationCompleted
+      summarizationFailed
+      summarizationTotal
+      latestErrorMessage
+    }
+  }
+}
+    `;
+
+export function useDomainTrialRunsStatusQuery(options: Omit<Urql.UseQueryArgs<DomainTrialRunsStatusQueryVariables>, 'query'>) {
+  return Urql.useQuery<DomainTrialRunsStatusQuery, DomainTrialRunsStatusQueryVariables>({ query: DomainTrialRunsStatusDocument, ...options });
+};
+export const DomainSettingsDocument = gql`
+    query DomainSettings($domainId: ID!) {
+  domainSettings(domainId: $domainId) {
+    domainId
+    preambleVersionId
+    levelPresetVersionId
+    contextId
+    valueStatements {
+      id
+      token
+      currentContent
+      previousContent
+    }
+  }
+}
+    `;
+
+export function useDomainSettingsQuery(options: Omit<Urql.UseQueryArgs<DomainSettingsQueryVariables>, 'query'>) {
+  return Urql.useQuery<DomainSettingsQuery, DomainSettingsQueryVariables>({ query: DomainSettingsDocument, ...options });
+};
+export const DomainConfigSnapshotsDocument = gql`
+    query DomainConfigSnapshots($domainId: ID!, $limit: Int) {
+  domainConfigSnapshots(domainId: $domainId, limit: $limit) {
+    id
+    createdAt
+    preambleLabel
+    levelPresetLabel
+    contextLabel
+    valueStatementCount
+  }
+}
+    `;
+
+export function useDomainConfigSnapshotsQuery(options: Omit<Urql.UseQueryArgs<DomainConfigSnapshotsQueryVariables>, 'query'>) {
+  return Urql.useQuery<DomainConfigSnapshotsQuery, DomainConfigSnapshotsQueryVariables>({ query: DomainConfigSnapshotsDocument, ...options });
+};
+export const SetDomainSettingsDocument = gql`
+    mutation SetDomainSettings($domainId: ID!, $preambleVersionId: ID, $levelPresetVersionId: ID, $contextId: ID, $valueStatements: [ValueStatementInput!]!) {
+  setDomainSettings(
+    domainId: $domainId
+    preambleVersionId: $preambleVersionId
+    levelPresetVersionId: $levelPresetVersionId
+    contextId: $contextId
+    valueStatements: $valueStatements
+  ) {
+    id
+    name
+    defaultPreambleVersionId
+    defaultLevelPresetVersionId
+    defaultContextId
+  }
+}
+    `;
+
+export function useSetDomainSettingsMutation() {
+  return Urql.useMutation<SetDomainSettingsMutation, SetDomainSettingsMutationVariables>(SetDomainSettingsDocument);
 };
 export const SystemHealthDocument = gql`
     query SystemHealth($refresh: Boolean) {
@@ -4594,6 +5827,208 @@ export const AvailableModelsDocument = gql`
 
 export function useAvailableModelsQuery(options?: Omit<Urql.UseQueryArgs<AvailableModelsQueryVariables>, 'query'>) {
   return Urql.useQuery<AvailableModelsQuery, AvailableModelsQueryVariables>({ query: AvailableModelsDocument, ...options });
+};
+export const RunsDocument = gql`
+    query Runs($definitionId: String, $experimentId: String, $status: String, $runCategory: String, $hasAnalysis: Boolean, $analysisStatus: String, $runType: String, $limit: Int, $offset: Int) {
+  runs(
+    definitionId: $definitionId
+    experimentId: $experimentId
+    status: $status
+    runCategory: $runCategory
+    hasAnalysis: $hasAnalysis
+    analysisStatus: $analysisStatus
+    runType: $runType
+    limit: $limit
+    offset: $offset
+  ) {
+    ...RunFields
+  }
+}
+    ${RunFieldsFragmentDoc}`;
+
+export function useRunsQuery(options?: Omit<Urql.UseQueryArgs<RunsQueryVariables>, 'query'>) {
+  return Urql.useQuery<RunsQuery, RunsQueryVariables>({ query: RunsDocument, ...options });
+};
+export const RunCountDocument = gql`
+    query RunCount($definitionId: String, $experimentId: String, $status: String, $runCategory: String, $hasAnalysis: Boolean, $analysisStatus: String, $runType: String) {
+  runCount(
+    definitionId: $definitionId
+    experimentId: $experimentId
+    status: $status
+    runCategory: $runCategory
+    hasAnalysis: $hasAnalysis
+    analysisStatus: $analysisStatus
+    runType: $runType
+  )
+}
+    `;
+
+export function useRunCountQuery(options?: Omit<Urql.UseQueryArgs<RunCountQueryVariables>, 'query'>) {
+  return Urql.useQuery<RunCountQuery, RunCountQueryVariables>({ query: RunCountDocument, ...options });
+};
+export const AnalysisFolderCountsDocument = gql`
+    query AnalysisFolderCounts($definitionId: String, $definitionTagIds: [ID!], $experimentId: String, $status: String, $runCategory: String, $analysisStatus: String, $runType: String) {
+  analysisFolderCounts(
+    definitionId: $definitionId
+    definitionTagIds: $definitionTagIds
+    experimentId: $experimentId
+    status: $status
+    runCategory: $runCategory
+    analysisStatus: $analysisStatus
+    runType: $runType
+  ) {
+    aggregateCount
+    untaggedCount
+    aggregateUntaggedCount
+    tagCounts {
+      tagId
+      name
+      count
+    }
+    aggregateTagCounts {
+      tagId
+      name
+      count
+    }
+  }
+}
+    `;
+
+export function useAnalysisFolderCountsQuery(options?: Omit<Urql.UseQueryArgs<AnalysisFolderCountsQueryVariables>, 'query'>) {
+  return Urql.useQuery<AnalysisFolderCountsQuery, AnalysisFolderCountsQueryVariables>({ query: AnalysisFolderCountsDocument, ...options });
+};
+export const RunDocument = gql`
+    query Run($id: ID!) {
+  run(id: $id) {
+    ...RunWithTranscriptsFields
+  }
+}
+    ${RunWithTranscriptsFieldsFragmentDoc}`;
+
+export function useRunQuery(options: Omit<Urql.UseQueryArgs<RunQueryVariables>, 'query'>) {
+  return Urql.useQuery<RunQuery, RunQueryVariables>({ query: RunDocument, ...options });
+};
+export const StartRunDocument = gql`
+    mutation StartRun($input: StartRunInput!) {
+  startRun(input: $input) {
+    run {
+      ...RunFields
+    }
+    jobCount
+    pairedRunIds
+  }
+}
+    ${RunFieldsFragmentDoc}`;
+
+export function useStartRunMutation() {
+  return Urql.useMutation<StartRunMutation, StartRunMutationVariables>(StartRunDocument);
+};
+export const PauseRunDocument = gql`
+    mutation PauseRun($runId: ID!) {
+  pauseRun(runId: $runId) {
+    ...RunFields
+  }
+}
+    ${RunFieldsFragmentDoc}`;
+
+export function usePauseRunMutation() {
+  return Urql.useMutation<PauseRunMutation, PauseRunMutationVariables>(PauseRunDocument);
+};
+export const ResumeRunDocument = gql`
+    mutation ResumeRun($runId: ID!) {
+  resumeRun(runId: $runId) {
+    ...RunFields
+  }
+}
+    ${RunFieldsFragmentDoc}`;
+
+export function useResumeRunMutation() {
+  return Urql.useMutation<ResumeRunMutation, ResumeRunMutationVariables>(ResumeRunDocument);
+};
+export const CancelRunDocument = gql`
+    mutation CancelRun($runId: ID!) {
+  cancelRun(runId: $runId) {
+    ...RunFields
+  }
+}
+    ${RunFieldsFragmentDoc}`;
+
+export function useCancelRunMutation() {
+  return Urql.useMutation<CancelRunMutation, CancelRunMutationVariables>(CancelRunDocument);
+};
+export const DeleteRunDocument = gql`
+    mutation DeleteRun($runId: ID!) {
+  deleteRun(runId: $runId)
+}
+    `;
+
+export function useDeleteRunMutation() {
+  return Urql.useMutation<DeleteRunMutation, DeleteRunMutationVariables>(DeleteRunDocument);
+};
+export const UpdateRunDocument = gql`
+    mutation UpdateRun($runId: ID!, $input: UpdateRunInput!) {
+  updateRun(runId: $runId, input: $input) {
+    ...RunFields
+  }
+}
+    ${RunFieldsFragmentDoc}`;
+
+export function useUpdateRunMutation() {
+  return Urql.useMutation<UpdateRunMutation, UpdateRunMutationVariables>(UpdateRunDocument);
+};
+export const CancelSummarizationDocument = gql`
+    mutation CancelSummarization($runId: ID!) {
+  cancelSummarization(runId: $runId) {
+    run {
+      ...RunFields
+    }
+    cancelledCount
+  }
+}
+    ${RunFieldsFragmentDoc}`;
+
+export function useCancelSummarizationMutation() {
+  return Urql.useMutation<CancelSummarizationMutation, CancelSummarizationMutationVariables>(CancelSummarizationDocument);
+};
+export const RestartSummarizationDocument = gql`
+    mutation RestartSummarization($runId: ID!, $force: Boolean) {
+  restartSummarization(runId: $runId, force: $force) {
+    run {
+      ...RunFields
+    }
+    queuedCount
+  }
+}
+    ${RunFieldsFragmentDoc}`;
+
+export function useRestartSummarizationMutation() {
+  return Urql.useMutation<RestartSummarizationMutation, RestartSummarizationMutationVariables>(RestartSummarizationDocument);
+};
+export const UpdateTranscriptDecisionDocument = gql`
+    mutation UpdateTranscriptDecision($transcriptId: ID!, $decisionCode: String!) {
+  updateTranscriptDecision(
+    transcriptId: $transcriptId
+    decisionCode: $decisionCode
+  ) {
+    id
+    runId
+    scenarioId
+    modelId
+    modelVersion
+    content
+    decisionMetadata
+    turnCount
+    tokenCount
+    durationMs
+    estimatedCost
+    createdAt
+    lastAccessedAt
+  }
+}
+    `;
+
+export function useUpdateTranscriptDecisionMutation() {
+  return Urql.useMutation<UpdateTranscriptDecisionMutation, UpdateTranscriptDecisionMutationVariables>(UpdateTranscriptDecisionDocument);
 };
 export const ScenariosDocument = gql`
     query Scenarios($definitionId: ID!, $limit: Int, $offset: Int) {

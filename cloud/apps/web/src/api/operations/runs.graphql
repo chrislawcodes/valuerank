@@ -1,0 +1,283 @@
+fragment RunFields on Run {
+  id
+  name
+  definitionId
+  definitionVersion
+  experimentId
+  status
+  runCategory
+  config
+  stalledModels
+  companionRunId
+  batchCount
+  pairedBatchGroupId
+  progress
+  runProgress {
+    total
+    completed
+    failed
+    percentComplete
+    byModel {
+      modelId
+      completed
+      failed
+    }
+  }
+  summarizeProgress {
+    total
+    completed
+    failed
+    percentComplete
+  }
+  startedAt
+  completedAt
+  createdAt
+  updatedAt
+  lastAccessedAt
+  transcriptCount
+  analysisStatus
+  tags {
+    id
+    name
+  }
+  definition {
+    id
+    name
+    version
+    domain {
+      name
+    }
+    tags: allTags {
+      id
+      name
+    }
+    content
+  }
+  definitionSnapshot
+}
+
+fragment RunWithTranscriptsFields on Run {
+  ...RunFields
+  failedProbes {
+    modelId
+    errorCode
+    errorMessage
+  }
+  transcripts {
+    id
+    runId
+    scenarioId
+    modelId
+    modelVersion
+    content
+    decisionMetadata
+    turnCount
+    tokenCount
+    durationMs
+    estimatedCost
+    createdAt
+    lastAccessedAt
+    dimensionValues
+    decisionModelV2
+  }
+  analysis {
+    actualCost {
+      total
+      perModel {
+        modelId
+        inputTokens
+        outputTokens
+        cost
+        probeCount
+      }
+    }
+  }
+  recentTasks(limit: 10) {
+    scenarioId
+    modelId
+    status
+    error
+    completedAt
+  }
+  executionMetrics {
+    providers {
+      provider
+      activeJobs
+      queuedJobs
+      maxParallel
+      requestsPerMinute
+      activeModelIds
+      recentCompletions {
+        modelId
+        scenarioId
+        success
+        completedAt
+        durationMs
+      }
+    }
+    totalActive
+    totalQueued
+    estimatedSecondsRemaining
+    totalRetries
+  }
+}
+
+query Runs(
+  $definitionId: String
+  $experimentId: String
+  $status: String
+  $runCategory: String
+  $hasAnalysis: Boolean
+  $analysisStatus: String
+  $runType: String
+  $limit: Int
+  $offset: Int
+) {
+  runs(
+    definitionId: $definitionId
+    experimentId: $experimentId
+    status: $status
+    runCategory: $runCategory
+    hasAnalysis: $hasAnalysis
+    analysisStatus: $analysisStatus
+    runType: $runType
+    limit: $limit
+    offset: $offset
+  ) {
+    ...RunFields
+  }
+}
+
+query RunCount(
+  $definitionId: String
+  $experimentId: String
+  $status: String
+  $runCategory: String
+  $hasAnalysis: Boolean
+  $analysisStatus: String
+  $runType: String
+) {
+  runCount(
+    definitionId: $definitionId
+    experimentId: $experimentId
+    status: $status
+    runCategory: $runCategory
+    hasAnalysis: $hasAnalysis
+    analysisStatus: $analysisStatus
+    runType: $runType
+  )
+}
+
+query AnalysisFolderCounts(
+  $definitionId: String
+  $definitionTagIds: [ID!]
+  $experimentId: String
+  $status: String
+  $runCategory: String
+  $analysisStatus: String
+  $runType: String
+) {
+  analysisFolderCounts(
+    definitionId: $definitionId
+    definitionTagIds: $definitionTagIds
+    experimentId: $experimentId
+    status: $status
+    runCategory: $runCategory
+    analysisStatus: $analysisStatus
+    runType: $runType
+  ) {
+    aggregateCount
+    untaggedCount
+    aggregateUntaggedCount
+    tagCounts {
+      tagId
+      name
+      count
+    }
+    aggregateTagCounts {
+      tagId
+      name
+      count
+    }
+  }
+}
+
+query Run($id: ID!) {
+  run(id: $id) {
+    ...RunWithTranscriptsFields
+  }
+}
+
+mutation StartRun($input: StartRunInput!) {
+  startRun(input: $input) {
+    run {
+      ...RunFields
+    }
+    jobCount
+    pairedRunIds
+  }
+}
+
+mutation PauseRun($runId: ID!) {
+  pauseRun(runId: $runId) {
+    ...RunFields
+  }
+}
+
+mutation ResumeRun($runId: ID!) {
+  resumeRun(runId: $runId) {
+    ...RunFields
+  }
+}
+
+mutation CancelRun($runId: ID!) {
+  cancelRun(runId: $runId) {
+    ...RunFields
+  }
+}
+
+mutation DeleteRun($runId: ID!) {
+  deleteRun(runId: $runId)
+}
+
+mutation UpdateRun($runId: ID!, $input: UpdateRunInput!) {
+  updateRun(runId: $runId, input: $input) {
+    ...RunFields
+  }
+}
+
+mutation CancelSummarization($runId: ID!) {
+  cancelSummarization(runId: $runId) {
+    run {
+      ...RunFields
+    }
+    cancelledCount
+  }
+}
+
+mutation RestartSummarization($runId: ID!, $force: Boolean) {
+  restartSummarization(runId: $runId, force: $force) {
+    run {
+      ...RunFields
+    }
+    queuedCount
+  }
+}
+
+mutation UpdateTranscriptDecision($transcriptId: ID!, $decisionCode: String!) {
+  updateTranscriptDecision(transcriptId: $transcriptId, decisionCode: $decisionCode) {
+    id
+    runId
+    scenarioId
+    modelId
+    modelVersion
+    content
+    decisionMetadata
+    turnCount
+    tokenCount
+    durationMs
+    estimatedCost
+    createdAt
+    lastAccessedAt
+  }
+}

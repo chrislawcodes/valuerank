@@ -1,7 +1,25 @@
-import { gql } from 'urql';
+import type {
+  DefinitionCountQuery as GeneratedDefinitionCountQuery,
+  DeleteDefinitionMutation as GeneratedDeleteDefinitionMutation,
+  RegenerateScenariosMutation as GeneratedRegenerateScenariosMutation,
+  CancelScenarioExpansionMutation as GeneratedCancelScenarioExpansionMutation,
+  DefinitionsQueryVariables as GeneratedDefinitionsQueryVariables,
+  DefinitionQueryVariables as GeneratedDefinitionQueryVariables,
+  DefinitionAncestorsQueryVariables as GeneratedDefinitionAncestorsQueryVariables,
+  DefinitionDescendantsQueryVariables as GeneratedDefinitionDescendantsQueryVariables,
+  DefinitionCountQueryVariables as GeneratedDefinitionCountQueryVariables,
+  CreateDefinitionMutationVariables as GeneratedCreateDefinitionMutationVariables,
+  UpdateDefinitionMutationVariables as GeneratedUpdateDefinitionMutationVariables,
+  ForkDefinitionMutationVariables as GeneratedForkDefinitionMutationVariables,
+  UnforkDefinitionMutationVariables as GeneratedUnforkDefinitionMutationVariables,
+  DeleteDefinitionMutationVariables as GeneratedDeleteDefinitionMutationVariables,
+  RegenerateScenariosMutationVariables as GeneratedRegenerateScenariosMutationVariables,
+  CancelScenarioExpansionMutationVariables as GeneratedCancelScenarioExpansionMutationVariables,
+  Definition as GeneratedDefinition,
+} from '../../generated/graphql';
 
 // ============================================================================
-// TYPES
+// TYPES — JSON scalar fields require manual types; codegen types them as unknown
 // ============================================================================
 
 export type Tag = {
@@ -58,52 +76,27 @@ export type ExpansionStatus = {
   progress: ExpansionProgress | null;
 };
 
-export type Definition = {
-  id: string;
+export type DefinitionMethodology = {
+  family?: string;
+  response_scale?: 'numeric' | 'option_text' | 'value_labels';
+  legacy_label?: string;
+  canonical_value_order?: string[];
+  pair_key?: string;
+};
+
+export type DimensionLevel = {
+  score: number;
+  label: string;
+  description?: string;
+  options?: string[];
+};
+
+export type Dimension = {
   name: string;
-  domainId?: string | null;
-  domainContextId?: string | null;
-  domain?: {
-    id: string;
-    name: string;
-  } | null;
-  parentId: string | null;
-  content: DefinitionContent;
-  createdAt: string;
-  updatedAt: string;
-  lastAccessedAt: string | null;
-  runCount: number;
-  trialCount: number;
-  trialConfig?: {
-    definitionVersion: number | null;
-    temperature: number | null;
-    signature: string | null;
-    signatureBreakdown: Array<{
-      signature: string;
-      definitionVersion: number | null;
-      temperature: number | null;
-      trialCount: number;
-    }>;
-    isConsistent: boolean;
-    message: string | null;
-  };
-  scenarioCount?: number;
-  version: number;
-  preambleVersionId: string | null;
-  levelPresetVersionId?: string | null;
-  preambleVersion?: PreambleVersion | null;
-  tags: Tag[];
-  parent?: Definition | null;
-  children?: Definition[];
-  // Inheritance fields (Phase 12)
-  isForked?: boolean;
-  resolvedContent?: DefinitionContent;
-  localContent?: Partial<DefinitionContent>;
-  overrides?: DefinitionOverrides;
-  inheritedTags?: Tag[];
-  allTags?: Tag[];
-  // Expansion status (Phase 9)
-  expansionStatus?: ExpansionStatus;
+  // New format: structured levels with scores
+  levels?: DimensionLevel[];
+  // Legacy format: simple string array
+  values?: string[];
 };
 
 /**
@@ -130,387 +123,21 @@ export type DefinitionContent = {
   methodology?: DefinitionMethodology;
 };
 
-export type DefinitionMethodology = {
-  family?: string;
-  response_scale?: 'numeric' | 'option_text' | 'value_labels';
-  legacy_label?: string;
-  canonical_value_order?: string[];
-  pair_key?: string;
-};
-
-export type Dimension = {
-  name: string;
-  // New format: structured levels with scores
-  levels?: DimensionLevel[];
-  // Legacy format: simple string array
-  values?: string[];
-};
-
-export type DimensionLevel = {
-  score: number;
-  label: string;
-  description?: string;
-  options?: string[];
+// Override generated Definition type to replace JSON scalar fields and fix optionality.
+export type Definition = Omit<
+  GeneratedDefinition,
+  'content' | 'resolvedContent' | 'localContent' | 'expansionStatus' | 'preambleVersion' | 'parentId'
+> & {
+  content: DefinitionContent;
+  resolvedContent: DefinitionContent;
+  localContent: Partial<DefinitionContent> | null;
+  expansionStatus: ExpansionStatus;
+  preambleVersion?: PreambleVersion | null;
+  parentId: string | null;
 };
 
 // ============================================================================
-// QUERIES
-// ============================================================================
-
-// List definitions with filtering
-export const DEFINITIONS_QUERY = gql`
-  query Definitions(
-    $rootOnly: Boolean
-    $search: String
-    $tagIds: [ID!]
-    $hasRuns: Boolean
-    $domainId: ID
-    $withoutDomain: Boolean
-    $limit: Int
-    $offset: Int
-  ) {
-    definitions(
-      rootOnly: $rootOnly
-      search: $search
-      tagIds: $tagIds
-      hasRuns: $hasRuns
-      domainId: $domainId
-      withoutDomain: $withoutDomain
-      limit: $limit
-      offset: $offset
-    ) {
-      id
-      name
-      domainId
-      domain {
-        id
-        name
-      }
-      parentId
-      content
-      createdAt
-      updatedAt
-      lastAccessedAt
-      version
-      runCount
-      trialCount
-      trialConfig {
-        definitionVersion
-        temperature
-        signature
-        signatureBreakdown {
-          signature
-          definitionVersion
-          temperature
-          trialCount
-        }
-        isConsistent
-        message
-      }
-      tags {
-        id
-        name
-      }
-      allTags {
-        id
-        name
-      }
-    }
-  }
-`;
-
-// Single definition with full details
-export const DEFINITION_QUERY = gql`
-  query Definition($id: ID!) {
-    definition(id: $id) {
-      id
-      name
-      domainId
-      domainContextId
-      domain {
-        id
-        name
-      }
-      parentId
-      content
-      createdAt
-      updatedAt
-      lastAccessedAt
-      version
-      runCount
-      trialCount
-      trialConfig {
-        definitionVersion
-        temperature
-        signature
-        signatureBreakdown {
-          signature
-          definitionVersion
-          temperature
-          trialCount
-        }
-        isConsistent
-        message
-      }
-      scenarioCount
-      version
-      preambleVersionId
-      levelPresetVersionId
-      preambleVersion {
-        id
-        version
-        content
-        preamble {
-          name
-        }
-      }
-      tags {
-        id
-        name
-        createdAt
-      }
-      parent {
-        id
-        name
-      }
-      children {
-        id
-        name
-        createdAt
-      }
-      # Inheritance fields (Phase 12)
-      isForked
-      resolvedContent
-      localContent
-      overrides {
-
-        template
-        dimensions
-        matchingRules
-      }
-      inheritedTags {
-        id
-        name
-        createdAt
-      }
-      allTags {
-        id
-        name
-        createdAt
-      }
-      # Expansion status (Phase 9)
-      expansionStatus {
-        status
-        jobId
-        triggeredBy
-        createdAt
-        completedAt
-        error
-        scenarioCount
-        progress {
-          phase
-          expectedScenarios
-          generatedScenarios
-          inputTokens
-          outputTokens
-          message
-          updatedAt
-        }
-      }
-    }
-  }
-`;
-
-// Get ancestors of a definition
-export const DEFINITION_ANCESTORS_QUERY = gql`
-  query DefinitionAncestors($id: ID!, $maxDepth: Int) {
-    definitionAncestors(id: $id, maxDepth: $maxDepth) {
-      id
-      name
-      parentId
-      createdAt
-    }
-  }
-`;
-
-// Get descendants of a definition
-export const DEFINITION_DESCENDANTS_QUERY = gql`
-  query DefinitionDescendants($id: ID!, $maxDepth: Int) {
-    definitionDescendants(id: $id, maxDepth: $maxDepth) {
-      id
-      name
-      parentId
-      createdAt
-    }
-  }
-`;
-
-// ============================================================================
-// MUTATIONS
-// ============================================================================
-
-// Create a new definition
-export const CREATE_DEFINITION_MUTATION = gql`
-  mutation CreateDefinition($input: CreateDefinitionInput!) {
-    createDefinition(input: $input) {
-      id
-      name
-      parentId
-      content
-      createdAt
-      updatedAt
-    }
-  }
-`;
-
-// Update an existing definition
-export const UPDATE_DEFINITION_MUTATION = gql`
-  mutation UpdateDefinition($id: String!, $input: UpdateDefinitionInput!) {
-    updateDefinition(id: $id, input: $input) {
-      id
-      name
-      content
-      updatedAt
-    }
-  }
-`;
-
-// Fork a definition (uses inheritance by default)
-export const FORK_DEFINITION_MUTATION = gql`
-  mutation ForkDefinition($input: ForkDefinitionInput!) {
-    forkDefinition(input: $input) {
-      id
-      name
-      parentId
-      content
-      createdAt
-      isForked
-      resolvedContent
-      localContent
-      overrides {
-
-        template
-        dimensions
-        matchingRules
-      }
-    }
-  }
-`;
-
-// Detach a forked definition from its parent
-export const UNFORK_DEFINITION_MUTATION = gql`
-  mutation UnforkDefinition($id: String!) {
-    unforkDefinition(id: $id) {
-      id
-      name
-      parentId
-      content
-      updatedAt
-      version
-      isForked
-      resolvedContent
-      localContent
-      overrides {
-
-        template
-        dimensions
-        matchingRules
-      }
-    }
-  }
-`;
-
-// Delete a definition (soft delete)
-export const DELETE_DEFINITION_MUTATION = gql`
-  mutation DeleteDefinition($id: String!) {
-    deleteDefinition(id: $id) {
-      deletedIds
-      count
-    }
-  }
-`;
-
-// Count of definitions matching filters
-export const DEFINITION_COUNT_QUERY = gql`
-  query DefinitionCount(
-    $rootOnly: Boolean
-    $search: String
-    $tagIds: [ID!]
-    $hasRuns: Boolean
-    $domainId: ID
-    $withoutDomain: Boolean
-  ) {
-    definitionCount(
-      rootOnly: $rootOnly
-      search: $search
-      tagIds: $tagIds
-      hasRuns: $hasRuns
-      domainId: $domainId
-      withoutDomain: $withoutDomain
-    )
-  }
-`;
-
-// ============================================================================
-// QUERY RESULT TYPES
-// ============================================================================
-
-export type DefinitionsQueryVariables = {
-  rootOnly?: boolean;
-  search?: string;
-  tagIds?: string[];
-  hasRuns?: boolean;
-  domainId?: string;
-  withoutDomain?: boolean;
-  limit?: number;
-  offset?: number;
-};
-
-export type DefinitionsQueryResult = {
-  definitions: Definition[];
-};
-
-export type DefinitionCountQueryVariables = {
-  rootOnly?: boolean;
-  search?: string;
-  tagIds?: string[];
-  hasRuns?: boolean;
-  domainId?: string;
-  withoutDomain?: boolean;
-};
-
-export type DefinitionCountQueryResult = {
-  definitionCount: number;
-};
-
-export type DefinitionQueryVariables = {
-  id: string;
-};
-
-export type DefinitionQueryResult = {
-  definition: Definition | null;
-};
-
-export type DefinitionAncestorsQueryVariables = {
-  id: string;
-  maxDepth?: number;
-};
-
-export type DefinitionAncestorsQueryResult = {
-  definitionAncestors: Definition[];
-};
-
-export type DefinitionDescendantsQueryVariables = {
-  id: string;
-  maxDepth?: number;
-};
-
-export type DefinitionDescendantsQueryResult = {
-  definitionDescendants: Definition[];
-};
-
-// ============================================================================
-// MUTATION INPUT/RESULT TYPES
+// MUTATION INPUT TYPES
 // ============================================================================
 
 export type CreateDefinitionInput = {
@@ -520,18 +147,10 @@ export type CreateDefinitionInput = {
   preambleVersionId?: string;
 };
 
-export type CreateDefinitionResult = {
-  createDefinition: Definition;
-};
-
 export type UpdateDefinitionInput = {
   name?: string;
   content?: DefinitionContent;
   preambleVersionId?: string | null;
-};
-
-export type UpdateDefinitionResult = {
-  updateDefinition: Definition;
 };
 
 export type ForkDefinitionInput = {
@@ -542,6 +161,91 @@ export type ForkDefinitionInput = {
   inheritAll?: boolean;
 };
 
+// ============================================================================
+// QUERIES
+// ============================================================================
+
+export {
+  DefinitionsDocument as DEFINITIONS_QUERY,
+  DefinitionDocument as DEFINITION_QUERY,
+  DefinitionAncestorsDocument as DEFINITION_ANCESTORS_QUERY,
+  DefinitionDescendantsDocument as DEFINITION_DESCENDANTS_QUERY,
+  DefinitionCountDocument as DEFINITION_COUNT_QUERY,
+} from '../../generated/graphql';
+
+// ============================================================================
+// MUTATIONS
+// ============================================================================
+
+export {
+  CreateDefinitionDocument as CREATE_DEFINITION_MUTATION,
+  UpdateDefinitionDocument as UPDATE_DEFINITION_MUTATION,
+  ForkDefinitionDocument as FORK_DEFINITION_MUTATION,
+  UnforkDefinitionDocument as UNFORK_DEFINITION_MUTATION,
+  DeleteDefinitionDocument as DELETE_DEFINITION_MUTATION,
+  RegenerateScenariosDocument as REGENERATE_SCENARIOS_MUTATION,
+  CancelScenarioExpansionDocument as CANCEL_SCENARIO_EXPANSION_MUTATION,
+} from '../../generated/graphql';
+
+// ============================================================================
+// QUERY VARIABLE TYPES
+// ============================================================================
+
+export type DefinitionsQueryVariables = GeneratedDefinitionsQueryVariables;
+export type DefinitionQueryVariables = GeneratedDefinitionQueryVariables;
+export type DefinitionAncestorsQueryVariables = GeneratedDefinitionAncestorsQueryVariables;
+export type DefinitionDescendantsQueryVariables = GeneratedDefinitionDescendantsQueryVariables;
+export type DefinitionCountQueryVariables = GeneratedDefinitionCountQueryVariables;
+
+// ============================================================================
+// QUERY RESULT TYPES
+// Redefine result types to use our typed Definition instead of generated unknown fields.
+// ============================================================================
+
+export type DefinitionsQueryResult = {
+  definitions: Definition[];
+};
+
+export type DefinitionQueryResult = {
+  definition: Definition | null;
+};
+
+export type DefinitionAncestorsQueryResult = {
+  definitionAncestors: Definition[];
+};
+
+export type DefinitionDescendantsQueryResult = {
+  definitionDescendants: Definition[];
+};
+
+export type DefinitionCountQueryResult = GeneratedDefinitionCountQuery;
+
+// ============================================================================
+// MUTATION VARIABLE TYPES
+// ============================================================================
+
+export type CreateDefinitionMutationVariables = GeneratedCreateDefinitionMutationVariables;
+export type UpdateDefinitionMutationVariables = GeneratedUpdateDefinitionMutationVariables;
+export type ForkDefinitionMutationVariables = GeneratedForkDefinitionMutationVariables;
+export type UnforkDefinitionMutationVariables = GeneratedUnforkDefinitionMutationVariables;
+export type DeleteDefinitionMutationVariables = GeneratedDeleteDefinitionMutationVariables;
+export type RegenerateScenariosMutationVariables = GeneratedRegenerateScenariosMutationVariables;
+export type CancelScenarioExpansionMutationVariables =
+  GeneratedCancelScenarioExpansionMutationVariables;
+
+// ============================================================================
+// MUTATION RESULT TYPES
+// Redefine result types to use our typed Definition instead of generated unknown fields.
+// ============================================================================
+
+export type CreateDefinitionResult = {
+  createDefinition: Definition;
+};
+
+export type UpdateDefinitionResult = {
+  updateDefinition: Definition;
+};
+
 export type ForkDefinitionResult = {
   forkDefinition: Definition;
 };
@@ -550,49 +254,8 @@ export type UnforkDefinitionResult = {
   unforkDefinition: Definition;
 };
 
-export type DeleteDefinitionResult = {
-  deleteDefinition: {
-    deletedIds: string[];
-    count: number;
-  };
-};
+export type DeleteDefinitionResult = GeneratedDeleteDefinitionMutation;
 
-// Regenerate scenarios mutation
-export const REGENERATE_SCENARIOS_MUTATION = gql`
-  mutation RegenerateScenarios($definitionId: String!) {
-    regenerateScenarios(definitionId: $definitionId) {
-      definitionId
-      jobId
-      queued
-    }
-  }
-`;
+export type RegenerateScenariosResult = GeneratedRegenerateScenariosMutation;
 
-export type RegenerateScenariosResult = {
-  regenerateScenarios: {
-    definitionId: string;
-    jobId: string | null;
-    queued: boolean;
-  };
-};
-
-// Cancel scenario expansion mutation
-export const CANCEL_SCENARIO_EXPANSION_MUTATION = gql`
-  mutation CancelScenarioExpansion($definitionId: String!) {
-    cancelScenarioExpansion(definitionId: $definitionId) {
-      definitionId
-      cancelled
-      jobId
-      message
-    }
-  }
-`;
-
-export type CancelScenarioExpansionResult = {
-  cancelScenarioExpansion: {
-    definitionId: string;
-    cancelled: boolean;
-    jobId: string | null;
-    message: string;
-  };
-};
+export type CancelScenarioExpansionResult = GeneratedCancelScenarioExpansionMutation;
