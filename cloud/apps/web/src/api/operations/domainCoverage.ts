@@ -1,55 +1,19 @@
-import { gql } from 'urql';
+import type {
+  DomainValueCoverageQuery as GeneratedDomainValueCoverageQuery,
+  DomainValueCoverageLegacyQuery as GeneratedDomainValueCoverageLegacyQuery,
+  DomainValueCoverageQueryVariables as GeneratedDomainValueCoverageQueryVariables,
+} from '../../generated/graphql';
 
-export const DOMAIN_VALUE_COVERAGE_QUERY = gql`
-  query DomainValueCoverage($domainId: ID!, $modelIds: [String!], $signature: String) {
-    domainValueCoverage(domainId: $domainId, modelIds: $modelIds, signature: $signature) {
-      domainId
-      values
-      cells {
-        valueA
-        valueB
-        batchCount
-        pairedBatchCount
-        definitionId
-        definitionName
-        aggregateRunId
-        minTrialCount
-        maxTrialCount
-        modelBreakdown {
-          modelId
-          label
-          trialCount
-        }
-      }
-      availableModels {
-        modelId
-        label
-      }
-    }
-  }
-`;
+// ============================================================================
+// QUERIES
+// ============================================================================
 
-export const DOMAIN_VALUE_COVERAGE_QUERY_LEGACY = gql`
-  query DomainValueCoverageLegacy($domainId: ID!, $modelIds: [String!]) {
-    domainValueCoverage(domainId: $domainId, modelIds: $modelIds) {
-      domainId
-      values
-      cells {
-        valueA
-        valueB
-        batchCount
-        pairedBatchCount
-        definitionId
-        definitionName
-        aggregateRunId
-      }
-      availableModels {
-        modelId
-        label
-      }
-    }
-  }
-`;
+export { DomainValueCoverageDocument as DOMAIN_VALUE_COVERAGE_QUERY } from '../../generated/graphql';
+export { DomainValueCoverageLegacyDocument as DOMAIN_VALUE_COVERAGE_QUERY_LEGACY } from '../../generated/graphql';
+
+// ============================================================================
+// TYPES
+// ============================================================================
 
 export type CoverageModelBreakdownItem = {
   modelId: string;
@@ -82,12 +46,10 @@ export type DomainValueCoverageResult = {
   availableModels: CoverageModelOption[];
 };
 
-export type DomainValueCoverageQueryResult = {
-  domainValueCoverage: DomainValueCoverageResult | null;
-};
+// ============================================================================
+// RESULT TYPES
+// ============================================================================
 
-export type DomainValueCoverageQueryVariables = {
-  domainId: string;
-  modelIds?: string[];
-  signature?: string;
-};
+export type DomainValueCoverageQueryVariables = GeneratedDomainValueCoverageQueryVariables;
+export type DomainValueCoverageQueryResult = GeneratedDomainValueCoverageQuery;
+export type DomainValueCoverageLegacyQueryResult = GeneratedDomainValueCoverageLegacyQuery;

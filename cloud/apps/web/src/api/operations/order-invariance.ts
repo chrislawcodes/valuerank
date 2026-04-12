@@ -1,4 +1,31 @@
-import { gql } from 'urql';
+import type {
+  AssumptionsOrderInvarianceLegacyQueryVariables as GeneratedOrderInvarianceLegacyQueryVariables,
+  AssumptionsOrderInvarianceTranscriptsQueryVariables as GeneratedOrderInvarianceTranscriptsQueryVariables,
+  AssumptionsOrderInvarianceLaunchStatusQueryVariables as GeneratedOrderInvarianceLaunchStatusQueryVariables,
+  ReviewOrderInvariancePairMutationVariables as GeneratedReviewOrderInvariancePairMutationVariables,
+  LaunchOrderInvarianceMutationVariables as GeneratedLaunchOrderInvarianceMutationVariables,
+} from '../../generated/graphql';
+
+// ============================================================================
+// QUERIES
+// ============================================================================
+
+export { AssumptionsOrderInvarianceLegacyDocument as ORDER_INVARIANCE_LEGACY_QUERY } from '../../generated/graphql';
+export { AssumptionsOrderInvarianceAnalysisDocument as ORDER_INVARIANCE_ANALYSIS_QUERY } from '../../generated/graphql';
+export { AssumptionsOrderInvarianceReviewDocument as ORDER_INVARIANCE_REVIEW_QUERY } from '../../generated/graphql';
+export { AssumptionsOrderInvarianceTranscriptsDocument as ORDER_INVARIANCE_TRANSCRIPTS_QUERY } from '../../generated/graphql';
+export { AssumptionsOrderInvarianceLaunchStatusDocument as ORDER_INVARIANCE_LAUNCH_STATUS_QUERY } from '../../generated/graphql';
+
+// ============================================================================
+// MUTATIONS
+// ============================================================================
+
+export { ReviewOrderInvariancePairDocument as REVIEW_ORDER_INVARIANCE_PAIR_MUTATION } from '../../generated/graphql';
+export { LaunchOrderInvarianceDocument as LAUNCH_ORDER_INVARIANCE_MUTATION } from '../../generated/graphql';
+
+// ============================================================================
+// MANUAL TYPES (kept manual — JSON scalars: content, runsByVariantType)
+// ============================================================================
 
 export type OrderInvarianceMismatchType =
   | 'direction_flip'
@@ -218,20 +245,9 @@ export type OrderInvarianceLaunchStatusQueryResult = {
   assumptionsOrderInvarianceLaunchStatus: OrderInvarianceLaunchStatus;
 };
 
-export type OrderInvarianceQueryVariables = {
-  directionOnly?: boolean;
-  trimOutliers?: boolean;
-};
-
-export type OrderInvarianceTranscriptsQueryVariables = {
-  vignetteId: string;
-  modelId: string;
-  conditionKey: string;
-};
-
-export type OrderInvarianceLaunchStatusQueryVariables = {
-  runIds: string[];
-};
+export type OrderInvarianceQueryVariables = GeneratedOrderInvarianceLegacyQueryVariables;
+export type OrderInvarianceTranscriptsQueryVariables = GeneratedOrderInvarianceTranscriptsQueryVariables;
+export type OrderInvarianceLaunchStatusQueryVariables = GeneratedOrderInvarianceLaunchStatusQueryVariables;
 
 export type ReviewOrderInvariancePairResult = {
   reviewOrderInvariancePair: {
@@ -252,227 +268,5 @@ export type LaunchOrderInvarianceResult = {
   };
 };
 
-export type ReviewOrderInvariancePairVariables = {
-  pairId: string;
-  reviewStatus: Exclude<OrderInvarianceReviewStatus, 'PENDING'>;
-  reviewNotes?: string | null;
-};
-
-export type LaunchOrderInvarianceVariables = {
-  force?: boolean | null;
-};
-
-export const ORDER_INVARIANCE_LEGACY_QUERY = gql`
-  query AssumptionsOrderInvarianceLegacy($directionOnly: Boolean, $trimOutliers: Boolean) {
-    assumptionsOrderInvariance(directionOnly: $directionOnly, trimOutliers: $trimOutliers) {
-      generatedAt
-      summary {
-        status
-        matchRate
-        exactMatchRate
-        totalCandidatePairs
-        qualifyingPairs
-        missingPairs
-        comparablePairs
-        sensitiveModelCount
-        sensitiveVignetteCount
-        presentationEffectMAD
-        scaleEffectMAD
-        excludedPairs {
-          reason
-          count
-        }
-      }
-      rows {
-        modelId
-        modelLabel
-        vignetteId
-        vignetteTitle
-        conditionKey
-        majorityVoteBaseline
-        majorityVoteFlipped
-        mismatchType
-        ordinalDistance
-        isMatch
-        variantType
-      }
-    }
-  }
-`;
-
-export const ORDER_INVARIANCE_ANALYSIS_QUERY = gql`
-  query AssumptionsOrderInvarianceAnalysis($directionOnly: Boolean, $trimOutliers: Boolean) {
-    assumptionsOrderInvariance(directionOnly: $directionOnly, trimOutliers: $trimOutliers) {
-      generatedAt
-      modelMetrics {
-        modelId
-        modelLabel
-        matchRate
-        matchCount
-        matchEligibleCount
-        valueOrderReversalRate
-        valueOrderEligibleCount
-        valueOrderExcludedCount
-        valueOrderPull
-        scaleOrderReversalRate
-        scaleOrderEligibleCount
-        scaleOrderExcludedCount
-        scaleOrderPull
-        withinCellDisagreementRate
-        pairLevelMarginSummary {
-          mean
-          median
-          p25
-          p75
-        }
-      }
-      rows {
-        modelId
-        modelLabel
-        vignetteId
-        vignetteTitle
-        conditionKey
-        majorityVoteBaseline
-        majorityVoteFlipped
-        ordinalDistance
-        isMatch
-        variantType
-      }
-    }
-  }
-`;
-
-export const ORDER_INVARIANCE_REVIEW_QUERY = gql`
-  query AssumptionsOrderInvarianceReview {
-    assumptionsOrderInvarianceReview {
-      generatedAt
-      summary {
-        totalVignettes
-        reviewedVignettes
-        approvedVignettes
-        rejectedVignettes
-        pendingVignettes
-        launchReady
-      }
-      vignettes {
-        pairId
-        vignetteId
-        vignetteTitle
-        conditionKey
-        conditionPairCount
-        sourceScenarioId
-        variantScenarioId
-        baselineName
-        flippedName
-        baselineText
-        flippedText
-        variantType
-        reviewStatus
-        reviewedBy
-        reviewedAt
-        reviewNotes
-      }
-    }
-  }
-`;
-
-export const ORDER_INVARIANCE_TRANSCRIPTS_QUERY = gql`
-  query AssumptionsOrderInvarianceTranscripts(
-    $vignetteId: ID!
-    $modelId: String!
-    $conditionKey: String!
-  ) {
-    assumptionsOrderInvarianceTranscripts(
-      vignetteId: $vignetteId
-      modelId: $modelId
-      conditionKey: $conditionKey
-    ) {
-      generatedAt
-      vignetteId
-      vignetteTitle
-      modelId
-      modelLabel
-      conditionKey
-      attributeALabel
-      attributeBLabel
-      transcripts {
-        id
-        runId
-        scenarioId
-        modelId
-        modelVersion
-        content
-        turnCount
-        tokenCount
-        durationMs
-        estimatedCost
-        createdAt
-        lastAccessedAt
-        orderLabel
-        attributeALevel
-        attributeBLevel
-      }
-    }
-  }
-`;
-
-export const ORDER_INVARIANCE_LAUNCH_STATUS_QUERY = gql`
-  query AssumptionsOrderInvarianceLaunchStatus($runIds: [ID!]!) {
-    assumptionsOrderInvarianceLaunchStatus(runIds: $runIds) {
-      generatedAt
-      totalRuns
-      activeRuns
-      completedRuns
-      failedRuns
-      targetedTrials
-      completedTrials
-      failedTrials
-      percentComplete
-      isComplete
-      stalledModels
-      failureSummaries
-      runs {
-        runId
-        status
-        targetedTrials
-        completedTrials
-        failedTrials
-        percentComplete
-        startedAt
-        completedAt
-        isStalled
-      }
-    }
-  }
-`;
-
-export const REVIEW_ORDER_INVARIANCE_PAIR_MUTATION = gql`
-  mutation ReviewOrderInvariancePair(
-    $pairId: ID!
-    $reviewStatus: String!
-    $reviewNotes: String
-  ) {
-    reviewOrderInvariancePair(
-      pairId: $pairId
-      reviewStatus: $reviewStatus
-      reviewNotes: $reviewNotes
-    ) {
-      pairId
-      reviewStatus
-      reviewedAt
-    }
-  }
-`;
-
-export const LAUNCH_ORDER_INVARIANCE_MUTATION = gql`
-  mutation LaunchOrderInvariance($force: Boolean) {
-    launchOrderInvariance(force: $force) {
-      startedRuns
-      runsByVariantType
-      approvedPairs
-      modelCount
-      runIds
-      failedDefinitionIds
-    }
-  }
-`;
+export type ReviewOrderInvariancePairVariables = GeneratedReviewOrderInvariancePairMutationVariables;
+export type LaunchOrderInvarianceVariables = GeneratedLaunchOrderInvarianceMutationVariables;

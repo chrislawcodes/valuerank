@@ -1,0 +1,46 @@
+query DomainValueCoverage($domainId: ID!, $modelIds: [String!], $signature: String) {
+  domainValueCoverage(domainId: $domainId, modelIds: $modelIds, signature: $signature) {
+    domainId
+    values
+    cells {
+      valueA
+      valueB
+      batchCount
+      pairedBatchCount
+      definitionId
+      definitionName
+      aggregateRunId
+      minTrialCount
+      maxTrialCount
+      modelBreakdown {
+        modelId
+        label
+        trialCount
+      }
+    }
+    availableModels {
+      modelId
+      label
+    }
+  }
+}
+
+query DomainValueCoverageLegacy($domainId: ID!, $modelIds: [String!]) {
+  domainValueCoverage(domainId: $domainId, modelIds: $modelIds) {
+    domainId
+    values
+    cells {
+      valueA
+      valueB
+      batchCount
+      pairedBatchCount
+      definitionId
+      definitionName
+      aggregateRunId
+    }
+    availableModels {
+      modelId
+      label
+    }
+  }
+}
