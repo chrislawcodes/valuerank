@@ -115,7 +115,7 @@ export async function maybeCompleteRun(runId: string): Promise<void> {
       UPDATE "runs"
       SET "status" = 'COMPLETED',
           "completed_at" = NOW(),
-          "stalled_models" = '[]'::jsonb
+          "stalled_models" = '{}'::text[]
       WHERE "id" = ${runId}
         AND "status" = 'SUMMARIZING'
     `;
