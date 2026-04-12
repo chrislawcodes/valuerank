@@ -97,20 +97,34 @@ export async function checkAllSummarized(runId: string): Promise<boolean> {
 
 /**
  * Update run status to COMPLETED if all transcripts are summarized.
- * Also triggers basic analysis and token statistics computation for the completed run.
+ * Also triggers basic analysis, token statistics computation, and budget deduction.
+ *
+ * Uses an atomic status transition (SUMMARIZING → COMPLETED) to prevent
+ * duplicate side effects when multiple summarization jobs finish concurrently.
+ * Only the first caller that successfully transitions the status will run
+ * the completion side effects (analysis, token stats, budget deduction).
  */
 export async function maybeCompleteRun(runId: string): Promise<void> {
   const allDone = await checkAllSummarized(runId);
 
   if (allDone) {
-    await db.run.update({
-      where: { id: runId },
-      data: {
-        status: 'COMPLETED',
-        completedAt: new Date(),
-        stalledModels: [],
-      },
-    });
+    // Atomic transition: only update if status is still SUMMARIZING.
+    // If another caller already moved it to COMPLETED, this returns 0 rows
+    // and we skip all side effects to avoid duplicates (e.g., double deductions).
+    const transitioned = await db.$executeRaw`
+      UPDATE "runs"
+      SET "status" = 'COMPLETED',
+          "completed_at" = NOW(),
+          "stalled_models" = '{}'::text[]
+      WHERE "id" = ${runId}
+        AND "status" = 'SUMMARIZING'
+    `;
+
+    if (transitioned === 0) {
+      log.debug({ runId }, 'Run already completed by another worker — skipping side effects');
+      return;
+    }
+
     log.info({ runId }, 'Run completed - all transcripts summarized');
 
     try {
