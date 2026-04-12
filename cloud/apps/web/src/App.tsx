@@ -55,14 +55,10 @@ function ProtectedLayout({ children, fullWidth = false }: { children: React.Reac
 }
 
 function LegacyRouteRedirect({ to }: { to: string }) {
+  const params = useParams();
   const location = useLocation();
-  return <Navigate to={`${to}${location.search}${location.hash}`} replace />;
-}
-
-function RunTrialsRedirect() {
-  const { domainId } = useParams();
-  const location = useLocation();
-  return <Navigate to={`/domains/${domainId ?? ''}/status${location.search}${location.hash}`} replace />;
+  const resolved = Object.entries(params).reduce((path, [key, val]) => path.replace(`:${key}`, val ?? ''), to);
+  return <Navigate to={`${resolved}${location.search}${location.hash}`} replace />;
 }
 
 function App() {
@@ -149,7 +145,7 @@ function App() {
             />
             <Route
               path="/domains/:domainId/run-trials"
-              element={<RunTrialsRedirect />}
+              element={<LegacyRouteRedirect to="/domains/:domainId/status" />}
             />
             <Route
               path="/domains/analysis"
@@ -375,23 +371,9 @@ function App() {
                 </ProtectedLayout>
               }
             />
-            <Route
-              path="/paired/new"
-              element={
-                <ProtectedLayout>
-                  <PairedVignetteNew />
-                </ProtectedLayout>
-              }
-            />
-            <Route
-              path="/paired/:id/edit"
-              element={
-                <ProtectedLayout>
-                  <PairedVignetteNew />
-                </ProtectedLayout>
-              }
-            />
-
+            {['/paired/new', '/paired/:id/edit'].map((path) => (
+              <Route key={path} path={path} element={<ProtectedLayout><PairedVignetteNew /></ProtectedLayout>} />
+            ))}
             <Route
               path="*"
               element={
