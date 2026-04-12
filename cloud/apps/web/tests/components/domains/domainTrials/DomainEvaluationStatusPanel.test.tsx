@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { DomainEvaluationStatusPanel } from '../../../../src/components/domains/domainTrials/DomainEvaluationStatusPanel';
@@ -129,5 +129,83 @@ describe('DomainEvaluationStatusPanel', () => {
     // Click the batch ID text (not the vignette name link) to trigger the row click handler
     await user.click(screen.getByText('Batch run-1'));
     expect(onSelectRun).toHaveBeenCalledWith('run-1');
+  });
+
+  it('keeps recovered completed runs out of the Needs attention section', () => {
+    const onSelectRun = vi.fn();
+
+    render(
+      <MemoryRouter>
+        <DomainEvaluationStatusPanel
+          domainName="Jobs"
+          evaluation={makeEvaluation() as never}
+          evaluationStatus={{
+            id: 'eval-1',
+            status: 'RUNNING',
+            totalRuns: 2,
+            pendingRuns: 0,
+            runningRuns: 1,
+            completedRuns: 2,
+            failedRuns: 0,
+            cancelledRuns: 0,
+          }}
+          runStatuses={[
+            {
+              runId: 'run-1',
+              definitionId: 'def-1',
+              status: 'COMPLETED',
+              updatedAt: '2026-03-15T12:02:00.000Z',
+              stalledModels: ['model-2'],
+              analysisStatus: 'completed',
+              modelStatuses: [
+                {
+                  modelId: 'model-1',
+                  generationCompleted: 25,
+                  generationFailed: 0,
+                  generationTotal: 25,
+                  summarizationCompleted: 25,
+                  summarizationFailed: 0,
+                  summarizationTotal: 25,
+                  latestErrorMessage: 'AUTH_ERROR',
+                },
+              ],
+            },
+            {
+              runId: 'run-2',
+              definitionId: 'def-2',
+              status: 'RUNNING',
+              updatedAt: '2026-03-15T12:05:00.000Z',
+              stalledModels: [],
+              analysisStatus: 'computing',
+              modelStatuses: [
+                {
+                  modelId: 'model-2',
+                  generationCompleted: 2,
+                  generationFailed: 1,
+                  generationTotal: 25,
+                  summarizationCompleted: 0,
+                  summarizationFailed: 0,
+                  summarizationTotal: 25,
+                  latestErrorMessage: null,
+                },
+              ],
+            },
+          ]}
+          fetching={false}
+          lastUpdatedAt={Date.now()}
+          selectedRunId={null}
+          onSelectRun={onSelectRun}
+        />
+      </MemoryRouter>,
+    );
+
+    const needsAttentionHeading = screen.getByRole('heading', { name: /needs attention/i });
+    const needsAttentionSection = needsAttentionHeading.closest('section');
+    expect(needsAttentionSection).not.toBeNull();
+    const section = needsAttentionSection as HTMLElement;
+
+    expect(within(section).queryByText('Jobs A')).toBeNull();
+    expect(within(section).queryByText('Batch run-1')).toBeNull();
+    expect(screen.getByText('Analysis complete: 1')).toBeInTheDocument();
   });
 });

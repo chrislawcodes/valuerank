@@ -52,9 +52,14 @@ export async function updateProgress(
     throw new NotFoundError('Run', runId);
   }
 
-  // Don't update progress if run is not in PENDING or RUNNING state
-  // This prevents overcounting when probe jobs complete after the run has moved on
-  if (!['PENDING', 'RUNNING'].includes(currentRun.status)) {
+  // Allow correction swaps regardless of run status.
+  // A correction swap is exactly { +1, -1 } or { -1, +1 } - the counters offset each other.
+  // This handles FAILED -> SUCCESS or SUCCESS -> FAILED probe transitions during recovery
+  // even after the run has moved to SUMMARIZING or a terminal state.
+  const isCorrectionSwap =
+    (incrementCompleted === 1 && incrementFailed === -1) ||
+    (incrementCompleted === -1 && incrementFailed === 1);
+  if (!['PENDING', 'RUNNING'].includes(currentRun.status) && !isCorrectionSwap) {
     log.debug(
       { runId, status: currentRun.status, incrementCompleted, incrementFailed },
       'Skipping progress update - run not in PENDING/RUNNING state'

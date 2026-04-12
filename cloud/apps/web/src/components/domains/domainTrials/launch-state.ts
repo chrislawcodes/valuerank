@@ -30,6 +30,12 @@ type RunStatusLike = {
 };
 
 export function getBatchRuntimeState(run: RunStatusLike): BatchRuntimeState {
+  // A COMPLETED run with finished analysis is always TERMINAL - never EXCEPTION -
+  // regardless of historical error messages from before recovery.
+  if (run.status === 'COMPLETED' && run.analysisStatus === 'completed') {
+    return 'TERMINAL';
+  }
+
   const hasLiveAnalysis = run.analysisStatus === 'pending' || run.analysisStatus === 'computing';
   const isActive = run.status === 'PENDING' || run.status === 'RUNNING' || run.status === 'SUMMARIZING' || hasLiveAnalysis;
   const isException = run.status === 'FAILED'
