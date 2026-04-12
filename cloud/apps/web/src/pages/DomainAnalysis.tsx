@@ -492,7 +492,7 @@ export function DomainAnalysis() {
         query.set('temperature', String(signatureTemperature));
       }
     }
-    navigate(`/domains/${selectedDomainId}/run-trials?${query.toString()}`);
+    navigate(`/domains/${selectedDomainId}/status?${query.toString()}`);
   };
 
   return (

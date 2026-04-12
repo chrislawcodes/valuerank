@@ -1,6 +1,6 @@
 // NOTE: The term "Vignette" is used throughout the UI for user-friendliness.
 // However, the underlying codebase, API, and database still use the term "Definition".
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { Provider } from 'urql';
 import { AuthProvider } from './auth/context';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -12,7 +12,8 @@ import { ArchiveHome } from './pages/ArchiveHome';
 import { Definitions } from './pages/Definitions';
 import { Domains } from './pages/Domains';
 import { DomainsManage } from './pages/DomainsManage';
-import { DomainTrialsDashboard } from './pages/DomainTrialsDashboard';
+import { DomainStartBatches } from './pages/DomainStartBatches';
+import { DomainStatus } from './pages/DomainStatus';
 import { DomainAnalysis } from './pages/DomainAnalysis';
 import { DomainCoverage } from './pages/DomainCoverage';
 import { TempZeroEffectAssumptions } from './pages/TempZeroEffectAssumptions';
@@ -56,6 +57,12 @@ function ProtectedLayout({ children, fullWidth = false }: { children: React.Reac
 function LegacyRouteRedirect({ to }: { to: string }) {
   const location = useLocation();
   return <Navigate to={`${to}${location.search}${location.hash}`} replace />;
+}
+
+function RunTrialsRedirect() {
+  const { domainId } = useParams();
+  const location = useLocation();
+  return <Navigate to={`/domains/${domainId ?? ''}/status${location.search}${location.hash}`} replace />;
 }
 
 function App() {
@@ -125,12 +132,24 @@ function App() {
               }
             />
             <Route
-              path="/domains/:domainId/run-trials"
+              path="/domains/:domainId/start"
               element={
                 <ProtectedLayout>
-                  <DomainTrialsDashboard />
+                  <DomainStartBatches />
                 </ProtectedLayout>
               }
+            />
+            <Route
+              path="/domains/:domainId/status"
+              element={
+                <ProtectedLayout>
+                  <DomainStatus />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/domains/:domainId/run-trials"
+              element={<RunTrialsRedirect />}
             />
             <Route
               path="/domains/analysis"
