@@ -23,6 +23,7 @@ type LaunchControlsPanelProps = {
   onSetMaxBudgetInput: (value: string) => void;
   onSetTargetBatchCountInput: (value: string) => void;
   onOpenConfirm: () => void;
+  hideAdvancedControls?: boolean;
 };
 
 export function LaunchControlsPanel({
@@ -45,6 +46,7 @@ export function LaunchControlsPanel({
   onSetMaxBudgetInput,
   onSetTargetBatchCountInput,
   onOpenConfirm,
+  hideAdvancedControls = false,
 }: LaunchControlsPanelProps) {
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
@@ -69,29 +71,31 @@ export function LaunchControlsPanel({
             className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
           />
         </label>
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={maxBudgetEnabled} onChange={(event) => onSetMaxBudgetEnabled(event.target.checked)} />
-            Total budget cap (USD)
-          </label>
-          <input
-            type="number"
-            min={0.01}
-            step={0.01}
-            placeholder="e.g. 10.00"
-            value={maxBudgetInput}
-            onChange={(event) => onSetMaxBudgetInput(event.target.value)}
-            disabled={!maxBudgetEnabled}
-            className="w-28 px-2 py-1 border border-gray-300 rounded text-sm disabled:bg-gray-100"
-          />
-        </div>
+        {!hideAdvancedControls && (
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" checked={maxBudgetEnabled} onChange={(event) => onSetMaxBudgetEnabled(event.target.checked)} />
+              Total budget cap (USD)
+            </label>
+            <input
+              type="number"
+              min={0.01}
+              step={0.01}
+              placeholder="e.g. 10.00"
+              value={maxBudgetInput}
+              onChange={(event) => onSetMaxBudgetInput(event.target.value)}
+              disabled={!maxBudgetEnabled}
+              className="w-28 px-2 py-1 border border-gray-300 rounded text-sm disabled:bg-gray-100"
+            />
+          </div>
+        )}
       </div>
 
       {!hasValidTargetBatchCount && (
         <p className="text-xs text-amber-700">Enter a paired-batch depth between 1 and 100.</p>
       )}
 
-      <details className="rounded border border-gray-200 bg-gray-50 p-3">
+      {!hideAdvancedControls && <details className="rounded border border-gray-200 bg-gray-50 p-3">
         <summary className="cursor-pointer text-sm font-medium text-gray-900">Advanced controls</summary>
         <div className="mt-3 space-y-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -132,9 +136,9 @@ export function LaunchControlsPanel({
           )}
           {temperatureWarning && <p className="text-xs text-amber-700">{temperatureWarning}</p>}
         </div>
-      </details>
+      </details>}
 
-      {maxBudgetEnabled && !hasValidBudget && (
+      {!hideAdvancedControls && maxBudgetEnabled && !hasValidBudget && (
         <p className="text-xs text-amber-700">Enter a budget cap above $0 to enforce launch spend limits.</p>
       )}
 

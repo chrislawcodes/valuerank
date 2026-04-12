@@ -1,0 +1,15 @@
+{
+  "paths": [
+    "cloud/apps/web/src/App.tsx",
+    "cloud/apps/web/src/components/domains/domainTrials",
+    "cloud/apps/web/src/pages/DomainTrialsDashboard.tsx",
+    "cloud/apps/web/src/pages/Domains.tsx"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/web/src/App.tsx",
+    "cloud/apps/web/src/components/domains/domainTrials",
+    "cloud/apps/web/src/pages/DomainTrialsDashboard.tsx",
+    "cloud/apps/web/src/pages/Domains.tsx",
+    "docs/workflow/feature-runs/split-status-start-pages"
+  ]
+}

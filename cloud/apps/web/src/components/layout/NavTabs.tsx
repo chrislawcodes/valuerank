@@ -5,7 +5,7 @@ import { Button } from '../ui/Button';
 import { useClickOutside } from '../../hooks/useClickOutside';
 
 const utilityTabs: { name: string; path: string; icon: React.ComponentType<{ className?: string }>; aliases?: string[] }[] = [
-  { name: 'Status', path: '/status', icon: Activity, aliases: ['/run-trials'] },
+  { name: 'Status', path: '/status', icon: Activity, aliases: ['/run-trials', '/status'] },
 ];
 
 type MenuLinkItem = {

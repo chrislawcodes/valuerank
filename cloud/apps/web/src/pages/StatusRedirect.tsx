@@ -14,7 +14,7 @@ export function StatusRedirect() {
     if (queryLoading) return;
     const domain = domains[0];
     if (domain != null) {
-      navigate(`/domains/${domain.id}/run-trials`, { replace: true });
+      navigate(`/domains/${domain.id}/status`, { replace: true });
     }
   }, [domains, queryLoading, navigate]);
 

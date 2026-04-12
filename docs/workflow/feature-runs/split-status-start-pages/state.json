@@ -1,0 +1,52 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 3,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "Start Paired Batches is a new page at /domains/:domainId/start \u2014 lean launch form only, no status summary, no domain picker",
+      "Domain Status stays at /domains/:domainId/status \u2014 monitoring, status drawer, and inline backfill gap detection",
+      "Backfill UI (Missing Model Backfill section, BackfillConfirmModal) is deleted \u2014 replaced by a link from Status that navigates to the Start page with prefilled params (models, definitions, target depth)",
+      "User navigates back to Domains overview to pick a different domain \u2014 no domain selector on Start or Status pages",
+      "Post-launch redirect: after launching from Start page, user is redirected to Status page with ?evaluationId= highlighted",
+      "StatusRedirect (/status) continues to exist but redirects to /domains/:domainId/status instead of /run-trials",
+      "The backfillDomainEvaluationModels API mutation stays \u2014 the Start page calls it when prefilled with backfill context"
+    ],
+    "summary": "Split the combined DomainTrialsDashboard into two pages: Start Paired Batches (launch) and Domain Status (monitor). Eliminate the separate backfill UI by reusing the Start page with prefilled inputs.",
+    "updated_at": 1775884295,
+    "answers": {
+      "Should the Domains overview 'Add Paired Batches' button link to the new Start page?": "Yes \u2014 update it to link to /domains/:domainId/start. The domain-level launch and backfill are unified on the new Start page. The vignette-level StartPairedBatchPage stays separate (Option B).",
+      "Nav structure for the split pages?": "No nav entry for Start Batches \u2014 users reach it from Domains overview button or Status page fill-gap link. Status stays as top-level nav entry redirecting to /domains/:domainId/status. Nav is unchanged except the redirect target.",
+      "How to pass backfill context to Start page?": "URL search params: /domains/:domainId/start?evaluationId=abc&models=gpt-4o&depth=5. When evaluationId is present, Start page uses backfillDomainEvaluationModels mutation instead of startDomainEvaluation. Shareable and survives refresh."
+    },
+    "non_goals": [
+      "Unifying vignette-level StartPairedBatchPage with the domain-level Start page"
+    ],
+    "acceptance_criteria": [
+      "Post-launch redirects to Status with ?evaluationId= highlighted"
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "checkpoint_fallback": {}
+}

@@ -1,6 +1,6 @@
 // NOTE: The term "Vignette" is used throughout the UI for user-friendliness.
 // However, the underlying codebase, API, and database still use the term "Definition".
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { Provider } from 'urql';
 import { AuthProvider } from './auth/context';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -12,7 +12,8 @@ import { ArchiveHome } from './pages/ArchiveHome';
 import { Definitions } from './pages/Definitions';
 import { Domains } from './pages/Domains';
 import { DomainsManage } from './pages/DomainsManage';
-import { DomainTrialsDashboard } from './pages/DomainTrialsDashboard';
+import { DomainStartBatches } from './pages/DomainStartBatches';
+import { DomainStatus } from './pages/DomainStatus';
 import { DomainAnalysis } from './pages/DomainAnalysis';
 import { DomainCoverage } from './pages/DomainCoverage';
 import { TempZeroEffectAssumptions } from './pages/TempZeroEffectAssumptions';
@@ -54,8 +55,10 @@ function ProtectedLayout({ children, fullWidth = false }: { children: React.Reac
 }
 
 function LegacyRouteRedirect({ to }: { to: string }) {
+  const params = useParams();
   const location = useLocation();
-  return <Navigate to={`${to}${location.search}${location.hash}`} replace />;
+  const resolved = Object.entries(params).reduce((path, [key, val]) => path.replace(`:${key}`, val ?? ''), to);
+  return <Navigate to={`${resolved}${location.search}${location.hash}`} replace />;
 }
 
 function App() {
@@ -125,12 +128,24 @@ function App() {
               }
             />
             <Route
-              path="/domains/:domainId/run-trials"
+              path="/domains/:domainId/start"
               element={
                 <ProtectedLayout>
-                  <DomainTrialsDashboard />
+                  <DomainStartBatches />
                 </ProtectedLayout>
               }
+            />
+            <Route
+              path="/domains/:domainId/status"
+              element={
+                <ProtectedLayout>
+                  <DomainStatus />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/domains/:domainId/run-trials"
+              element={<LegacyRouteRedirect to="/domains/:domainId/status" />}
             />
             <Route
               path="/domains/analysis"
@@ -356,23 +371,9 @@ function App() {
                 </ProtectedLayout>
               }
             />
-            <Route
-              path="/paired/new"
-              element={
-                <ProtectedLayout>
-                  <PairedVignetteNew />
-                </ProtectedLayout>
-              }
-            />
-            <Route
-              path="/paired/:id/edit"
-              element={
-                <ProtectedLayout>
-                  <PairedVignetteNew />
-                </ProtectedLayout>
-              }
-            />
-
+            {['/paired/new', '/paired/:id/edit'].map((path) => (
+              <Route key={path} path={path} element={<ProtectedLayout><PairedVignetteNew /></ProtectedLayout>} />
+            ))}
             <Route
               path="*"
               element={
