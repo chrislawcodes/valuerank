@@ -13,6 +13,7 @@ import type {
   ComputeTokenStatsJobData,
   ProbeDeadLetterJobData,
   AggregateAnalysisJobData,
+  RefreshDomainAnalysisSnapshotJobData,
 } from '../types.js';
 import { createProbeScenarioHandler } from './probe-scenario/index.js';
 import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
@@ -21,6 +22,7 @@ import { createExpandScenariosHandler } from './expand-scenarios.js';
 import { createComputeTokenStatsHandler } from './compute-token-stats.js';
 import { createProbeDeadLetterHandler } from './probe-dead-letter.js';
 import { createAggregateAnalysisHandler } from './aggregate-analysis.js';
+import { createRefreshDomainAnalysisSnapshotHandler } from './refresh-domain-analysis-snapshot.js';
 
 // Re-export job data types for handlers
 export type {
@@ -31,6 +33,7 @@ export type {
   ComputeTokenStatsJobData,
   ProbeDeadLetterJobData,
   AggregateAnalysisJobData,
+  RefreshDomainAnalysisSnapshotJobData,
 };
 
 // Dead letter queue name for probe jobs
@@ -111,6 +114,16 @@ export const handlerRegistrations: HandlerRegistration[] = [
         'aggregate_analysis',
         { batchSize }, // Usually batchSize=1 effectively for aggregation if we want strict serial per worker
         createAggregateAnalysisHandler()
+      );
+    },
+  },
+  {
+    name: 'refresh_domain_analysis_snapshot',
+    register: async (boss, batchSize) => {
+      await boss.work<RefreshDomainAnalysisSnapshotJobData>(
+        'refresh_domain_analysis_snapshot',
+        { batchSize },
+        createRefreshDomainAnalysisSnapshotHandler()
       );
     },
   },
