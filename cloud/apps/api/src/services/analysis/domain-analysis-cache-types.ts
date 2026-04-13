@@ -1,10 +1,10 @@
-import { db, type Prisma } from '@valuerank/db';
+import type { db, Prisma } from '@valuerank/db';
 import type {
   DefinitionRow,
   DomainAnalysisMissingDefinition,
   DomainAnalysisValueCounts,
+  resolveSignatureRuns,
 } from '../../graphql/queries/domain/shared.js';
-import { resolveSignatureRuns } from '../../graphql/queries/domain/shared.js';
 
 export const DOMAIN_ANALYSIS_CACHE_STATUS = {
   FRESH: 'FRESH',

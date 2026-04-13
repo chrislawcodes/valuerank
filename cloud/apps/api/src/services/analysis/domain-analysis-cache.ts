@@ -9,7 +9,6 @@ import {
 import {
   computeFullBTScores,
   computeSmoothedLogOddsScore,
-  getMissingReasonLabel,
   type DomainAnalysisScoreMethod,
 } from '../../graphql/queries/domain/shared.js';
 import { computeRankingShapes } from '../../graphql/queries/domain-shape.js';

@@ -1,6 +1,6 @@
 import { db, resolveDefinitionContent } from '@valuerank/db';
 import { formatVnewLabel, formatVnewSignature } from '@valuerank/shared/trial-signature';
-import { DOMAIN_ANALYSIS_VALUE_KEYS, type DomainAnalysisValueKey, extractValuePair } from '../domain-analysis-values.js';
+import { type DomainAnalysisValueKey, extractValuePair } from '../domain-analysis-values.js';
 import type { DomainAnalysisVignetteDetail } from './types-detail.js';
 import { runMatchesSignature, selectDefaultVnewSignature } from './planning-utils.js';
 export { selectLatestDefinitionPerLineage, hydrateDefinitionAncestors } from '../../../services/definition-lineage.js';
