@@ -103,6 +103,8 @@ def load_summarize_module(monkeypatch: pytest.MonkeyPatch, parser_version: str |
     if parser_version is not None:
         monkeypatch.setenv("SUMMARIZE_PARSER_VERSION", parser_version)
     sys.modules.pop("summarize", None)
+    sys.modules.pop("summarize_batch", None)
+    sys.modules.pop("summarize_extract", None)
     return importlib.import_module("summarize")
 
 
@@ -682,7 +684,7 @@ class TestRunSummarize:
         """Test parser version defaults to the current worker value."""
         module = load_summarize_module(monkeypatch)
 
-        assert module.PARSER_VERSION == "job-choice-v2"
+        assert module.PARSER_VERSION == "paired-v2"
         sys.modules.pop("summarize", None)
 
     def test_parser_version_uses_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1203,7 +1205,7 @@ class TestRunSummarizeBatch:
 
     def test_returns_per_transcript_results(self) -> None:
         """Batch mode should preserve per-transcript summaries."""
-        from summarize import run_summarize_batch
+        from summarize_batch import run_summarize_batch
 
         data = {
             "transcripts": [
@@ -1220,8 +1222,8 @@ class TestRunSummarizeBatch:
             ]
         }
 
-        with patch("summarize.run_summarize") as mock_run, patch(
-            "summarize.validate_input"
+        with patch("summarize_batch.run_summarize") as mock_run, patch(
+            "summarize_batch.validate_input"
         ) as mock_validate:
             mock_run.side_effect = [
                 {
@@ -1260,7 +1262,7 @@ class TestRunSummarizeBatch:
 
     def test_returns_item_validation_error_without_failing_batch(self) -> None:
         """Invalid batch items should be returned as per-item errors."""
-        from summarize import run_summarize_batch
+        from summarize_batch import run_summarize_batch
 
         data = {
             "transcripts": [
@@ -1276,7 +1278,7 @@ class TestRunSummarizeBatch:
             ]
         }
 
-        with patch("summarize.run_summarize") as mock_run:
+        with patch("summarize_batch.run_summarize") as mock_run:
             mock_run.return_value = {
                 "success": True,
                 "summary": {
@@ -1300,7 +1302,7 @@ class TestRunSummarizeBatch:
 
     def test_returns_success_for_empty_batch(self) -> None:
         """An empty batch should round-trip cleanly."""
-        from summarize import run_summarize_batch
+        from summarize_batch import run_summarize_batch
 
         result = run_summarize_batch({"transcripts": []})
 
@@ -1309,7 +1311,7 @@ class TestRunSummarizeBatch:
 
     def test_rejects_non_list_batch_envelope(self) -> None:
         """A malformed transcripts envelope should fail fast."""
-        from summarize import run_summarize_batch
+        from summarize_batch import run_summarize_batch
 
         result = run_summarize_batch({"transcripts": "not-a-list"})
 
@@ -1318,7 +1320,7 @@ class TestRunSummarizeBatch:
 
     def test_rejects_oversized_batch(self) -> None:
         """A batch larger than the configured maximum should fail fast."""
-        from summarize import MAX_SUMMARIZE_BATCH_SIZE, run_summarize_batch
+        from summarize_batch import MAX_SUMMARIZE_BATCH_SIZE, run_summarize_batch
 
         result = run_summarize_batch(
             {
@@ -1340,13 +1342,13 @@ class TestRunSummarizeBatch:
 class TestMain:
     """Tests for main entry point."""
 
-    @patch("summarize.run_summarize")
+    @patch("summarize_batch.run_summarize")
     @patch("sys.stdin")
     def test_successful_execution(
         self, mock_stdin: MagicMock, mock_run: MagicMock, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """Test successful main execution."""
-        from summarize import main
+        from summarize_batch import main
 
         mock_stdin.read.return_value = json.dumps({
             "transcriptId": "transcript-123",
@@ -1368,7 +1370,7 @@ class TestMain:
         self, mock_stdin: MagicMock, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """Test handling of empty input."""
-        from summarize import main
+        from summarize_batch import main
 
         mock_stdin.read.return_value = ""
 
@@ -1384,7 +1386,7 @@ class TestMain:
         self, mock_stdin: MagicMock, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """Test handling of invalid JSON."""
-        from summarize import main
+        from summarize_batch import main
 
         mock_stdin.read.return_value = "not valid json {"
 
@@ -1400,7 +1402,7 @@ class TestMain:
         self, mock_stdin: MagicMock, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """Test handling of validation error."""
-        from summarize import main
+        from summarize_batch import main
 
         mock_stdin.read.return_value = json.dumps({
             "transcriptId": "t-123",
@@ -1414,13 +1416,13 @@ class TestMain:
         assert result["success"] is False
         assert ErrorCode.VALIDATION_ERROR.value == result["error"]["code"]
 
-    @patch("summarize.run_summarize_batch")
+    @patch("summarize_batch.run_summarize_batch")
     @patch("sys.stdin")
     def test_batch_execution(
         self, mock_stdin: MagicMock, mock_run_batch: MagicMock, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """Test batch execution path."""
-        from summarize import main
+        from summarize_batch import main
 
         mock_stdin.read.return_value = json.dumps({
             "transcripts": [
@@ -1475,7 +1477,7 @@ class TestMain:
         self, mock_stdin: MagicMock, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """Test malformed batch envelopes stay in batch mode."""
-        from summarize import main
+        from summarize_batch import main
 
         mock_stdin.read.return_value = json.dumps({
             "transcripts": "not-a-list",
@@ -1493,7 +1495,7 @@ class TestMain:
         self, mock_stdin: MagicMock, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """Test that mixed batch and single envelopes fail fast."""
-        from summarize import main
+        from summarize_batch import main
 
         mock_stdin.read.return_value = json.dumps({
             "transcriptId": "transcript-123",

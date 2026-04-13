@@ -1,0 +1,371 @@
+#!/usr/bin/env python3
+"""Decision extraction helpers for the summarize worker."""
+
+import os
+import re
+from typing import Any, Optional
+
+from summarize_text import (
+    leading_response_candidates,
+    normalize_for_match,
+    normalize_for_relaxed_match,
+    response_segments,
+)
+
+# Pattern to find "Rating: X" format (preferred, structured)
+STRUCTURED_RATING_PATTERN = re.compile(r"Rating:\s*([1-9]\d*)", re.IGNORECASE)
+
+# Additional structured formats commonly returned by models.
+STRUCTURED_DECISION_PATTERNS = [
+    re.compile(r"\b(?:decision(?:\s*code)?|answer|response)\s*(?:is|=|:)?\s*([1-9]\d*)\b", re.IGNORECASE),
+    re.compile(r"\b(?:my\s+)?judg(?:e)?ment(?:\s+on\s+the\s+scale)?\s*(?:(?:is)\s*[:=]?|[:=])?\s*(?:a\s*)?([1-9]\d*)\b", re.IGNORECASE),
+    re.compile(r"\bmy\s+(?:rating|answer|response|choice)\s*(?:is|=|:)?\s*([1-9]\d*)\b", re.IGNORECASE),
+    re.compile(r"\b(?:my|overall|final)\s+score\s*(?:is|=|:)?\s*([1-9]\d*)\b", re.IGNORECASE),
+    re.compile(r"\bi\s*(?:choose|chose|pick|picked|select|selected|rate|rated|would choose|would pick|would select)\s*(?:option\s*)?([1-9]\d*)\b", re.IGNORECASE),
+    re.compile(r"\b(?:i\s+would\s+)?lean\s+toward\s*(?:option\s*)?([1-9]\d*)\b", re.IGNORECASE),
+    re.compile(r"\bi(?:['’]d|\s+would)?\s+rate\b.{0,40}?([1-9]\d*)\b", re.IGNORECASE),
+    re.compile(r"\bi(?:['’]d|\s+would)?\s+(?:give|assign)\b.{0,30}?([1-9]\d*)\b", re.IGNORECASE),
+    re.compile(r"\b([1-9]\d*)\s*(?:is|=|:)?\s*(?:my|the)\s*(?:rating|answer|response|choice)\b", re.IGNORECASE),
+    re.compile(r"\b([1-9]\d*)\s*[—–-]\s*(?:strongly|somewhat|neutral|not like|like me|support)\b", re.IGNORECASE),
+    re.compile(r"^\s*([1-9]\d*)\s*(?:reason\s*:)", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^\s*([1-9]\d*)\s*(?:\r?\n)+\s*\*{0,2}reason(?:ing)?\*{0,2}\s*:", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^\s*([1-9]\d*)\s*[—-]\s*", re.IGNORECASE | re.MULTILINE),
+]
+
+# Fallback pattern to find positive integer ratings - less reliable
+FALLBACK_RATING_PATTERN = re.compile(r"\b([1-9]\d*)\b")
+RANGE_PATTERN = re.compile(r"([1-9]\d*)\s*(?:-|–|—|to)\s*([1-9]\d*)", re.IGNORECASE)
+# Word-count parentheticals appended by some models, e.g. "(5 words)" or "(152 words)".
+# Must be stripped before fallback numeric scanning to avoid false code matches.
+WORD_COUNT_SUFFIX_PATTERN = re.compile(r"\(\s*\d+\s+words?\s*\)", re.IGNORECASE)
+AMBIGUOUS_SUFFIX_PATTERN = re.compile(r"^\s*(?:and|or|/|,)\s*([1-9]\d*)\b", re.IGNORECASE)
+LEADING_BARE_NUMBER_PATTERN = re.compile(r"^\s*([1-9]\d*)\s*(?:[.!?])?\s*$", re.IGNORECASE)
+
+# Heuristics for detecting responses that are about the user ("you/your")
+# rather than a self-rating from the target AI.
+USER_DIRECTED_PATTERN = re.compile(
+    r"\b("
+    r"would you|do you|what do you think|would you like|"
+    r"you should|you(?:'d| would)\s+likely|which option"
+    r")\b",
+    re.IGNORECASE,
+)
+SELF_RATING_PATTERN = re.compile(r"\b(i|i'm|i’d|i'd|i would|my|for me|personally)\b", re.IGNORECASE)
+REFUSAL_PATTERN = re.compile(
+    r"\b("
+    r"must decline|decline to (?:engage|respond)|"
+    r"can't comply|cannot comply|won't comply|"
+    r"jailbreak|circumvent (?:my )?(?:safety|guidelines)|"
+    r"adhere to my safety instructions|"
+    r"i(?: am|'m) sorry[, ]+but"
+    r")\b",
+    re.IGNORECASE,
+)
+
+DEFAULT_SUMMARIZE_PARSER_VERSION = "paired-v2"
+
+
+def load_parser_version() -> str:
+    raw_version = os.getenv("SUMMARIZE_PARSER_VERSION", DEFAULT_SUMMARIZE_PARSER_VERSION)
+    normalized_version = raw_version.strip()
+    return normalized_version if normalized_version else DEFAULT_SUMMARIZE_PARSER_VERSION
+
+
+PARSER_VERSION = load_parser_version()
+
+
+def collect_scale_labels(transcript_content: dict[str, Any]) -> list[dict[str, str]]:
+    turns = transcript_content.get("turns", [])
+    for turn in turns:
+        probe_prompt = turn.get("probePrompt")
+        if not isinstance(probe_prompt, str) or probe_prompt.strip() == "":
+            continue
+
+        numbered_labels: list[dict[str, str]] = []
+        bullet_labels: list[str] = []
+
+        for raw_line in probe_prompt.splitlines():
+            line = raw_line.strip()
+            if line == "":
+                continue
+
+            numbered_match = re.match(r"^(?P<code>[1-9]\d*)\s*-\s*(?P<label>.+)$", line)
+            if numbered_match:
+                numbered_labels.append(
+                    {
+                        "code": numbered_match.group("code"),
+                        "label": numbered_match.group("label").strip(),
+                    }
+                )
+                continue
+
+            bullet_match = re.match(r"^-\s+(?P<label>.+)$", line)
+            if bullet_match:
+                bullet_labels.append(bullet_match.group("label").strip())
+
+        if len(numbered_labels) >= 5:
+            return numbered_labels
+        if len(bullet_labels) == 5:
+            return [
+                {"code": code, "label": label}
+                for code, label in zip(["5", "4", "3", "2", "1"], bullet_labels)
+            ]
+
+    return []
+
+
+def extract_text_label_decision(text: str, scale_labels: list[dict[str, str]]) -> tuple[Optional[str], Optional[str]]:
+    if not text or not scale_labels:
+        return None, None
+
+    segments = response_segments(text)
+    if not segments:
+        return None, None
+
+    normalized_labels = [
+        {
+            "code": entry.get("code", ""),
+            "label": entry.get("label", ""),
+            "normalized": normalize_for_match(entry.get("label", "")),
+        }
+        for entry in scale_labels
+        if entry.get("label")
+    ]
+
+    for segment in segments:
+        normalized_segment = normalize_for_match(segment)
+        if normalized_segment == "":
+            continue
+
+        prefix_matches = [
+            entry
+            for entry in normalized_labels
+            if entry["normalized"]
+            and (
+                normalized_segment == entry["normalized"]
+                or normalized_segment.startswith(entry["normalized"] + " ")
+            )
+        ]
+
+        unique_prefix_matches = list({entry["code"]: entry for entry in prefix_matches}.values())
+        if len(unique_prefix_matches) == 1:
+            match = unique_prefix_matches[0]
+            return match["code"], match["label"]
+        if len(unique_prefix_matches) > 1:
+            return None, None
+
+    return None, None
+
+
+def extract_text_label_decision_relaxed(
+    text: str, scale_labels: list[dict[str, str]]
+) -> tuple[Optional[str], Optional[str]]:
+    """Same as extract_text_label_decision but strips filler words before comparing."""
+    if not text or not scale_labels:
+        return None, None
+
+    segments = response_segments(text)
+    if not segments:
+        return None, None
+
+    normalized_labels = [
+        {
+            "code": entry.get("code", ""),
+            "label": entry.get("label", ""),
+            "relaxed": normalize_for_relaxed_match(entry.get("label", "")),
+        }
+        for entry in scale_labels
+        if entry.get("label")
+    ]
+
+    for segment in segments:
+        relaxed_segment = normalize_for_relaxed_match(segment)
+        if relaxed_segment == "":
+            continue
+
+        prefix_matches = [
+            entry
+            for entry in normalized_labels
+            if entry["relaxed"]
+            and (
+                relaxed_segment == entry["relaxed"]
+                or relaxed_segment.startswith(entry["relaxed"] + " ")
+            )
+        ]
+
+        unique_prefix_matches = list({entry["code"]: entry for entry in prefix_matches}.values())
+        if len(unique_prefix_matches) == 1:
+            match = unique_prefix_matches[0]
+            return match["code"], match["label"]
+        if len(unique_prefix_matches) > 1:
+            return None, None
+
+    return None, None
+
+
+def extract_leading_text_label_decision_relaxed(
+    text: str, scale_labels: list[dict[str, str]]
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """Same as extract_leading_text_label_decision but uses relaxed matching."""
+    for candidate, used_prefix_stripping in leading_response_candidates(text):
+        decision_code, matched_label = extract_text_label_decision_relaxed(candidate, scale_labels)
+        if decision_code is not None:
+            parse_path = "text_label_relaxed_leading" if used_prefix_stripping else "text_label_relaxed"
+            return decision_code, matched_label, parse_path
+    return None, None, None
+
+
+def extract_leading_decision_code(text: str) -> Optional[str]:
+    for candidate, _used_prefix_stripping in leading_response_candidates(text):
+        decision_code = extract_explicit_leading_decision_code(candidate)
+        if decision_code is not None:
+            return decision_code
+    return None
+
+
+def extract_leading_text_label_decision(
+    text: str, scale_labels: list[dict[str, str]]
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    for candidate, used_prefix_stripping in leading_response_candidates(text):
+        decision_code, matched_label = extract_text_label_decision(candidate, scale_labels)
+        if decision_code is not None:
+            parse_path = "text_label_leading" if used_prefix_stripping else "text_label_exact"
+            return decision_code, matched_label, parse_path
+    return None, None, None
+
+
+def extract_decision_code_from_text(text: str) -> Optional[str]:
+    """
+    Extract numeric decision code (positive integer) from text.
+
+    First looks for structured "Rating: X" format (most reliable).
+    Falls back to finding first standalone positive integer (less reliable).
+
+    Returns None if no rating found.
+    """
+    if not text:
+        return None
+
+    # Strip lightweight markdown markers that often surround numeric answers.
+    sanitized_markdown_text = text.replace("**", "").replace("__", "").replace("`", "")
+
+    # First, try structured "Rating: X" format (most reliable)
+    structured_match = STRUCTURED_RATING_PATTERN.search(sanitized_markdown_text)
+    if structured_match:
+        suffix = sanitized_markdown_text[structured_match.end():structured_match.end() + 24]
+        if AMBIGUOUS_SUFFIX_PATTERN.search(suffix):
+            return None
+        return structured_match.group(1)
+
+    # Next, look for common explicit decision formats.
+    for pattern in STRUCTURED_DECISION_PATTERNS:
+        matches = []
+        for match in pattern.finditer(sanitized_markdown_text):
+            # If immediate continuation suggests multiple candidate codes
+            # (e.g., "I choose 3 and 4"), treat as ambiguous.
+            suffix = sanitized_markdown_text[match.end():match.end() + 24]
+            if AMBIGUOUS_SUFFIX_PATTERN.search(suffix):
+                return None
+            matches.append(match.group(1))
+        if not matches:
+            continue
+        unique_values = list(dict.fromkeys(matches))
+        if len(unique_values) == 1:
+            return unique_values[0]
+        # If an explicit format provides conflicting values, treat as ambiguous.
+        return None
+
+    # Remove numeric ranges (e.g., "1-6", "1 to 6") before fallback scanning.
+    sanitized_text = RANGE_PATTERN.sub(" ", sanitized_markdown_text)
+    # Strip word-count parentheticals like "(5 words)" before fallback scanning.
+    # Some models append these as metadata; a coincidentally valid code would cause
+    # a false positive that the out-of-range guard cannot catch.
+    sanitized_text = WORD_COUNT_SUFFIX_PATTERN.sub(" ", sanitized_text)
+
+    fallback_matches = [m.group(1) for m in FALLBACK_RATING_PATTERN.finditer(sanitized_text)]
+    if not fallback_matches:
+        if REFUSAL_PATTERN.search(text):
+            return "refusal"
+        return None
+
+    # If the model enumerates multiple options (e.g., "1..6"), it did not choose one.
+    unique_values = list(dict.fromkeys(fallback_matches))
+    if len(unique_values) > 1:
+        return None
+
+    # If response is clearly directed at the user and lacks self-rating language,
+    # treat as no valid decision choice.
+    lower_text = text.lower()
+    has_user_directed = USER_DIRECTED_PATTERN.search(lower_text) is not None
+    has_self_rating = SELF_RATING_PATTERN.search(lower_text) is not None
+    if has_user_directed and not has_self_rating:
+        return None
+
+    return unique_values[0]
+
+
+def extract_explicit_leading_decision_code(text: str) -> Optional[str]:
+    """
+    Extract a decision from a leading candidate only when the candidate contains
+    an explicit decision signal.
+
+    This intentionally avoids the broad fallback number scan used for whole-response
+    parsing, because opening lines often contain contextual numbers that are not
+    the final decision.
+    """
+    if not text:
+        return None
+
+    sanitized_markdown_text = text.replace("**", "").replace("__", "").replace("`", "")
+
+    structured_match = STRUCTURED_RATING_PATTERN.search(sanitized_markdown_text)
+    if structured_match:
+        suffix = sanitized_markdown_text[structured_match.end():structured_match.end() + 24]
+        if AMBIGUOUS_SUFFIX_PATTERN.search(suffix):
+            return None
+        return structured_match.group(1)
+
+    for pattern in STRUCTURED_DECISION_PATTERNS:
+        matches = []
+        for match in pattern.finditer(sanitized_markdown_text):
+            suffix = sanitized_markdown_text[match.end():match.end() + 24]
+            if AMBIGUOUS_SUFFIX_PATTERN.search(suffix):
+                return None
+            matches.append(match.group(1))
+        if not matches:
+            continue
+        unique_values = list(dict.fromkeys(matches))
+        if len(unique_values) == 1:
+            return unique_values[0]
+        return None
+
+    bare_number_match = LEADING_BARE_NUMBER_PATTERN.match(sanitized_markdown_text)
+    if bare_number_match:
+        return bare_number_match.group(1)
+
+    if REFUSAL_PATTERN.search(text):
+        return "refusal"
+
+    return None
+
+
+def extract_decision_code(transcript_content: dict[str, Any]) -> str:
+    """
+    Extract numeric decision code (positive integer) from transcript.
+
+    Looks for "Rating: X" format first (structured response from probe).
+    Falls back to finding first positive integer in the response.
+
+    Returns "other" if no clear rating/refusal found.
+    """
+    turns = transcript_content.get("turns", [])
+
+    # Combine all target responses
+    full_text = ""
+    for turn in turns:
+        response = turn.get("targetResponse", "")
+        if response:
+            full_text += response + "\n"
+
+    result = extract_decision_code_from_text(full_text)
+    return result if result else "other"
