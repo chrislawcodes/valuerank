@@ -109,9 +109,12 @@ export function useAnalysisState({
     [effectiveModels, perModel],
   );
 
-  // Must be defined AFTER effectiveModels
+  // Must be defined AFTER effectiveModels.
+  // Only filter when there are transcript-based models to filter by; if effectiveModels
+  // is empty (no transcripts for this run), show all models rather than nothing.
   const filteredDecisionsVisualizationData = useMemo(() => {
     if (decisionsVisualizationData == null) return null;
+    if (effectiveModels.length === 0) return decisionsVisualizationData;
     return {
       ...decisionsVisualizationData,
       decisionDistribution: Object.fromEntries(
