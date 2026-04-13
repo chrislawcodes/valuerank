@@ -1,5 +1,4 @@
 import { builder } from '../../builder.js';
-import { config } from '../../../config.js';
 import {
   type RankingShape,
   type RankingShapeBenchmarks,
@@ -12,13 +11,9 @@ import {
   type ClusterPairFaultLines,
 } from '../domain-clustering.js';
 import type {
-  DomainAnalysisConditionDetail,
-  DomainAnalysisConditionTranscript,
   DomainAnalysisMissingDefinition,
   DomainAnalysisUnavailableModel,
-  DomainAnalysisValueDetailResult,
   DomainAnalysisValueScore,
-  DomainAnalysisVignetteDetail,
   DomainAvailableSignature,
   DomainTrialModelStatus,
   DomainTrialPlanCellEstimate,
@@ -30,7 +25,13 @@ import type {
   DomainEvaluationEstimateModel,
   DomainTrialRunStatus,
 } from './shared.js';
-import { resolveTranscriptDecisionModel } from './shared.js';
+
+export {
+  DomainAnalysisConditionDetailRef,
+  DomainAnalysisVignetteDetailRef,
+  DomainAnalysisConditionTranscriptRef,
+  DomainAnalysisValueDetailResultRef,
+} from './types-detail.js';
 
 export type DomainAnalysisModel = {
   model: string;
@@ -70,10 +71,6 @@ export const DomainAnalysisModelRef = builder.objectRef<DomainAnalysisModel>('Do
 export const DomainAnalysisUnavailableModelRef = builder.objectRef<DomainAnalysisUnavailableModel>('DomainAnalysisUnavailableModel');
 export const DomainAnalysisMissingDefinitionRef = builder.objectRef<DomainAnalysisMissingDefinition>('DomainAnalysisMissingDefinition');
 export const DomainAnalysisResultRef = builder.objectRef<DomainAnalysisResult>('DomainAnalysisResult');
-export const DomainAnalysisConditionDetailRef = builder.objectRef<DomainAnalysisConditionDetail>('DomainAnalysisConditionDetail');
-export const DomainAnalysisVignetteDetailRef = builder.objectRef<DomainAnalysisVignetteDetail>('DomainAnalysisVignetteDetail');
-export const DomainAnalysisValueDetailResultRef = builder.objectRef<DomainAnalysisValueDetailResult>('DomainAnalysisValueDetailResult');
-export const DomainAnalysisConditionTranscriptRef = builder.objectRef<DomainAnalysisConditionTranscript>('DomainAnalysisConditionTranscript');
 export const DomainAvailableSignatureRef = builder.objectRef<DomainAvailableSignature>('DomainAvailableSignature');
 export const DomainTrialPlanModelRef = builder.objectRef<DomainTrialPlanModel>('DomainTrialPlanModel');
 export const DomainTrialPlanVignetteRef = builder.objectRef<DomainTrialPlanVignette>('DomainTrialPlanVignette');
@@ -249,116 +246,12 @@ builder.objectType(DomainAnalysisResultRef, {
   }),
 });
 
-builder.objectType(DomainAnalysisConditionDetailRef, {
-  fields: (t) => ({
-    scenarioId: t.exposeID('scenarioId', { nullable: true }),
-    conditionName: t.exposeString('conditionName'),
-    dimensions: t.expose('dimensions', { type: 'JSON', nullable: true }),
-    prioritized: t.exposeInt('prioritized'),
-    deprioritized: t.exposeInt('deprioritized'),
-    neutral: t.exposeInt('neutral'),
-    totalTrials: t.exposeInt('totalTrials'),
-    selectedValueWinRate: t.exposeFloat('selectedValueWinRate', { nullable: true }),
-    strongly: t.exposeInt('strongly'),
-    somewhat: t.exposeInt('somewhat'),
-    opponentSomewhat: t.exposeInt('opponentSomewhat'),
-    opponentStrongly: t.exposeInt('opponentStrongly'),
-    unknownCount: t.exposeInt('unknownCount'),
-  }),
-});
-
-builder.objectType(DomainAnalysisVignetteDetailRef, {
-  fields: (t) => ({
-    definitionId: t.exposeID('definitionId'),
-    definitionName: t.exposeString('definitionName'),
-    definitionVersion: t.exposeInt('definitionVersion'),
-    aggregateRunId: t.exposeID('aggregateRunId', { nullable: true }),
-    otherValueKey: t.exposeString('otherValueKey'),
-    prioritized: t.exposeInt('prioritized'),
-    deprioritized: t.exposeInt('deprioritized'),
-    neutral: t.exposeInt('neutral'),
-    totalTrials: t.exposeInt('totalTrials'),
-    selectedValueWinRate: t.exposeFloat('selectedValueWinRate', { nullable: true }),
-    conditions: t.field({
-      type: [DomainAnalysisConditionDetailRef],
-      resolve: (parent) => parent.conditions,
-    }),
-  }),
-});
-
-builder.objectType(DomainAnalysisValueDetailResultRef, {
-  fields: (t) => ({
-    domainId: t.exposeID('domainId'),
-    domainName: t.exposeString('domainName'),
-    modelId: t.exposeString('modelId'),
-    modelLabel: t.exposeString('modelLabel'),
-    valueKey: t.exposeString('valueKey'),
-    score: t.exposeFloat('score'),
-    prioritized: t.exposeInt('prioritized'),
-    deprioritized: t.exposeInt('deprioritized'),
-    neutral: t.exposeInt('neutral'),
-    totalTrials: t.exposeInt('totalTrials'),
-    targetedDefinitions: t.exposeInt('targetedDefinitions'),
-    coveredDefinitions: t.exposeInt('coveredDefinitions'),
-    missingDefinitionIds: t.exposeIDList('missingDefinitionIds'),
-    vignettes: t.field({
-      type: [DomainAnalysisVignetteDetailRef],
-      resolve: (parent) => parent.vignettes,
-    }),
-    generatedAt: t.field({
-      type: 'DateTime',
-      resolve: (parent) => parent.generatedAt,
-    }),
-  }),
-});
-
 builder.objectType(DomainAvailableSignatureRef, {
   fields: (t) => ({
     signature: t.exposeString('signature'),
     label: t.exposeString('label'),
     isVirtual: t.exposeBoolean('isVirtual'),
     temperature: t.exposeFloat('temperature', { nullable: true }),
-  }),
-});
-
-builder.objectType(DomainAnalysisConditionTranscriptRef, {
-  fields: (t) => ({
-    id: t.exposeID('id'),
-    runId: t.exposeID('runId'),
-    scenarioId: t.exposeID('scenarioId', { nullable: true }),
-    modelId: t.exposeString('modelId'),
-    decisionCode: t.exposeString('decisionCode', { nullable: true }),
-    decisionCodeSource: t.exposeString('decisionCodeSource', { nullable: true }),
-    decisionModelV2: t.field({
-      type: 'JSON',
-      nullable: true,
-      resolve: async (transcript, _args, ctx) => {
-        if (!config.DECISION_MODEL_V2) {
-          return null;
-        }
-
-        const scenario =
-          transcript.scenarioId === null || transcript.scenarioId === undefined || transcript.scenarioId === ''
-            ? null
-            : await ctx.loaders.scenario.load(transcript.scenarioId);
-
-        return resolveTranscriptDecisionModel({
-          decisionCode: transcript.decisionCode,
-          decisionMetadata: transcript.decisionMetadata,
-          definitionSnapshot: transcript.definitionSnapshot,
-          orientationFlipped: scenario?.orientationFlipped ?? null,
-          pairOverride: transcript.pairOverride,
-        });
-      },
-    }),
-    turnCount: t.exposeInt('turnCount'),
-    tokenCount: t.exposeInt('tokenCount'),
-    durationMs: t.exposeInt('durationMs'),
-    createdAt: t.field({
-      type: 'DateTime',
-      resolve: (parent) => parent.createdAt,
-    }),
-    content: t.expose('content', { type: 'JSON' }),
   }),
 });
 
