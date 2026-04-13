@@ -16,8 +16,7 @@ import { getBoss } from '../../queue/boss.js';
 import { DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
 import { getQueueNameForModel } from '../parallelism/index.js';
 import {
-  findMissingTranscriptKeys,
-  normalizeSamplesPerScenario,
+  findMissingProbes,
   type TranscriptKey,
 } from './coverage-completeness.js';
 
@@ -148,54 +147,6 @@ async function countJobsForRun(runId: string): Promise<{ pending: number; active
   }
 
   return { pending, active };
-}
-
-/**
- * Finds which scenario+model+sampleIndex combinations are missing transcripts for a run.
- * Handles multi-sample runs where samplesPerScenario > 1.
- */
-async function findMissingProbes(
-  runId: string
-): Promise<TranscriptKey[]> {
-  // Get run config to know which models were requested and samples per scenario
-  const run = await db.run.findUnique({
-    where: { id: runId },
-    select: {
-      config: true,
-      scenarioSelections: {
-        select: { scenarioId: true },
-      },
-    },
-  });
-
-  if (run === null) {
-    return [];
-  }
-
-  const config = run.config as { models: string[]; samplesPerScenario?: number };
-  const models = config.models ?? [];
-  const samplesPerScenario = normalizeSamplesPerScenario(config.samplesPerScenario);
-  const scenarioIds = run.scenarioSelections.map((s) => s.scenarioId);
-
-  // Get existing transcripts for this run (include sampleIndex for multi-sample runs)
-  const existingTranscripts = await db.transcript.findMany({
-    where: { runId },
-    select: { scenarioId: true, modelId: true, sampleIndex: true },
-  });
-  const existingTranscriptKeys = existingTranscripts
-    .filter((transcript): transcript is TranscriptKey => transcript.scenarioId !== null)
-    .map((transcript) => ({
-      scenarioId: transcript.scenarioId,
-      modelId: transcript.modelId,
-      sampleIndex: transcript.sampleIndex,
-    }));
-
-  return findMissingTranscriptKeys({
-    scenarioIds,
-    models,
-    samplesPerScenario,
-    existingTranscripts: existingTranscriptKeys,
-  });
 }
 
 /**

@@ -1,4 +1,5 @@
 import { db, Prisma, type SummaryCache } from '@valuerank/db';
+import { findMissingProbes } from '../../services/run/coverage-completeness.js';
 import { createLogger } from '@valuerank/shared';
 import { DEFAULT_JOB_OPTIONS } from '../types.js';
 import { triggerBasicAnalysis } from '../../services/analysis/index.js';
@@ -83,7 +84,15 @@ export async function queueComputeTokenStats(runId: string): Promise<void> {
 }
 
 /**
- * Check if all transcripts for a run have been summarized.
+ * Check if all transcripts for a run have been summarized AND all expected probes
+ * have produced transcripts (or been accounted for).
+ *
+ * Returns false if:
+ * - Any transcript is still unsummarized (existing behavior), OR
+ * - Any expected (scenarioId × modelId × sampleIndex) tuple lacks a transcript
+ *   (new guard: prevents premature completion when AUTH_ERROR probes are re-queued)
+ *
+ * Returns true only when both conditions are satisfied.
  */
 export async function checkAllSummarized(runId: string): Promise<boolean> {
   const unsummarized = await db.transcript.count({
@@ -92,7 +101,11 @@ export async function checkAllSummarized(runId: string): Promise<boolean> {
       summarizedAt: null,
     },
   });
-  return unsummarized === 0;
+  if (unsummarized > 0) {
+    return false;
+  }
+  const missing = await findMissingProbes(runId);
+  return missing.length === 0;
 }
 
 /**
