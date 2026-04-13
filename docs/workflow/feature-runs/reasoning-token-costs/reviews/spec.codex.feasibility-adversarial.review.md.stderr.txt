@@ -1,0 +1,4096 @@
+Reading additional input from stdin...
+OpenAI Codex v0.118.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d74f9-dac5-7a32-8479-f9477e06f450
+--------
+user
+Review this spec artifact using a feasibility-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: anthropic.py
+"""
+Anthropic Messages API adapter.
+"""
+
+from dataclasses import dataclass
+from typing import Any, Optional
+
+from ...config import get_config
+from ...errors import ErrorCode, LLMError
+from ...logging import get_logger
+from ..base import BaseLLMAdapter, post_json
+from ..config_utils import get_config_value, resolve_max_tokens, resolve_temperature
+from ..constants import DEFAULT_TIMEOUT, normalize_finish_reason
+from ..types import LLMResponse
+
+log = get_logger("llm_adapters.anthropic")
+
+
+@dataclass
+class AnthropicAdapter(BaseLLMAdapter):
+    """Adapter for Anthropic Messages API."""
+
+    api_key: Optional[str] = None
+    base_url: str = "https://api.anthropic.com/v1/messages"
+    api_version: str = "2023-06-01"
+    timeout: int = DEFAULT_TIMEOUT
+
+    def __post_init__(self) -> None:
+        if self.api_key is None:
+            self.api_key = get_config().anthropic_api_key
+
+    def generate(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        *,
+        temperature: Optional[float] = None,
+        max_tokens: int = 1024,
+        model_config: Optional[dict] = None,
+        seed: Optional[int] = None,
+        timeout: Optional[int] = None,
+    ) -> LLMResponse:
+        if not self.api_key:
+            raise LLMError(
+                message="ANTHROPIC_API_KEY is not set",
+                code=ErrorCode.MISSING_API_KEY,
+            )
+
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": self.api_version,
+            "Content-Type": "application/json",
+        }
+
+        # Convert messages to Anthropic format (separate system from conversation)
+        system_parts: list[str] = []
+        anthropic_messages: list[dict[str, str]] = []
+
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "system":
+                system_parts.append(content)
+            else:
+                anthropic_messages.append({"role": role, "content": content})
+
+        if not anthropic_messages:
+            anthropic_messages = [{"role": "user", "content": ""}]
+
+        # Resolve config values (model_config overrides function args)
+        # Note: Anthropic requires max_tokens, so use a high default if unlimited
+        resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+        resolved_temperature = resolve_temperature(model_config, temperature)
+        # Anthropic requires max_tokens - use 8192 as default for "unlimited"
+        effective_max_tokens = resolved_max_tokens if resolved_max_tokens is not None else 8192
+
+        payload: dict[str, Any] = {
+            "model": model,
+            "max_tokens": effective_max_tokens,
+            "messages": anthropic_messages,
+        }
+
+        if resolved_temperature is not None:
+            payload["temperature"] = resolved_temperature
+
+        if system_parts:
+            payload["system"] = "\n\n".join(system_parts)
+
+        # Add optional config values (Anthropic supports topP and stopSequences)
+        top_p = get_config_value(model_config, "topP", float, 0, 1)
+        if top_p is not None:
+            payload["top_p"] = top_p
+
+        stop_seqs = get_config_value(model_config, "stopSequences", list)
+        if stop_seqs is not None and len(stop_seqs) > 0:
+            payload["stop_sequences"] = stop_seqs
+
+        # Note: Anthropic does NOT support frequencyPenalty or presencePenalty
+
+        effective_timeout = timeout if timeout is not None else self.timeout
+        log.debug("Calling Anthropic API", model=model, max_tokens=effective_max_tokens)
+        data = post_json(self.base_url, headers, payload, timeout=effective_timeout)
+
+        try:
+            content_list = data.get("content", [])
+            text_parts = []
+            for item in content_list:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    text_parts.append(item.get("text", ""))
+
+            usage = data.get("usage", {})
+            model_version = data.get("model")
+
+            # Capture provider metadata
+            raw_stop_reason = data.get("stop_reason")
+            provider_metadata = {
+                "provider": "anthropic",
+                "finishReason": normalize_finish_reason("anthropic", raw_stop_reason),
+                "raw": {
+                    "id": data.get("id"),
+                    "stop_reason": raw_stop_reason,
+                    "stop_sequence": data.get("stop_sequence"),
+                },
+            }
+
+            return LLMResponse(
+                content="\n".join(text_parts).strip(),
+                input_tokens=usage.get("input_tokens"),
+                output_tokens=usage.get("output_tokens"),
+                model_version=model_version,
+                provider_metadata=provider_metadata,
+            )
+        except (KeyError, TypeError) as exc:
+            raise LLMError(
+                message="Unexpected Anthropic response format",
+                code=ErrorCode.INVALID_RESPONSE,
+                details=str(exc),
+            )
+
+
+Context: mistral.py
+"""
+Mistral API adapter (OpenAI-compatible).
+"""
+
+from dataclasses import dataclass
+from typing import Any, Optional
+
+from ...config import get_config
+from ...errors import ErrorCode, LLMError
+from ...logging import get_logger
+from ..base import BaseLLMAdapter, post_json
+from ..config_utils import get_config_value, resolve_max_tokens, resolve_temperature
+from ..constants import DEFAULT_TIMEOUT, normalize_finish_reason
+from ..types import LLMResponse
+
+log = get_logger("llm_adapters.mistral")
+
+
+@dataclass
+class MistralAdapter(BaseLLMAdapter):
+    """Adapter for Mistral API (OpenAI-compatible)."""
+
+    api_key: Optional[str] = None
+    base_url: str = "https://api.mistral.ai/v1/chat/completions"
+    timeout: int = DEFAULT_TIMEOUT
+
+    def __post_init__(self) -> None:
+        if self.api_key is None:
+            self.api_key = get_config().mistral_api_key
+
+    def generate(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        *,
+        temperature: Optional[float] = None,
+        max_tokens: int = 1024,
+        model_config: Optional[dict] = None,
+        seed: Optional[int] = None,
+        timeout: Optional[int] = None,
+    ) -> LLMResponse:
+        if not self.api_key:
+            raise LLMError(
+                message="MISTRAL_API_KEY is not set",
+                code=ErrorCode.MISSING_API_KEY,
+            )
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        # Resolve config values (model_config overrides function args)
+        resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+        resolved_temperature = resolve_temperature(model_config, temperature)
+
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+        }
+
+        if resolved_temperature is not None:
+            payload["temperature"] = resolved_temperature
+
+        # Only add max_tokens if not unlimited (None)
+        if resolved_max_tokens is not None:
+            payload["max_tokens"] = resolved_max_tokens
+
+        # Add optional config values (Mistral supports topP and stopSequences)
+        top_p = get_config_value(model_config, "topP", float, 0, 1)
+        if top_p is not None:
+            payload["top_p"] = top_p
+
+        stop_seqs = get_config_value(model_config, "stopSequences", list)
+        if stop_seqs is not None and len(stop_seqs) > 0:
+            payload["stop"] = stop_seqs
+
+        # Note: Mistral does NOT support frequencyPenalty or presencePenalty
+
+        # Use explicit timeout if provided, otherwise fall back to instance default
+        effective_timeout = timeout if timeout is not None else self.timeout
+
+        log.debug("Calling Mistral API", model=model, max_tokens=resolved_max_tokens)
+        data = post_json(self.base_url, headers, payload, timeout=effective_timeout)
+
+        try:
+            choice = data["choices"][0]
+            content = choice["message"]["content"]
+            usage = data.get("usage", {})
+
+            # Capture provider metadata (OpenAI-compatible format)
+            raw_finish_reason = choice.get("finish_reason")
+            provider_metadata = {
+                "provider": "mistral",
+                "finishReason": normalize_finish_reason("mistral", raw_finish_reason),
+                "raw": {
+                    "id": data.get("id"),
+                    "finish_reason": raw_finish_reason,
+                },
+            }
+
+            return LLMResponse(
+                content=content.strip() if content else "",
+                input_tokens=usage.get("prompt_tokens"),
+                output_tokens=usage.get("completion_tokens"),
+                model_version=data.get("model"),
+                provider_metadata=provider_metadata,
+            )
+        except (KeyError, IndexError, TypeError) as exc:
+            raise LLMError(
+                message="Unexpected Mistral response format",
+                code=ErrorCode.INVALID_RESPONSE,
+                details=str(exc),
+            )
+
+
+Context: deepseek.py
+"""
+DeepSeek API adapter (OpenAI-compatible with streaming support).
+"""
+
+from dataclasses import dataclass
+import json
+from typing import Any, Generator, Optional
+
+import requests
+
+from ...config import get_config
+from ...errors import ErrorCode, LLMError
+from ...logging import get_logger
+from ..base import BaseLLMAdapter, post_json
+from ..config_utils import get_config_value, resolve_max_tokens, resolve_temperature
+from ..constants import DEFAULT_TIMEOUT, normalize_finish_reason
+from ..types import LLMResponse, StreamChunk
+
+log = get_logger("llm_adapters.deepseek")
+
+
+@dataclass
+class DeepSeekAdapter(BaseLLMAdapter):
+    """Adapter for DeepSeek API (OpenAI-compatible)."""
+
+    api_key: Optional[str] = None
+    base_url: str = "https://api.deepseek.com/v1/chat/completions"
+    timeout: int = DEFAULT_TIMEOUT
+
+    def __post_init__(self) -> None:
+        if self.api_key is None:
+            self.api_key = get_config().deepseek_api_key
+
+    def generate(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        *,
+        temperature: Optional[float] = None,
+        max_tokens: int = 1024,
+        model_config: Optional[dict] = None,
+        seed: Optional[int] = None,
+        timeout: Optional[int] = None,
+    ) -> LLMResponse:
+        if not self.api_key:
+            raise LLMError(
+                message="DEEPSEEK_API_KEY is not set",
+                code=ErrorCode.MISSING_API_KEY,
+            )
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        # Resolve config values (model_config overrides function args)
+        resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+        resolved_temperature = resolve_temperature(model_config, temperature)
+
+        # DeepSeek max_tokens limits vary by model:
+        # - deepseek-reasoner: 64K (65536)
+        # - deepseek-chat and others: 8K (8192)
+        if resolved_max_tokens is not None:
+            max_limit = 65536 if "reasoner" in model else 8192
+            resolved_max_tokens = min(resolved_max_tokens, max_limit)
+
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+        }
+
+        if resolved_temperature is not None:
+            payload["temperature"] = resolved_temperature
+
+        # Only add max_tokens if not unlimited (None)
+        if resolved_max_tokens is not None:
+            payload["max_tokens"] = resolved_max_tokens
+
+        if seed is not None:
+            payload["seed"] = seed
+
+        # Add optional config values (DeepSeek supports all OpenAI-compatible options)
+        top_p = get_config_value(model_config, "topP", float, 0, 1)
+        if top_p is not None:
+            payload["top_p"] = top_p
+
+        freq_penalty = get_config_value(model_config, "frequencyPenalty", float, -2, 2)
+        if freq_penalty is not None:
+            payload["frequency_penalty"] = freq_penalty
+
+        pres_penalty = get_config_value(model_config, "presencePenalty", float, -2, 2)
+        if pres_penalty is not None:
+            payload["presence_penalty"] = pres_penalty
+
+        stop_seqs = get_config_value(model_config, "stopSequences", list)
+        if stop_seqs is not None and len(stop_seqs) > 0:
+            payload["stop"] = stop_seqs
+
+        # Use provided timeout or fall back to adapter default
+        effective_timeout = timeout if timeout is not None else self.timeout
+        log.debug(
+            "Calling DeepSeek API",
+            model=model,
+            max_tokens=resolved_max_tokens,
+            timeout=effective_timeout,
+        )
+        data = post_json(self.base_url, headers, payload, timeout=effective_timeout)
+
+        try:
+            choice = data["choices"][0]
+            content = choice["message"]["content"]
+            usage = data.get("usage", {})
+
+            # Capture provider metadata (OpenAI-compatible format)
+            raw_finish_reason = choice.get("finish_reason")
+            provider_metadata = {
+                "provider": "deepseek",
+                "finishReason": normalize_finish_reason("deepseek", raw_finish_reason),
+                "raw": {
+                    "id": data.get("id"),
+                    "finish_reason": raw_finish_reason,
+                },
+            }
+
+            # Log warning for content filter or system resource issues
+            if raw_finish_reason in ("content_filter", "insufficient_system_resource"):
+                log.warn(
+                    "DeepSeek non-standard finish",
+                    model=model,
+                    finish_reason=raw_finish_reason,
+                )
+
+            return LLMResponse(
+                content=content.strip() if content else "",
+                input_tokens=usage.get("prompt_tokens"),
+                output_tokens=usage.get("completion_tokens"),
+                model_version=data.get("model"),
+                provider_metadata=provider_metadata,
+            )
+        except (KeyError, IndexError, TypeError) as exc:
+            raise LLMError(
+                message="Unexpected DeepSeek response format",
+                code=ErrorCode.INVALID_RESPONSE,
+                details=str(exc),
+            )
+
+    def generate_stream(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        *,
+        temperature: Optional[float] = None,
+        max_tokens: int = 1024,
+        model_config: Optional[dict] = None,
+        timeout: Optional[int] = None,
+    ) -> Generator[StreamChunk, None, None]:
+        """
+        Stream response from DeepSeek API, yielding chunks as they arrive.
+
+        Yields StreamChunk objects with incremental content and token counts.
+        Final chunk has done=True and includes input_tokens.
+        """
+        if not self.api_key:
+            raise LLMError(
+                message="DEEPSEEK_API_KEY is not set",
+                code=ErrorCode.MISSING_API_KEY,
+            )
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        # Resolve config values
+        resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+        resolved_temperature = resolve_temperature(model_config, temperature)
+
+        # DeepSeek max_tokens limits vary by model
+        if resolved_max_tokens is not None:
+            max_limit = 65536 if "reasoner" in model else 8192
+            resolved_max_tokens = min(resolved_max_tokens, max_limit)
+
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "stream": True,  # Enable streaming
+            "stream_options": {"include_usage": True},  # Get token counts in stream
+        }
+
+        if resolved_temperature is not None:
+            payload["temperature"] = resolved_temperature
+
+        if resolved_max_tokens is not None:
+            payload["max_tokens"] = resolved_max_tokens
+
+        effective_timeout = timeout if timeout is not None else self.timeout
+        log.debug("Starting DeepSeek streaming", model=model, max_tokens=resolved_max_tokens)
+
+        try:
+            response = requests.post(
+                self.base_url,
+                headers=headers,
+                json=payload,
+                timeout=effective_timeout,
+                stream=True,
+            )
+            response.raise_for_status()
+        except requests.exceptions.Timeout:
+            raise LLMError(
+                message=f"DeepSeek API timeout after {effective_timeout}s",
+                code=ErrorCode.TIMEOUT,
+            )
+        except requests.exceptions.HTTPError as exc:
+            # Try to extract error details from response body
+            error_details = None
+            status_code = None
+            try:
+                if exc.response is not None:
+                    status_code = exc.response.status_code
+                    # For streaming responses, read the content
+                    error_body = exc.response.content.decode('utf-8', errors='replace')
+                    if error_body:
+                        error_details = error_body[:500]  # Limit size
+            except Exception:
+                pass
+
+            error_code = (
+                ErrorCode.SERVER_ERROR if status_code and status_code >= 500
+                else ErrorCode.VALIDATION_ERROR
+            )
+
+            raise LLMError(
+                message=f"DeepSeek API error ({status_code}): {exc}",
+                code=error_code,
+                details=error_details,
+            )
+        except requests.exceptions.RequestException as exc:
+            raise LLMError(
+                message=f"DeepSeek API request failed: {exc}",
+                code=ErrorCode.NETWORK_ERROR,
+            )
+
+        accumulated_content = ""
+        output_tokens = 0
+        input_tokens = None
+        model_version = None
+        finish_reason = None
+        chunk_count = 0
+
+        try:
+            for line in response.iter_lines():
+                if not line:
+                    continue
+
+                line_str = line.decode("utf-8")
+                if not line_str.startswith("data: "):
+                    continue
+
+                data_str = line_str[6:]  # Remove "data: " prefix
+                if data_str == "[DONE]":
+                    # Final chunk - include normalized finish_reason
+                    normalized_finish = normalize_finish_reason("deepseek", finish_reason)
+                    yield StreamChunk(
+                        content=accumulated_content,
+                        output_tokens=output_tokens,
+                        done=True,
+                        input_tokens=input_tokens,
+                        model_version=model_version,
+                        finish_reason=normalized_finish,
+                    )
+                    return
+
+                try:
+                    data = json.loads(data_str)
+                except json.JSONDecodeError:
+                    continue
+
+                chunk_count += 1
+
+                # Extract model version from first chunk
+                if model_version is None:
+                    model_version = data.get("model")
+
+                # Handle usage info (comes in final chunk with stream_options)
+                usage = data.get("usage")
+                if usage:
+                    input_tokens = usage.get("prompt_tokens")
+                    output_tokens = usage.get("completion_tokens", output_tokens)
+
+                # Extract content delta and finish_reason
+                choices = data.get("choices", [])
+                if choices:
+                    choice = choices[0]
+                    delta = choice.get("delta", {})
+                    content_delta = delta.get("content", "")
+
+                    # Check for finish_reason (indicates why generation stopped)
+                    if choice.get("finish_reason"):
+                        finish_reason = choice.get("finish_reason")
+
+                    if content_delta:
+                        accumulated_content += content_delta
+                        # Estimate tokens (roughly 4 chars per token)
+                        output_tokens = max(output_tokens, len(accumulated_content) // 4)
+
+                        yield StreamChunk(
+                            content=accumulated_content,
+                            output_tokens=output_tokens,
+                            done=False,
+                        )
+
+            # Stream ended without [DONE] - log details and yield final chunk
+            log.warn(
+                "DeepSeek stream ended without [DONE]",
+                model=model,
+                chunk_count=chunk_count,
+                content_length=len(accumulated_content),
+                output_tokens=output_tokens,
+                finish_reason=finish_reason,
+            )
+            normalized_finish = normalize_finish_reason("deepseek", finish_reason)
+            yield StreamChunk(
+                content=accumulated_content,
+                output_tokens=output_tokens,
+                done=True,
+                input_tokens=input_tokens,
+                model_version=model_version,
+                finish_reason=normalized_finish,
+            )
+
+        except Exception as exc:
+            # Log details about partial response before raising error
+            log.error(
+                "DeepSeek stream failed",
+                model=model,
+                error=str(exc),
+                chunk_count=chunk_count,
+                content_length=len(accumulated_content),
+                output_tokens=output_tokens,
+                finish_reason=finish_reason,
+                partial_content_preview=accumulated_content[-500:] if accumulated_content else None,
+            )
+            raise LLMError(
+                message=f"Error reading DeepSeek stream: {exc}",
+                code=ErrorCode.NETWORK_ERROR,
+                details=(
+                    f"chunks={chunk_count}, tokens~{output_tokens}, "
+                    f"finish={finish_reason}, content_len={len(accumulated_content)}"
+                ),
+            )
+
+
+Artifact: spec.md
+# Spec: Capture Reasoning Token Costs
+
+**Slug:** reasoning-token-costs  
+
+---
+
+## Problem
+
+LLM adapters don't capture reasoning/thinking tokens. For some providers, reasoning tokens are billed separately from `completion_tokens` but never counted, causing cost tracking to underreport.
+
+**Observed gap:** xAI showed $0.84 actual vs $0.38 tracked for one Grok-4 run — a 2.2× undercount.
+
+---
+
+## Key Finding: Provider Billing Differs
+
+| Provider | Does `completion_tokens` include reasoning? | Action |
+|----------|----------------------------------------------|--------|
+| xAI | **No** — reasoning tokens are separate | Add `completion_tokens_details.reasoning_tokens` to output for cost |
+| Google | **No** — thinking tokens are separate from `candidatesTokenCount` | Add `usageMetadata.thoughtsTokenCount` to output for cost |
+| OpenAI | **Yes** — `completion_tokens` already includes reasoning | Store for visibility only; do NOT add (double-count) |
+| DeepSeek | **Yes** — same as OpenAI | Store for visibility only; do NOT add |
+
+---
+
+## Locked Decisions
+
+1. Add `reasoning_tokens: Optional[int]` and `reasoning_tokens_included_in_output: bool = False` to `LLMResponse`. xAI and Google set `included=False` (must add to output). OpenAI and DeepSeek set `included=True` (already counted).
+2. `probe.py` adds extra reasoning tokens to `total_output_tokens` at accumulation time for providers where `included=False`. This keeps the TypeScript cost formula unchanged.
+3. Reasoning tokens accumulation is NOT gated on `output_tokens > 0` — a turn with 0 visible output but non-zero reasoning tokens must still be counted.
+4. `costSnapshot` stores `reasoningTokens` separately for transparency.
+5. `get-transcript.ts` MCP tool is updated to surface `reasoningTokens` from costSnapshot.
+6. No DB schema migration — `costSnapshot` is a JSON blob in `content` JSONB.
+7. DeepSeek `generate_stream` is out of scope (probe.py uses `generate()` only). **Known gap:** streaming path will not count reasoning tokens until addressed separately.
+8. `anthropic.py` and `mistral.py` are out of scope.
+
+---
+
+## Scope
+
+### Files Modified
+
+**Python — cloud/workers/**
+
+| File | Change |
+|------|--------|
+| `common/llm_adapters/types.py` | Add `reasoning_tokens: Optional[int]` and `reasoning_tokens_included_in_output: bool = False` to `LLMResponse`; emit `reasoningTokens` in `to_dict()` when not None |
+| `common/cost.py` | Add `reasoning_tokens: Optional[int]` to `CostSnapshot`; emit in `to_dict()` when not None; update `create_cost_snapshot` to accept `reasoning_tokens` for storage (cost calculation unchanged — `output_tokens` already includes extra tokens when needed) |
+| `common/llm_adapters/providers/xai.py` | Read `completion_tokens_details.reasoning_tokens`; set `reasoning_tokens_included_in_output=False` |
+| `common/llm_adapters/providers/openai.py` | Read `completion_tokens_details.reasoning_tokens`; set `reasoning_tokens_included_in_output=True` |
+| `common/llm_adapters/providers/deepseek.py` | Read `completion_tokens_details.reasoning_tokens` in `generate()` only; set `reasoning_tokens_included_in_output=True` (streaming path unchanged) |
+| `common/llm_adapters/providers/google.py` | Read `usageMetadata.thoughtsTokenCount`; set `reasoning_tokens_included_in_output=False`; apply to all three `LLMResponse` return sites in `generate()` |
+| `probe.py` | Add `total_reasoning_tokens: int = 0` to `Transcript`; accumulate reasoning tokens unconditionally (not gated on `output_tokens`); add extra tokens to `total_output_tokens` when `included=False`; emit `totalReasoningTokens` in `to_dict()` when > 0; pass to `create_cost_snapshot` |
+
+**TypeScript — cloud/apps/api/**
+
+| File | Change |
+|------|--------|
+| `src/services/transcript/create.ts` | Add `reasoningTokens?: number` to `CostSnapshot` type; add `totalReasoningTokens?: number \| null` to `ProbeTranscript` type |
+| `src/queue/handlers/probe-scenario.ts` | Pass `reasoningTokens` from transcript into the costSnapshot object (math unchanged — `totalOutputTokens` already includes extra tokens) |
+| `src/mcp/tools/get-transcript.ts` | Add `reasoningTokens?: number` to the costSnapshot type and extraction logic so the field is surfaced to MCP callers |
+
+### Files NOT Modified
+
+- `cloud/workers/common/llm_adapters/providers/anthropic.py`
+- `cloud/workers/common/llm_adapters/providers/mistral.py`
+- `cloud/workers/common/llm_adapters/providers/deepseek.py` — `generate_stream` method only
+- `cloud/packages/db/` — no schema changes
+- GraphQL schema files
+- `CLAUDE.md`, `AGENTS.md`, `MEMORY.md`, `.gitignore`
+
+---
+
+## Implementation Assumptions
+
+- **DeepSeek `completion_tokens_details` field**: DeepSeek uses the OpenAI-compatible API format. The spec assumes `completion_tokens_details.reasoning_tokens` is present in DeepSeek Reasoner responses. Implementation must verify against actual API docs or a live test response. If the field is absent, the adapter will safely return `reasoning_tokens=None` (no regression).
+- **xAI `completion_tokens_details` format**: Same assumption — xAI uses OpenAI-compatible format, field is assumed present for reasoning models.
+- **Google `thoughtsTokenCount`**: Standard field for Gemini 2.5 thinking models. Absent for non-thinking models → returns `None` safely.
+
+---
+
+## Acceptance Criteria
+
+1. xAI: turn with `completion_tokens=100` and `completion_tokens_details.reasoning_tokens=400` → `LLMResponse.output_tokens=100`, `reasoning_tokens=400`, `included=False`.
+2. OpenAI: turn with `completion_tokens=500` (400 reasoning included) → `LLMResponse.output_tokens=500`, `reasoning_tokens=400`, `included=True`.
+3. `Transcript.total_output_tokens` after one xAI turn (100 visible, 400 reasoning, `included=False`) = 500.
+4. `Transcript.total_output_tokens` after one OpenAI turn (500 completion, 400 reasoning, `included=True`) = 500 (no double-count).
+5. `CostSnapshot.to_dict()` includes `reasoningTokens` only when not None.
+6. `Transcript.to_dict()` includes `totalReasoningTokens` only when > 0.
+7. probe-scenario.ts: xAI run with 100 visible + 400 reasoning output tokens produces cost billed at 500 output tokens.
+8. probe-scenario.ts: OpenAI run with 500 completion tokens (400 reasoning included) produces cost billed at 500 output tokens (no double-count).
+9. MCP `get_transcript` returns `reasoningTokens` from costSnapshot when present.
+10. `npm run build --workspace @valuerank/api` passes.
+11. Existing Python cost tests pass; new tests cover criteria 1–6.
+
+---
+
+## Deferred / Out of Scope
+
+- DeepSeek `generate_stream` reasoning token capture (known gap; separate ticket)
+- `extractStoredTranscriptTokenUsage` recovery path (does not affect primary flow)
+- Anthropic and Mistral reasoning token support
+- Backfilling existing transcripts
+- GraphQL schema exposure of `reasoningTokens`
+- UI changes
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the spec against the adapter code you provided and separating what is directly supported from what is only an assumption. I’ll keep the review adversarial and only count findings that the code context actually backs up.
+exec
+/bin/zsh -lc "rg --files cloud/workers/common/llm_adapters | rg 'types\\.py|cost\\.py|probe\\.py|xai\\.py|openai\\.py|google\\.py|deepseek\\.py|anthropic\\.py|mistral\\.py'" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+exec
+/bin/zsh -lc "rg --files cloud/apps/api/src | rg 'create\\.ts|get-transcript\\.ts|probe-scenario\\.ts'" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+cloud/apps/api/src/services/audit/create.ts
+cloud/apps/api/src/services/transcript/create.ts
+cloud/apps/api/src/queue/handlers/probe-scenario.ts
+cloud/apps/api/src/mcp/tools/get-transcript.ts
+
+ succeeded in 0ms:
+cloud/workers/common/llm_adapters/types.py
+cloud/workers/common/llm_adapters/providers/google.py
+cloud/workers/common/llm_adapters/providers/xai.py
+cloud/workers/common/llm_adapters/providers/mistral.py
+cloud/workers/common/llm_adapters/providers/anthropic.py
+cloud/workers/common/llm_adapters/providers/deepseek.py
+cloud/workers/common/llm_adapters/providers/openai.py
+
+codex
+I found the main files the spec wants to touch. Next I’m checking whether the current code already has any shape that would break the spec, especially around response parsing and token accounting.
+exec
+/bin/zsh -lc "sed -n '1,240p' cloud/workers/common/llm_adapters/types.py" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+"""
+Data types for LLM adapter responses.
+"""
+
+from dataclasses import dataclass
+from typing import Any, Optional
+
+
+@dataclass
+class LLMResponse:
+    """Response from an LLM API call."""
+
+    content: str
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    model_version: Optional[str] = None
+    provider_metadata: Optional[dict[str, Any]] = None
+    prompt_hash: Optional[str] = None
+    temperature_sent: Optional[bool] = None
+    temperature_value: Optional[float] = None
+    seed_sent: Optional[bool] = None
+    seed_value: Optional[int] = None
+    adapter_mode: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        """Backfill request instrumentation from the shared adapter context."""
+        from .base import get_current_request_metadata
+
+        metadata = get_current_request_metadata()
+        if not metadata:
+            return
+
+        if self.prompt_hash is None:
+            self.prompt_hash = metadata.get("prompt_hash")
+        if self.temperature_sent is None:
+            self.temperature_sent = metadata.get("temperature_sent")
+        if self.temperature_value is None:
+            self.temperature_value = metadata.get("temperature_value")
+        if self.seed_sent is None:
+            self.seed_sent = metadata.get("seed_sent")
+        if self.seed_value is None:
+            self.seed_value = metadata.get("seed_value")
+        if self.adapter_mode is None:
+            self.adapter_mode = metadata.get("adapter_mode")
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON output."""
+        result = {
+            "content": self.content,
+            "inputTokens": self.input_tokens,
+            "outputTokens": self.output_tokens,
+            "modelVersion": self.model_version,
+        }
+        if self.provider_metadata is not None:
+            result["providerMetadata"] = self.provider_metadata
+        if self.prompt_hash is not None:
+            result["promptHash"] = self.prompt_hash
+        if self.temperature_sent is not None:
+            result["temperatureSent"] = self.temperature_sent
+        if self.temperature_value is not None:
+            result["temperatureValue"] = self.temperature_value
+        if self.seed_sent is not None:
+            result["seedSent"] = self.seed_sent
+        if self.seed_value is not None:
+            result["seedValue"] = self.seed_value
+        if self.adapter_mode is not None:
+            result["adapterMode"] = self.adapter_mode
+        return result
+
+
+@dataclass
+class StreamChunk:
+    """A chunk from a streaming LLM response."""
+
+    content: str  # The text content of this chunk
+    output_tokens: int  # Cumulative output tokens so far
+    done: bool = False  # True if this is the final chunk
+    input_tokens: Optional[int] = None  # Only available on final chunk
+    model_version: Optional[str] = None  # Only available on final chunk
+    finish_reason: Optional[str] = None  # Only available on final chunk (normalized)
+
+exec
+/bin/zsh -lc "sed -n '1,280p' cloud/apps/api/src/queue/handlers/probe-scenario.ts" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/api/src/services/transcript/create.ts" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+/**
+ * Transcript Creation Service
+ *
+ * Creates transcript records from Python probe worker output.
+ */
+
+import { db, Prisma } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+
+const log = createLogger('services:transcript');
+
+/**
+ * Provider metadata captured from LLM API response.
+ * Contains normalized finish reason and raw provider-specific data.
+ */
+export type ProviderMetadata = {
+  provider: string;
+  finishReason: string;
+  raw: Record<string, unknown>;
+};
+
+/**
+ * Turn structure from Python probe worker.
+ */
+export type TranscriptTurn = {
+  turnNumber: number;
+  promptLabel: string;
+  probePrompt: string;
+  targetResponse: string;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  providerMetadata?: ProviderMetadata | null;
+};
+
+/**
+ * Transcript data from Python probe worker.
+ */
+export type ProbeTranscript = {
+  turns: TranscriptTurn[];
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  modelVersion?: string | null;
+  startedAt: string;
+  completedAt: string;
+};
+
+/**
+ * Cost snapshot for transcript.
+ */
+export type CostSnapshot = {
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCost: number;
+  costInputPerMillion: number;
+  costOutputPerMillion: number;
+};
+
+/**
+ * Input for creating a transcript.
+ */
+export type CreateTranscriptInput = {
+  runId: string;
+  scenarioId: string;
+  modelId: string;
+  sampleIndex?: number; // Index within sample set for multi-sample runs (0 to N-1), defaults to 0
+  transcript: ProbeTranscript;
+  definitionSnapshot?: Prisma.InputJsonValue;
+  costSnapshot?: CostSnapshot;
+};
+
+/**
+ * Create a transcript record from probe worker output.
+ */
+export async function createTranscript(input: CreateTranscriptInput) {
+  const { runId, scenarioId, modelId, sampleIndex = 0, transcript, definitionSnapshot, costSnapshot } = input;
+
+  // Calculate duration from timestamps
+  const startedAt = new Date(transcript.startedAt);
+  const completedAt = new Date(transcript.completedAt);
+  const durationMs = completedAt.getTime() - startedAt.getTime();
+
+  // Build content structure for storage (JSONB)
+  // Include costSnapshot if provided for actual cost computation
+  const content: Record<string, unknown> = {
+    schemaVersion: 1,
+    turns: transcript.turns,
+  };
+
+  if (costSnapshot !== undefined) {
+    content.costSnapshot = costSnapshot;
+  }
+
+  // Calculate total token count
+  const tokenCount = transcript.totalInputTokens + transcript.totalOutputTokens;
+
+  // Get estimatedCost from costSnapshot if available
+  const estimatedCost = costSnapshot?.estimatedCost ?? null;
+
+  log.info(
+    { runId, scenarioId, modelId, sampleIndex, turns: transcript.turns.length, tokenCount, estimatedCost },
+    'Creating transcript'
+  );
+
+  const record = await db.transcript.create({
+    data: {
+      runId,
+      scenarioId,
+      modelId,
+      sampleIndex,
+      modelVersion: transcript.modelVersion,
+      definitionSnapshot: definitionSnapshot ?? Prisma.JsonNull,
+      content: content as Prisma.InputJsonValue,
+      turnCount: transcript.turns.length,
+      tokenCount,
+      durationMs,
+      estimatedCost,
+    },
+  });
+
+  log.info({ transcriptId: record.id, runId, estimatedCost }, 'Transcript created');
+
+  return record;
+}
+
+/**
+ * Validate transcript data from Python worker.
+ */
+export function validateTranscript(data: unknown): data is ProbeTranscript {
+  if (data === null || data === undefined || typeof data !== 'object') {
+    return false;
+  }
+
+  const obj = data as Record<string, unknown>;
+
+  // Check required fields
+  if (!Array.isArray(obj.turns)) return false;
+  if (typeof obj.totalInputTokens !== 'number') return false;
+  if (typeof obj.totalOutputTokens !== 'number') return false;
+  if (typeof obj.startedAt !== 'string') return false;
+  if (typeof obj.completedAt !== 'string') return false;
+
+  // Validate each turn
+  for (const turn of obj.turns) {
+    if (turn === null || turn === undefined || typeof turn !== 'object') return false;
+    const t = turn as Record<string, unknown>;
+    if (typeof t.turnNumber !== 'number') return false;
+    if (typeof t.promptLabel !== 'string') return false;
+    if (typeof t.probePrompt !== 'string') return false;
+    if (typeof t.targetResponse !== 'string') return false;
+  }
+
+  return true;
+}
+
+ succeeded in 0ms:
+/**
+ * Probe Scenario Handler
+ *
+ * Handles probe_scenario jobs by executing Python probe worker
+ * and saving transcripts to database.
+ *
+ * Jobs are processed in parallel within each batch, with rate limiting
+ * enforced per-provider using Bottleneck.
+ */
+
+import path from 'path';
+import type * as PgBoss from 'pg-boss';
+import type { Prisma } from '@valuerank/db';
+import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import type { ProbeScenarioJobData } from '../types.js';
+import { DEFAULT_JOB_OPTIONS } from '../types.js';
+import { spawnPython } from '../spawn.js';
+import { updateProgress, isRunPaused, isRunTerminal } from '../../services/run/index.js';
+import { createTranscript, validateTranscript } from '../../services/transcript/index.js';
+import type { ProbeTranscript, CostSnapshot } from '../../services/transcript/index.js';
+import { recordProbeSuccess, recordProbeFailure } from '../../services/probe-result/index.js';
+import { LLM_PROVIDERS } from '../../config/models.js';
+import { schedule as rateLimitSchedule } from '../../services/rate-limiter/index.js';
+import { getProviderForModel } from '../../services/parallelism/index.js';
+
+const log = createLogger('queue:probe-scenario');
+
+// Retry limit from job options (default 3)
+const RETRY_LIMIT = DEFAULT_JOB_OPTIONS['probe_scenario'].retryLimit ?? 3;
+
+// Python worker paths (relative to cloud/ directory)
+const PROBE_WORKER_PATH = 'workers/probe.py';
+const HEALTH_CHECK_PATH = 'workers/health_check.py';
+
+// Health check cache - verified once per process lifetime
+let healthCheckDone = false;
+let healthCheckPromise: Promise<void> | null = null;
+
+/**
+ * Health check output structure.
+ */
+type HealthCheckOutput = {
+  success: boolean;
+  health?: {
+    pythonVersion: string;
+    packages: Record<string, string>;
+    apiKeys: Record<string, boolean>;
+    warnings: string[];
+  };
+  error?: { message: string; code: string; retryable: boolean };
+};
+
+/**
+ * Run health check on first probe job (lazy initialization).
+ * Caches result to avoid repeated checks.
+ */
+async function ensureHealthCheck(): Promise<void> {
+  // Already verified
+  if (healthCheckDone) {
+    return;
+  }
+
+  // Health check in progress - wait for it
+  if (healthCheckPromise !== null) {
+    return healthCheckPromise;
+  }
+
+  // Start health check
+  healthCheckPromise = (async () => {
+    log.info('Running Python worker health check');
+
+    const result = await spawnPython<Record<string, never>, HealthCheckOutput>(
+      HEALTH_CHECK_PATH,
+      {},
+      { cwd: path.resolve(process.cwd(), '../..'), timeout: 10000 }
+    );
+
+    if (!result.success) {
+      log.error({ error: result.error, stderr: result.stderr }, 'Health check failed');
+      throw new Error(`Python health check failed: ${result.error}`);
+    }
+
+    const output = result.data;
+    if (!output.success) {
+      log.error({ error: output.error }, 'Health check returned error');
+      throw new Error(`Python health check error: ${output.error?.message}`);
+    }
+
+    // Log health status
+    const health = output.health;
+    if (health !== undefined) {
+      log.info(
+        {
+          pythonVersion: health.pythonVersion,
+          packages: Object.keys(health.packages).length,
+          apiKeys: Object.fromEntries(
+            Object.entries(health.apiKeys).filter(([, v]) => v)
+          ),
+        },
+        'Python worker health check passed'
+      );
+
+      // Log warnings
+      for (const warning of health.warnings) {
+        log.warn({ warning }, 'Python worker health warning');
+      }
+    }
+
+    healthCheckDone = true;
+  })();
+
+  return healthCheckPromise;
+}
+
+/**
+ * Reset health check cache (for testing).
+ */
+export function resetHealthCheck(): void {
+  healthCheckDone = false;
+  healthCheckPromise = null;
+}
+
+/**
+ * Python worker input structure.
+ */
+type ProbeWorkerInput = {
+  runId: string;
+  scenarioId: string;
+  modelId: string;
+  scenario: {
+    preamble?: string;
+    prompt: string;
+    followups: Array<{ label: string; prompt: string }>;
+  };
+  config: {
+    temperature?: number;
+    seed?: number;
+    maxTokens: number;
+    maxTurns: number;
+  };
+  modelCost?: {
+    costInputPerMillion: number;
+    costOutputPerMillion: number;
+  };
+  modelConfig?: Record<string, unknown>;
+};
+
+/**
+ * Python worker output structure.
+ */
+type ProbeWorkerOutput =
+  | { success: true; transcript: ProbeTranscript }
+  | { success: false; error: { message: string; code: string; retryable: boolean; details?: string } };
+
+type ProbeStatus = 'SUCCESS' | 'FAILED' | null;
+
+function formatWorkerErrorMessage(error: { message: string; details?: string }): string {
+  const baseMessage = error.message;
+  const details = typeof error.details === 'string' ? error.details.trim() : '';
+  if (details === '') {
+    return baseMessage;
+  }
+
+  if (baseMessage.toLowerCase().includes(details.toLowerCase())) {
+    return baseMessage;
+  }
+
+  return `${baseMessage} | ${details}`;
+}
+
+function getProgressDelta(
+  previousStatus: ProbeStatus,
+  nextStatus: 'SUCCESS' | 'FAILED'
+): { incrementCompleted: number; incrementFailed: number } {
+  if (previousStatus === nextStatus) {
+    return { incrementCompleted: 0, incrementFailed: 0 };
+  }
+
+  if (previousStatus === null) {
+    return nextStatus === 'SUCCESS'
+      ? { incrementCompleted: 1, incrementFailed: 0 }
+      : { incrementCompleted: 0, incrementFailed: 1 };
+  }
+
+  // Transition between terminal states (rare but possible if recovered/overridden)
+  return nextStatus === 'SUCCESS'
+    ? { incrementCompleted: 1, incrementFailed: -1 }
+    : { incrementCompleted: -1, incrementFailed: 1 };
+}
+
+function extractStoredTranscriptTokenUsage(
+  content: unknown,
+  fallbackTokenCount: number
+): { inputTokens: number; outputTokens: number } {
+  const value = content as Record<string, unknown>;
+  const snapshot = value.costSnapshot as Record<string, unknown> | undefined;
+  const snapshotInput = snapshot?.inputTokens;
+  const snapshotOutput = snapshot?.outputTokens;
+
+  if (typeof snapshotInput === 'number' && typeof snapshotOutput === 'number') {
+    return { inputTokens: snapshotInput, outputTokens: snapshotOutput };
+  }
+
+  const turns = Array.isArray(value.turns) ? value.turns : [];
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let foundAny = false;
+
+  for (const turn of turns) {
+    if (turn === null || typeof turn !== 'object') {
+      continue;
+    }
+
+    const turnObj = turn as Record<string, unknown>;
+    if (typeof turnObj.inputTokens === 'number') {
+      inputTokens += turnObj.inputTokens;
+      foundAny = true;
+    }
+    if (typeof turnObj.outputTokens === 'number') {
+      outputTokens += turnObj.outputTokens;
+      foundAny = true;
+    }
+  }
+
+  if (foundAny) {
+    return { inputTokens, outputTokens };
+  }
+
+  // Last-resort fallback when detailed counts are unavailable in legacy transcript payloads
+  return { inputTokens: 0, outputTokens: fallbackTokenCount };
+}
+
+async function applyProgressDelta(
+  runId: string,
+  previousStatus: ProbeStatus,
+  nextStatus: 'SUCCESS' | 'FAILED'
+): Promise<{ progress: { total: number; completed: number; failed: number } | null; status: string | null }> {
+  const delta = getProgressDelta(previousStatus, nextStatus);
+  if (delta.incrementCompleted === 0 && delta.incrementFailed === 0) {
+    return { progress: null, status: null };
+  }
+
+  const updated = await updateProgress(runId, delta);
+  return { progress: updated.progress, status: updated.status };
+}
+
+/**
+ * Checks if an error is retryable.
+ */
+export function isRetryableError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return true; // Unknown errors are retryable by default
+  }
+
+  const message = error.message.toLowerCase();
+
+  // Network errors - retryable
+  const networkErrorPatterns = [
+    'econnrefused',
+    'enotfound',
+    'etimedout',
+    'econnreset',
+    'socket hang up',
+    'network error',
+    'fetch failed',
+  ];
+
+  if (networkErrorPatterns.some((pattern) => message.includes(pattern))) {
+    return true;
+  }
+
+  // HTTP status code errors
+  if (message.includes('429') || message.includes('rate limit')) {
+    return true; // Rate limit - retryable
+  }
+
+  if (/5\d{2}/.test(message)) {
+    return true; // Server errors (5xx) - retryable
+  }
+
+exec
+/bin/zsh -lc "sed -n '1,280p' cloud/apps/api/src/mcp/tools/get-transcript.ts" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+/**
+ * get_transcript MCP Tool
+ *
+ * Returns the full transcript data including all turns and provider metadata.
+ * Use this when you need the complete conversation and API response details.
+ */
+
+import { z } from 'zod';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import { buildMcpResponse } from '../../services/mcp/index.js';
+import { addToolRegistrar } from './registry.js';
+
+const log = createLogger('mcp:tools:get-transcript');
+
+/**
+ * Input schema for get_transcript tool
+ *
+ * Accepts either:
+ * - transcript_id alone (direct lookup)
+ * - run_id + scenario_id + model (composite key lookup)
+ */
+const GetTranscriptInputSchema = {
+  transcript_id: z.string().optional().describe('Transcript ID for direct lookup (preferred)'),
+  run_id: z.string().optional().describe('Run ID (required if not using transcript_id)'),
+  scenario_id: z.string().optional().describe('Scenario ID (required if not using transcript_id)'),
+  model: z.string().optional().describe('Model ID (required if not using transcript_id)'),
+};
+
+/**
+ * Provider metadata from LLM API response
+ */
+type ProviderMetadata = {
+  provider: string;
+  finishReason: string;
+  raw: Record<string, unknown>;
+};
+
+/**
+ * Turn structure in transcript content
+ */
+type TranscriptTurn = {
+  turnNumber: number;
+  promptLabel: string;
+  probePrompt: string;
+  targetResponse: string;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  providerMetadata?: ProviderMetadata | null;
+};
+
+/**
+ * Full transcript output
+ */
+type TranscriptOutput = {
+  runId: string;
+  scenarioId: string;
+  model: string;
+  status: 'found' | 'not_found';
+  transcriptId?: string; // Included in not_found when searching by ID
+  transcript?: {
+    id: string;
+    modelVersion: string | null;
+    turnCount: number;
+    tokenCount: number;
+    durationMs: number;
+    estimatedCost: number | null;
+    createdAt: string;
+    turns: TranscriptTurn[];
+    costSnapshot?: {
+      inputTokens: number;
+      outputTokens: number;
+      estimatedCost: number;
+      costInputPerMillion: number;
+      costOutputPerMillion: number;
+    };
+  };
+};
+
+/**
+ * Extracts turns from transcript content
+ */
+function extractTurns(content: unknown): TranscriptTurn[] {
+  if (content === undefined || content === null || typeof content !== 'object') return [];
+
+  const obj = content as Record<string, unknown>;
+  const turns = obj.turns;
+
+  if (!Array.isArray(turns)) return [];
+
+  return turns.map((turn) => {
+    if (turn === undefined || turn === null || typeof turn !== 'object') {
+      return {
+        turnNumber: 0,
+        promptLabel: '',
+        probePrompt: '',
+        targetResponse: '',
+      };
+    }
+
+    const t = turn as Record<string, unknown>;
+    return {
+      turnNumber: typeof t.turnNumber === 'number' ? t.turnNumber : 0,
+      promptLabel: typeof t.promptLabel === 'string' ? t.promptLabel : '',
+      probePrompt: typeof t.probePrompt === 'string' ? t.probePrompt : '',
+      targetResponse: typeof t.targetResponse === 'string' ? t.targetResponse : '',
+      inputTokens: typeof t.inputTokens === 'number' ? t.inputTokens : null,
+      outputTokens: typeof t.outputTokens === 'number' ? t.outputTokens : null,
+      providerMetadata: t.providerMetadata as ProviderMetadata | null | undefined,
+    };
+  });
+}
+
+/**
+ * Cost snapshot type
+ */
+type CostSnapshot = {
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCost: number;
+  costInputPerMillion: number;
+  costOutputPerMillion: number;
+};
+
+/**
+ * Extracts cost snapshot from transcript content
+ */
+function extractCostSnapshot(content: unknown): CostSnapshot | undefined {
+  if (content === undefined || content === null || typeof content !== 'object') return undefined;
+
+  const obj = content as Record<string, unknown>;
+  const costSnapshot = obj.costSnapshot;
+
+  if (costSnapshot === undefined || costSnapshot === null || typeof costSnapshot !== 'object') return undefined;
+
+  const cs = costSnapshot as Record<string, unknown>;
+  return {
+    inputTokens: typeof cs.inputTokens === 'number' ? cs.inputTokens : 0,
+    outputTokens: typeof cs.outputTokens === 'number' ? cs.outputTokens : 0,
+    estimatedCost: typeof cs.estimatedCost === 'number' ? cs.estimatedCost : 0,
+    costInputPerMillion: typeof cs.costInputPerMillion === 'number' ? cs.costInputPerMillion : 0,
+    costOutputPerMillion: typeof cs.costOutputPerMillion === 'number' ? cs.costOutputPerMillion : 0,
+  };
+}
+
+/**
+ * Registers the get_transcript tool on the MCP server
+ */
+function registerGetTranscriptTool(server: McpServer): void {
+  log.info('Registering get_transcript tool');
+
+  server.registerTool(
+    'get_transcript',
+    {
+      description: `Get the full transcript data including all conversation turns and provider metadata.
+
+**Input options (use ONE):**
+- transcript_id: Direct lookup by ID (preferred - get IDs from graphql_query)
+- run_id + scenario_id + model: Composite key lookup (legacy)
+
+**To discover transcript IDs, use graphql_query:**
+\`{ run(id: "xxx") { transcripts(limit: 10) { id modelId scenarioId } } }\`
+
+**Returns:**
+- All turns (prompt, response, token counts)
+- Provider metadata per turn (provider name, finish reason, raw API data)
+- Cost snapshot with token usage and pricing
+- Model version and timing information
+
+Limited to 10KB token budget.`,
+      inputSchema: GetTranscriptInputSchema,
+    },
+    async (args, extra) => {
+      const startTime = Date.now();
+      const requestId = String(extra.requestId ?? 'unknown');
+
+      log.debug(
+        { requestId, transcriptId: args.transcript_id, runId: args.run_id, scenarioId: args.scenario_id, model: args.model },
+        'get_transcript called'
+      );
+
+      try {
+        // Validate input: either transcript_id OR (run_id + scenario_id + model)
+        const hasDirectId = args.transcript_id !== undefined && args.transcript_id !== null && args.transcript_id !== '';
+        const hasCompositeKey =
+          args.run_id !== undefined && args.run_id !== null && args.run_id !== '' &&
+          args.scenario_id !== undefined && args.scenario_id !== null && args.scenario_id !== '' &&
+          args.model !== undefined && args.model !== null && args.model !== '';
+
+        if (!hasDirectId && !hasCompositeKey) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify({
+                  error: 'INVALID_INPUT',
+                  message: 'Provide either transcript_id OR (run_id + scenario_id + model)',
+                }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        // Query transcript with all fields
+        const transcript = hasDirectId
+          ? await db.transcript.findFirst({
+            where: {
+              id: args.transcript_id,
+              deletedAt: null,
+            },
+          })
+          : await db.transcript.findFirst({
+            where: {
+              runId: args.run_id,
+              scenarioId: args.scenario_id,
+              modelId: args.model,
+              deletedAt: null,
+            },
+          });
+
+        let data: TranscriptOutput;
+
+        if (!transcript) {
+          data = {
+            runId: args.run_id ?? '',
+            scenarioId: args.scenario_id ?? '',
+            model: args.model ?? '',
+            status: 'not_found',
+            ...((args.transcript_id !== undefined && args.transcript_id !== null && args.transcript_id !== '') ? { transcriptId: args.transcript_id } : {}),
+          };
+        } else {
+          const turns = extractTurns(transcript.content);
+          const costSnapshot = extractCostSnapshot(transcript.content);
+
+          data = {
+            runId: transcript.runId,
+            scenarioId: transcript.scenarioId ?? '',
+            model: transcript.modelId,
+            status: 'found',
+            transcript: {
+              id: transcript.id,
+              modelVersion: transcript.modelVersion,
+              turnCount: transcript.turnCount,
+              tokenCount: transcript.tokenCount,
+              durationMs: transcript.durationMs,
+              estimatedCost: transcript.estimatedCost !== null && transcript.estimatedCost !== undefined ? Number(transcript.estimatedCost) : null,
+              createdAt: transcript.createdAt.toISOString(),
+              turns,
+              ...(costSnapshot !== undefined && costSnapshot !== null && { costSnapshot }),
+            },
+          };
+        }
+
+        // Build response
+        const response = buildMcpResponse({
+          toolName: 'get_transcript',
+          data,
+          requestId,
+          startTime,
+        });
+
+        log.info(
+          {
+            requestId,
+            runId: args.run_id,
+            scenarioId: args.scenario_id,
+            model: args.model,
+            found: data.status === 'found',
+            turnCount: data.transcript?.turnCount ?? 0,
+            bytes: response.metadata.bytes,
+            executionMs: response.metadata.executionMs,
+          },
+          'get_transcript completed'
+        );
+
+        return {
+          content: [
+            {
+
+exec
+/bin/zsh -lc "sed -n '280,380p' cloud/apps/api/src/mcp/tools/get-transcript.ts" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+            {
+              type: 'text' as const,
+              text: JSON.stringify(response, null, 2),
+            },
+          ],
+        };
+      } catch (err) {
+        log.error(
+          { err, requestId, runId: args.run_id, scenarioId: args.scenario_id },
+          'get_transcript failed'
+        );
+
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({
+                error: 'INTERNAL_ERROR',
+                message: 'Failed to get transcript',
+              }),
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+}
+
+// Register this tool with the tool registry
+addToolRegistrar(registerGetTranscriptTool);
+
+export { registerGetTranscriptTool };
+
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/workers/common/llm_adapters/providers/openai.py" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+"""
+OpenAI Chat Completions API adapter.
+"""
+
+from dataclasses import dataclass
+from typing import Any, Optional
+
+from ...config import get_config
+from ...errors import ErrorCode, LLMError
+from ...logging import get_logger
+from ..base import BaseLLMAdapter, post_json
+from ..config_utils import get_config_value, resolve_max_tokens, resolve_temperature
+from ..constants import DEFAULT_TIMEOUT, normalize_finish_reason
+from ..types import LLMResponse
+
+log = get_logger("llm_adapters.openai")
+
+
+@dataclass
+class OpenAIAdapter(BaseLLMAdapter):
+    """Adapter for OpenAI Chat Completions API."""
+
+    api_key: Optional[str] = None
+    base_url: str = "https://api.openai.com/v1/chat/completions"
+    timeout: int = DEFAULT_TIMEOUT
+
+    def __post_init__(self) -> None:
+        if self.api_key is None:
+            self.api_key = get_config().openai_api_key
+
+    def generate(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        *,
+        temperature: Optional[float] = None,
+        max_tokens: int = 1024,
+        model_config: Optional[dict] = None,
+        seed: Optional[int] = None,
+        timeout: Optional[int] = None,
+    ) -> LLMResponse:
+        if not self.api_key:
+            raise LLMError(
+                message="OPENAI_API_KEY is not set",
+                code=ErrorCode.MISSING_API_KEY,
+            )
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        # Determine max_tokens parameter name from config
+        # Newer OpenAI models (gpt-5.1, o1, o3) require "max_completion_tokens"
+        # Older models use "max_tokens"
+        max_tokens_param = "max_tokens"
+        if model_config and "maxTokensParam" in model_config:
+            max_tokens_param = model_config["maxTokensParam"]
+        elif model.startswith(("gpt-5", "o1", "o3")):
+            max_tokens_param = "max_completion_tokens"
+
+        # Resolve config values (model_config overrides function args)
+        resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+        resolved_temperature = resolve_temperature(model_config, temperature)
+
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+        }
+
+        if resolved_temperature is not None:
+            payload["temperature"] = resolved_temperature
+
+        # Only add max_tokens if not unlimited (None)
+        if resolved_max_tokens is not None:
+            payload[max_tokens_param] = resolved_max_tokens
+
+        # Add optional config values (OpenAI supports all of these)
+        top_p = get_config_value(model_config, "topP", float, 0, 1)
+        if top_p is not None:
+            payload["top_p"] = top_p
+
+        if seed is not None:
+            payload["seed"] = seed
+
+        freq_penalty = get_config_value(model_config, "frequencyPenalty", float, -2, 2)
+        if freq_penalty is not None:
+            payload["frequency_penalty"] = freq_penalty
+
+        pres_penalty = get_config_value(model_config, "presencePenalty", float, -2, 2)
+        if pres_penalty is not None:
+            payload["presence_penalty"] = pres_penalty
+
+        stop_seqs = get_config_value(model_config, "stopSequences", list)
+        if stop_seqs is not None and len(stop_seqs) > 0:
+            payload["stop"] = stop_seqs
+
+        effective_timeout = timeout if timeout is not None else self.timeout
+        log.debug(
+            "Calling OpenAI API",
+            model=model,
+            max_tokens_param=max_tokens_param,
+            max_tokens=resolved_max_tokens,
+        )
+        data = post_json(self.base_url, headers, payload, timeout=effective_timeout)
+
+        try:
+            choice = data["choices"][0]
+            content = choice["message"]["content"]
+            usage = data.get("usage", {})
+            model_version = data.get("model")  # OpenAI returns resolved model ID
+
+            # Capture provider metadata
+            raw_finish_reason = choice.get("finish_reason")
+            provider_metadata = {
+                "provider": "openai",
+                "finishReason": normalize_finish_reason("openai", raw_finish_reason),
+                "raw": {
+                    "id": data.get("id"),
+                    "finish_reason": raw_finish_reason,
+                    "system_fingerprint": data.get("system_fingerprint"),
+                    "logprobs": choice.get("logprobs"),
+                },
+            }
+
+            # Log warning if content was filtered
+            if raw_finish_reason == "content_filter":
+                log.warn(
+                    "OpenAI content filtered",
+                    model=model,
+                    finish_reason=raw_finish_reason,
+                )
+
+            return LLMResponse(
+                content=content.strip() if content else "",
+                input_tokens=usage.get("prompt_tokens"),
+                output_tokens=usage.get("completion_tokens"),
+                model_version=model_version,
+                provider_metadata=provider_metadata,
+            )
+        except (KeyError, IndexError, TypeError) as exc:
+            raise LLMError(
+                message="Unexpected OpenAI response format",
+                code=ErrorCode.INVALID_RESPONSE,
+                details=str(exc),
+            )
+
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/workers/common/llm_adapters/providers/xai.py" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+"""
+xAI Grok API adapter (OpenAI-compatible).
+"""
+
+from dataclasses import dataclass
+from typing import Any, Optional
+
+from ...config import get_config
+from ...errors import ErrorCode, LLMError
+from ...logging import get_logger
+from ..base import BaseLLMAdapter, post_json
+from ..config_utils import get_config_value, resolve_max_tokens, resolve_temperature
+from ..constants import DEFAULT_TIMEOUT, normalize_finish_reason
+from ..types import LLMResponse
+
+log = get_logger("llm_adapters.xai")
+
+
+@dataclass
+class XAIAdapter(BaseLLMAdapter):
+    """Adapter for xAI Grok API (OpenAI-compatible)."""
+
+    api_key: Optional[str] = None
+    base_url: str = "https://api.x.ai/v1/chat/completions"
+    timeout: int = DEFAULT_TIMEOUT
+
+    def __post_init__(self) -> None:
+        if self.api_key is None:
+            self.api_key = get_config().xai_api_key
+
+    def generate(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        *,
+        temperature: Optional[float] = None,
+        max_tokens: int = 1024,
+        model_config: Optional[dict] = None,
+        seed: Optional[int] = None,
+        timeout: Optional[int] = None,
+    ) -> LLMResponse:
+        if not self.api_key:
+            raise LLMError(
+                message="XAI_API_KEY is not set",
+                code=ErrorCode.MISSING_API_KEY,
+            )
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        # Resolve config values (model_config overrides function args)
+        resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+        resolved_temperature = resolve_temperature(model_config, temperature)
+
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+        }
+
+        if resolved_temperature is not None:
+            payload["temperature"] = resolved_temperature
+
+        # Only add max_tokens if not unlimited (None)
+        if resolved_max_tokens is not None:
+            payload["max_tokens"] = resolved_max_tokens
+
+        # Add optional config values (xAI supports all OpenAI-compatible options)
+        top_p = get_config_value(model_config, "topP", float, 0, 1)
+        if top_p is not None:
+            payload["top_p"] = top_p
+
+        if seed is not None:
+            payload["seed"] = seed
+
+        freq_penalty = get_config_value(model_config, "frequencyPenalty", float, -2, 2)
+        if freq_penalty is not None:
+            payload["frequency_penalty"] = freq_penalty
+
+        pres_penalty = get_config_value(model_config, "presencePenalty", float, -2, 2)
+        if pres_penalty is not None:
+            payload["presence_penalty"] = pres_penalty
+
+        stop_seqs = get_config_value(model_config, "stopSequences", list)
+        if stop_seqs is not None and len(stop_seqs) > 0:
+            payload["stop"] = stop_seqs
+
+        effective_timeout = timeout if timeout is not None else self.timeout
+        log.debug("Calling xAI API", model=model, max_tokens=resolved_max_tokens)
+        data = post_json(self.base_url, headers, payload, timeout=effective_timeout)
+
+        try:
+            choice = data["choices"][0]
+            content = choice["message"]["content"]
+            usage = data.get("usage", {})
+
+            # Capture provider metadata (OpenAI-compatible format)
+            raw_finish_reason = choice.get("finish_reason")
+            provider_metadata = {
+                "provider": "xai",
+                "finishReason": normalize_finish_reason("xai", raw_finish_reason),
+                "raw": {
+                    "id": data.get("id"),
+                    "finish_reason": raw_finish_reason,
+                    "system_fingerprint": data.get("system_fingerprint"),
+                },
+            }
+
+            return LLMResponse(
+                content=content.strip() if content else "",
+                input_tokens=usage.get("prompt_tokens"),
+                output_tokens=usage.get("completion_tokens"),
+                model_version=data.get("model"),
+                provider_metadata=provider_metadata,
+            )
+        except (KeyError, IndexError, TypeError) as exc:
+            raise LLMError(
+                message="Unexpected xAI response format",
+                code=ErrorCode.INVALID_RESPONSE,
+                details=str(exc),
+            )
+
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/workers/common/llm_adapters/providers/google.py" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+"""
+Google Gemini API adapter.
+"""
+
+from dataclasses import dataclass
+from typing import Any, Optional
+
+from ...config import get_config
+from ...errors import ErrorCode, LLMError
+from ...logging import get_logger
+from ..base import BaseLLMAdapter, post_json
+from ..config_utils import get_config_value, resolve_max_tokens, resolve_temperature
+from ..constants import DEFAULT_TIMEOUT, normalize_finish_reason
+from ..types import LLMResponse
+
+log = get_logger("llm_adapters.google")
+
+
+@dataclass
+class GeminiAdapter(BaseLLMAdapter):
+    """Adapter for Google Gemini API."""
+
+    api_key: Optional[str] = None
+    base_url: str = "https://generativelanguage.googleapis.com/v1beta/models"
+    timeout: int = DEFAULT_TIMEOUT
+
+    def __post_init__(self) -> None:
+        if self.api_key is None:
+            self.api_key = get_config().google_api_key
+
+    def generate(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        *,
+        temperature: Optional[float] = None,
+        max_tokens: int = 1024,
+        model_config: Optional[dict] = None,
+        seed: Optional[int] = None,
+        timeout: Optional[int] = None,
+    ) -> LLMResponse:
+        if not self.api_key:
+            raise LLMError(
+                message="GOOGLE_API_KEY is not set",
+                code=ErrorCode.MISSING_API_KEY,
+            )
+
+        # Convert to Gemini format
+        system_parts: list[str] = []
+        contents: list[dict[str, Any]] = []
+
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "system":
+                system_parts.append(content)
+            else:
+                gemini_role = "user" if role == "user" else "model"
+                contents.append({"role": gemini_role, "parts": [{"text": content}]})
+
+        if not contents:
+            contents = [{"role": "user", "parts": [{"text": ""}]}]
+
+        # Resolve config values (model_config overrides function args)
+        resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+        resolved_temperature = resolve_temperature(model_config, temperature)
+
+        # Build generation config
+        generation_config: dict[str, Any] = {}
+
+        if resolved_temperature is not None:
+            generation_config["temperature"] = resolved_temperature
+
+        if seed is not None:
+            generation_config["seed"] = seed
+
+        # Only add maxOutputTokens if not unlimited (None)
+        # For Gemini 2.5 thinking models, omitting this allows full thinking + output
+        # (Default 1024 is too low for thinking models)
+        if resolved_max_tokens is not None and "thinking" not in model:
+            generation_config["maxOutputTokens"] = resolved_max_tokens
+
+        # Add optional config values (Google supports topP and stopSequences)
+        top_p = get_config_value(model_config, "topP", float, 0, 1)
+        if top_p is not None:
+            generation_config["topP"] = top_p
+
+        stop_seqs = get_config_value(model_config, "stopSequences", list)
+        if stop_seqs is not None and len(stop_seqs) > 0:
+            generation_config["stopSequences"] = stop_seqs
+
+        # Note: Google does NOT support frequencyPenalty or presencePenalty
+
+        # Disable safety filters to prevent empty responses on ethical scenarios
+        # Rationale: Default Gemini filters are too aggressive for ethical dilemma research,
+        # often blocking valid scenarios. We need raw model output to evaluate value trade-offs.
+        safety_settings = [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_CIVIC_INTEGRITY", "threshold": "BLOCK_NONE"},
+        ]
+
+        payload: dict[str, Any] = {
+            "contents": contents,
+            "generationConfig": generation_config,
+            "safetySettings": safety_settings,
+        }
+
+        if system_parts:
+            payload["systemInstruction"] = {"parts": [{"text": "\n\n".join(system_parts)}]}
+
+        url = f"{self.base_url}/{model}:generateContent?key={self.api_key}"
+        headers = {"Content-Type": "application/json"}
+
+        effective_timeout = timeout if timeout is not None else self.timeout
+        log.debug("Calling Gemini API", model=model, max_tokens=resolved_max_tokens)
+        data = post_json(url, headers, payload, timeout=effective_timeout)
+
+        try:
+            # Check for prompt-level blocking first
+            prompt_feedback = data.get("promptFeedback", {})
+            prompt_block_reason = prompt_feedback.get("blockReason")
+
+            if prompt_block_reason:
+                # Prompt was blocked - no candidates will be returned
+                provider_metadata = {
+                    "provider": "google",
+                    "finishReason": normalize_finish_reason("google", prompt_block_reason),
+                    "raw": {
+                        "promptFeedback": prompt_feedback,
+                        "candidates": [],
+                    },
+                }
+                log.warn(
+                    "Gemini prompt blocked",
+                    model=model,
+                    block_reason=prompt_block_reason,
+                    safety_ratings=prompt_feedback.get("safetyRatings"),
+                )
+                # Return empty content with metadata explaining why
+                usage = data.get("usageMetadata", {})
+                return LLMResponse(
+                    content="",
+                    input_tokens=usage.get("promptTokenCount"),
+                    output_tokens=0,
+                    model_version=None,
+                    provider_metadata=provider_metadata,
+                )
+
+            candidates = data.get("candidates", [])
+            if not candidates:
+                # No candidates but no block reason - unexpected
+                provider_metadata = {
+                    "provider": "google",
+                    "finishReason": "unknown",
+                    "raw": {
+                        "promptFeedback": prompt_feedback,
+                        "candidates": [],
+                    },
+                }
+                log.warn("Gemini response missing candidates", model=model)
+                usage = data.get("usageMetadata", {})
+                return LLMResponse(
+                    content="",
+                    input_tokens=usage.get("promptTokenCount"),
+                    output_tokens=0,
+                    model_version=None,
+                    provider_metadata=provider_metadata,
+                )
+
+            candidate = candidates[0]
+            raw_finish_reason = candidate.get("finishReason")
+            safety_ratings = candidate.get("safetyRatings", [])
+
+            parts = candidate.get("content", {}).get("parts", [])
+            texts = [part.get("text", "") for part in parts if isinstance(part, dict)]
+            content = "\n".join(text.strip() for text in texts if text.strip())
+
+            # Gemini includes usage metadata
+            usage = data.get("usageMetadata", {})
+
+            # Build comprehensive provider metadata
+            provider_metadata = {
+                "provider": "google",
+                "finishReason": normalize_finish_reason("google", raw_finish_reason),
+                "raw": {
+                    "finishReason": raw_finish_reason,
+                    "safetyRatings": safety_ratings,
+                    "promptFeedback": prompt_feedback,
+                },
+            }
+
+            # Log warning if response was blocked by safety
+            if raw_finish_reason and raw_finish_reason != "STOP":
+                log.warn(
+                    "Gemini non-standard finish",
+                    model=model,
+                    finish_reason=raw_finish_reason,
+                    safety_ratings=safety_ratings,
+                    content_length=len(content),
+                )
+
+            return LLMResponse(
+                content=content,
+                input_tokens=usage.get("promptTokenCount"),
+                output_tokens=usage.get("candidatesTokenCount"),
+                model_version=None,  # Gemini doesn't return model version
+                provider_metadata=provider_metadata,
+            )
+        except (KeyError, TypeError) as exc:
+            raise LLMError(
+                message="Unexpected Gemini response format",
+                code=ErrorCode.INVALID_RESPONSE,
+                details=str(exc),
+            )
+
+codex
+I’ve confirmed the current transcript and adapter shapes. I’m now checking token aggregation points so I can tell whether the spec’s counting model is actually safe or whether it hides a double-count / drop-count risk.
+exec
+/bin/zsh -lc "rg -n \"totalOutputTokens|totalInputTokens|costSnapshot|output_tokens|reasoning\" cloud/workers/probe.py cloud/workers/common -g '"'!**/__pycache__/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+cloud/workers/probe.py:41:    "totalInputTokens": number,
+cloud/workers/probe.py:42:    "totalOutputTokens": number,
+cloud/workers/probe.py:46:    "costSnapshot": {  // Only present if modelCost was provided in input
+cloud/workers/probe.py:120:    output_tokens: Optional[int] = None
+cloud/workers/probe.py:131:            "outputTokens": self.output_tokens,
+cloud/workers/probe.py:144:    total_output_tokens: int = 0
+cloud/workers/probe.py:154:            "totalInputTokens": self.total_input_tokens,
+cloud/workers/probe.py:155:            "totalOutputTokens": self.total_output_tokens,
+cloud/workers/probe.py:161:            result["costSnapshot"] = self.cost_snapshot.to_dict()
+cloud/workers/probe.py:280:            output_tokens=response.output_tokens,
+cloud/workers/probe.py:287:        if response.output_tokens:
+cloud/workers/probe.py:288:            transcript.total_output_tokens += response.output_tokens
+cloud/workers/probe.py:322:                output_tokens=response.output_tokens,
+cloud/workers/probe.py:329:            if response.output_tokens:
+cloud/workers/probe.py:330:                transcript.total_output_tokens += response.output_tokens
+cloud/workers/probe.py:345:                output_tokens=transcript.total_output_tokens,
+cloud/workers/probe.py:357:            outputTokens=transcript.total_output_tokens,
+cloud/workers/common/cost.py:24:        self, input_tokens: Optional[int], output_tokens: Optional[int]
+cloud/workers/common/cost.py:31:            output_tokens: Number of output (completion) tokens
+cloud/workers/common/cost.py:42:        if output_tokens is not None and output_tokens > 0:
+cloud/workers/common/cost.py:43:            output_cost = (output_tokens / 1_000_000) * self.cost_output_per_million
+cloud/workers/common/cost.py:50:    output_tokens: Optional[int],
+cloud/workers/common/cost.py:59:        output_tokens: Number of output (completion) tokens
+cloud/workers/common/cost.py:70:    return model_cost.calculate_cost(input_tokens, output_tokens)
+cloud/workers/common/cost.py:80:    output_tokens: int
+cloud/workers/common/cost.py:89:            "outputTokens": self.output_tokens,
+cloud/workers/common/cost.py:96:    output_tokens: int,
+cloud/workers/common/cost.py:105:        output_tokens: Total output tokens used
+cloud/workers/common/cost.py:113:        input_tokens, output_tokens, cost_input_per_million, cost_output_per_million
+cloud/workers/common/cost.py:120:        output_tokens=output_tokens,
+cloud/workers/common/llm_adapters/types.py:15:    output_tokens: Optional[int] = None
+cloud/workers/common/llm_adapters/types.py:51:            "outputTokens": self.output_tokens,
+cloud/workers/common/llm_adapters/types.py:76:    output_tokens: int  # Cumulative output tokens so far
+cloud/workers/common/llm_adapters/registry.py:222:        output_tokens=response.output_tokens or 0,
+cloud/workers/common/llm_adapters/providers/xai.py:113:                output_tokens=usage.get("completion_tokens"),
+cloud/workers/common/llm_adapters/providers/anthropic.py:129:                output_tokens=usage.get("output_tokens"),
+cloud/workers/common/llm_adapters/providers/deepseek.py:136:                output_tokens=usage.get("completion_tokens"),
+cloud/workers/common/llm_adapters/providers/deepseek.py:244:        output_tokens = 0
+cloud/workers/common/llm_adapters/providers/deepseek.py:265:                        output_tokens=output_tokens,
+cloud/workers/common/llm_adapters/providers/deepseek.py:288:                    output_tokens = usage.get("completion_tokens", output_tokens)
+cloud/workers/common/llm_adapters/providers/deepseek.py:304:                        output_tokens = max(output_tokens, len(accumulated_content) // 4)
+cloud/workers/common/llm_adapters/providers/deepseek.py:308:                            output_tokens=output_tokens,
+cloud/workers/common/llm_adapters/providers/deepseek.py:318:                output_tokens=output_tokens,
+cloud/workers/common/llm_adapters/providers/deepseek.py:324:                output_tokens=output_tokens,
+cloud/workers/common/llm_adapters/providers/deepseek.py:339:                output_tokens=output_tokens,
+cloud/workers/common/llm_adapters/providers/deepseek.py:347:                    f"chunks={chunk_count}, tokens~{output_tokens}, "
+cloud/workers/common/llm_adapters/providers/openai.py:137:                output_tokens=usage.get("completion_tokens"),
+cloud/workers/common/llm_adapters/providers/google.py:147:                    output_tokens=0,
+cloud/workers/common/llm_adapters/providers/google.py:168:                    output_tokens=0,
+cloud/workers/common/llm_adapters/providers/google.py:208:                output_tokens=usage.get("candidatesTokenCount"),
+cloud/workers/common/llm_adapters/providers/mistral.py:105:                output_tokens=usage.get("completion_tokens"),
+
+exec
+/bin/zsh -lc "rg -n \"create_cost_snapshot|CostSnapshot|tokenCount|estimatedCost\" cloud/apps/api/src cloud/workers -g '"'!**/__pycache__/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+cloud/workers/probe.py:51:      "estimatedCost": number
+cloud/workers/probe.py:84:from common.cost import CostSnapshot, create_cost_snapshot
+cloud/workers/probe.py:148:    cost_snapshot: Optional[CostSnapshot] = None
+cloud/workers/probe.py:343:            transcript.cost_snapshot = create_cost_snapshot(
+cloud/workers/probe.py:358:            estimatedCost=transcript.cost_snapshot.estimated_cost if transcript.cost_snapshot else None,
+cloud/apps/api/src/services/budget/deduct.ts:52:  const cost = snap.estimatedCost;
+cloud/apps/api/src/services/budget/deduct.ts:59: * Reads costSnapshot.estimatedCost from each transcript, groups costs by
+cloud/apps/api/src/services/budget/deduct.ts:137: * Reads `estimatedCosts.perModel` from the run's JSON config, groups costs by
+cloud/apps/api/src/services/budget/deduct.ts:161:  // config is a JSON blob; estimatedCosts may be absent on old runs
+cloud/apps/api/src/services/budget/deduct.ts:163:  const estimatedCosts = config?.estimatedCosts as
+cloud/apps/api/src/services/budget/deduct.ts:168:  if (!estimatedCosts?.perModel || estimatedCosts.perModel.length === 0) {
+cloud/apps/api/src/services/budget/deduct.ts:169:    log.debug({ runId }, 'Run has no estimatedCosts — skipping budget deduction');
+cloud/apps/api/src/services/budget/deduct.ts:173:  const costByProvider = groupCostByProvider(estimatedCosts.perModel);
+cloud/apps/api/src/routes/odata.ts:184:        <Property Name="tokenCount" Type="Edm.Int32"/>
+cloud/apps/api/src/routes/odata.ts:186:        <Property Name="estimatedCost" Type="Edm.Decimal"/>
+cloud/apps/api/src/routes/odata.ts:316:          tokenCount: t.tokenCount,
+cloud/apps/api/src/routes/odata.ts:318:          estimatedCost: (t.estimatedCost !== null && t.estimatedCost !== undefined) ? Number(t.estimatedCost) : null,
+cloud/workers/common/cost.py:74:class CostSnapshot:
+cloud/workers/common/cost.py:90:            "estimatedCost": round(self.estimated_cost, 6),  # Round to 6 decimal places
+cloud/workers/common/cost.py:94:def create_cost_snapshot(
+cloud/workers/common/cost.py:99:) -> CostSnapshot:
+cloud/workers/common/cost.py:110:        CostSnapshot with calculated cost
+cloud/workers/common/cost.py:116:    return CostSnapshot(
+cloud/apps/api/src/routes/export.ts:600:            tokenCount: t.tokenCount,
+cloud/apps/api/src/routes/export.ts:602:            estimatedCost: t.estimatedCost,
+cloud/apps/api/src/services/assumptions/order-effect-queries.ts:83:  tokenCount: number;
+cloud/apps/api/src/services/assumptions/order-effect-queries.ts:85:  estimatedCost: number | null;
+cloud/apps/api/src/services/assumptions/order-effect-queries.ts:495:      tokenCount: true,
+cloud/apps/api/src/services/assumptions/order-effect-queries.ts:497:      estimatedCost: true,
+cloud/apps/api/src/services/assumptions/order-effect-queries.ts:550:      tokenCount: transcript.tokenCount,
+cloud/apps/api/src/services/assumptions/order-effect-queries.ts:552:      estimatedCost: transcript.estimatedCost,
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:21:import type { ProbeTranscript, CostSnapshot } from '../../services/transcript/index.js';
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:554:        tokenCount: true,
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:562:        existingTranscript.tokenCount
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:651:    let costSnapshot: CostSnapshot | undefined;
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:656:      const estimatedCost =
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:662:        estimatedCost,
+cloud/workers/tests/test_cost_tracking.py:7:    CostSnapshot,
+cloud/workers/tests/test_cost_tracking.py:9:    create_cost_snapshot,
+cloud/workers/tests/test_cost_tracking.py:93:class TestCostSnapshot:
+cloud/workers/tests/test_cost_tracking.py:94:    """Tests for CostSnapshot class."""
+cloud/workers/tests/test_cost_tracking.py:98:        snapshot = CostSnapshot(
+cloud/workers/tests/test_cost_tracking.py:112:        assert result["estimatedCost"] == 0.0075
+cloud/workers/tests/test_cost_tracking.py:116:        snapshot = CostSnapshot(
+cloud/workers/tests/test_cost_tracking.py:125:        assert result["estimatedCost"] == 0.000013  # Rounded to 6 places
+cloud/workers/tests/test_cost_tracking.py:128:class TestCreateCostSnapshot:
+cloud/workers/tests/test_cost_tracking.py:129:    """Tests for create_cost_snapshot function."""
+cloud/workers/tests/test_cost_tracking.py:131:    def test_create_cost_snapshot_calculates_cost(self) -> None:
+cloud/workers/tests/test_cost_tracking.py:132:        """Test that create_cost_snapshot calculates estimated cost."""
+cloud/workers/tests/test_cost_tracking.py:133:        snapshot = create_cost_snapshot(
+cloud/workers/tests/test_cost_tracking.py:146:    def test_create_cost_snapshot_with_large_values(self) -> None:
+cloud/workers/tests/test_cost_tracking.py:149:        snapshot = create_cost_snapshot(
+cloud/workers/tests/test_cost_tracking.py:165:        snapshot = create_cost_snapshot(
+cloud/workers/tests/test_cost_tracking.py:179:        assert "estimatedCost" in result
+cloud/workers/tests/test_cost_tracking.py:186:        assert isinstance(result["estimatedCost"], (int, float))
+cloud/apps/api/src/services/assumptions/order-effect-types.ts:86:  tokenCount: number;
+cloud/apps/api/src/services/assumptions/order-effect-types.ts:88:  estimatedCost: number | null;
+cloud/apps/api/src/services/cost/estimate.ts:219:    estimatedCost?: number;
+cloud/apps/api/src/services/cost/estimate.ts:291:    if (costSnapshot?.estimatedCost !== undefined) {
+cloud/apps/api/src/services/cost/estimate.ts:292:      modelEntry.cost += costSnapshot.estimatedCost;
+cloud/apps/api/src/services/cost/estimate.ts:296:      // Calculate cost from tokens if estimatedCost not stored
+cloud/apps/api/src/services/transcript/create.ts:50:export type CostSnapshot = {
+cloud/apps/api/src/services/transcript/create.ts:53:  estimatedCost: number;
+cloud/apps/api/src/services/transcript/create.ts:68:  costSnapshot?: CostSnapshot;
+cloud/apps/api/src/services/transcript/create.ts:94:  const tokenCount = transcript.totalInputTokens + transcript.totalOutputTokens;
+cloud/apps/api/src/services/transcript/create.ts:96:  // Get estimatedCost from costSnapshot if available
+cloud/apps/api/src/services/transcript/create.ts:97:  const estimatedCost = costSnapshot?.estimatedCost ?? null;
+cloud/apps/api/src/services/transcript/create.ts:100:    { runId, scenarioId, modelId, sampleIndex, turns: transcript.turns.length, tokenCount, estimatedCost },
+cloud/apps/api/src/services/transcript/create.ts:114:      tokenCount,
+cloud/apps/api/src/services/transcript/create.ts:116:      estimatedCost,
+cloud/apps/api/src/services/transcript/create.ts:120:  log.info({ transcriptId: record.id, runId, estimatedCost }, 'Transcript created');
+cloud/apps/api/src/services/transcript/index.ts:6:export type { CreateTranscriptInput, ProbeTranscript, TranscriptTurn, CostSnapshot } from './create.js';
+cloud/apps/api/src/services/run/start.ts:49:  estimatedCosts: CostEstimate;
+cloud/apps/api/src/services/run/start.ts:298:    estimatedCosts: costEstimate,
+cloud/apps/api/src/services/run/start.ts:509:    estimatedCosts: costEstimate,
+cloud/apps/api/src/mcp/tools/get-transcript.ts:66:    tokenCount: number;
+cloud/apps/api/src/mcp/tools/get-transcript.ts:68:    estimatedCost: number | null;
+cloud/apps/api/src/mcp/tools/get-transcript.ts:74:      estimatedCost: number;
+cloud/apps/api/src/mcp/tools/get-transcript.ts:118:type CostSnapshot = {
+cloud/apps/api/src/mcp/tools/get-transcript.ts:121:  estimatedCost: number;
+cloud/apps/api/src/mcp/tools/get-transcript.ts:129:function extractCostSnapshot(content: unknown): CostSnapshot | undefined {
+cloud/apps/api/src/mcp/tools/get-transcript.ts:141:    estimatedCost: typeof cs.estimatedCost === 'number' ? cs.estimatedCost : 0,
+cloud/apps/api/src/mcp/tools/get-transcript.ts:235:          const costSnapshot = extractCostSnapshot(transcript.content);
+cloud/apps/api/src/mcp/tools/get-transcript.ts:246:              tokenCount: transcript.tokenCount,
+cloud/apps/api/src/mcp/tools/get-transcript.ts:248:              estimatedCost: transcript.estimatedCost !== null && transcript.estimatedCost !== undefined ? Number(transcript.estimatedCost) : null,
+cloud/apps/api/src/mcp/tools/start-run.ts:207:        const costEstimate = result.estimatedCosts;
+cloud/apps/api/src/graphql/mutations/domain/launch/record-results.ts:18:  estimatedCostByDefinitionId: Map<string, number>;
+cloud/apps/api/src/graphql/mutations/domain/launch/record-results.ts:42:    estimatedCostByDefinitionId,
+cloud/apps/api/src/graphql/mutations/domain/launch/record-results.ts:90:        launchableDefinitionEstimatesUsd: Object.fromEntries(estimatedCostByDefinitionId),
+cloud/apps/api/src/graphql/mutations/domain/launch/plan-slots.ts:26:  estimatedCostByDefinitionId: Map<string, number>;
+cloud/apps/api/src/graphql/mutations/domain/launch/plan-slots.ts:77:  const estimatedCostByDefinitionId = new Map<string, number>();
+cloud/apps/api/src/graphql/mutations/domain/launch/plan-slots.ts:108:        estimatedCostByDefinitionId.set(definition.id, estimate.total);
+cloud/apps/api/src/graphql/mutations/domain/launch/plan-slots.ts:151:    estimatedCostByDefinitionId,
+cloud/apps/api/src/graphql/mutations/domain/launch/launch-orchestrator.ts:109:    estimatedCostByDefinitionId,
+cloud/apps/api/src/graphql/mutations/domain/launch/launch-orchestrator.ts:180:      estimatedCostByDefinitionId,
+cloud/apps/api/src/graphql/types/run.ts:32:  estimatedCosts?: CostEstimateShape;
+cloud/apps/api/src/graphql/types/run.ts:665:    estimatedCosts: t.field({
+cloud/apps/api/src/graphql/types/run.ts:671:        return config?.estimatedCosts ?? null;
+cloud/apps/api/src/graphql/mutations/domain/launch/plan-backfill.ts:61:        let estimatedCost = costEstimateCache.get(costKey);
+cloud/apps/api/src/graphql/mutations/domain/launch/plan-backfill.ts:62:        if (estimatedCost == null) {
+cloud/apps/api/src/graphql/mutations/domain/launch/plan-backfill.ts:69:          estimatedCost = estimate.total;
+cloud/apps/api/src/graphql/mutations/domain/launch/plan-backfill.ts:70:          costEstimateCache.set(costKey, estimatedCost);
+cloud/apps/api/src/graphql/mutations/domain/launch/plan-backfill.ts:72:        projectedCostUsd += estimatedCost * delta;
+cloud/apps/api/src/graphql/queries/domain/analysis.ts:728:          tokenCount: true,
+cloud/apps/api/src/graphql/queries/order-invariance.ts:73:  tokenCount: number;
+cloud/apps/api/src/graphql/queries/order-invariance.ts:75:  estimatedCost: number | null;
+cloud/apps/api/src/graphql/queries/order-invariance.ts:404:      tokenCount: t.exposeInt('tokenCount'),
+cloud/apps/api/src/graphql/queries/order-invariance.ts:406:      estimatedCost: t.exposeFloat('estimatedCost', { nullable: true }),
+cloud/apps/api/src/graphql/queries/domain/types.ts:351:    tokenCount: t.exposeInt('tokenCount'),
+cloud/apps/api/src/graphql/queries/domain/types.ts:385:    estimatedCost: t.exposeFloat('estimatedCost'),
+cloud/apps/api/src/graphql/queries/domain/types.ts:421:    estimatedCost: t.exposeFloat('estimatedCost'),
+cloud/apps/api/src/graphql/queries/domain/types.ts:434:    estimatedCost: t.exposeFloat('estimatedCost'),
+cloud/apps/api/src/graphql/types/transcript.ts:25:    tokenCount: t.exposeInt('tokenCount'),
+cloud/apps/api/src/graphql/types/transcript.ts:97:    estimatedCost: t.float({
+cloud/apps/api/src/graphql/types/transcript.ts:105:        const cost = costSnapshot.estimatedCost;
+cloud/apps/api/src/graphql/queries/domain/shared.ts:160:  estimatedCost: number;
+cloud/apps/api/src/graphql/queries/domain/shared.ts:170:  estimatedCost: number;
+cloud/apps/api/src/graphql/queries/domain/shared.ts:181:  estimatedCost: number;
+cloud/apps/api/src/graphql/queries/domain/shared.ts:250:  tokenCount: number;
+cloud/apps/api/src/graphql/queries/assumptions.ts:35:  estimatedCostUsd: number | null;
+cloud/apps/api/src/graphql/queries/assumptions.ts:266:    estimatedCostUsd: t.exposeFloat('estimatedCostUsd', { nullable: true }),
+cloud/apps/api/src/graphql/queries/assumptions.ts:665:      let estimatedCostUsd = 0;
+cloud/apps/api/src/graphql/queries/assumptions.ts:680:            estimatedCostUsd += perModel.totalCost;
+cloud/apps/api/src/graphql/queries/assumptions.ts:738:          estimatedCostUsd: estimatedCostUsd > 0 ? estimatedCostUsd : null,
+cloud/apps/api/src/graphql/queries/domain/planning.ts:222:            estimatedCost: modelEstimate.totalCost,
+cloud/apps/api/src/graphql/queries/domain/planning.ts:322:          estimatedCost: modelTotals?.total ?? 0,
+cloud/apps/api/src/graphql/queries/domain/planning.ts:335:          estimatedCost: definitionTotals?.total ?? 0,
+
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/workers/probe.py" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+exec
+/bin/zsh -lc "sed -n '260,420p' cloud/workers/probe.py" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+            "max_tokens": max_tokens,
+            "model_config": model_config,
+        }
+        if isinstance(temperature, (int, float)):
+            generate_kwargs["temperature"] = float(temperature)
+        if isinstance(seed, int):
+            generate_kwargs["seed"] = seed
+
+        response = generate(
+            model_id,
+            messages,
+            **generate_kwargs,
+        )
+
+        turn = Turn(
+            turn_number=1,
+            prompt_label="scenario_prompt",
+            probe_prompt=prompt,
+            target_response=response.content,
+            input_tokens=response.input_tokens,
+            output_tokens=response.output_tokens,
+            provider_metadata=build_provider_metadata(response),
+        )
+        transcript.turns.append(turn)
+
+        if response.input_tokens:
+            transcript.total_input_tokens += response.input_tokens
+        if response.output_tokens:
+            transcript.total_output_tokens += response.output_tokens
+        if response.model_version:
+            transcript.model_version = response.model_version
+
+        # Add assistant response to conversation
+        messages.append({"role": "assistant", "content": response.content})
+
+        # Execute followup turns
+        followups = scenario.get("followups", [])
+        for i, followup in enumerate(followups[:max_turns - 1]):
+            turn_num = i + 2
+            followup_label = followup.get("label", f"followup_{i + 1}")
+            followup_prompt = followup.get("prompt", "")
+
+            if not followup_prompt:
+                continue
+
+            log.debug("Executing followup turn", turn=turn_num, label=followup_label)
+
+            # Add followup to conversation
+            messages.append({"role": "user", "content": followup_prompt})
+
+            response = generate(
+                model_id,
+                messages,
+                **generate_kwargs,
+            )
+
+            turn = Turn(
+                turn_number=turn_num,
+                prompt_label=followup_label,
+                probe_prompt=followup_prompt,
+                target_response=response.content,
+                input_tokens=response.input_tokens,
+                output_tokens=response.output_tokens,
+                provider_metadata=build_provider_metadata(response),
+            )
+            transcript.turns.append(turn)
+
+            if response.input_tokens:
+                transcript.total_input_tokens += response.input_tokens
+            if response.output_tokens:
+                transcript.total_output_tokens += response.output_tokens
+            if response.model_version and not transcript.model_version:
+                transcript.model_version = response.model_version
+
+            # Add response to conversation
+            messages.append({"role": "assistant", "content": response.content})
+
+        transcript.completed_at = datetime.now(timezone.utc)
+
+        # Calculate cost if model cost configuration was provided
+        if model_cost:
+            cost_input = model_cost.get("costInputPerMillion", 0)
+            cost_output = model_cost.get("costOutputPerMillion", 0)
+            transcript.cost_snapshot = create_cost_snapshot(
+                input_tokens=transcript.total_input_tokens,
+                output_tokens=transcript.total_output_tokens,
+                cost_input_per_million=cost_input,
+                cost_output_per_million=cost_output,
+            )
+
+        log.info(
+            "Probe completed",
+            runId=run_id,
+            scenarioId=scenario_id,
+            modelId=model_id,
+            turns=len(transcript.turns),
+            inputTokens=transcript.total_input_tokens,
+            outputTokens=transcript.total_output_tokens,
+            estimatedCost=transcript.cost_snapshot.estimated_cost if transcript.cost_snapshot else None,
+        )
+
+        return {
+            "success": True,
+            "transcript": transcript.to_dict(),
+        }
+
+    except (WorkerError, LLMError) as err:
+        log.error("Probe failed", runId=run_id, err=err)
+        return {
+            "success": False,
+            "error": err.to_dict(),
+        }
+    except Exception as err:
+        # Classify unknown exceptions
+        worker_err = classify_exception(err)
+        log.error("Probe failed with unexpected error", runId=run_id, err=err)
+        return {
+            "success": False,
+            "error": worker_err.to_dict(),
+        }
+
+
+def main() -> None:
+    """Main entry point - read from stdin, write to stdout."""
+    try:
+        # Read JSON input from stdin
+        input_data = sys.stdin.read()
+        if not input_data.strip():
+            result = {
+                "success": False,
+                "error": {
+                    "message": "No input provided",
+                    "code": ErrorCode.VALIDATION_ERROR.value,
+                    "retryable": False,
+                },
+            }
+            print(json.dumps(result))
+            return
+
+        try:
+            data = json.loads(input_data)
+        except json.JSONDecodeError as err:
+            result = {
+                "success": False,
+                "error": {
+                    "message": f"Invalid JSON input: {err}",
+                    "code": ErrorCode.VALIDATION_ERROR.value,
+                    "retryable": False,
+                },
+            }
+            print(json.dumps(result))
+            return
+
+        # Validate input
+        try:
+            validate_input(data)
+        except ValidationError as err:
+            result = {
+                "success": False,
+                "error": err.to_dict(),
+            }
+
+ succeeded in 0ms:
+#!/usr/bin/env python3
+"""
+Probe Worker - Executes multi-turn LLM conversations for scenario evaluation.
+
+Protocol:
+- Reads JSON input from stdin
+- Writes JSON output to stdout
+- Logs structured JSON to stderr
+
+Input format (ProbeWorkerInput):
+{
+  "runId": string,
+  "scenarioId": string,
+  "modelId": string,
+  "scenario": {
+    # "preamble": string,  # Deprecated/Ignored
+    "prompt": string,
+    "followups": [{ "label": string, "prompt": string }]
+  },
+  "config": {
+    "temperature": number,  # Optional
+    "maxTokens": number,
+    "maxTurns": number
+  },
+  "modelCost": {  // Optional - if provided, cost will be calculated
+    "costInputPerMillion": number,
+    "costOutputPerMillion": number
+  },
+  "modelConfig": {  // Optional - provider-specific API configuration
+    "maxTokensParam": string,  // e.g., "max_completion_tokens" for newer OpenAI models
+    ...
+  }
+}
+
+Output format (ProbeWorkerOutput):
+Success:
+{
+  "success": true,
+  "transcript": {
+    "turns": [...],
+    "totalInputTokens": number,
+    "totalOutputTokens": number,
+    "modelVersion": string | null,
+    "startedAt": string,
+    "completedAt": string,
+    "costSnapshot": {  // Only present if modelCost was provided in input
+      "costInputPerMillion": number,
+      "costOutputPerMillion": number,
+      "inputTokens": number,
+      "outputTokens": number,
+      "estimatedCost": number
+    }
+  }
+}
+
+Error:
+{
+  "success": false,
+  "error": {
+    "message": string,
+    "code": string,
+    "retryable": boolean,
+    "details": string | null
+  }
+}
+"""
+
+import json
+import sys
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Optional
+
+# Estimated tokens per character for non-OpenAI models
+CHARS_PER_TOKEN = 4
+
+# Try to import tiktoken for accurate OpenAI token counting
+try:
+    import tiktoken
+    TIKTOKEN_AVAILABLE = True
+except ImportError:
+    TIKTOKEN_AVAILABLE = False
+
+from common.cost import CostSnapshot, create_cost_snapshot
+from common.errors import ErrorCode, LLMError, ValidationError, WorkerError, classify_exception
+from common.llm_adapters import LLMResponse, generate, infer_provider
+from common.logging import get_logger
+
+log = get_logger("probe")
+
+
+def build_provider_metadata(response: LLMResponse) -> Optional[dict[str, Any]]:
+    """Merge provider metadata with adapter instrumentation fields."""
+    metadata = dict(response.provider_metadata) if response.provider_metadata else {}
+
+    instrumentation = {
+        "promptHash": response.prompt_hash,
+        "temperatureSent": response.temperature_sent,
+        "temperatureValue": response.temperature_value,
+        "seedSent": response.seed_sent,
+        "seedValue": response.seed_value,
+        "adapterMode": response.adapter_mode,
+    }
+    for key, value in instrumentation.items():
+        if value is not None:
+            metadata[key] = value
+
+    return metadata or None
+
+
+@dataclass
+class Turn:
+    """A single turn in the conversation."""
+
+    turn_number: int
+    prompt_label: str
+    probe_prompt: str
+    target_response: str
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    provider_metadata: Optional[dict[str, Any]] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON output."""
+        result = {
+            "turnNumber": self.turn_number,
+            "promptLabel": self.prompt_label,
+            "probePrompt": self.probe_prompt,
+            "targetResponse": self.target_response,
+            "inputTokens": self.input_tokens,
+            "outputTokens": self.output_tokens,
+        }
+        if self.provider_metadata is not None:
+            result["providerMetadata"] = self.provider_metadata
+        return result
+
+
+@dataclass
+class Transcript:
+    """Complete transcript of a probe conversation."""
+
+    turns: list[Turn] = field(default_factory=list)
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    model_version: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    cost_snapshot: Optional[CostSnapshot] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON output."""
+        result = {
+            "turns": [t.to_dict() for t in self.turns],
+            "totalInputTokens": self.total_input_tokens,
+            "totalOutputTokens": self.total_output_tokens,
+            "modelVersion": self.model_version,
+            "startedAt": self.started_at.isoformat() if self.started_at else None,
+            "completedAt": self.completed_at.isoformat() if self.completed_at else None,
+        }
+        if self.cost_snapshot is not None:
+            result["costSnapshot"] = self.cost_snapshot.to_dict()
+        return result
+
+
+def estimate_tokens(text: str, model: str) -> int:
+    """
+    Estimate token count for text.
+
+    Uses tiktoken for OpenAI models (accurate), character estimation for others.
+    """
+    if not text:
+        return 0
+
+    provider = infer_provider(model)
+
+    if provider == "openai" and TIKTOKEN_AVAILABLE:
+        try:
+            # Try to get encoding for specific model
+            encoding = tiktoken.encoding_for_model(model)
+        except KeyError:
+            # Fall back to cl100k_base for GPT-4 class models
+            encoding = tiktoken.get_encoding("cl100k_base")
+        return len(encoding.encode(text))
+
+    # Estimate for non-OpenAI models
+    return max(1, len(text) // CHARS_PER_TOKEN)
+
+
+def validate_input(data: dict[str, Any]) -> None:
+    """Validate probe worker input."""
+    required = ["runId", "scenarioId", "modelId", "scenario", "config"]
+    for field_name in required:
+        if field_name not in data:
+            raise ValidationError(
+                message=f"Missing required field: {field_name}",
+                details=f"Input must include: {', '.join(required)}",
+            )
+
+    scenario = data["scenario"]
+    if not isinstance(scenario, dict):
+        raise ValidationError(message="scenario must be an object")
+
+    if "prompt" not in scenario:
+        raise ValidationError(message="scenario.prompt is required")
+
+    if not scenario.get("prompt", "").strip():
+        raise ValidationError(message="scenario.prompt cannot be empty")
+
+
+
+def run_probe(data: dict[str, Any]) -> dict[str, Any]:
+    """
+    Execute the probe conversation.
+
+    Args:
+        data: Validated probe worker input
+
+    Returns:
+        Success response with transcript or error response
+    """
+    run_id = data["runId"]
+    scenario_id = data["scenarioId"]
+    model_id = data["modelId"]
+    scenario = data["scenario"]
+    config = data.get("config", {})
+    model_cost = data.get("modelCost")  # Optional cost configuration
+    model_config = data.get("modelConfig")  # Optional API configuration
+
+    temperature = config.get("temperature")
+    seed = config.get("seed")
+    max_tokens = config.get("maxTokens", 8192)
+    max_turns = config.get("maxTurns", 10)
+
+    log.info(
+        "Starting probe",
+        runId=run_id,
+        scenarioId=scenario_id,
+        modelId=model_id,
+    )
+
+    transcript = Transcript(started_at=datetime.now(timezone.utc))
+
+    # Build initial conversation with prompt
+    messages: list[dict[str, str]] = []
+
+    # Use scenario prompt directly without rating instruction
+    prompt = scenario["prompt"]
+    
+    # Prepend preamble if available
+    preamble = scenario.get("preamble")
+    if preamble:
+        prompt = f"{preamble}\n\n{prompt}"
+        
+    messages.append({"role": "user", "content": prompt})
+
+    try:
+        # Turn 1: Initial prompt
+        log.debug("Executing turn 1", modelId=model_id)
+        generate_kwargs: dict[str, Any] = {
+            "max_tokens": max_tokens,
+
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/workers/common/cost.py" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+"""
+Cost calculation utilities for LLM token usage.
+
+Calculates estimated costs based on input/output token counts
+and per-million token pricing.
+"""
+
+from dataclasses import dataclass
+from typing import Optional
+
+from .logging import get_logger
+
+log = get_logger("cost")
+
+
+@dataclass
+class ModelCost:
+    """Cost configuration for a model."""
+
+    cost_input_per_million: float
+    cost_output_per_million: float
+
+    def calculate_cost(
+        self, input_tokens: Optional[int], output_tokens: Optional[int]
+    ) -> float:
+        """
+        Calculate the estimated cost for token usage.
+
+        Args:
+            input_tokens: Number of input (prompt) tokens
+            output_tokens: Number of output (completion) tokens
+
+        Returns:
+            Estimated cost in dollars
+        """
+        input_cost = 0.0
+        output_cost = 0.0
+
+        if input_tokens is not None and input_tokens > 0:
+            input_cost = (input_tokens / 1_000_000) * self.cost_input_per_million
+
+        if output_tokens is not None and output_tokens > 0:
+            output_cost = (output_tokens / 1_000_000) * self.cost_output_per_million
+
+        return input_cost + output_cost
+
+
+def calculate_cost(
+    input_tokens: Optional[int],
+    output_tokens: Optional[int],
+    cost_input_per_million: float,
+    cost_output_per_million: float,
+) -> float:
+    """
+    Calculate the estimated cost for token usage.
+
+    Args:
+        input_tokens: Number of input (prompt) tokens
+        output_tokens: Number of output (completion) tokens
+        cost_input_per_million: Cost per million input tokens in dollars
+        cost_output_per_million: Cost per million output tokens in dollars
+
+    Returns:
+        Estimated cost in dollars
+    """
+    model_cost = ModelCost(
+        cost_input_per_million=cost_input_per_million,
+        cost_output_per_million=cost_output_per_million,
+    )
+    return model_cost.calculate_cost(input_tokens, output_tokens)
+
+
+@dataclass
+class CostSnapshot:
+    """Snapshot of cost data at time of job execution."""
+
+    cost_input_per_million: float
+    cost_output_per_million: float
+    input_tokens: int
+    output_tokens: int
+    estimated_cost: float
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON output."""
+        return {
+            "costInputPerMillion": self.cost_input_per_million,
+            "costOutputPerMillion": self.cost_output_per_million,
+            "inputTokens": self.input_tokens,
+            "outputTokens": self.output_tokens,
+            "estimatedCost": round(self.estimated_cost, 6),  # Round to 6 decimal places
+        }
+
+
+def create_cost_snapshot(
+    input_tokens: int,
+    output_tokens: int,
+    cost_input_per_million: float,
+    cost_output_per_million: float,
+) -> CostSnapshot:
+    """
+    Create a cost snapshot with calculated estimated cost.
+
+    Args:
+        input_tokens: Total input tokens used
+        output_tokens: Total output tokens used
+        cost_input_per_million: Cost per million input tokens
+        cost_output_per_million: Cost per million output tokens
+
+    Returns:
+        CostSnapshot with calculated cost
+    """
+    estimated_cost = calculate_cost(
+        input_tokens, output_tokens, cost_input_per_million, cost_output_per_million
+    )
+
+    return CostSnapshot(
+        cost_input_per_million=cost_input_per_million,
+        cost_output_per_million=cost_output_per_million,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        estimated_cost=estimated_cost,
+    )
+
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/workers/common/llm_adapters/registry.py" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+"""
+Adapter registry for managing LLM provider adapters.
+"""
+
+from typing import Generator, Optional
+
+from ..config import get_config
+from ..errors import ErrorCode, LLMError
+from .base import BaseLLMAdapter
+from .constants import PROVIDER_PATTERNS
+from .providers import (
+    AnthropicAdapter,
+    DeepSeekAdapter,
+    GeminiAdapter,
+    MistralAdapter,
+    OpenAIAdapter,
+    XAIAdapter,
+)
+from .types import LLMResponse, StreamChunk
+
+
+def infer_provider(model: str) -> str:
+    """Infer provider from model ID."""
+    # Check for explicit prefix (e.g., "openai:gpt-4")
+    if ":" in model:
+        prefix, _ = model.split(":", 1)
+        if prefix.lower() in PROVIDER_PATTERNS:
+            return prefix.lower()
+
+    model_lower = model.lower()
+
+    for provider, patterns in PROVIDER_PATTERNS.items():
+        if any(pattern in model_lower for pattern in patterns):
+            return provider
+
+    return "unknown"
+
+
+class AdapterRegistry:
+    """Registry mapping providers to adapter instances."""
+
+    def __init__(self) -> None:
+        self._adapters: dict[str, BaseLLMAdapter] = {}
+        self._initialize_adapters()
+
+    def _initialize_adapters(self) -> None:
+        """Initialize adapters for providers with configured API keys."""
+        config = get_config()
+
+        if config.openai_api_key:
+            self._adapters["openai"] = OpenAIAdapter()
+        if config.anthropic_api_key:
+            self._adapters["anthropic"] = AnthropicAdapter()
+        if config.google_api_key:
+            self._adapters["google"] = GeminiAdapter()
+        if config.xai_api_key:
+            self._adapters["xai"] = XAIAdapter()
+        if config.deepseek_api_key:
+            self._adapters["deepseek"] = DeepSeekAdapter()
+        if config.mistral_api_key:
+            self._adapters["mistral"] = MistralAdapter()
+
+    def get(self, provider: str) -> BaseLLMAdapter:
+        """Get adapter for a provider."""
+        if provider not in self._adapters:
+            # Try to create adapter on demand
+            adapter = self._create_adapter(provider)
+            if adapter:
+                self._adapters[provider] = adapter
+                return adapter
+            raise LLMError(
+                message=f"No adapter available for provider '{provider}'",
+                code=ErrorCode.UNSUPPORTED_PROVIDER,
+            )
+        return self._adapters[provider]
+
+    def _create_adapter(self, provider: str) -> Optional[BaseLLMAdapter]:
+        """Try to create an adapter for a provider."""
+        adapter_classes: dict[str, type[BaseLLMAdapter]] = {
+            "openai": OpenAIAdapter,
+            "anthropic": AnthropicAdapter,
+            "google": GeminiAdapter,
+            "xai": XAIAdapter,
+            "deepseek": DeepSeekAdapter,
+            "mistral": MistralAdapter,
+        }
+
+        if provider not in adapter_classes:
+            return None
+
+        return adapter_classes[provider]()
+
+    def resolve_for_model(self, model: str) -> BaseLLMAdapter:
+        """Get the appropriate adapter for a model ID."""
+        provider = infer_provider(model)
+        if provider == "unknown":
+            raise LLMError(
+                message=f"Cannot determine provider for model '{model}'",
+                code=ErrorCode.UNSUPPORTED_PROVIDER,
+            )
+        return self.get(provider)
+
+
+# Global registry instance
+_registry: Optional[AdapterRegistry] = None
+
+
+def get_registry() -> AdapterRegistry:
+    """Get or create the global adapter registry."""
+    global _registry
+    if _registry is None:
+        _registry = AdapterRegistry()
+    return _registry
+
+
+def generate(
+    model: str,
+    messages: list[dict[str, str]],
+    *,
+    temperature: Optional[float] = None,
+    max_tokens: int = 1024,
+    model_config: Optional[dict] = None,
+    seed: Optional[int] = None,
+    timeout: Optional[int] = None,
+) -> LLMResponse:
+    """
+    Generate a completion using the appropriate adapter for the model.
+
+    This is the main entry point for LLM generation.
+
+    Args:
+        model: Model ID (e.g., "gpt-4", "claude-3-sonnet-20240229")
+        messages: List of message dicts with 'role' and 'content'
+        temperature: Sampling temperature (None omits provider parameter)
+        max_tokens: Maximum tokens to generate
+        model_config: Optional provider-specific configuration from database
+        seed: Optional deterministic seed for providers that support it
+        timeout: HTTP request timeout in seconds (defaults to adapter's default)
+
+    Returns:
+        LLMResponse with content and token counts
+    """
+    # Strip provider prefix if present
+    clean_model = model.split(":", 1)[-1] if ":" in model else model
+
+    adapter = get_registry().resolve_for_model(model)
+    generate_kwargs = {
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "model_config": model_config,
+        "timeout": timeout,
+    }
+    if seed is not None and isinstance(adapter, (OpenAIAdapter, XAIAdapter, DeepSeekAdapter, GeminiAdapter)):
+        generate_kwargs["seed"] = seed
+
+    return adapter.generate(
+        clean_model,
+        messages,
+        **generate_kwargs,
+    )
+
+
+def generate_stream(
+    model: str,
+    messages: list[dict[str, str]],
+    *,
+    temperature: Optional[float] = None,
+    max_tokens: int = 1024,
+    model_config: Optional[dict] = None,
+    timeout: Optional[int] = None,
+) -> Generator[StreamChunk, None, None]:
+    """
+    Stream a completion using the appropriate adapter for the model.
+
+    Currently only DeepSeek supports streaming. Other providers will fall back
+    to non-streaming and yield a single chunk with the complete response.
+
+    Args:
+        model: Model ID (e.g., "deepseek:deepseek-reasoner")
+        messages: List of message dicts with 'role' and 'content'
+        temperature: Sampling temperature (None omits provider parameter)
+        max_tokens: Maximum tokens to generate
+        model_config: Optional provider-specific configuration from database
+        timeout: HTTP request timeout in seconds
+
+    Yields:
+        StreamChunk objects with incremental content and token counts
+    """
+    # Strip provider prefix if present
+    clean_model = model.split(":", 1)[-1] if ":" in model else model
+    provider = infer_provider(model)
+
+    # Only DeepSeek currently supports streaming
+    if provider == "deepseek":
+        adapter = get_registry().get("deepseek")
+        if isinstance(adapter, DeepSeekAdapter):
+            yield from adapter.generate_stream(
+                clean_model,
+                messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                model_config=model_config,
+                timeout=timeout,
+            )
+            return
+
+    # Fallback: use non-streaming and yield single chunk
+    response = generate(
+        model,
+        messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        model_config=model_config,
+        timeout=timeout,
+    )
+    # Extract finish_reason from provider_metadata if available
+    finish_reason = None
+    if response.provider_metadata:
+        finish_reason = response.provider_metadata.get("finishReason")
+    yield StreamChunk(
+        content=response.content,
+        output_tokens=response.output_tokens or 0,
+        done=True,
+        input_tokens=response.input_tokens,
+        model_version=response.model_version,
+        finish_reason=finish_reason,
+    )
+
+codex
+I’ve confirmed one concrete mismatch already: the probe worker only accumulates token counts when the value is truthy, so zero-count cases are currently dropped. I’m checking whether there are any other spec assumptions that the existing code directly cuts against.
+exec
+/bin/zsh -lc "nl -ba cloud/workers/probe.py | sed -n '270,350p'" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+exec
+/bin/zsh -lc "nl -ba cloud/workers/common/llm_adapters/types.py | sed -n '1,120p'" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+   270	            messages,
+   271	            **generate_kwargs,
+   272	        )
+   273	
+   274	        turn = Turn(
+   275	            turn_number=1,
+   276	            prompt_label="scenario_prompt",
+   277	            probe_prompt=prompt,
+   278	            target_response=response.content,
+   279	            input_tokens=response.input_tokens,
+   280	            output_tokens=response.output_tokens,
+   281	            provider_metadata=build_provider_metadata(response),
+   282	        )
+   283	        transcript.turns.append(turn)
+   284	
+   285	        if response.input_tokens:
+   286	            transcript.total_input_tokens += response.input_tokens
+   287	        if response.output_tokens:
+   288	            transcript.total_output_tokens += response.output_tokens
+   289	        if response.model_version:
+   290	            transcript.model_version = response.model_version
+   291	
+   292	        # Add assistant response to conversation
+   293	        messages.append({"role": "assistant", "content": response.content})
+   294	
+   295	        # Execute followup turns
+   296	        followups = scenario.get("followups", [])
+   297	        for i, followup in enumerate(followups[:max_turns - 1]):
+   298	            turn_num = i + 2
+   299	            followup_label = followup.get("label", f"followup_{i + 1}")
+   300	            followup_prompt = followup.get("prompt", "")
+   301	
+   302	            if not followup_prompt:
+   303	                continue
+   304	
+   305	            log.debug("Executing followup turn", turn=turn_num, label=followup_label)
+   306	
+   307	            # Add followup to conversation
+   308	            messages.append({"role": "user", "content": followup_prompt})
+   309	
+   310	            response = generate(
+   311	                model_id,
+   312	                messages,
+   313	                **generate_kwargs,
+   314	            )
+   315	
+   316	            turn = Turn(
+   317	                turn_number=turn_num,
+   318	                prompt_label=followup_label,
+   319	                probe_prompt=followup_prompt,
+   320	                target_response=response.content,
+   321	                input_tokens=response.input_tokens,
+   322	                output_tokens=response.output_tokens,
+   323	                provider_metadata=build_provider_metadata(response),
+   324	            )
+   325	            transcript.turns.append(turn)
+   326	
+   327	            if response.input_tokens:
+   328	                transcript.total_input_tokens += response.input_tokens
+   329	            if response.output_tokens:
+   330	                transcript.total_output_tokens += response.output_tokens
+   331	            if response.model_version and not transcript.model_version:
+   332	                transcript.model_version = response.model_version
+   333	
+   334	            # Add response to conversation
+   335	            messages.append({"role": "assistant", "content": response.content})
+   336	
+   337	        transcript.completed_at = datetime.now(timezone.utc)
+   338	
+   339	        # Calculate cost if model cost configuration was provided
+   340	        if model_cost:
+   341	            cost_input = model_cost.get("costInputPerMillion", 0)
+   342	            cost_output = model_cost.get("costOutputPerMillion", 0)
+   343	            transcript.cost_snapshot = create_cost_snapshot(
+   344	                input_tokens=transcript.total_input_tokens,
+   345	                output_tokens=transcript.total_output_tokens,
+   346	                cost_input_per_million=cost_input,
+   347	                cost_output_per_million=cost_output,
+   348	            )
+   349	
+   350	        log.info(
+
+ succeeded in 0ms:
+     1	"""
+     2	Data types for LLM adapter responses.
+     3	"""
+     4	
+     5	from dataclasses import dataclass
+     6	from typing import Any, Optional
+     7	
+     8	
+     9	@dataclass
+    10	class LLMResponse:
+    11	    """Response from an LLM API call."""
+    12	
+    13	    content: str
+    14	    input_tokens: Optional[int] = None
+    15	    output_tokens: Optional[int] = None
+    16	    model_version: Optional[str] = None
+    17	    provider_metadata: Optional[dict[str, Any]] = None
+    18	    prompt_hash: Optional[str] = None
+    19	    temperature_sent: Optional[bool] = None
+    20	    temperature_value: Optional[float] = None
+    21	    seed_sent: Optional[bool] = None
+    22	    seed_value: Optional[int] = None
+    23	    adapter_mode: Optional[str] = None
+    24	
+    25	    def __post_init__(self) -> None:
+    26	        """Backfill request instrumentation from the shared adapter context."""
+    27	        from .base import get_current_request_metadata
+    28	
+    29	        metadata = get_current_request_metadata()
+    30	        if not metadata:
+    31	            return
+    32	
+    33	        if self.prompt_hash is None:
+    34	            self.prompt_hash = metadata.get("prompt_hash")
+    35	        if self.temperature_sent is None:
+    36	            self.temperature_sent = metadata.get("temperature_sent")
+    37	        if self.temperature_value is None:
+    38	            self.temperature_value = metadata.get("temperature_value")
+    39	        if self.seed_sent is None:
+    40	            self.seed_sent = metadata.get("seed_sent")
+    41	        if self.seed_value is None:
+    42	            self.seed_value = metadata.get("seed_value")
+    43	        if self.adapter_mode is None:
+    44	            self.adapter_mode = metadata.get("adapter_mode")
+    45	
+    46	    def to_dict(self) -> dict:
+    47	        """Convert to dictionary for JSON output."""
+    48	        result = {
+    49	            "content": self.content,
+    50	            "inputTokens": self.input_tokens,
+    51	            "outputTokens": self.output_tokens,
+    52	            "modelVersion": self.model_version,
+    53	        }
+    54	        if self.provider_metadata is not None:
+    55	            result["providerMetadata"] = self.provider_metadata
+    56	        if self.prompt_hash is not None:
+    57	            result["promptHash"] = self.prompt_hash
+    58	        if self.temperature_sent is not None:
+    59	            result["temperatureSent"] = self.temperature_sent
+    60	        if self.temperature_value is not None:
+    61	            result["temperatureValue"] = self.temperature_value
+    62	        if self.seed_sent is not None:
+    63	            result["seedSent"] = self.seed_sent
+    64	        if self.seed_value is not None:
+    65	            result["seedValue"] = self.seed_value
+    66	        if self.adapter_mode is not None:
+    67	            result["adapterMode"] = self.adapter_mode
+    68	        return result
+    69	
+    70	
+    71	@dataclass
+    72	class StreamChunk:
+    73	    """A chunk from a streaming LLM response."""
+    74	
+    75	    content: str  # The text content of this chunk
+    76	    output_tokens: int  # Cumulative output tokens so far
+    77	    done: bool = False  # True if this is the final chunk
+    78	    input_tokens: Optional[int] = None  # Only available on final chunk
+    79	    model_version: Optional[str] = None  # Only available on final chunk
+    80	    finish_reason: Optional[str] = None  # Only available on final chunk (normalized)
+
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/mcp/tools/get-transcript.ts | sed -n '110,260p'" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/services/transcript/create.ts | sed -n '1,150p'" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+   110	      providerMetadata: t.providerMetadata as ProviderMetadata | null | undefined,
+   111	    };
+   112	  });
+   113	}
+   114	
+   115	/**
+   116	 * Cost snapshot type
+   117	 */
+   118	type CostSnapshot = {
+   119	  inputTokens: number;
+   120	  outputTokens: number;
+   121	  estimatedCost: number;
+   122	  costInputPerMillion: number;
+   123	  costOutputPerMillion: number;
+   124	};
+   125	
+   126	/**
+   127	 * Extracts cost snapshot from transcript content
+   128	 */
+   129	function extractCostSnapshot(content: unknown): CostSnapshot | undefined {
+   130	  if (content === undefined || content === null || typeof content !== 'object') return undefined;
+   131	
+   132	  const obj = content as Record<string, unknown>;
+   133	  const costSnapshot = obj.costSnapshot;
+   134	
+   135	  if (costSnapshot === undefined || costSnapshot === null || typeof costSnapshot !== 'object') return undefined;
+   136	
+   137	  const cs = costSnapshot as Record<string, unknown>;
+   138	  return {
+   139	    inputTokens: typeof cs.inputTokens === 'number' ? cs.inputTokens : 0,
+   140	    outputTokens: typeof cs.outputTokens === 'number' ? cs.outputTokens : 0,
+   141	    estimatedCost: typeof cs.estimatedCost === 'number' ? cs.estimatedCost : 0,
+   142	    costInputPerMillion: typeof cs.costInputPerMillion === 'number' ? cs.costInputPerMillion : 0,
+   143	    costOutputPerMillion: typeof cs.costOutputPerMillion === 'number' ? cs.costOutputPerMillion : 0,
+   144	  };
+   145	}
+   146	
+   147	/**
+   148	 * Registers the get_transcript tool on the MCP server
+   149	 */
+   150	function registerGetTranscriptTool(server: McpServer): void {
+   151	  log.info('Registering get_transcript tool');
+   152	
+   153	  server.registerTool(
+   154	    'get_transcript',
+   155	    {
+   156	      description: `Get the full transcript data including all conversation turns and provider metadata.
+   157	
+   158	**Input options (use ONE):**
+   159	- transcript_id: Direct lookup by ID (preferred - get IDs from graphql_query)
+   160	- run_id + scenario_id + model: Composite key lookup (legacy)
+   161	
+   162	**To discover transcript IDs, use graphql_query:**
+   163	\`{ run(id: "xxx") { transcripts(limit: 10) { id modelId scenarioId } } }\`
+   164	
+   165	**Returns:**
+   166	- All turns (prompt, response, token counts)
+   167	- Provider metadata per turn (provider name, finish reason, raw API data)
+   168	- Cost snapshot with token usage and pricing
+   169	- Model version and timing information
+   170	
+   171	Limited to 10KB token budget.`,
+   172	      inputSchema: GetTranscriptInputSchema,
+   173	    },
+   174	    async (args, extra) => {
+   175	      const startTime = Date.now();
+   176	      const requestId = String(extra.requestId ?? 'unknown');
+   177	
+   178	      log.debug(
+   179	        { requestId, transcriptId: args.transcript_id, runId: args.run_id, scenarioId: args.scenario_id, model: args.model },
+   180	        'get_transcript called'
+   181	      );
+   182	
+   183	      try {
+   184	        // Validate input: either transcript_id OR (run_id + scenario_id + model)
+   185	        const hasDirectId = args.transcript_id !== undefined && args.transcript_id !== null && args.transcript_id !== '';
+   186	        const hasCompositeKey =
+   187	          args.run_id !== undefined && args.run_id !== null && args.run_id !== '' &&
+   188	          args.scenario_id !== undefined && args.scenario_id !== null && args.scenario_id !== '' &&
+   189	          args.model !== undefined && args.model !== null && args.model !== '';
+   190	
+   191	        if (!hasDirectId && !hasCompositeKey) {
+   192	          return {
+   193	            content: [
+   194	              {
+   195	                type: 'text' as const,
+   196	                text: JSON.stringify({
+   197	                  error: 'INVALID_INPUT',
+   198	                  message: 'Provide either transcript_id OR (run_id + scenario_id + model)',
+   199	                }),
+   200	              },
+   201	            ],
+   202	            isError: true,
+   203	          };
+   204	        }
+   205	
+   206	        // Query transcript with all fields
+   207	        const transcript = hasDirectId
+   208	          ? await db.transcript.findFirst({
+   209	            where: {
+   210	              id: args.transcript_id,
+   211	              deletedAt: null,
+   212	            },
+   213	          })
+   214	          : await db.transcript.findFirst({
+   215	            where: {
+   216	              runId: args.run_id,
+   217	              scenarioId: args.scenario_id,
+   218	              modelId: args.model,
+   219	              deletedAt: null,
+   220	            },
+   221	          });
+   222	
+   223	        let data: TranscriptOutput;
+   224	
+   225	        if (!transcript) {
+   226	          data = {
+   227	            runId: args.run_id ?? '',
+   228	            scenarioId: args.scenario_id ?? '',
+   229	            model: args.model ?? '',
+   230	            status: 'not_found',
+   231	            ...((args.transcript_id !== undefined && args.transcript_id !== null && args.transcript_id !== '') ? { transcriptId: args.transcript_id } : {}),
+   232	          };
+   233	        } else {
+   234	          const turns = extractTurns(transcript.content);
+   235	          const costSnapshot = extractCostSnapshot(transcript.content);
+   236	
+   237	          data = {
+   238	            runId: transcript.runId,
+   239	            scenarioId: transcript.scenarioId ?? '',
+   240	            model: transcript.modelId,
+   241	            status: 'found',
+   242	            transcript: {
+   243	              id: transcript.id,
+   244	              modelVersion: transcript.modelVersion,
+   245	              turnCount: transcript.turnCount,
+   246	              tokenCount: transcript.tokenCount,
+   247	              durationMs: transcript.durationMs,
+   248	              estimatedCost: transcript.estimatedCost !== null && transcript.estimatedCost !== undefined ? Number(transcript.estimatedCost) : null,
+   249	              createdAt: transcript.createdAt.toISOString(),
+   250	              turns,
+   251	              ...(costSnapshot !== undefined && costSnapshot !== null && { costSnapshot }),
+   252	            },
+   253	          };
+   254	        }
+   255	
+   256	        // Build response
+   257	        const response = buildMcpResponse({
+   258	          toolName: 'get_transcript',
+   259	          data,
+   260	          requestId,
+
+ succeeded in 0ms:
+     1	/**
+     2	 * Transcript Creation Service
+     3	 *
+     4	 * Creates transcript records from Python probe worker output.
+     5	 */
+     6	
+     7	import { db, Prisma } from '@valuerank/db';
+     8	import { createLogger } from '@valuerank/shared';
+     9	
+    10	const log = createLogger('services:transcript');
+    11	
+    12	/**
+    13	 * Provider metadata captured from LLM API response.
+    14	 * Contains normalized finish reason and raw provider-specific data.
+    15	 */
+    16	export type ProviderMetadata = {
+    17	  provider: string;
+    18	  finishReason: string;
+    19	  raw: Record<string, unknown>;
+    20	};
+    21	
+    22	/**
+    23	 * Turn structure from Python probe worker.
+    24	 */
+    25	export type TranscriptTurn = {
+    26	  turnNumber: number;
+    27	  promptLabel: string;
+    28	  probePrompt: string;
+    29	  targetResponse: string;
+    30	  inputTokens?: number | null;
+    31	  outputTokens?: number | null;
+    32	  providerMetadata?: ProviderMetadata | null;
+    33	};
+    34	
+    35	/**
+    36	 * Transcript data from Python probe worker.
+    37	 */
+    38	export type ProbeTranscript = {
+    39	  turns: TranscriptTurn[];
+    40	  totalInputTokens: number;
+    41	  totalOutputTokens: number;
+    42	  modelVersion?: string | null;
+    43	  startedAt: string;
+    44	  completedAt: string;
+    45	};
+    46	
+    47	/**
+    48	 * Cost snapshot for transcript.
+    49	 */
+    50	export type CostSnapshot = {
+    51	  inputTokens: number;
+    52	  outputTokens: number;
+    53	  estimatedCost: number;
+    54	  costInputPerMillion: number;
+    55	  costOutputPerMillion: number;
+    56	};
+    57	
+    58	/**
+    59	 * Input for creating a transcript.
+    60	 */
+    61	export type CreateTranscriptInput = {
+    62	  runId: string;
+    63	  scenarioId: string;
+    64	  modelId: string;
+    65	  sampleIndex?: number; // Index within sample set for multi-sample runs (0 to N-1), defaults to 0
+    66	  transcript: ProbeTranscript;
+    67	  definitionSnapshot?: Prisma.InputJsonValue;
+    68	  costSnapshot?: CostSnapshot;
+    69	};
+    70	
+    71	/**
+    72	 * Create a transcript record from probe worker output.
+    73	 */
+    74	export async function createTranscript(input: CreateTranscriptInput) {
+    75	  const { runId, scenarioId, modelId, sampleIndex = 0, transcript, definitionSnapshot, costSnapshot } = input;
+    76	
+    77	  // Calculate duration from timestamps
+    78	  const startedAt = new Date(transcript.startedAt);
+    79	  const completedAt = new Date(transcript.completedAt);
+    80	  const durationMs = completedAt.getTime() - startedAt.getTime();
+    81	
+    82	  // Build content structure for storage (JSONB)
+    83	  // Include costSnapshot if provided for actual cost computation
+    84	  const content: Record<string, unknown> = {
+    85	    schemaVersion: 1,
+    86	    turns: transcript.turns,
+    87	  };
+    88	
+    89	  if (costSnapshot !== undefined) {
+    90	    content.costSnapshot = costSnapshot;
+    91	  }
+    92	
+    93	  // Calculate total token count
+    94	  const tokenCount = transcript.totalInputTokens + transcript.totalOutputTokens;
+    95	
+    96	  // Get estimatedCost from costSnapshot if available
+    97	  const estimatedCost = costSnapshot?.estimatedCost ?? null;
+    98	
+    99	  log.info(
+   100	    { runId, scenarioId, modelId, sampleIndex, turns: transcript.turns.length, tokenCount, estimatedCost },
+   101	    'Creating transcript'
+   102	  );
+   103	
+   104	  const record = await db.transcript.create({
+   105	    data: {
+   106	      runId,
+   107	      scenarioId,
+   108	      modelId,
+   109	      sampleIndex,
+   110	      modelVersion: transcript.modelVersion,
+   111	      definitionSnapshot: definitionSnapshot ?? Prisma.JsonNull,
+   112	      content: content as Prisma.InputJsonValue,
+   113	      turnCount: transcript.turns.length,
+   114	      tokenCount,
+   115	      durationMs,
+   116	      estimatedCost,
+   117	    },
+   118	  });
+   119	
+   120	  log.info({ transcriptId: record.id, runId, estimatedCost }, 'Transcript created');
+   121	
+   122	  return record;
+   123	}
+   124	
+   125	/**
+   126	 * Validate transcript data from Python worker.
+   127	 */
+   128	export function validateTranscript(data: unknown): data is ProbeTranscript {
+   129	  if (data === null || data === undefined || typeof data !== 'object') {
+   130	    return false;
+   131	  }
+   132	
+   133	  const obj = data as Record<string, unknown>;
+   134	
+   135	  // Check required fields
+   136	  if (!Array.isArray(obj.turns)) return false;
+   137	  if (typeof obj.totalInputTokens !== 'number') return false;
+   138	  if (typeof obj.totalOutputTokens !== 'number') return false;
+   139	  if (typeof obj.startedAt !== 'string') return false;
+   140	  if (typeof obj.completedAt !== 'string') return false;
+   141	
+   142	  // Validate each turn
+   143	  for (const turn of obj.turns) {
+   144	    if (turn === null || turn === undefined || typeof turn !== 'object') return false;
+   145	    const t = turn as Record<string, unknown>;
+   146	    if (typeof t.turnNumber !== 'number') return false;
+   147	    if (typeof t.promptLabel !== 'string') return false;
+   148	    if (typeof t.probePrompt !== 'string') return false;
+   149	    if (typeof t.targetResponse !== 'string') return false;
+   150	  }
+
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/queue/handlers/probe-scenario.ts | sed -n '640,680p'" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+exec
+/bin/zsh -lc "nl -ba cloud/workers/common/llm_adapters/providers/deepseek.py | sed -n '1,180p'" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+   640	      // Retryable error - throw to trigger retry
+   641	      throw new Error(`${err.code}: ${formatWorkerErrorMessage(err)}`);
+   642	    }
+   643	
+   644	    // Validate transcript structure
+   645	    if (!validateTranscript(output.transcript)) {
+   646	      log.error({ jobId, runId }, 'Invalid transcript structure from Python worker');
+   647	      throw new Error('Invalid transcript structure');
+   648	    }
+   649	
+   650	    // Create transcript record with cost snapshot if model cost info available
+   651	    let costSnapshot: CostSnapshot | undefined;
+   652	    if (workerInput.modelCost !== undefined) {
+   653	      const { costInputPerMillion, costOutputPerMillion } = workerInput.modelCost;
+   654	      const inputTokens = output.transcript.totalInputTokens;
+   655	      const outputTokens = output.transcript.totalOutputTokens;
+   656	      const estimatedCost =
+   657	        (inputTokens * costInputPerMillion) / 1_000_000 +
+   658	        (outputTokens * costOutputPerMillion) / 1_000_000;
+   659	      costSnapshot = {
+   660	        inputTokens,
+   661	        outputTokens,
+   662	        estimatedCost,
+   663	        costInputPerMillion,
+   664	        costOutputPerMillion,
+   665	      };
+   666	    }
+   667	
+   668	    const transcriptRecord = await createTranscript({
+   669	      runId,
+   670	      scenarioId,
+   671	      modelId,
+   672	      sampleIndex,
+   673	      transcript: output.transcript,
+   674	      definitionSnapshot: scenario.definition.content as Prisma.InputJsonValue,
+   675	      costSnapshot,
+   676	    });
+   677	
+   678	    // Record probe success in results table
+   679	    // Calculate duration from timestamps
+   680	    const startedAt = new Date(output.transcript.startedAt);
+
+ succeeded in 0ms:
+     1	"""
+     2	DeepSeek API adapter (OpenAI-compatible with streaming support).
+     3	"""
+     4	
+     5	from dataclasses import dataclass
+     6	import json
+     7	from typing import Any, Generator, Optional
+     8	
+     9	import requests
+    10	
+    11	from ...config import get_config
+    12	from ...errors import ErrorCode, LLMError
+    13	from ...logging import get_logger
+    14	from ..base import BaseLLMAdapter, post_json
+    15	from ..config_utils import get_config_value, resolve_max_tokens, resolve_temperature
+    16	from ..constants import DEFAULT_TIMEOUT, normalize_finish_reason
+    17	from ..types import LLMResponse, StreamChunk
+    18	
+    19	log = get_logger("llm_adapters.deepseek")
+    20	
+    21	
+    22	@dataclass
+    23	class DeepSeekAdapter(BaseLLMAdapter):
+    24	    """Adapter for DeepSeek API (OpenAI-compatible)."""
+    25	
+    26	    api_key: Optional[str] = None
+    27	    base_url: str = "https://api.deepseek.com/v1/chat/completions"
+    28	    timeout: int = DEFAULT_TIMEOUT
+    29	
+    30	    def __post_init__(self) -> None:
+    31	        if self.api_key is None:
+    32	            self.api_key = get_config().deepseek_api_key
+    33	
+    34	    def generate(
+    35	        self,
+    36	        model: str,
+    37	        messages: list[dict[str, str]],
+    38	        *,
+    39	        temperature: Optional[float] = None,
+    40	        max_tokens: int = 1024,
+    41	        model_config: Optional[dict] = None,
+    42	        seed: Optional[int] = None,
+    43	        timeout: Optional[int] = None,
+    44	    ) -> LLMResponse:
+    45	        if not self.api_key:
+    46	            raise LLMError(
+    47	                message="DEEPSEEK_API_KEY is not set",
+    48	                code=ErrorCode.MISSING_API_KEY,
+    49	            )
+    50	
+    51	        headers = {
+    52	            "Authorization": f"Bearer {self.api_key}",
+    53	            "Content-Type": "application/json",
+    54	        }
+    55	
+    56	        # Resolve config values (model_config overrides function args)
+    57	        resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+    58	        resolved_temperature = resolve_temperature(model_config, temperature)
+    59	
+    60	        # DeepSeek max_tokens limits vary by model:
+    61	        # - deepseek-reasoner: 64K (65536)
+    62	        # - deepseek-chat and others: 8K (8192)
+    63	        if resolved_max_tokens is not None:
+    64	            max_limit = 65536 if "reasoner" in model else 8192
+    65	            resolved_max_tokens = min(resolved_max_tokens, max_limit)
+    66	
+    67	        payload: dict[str, Any] = {
+    68	            "model": model,
+    69	            "messages": messages,
+    70	        }
+    71	
+    72	        if resolved_temperature is not None:
+    73	            payload["temperature"] = resolved_temperature
+    74	
+    75	        # Only add max_tokens if not unlimited (None)
+    76	        if resolved_max_tokens is not None:
+    77	            payload["max_tokens"] = resolved_max_tokens
+    78	
+    79	        if seed is not None:
+    80	            payload["seed"] = seed
+    81	
+    82	        # Add optional config values (DeepSeek supports all OpenAI-compatible options)
+    83	        top_p = get_config_value(model_config, "topP", float, 0, 1)
+    84	        if top_p is not None:
+    85	            payload["top_p"] = top_p
+    86	
+    87	        freq_penalty = get_config_value(model_config, "frequencyPenalty", float, -2, 2)
+    88	        if freq_penalty is not None:
+    89	            payload["frequency_penalty"] = freq_penalty
+    90	
+    91	        pres_penalty = get_config_value(model_config, "presencePenalty", float, -2, 2)
+    92	        if pres_penalty is not None:
+    93	            payload["presence_penalty"] = pres_penalty
+    94	
+    95	        stop_seqs = get_config_value(model_config, "stopSequences", list)
+    96	        if stop_seqs is not None and len(stop_seqs) > 0:
+    97	            payload["stop"] = stop_seqs
+    98	
+    99	        # Use provided timeout or fall back to adapter default
+   100	        effective_timeout = timeout if timeout is not None else self.timeout
+   101	        log.debug(
+   102	            "Calling DeepSeek API",
+   103	            model=model,
+   104	            max_tokens=resolved_max_tokens,
+   105	            timeout=effective_timeout,
+   106	        )
+   107	        data = post_json(self.base_url, headers, payload, timeout=effective_timeout)
+   108	
+   109	        try:
+   110	            choice = data["choices"][0]
+   111	            content = choice["message"]["content"]
+   112	            usage = data.get("usage", {})
+   113	
+   114	            # Capture provider metadata (OpenAI-compatible format)
+   115	            raw_finish_reason = choice.get("finish_reason")
+   116	            provider_metadata = {
+   117	                "provider": "deepseek",
+   118	                "finishReason": normalize_finish_reason("deepseek", raw_finish_reason),
+   119	                "raw": {
+   120	                    "id": data.get("id"),
+   121	                    "finish_reason": raw_finish_reason,
+   122	                },
+   123	            }
+   124	
+   125	            # Log warning for content filter or system resource issues
+   126	            if raw_finish_reason in ("content_filter", "insufficient_system_resource"):
+   127	                log.warn(
+   128	                    "DeepSeek non-standard finish",
+   129	                    model=model,
+   130	                    finish_reason=raw_finish_reason,
+   131	                )
+   132	
+   133	            return LLMResponse(
+   134	                content=content.strip() if content else "",
+   135	                input_tokens=usage.get("prompt_tokens"),
+   136	                output_tokens=usage.get("completion_tokens"),
+   137	                model_version=data.get("model"),
+   138	                provider_metadata=provider_metadata,
+   139	            )
+   140	        except (KeyError, IndexError, TypeError) as exc:
+   141	            raise LLMError(
+   142	                message="Unexpected DeepSeek response format",
+   143	                code=ErrorCode.INVALID_RESPONSE,
+   144	                details=str(exc),
+   145	            )
+   146	
+   147	    def generate_stream(
+   148	        self,
+   149	        model: str,
+   150	        messages: list[dict[str, str]],
+   151	        *,
+   152	        temperature: Optional[float] = None,
+   153	        max_tokens: int = 1024,
+   154	        model_config: Optional[dict] = None,
+   155	        timeout: Optional[int] = None,
+   156	    ) -> Generator[StreamChunk, None, None]:
+   157	        """
+   158	        Stream response from DeepSeek API, yielding chunks as they arrive.
+   159	
+   160	        Yields StreamChunk objects with incremental content and token counts.
+   161	        Final chunk has done=True and includes input_tokens.
+   162	        """
+   163	        if not self.api_key:
+   164	            raise LLMError(
+   165	                message="DEEPSEEK_API_KEY is not set",
+   166	                code=ErrorCode.MISSING_API_KEY,
+   167	            )
+   168	
+   169	        headers = {
+   170	            "Authorization": f"Bearer {self.api_key}",
+   171	            "Content-Type": "application/json",
+   172	        }
+   173	
+   174	        # Resolve config values
+   175	        resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+   176	        resolved_temperature = resolve_temperature(model_config, temperature)
+   177	
+   178	        # DeepSeek max_tokens limits vary by model
+   179	        if resolved_max_tokens is not None:
+   180	            max_limit = 65536 if "reasoner" in model else 8192
+
+exec
+/bin/zsh -lc "nl -ba cloud/workers/common/llm_adapters/providers/google.py | sed -n '120,230p'" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+exec
+/bin/zsh -lc "nl -ba cloud/workers/common/llm_adapters/providers/openai.py | sed -n '95,150p'" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+    95	        if stop_seqs is not None and len(stop_seqs) > 0:
+    96	            payload["stop"] = stop_seqs
+    97	
+    98	        effective_timeout = timeout if timeout is not None else self.timeout
+    99	        log.debug(
+   100	            "Calling OpenAI API",
+   101	            model=model,
+   102	            max_tokens_param=max_tokens_param,
+   103	            max_tokens=resolved_max_tokens,
+   104	        )
+   105	        data = post_json(self.base_url, headers, payload, timeout=effective_timeout)
+   106	
+   107	        try:
+   108	            choice = data["choices"][0]
+   109	            content = choice["message"]["content"]
+   110	            usage = data.get("usage", {})
+   111	            model_version = data.get("model")  # OpenAI returns resolved model ID
+   112	
+   113	            # Capture provider metadata
+   114	            raw_finish_reason = choice.get("finish_reason")
+   115	            provider_metadata = {
+   116	                "provider": "openai",
+   117	                "finishReason": normalize_finish_reason("openai", raw_finish_reason),
+   118	                "raw": {
+   119	                    "id": data.get("id"),
+   120	                    "finish_reason": raw_finish_reason,
+   121	                    "system_fingerprint": data.get("system_fingerprint"),
+   122	                    "logprobs": choice.get("logprobs"),
+   123	                },
+   124	            }
+   125	
+   126	            # Log warning if content was filtered
+   127	            if raw_finish_reason == "content_filter":
+   128	                log.warn(
+   129	                    "OpenAI content filtered",
+   130	                    model=model,
+   131	                    finish_reason=raw_finish_reason,
+   132	                )
+   133	
+   134	            return LLMResponse(
+   135	                content=content.strip() if content else "",
+   136	                input_tokens=usage.get("prompt_tokens"),
+   137	                output_tokens=usage.get("completion_tokens"),
+   138	                model_version=model_version,
+   139	                provider_metadata=provider_metadata,
+   140	            )
+   141	        except (KeyError, IndexError, TypeError) as exc:
+   142	            raise LLMError(
+   143	                message="Unexpected OpenAI response format",
+   144	                code=ErrorCode.INVALID_RESPONSE,
+   145	                details=str(exc),
+   146	            )
+
+ succeeded in 0ms:
+   120	
+   121	        try:
+   122	            # Check for prompt-level blocking first
+   123	            prompt_feedback = data.get("promptFeedback", {})
+   124	            prompt_block_reason = prompt_feedback.get("blockReason")
+   125	
+   126	            if prompt_block_reason:
+   127	                # Prompt was blocked - no candidates will be returned
+   128	                provider_metadata = {
+   129	                    "provider": "google",
+   130	                    "finishReason": normalize_finish_reason("google", prompt_block_reason),
+   131	                    "raw": {
+   132	                        "promptFeedback": prompt_feedback,
+   133	                        "candidates": [],
+   134	                    },
+   135	                }
+   136	                log.warn(
+   137	                    "Gemini prompt blocked",
+   138	                    model=model,
+   139	                    block_reason=prompt_block_reason,
+   140	                    safety_ratings=prompt_feedback.get("safetyRatings"),
+   141	                )
+   142	                # Return empty content with metadata explaining why
+   143	                usage = data.get("usageMetadata", {})
+   144	                return LLMResponse(
+   145	                    content="",
+   146	                    input_tokens=usage.get("promptTokenCount"),
+   147	                    output_tokens=0,
+   148	                    model_version=None,
+   149	                    provider_metadata=provider_metadata,
+   150	                )
+   151	
+   152	            candidates = data.get("candidates", [])
+   153	            if not candidates:
+   154	                # No candidates but no block reason - unexpected
+   155	                provider_metadata = {
+   156	                    "provider": "google",
+   157	                    "finishReason": "unknown",
+   158	                    "raw": {
+   159	                        "promptFeedback": prompt_feedback,
+   160	                        "candidates": [],
+   161	                    },
+   162	                }
+   163	                log.warn("Gemini response missing candidates", model=model)
+   164	                usage = data.get("usageMetadata", {})
+   165	                return LLMResponse(
+   166	                    content="",
+   167	                    input_tokens=usage.get("promptTokenCount"),
+   168	                    output_tokens=0,
+   169	                    model_version=None,
+   170	                    provider_metadata=provider_metadata,
+   171	                )
+   172	
+   173	            candidate = candidates[0]
+   174	            raw_finish_reason = candidate.get("finishReason")
+   175	            safety_ratings = candidate.get("safetyRatings", [])
+   176	
+   177	            parts = candidate.get("content", {}).get("parts", [])
+   178	            texts = [part.get("text", "") for part in parts if isinstance(part, dict)]
+   179	            content = "\n".join(text.strip() for text in texts if text.strip())
+   180	
+   181	            # Gemini includes usage metadata
+   182	            usage = data.get("usageMetadata", {})
+   183	
+   184	            # Build comprehensive provider metadata
+   185	            provider_metadata = {
+   186	                "provider": "google",
+   187	                "finishReason": normalize_finish_reason("google", raw_finish_reason),
+   188	                "raw": {
+   189	                    "finishReason": raw_finish_reason,
+   190	                    "safetyRatings": safety_ratings,
+   191	                    "promptFeedback": prompt_feedback,
+   192	                },
+   193	            }
+   194	
+   195	            # Log warning if response was blocked by safety
+   196	            if raw_finish_reason and raw_finish_reason != "STOP":
+   197	                log.warn(
+   198	                    "Gemini non-standard finish",
+   199	                    model=model,
+   200	                    finish_reason=raw_finish_reason,
+   201	                    safety_ratings=safety_ratings,
+   202	                    content_length=len(content),
+   203	                )
+   204	
+   205	            return LLMResponse(
+   206	                content=content,
+   207	                input_tokens=usage.get("promptTokenCount"),
+   208	                output_tokens=usage.get("candidatesTokenCount"),
+   209	                model_version=None,  # Gemini doesn't return model version
+   210	                provider_metadata=provider_metadata,
+   211	            )
+   212	        except (KeyError, TypeError) as exc:
+   213	            raise LLMError(
+   214	                message="Unexpected Gemini response format",
+   215	                code=ErrorCode.INVALID_RESPONSE,
+   216	                details=str(exc),
+   217	            )
+
+exec
+/bin/zsh -lc "rg -n \"extractStoredTranscriptTokenUsage|turn\\.outputTokens|turns\\)\\s*\\{|total_output_tokens\" cloud/apps/api/src/queue/handlers/probe-scenario.ts cloud/apps/api/src/services -g '"'!**/__pycache__/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:192:function extractStoredTranscriptTokenUsage(
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:210:  for (const turn of turns) {
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:560:      const tokenUsage = extractStoredTranscriptTokenUsage(
+cloud/apps/api/src/services/transcript/create.ts:143:  for (const turn of obj.turns) {
+
+exec
+/bin/zsh -lc "rg -n \"totalOutputTokens|totalInputTokens|outputTokens: transcript\\.totalOutputTokens|transcript\\.totalOutputTokens|output_tokens\" cloud/apps/api/src cloud/workers/probe.py" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+cloud/workers/probe.py:41:    "totalInputTokens": number,
+cloud/workers/probe.py:42:    "totalOutputTokens": number,
+cloud/workers/probe.py:120:    output_tokens: Optional[int] = None
+cloud/workers/probe.py:131:            "outputTokens": self.output_tokens,
+cloud/workers/probe.py:144:    total_output_tokens: int = 0
+cloud/workers/probe.py:154:            "totalInputTokens": self.total_input_tokens,
+cloud/workers/probe.py:155:            "totalOutputTokens": self.total_output_tokens,
+cloud/workers/probe.py:280:            output_tokens=response.output_tokens,
+cloud/workers/probe.py:287:        if response.output_tokens:
+cloud/workers/probe.py:288:            transcript.total_output_tokens += response.output_tokens
+cloud/workers/probe.py:322:                output_tokens=response.output_tokens,
+cloud/workers/probe.py:329:            if response.output_tokens:
+cloud/workers/probe.py:330:                transcript.total_output_tokens += response.output_tokens
+cloud/workers/probe.py:345:                output_tokens=transcript.total_output_tokens,
+cloud/workers/probe.py:357:            outputTokens=transcript.total_output_tokens,
+cloud/apps/api/src/services/cost/estimate.ts:163:    const totalInputTokens = scenarioCount * avgInputTokens * samplesPerScenario;
+cloud/apps/api/src/services/cost/estimate.ts:164:    const totalOutputTokens = scenarioCount * avgOutputTokens * samplesPerScenario;
+cloud/apps/api/src/services/cost/estimate.ts:167:    const inputCost = calculateCost(totalInputTokens, Number(model.costInputPerMillion));
+cloud/apps/api/src/services/cost/estimate.ts:168:    const outputCost = calculateCost(totalOutputTokens, Number(model.costOutputPerMillion));
+cloud/apps/api/src/services/cost/estimate.ts:176:      inputTokens: totalInputTokens,
+cloud/apps/api/src/services/cost/estimate.ts:177:      outputTokens: totalOutputTokens,
+cloud/apps/api/src/services/transcript/create.ts:40:  totalInputTokens: number;
+cloud/apps/api/src/services/transcript/create.ts:41:  totalOutputTokens: number;
+cloud/apps/api/src/services/transcript/create.ts:94:  const tokenCount = transcript.totalInputTokens + transcript.totalOutputTokens;
+cloud/apps/api/src/services/transcript/create.ts:137:  if (typeof obj.totalInputTokens !== 'number') return false;
+cloud/apps/api/src/services/transcript/create.ts:138:  if (typeof obj.totalOutputTokens !== 'number') return false;
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:654:      const inputTokens = output.transcript.totalInputTokens;
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:655:      const outputTokens = output.transcript.totalOutputTokens;
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:691:      inputTokens: output.transcript.totalInputTokens,
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:692:      outputTokens: output.transcript.totalOutputTokens,
+cloud/apps/api/src/mcp/tools/start-run.ts:213:          output_tokens: m.outputTokens,
+
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/queue/handlers/probe-scenario.ts | sed -n '540,575p'" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/queue/handlers/probe-scenario.ts | sed -n '190,230p'" in /Users/chrislaw/valuerank/.claude/worktrees/confident-jang
+ succeeded in 0ms:
+   190	}
+   191	
+   192	function extractStoredTranscriptTokenUsage(
+   193	  content: unknown,
+   194	  fallbackTokenCount: number
+   195	): { inputTokens: number; outputTokens: number } {
+   196	  const value = content as Record<string, unknown>;
+   197	  const snapshot = value.costSnapshot as Record<string, unknown> | undefined;
+   198	  const snapshotInput = snapshot?.inputTokens;
+   199	  const snapshotOutput = snapshot?.outputTokens;
+   200	
+   201	  if (typeof snapshotInput === 'number' && typeof snapshotOutput === 'number') {
+   202	    return { inputTokens: snapshotInput, outputTokens: snapshotOutput };
+   203	  }
+   204	
+   205	  const turns = Array.isArray(value.turns) ? value.turns : [];
+   206	  let inputTokens = 0;
+   207	  let outputTokens = 0;
+   208	  let foundAny = false;
+   209	
+   210	  for (const turn of turns) {
+   211	    if (turn === null || typeof turn !== 'object') {
+   212	      continue;
+   213	    }
+   214	
+   215	    const turnObj = turn as Record<string, unknown>;
+   216	    if (typeof turnObj.inputTokens === 'number') {
+   217	      inputTokens += turnObj.inputTokens;
+   218	      foundAny = true;
+   219	    }
+   220	    if (typeof turnObj.outputTokens === 'number') {
+   221	      outputTokens += turnObj.outputTokens;
+   222	      foundAny = true;
+   223	    }
+   224	  }
+   225	
+   226	  if (foundAny) {
+   227	    return { inputTokens, outputTokens };
+   228	  }
+   229	
+   230	  // Last-resort fallback when detailed counts are unavailable in legacy transcript payloads
+
+ succeeded in 0ms:
+   540	
+   541	    // Recovery path: transcript exists but probe_result success row is missing
+   542	    const existingTranscript = await db.transcript.findFirst({
+   543	      where: {
+   544	        runId,
+   545	        scenarioId,
+   546	        modelId,
+   547	        sampleIndex,
+   548	        deletedAt: null,
+   549	      },
+   550	      orderBy: { createdAt: 'asc' },
+   551	      select: {
+   552	        id: true,
+   553	        durationMs: true,
+   554	        tokenCount: true,
+   555	        content: true,
+   556	      },
+   557	    });
+   558	
+   559	    if (existingTranscript !== null) {
+   560	      const tokenUsage = extractStoredTranscriptTokenUsage(
+   561	        existingTranscript.content,
+   562	        existingTranscript.tokenCount
+   563	      );
+   564	
+   565	      await recordProbeSuccess({
+   566	        runId,
+   567	        scenarioId,
+   568	        modelId,
+   569	        sampleIndex,
+   570	        transcriptId: existingTranscript.id,
+   571	        durationMs: existingTranscript.durationMs,
+   572	        inputTokens: tokenUsage.inputTokens,
+   573	        outputTokens: tokenUsage.outputTokens,
+   574	      });
+   575	
+
+codex
+## Findings
+- **HIGH [CODE-CONFIRMED]** The probe worker still only adds token counts when `response.output_tokens` is truthy in both the initial turn and follow-up loop ([probe.py](/Users/chrislaw/valuerank/.claude/worktrees/confident-jang/cloud/workers/probe.py#L285), [probe.py](/Users/chrislaw/valuerank/.claude/worktrees/confident-jang/cloud/workers/probe.py#L327)). That means a reasoning-only response with `output_tokens = 0` will still be dropped completely, so the spec’s core guarantee that zero-visible-output turns still count cannot be met unless this logic is changed.
+
+## Residual Risks
+- The spec intentionally leaves DeepSeek streaming out of scope, but the adapter still has a separate streaming path ([deepseek.py](/Users/chrislaw/valuerank/.claude/worktrees/confident-jang/cloud/workers/common/llm_adapters/providers/deepseek.py#L147)). Any caller using `generate_stream()` will continue to miss reasoning tokens.
+- Existing recovery logic still reconstructs token usage from stored `costSnapshot.outputTokens` or per-turn `outputTokens` when needed ([probe-scenario.ts](/Users/chrislaw/valuerank/.claude/worktrees/confident-jang/cloud/apps/api/src/queue/handlers/probe-scenario.ts#L192), [probe-scenario.ts](/Users/chrislaw/valuerank/.claude/worktrees/confident-jang/cloud/apps/api/src/queue/handlers/probe-scenario.ts#L559)). Legacy transcripts without the new snapshot field will remain undercounted.
+- The spec depends on provider response fields that are not verified in the provided code, especially `completion_tokens_details.reasoning_tokens` and `usageMetadata.thoughtsTokenCount`. If either provider uses a different schema, the new fields will stay `None` and billing will not change.
+- The same truthy pattern in probe.py also drops zero `input_tokens` today ([probe.py](/Users/chrislaw/valuerank/.claude/worktrees/confident-jang/cloud/workers/probe.py#L285)). That is separate from reasoning, but it is still an accounting blind spot for empty or blocked turns.
+tokens used
+58,132

@@ -1,71 +1,28 @@
-import { gql } from 'urql';
+import type {
+  CreatePairedVignetteMutation as GeneratedCreatePairedVignetteMutation,
+  UpdatePairedVignetteMutation as GeneratedUpdatePairedVignetteMutation,
+  CreatePairedVignetteMutationVariables as GeneratedCreatePairedVignetteMutationVariables,
+  UpdatePairedVignetteMutationVariables as GeneratedUpdatePairedVignetteMutationVariables,
+} from '../../generated/graphql';
+
+// ============================================================================
+// TYPES
+// ============================================================================
 
 export type PairedVignetteDefinition = { id: string; name: string };
 
-export type CreatePairedVignetteResult = {
-  createPairedVignette: {
-    definitionA: PairedVignetteDefinition;
-    definitionB: PairedVignetteDefinition;
-  };
-};
+// ============================================================================
+// MUTATIONS
+// ============================================================================
 
-export type CreatePairedVignetteVariables = {
-  input: {
-    name: string;
-    domainId: string;
-    contextId: string;
-    valueFirstId: string;
-    valueSecondId: string;
-    preambleVersionId?: string | null;
-    levelPresetVersionId?: string | null;
-  };
-};
+export { CreatePairedVignetteDocument as CREATE_PAIRED_VIGNETTE_MUTATION } from '../../generated/graphql';
+export { UpdatePairedVignetteDocument as UPDATE_PAIRED_VIGNETTE_MUTATION } from '../../generated/graphql';
 
-export type UpdatePairedVignetteResult = {
-  updatePairedVignette: {
-    definitionA: PairedVignetteDefinition;
-    definitionB: PairedVignetteDefinition;
-  };
-};
+// ============================================================================
+// RESULT TYPES
+// ============================================================================
 
-export type UpdatePairedVignetteVariables = {
-  input: {
-    definitionId: string;
-    name: string;
-    contextId: string;
-    valueFirstId: string;
-    valueSecondId: string;
-    preambleVersionId?: string | null;
-    levelPresetVersionId?: string | null;
-  };
-};
-
-export const CREATE_PAIRED_VIGNETTE_MUTATION = gql`
-  mutation CreatePairedVignette($input: CreatePairedVignetteInput!) {
-    createPairedVignette(input: $input) {
-      definitionA {
-        id
-        name
-      }
-      definitionB {
-        id
-        name
-      }
-    }
-  }
-`;
-
-export const UPDATE_PAIRED_VIGNETTE_MUTATION = gql`
-  mutation UpdatePairedVignette($input: UpdatePairedVignetteInput!) {
-    updatePairedVignette(input: $input) {
-      definitionA {
-        id
-        name
-      }
-      definitionB {
-        id
-        name
-      }
-    }
-  }
-`;
+export type CreatePairedVignetteResult = GeneratedCreatePairedVignetteMutation;
+export type CreatePairedVignetteVariables = GeneratedCreatePairedVignetteMutationVariables;
+export type UpdatePairedVignetteResult = GeneratedUpdatePairedVignetteMutation;
+export type UpdatePairedVignetteVariables = GeneratedUpdatePairedVignetteMutationVariables;

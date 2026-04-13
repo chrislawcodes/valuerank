@@ -1,0 +1,56 @@
+query GetLevelPresets {
+  levelPresets {
+    id
+    name
+    updatedAt
+    latestVersion {
+      id
+      version
+      l1
+      l2
+      l3
+      l4
+      l5
+      createdAt
+    }
+  }
+}
+
+mutation CreateLevelPreset($name: String!, $l1: String!, $l2: String!, $l3: String!, $l4: String!, $l5: String!) {
+  createLevelPreset(name: $name, l1: $l1, l2: $l2, l3: $l3, l4: $l4, l5: $l5) {
+    id
+    name
+    latestVersion {
+      id
+      version
+      l1
+      l2
+      l3
+      l4
+      l5
+    }
+  }
+}
+
+mutation UpdateLevelPreset($id: ID!, $l1: String!, $l2: String!, $l3: String!, $l4: String!, $l5: String!) {
+  updateLevelPreset(id: $id, l1: $l1, l2: $l2, l3: $l3, l4: $l4, l5: $l5) {
+    id
+    name
+    updatedAt
+    latestVersion {
+      id
+      version
+      l1
+      l2
+      l3
+      l4
+      l5
+    }
+  }
+}
+
+mutation DeleteLevelPreset($id: ID!) {
+  deleteLevelPreset(id: $id) {
+    id
+  }
+}

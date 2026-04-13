@@ -1,4 +1,5 @@
 import { db } from '@valuerank/db';
+import { ValidationError } from '@valuerank/shared';
 import { createAuditLog } from '../../../../services/audit/index.js';
 import type {
   DomainEvaluationLaunchInput,
@@ -89,7 +90,7 @@ export async function launchDomainEvaluation(input: DomainEvaluationLaunchInput)
   }
 
   if (maxBudgetUsd !== undefined && maxBudgetUsd !== null && maxBudgetUsd <= 0) {
-    throw new Error('maxBudgetUsd must be greater than 0 when provided.');
+    throw new ValidationError('maxBudgetUsd must be greater than 0 when provided.');
   }
   const budgetCap = maxBudgetUsd ?? null;
 
@@ -97,7 +98,7 @@ export async function launchDomainEvaluation(input: DomainEvaluationLaunchInput)
   for (const pairKey of incompletePairKeys) {
     log.warn(
       { domainId, pairKey },
-      'Incomplete job-choice pair: companion definition not found. Launching as individual run.'
+      'Incomplete pair: companion definition not found. Launching as individual run.'
     );
   }
 

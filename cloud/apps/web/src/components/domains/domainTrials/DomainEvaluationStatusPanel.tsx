@@ -136,11 +136,14 @@ export function DomainEvaluationStatusPanel({
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Batches complete</div>
-          <div className="mt-1 text-2xl font-semibold text-gray-900">{percentComplete}%</div>
-          <div className="mt-2 h-2 rounded-full bg-gray-200">
-            <div className="h-2 rounded-full bg-teal-500" style={{ width: `${percentComplete}%` }} />
-          </div>
+          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Remaining</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">{counts.remaining}</div>
+          <div className="text-xs text-gray-600">Still needed for this launch</div>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Processing</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">{counts.live}</div>
+          <div className="text-xs text-gray-600">Moving right now</div>
         </div>
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
           <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Done</div>
@@ -148,19 +151,16 @@ export function DomainEvaluationStatusPanel({
           <div className="text-xs text-gray-600">Run work finished</div>
         </div>
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Remaining</div>
-          <div className="mt-1 text-2xl font-semibold text-gray-900">{counts.remaining}</div>
-          <div className="text-xs text-gray-600">Still needed for this launch</div>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Currently processing</div>
-          <div className="mt-1 text-2xl font-semibold text-gray-900">{counts.live}</div>
-          <div className="text-xs text-gray-600">Moving right now</div>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Failed</div>
+          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Needs Attention</div>
           <div className="mt-1 text-2xl font-semibold text-gray-900">{counts.failed}</div>
-          <div className="text-xs text-gray-600">Needs attention</div>
+          <div className="text-xs text-gray-600">Flagged for review</div>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Batches complete</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">{percentComplete}%</div>
+          <div className="mt-2 h-2 rounded-full bg-gray-200">
+            <div className="h-2 rounded-full bg-teal-500" style={{ width: `${percentComplete}%` }} />
+          </div>
         </div>
       </div>
 

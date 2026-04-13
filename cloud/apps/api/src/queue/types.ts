@@ -9,7 +9,6 @@ export type JobType =
   | 'probe_scenario'
   | 'summarize_transcript'
   | 'analyze_basic'
-  | 'analyze_deep'
   | 'expand_scenarios'
   | 'compute_token_stats'
   | 'probe_dead_letter'
@@ -41,11 +40,6 @@ export type AnalyzeBasicJobData = {
   runId: string;
   transcriptIds?: string[]; // Optional: will be fetched from DB if not provided
   force?: boolean; // Force recomputation even if cached
-};
-
-export type AnalyzeDeepJobData = {
-  runId: string;
-  analysisType: 'correlations' | 'pca' | 'outliers';
 };
 
 export type ExpandScenariosJobData = {
@@ -80,7 +74,6 @@ export type JobData =
   | ProbeScenarioJobData
   | SummarizeTranscriptJobData
   | AnalyzeBasicJobData
-  | AnalyzeDeepJobData
   | ExpandScenariosJobData
   | ComputeTokenStatsJobData
   | AggregateAnalysisJobData
@@ -115,12 +108,6 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
     retryDelay: 10,
     retryBackoff: true,
     expireInSeconds: 600, // 10 minutes
-  },
-  'analyze_deep': {
-    retryLimit: 2,
-    retryDelay: 30,
-    retryBackoff: true,
-    expireInSeconds: 1800, // 30 minutes
   },
   'expand_scenarios': {
     retryLimit: 2,

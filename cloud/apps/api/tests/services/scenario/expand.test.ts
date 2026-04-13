@@ -276,10 +276,15 @@ describe('Scenario Expansion Service', () => {
         expect(result.created).toBe(1);
 
         // Verify old scenario is soft deleted
-        const allScenarios = await db.scenario.findMany({
-          where: { definitionId: testDefinitionId },
+        // Query active and deleted separately (soft-delete extension auto-filters)
+        const activeCount = await db.scenario.count({
+          where: { definitionId: testDefinitionId, deletedAt: null },
         });
-        expect(allScenarios).toHaveLength(2);
+        const deletedCount = await db.scenario.count({
+          where: { definitionId: testDefinitionId, deletedAt: { not: null } },
+        });
+        expect(activeCount).toBe(1); // new scenario
+        expect(deletedCount).toBe(1); // old scenario soft-deleted
 
         const activeScenarios = await db.scenario.findMany({
           where: { definitionId: testDefinitionId, deletedAt: null },

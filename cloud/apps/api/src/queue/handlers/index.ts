@@ -8,150 +8,24 @@
 import type { PgBoss } from 'pg-boss';
 import { createLogger } from '@valuerank/shared';
 import { queueConfig } from '../../config.js';
-import type {
-  JobType,
-  ProbeScenarioJobData,
-  SummarizeTranscriptJobData,
-  AnalyzeBasicJobData,
-  AnalyzeDeepJobData,
-  ExpandScenariosJobData,
-  ComputeTokenStatsJobData,
-  ProbeDeadLetterJobData,
-  AggregateAnalysisJobData,
-  RefreshDomainAnalysisSnapshotJobData,
-} from '../types.js';
-import { createProbeScenarioHandler } from './probe-scenario.js';
+import { createProbeScenarioHandler } from './probe-scenario/index.js';
 import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
-import { createAnalyzeBasicHandler } from './analyze-basic.js';
-import { createAnalyzeDeepHandler } from './analyze-deep.js';
-import { createExpandScenariosHandler } from './expand-scenarios.js';
-import { createComputeTokenStatsHandler } from './compute-token-stats.js';
-import { createProbeDeadLetterHandler } from './probe-dead-letter.js';
-import { createAggregateAnalysisHandler } from './aggregate-analysis.js';
-import { createRefreshDomainAnalysisSnapshotHandler } from './refresh-domain-analysis-snapshot.js';
+import {
+  PROBE_DEAD_LETTER_QUEUE,
+  handlerRegistrations,
+} from './handler-config.js';
+import type { ProbeScenarioJobData, SummarizeTranscriptJobData } from './handler-config.js';
 import {
   createProviderQueues,
   getAllProviderQueues,
 } from '../../services/parallelism/index.js';
 
-const log = createLogger('queue:handlers');
-
-// Re-export job data types for handlers
 export type {
   ProbeScenarioJobData,
   SummarizeTranscriptJobData,
-  AnalyzeBasicJobData,
-  AnalyzeDeepJobData,
-  ExpandScenariosJobData,
-  ComputeTokenStatsJobData,
-  ProbeDeadLetterJobData,
-  AggregateAnalysisJobData,
-  RefreshDomainAnalysisSnapshotJobData,
-};
+} from './handler-config.js';
 
-// Dead letter queue name for probe jobs
-const PROBE_DEAD_LETTER_QUEUE = 'probe_dead_letter';
-
-// Handler registration info
-type HandlerRegistration = {
-  name: JobType;
-  register: (boss: PgBoss, batchSize: number) => Promise<void>;
-};
-
-const handlerRegistrations: HandlerRegistration[] = [
-  {
-    name: 'probe_scenario',
-    register: async (boss, batchSize) => {
-      // Register for the default probe_scenario queue (fallback)
-      await boss.work<ProbeScenarioJobData>(
-        'probe_scenario',
-        { batchSize },
-        createProbeScenarioHandler()
-      );
-    },
-  },
-  {
-    name: 'summarize_transcript',
-    register: async (boss, batchSize) => {
-      await boss.work<SummarizeTranscriptJobData>(
-        'summarize_transcript',
-        { batchSize },
-        createSummarizeTranscriptHandler()
-      );
-    },
-  },
-  {
-    name: 'analyze_basic',
-    register: async (boss, batchSize) => {
-      await boss.work<AnalyzeBasicJobData>(
-        'analyze_basic',
-        { batchSize },
-        createAnalyzeBasicHandler()
-      );
-    },
-  },
-  {
-    name: 'analyze_deep',
-    register: async (boss, batchSize) => {
-      await boss.work<AnalyzeDeepJobData>(
-        'analyze_deep',
-        { batchSize },
-        createAnalyzeDeepHandler()
-      );
-    },
-  },
-  {
-    name: 'expand_scenarios',
-    register: async (boss, batchSize) => {
-      await boss.work<ExpandScenariosJobData>(
-        'expand_scenarios',
-        { batchSize },
-        createExpandScenariosHandler()
-      );
-    },
-  },
-  {
-    name: 'compute_token_stats',
-    register: async (boss, batchSize) => {
-      await boss.work<ComputeTokenStatsJobData>(
-        'compute_token_stats',
-        { batchSize },
-        createComputeTokenStatsHandler()
-      );
-    },
-  },
-  {
-    name: 'probe_dead_letter',
-    register: async (boss, batchSize) => {
-      await boss.work<ProbeDeadLetterJobData>(
-        PROBE_DEAD_LETTER_QUEUE,
-        { batchSize },
-        createProbeDeadLetterHandler()
-      );
-    },
-  },
-  {
-    name: 'aggregate_analysis',
-    register: async (boss, batchSize) => {
-      await boss.work<AggregateAnalysisJobData>(
-        'aggregate_analysis',
-        { batchSize }, // Usually batchSize=1 effectively for aggregation if we want strict serial per worker
-        createAggregateAnalysisHandler()
-      );
-    },
-  },
-  {
-    name: 'refresh_domain_analysis_snapshot',
-    register: async (boss, batchSize) => {
-      await boss.work<RefreshDomainAnalysisSnapshotJobData>(
-        'refresh_domain_analysis_snapshot',
-        { batchSize },
-        createRefreshDomainAnalysisSnapshotHandler()
-      );
-    },
-  },
-];
-
+const log = createLogger('queue:handlers');
 /**
  * Registers provider-specific probe queue handlers.
  * Each provider queue gets N workers where N = maxParallelRequests.
@@ -276,7 +150,7 @@ export async function registerHandlers(boss: PgBoss): Promise<void> {
 /**
  * Gets list of registered job types.
  */
-export function getJobTypes(): JobType[] {
+export function getJobTypes() {
   return handlerRegistrations.map((h) => h.name);
 }
 

@@ -43,5 +43,4 @@ export type ProviderSettingsModalProps = {
     maxParallelRequests?: number;
     balance?: number | null;
   }) => Promise<void>;
-  onSync?: (realBalance: number) => Promise<void>;
 };

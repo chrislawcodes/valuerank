@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
-import { builder } from '../../builder.js';
 import { db, Prisma } from '@valuerank/db';
+import { NotFoundError, ValidationError } from '@valuerank/shared';
+import { builder } from '../../builder.js';
 import { DomainRef } from '../../types/domain.js';
 import { createAuditLog } from '../../../services/audit/index.js';
 import { normalizeDomainName } from '../../../utils/domain-name.js';
@@ -27,7 +28,7 @@ builder.mutationField('createDomain', (t) =>
     },
     resolve: async (_root, args, ctx) => {
       const { displayName, normalizedName } = normalizeDomainName(args.name);
-      if (displayName.length === 0) throw new Error('Domain name is required');
+      if (displayName.length === 0) throw new ValidationError('Domain name is required');
       let domain;
       try {
         domain = await db.domain.create({
@@ -38,7 +39,7 @@ builder.mutationField('createDomain', (t) =>
         });
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-          throw new Error(`Domain "${displayName}" already exists`);
+          throw new ValidationError(`Domain "${displayName}" already exists`);
         }
         throw error;
       }
@@ -72,10 +73,10 @@ builder.mutationField('renameDomain', (t) =>
     resolve: async (_root, args, ctx) => {
       const id = String(args.id);
       const existing = await db.domain.findUnique({ where: { id } });
-      if (!existing) throw new Error(`Domain not found: ${id}`);
+      if (!existing) throw new NotFoundError('Domain', id);
 
       const { displayName, normalizedName } = normalizeDomainName(args.name);
-      if (displayName.length === 0) throw new Error('Domain name is required');
+      if (displayName.length === 0) throw new ValidationError('Domain name is required');
 
       let updated;
       try {
@@ -85,7 +86,7 @@ builder.mutationField('renameDomain', (t) =>
         });
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-          throw new Error(`Domain "${displayName}" already exists`);
+          throw new ValidationError(`Domain "${displayName}" already exists`);
         }
         throw error;
       }
@@ -112,7 +113,7 @@ builder.mutationField('deleteDomain', (t) =>
     resolve: async (_root, args, ctx) => {
       const id = String(args.id);
       const existing = await db.domain.findUnique({ where: { id } });
-      if (!existing) throw new Error(`Domain not found: ${id}`);
+      if (!existing) throw new NotFoundError('Domain', id);
 
       const affectedDefinitions = await db.$transaction(async (tx) => {
         const unassignResult = await tx.definition.updateMany({
@@ -147,14 +148,14 @@ builder.mutationField('assignDomainToDefinitions', (t) =>
       const definitionIds = args.definitionIds.map(String);
       if (definitionIds.length === 0) return { success: true, affectedDefinitions: 0 };
       if (definitionIds.length > MAX_BULK_ASSIGN_IDS) {
-        throw new Error(`Cannot assign more than ${MAX_BULK_ASSIGN_IDS} definitions in one request`);
+        throw new ValidationError(`Cannot assign more than ${MAX_BULK_ASSIGN_IDS} definitions in one request`);
       }
 
       const domainId = parseOptionalId(args.domainId, 'domainId');
       let domainName: string | null = null;
       if (domainId !== null) {
         const domain = await db.domain.findUnique({ where: { id: domainId } });
-        if (!domain) throw new Error(`Domain not found: ${domainId}`);
+        if (!domain) throw new NotFoundError('Domain', domainId);
         domainName = domain.name;
       }
 
@@ -199,7 +200,7 @@ builder.mutationField('assignDomainToDefinitionsByFilter', (t) =>
       let targetDomainName: string | null = null;
       if (domainId !== null) {
         const domain = await db.domain.findUnique({ where: { id: domainId } });
-        if (!domain) throw new Error(`Domain not found: ${domainId}`);
+        if (!domain) throw new NotFoundError('Domain', domainId);
         targetDomainName = domain.name;
       }
 

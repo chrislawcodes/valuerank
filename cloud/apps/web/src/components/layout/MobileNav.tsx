@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { type LucideIcon, Archive, BarChart2, FileText, FolderTree, GitCompare, Home, Library, Menu, Settings, ShieldCheck, X } from 'lucide-react';
+import { type LucideIcon, Archive, BarChart2, FileText, FolderTree, GitCompare, Home, Library, Menu, Settings, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
 
@@ -34,22 +34,12 @@ const navItems: NavItem[] = [
     ],
   },
   {
-    name: 'Validation',
-    path: '/validation',
-    icon: ShieldCheck,
-    children: [
-      { name: 'Temp=0 Effect', path: '/assumptions/temp-zero-effect', icon: ShieldCheck },
-      { name: 'Legacy Analysis', path: '/assumptions/analysis', icon: ShieldCheck },
-      { name: 'Validation (old v1)', path: '/assumptions/analysis-v1', icon: ShieldCheck },
-    ],
-  },
-  {
     name: 'Archive',
     path: '/archive',
     icon: Archive,
     children: [
-      { name: 'Legacy Survey Work', path: '/archive/surveys', icon: Archive, aliases: ['/survey'] },
-      { name: 'Legacy Survey Results', path: '/archive/survey-results', icon: Archive, aliases: ['/survey-results'] },
+      { name: 'Legacy Survey Work', path: '/archive/surveys', icon: Archive },
+      { name: 'Legacy Survey Results', path: '/archive/survey-results', icon: Archive },
     ],
   },
   { name: 'Compare', path: '/compare', icon: GitCompare },

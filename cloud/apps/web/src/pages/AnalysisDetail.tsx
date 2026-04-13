@@ -285,7 +285,7 @@ export function AnalysisDetail() {
   const methodology = getDefinitionMethodology(definitionContent);
   const runLaunchMode = run.config?.jobChoiceLaunchMode;
   const isPairedBatch = runLaunchMode === 'PAIRED_BATCH';
-  const launchModeLabel = methodology?.family === 'job-choice'
+  const launchModeLabel = methodology?.pair_key != null
     ? runLaunchMode === 'AD_HOC_BATCH'
       ? 'Ad Hoc Batch'
       : runLaunchMode === 'PAIRED_BATCH'

@@ -39,6 +39,7 @@ export type ProbeTranscript = {
   turns: TranscriptTurn[];
   totalInputTokens: number;
   totalOutputTokens: number;
+  totalReasoningTokens?: number;
   modelVersion?: string | null;
   startedAt: string;
   completedAt: string;
@@ -53,6 +54,7 @@ export type CostSnapshot = {
   estimatedCost: number;
   costInputPerMillion: number;
   costOutputPerMillion: number;
+  reasoningTokens?: number;
 };
 
 /**
@@ -71,7 +73,7 @@ export type CreateTranscriptInput = {
 /**
  * Create a transcript record from probe worker output.
  */
-export async function createTranscript(input: CreateTranscriptInput) {
+export async function createTranscript(input: CreateTranscriptInput, txClient?: Prisma.TransactionClient) {
   const { runId, scenarioId, modelId, sampleIndex = 0, transcript, definitionSnapshot, costSnapshot } = input;
 
   // Calculate duration from timestamps
@@ -85,6 +87,10 @@ export async function createTranscript(input: CreateTranscriptInput) {
     schemaVersion: 1,
     turns: transcript.turns,
   };
+
+  if (transcript.totalReasoningTokens != null && transcript.totalReasoningTokens > 0) {
+    content.totalReasoningTokens = transcript.totalReasoningTokens;
+  }
 
   if (costSnapshot !== undefined) {
     content.costSnapshot = costSnapshot;
@@ -101,7 +107,8 @@ export async function createTranscript(input: CreateTranscriptInput) {
     'Creating transcript'
   );
 
-  const record = await db.transcript.create({
+  const client = txClient ?? db;
+  const record = await client.transcript.create({
     data: {
       runId,
       scenarioId,

@@ -165,6 +165,22 @@ module.exports = {
         '@typescript-eslint/no-misused-promises': 'warn',
       },
     },
+    {
+      // Enforce typed errors in GraphQL resolvers and services.
+      // Use ValidationError, NotFoundError, etc. from @valuerank/shared
+      // instead of generic Error.
+      files: [
+        'apps/api/src/graphql/**/*.ts',
+        'apps/api/src/services/**/*.ts',
+      ],
+      excludedFiles: ['**/*.test.ts', '**/tests/**/*.ts', '**/__tests__/**/*.ts'],
+      rules: {
+        'no-restricted-syntax': ['error', {
+          selector: 'ThrowStatement > NewExpression[callee.name="Error"]',
+          message: 'Use typed errors from @valuerank/shared (ValidationError, NotFoundError, AuthenticationError, etc.) instead of generic Error.',
+        }],
+      },
+    },
   ],
   ignorePatterns: ['dist', 'node_modules', '*.js', '*.cjs'],
 };

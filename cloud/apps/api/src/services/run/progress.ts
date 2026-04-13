@@ -52,9 +52,14 @@ export async function updateProgress(
     throw new NotFoundError('Run', runId);
   }
 
-  // Don't update progress if run is not in PENDING or RUNNING state
-  // This prevents overcounting when probe jobs complete after the run has moved on
-  if (!['PENDING', 'RUNNING'].includes(currentRun.status)) {
+  // Allow correction swaps regardless of run status.
+  // A correction swap is exactly { +1, -1 } or { -1, +1 } - the counters offset each other.
+  // This handles FAILED -> SUCCESS or SUCCESS -> FAILED probe transitions during recovery
+  // even after the run has moved to SUMMARIZING or a terminal state.
+  const isCorrectionSwap =
+    (incrementCompleted === 1 && incrementFailed === -1) ||
+    (incrementCompleted === -1 && incrementFailed === 1);
+  if (!['PENDING', 'RUNNING'].includes(currentRun.status) && !isCorrectionSwap) {
     log.debug(
       { runId, status: currentRun.status, incrementCompleted, incrementFailed },
       'Skipping progress update - run not in PENDING/RUNNING state'
@@ -206,6 +211,44 @@ async function transitionStatus(
 }
 
 /**
+ * Wait for transcript rows to settle before counting.
+ *
+ * When the last probe job triggers SUMMARIZING, other probe jobs may still
+ * be committing their transcript rows. This polls briefly (up to 5 seconds)
+ * until the DB transcript count matches the expected total from probe progress,
+ * so the summarization denominator is accurate.
+ */
+const SETTLE_POLL_INTERVAL_MS = 500;
+const SETTLE_MAX_WAIT_MS = 5_000;
+
+async function waitForTranscriptSettle(
+  runId: string,
+  expectedCompleted: number,
+): Promise<number> {
+  const deadline = Date.now() + SETTLE_MAX_WAIT_MS;
+
+  while (Date.now() < deadline) {
+    const count = await db.transcript.count({ where: { runId } });
+    if (count >= expectedCompleted) {
+      return count;
+    }
+    log.debug(
+      { runId, dbCount: count, expected: expectedCompleted },
+      'Waiting for in-flight transcript commits to settle'
+    );
+    await new Promise((resolve) => setTimeout(resolve, SETTLE_POLL_INTERVAL_MS));
+  }
+
+  // Timed out — return whatever we have
+  const finalCount = await db.transcript.count({ where: { runId } });
+  log.warn(
+    { runId, dbCount: finalCount, expected: expectedCompleted },
+    'Transcript settle timed out — proceeding with current count'
+  );
+  return finalCount;
+}
+
+/**
  * Queues summarize jobs for all transcripts in a run.
  */
 async function queueSummarizeJobs(runId: string): Promise<void> {
@@ -214,6 +257,19 @@ async function queueSummarizeJobs(runId: string): Promise<void> {
   const { DEFAULT_JOB_OPTIONS } = await import('../../queue/types.js');
 
   const boss = getBoss();
+
+  // Read the probe progress to know how many successful transcripts to expect
+  const run = await db.run.findUnique({
+    where: { id: runId },
+    select: { progress: true },
+  });
+  const probeProgress = run?.progress as ProgressData | null;
+  const expectedCompleted = probeProgress?.completed ?? 0;
+
+  // Wait for in-flight transcript commits before counting
+  if (expectedCompleted > 0) {
+    await waitForTranscriptSettle(runId, expectedCompleted);
+  }
 
   // Get all transcripts for this run
   const transcripts = await db.transcript.findMany({
@@ -303,69 +359,5 @@ export function calculatePercentComplete(progress: ProgressData): number {
   return Math.round((done / progress.total) * 100);
 }
 
-/**
- * Updates summarize progress atomically using PostgreSQL JSONB operators.
- * Increments the completed or failed count for transcript summarization.
- */
-export async function updateSummarizeProgress(
-  runId: string,
-  update: { incrementCompleted?: number; incrementFailed?: number }
-): Promise<ProgressData | null> {
-  const { incrementCompleted = 0, incrementFailed = 0 } = update;
-
-  if (incrementCompleted === 0 && incrementFailed === 0) {
-    const run = await db.run.findUnique({
-      where: { id: runId },
-      select: { summarizeProgress: true },
-    });
-    return run?.summarizeProgress as ProgressData | null;
-  }
-
-  log.debug(
-    { runId, incrementCompleted, incrementFailed },
-    'Updating summarize progress'
-  );
-
-  // Use raw SQL for atomic JSONB increment
-  const result = await db.$queryRaw<Array<{
-    id: string;
-    summarize_progress: ProgressData;
-  }>>`
-    UPDATE runs
-    SET
-      summarize_progress = jsonb_set(
-        jsonb_set(
-          summarize_progress,
-          '{completed}',
-          to_jsonb((summarize_progress->>'completed')::int + ${incrementCompleted})
-        ),
-        '{failed}',
-        to_jsonb((summarize_progress->>'failed')::int + ${incrementFailed})
-      ),
-      updated_at = NOW()
-    WHERE id = ${runId}
-    RETURNING id, summarize_progress
-  `;
-
-  const updatedRun = result[0];
-  if (!updatedRun) {
-    return null;
-  }
-
-  log.debug({ runId, summarizeProgress: updatedRun.summarize_progress }, 'Summarize progress updated');
-  return updatedRun.summarize_progress;
-}
-
-/**
- * Increments summarize completed count by 1.
- */
-export async function incrementSummarizeCompleted(runId: string): Promise<ProgressData | null> {
-  return updateSummarizeProgress(runId, { incrementCompleted: 1 });
-}
-
-/**
- * Increments summarize failed count by 1.
- */
-export async function incrementSummarizeFailed(runId: string): Promise<ProgressData | null> {
-  return updateSummarizeProgress(runId, { incrementFailed: 1 });
-}
+// Summarize progress functions live in ./summarize-progress.ts
+export { updateSummarizeProgress, incrementSummarizeCompleted, incrementSummarizeFailed } from './summarize-progress.js';

@@ -2,9 +2,11 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDomains } from '../hooks/useDomains';
 
+const LAST_DOMAIN_KEY = 'valuerank:lastSelectedDomainId';
+
 /**
- * Redirects /status to the first domain's trial dashboard.
- * Top-level entry point so users always have one place to check run status.
+ * Redirects /status (or /domains/status) to the last-used domain's status page.
+ * Falls back to the first domain if no last-used domain is stored.
  */
 export function StatusRedirect() {
   const { domains, queryLoading } = useDomains();
@@ -12,9 +14,11 @@ export function StatusRedirect() {
 
   useEffect(() => {
     if (queryLoading) return;
-    const domain = domains[0];
+    const lastId = localStorage.getItem(LAST_DOMAIN_KEY);
+    const lastDomain = lastId != null ? domains.find((d) => d.id === lastId) : null;
+    const domain = lastDomain ?? domains[0];
     if (domain != null) {
-      navigate(`/domains/${domain.id}/run-trials`, { replace: true });
+      navigate(`/domains/status/${domain.id}`, { replace: true });
     }
   }, [domains, queryLoading, navigate]);
 

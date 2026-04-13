@@ -21,6 +21,9 @@ class LLMResponse:
     seed_sent: Optional[bool] = None
     seed_value: Optional[int] = None
     adapter_mode: Optional[str] = None
+    reasoning_tokens: Optional[int] = None
+    # Defaults to True (safe: under-tracks rather than over-bills if an adapter omits this flag)
+    reasoning_tokens_included_in_output: bool = True
 
     def __post_init__(self) -> None:
         """Backfill request instrumentation from the shared adapter context."""
@@ -65,6 +68,8 @@ class LLMResponse:
             result["seedValue"] = self.seed_value
         if self.adapter_mode is not None:
             result["adapterMode"] = self.adapter_mode
+        if self.reasoning_tokens is not None:
+            result["reasoningTokens"] = self.reasoning_tokens
         return result
 
 

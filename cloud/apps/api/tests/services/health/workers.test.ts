@@ -234,27 +234,4 @@ describe('Worker Health Service', () => {
     });
   });
 
-  describe('clearWorkerHealthCache', () => {
-    it('clears cache and forces new health check', async () => {
-      vi.mocked(spawnPython).mockResolvedValue({
-        success: true,
-        data: {
-          success: true,
-          health: {
-            pythonVersion: '3.11.5',
-            packages: {},
-            apiKeys: {},
-            warnings: [],
-          },
-        },
-        stderr: '',
-      });
-
-      await getWorkerHealth();
-      clearWorkerHealthCache();
-      await getWorkerHealth();
-
-      expect(spawnPython).toHaveBeenCalledTimes(2);
-    });
-  });
 });

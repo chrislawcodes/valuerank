@@ -20,10 +20,6 @@ ValueRank evaluates how AI models prioritize moral values in tradeoff prompts.
 - Ask them one at a time.
 - Give your recommendation before each question when helpful.
 
-## Diagnose Before Fixing
-
-- When something breaks, follow `docs/workflow/rules/diagnose-before-fixing.md`.
-
 ## Never Do
 
 - Push commits directly to `main`.
@@ -68,7 +64,7 @@ Read when relevant:
 - `docs/values-summary.md` for value definitions and tensions
 - `docs/README.md` for architecture overview
 - `experiments.md` when choosing a delivery path
-- `MEMORY.md` for the active branch handoff
+- `MEMORY.md` for persistent project references
 - `docs/workflow/feature-runs/<slug>/` when working in Feature Factory
 
 ## Delivery Paths
@@ -85,6 +81,10 @@ Read when relevant:
 - Agents may hand off work, but the current integrator owns user communication and the next decision.
 - When blocked, stop and ask the human for the missing decision.
 
+## Diagnose Before Fixing
+
+- When something breaks, follow `docs/workflow/rules/diagnose-before-fixing.md`.
+
 ## Data-Critical Work
 
 - For migrations, backfills, rollout scripts, or seed changes, follow `docs/workflow/rules/data-critical-waves.md`.
@@ -93,13 +93,9 @@ Read when relevant:
 
 ## Memory Policy
 
-- `MEMORY.md` is a short handoff file for the active feature on the current branch.
-- Keep only: locked decisions, off-limits symbols, removed or renamed symbols, current status, and open blockers.
-- Do not use `MEMORY.md` as a long-term archive.
+- `MEMORY.md` is a persistent reference index. Keep it lean — no shipped feature history or long-term archives.
 - In Feature Factory, runtime state lives in `docs/workflow/feature-runs/<slug>/state.json`.
 - In Feature Factory, durable artifacts live in `docs/workflow/feature-runs/<slug>/spec.md`, `plan.md`, `tasks.md`, and `closeout.md`.
-- Before merge, move durable notes into feature artifacts or another normal doc.
-- Trim `MEMORY.md` back to the current active handoff.
 
 ## Project Status
 

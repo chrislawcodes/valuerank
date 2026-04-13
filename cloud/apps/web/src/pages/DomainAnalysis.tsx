@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from 'urql';
-import { AlertTriangle, ChevronDown, Loader2 } from 'lucide-react';
 import { isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
@@ -19,7 +18,6 @@ import {
   type DomainFindingsEligibilityQueryVariables,
   type DomainAnalysisQueryResult,
   type DomainAnalysisQueryVariables,
-  type DomainFindingsEligibility,
   type RefreshDomainAnalysisMutationResult,
   type RefreshDomainAnalysisMutationVariables,
 } from '../api/operations/domainAnalysis';
@@ -27,6 +25,7 @@ import { ModelGroupsSection } from '../components/domains/ModelGroupsSection';
 import { DominanceSection } from '../components/domains/DominanceSection';
 import { SimilaritySection } from '../components/domains/SimilaritySection';
 import { ValuePrioritiesSection } from '../components/domains/ValuePrioritiesSection';
+import { EvidenceScopeDisclosure, getEvidenceScopeState } from '../components/domains/EvidenceScopeDisclosure';
 import {
   VALUES,
   type DomainAnalysisModelAvailability,
@@ -39,15 +38,11 @@ import { exportDomainTranscriptsAsCSV } from '../api/export';
 function parseTemperatureFromSignature(signature: string): number | null {
   if (signature.trim() === '') return null;
   if (isVnewSignature(signature)) {
-    try {
-      return parseVnewTemperature(signature);
-    } catch {
-      return null;
-    }
+    try { return parseVnewTemperature(signature); } catch { return null; }
   }
-  const standardMatch = signature.match(/t(.+)$/);
-  if (standardMatch) {
-    const token = standardMatch[1] ?? '';
+  const match = signature.match(/t(.+)$/);
+  if (match != null) {
+    const token = match[1] ?? '';
     if (token === 'd') return null;
     const parsed = Number.parseFloat(token);
     return Number.isFinite(parsed) ? parsed : null;
@@ -65,236 +60,10 @@ function getSignaturePriority(option: DomainAvailableSignature): number {
 function formatSignatureOptionLabel(option: DomainAvailableSignature): string {
   if (option.isVirtual) return option.label;
   const defaultMatch = option.signature.match(/^v(\d+)td$/i);
-  if (defaultMatch) {
-    return `v${defaultMatch[1]} @ default`;
-  }
+  if (defaultMatch != null) return `v${defaultMatch[1]} @ default`;
   const tempMatch = option.signature.match(/^v(\d+)t(.+)$/i);
-  if (tempMatch) {
-    return `v${tempMatch[1]} @ t=${tempMatch[2]}`;
-  }
+  if (tempMatch != null) return `v${tempMatch[1]} @ t=${tempMatch[2]}`;
   return option.label;
-}
-
-type EvidenceScopeState =
-  | {
-      kind: 'loading';
-    }
-  | {
-      kind: 'auditable' | 'diagnostic';
-      label: string;
-      summary: string;
-      reasons: string[];
-      recommendedAction: string | null;
-      completedEligibleEvaluationCount: number;
-      consideredScopeCategories: string[];
-      latestEligibleEvaluationId: string | null;
-      latestEligibleScopeCategory: string | null;
-      latestEligibleCompletedAt: string | null;
-    }
-  | {
-      kind: 'unavailable';
-      label: 'scope unavailable';
-      summary: string;
-      reasons: string[];
-      note: string | null;
-    }
-  | {
-      kind: 'error';
-      label: 'scope unavailable';
-      summary: string;
-      reasons: string[];
-      note: string;
-    };
-
-function getEvidenceScopeState(
-  findingsEligibilityData: DomainFindingsEligibility | undefined,
-  findingsEligibilityLoading: boolean,
-  findingsEligibilityError: { message: string } | undefined,
-): EvidenceScopeState {
-  if (findingsEligibilityData != null) {
-    if (findingsEligibilityData.eligible === true || findingsEligibilityData.eligible === false) {
-      return {
-        kind: findingsEligibilityData.eligible ? 'auditable' : 'diagnostic',
-        label: findingsEligibilityData.eligible ? 'auditable findings' : 'diagnostic evidence only',
-        summary: findingsEligibilityData.summary,
-        reasons: findingsEligibilityData.reasons ?? [],
-        recommendedAction: findingsEligibilityData.recommendedActions[0] ?? null,
-        completedEligibleEvaluationCount: findingsEligibilityData.completedEligibleEvaluationCount,
-        consideredScopeCategories: findingsEligibilityData.consideredScopeCategories.map((scope) => scope.toLowerCase()),
-        latestEligibleEvaluationId: findingsEligibilityData.latestEligibleEvaluationId,
-        latestEligibleScopeCategory: findingsEligibilityData.latestEligibleScopeCategory,
-        latestEligibleCompletedAt: findingsEligibilityData.latestEligibleCompletedAt,
-      };
-    }
-
-    return {
-      kind: 'unavailable',
-      label: 'scope unavailable',
-      summary: 'The current scope could not be confirmed.',
-      reasons: findingsEligibilityData.reasons ?? [],
-      note: null,
-    };
-  }
-
-  if (findingsEligibilityLoading) {
-    return { kind: 'loading' };
-  }
-
-  if (findingsEligibilityError != null) {
-    return {
-      kind: 'error',
-      label: 'scope unavailable',
-      summary: 'Eligibility data could not load.',
-      reasons: [],
-      note: findingsEligibilityError.message,
-    };
-  }
-
-  return {
-    kind: 'unavailable',
-    label: 'scope unavailable',
-    summary: 'The current scope could not be confirmed.',
-    reasons: [],
-    note: null,
-  };
-}
-
-function EvidenceScopeDisclosure({
-  state,
-}: {
-  state: EvidenceScopeState;
-}) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const detailsId = 'domain-analysis-evidence-scope-details';
-
-  if (state.kind === 'loading') {
-    return (
-      <div className="inline-flex min-h-[40px] items-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-500">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-        Loading scope...
-      </div>
-    );
-  }
-
-  const isPositive = state.kind === 'auditable' || state.kind === 'diagnostic';
-  const chipClasses = isPositive
-    ? state.kind === 'auditable'
-      ? 'border-green-200 bg-green-100 text-green-900'
-      : 'border-amber-200 bg-amber-100 text-amber-900'
-    : 'border-gray-300 bg-gray-100 text-gray-800';
-  const buttonClasses = `inline-flex min-h-[40px] items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${chipClasses} ${
-    isPositive ? 'hover:brightness-95' : 'hover:bg-gray-200'
-  }`;
-  const badgeText = state.label;
-
-  return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
-      <div className="flex flex-wrap items-start gap-2">
-        <Button
-          type="button"
-          className={buttonClasses}
-          aria-expanded={isExpanded}
-          aria-controls={detailsId}
-          aria-label={isExpanded ? 'Hide evidence scope details' : 'Show evidence scope details'}
-          onClick={() => setIsExpanded((current) => !current)}
-        >
-          {!isPositive && <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />}
-          <span className="whitespace-normal text-left">Current evidence scope: {badgeText}</span>
-          <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} aria-hidden="true" />
-        </Button>
-      </div>
-      {state.kind === 'error' && (
-        <p className="mt-1 text-xs text-gray-500">{state.summary}</p>
-      )}
-
-      {isExpanded && (
-        <div
-          id={detailsId}
-          className="mt-3 max-h-[50vh] overflow-y-auto rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm text-gray-700"
-        >
-          <div
-            className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${
-              isPositive ? (state.kind === 'auditable'
-                ? 'border-green-200 bg-green-100 text-green-900'
-                : 'border-amber-200 bg-amber-100 text-amber-900')
-                : 'border-gray-300 bg-gray-100 text-gray-800'
-            }`}
-          >
-            Current evidence scope: {badgeText}
-          </div>
-          <p className={`font-semibold ${isPositive ? 'text-gray-900' : 'text-gray-800'}`}>
-            {state.summary}
-          </p>
-
-          {state.kind === 'auditable' || state.kind === 'diagnostic' ? (
-            <div className="mt-3 space-y-3">
-              {state.reasons.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Reasons</p>
-                  <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
-                    {state.reasons.map((reason) => (
-                      <li key={reason}>{reason}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {state.recommendedAction && (
-                <p className="text-sm">
-                  <span className="font-medium text-gray-900">Recommended next step:</span>{' '}
-                  {state.recommendedAction}
-                </p>
-              )}
-              <div className="grid gap-2 rounded-lg border border-white bg-white p-3 text-xs text-gray-700 sm:grid-cols-2">
-                <div>
-                  <span className="font-semibold text-gray-900">Completed eligible evaluations:</span>{' '}
-                  {state.completedEligibleEvaluationCount}
-                </div>
-                <div>
-                  <span className="font-semibold text-gray-900">Scopes considered:</span>{' '}
-                  {state.consideredScopeCategories.join(', ')}
-                </div>
-                {state.latestEligibleEvaluationId && (
-                  <div>
-                    <span className="font-semibold text-gray-900">Latest eligible cohort:</span>{' '}
-                    {state.latestEligibleEvaluationId.slice(-8)}
-                  </div>
-                )}
-                {state.latestEligibleScopeCategory && (
-                  <div>
-                    <span className="font-semibold text-gray-900">Latest eligible scope:</span>{' '}
-                    {state.latestEligibleScopeCategory.toLowerCase()}
-                  </div>
-                )}
-                {state.latestEligibleCompletedAt && (
-                  <div>
-                    <span className="font-semibold text-gray-900">Latest eligible completed:</span>{' '}
-                    {new Date(state.latestEligibleCompletedAt).toLocaleString()}
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="mt-3 space-y-2 text-sm">
-              <p>{state.kind === 'error' ? 'Eligibility data could not load.' : 'The current scope could not be confirmed.'}</p>
-              {state.reasons.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Raw reason text</p>
-                  <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
-                    {state.reasons.map((reason) => (
-                      <li key={reason}>{reason}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {state.kind === 'error' && state.note && (
-                <p className="text-xs text-gray-600">{state.note}</p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
 }
 
 function getCacheStatusCopy(
@@ -342,9 +111,9 @@ export function DomainAnalysis() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+
   const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
-    DomainAvailableSignaturesQueryResult,
-    DomainAvailableSignaturesQueryVariables
+    DomainAvailableSignaturesQueryResult, DomainAvailableSignaturesQueryVariables
   >({
     query: DOMAIN_AVAILABLE_SIGNATURES_QUERY,
     variables: { domainId: selectedDomainId },
@@ -352,51 +121,39 @@ export function DomainAnalysis() {
     requestPolicy: 'cache-and-network',
   });
 
-  const signatureOptions = useMemo<DomainAvailableSignature[]>(
-    () => {
-      const options = signatureData?.domainAvailableSignatures ?? [];
-      return options
-        .map((option, index) => ({ option, index }))
-        .sort((left, right) => {
-          const priorityDifference = getSignaturePriority(left.option) - getSignaturePriority(right.option);
-          if (priorityDifference !== 0) return priorityDifference;
-          return left.index - right.index;
-        })
-        .map(({ option }) => option);
-    },
-    [signatureData],
-  );
+  const signatureOptions = useMemo<DomainAvailableSignature[]>(() => {
+    const options = signatureData?.domainAvailableSignatures ?? [];
+    return options
+      .map((option, index) => ({ option, index }))
+      .sort((a, b) => {
+        const p = getSignaturePriority(a.option) - getSignaturePriority(b.option);
+        return p !== 0 ? p : a.index - b.index;
+      })
+      .map(({ option }) => option);
+  }, [signatureData]);
+
   const [{ data: findingsEligibilityData, fetching: findingsEligibilityLoading, error: findingsEligibilityError }] = useQuery<
-    DomainFindingsEligibilityQueryResult,
-    DomainFindingsEligibilityQueryVariables
+    DomainFindingsEligibilityQueryResult, DomainFindingsEligibilityQueryVariables
   >({
     query: DOMAIN_FINDINGS_ELIGIBILITY_QUERY,
     variables: { domainId: selectedDomainId },
     pause: selectedDomainId === '',
     requestPolicy: 'cache-and-network',
   });
+
   useEffect(() => {
     if (domains.length === 0) return;
-    const selectedExists = selectedDomainId !== '' && domains.some((domain) => domain.id === selectedDomainId);
-    if (selectedExists) return;
+    if (selectedDomainId !== '' && domains.some((d) => d.id === selectedDomainId)) return;
     setSelectedDomainId(domains[0]?.id ?? '');
   }, [domains, selectedDomainId]);
 
   useEffect(() => {
-    if (signatureOptions.length === 0) {
-      setSelectedSignature('');
-      return;
-    }
-
-    const selectedExists = selectedSignature !== ''
-      && signatureOptions.some((option) => option.signature === selectedSignature);
-    if (selectedExists) return;
+    if (signatureOptions.length === 0) { setSelectedSignature(''); return; }
+    if (selectedSignature !== '' && signatureOptions.some((o) => o.signature === selectedSignature)) return;
     setSelectedSignature(signatureOptions[0]?.signature ?? '');
   }, [selectedSignature, signatureOptions]);
 
-  useEffect(() => {
-    setExportError(null);
-  }, [selectedDomainId, selectedSignature]);
+  useEffect(() => { setExportError(null); }, [selectedDomainId, selectedSignature]);
 
   useEffect(() => {
     setRefreshNotice(null);
@@ -405,20 +162,12 @@ export function DomainAnalysis() {
 
   useEffect(() => {
     if (selectedDomainId === '') return;
-    if (
-      searchParams.get('domainId') === selectedDomainId
-      && (searchParams.get('signature') ?? '') === selectedSignature
-    ) {
-      return;
-    }
+    if (searchParams.get('domainId') === selectedDomainId && (searchParams.get('signature') ?? '') === selectedSignature) return;
     const next = new URLSearchParams(searchParams);
     next.set('domainId', selectedDomainId);
     next.set('scoreMethod', 'FULL_BT');
-    if (selectedSignature === '') {
-      next.delete('signature');
-    } else {
-      next.set('signature', selectedSignature);
-    }
+    if (selectedSignature === '') next.delete('signature');
+    else next.set('signature', selectedSignature);
     setSearchParams(next, { replace: true });
   }, [searchParams, selectedDomainId, selectedSignature, setSearchParams]);
 
@@ -427,11 +176,7 @@ export function DomainAnalysis() {
     reexecuteScoredQuery,
   ] = useQuery<DomainAnalysisQueryResult, DomainAnalysisQueryVariables>({
     query: DOMAIN_ANALYSIS_QUERY,
-    variables: {
-      domainId: selectedDomainId,
-      scoreMethod: 'FULL_BT',
-      signature: selectedSignature === '' ? undefined : selectedSignature,
-    },
+    variables: { domainId: selectedDomainId, scoreMethod: 'FULL_BT', signature: selectedSignature === '' ? undefined : selectedSignature },
     pause: selectedDomainId === '' || useLegacyQuery,
     requestPolicy: 'cache-and-network',
   });
@@ -448,15 +193,11 @@ export function DomainAnalysis() {
 
   useEffect(() => {
     const message = scoredError?.message ?? '';
-    const isUnknownArgumentError =
-      message.includes('Unknown argument "scoreMethod"')
-      || message.includes('Unknown argument "signature"');
-    const isUnknownFieldError =
-      message.includes('Cannot query field')
+    const isFieldError = message.includes('Unknown argument "scoreMethod"')
+      || message.includes('Unknown argument "signature"')
+      || message.includes('Cannot query field')
       || message.includes('Unknown field');
-    if ((isUnknownArgumentError || isUnknownFieldError) && !useLegacyQuery) {
-      setUseLegacyQuery(true);
-    }
+    if (isFieldError && !useLegacyQuery) setUseLegacyQuery(true);
   }, [scoredError, useLegacyQuery]);
 
   const data = useLegacyQuery ? legacyData : scoredData;
@@ -476,40 +217,24 @@ export function DomainAnalysis() {
   const models = useMemo<ModelEntry[]>(() => {
     const sourceModels = data?.domainAnalysis.models ?? [];
     return sourceModels.map((model) => {
-      const valueMap = new Map(model.values.map((entry) => [entry.valueKey, entry.score]));
-      const winRateMap = new Map(model.values.map((entry) => {
-        const denom = entry.prioritized + entry.deprioritized;
-        const rate = denom > 0 ? (entry.prioritized / denom) * 100 : null;
-        return [entry.valueKey, rate] as const;
+      const valueMap = new Map(model.values.map((e) => [e.valueKey, e.score]));
+      const winRateMap = new Map(model.values.map((e) => {
+        const denom = e.prioritized + e.deprioritized;
+        return [e.valueKey, denom > 0 ? (e.prioritized / denom) * 100 : null] as const;
       }));
-      const values = VALUES.reduce<Record<ValueKey, number>>((acc, valueKey) => {
-        acc[valueKey] = valueMap.get(valueKey) ?? 0;
-        return acc;
-      }, {} as Record<ValueKey, number>);
-      const winRates = VALUES.reduce<Record<ValueKey, number | null>>((acc, valueKey) => {
-        acc[valueKey] = winRateMap.get(valueKey) ?? null;
-        return acc;
-      }, {} as Record<ValueKey, number | null>);
-      return {
-        model: model.model,
-        label: model.label,
-        values,
-        winRates,
-      };
+      const values = VALUES.reduce<Record<ValueKey, number>>((acc, k) => { acc[k] = valueMap.get(k) ?? 0; return acc; }, {} as Record<ValueKey, number>);
+      const winRates = VALUES.reduce<Record<ValueKey, number | null>>((acc, k) => { acc[k] = winRateMap.get(k) ?? null; return acc; }, {} as Record<ValueKey, number | null>);
+      return { model: model.model, label: model.label, values, winRates };
     });
   }, [data]);
 
   const unavailableModels = useMemo<DomainAnalysisModelAvailability[]>(
-    () => (data?.domainAnalysis.unavailableModels ?? []).map((model) => ({
-      model: model.model,
-      label: model.label,
-      reason: model.reason,
-    })),
+    () => (data?.domainAnalysis.unavailableModels ?? []).map((m) => ({ model: m.model, label: m.label, reason: m.reason })),
     [data],
   );
   const missingDefinitionCount = data?.domainAnalysis.missingDefinitions?.length ?? 0;
   const allMissingDefinitionIds = useMemo(
-    () => (data?.domainAnalysis.missingDefinitions ?? []).map((missing) => missing.definitionId),
+    () => (data?.domainAnalysis.missingDefinitions ?? []).map((m) => m.definitionId),
     [data?.domainAnalysis.missingDefinitions],
   );
 
@@ -518,10 +243,7 @@ export function DomainAnalysis() {
     setExportLoading(true);
     setExportError(null);
     try {
-      await exportDomainTranscriptsAsCSV(
-        selectedDomainId,
-        selectedSignature !== '' ? selectedSignature : undefined,
-      );
+      await exportDomainTranscriptsAsCSV(selectedDomainId, selectedSignature !== '' ? selectedSignature : undefined);
     } catch (err) {
       setExportError(err instanceof Error ? err.message : 'Export failed');
     } finally {
@@ -554,12 +276,10 @@ export function DomainAnalysis() {
     query.set('definitionIds', allMissingDefinitionIds.join(','));
     if (selectedSignature !== '') {
       query.set('signature', selectedSignature);
-      const signatureTemperature = parseTemperatureFromSignature(selectedSignature);
-      if (signatureTemperature !== null) {
-        query.set('temperature', String(signatureTemperature));
-      }
+      const t = parseTemperatureFromSignature(selectedSignature);
+      if (t !== null) query.set('temperature', String(t));
     }
-    navigate(`/domains/${selectedDomainId}/run-trials?${query.toString()}`);
+    navigate(`/domains/status/${selectedDomainId}?${query.toString()}`);
   };
 
   return (
@@ -571,7 +291,7 @@ export function DomainAnalysis() {
         </p>
       </div>
 
-      {(domainsError || signaturesError || error) && (
+      {(domainsError != null || signaturesError != null || error != null) && (
         <ErrorMessage message={`Failed to load domain analysis: ${(domainsError ?? signaturesError ?? error)?.message ?? 'Unknown error'}`} />
       )}
 
@@ -585,50 +305,34 @@ export function DomainAnalysis() {
             <select
               className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800"
               value={selectedDomainId}
-              onChange={(event) => setSelectedDomainId(event.target.value)}
+              onChange={(e) => setSelectedDomainId(e.target.value)}
               disabled={domainsLoading || domains.length === 0}
             >
               {domains.length === 0 && <option value="">No domains available</option>}
               {domains.map((domain) => (
-                <option key={domain.id} value={domain.id}>
-                  {domain.name}
-                </option>
+                <option key={domain.id} value={domain.id}>{domain.name}</option>
               ))}
             </select>
             <select
               className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800"
               value={selectedSignature}
-              onChange={(event) => setSelectedSignature(event.target.value)}
+              onChange={(e) => setSelectedSignature(e.target.value)}
               disabled={signaturesLoading || signatureOptions.length === 0}
             >
-              {signatureOptions.length === 0 && (
-                <option value="">
-                  No signatures with completed runs
-                </option>
-              )}
-              {signatureOptions.map((signatureOption) => (
-                <option key={signatureOption.signature} value={signatureOption.signature}>
-                  {formatSignatureOptionLabel(signatureOption)}
-                </option>
+              {signatureOptions.length === 0 && <option value="">No signatures with completed runs</option>}
+              {signatureOptions.map((opt) => (
+                <option key={opt.signature} value={opt.signature}>{formatSignatureOptionLabel(opt)}</option>
               ))}
             </select>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={handleExport}
-              disabled={selectedDomainId === '' || exportLoading}
-            >
-              {exportLoading ? 'Exporting…' : 'Export CSV'}
+            <Button type="button" variant="secondary" size="sm" onClick={handleExport} disabled={selectedDomainId === '' || exportLoading}>
+              {exportLoading ? 'Exporting\u2026' : 'Export CSV'}
             </Button>
           </div>
-          {exportError !== null && (
-            <p className="mt-1 text-xs text-amber-700">{exportError}</p>
-          )}
+          {exportError !== null && <p className="mt-1 text-xs text-amber-700">{exportError}</p>}
         </div>
-        {data?.domainAnalysis && (
+        {data?.domainAnalysis != null && (
           <div className="mt-2 space-y-1 text-xs text-gray-500">
-            {cacheStatusCopy && (
+            {cacheStatusCopy != null && (
               <div className="flex flex-wrap items-center gap-2">
                 <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold ${cacheStatusCopy.badgeClassName}`}>
                   {cacheStatusCopy.badgeLabel}
@@ -642,7 +346,7 @@ export function DomainAnalysis() {
                     onClick={handleRefreshAnalysis}
                     disabled={refreshFetching}
                   >
-                    {refreshFetching ? 'Refreshing…' : 'Refresh now'}
+                    {refreshFetching ? 'Refreshing\u2026' : 'Refresh now'}
                   </Button>
                 )}
               </div>
@@ -653,38 +357,22 @@ export function DomainAnalysis() {
             {refreshError !== null && (
               <p className="text-amber-700">{refreshError}</p>
             )}
-            <p>
-              {data.domainAnalysis.definitionsWithAnalysis} of {data.domainAnalysis.targetedDefinitions} latest vignettes currently have aggregate analysis data.
-            </p>
+            <p>{data.domainAnalysis.definitionsWithAnalysis} of {data.domainAnalysis.targetedDefinitions} latest vignettes currently have aggregate analysis data.</p>
             {data.domainAnalysis.definitionsWithAnalysis === 0 && data.domainAnalysis.targetedDefinitions > 0 && (
-              <p className="text-amber-700">
-                No latest vignettes produced analyzable transcript data for the selected signature.
-              </p>
+              <p className="text-amber-700">No latest vignettes produced analyzable transcript data for the selected signature.</p>
             )}
             {missingDefinitionCount > 0 && (
               <>
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-amber-700">
-                    Analysis filter excluded {missingDefinitionCount}
-                    {' '}
-                    vignette{missingDefinitionCount === 1 ? '' : 's'}.
-                  </p>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleRunMissingVignettes}
-                    disabled={allMissingDefinitionIds.length === 0}
-                  >
+                  <p className="text-amber-700">Analysis filter excluded {missingDefinitionCount} vignette{missingDefinitionCount === 1 ? '' : 's'}.</p>
+                  <Button type="button" variant="secondary" size="sm" onClick={handleRunMissingVignettes} disabled={allMissingDefinitionIds.length === 0}>
                     Run Missing Vignettes
                   </Button>
                 </div>
                 <ul className="list-disc space-y-1 pl-5 text-amber-800">
-                  {(data.domainAnalysis.missingDefinitions ?? []).map((missing) => (
-                    <li key={missing.definitionId}>
-                      {missing.definitionName}
-                      {' '}
-                      ({missing.definitionId}) - {missing.reasonLabel} - AIs: {missing.missingAllModels ? 'All AIs' : missing.missingModelLabels.join(', ')}
+                  {(data.domainAnalysis.missingDefinitions ?? []).map((m) => (
+                    <li key={m.definitionId}>
+                      {m.definitionName} ({m.definitionId}) - {m.reasonLabel} - AIs: {m.missingAllModels ? 'All AIs' : m.missingModelLabels.join(', ')}
                     </li>
                   ))}
                 </ul>
@@ -694,20 +382,14 @@ export function DomainAnalysis() {
         )}
       </section>
 
-      {selectedDomainId !== '' && (
-        <EvidenceScopeDisclosure state={evidenceScopeState} />
-      )}
+      {selectedDomainId !== '' && <EvidenceScopeDisclosure state={evidenceScopeState} />}
 
       {showPageLoader ? (
         <Loading size="lg" text="Loading domain analysis..." />
       ) : (
         <>
           <ModelGroupsSection clusterAnalysis={data?.domainAnalysis.clusterAnalysis} />
-          <ValuePrioritiesSection
-            models={models}
-            selectedDomainId={selectedDomainId}
-            selectedSignature={selectedSignature === '' ? null : selectedSignature}
-          />
+          <ValuePrioritiesSection models={models} selectedDomainId={selectedDomainId} selectedSignature={selectedSignature === '' ? null : selectedSignature} />
           <DominanceSection models={models} unavailableModels={unavailableModels} />
           <SimilaritySection models={models} clusterAnalysis={data?.domainAnalysis.clusterAnalysis} />
         </>
@@ -717,10 +399,8 @@ export function DomainAnalysis() {
         <footer className="text-xs text-gray-500">
           <p className="font-medium text-gray-600">Data availability note</p>
           <ul className="mt-1 list-disc space-y-1 pl-5">
-            {unavailableModels.map((model) => (
-              <li key={model.model}>
-                {model.label}: {model.reason} This model is excluded from analysis tables and graph selectors.
-              </li>
+            {unavailableModels.map((m) => (
+              <li key={m.model}>{m.label}: {m.reason} This model is excluded from analysis tables and graph selectors.</li>
             ))}
           </ul>
         </footer>

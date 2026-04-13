@@ -146,10 +146,11 @@ class Transcript:
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     cost_snapshot: Optional[CostSnapshot] = None
+    total_reasoning_tokens: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON output."""
-        result = {
+        result: dict[str, Any] = {
             "turns": [t.to_dict() for t in self.turns],
             "totalInputTokens": self.total_input_tokens,
             "totalOutputTokens": self.total_output_tokens,
@@ -157,9 +158,27 @@ class Transcript:
             "startedAt": self.started_at.isoformat() if self.started_at else None,
             "completedAt": self.completed_at.isoformat() if self.completed_at else None,
         }
+        if self.total_reasoning_tokens > 0:
+            result["totalReasoningTokens"] = self.total_reasoning_tokens
         if self.cost_snapshot is not None:
             result["costSnapshot"] = self.cost_snapshot.to_dict()
         return result
+
+    def accumulate_response(self, response: "LLMResponse") -> None:
+        """Accumulate token counts from an LLM response into this transcript."""
+        if response.input_tokens:
+            self.total_input_tokens += response.input_tokens
+        # Add output tokens unconditionally so extra reasoning tokens are always billed
+        # (e.g. Google blocked responses with output_tokens=0 but non-zero thoughtsTokenCount)
+        base_output = response.output_tokens or 0
+        extra_reasoning = (response.reasoning_tokens or 0) if (
+            response.reasoning_tokens and not response.reasoning_tokens_included_in_output
+        ) else 0
+        self.total_output_tokens += base_output + extra_reasoning
+        if response.reasoning_tokens:
+            self.total_reasoning_tokens += response.reasoning_tokens
+        if response.model_version and not self.model_version:
+            self.model_version = response.model_version
 
 
 def estimate_tokens(text: str, model: str) -> int:
@@ -281,13 +300,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
             provider_metadata=build_provider_metadata(response),
         )
         transcript.turns.append(turn)
-
-        if response.input_tokens:
-            transcript.total_input_tokens += response.input_tokens
-        if response.output_tokens:
-            transcript.total_output_tokens += response.output_tokens
-        if response.model_version:
-            transcript.model_version = response.model_version
+        transcript.accumulate_response(response)
 
         # Add assistant response to conversation
         messages.append({"role": "assistant", "content": response.content})
@@ -323,13 +336,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
                 provider_metadata=build_provider_metadata(response),
             )
             transcript.turns.append(turn)
-
-            if response.input_tokens:
-                transcript.total_input_tokens += response.input_tokens
-            if response.output_tokens:
-                transcript.total_output_tokens += response.output_tokens
-            if response.model_version and not transcript.model_version:
-                transcript.model_version = response.model_version
+            transcript.accumulate_response(response)
 
             # Add response to conversation
             messages.append({"role": "assistant", "content": response.content})
@@ -345,6 +352,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
                 output_tokens=transcript.total_output_tokens,
                 cost_input_per_million=cost_input,
                 cost_output_per_million=cost_output,
+                reasoning_tokens=transcript.total_reasoning_tokens or None,
             )
 
         log.info(

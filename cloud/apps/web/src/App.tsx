@@ -1,23 +1,20 @@
 // NOTE: The term "Vignette" is used throughout the UI for user-friendliness.
 // However, the underlying codebase, API, and database still use the term "Definition".
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Provider } from 'urql';
 import { AuthProvider } from './auth/context';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/layout/Layout';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
-import { ValidationHome } from './pages/ValidationHome';
 import { ArchiveHome } from './pages/ArchiveHome';
 import { Definitions } from './pages/Definitions';
 import { Domains } from './pages/Domains';
 import { DomainsManage } from './pages/DomainsManage';
-import { DomainTrialsDashboard } from './pages/DomainTrialsDashboard';
+import { DomainStartBatches } from './pages/DomainStartBatches';
+import { DomainStatus } from './pages/DomainStatus';
 import { DomainAnalysis } from './pages/DomainAnalysis';
 import { DomainCoverage } from './pages/DomainCoverage';
-import { TempZeroEffectAssumptions } from './pages/TempZeroEffectAssumptions';
-import { AnalysisAssumptions } from './pages/AnalysisAssumptions';
-import { OrderEffectAssumptions } from './pages/OrderEffectAssumptions';
 import { DomainAnalysisValueDetail } from './pages/DomainAnalysisValueDetail';
 import { DefinitionDetail } from './pages/DefinitionDetail';
 import { StartPairedBatchPage } from './pages/DefinitionDetail/StartPairedBatchPage';
@@ -40,6 +37,7 @@ import { LevelPresets } from './pages/LevelPresets';
 import { DomainContexts } from './pages/DomainContexts';
 import { ValueStatements } from './pages/ValueStatements';
 import { PairedVignetteNew } from './pages/PairedVignetteNew';
+import { StartRedirect } from './pages/StartRedirect';
 import { StatusRedirect } from './pages/StatusRedirect';
 import { NotFound } from './pages/NotFound';
 import { client } from './api/client';
@@ -53,10 +51,6 @@ function ProtectedLayout({ children, fullWidth = false }: { children: React.Reac
   );
 }
 
-function LegacyRouteRedirect({ to }: { to: string }) {
-  const location = useLocation();
-  return <Navigate to={`${to}${location.search}${location.hash}`} replace />;
-}
 
 function App() {
   return (
@@ -109,14 +103,6 @@ function App() {
               }
             />
             <Route
-              path="/validation"
-              element={
-                <ProtectedLayout>
-                  <ValidationHome />
-                </ProtectedLayout>
-              }
-            />
-            <Route
               path="/archive"
               element={
                 <ProtectedLayout>
@@ -125,10 +111,34 @@ function App() {
               }
             />
             <Route
-              path="/domains/:domainId/run-trials"
+              path="/domains/start/:domainId"
               element={
                 <ProtectedLayout>
-                  <DomainTrialsDashboard />
+                  <DomainStartBatches />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/domains/start"
+              element={
+                <ProtectedLayout>
+                  <StartRedirect />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/domains/status/:domainId"
+              element={
+                <ProtectedLayout>
+                  <DomainStatus />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/domains/status"
+              element={
+                <ProtectedLayout>
+                  <StatusRedirect />
                 </ProtectedLayout>
               }
             />
@@ -147,42 +157,6 @@ function App() {
                   <DomainCoverage />
                 </ProtectedLayout>
               }
-            />
-            <Route
-              path="/assumptions"
-              element={<Navigate to="/validation" replace />}
-            />
-            <Route
-              path="/assumptions/temp-zero"
-              element={<Navigate to="/assumptions/temp-zero-effect" replace />}
-            />
-            <Route
-              path="/assumptions/temp-zero-effect"
-              element={
-                <ProtectedLayout fullWidth>
-                  <TempZeroEffectAssumptions />
-                </ProtectedLayout>
-              }
-            />
-            <Route
-              path="/assumptions/analysis"
-              element={
-                <ProtectedLayout fullWidth>
-                  <AnalysisAssumptions />
-                </ProtectedLayout>
-              }
-            />
-            <Route
-              path="/assumptions/analysis-v1"
-              element={
-                <ProtectedLayout fullWidth>
-                  <OrderEffectAssumptions />
-                </ProtectedLayout>
-              }
-            />
-            <Route
-              path="/assumptions/order-effect"
-              element={<Navigate to="/assumptions/analysis-v1" replace />}
             />
             <Route
               path="/domains/analysis/value-detail"
@@ -280,9 +254,6 @@ function App() {
                 </ProtectedLayout>
               }
             />
-            <Route path="/survey" element={<LegacyRouteRedirect to="/archive/surveys" />} />
-            <Route path="/survey-results" element={<LegacyRouteRedirect to="/archive/survey-results" />} />
-            <Route path="/experiments" element={<Navigate to="/archive" replace />} />
             <Route path="/settings" element={<Navigate to="/settings/account" replace />} />
             <Route
               path="/settings/account"
@@ -356,31 +327,10 @@ function App() {
                 </ProtectedLayout>
               }
             />
-            <Route
-              path="/paired/new"
-              element={
-                <ProtectedLayout>
-                  <PairedVignetteNew />
-                </ProtectedLayout>
-              }
-            />
-            <Route
-              path="/paired/:id/edit"
-              element={
-                <ProtectedLayout>
-                  <PairedVignetteNew />
-                </ProtectedLayout>
-              }
-            />
-
-            <Route
-              path="*"
-              element={
-                <ProtectedLayout>
-                  <NotFound />
-                </ProtectedLayout>
-              }
-            />
+            {['/paired/new', '/paired/:id/edit'].map((path) => (
+              <Route key={path} path={path} element={<ProtectedLayout><PairedVignetteNew /></ProtectedLayout>} />
+            ))}
+            <Route path="*" element={<ProtectedLayout><NotFound /></ProtectedLayout>} />
           </Routes>
         </AuthProvider>
       </Provider>

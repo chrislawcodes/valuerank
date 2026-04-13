@@ -30,6 +30,12 @@ type RunStatusLike = {
 };
 
 export function getBatchRuntimeState(run: RunStatusLike): BatchRuntimeState {
+  // A COMPLETED run with finished analysis is always TERMINAL - never EXCEPTION -
+  // regardless of historical error messages from before recovery.
+  if (run.status === 'COMPLETED' && run.analysisStatus === 'completed') {
+    return 'TERMINAL';
+  }
+
   const hasLiveAnalysis = run.analysisStatus === 'pending' || run.analysisStatus === 'computing';
   const isActive = run.status === 'PENDING' || run.status === 'RUNNING' || run.status === 'SUMMARIZING' || hasLiveAnalysis;
   const isException = run.status === 'FAILED'
@@ -103,7 +109,9 @@ export function buildProviderBudgetEstimates(input: {
     const key = provider.id || provider.name;
     const existing = providerRows.get(key);
     const remainingBatchCount = Math.max(0, targetCount - (existingBatchCountByDefinitionId.get(cell.definitionId) ?? 0));
-    const nextSpend = cell.estimatedCost * (remainingBatchCount / targetCount);
+    // cellEstimates represent 1-batch cost (backend uses samplesPerScenario=1).
+    // Multiply by remaining batches to get total expected spend.
+    const nextSpend = cell.estimatedCost * remainingBatchCount;
     const expectedSpendUsd = (existing?.expectedSpendUsd ?? 0) + nextSpend;
     const budgetBalanceUsd = existing?.budgetBalanceUsd ?? provider.balance ?? null;
 

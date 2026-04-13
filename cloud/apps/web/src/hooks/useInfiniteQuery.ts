@@ -82,6 +82,7 @@ export function useInfiniteQuery<
     ...filters,
     limit: pageSize,
     offset: currentOffset,
+  // Double cast required: TypeScript can't prove { ...filters, limit, offset } satisfies generic TVariables
   } as unknown as TVariables;
 
   // Fetch current page

@@ -56,14 +56,12 @@ describe('NavTabs Component', () => {
     expect(screen.queryByText('Domain Setup')).not.toBeInTheDocument();
   });
 
-  it('keeps the archive and validation links available from the archive menu', async () => {
+  it('keeps the archive links available from the archive menu', async () => {
     renderNavTabs('/archive');
     await openMenu('Archive');
 
     expect(screen.getByRole('link', { name: 'Legacy Survey Work' })).toHaveAttribute('href', '/archive/surveys');
     expect(screen.getByRole('link', { name: 'Legacy Survey Results' })).toHaveAttribute('href', '/archive/survey-results');
-    // Validation is a submenu under Archive
-    expect(screen.getByText('Validation')).toBeInTheDocument();
   });
 
   it('highlights Archive on archive compatibility routes', async () => {
@@ -72,13 +70,6 @@ describe('NavTabs Component', () => {
 
     expect(screen.getByRole('link', { name: 'Archive' }).parentElement?.className).toContain('border-teal-500');
     expect(screen.getByRole('link', { name: 'Legacy Survey Work' }).className).toContain('bg-teal-600/20');
-  });
-
-  it('highlights Archive when on validation routes', () => {
-    renderNavTabs('/assumptions/analysis');
-
-    // Archive tab should be highlighted since Validation is nested under it
-    expect(screen.getByRole('link', { name: 'Archive' }).parentElement?.className).toContain('border-teal-500');
   });
 
   it('renders Domains before Vignettes before Archive in the top-level order', () => {

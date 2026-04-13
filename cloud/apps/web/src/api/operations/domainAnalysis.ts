@@ -1,232 +1,29 @@
-import { gql } from 'urql';
+import type {
+  DomainAnalysisQueryVariables as GeneratedDomainAnalysisQueryVariables,
+  RefreshDomainAnalysisMutationVariables as GeneratedRefreshDomainAnalysisMutationVariables,
+  DomainAnalysisValueDetailQueryVariables as GeneratedDomainAnalysisValueDetailQueryVariables,
+  DomainAnalysisConditionTranscriptsQueryVariables as GeneratedDomainAnalysisConditionTranscriptsQueryVariables,
+  DomainAvailableSignaturesQueryVariables as GeneratedDomainAvailableSignaturesQueryVariables,
+  DomainFindingsEligibilityQueryVariables as GeneratedDomainFindingsEligibilityQueryVariables,
+} from '../../generated/graphql';
 
 import type { TranscriptDecisionModelV2 } from './runs';
 
-export const DOMAIN_ANALYSIS_QUERY = gql`
-  query DomainAnalysis($domainId: ID!, $scoreMethod: String, $signature: String) {
-    domainAnalysis(domainId: $domainId, scoreMethod: $scoreMethod, signature: $signature) {
-      domainId
-      domainName
-      totalDefinitions
-      targetedDefinitions
-      coveredDefinitions
-      missingDefinitionIds
-      missingDefinitions {
-        definitionId
-        definitionName
-        reasonCode
-        reasonLabel
-        missingAllModels
-        missingModelIds
-        missingModelLabels
-      }
-      definitionsWithAnalysis
-      cacheStatus
-      generatedAt
-      models {
-        model
-        label
-        values {
-          valueKey
-          score
-          prioritized
-          deprioritized
-          neutral
-          totalComparisons
-        }
-        rankingShape {
-          topStructure
-          bottomStructure
-          topGap
-          bottomGap
-          spread
-          steepness
-          dominanceZScore
-        }
-      }
-      unavailableModels {
-        model
-        label
-        reason
-      }
-      rankingShapeBenchmarks {
-        domainMeanTopGap
-        domainStdTopGap
-        medianSpread
-      }
-      clusterAnalysis {
-        skipped
-        skipReason
-        defaultPair
-        clusters {
-          id
-          name
-          definingValues
-          centroid
-          members {
-            model
-            label
-            silhouetteScore
-            isOutlier
-            nearestClusterIds
-            distancesToNearestClusters
-          }
-        }
-        faultLinesByPair
-      }
-    }
-  }
-`;
+// ============================================================================
+// QUERIES
+// ============================================================================
 
-export const REFRESH_DOMAIN_ANALYSIS_MUTATION = gql`
-  mutation RefreshDomainAnalysis($domainId: ID!, $signature: String) {
-    refreshDomainAnalysis(domainId: $domainId, signature: $signature) {
-      success
-      mode
-      message
-    }
-  }
-`;
+export { DomainAnalysisDocument as DOMAIN_ANALYSIS_QUERY } from '../../generated/graphql';
+export { RefreshDomainAnalysisDocument as REFRESH_DOMAIN_ANALYSIS_MUTATION } from '../../generated/graphql';
+export { DomainAnalysisLegacyDocument as DOMAIN_ANALYSIS_QUERY_LEGACY } from '../../generated/graphql';
+export { DomainAnalysisValueDetailDocument as DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY } from '../../generated/graphql';
+export { DomainAnalysisConditionTranscriptsDocument as DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY } from '../../generated/graphql';
+export { DomainAvailableSignaturesDocument as DOMAIN_AVAILABLE_SIGNATURES_QUERY } from '../../generated/graphql';
+export { DomainFindingsEligibilityDocument as DOMAIN_FINDINGS_ELIGIBILITY_QUERY } from '../../generated/graphql';
 
-export const DOMAIN_ANALYSIS_QUERY_LEGACY = gql`
-  query DomainAnalysisLegacy($domainId: ID!) {
-    domainAnalysis(domainId: $domainId) {
-      domainId
-      domainName
-      totalDefinitions
-      targetedDefinitions
-      definitionsWithAnalysis
-      generatedAt
-      models {
-        model
-        label
-        values {
-          valueKey
-          score
-          prioritized
-          deprioritized
-          neutral
-          totalComparisons
-        }
-      }
-      unavailableModels {
-        model
-        label
-        reason
-      }
-    }
-  }
-`;
-
-export const DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY = gql`
-  query DomainAnalysisValueDetail($domainId: ID!, $modelId: String!, $valueKey: String!, $scoreMethod: String, $signature: String) {
-    domainAnalysisValueDetail(domainId: $domainId, modelId: $modelId, valueKey: $valueKey, scoreMethod: $scoreMethod, signature: $signature) {
-      domainId
-      domainName
-      modelId
-      modelLabel
-      valueKey
-      score
-      prioritized
-      deprioritized
-      neutral
-      totalTrials
-      targetedDefinitions
-      coveredDefinitions
-      missingDefinitionIds
-      generatedAt
-      vignettes {
-        definitionId
-        definitionName
-        definitionVersion
-        aggregateRunId
-        otherValueKey
-        prioritized
-        deprioritized
-        neutral
-        totalTrials
-        selectedValueWinRate
-        conditions {
-          scenarioId
-          conditionName
-          dimensions
-          prioritized
-          deprioritized
-          neutral
-          totalTrials
-          selectedValueWinRate
-          strongly
-          somewhat
-          opponentSomewhat
-          opponentStrongly
-          unknownCount
-        }
-      }
-    }
-  }
-`;
-
-export const DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY = gql`
-  query DomainAnalysisConditionTranscripts(
-    $domainId: ID!
-    $modelId: String!
-    $valueKey: String!
-    $definitionId: ID!
-    $scenarioId: ID
-    $limit: Int
-    $signature: String
-  ) {
-    domainAnalysisConditionTranscripts(
-      domainId: $domainId
-      modelId: $modelId
-      valueKey: $valueKey
-      definitionId: $definitionId
-      scenarioId: $scenarioId
-      limit: $limit
-      signature: $signature
-    ) {
-      id
-      runId
-      scenarioId
-      modelId
-      decisionModelV2
-      turnCount
-      tokenCount
-      durationMs
-      createdAt
-      content
-    }
-  }
-`;
-
-export const DOMAIN_AVAILABLE_SIGNATURES_QUERY = gql`
-  query DomainAvailableSignatures($domainId: ID!) {
-    domainAvailableSignatures(domainId: $domainId) {
-      signature
-      label
-      isVirtual
-      temperature
-    }
-  }
-`;
-
-export const DOMAIN_FINDINGS_ELIGIBILITY_QUERY = gql`
-  query DomainFindingsEligibility($domainId: ID!) {
-    domainFindingsEligibility(domainId: $domainId) {
-      domainId
-      eligible
-      status
-      summary
-      reasons
-      recommendedActions
-      consideredScopeCategories
-      completedEligibleEvaluationCount
-      latestEligibleEvaluationId
-      latestEligibleScopeCategory
-      latestEligibleCompletedAt
-    }
-  }
-`;
+// ============================================================================
+// MANUAL TYPES (kept manual — JSON scalars: centroid, faultLinesByPair, dimensions, content, decisionModelV2)
+// ============================================================================
 
 export type DomainAnalysisValueScore = {
   valueKey: string;
@@ -321,7 +118,7 @@ export type DomainAnalysisResult = {
   missingDefinitions: {
     definitionId: string;
     definitionName: string;
-    reasonCode: 'NO_COMPLETED_RUNS' | 'NO_SIGNATURE_MATCH' | 'NO_TRANSCRIPTS';
+    reasonCode: 'NO_COMPLETED_RUNS' | 'NO_SIGNATURE_MATCH' | 'NO_TRANSCRIPTS' | 'NO_ANALYSIS';
     reasonLabel: string;
     missingAllModels: boolean;
     missingModelIds: string[];
@@ -340,11 +137,7 @@ export type DomainAnalysisQueryResult = {
   domainAnalysis: DomainAnalysisResult;
 };
 
-export type DomainAnalysisQueryVariables = {
-  domainId: string;
-  scoreMethod?: 'LOG_ODDS' | 'FULL_BT';
-  signature?: string;
-};
+export type DomainAnalysisQueryVariables = GeneratedDomainAnalysisQueryVariables;
 
 export type RefreshDomainAnalysisMutationResult = {
   refreshDomainAnalysis: {
@@ -354,10 +147,7 @@ export type RefreshDomainAnalysisMutationResult = {
   };
 };
 
-export type RefreshDomainAnalysisMutationVariables = {
-  domainId: string;
-  signature?: string;
-};
+export type RefreshDomainAnalysisMutationVariables = GeneratedRefreshDomainAnalysisMutationVariables;
 
 export type DomainFindingsEligibility = {
   domainId: string;
@@ -377,9 +167,7 @@ export type DomainFindingsEligibilityQueryResult = {
   domainFindingsEligibility: DomainFindingsEligibility;
 };
 
-export type DomainFindingsEligibilityQueryVariables = {
-  domainId: string;
-};
+export type DomainFindingsEligibilityQueryVariables = GeneratedDomainFindingsEligibilityQueryVariables;
 
 export type DomainAnalysisValueDetailCondition = {
   scenarioId: string | null;
@@ -440,21 +228,13 @@ export type DomainAvailableSignaturesQueryResult = {
   domainAvailableSignatures: DomainAvailableSignature[];
 };
 
-export type DomainAvailableSignaturesQueryVariables = {
-  domainId: string;
-};
+export type DomainAvailableSignaturesQueryVariables = GeneratedDomainAvailableSignaturesQueryVariables;
 
 export type DomainAnalysisValueDetailQueryResult = {
   domainAnalysisValueDetail: DomainAnalysisValueDetailResult;
 };
 
-export type DomainAnalysisValueDetailQueryVariables = {
-  domainId: string;
-  modelId: string;
-  valueKey: string;
-  scoreMethod?: 'LOG_ODDS' | 'FULL_BT';
-  signature?: string;
-};
+export type DomainAnalysisValueDetailQueryVariables = GeneratedDomainAnalysisValueDetailQueryVariables;
 
 export type DomainAnalysisConditionTranscript = {
   id: string;
@@ -475,12 +255,4 @@ export type DomainAnalysisConditionTranscriptsQueryResult = {
   domainAnalysisConditionTranscripts: DomainAnalysisConditionTranscript[];
 };
 
-export type DomainAnalysisConditionTranscriptsQueryVariables = {
-  domainId: string;
-  modelId: string;
-  valueKey: string;
-  definitionId: string;
-  scenarioId?: string | null;
-  limit?: number;
-  signature?: string;
-};
+export type DomainAnalysisConditionTranscriptsQueryVariables = GeneratedDomainAnalysisConditionTranscriptsQueryVariables;

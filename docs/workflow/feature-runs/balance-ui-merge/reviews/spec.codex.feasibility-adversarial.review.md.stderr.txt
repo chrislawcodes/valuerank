@@ -1,0 +1,3544 @@
+Reading additional input from stdin...
+OpenAI Codex v0.118.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d74fb-20b4-7021-b2e4-22528601b4b7
+--------
+user
+Review this spec artifact using a feasibility-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: llm.ts
+/**
+ * LLM Provider & Model Mutations
+ *
+ * GraphQL mutations for managing LLM providers, models, and system settings.
+ */
+
+import { builder } from '../builder.js';
+import { LlmModelRef, LlmProviderRef, SystemSettingRef, ProviderBalanceSyncLogRef } from '../types/refs.js';
+import {
+  CreateLlmModelInput,
+  UpdateLlmModelInput,
+  UpdateLlmProviderInput,
+  UpdateSystemSettingInput,
+} from '../types/inputs/llm.js';
+import type { LlmModel } from '@valuerank/db';
+import { db, Prisma } from '@valuerank/db';
+import {
+  createModel,
+  updateModel,
+  deprecateModel,
+  reactivateModel,
+  setDefaultModel,
+  unsetDefaultModel,
+  updateProvider,
+  upsertSetting,
+} from '@valuerank/db';
+import { createAuditLog } from '../../services/audit/index.js';
+import { getBoss, isBossRunning } from '../../queue/boss.js';
+import { reregisterProviderHandler } from '../../queue/handlers/index.js';
+import { NotFoundError, ValidationError } from '@valuerank/shared';
+
+// Result type for model deprecation
+type DeprecateModelResultShape = {
+  model: LlmModel;
+  newDefault: LlmModel | null;
+};
+
+const DeprecateModelResultRef = builder.objectRef<DeprecateModelResultShape>('DeprecateModelResult');
+
+builder.objectType(DeprecateModelResultRef, {
+  description: 'Result of deprecating a model',
+  fields: (t) => ({
+    model: t.field({
+      type: LlmModelRef,
+      description: 'The deprecated model',
+      resolve: (parent) => parent.model,
+    }),
+    newDefault: t.field({
+      type: LlmModelRef,
+      nullable: true,
+      description: 'The new default model (if previous default was deprecated)',
+      resolve: (parent) => parent.newDefault,
+    }),
+  }),
+});
+
+// Result type for setting default model
+type SetDefaultResultShape = {
+  model: LlmModel;
+  previousDefault: LlmModel | null;
+};
+
+const SetDefaultResultRef = builder.objectRef<SetDefaultResultShape>('SetDefaultModelResult');
+
+builder.objectType(SetDefaultResultRef, {
+  description: 'Result of setting a default model',
+  fields: (t) => ({
+    model: t.field({
+      type: LlmModelRef,
+      description: 'The new default model',
+      resolve: (parent) => parent.model,
+    }),
+    previousDefault: t.field({
+      type: LlmModelRef,
+      nullable: true,
+      description: 'Always null when multiple defaults are allowed',
+      resolve: (parent) => parent.previousDefault,
+    }),
+  }),
+});
+
+// Mutation: createLlmModel
+builder.mutationField('createLlmModel', (t) =>
+  t.field({
+    type: LlmModelRef,
+    description: 'Create a new LLM model under a provider',
+    args: {
+      input: t.arg({ type: CreateLlmModelInput, required: true }),
+    },
+    resolve: async (_root, args, ctx) => {
+      ctx.log.debug({ providerId: args.input.providerId, modelId: args.input.modelId }, 'Creating LLM model');
+
+      const model = await createModel({
+        providerId: args.input.providerId,
+        modelId: args.input.modelId,
+        displayName: args.input.displayName,
+        costInputPerMillion: args.input.costInputPerMillion,
+        costOutputPerMillion: args.input.costOutputPerMillion,
+        setAsDefault: args.input.setAsDefault ?? false,
+        createdByUserId: ctx.user?.id ?? null,
+      });
+
+      ctx.log.info({ modelId: model.id, apiModelId: model.modelId }, 'LLM model created');
+
+      // Audit log (non-blocking)
+      void createAuditLog({
+        action: 'CREATE',
+        entityType: 'LlmModel',
+        entityId: model.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { modelId: model.modelId, displayName: model.displayName },
+      });
+
+      return model;
+    },
+  })
+);
+
+// Mutation: updateLlmModel
+builder.mutationField('updateLlmModel', (t) =>
+  t.field({
+    type: LlmModelRef,
+    description: 'Update an LLM model (display name, costs, API config)',
+    args: {
+      id: t.arg.string({ required: true, description: 'Model ID to update' }),
+      input: t.arg({ type: UpdateLlmModelInput, required: true }),
+    },
+    resolve: async (_root, args, ctx) => {
+      ctx.log.debug({ id: args.id }, 'Updating LLM model');
+
+      // Build update data - only include fields that were provided
+      const updateData: {
+        displayName?: string;
+        costInputPerMillion?: number;
+        costOutputPerMillion?: number;
+        apiConfig?: Record<string, unknown> | null;
+      } = {};
+
+      if (args.input.displayName !== undefined && args.input.displayName !== null) {
+        updateData.displayName = args.input.displayName;
+      }
+      if (args.input.costInputPerMillion !== undefined && args.input.costInputPerMillion !== null) {
+        updateData.costInputPerMillion = args.input.costInputPerMillion;
+      }
+      if (args.input.costOutputPerMillion !== undefined && args.input.costOutputPerMillion !== null) {
+        updateData.costOutputPerMillion = args.input.costOutputPerMillion;
+      }
+      // For apiConfig, explicitly allow null to clear the value
+      if (args.input.apiConfig !== undefined) {
+        updateData.apiConfig = args.input.apiConfig as Record<string, unknown> | null;
+      }
+
+      const model = await updateModel(args.id, updateData);
+
+      ctx.log.info({ modelId: model.id }, 'LLM model updated');
+
+      // Audit log (non-blocking)
+      void createAuditLog({
+        action: 'UPDATE',
+        entityType: 'LlmModel',
+        entityId: model.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { updatedFields: Object.keys(updateData) },
+      });
+
+      return model;
+    },
+  })
+);
+
+// Mutation: deprecateLlmModel
+builder.mutationField('deprecateLlmModel', (t) =>
+  t.field({
+    type: DeprecateModelResultRef,
+    description: 'Deprecate an LLM model (mark as no longer recommended for new runs)',
+    args: {
+      id: t.arg.string({ required: true, description: 'Model ID to deprecate' }),
+    },
+    resolve: async (_root, args, ctx) => {
+      ctx.log.debug({ id: args.id }, 'Deprecating LLM model');
+
+      const result = await deprecateModel(args.id);
+
+      ctx.log.info(
+        { modelId: result.model.id, newDefaultId: result.newDefault?.id },
+        'LLM model deprecated'
+      );
+
+      // Audit log (non-blocking)
+      void createAuditLog({
+        action: 'ACTION',
+        entityType: 'LlmModel',
+        entityId: result.model.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { action: 'deprecate', newDefaultId: result.newDefault?.id },
+      });
+
+      return result;
+    },
+  })
+);
+
+// Mutation: reactivateLlmModel
+builder.mutationField('reactivateLlmModel', (t) =>
+  t.field({
+    type: LlmModelRef,
+    description: 'Reactivate a deprecated LLM model',
+    args: {
+      id: t.arg.string({ required: true, description: 'Model ID to reactivate' }),
+    },
+    resolve: async (_root, args, ctx) => {
+      ctx.log.debug({ id: args.id }, 'Reactivating LLM model');
+
+      const model = await reactivateModel(args.id);
+
+      ctx.log.info({ modelId: model.id }, 'LLM model reactivated');
+
+      // Audit log (non-blocking)
+      void createAuditLog({
+        action: 'ACTION',
+        entityType: 'LlmModel',
+        entityId: model.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { action: 'reactivate' },
+      });
+
+      return model;
+    },
+  })
+);
+
+// Mutation: setDefaultLlmModel
+builder.mutationField('setDefaultLlmModel', (t) =>
+  t.field({
+    type: SetDefaultResultRef,
+    description: 'Set a model as a default for its provider',
+    args: {
+      id: t.arg.string({ required: true, description: 'Model ID to set as default' }),
+    },
+    resolve: async (_root, args, ctx) => {
+      ctx.log.debug({ id: args.id }, 'Setting default LLM model');
+
+      const result = await setDefaultModel(args.id);
+
+      ctx.log.info(
+        { modelId: result.model.id, previousDefaultId: result.previousDefault?.id },
+        'Default LLM model set'
+      );
+
+      // Audit log (non-blocking)
+      void createAuditLog({
+        action: 'ACTION',
+        entityType: 'LlmModel',
+        entityId: result.model.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { action: 'setDefault', previousDefaultId: result.previousDefault?.id },
+      });
+
+      return result;
+    },
+  })
+);
+
+// Mutation: unsetDefaultLlmModel
+builder.mutationField('unsetDefaultLlmModel', (t) =>
+  t.field({
+    type: LlmModelRef,
+    description: 'Remove a model from defaults for its provider',
+    args: {
+      id: t.arg.string({ required: true, description: 'Model ID to unset as default' }),
+    },
+    resolve: async (_root, args, ctx) => {
+      ctx.log.debug({ id: args.id }, 'Unsetting default LLM model');
+
+      const model = await unsetDefaultModel(args.id);
+
+      ctx.log.info({ modelId: model.id }, 'Default LLM model unset');
+
+      // Audit log (non-blocking)
+      void createAuditLog({
+        action: 'ACTION',
+        entityType: 'LlmModel',
+        entityId: model.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { action: 'unsetDefault' },
+      });
+
+      return model;
+    },
+  })
+);
+
+// Mutation: updateLlmProvider
+builder.mutationField('updateLlmProvider', (t) =>
+  t.field({
+    type: LlmProviderRef,
+    description: 'Update LLM provider settings (rate limits, enabled status)',
+    args: {
+      id: t.arg.string({ required: true, description: 'Provider ID to update' }),
+      input: t.arg({ type: UpdateLlmProviderInput, required: true }),
+    },
+    resolve: async (_root, args, ctx) => {
+      ctx.log.debug({ id: args.id }, 'Updating LLM provider');
+
+      const provider = await updateProvider(args.id, {
+        maxParallelRequests: args.input.maxParallelRequests ?? undefined,
+        requestsPerMinute: args.input.requestsPerMinute ?? undefined,
+        isEnabled: args.input.isEnabled ?? undefined,
+      });
+
+      ctx.log.info({ providerId: provider.id }, 'LLM provider updated');
+
+      // Re-register queue handler if parallelism settings changed
+      const parallelismChanged =
+        args.input.maxParallelRequests !== undefined ||
+        args.input.requestsPerMinute !== undefined;
+
+      if (parallelismChanged && isBossRunning()) {
+        try {
+          const boss = getBoss();
+          await reregisterProviderHandler(boss, provider.name);
+          ctx.log.info(
+            { providerName: provider.name },
+            'Queue handler re-registered with new parallelism settings'
+          );
+        } catch (err) {
+          // Log but don't fail - settings are saved, restart will apply them
+          ctx.log.error(
+            { err, providerName: provider.name },
+            'Failed to re-register queue handler (settings saved, restart required)'
+          );
+        }
+      }
+
+      // Audit log (non-blocking)
+      void createAuditLog({
+        action: 'UPDATE',
+        entityType: 'LlmProvider',
+        entityId: provider.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { name: provider.name },
+      });
+
+      return provider;
+    },
+  })
+);
+
+// Mutation: setProviderBalance
+builder.mutationField('setProviderBalance', (t) =>
+  t.field({
+    type: LlmProviderRef,
+    description: 'Set the budget balance for a provider (null disables budget tracking)',
+    args: {
+      providerId: t.arg.string({ required: true, description: 'Provider ID' }),
+      balance: t.arg.float({ required: false, description: 'New balance in dollars (null = disable)' }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (args.balance !== null && args.balance !== undefined && args.balance < 0) {
+        throw new ValidationError('Balance must be greater than or equal to 0');
+      }
+
+      const existing = await db.llmProvider.findUnique({ where: { id: args.providerId } });
+      if (!existing) {
+        throw new NotFoundError('LlmProvider', args.providerId);
+      }
+
+      const balanceDecimal =
+        args.balance !== null && args.balance !== undefined
+          ? new Prisma.Decimal(args.balance)
+          : null;
+
+      const provider = await db.llmProvider.update({
+        where: { id: args.providerId },
+        data: { balance: balanceDecimal },
+      });
+
+      ctx.log.info({ providerId: provider.id, balance: args.balance }, 'Provider balance set');
+
+      void createAuditLog({
+        action: 'ACTION',
+        entityType: 'LlmProvider',
+        entityId: provider.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { action: 'set_provider_balance', balance: args.balance },
+      });
+
+      return provider;
+    },
+  })
+);
+
+// Mutation: syncProviderBalance
+builder.mutationField('syncProviderBalance', (t) =>
+  t.field({
+    type: ProviderBalanceSyncLogRef,
+    description: 'Sync the provider balance with the real balance from the provider dashboard',
+    args: {
+      providerId: t.arg.string({ required: true, description: 'Provider ID' }),
+      realBalance: t.arg.float({ required: true, description: 'Real balance in dollars from provider dashboard' }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (args.realBalance < 0) {
+        throw new ValidationError('Real balance must be greater than or equal to 0');
+      }
+
+      const provider = await db.llmProvider.findUnique({ where: { id: args.providerId } });
+      if (!provider) {
+        throw new NotFoundError('LlmProvider', args.providerId);
+      }
+
+      const systemBalanceAtSync = provider.balance ?? new Prisma.Decimal(0);
+      const enteredBalance = new Prisma.Decimal(args.realBalance);
+      const delta = enteredBalance.minus(systemBalanceAtSync);
+
+      const [syncLog] = await db.$transaction([
+        db.providerBalanceSyncLog.create({
+          data: {
+            providerId: args.providerId,
+            systemBalanceAtSync,
+            enteredBalance,
+            delta,
+            createdByUserId: ctx.user?.id ?? null,
+          },
+        }),
+        db.llmProvider.update({
+          where: { id: args.providerId },
+          data: { balance: enteredBalance },
+        }),
+      ]);
+
+      ctx.log.info(
+        { providerId: args.providerId, realBalance: args.realBalance, delta: delta.toNumber() },
+        'Provider balance synced'
+      );
+
+      void createAuditLog({
+        action: 'ACTION',
+        entityType: 'LlmProvider',
+        entityId: args.providerId,
+        userId: ctx.user?.id ?? null,
+        metadata: {
+          action: 'sync_provider_balance',
+          realBalance: args.realBalance,
+          delta: delta.toNumber(),
+        },
+      });
+
+      return syncLog;
+    },
+  })
+);
+
+// Mutation: updateSystemSetting
+builder.mutationField('updateSystemSetting', (t) =>
+  t.field({
+    type: SystemSettingRef,
+    description: 'Update a system setting (creates if not exists)',
+    args: {
+      input: t.arg({ type: UpdateSystemSettingInput, required: true }),
+    },
+    resolve: async (_root, args, ctx) => {
+      ctx.log.debug({ key: args.input.key }, 'Updating system setting');
+
+      const setting = await upsertSetting(args.input.key, args.input.value as Record<string, unknown>);
+
+      ctx.log.info({ key: setting.key }, 'System setting updated');
+
+      // Hot-reload summarize handler if parallelism setting changed
+      if (args.input.key === 'infra_max_parallel_summarizations' && isBossRunning()) {
+        try {
+          const { reregisterSummarizeHandler } = await import('../../queue/handlers/index.js');
+          const { clearSummarizationCache } = await import(
+            '../../services/summarization-parallelism/index.js'
+          );
+
+          // Clear cache to ensure fresh value is used
+          clearSummarizationCache();
+
+          const boss = getBoss();
+          await reregisterSummarizeHandler(boss);
+          ctx.log.info('Summarize handler re-registered with new parallelism setting');
+        } catch (err) {
+          // Log but don't fail - settings are saved, restart will apply them
+          ctx.log.error(
+            { err },
+            'Failed to re-register summarize handler (settings saved, restart required)'
+          );
+        }
+      }
+
+      // Audit log (non-blocking)
+      void createAuditLog({
+        action: 'UPDATE',
+        entityType: 'SystemSetting',
+        entityId: setting.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { key: setting.key },
+      });
+
+      return setting;
+    },
+  })
+);
+
+
+Context: ProviderSettingsModal.tsx
+/**
+ * Provider Settings Modal
+ *
+ * Modal for editing provider rate limit settings.
+ */
+
+import { useState } from 'react';
+import { X } from 'lucide-react';
+import { Button } from '../../ui/Button';
+import { Input } from '../../ui/Input';
+import type { ProviderSettingsModalProps } from './types';
+
+export function ProviderSettingsModal({
+  provider,
+  onClose,
+  onSave,
+  onSync,
+}: ProviderSettingsModalProps) {
+  const [requestsPerMinute, setRequestsPerMinute] = useState(provider.requestsPerMinute.toString());
+  const [maxParallelRequests, setMaxParallelRequests] = useState(
+    provider.maxParallelRequests.toString()
+  );
+  // Budget balance: empty string = no budget set (null); numeric string = tracked balance
+  const [balanceInput, setBalanceInput] = useState(
+    provider.balance != null ? provider.balance.toFixed(2) : ''
+  );
+  // Sync section: separate input for entering the real provider balance
+  const [syncInput, setSyncInput] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const parsedBalance = balanceInput.trim() === '' ? null : parseFloat(balanceInput);
+  const balanceIsValid =
+    balanceInput.trim() === '' || (!isNaN(parsedBalance!) && parsedBalance! >= 0);
+  const balanceChanged = parsedBalance !== provider.balance;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+
+    await onSave({
+      requestsPerMinute: parseInt(requestsPerMinute, 10),
+      maxParallelRequests: parseInt(maxParallelRequests, 10),
+      balance: parsedBalance,
+    });
+
+    setIsSaving(false);
+  };
+
+  const parsedSyncBalance = syncInput.trim() === '' ? null : parseFloat(syncInput);
+  const syncIsValid = parsedSyncBalance !== null && !isNaN(parsedSyncBalance) && parsedSyncBalance >= 0;
+
+  const handleSync = async () => {
+    if (!onSync || !syncIsValid || parsedSyncBalance === null) return;
+    setIsSyncing(true);
+    await onSync(parsedSyncBalance);
+    setSyncInput('');
+    setIsSyncing(false);
+  };
+
+  const hasChanges =
+    parseInt(requestsPerMinute, 10) !== provider.requestsPerMinute ||
+    parseInt(maxParallelRequests, 10) !== provider.maxParallelRequests ||
+    balanceChanged;
+
+  const isValid =
+    !!requestsPerMinute &&
+    !!maxParallelRequests &&
+    parseInt(requestsPerMinute, 10) > 0 &&
+    parseInt(maxParallelRequests, 10) > 0 &&
+    balanceIsValid;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-medium text-gray-900">
+            {provider.displayName} Settings
+          </h3>
+          <Button
+            onClick={onClose}
+            variant="ghost"
+            size="icon"
+            className="text-gray-400 hover:text-gray-600 hover:bg-transparent"
+            aria-label="Close modal"
+          >
+            <X className="w-5 h-5" />
+          </Button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <Input
+            label="Rate Limit (requests/minute)"
+            type="number"
+            min="1"
+            max="10000"
+            value={requestsPerMinute}
+            onChange={(e) => setRequestsPerMinute(e.target.value)}
+            required
+          />
+
+          <Input
+            label="Max Parallel Requests"
+            type="number"
+            min="1"
+            max="100"
+            value={maxParallelRequests}
+            onChange={(e) => setMaxParallelRequests(e.target.value)}
+            required
+          />
+
+          <Input
+            label="Budget Balance ($)"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Leave empty to disable budget tracking"
+            value={balanceInput}
+            onChange={(e) => setBalanceInput(e.target.value)}
+          />
+
+          {onSync && provider.balance != null && (
+            <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+              <p className="text-sm font-medium text-gray-700">Sync with real balance</p>
+              <p className="text-xs text-gray-500">
+                Enter the actual balance shown on your {provider.displayName} dashboard to correct drift.
+              </p>
+              {provider.lastSyncedAt && (
+                <p className="text-xs text-gray-400">
+                  Last synced: {new Date(provider.lastSyncedAt).toLocaleString()}
+                </p>
+              )}
+              <div className="flex gap-2 items-end">
+                <div className="flex-1">
+                  <Input
+                    label=""
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Real balance ($)"
+                    value={syncInput}
+                    onChange={(e) => setSyncInput(e.target.value)}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={!syncIsValid || isSyncing}
+                  isLoading={isSyncing}
+                  onClick={handleSync}
+                >
+                  Sync
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+            <p>
+              <strong>Rate Limit:</strong> Maximum API calls per minute to this provider.
+            </p>
+            <p className="mt-1">
+              <strong>Parallel Requests:</strong> Maximum concurrent API calls. Set to 1 for
+              conservative usage that avoids rate limit errors.
+            </p>
+            <p className="mt-1">
+              <strong>Budget Balance:</strong> Track remaining spend for this provider.
+              Leave empty to disable tracking. Balance is automatically decremented when runs complete.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={!isValid || !hasChanges || isSaving}
+              isLoading={isSaving}
+            >
+              Save Settings
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+
+Context: llm.ts
+import { gql } from 'urql';
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export type LlmModelStatus = 'ACTIVE' | 'DEPRECATED';
+
+export type LlmProvider = {
+  id: string;
+  name: string;
+  displayName: string;
+  maxParallelRequests: number;
+  requestsPerMinute: number;
+  isEnabled: boolean;
+  balance: number | null;
+  lastSyncedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  models: LlmModel[];
+};
+
+export type LlmModel = {
+  id: string;
+  providerId: string;
+  modelId: string;
+  displayName: string;
+  costInputPerMillion: number;
+  costOutputPerMillion: number;
+  status: LlmModelStatus;
+  isDefault: boolean;
+  isAvailable: boolean;
+  apiConfig?: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+  provider?: LlmProvider;
+};
+
+export type SystemSetting = {
+  id: string;
+  key: string;
+  value: unknown;
+  updatedAt: string;
+};
+
+// ============================================================================
+// FRAGMENTS
+// ============================================================================
+
+export const LLM_MODEL_FRAGMENT = gql`
+  fragment LlmModelFields on LlmModel {
+    id
+    providerId
+    modelId
+    displayName
+    costInputPerMillion
+    costOutputPerMillion
+    status
+    isDefault
+    isAvailable
+    apiConfig
+    createdAt
+    updatedAt
+  }
+`;
+
+export const LLM_PROVIDER_FRAGMENT = gql`
+  fragment LlmProviderFields on LlmProvider {
+    id
+    name
+    displayName
+    maxParallelRequests
+    requestsPerMinute
+    isEnabled
+    balance
+    lastSyncedAt
+    createdAt
+    updatedAt
+  }
+`;
+
+// ============================================================================
+// QUERIES
+// ============================================================================
+
+export const LLM_PROVIDERS_QUERY = gql`
+  query LlmProviders {
+    llmProviders {
+      ...LlmProviderFields
+      models {
+        ...LlmModelFields
+      }
+    }
+  }
+  ${LLM_PROVIDER_FRAGMENT}
+  ${LLM_MODEL_FRAGMENT}
+`;
+
+export const LLM_MODELS_QUERY = gql`
+  query LlmModels($providerId: String, $status: String) {
+    llmModels(providerId: $providerId, status: $status) {
+      ...LlmModelFields
+      provider {
+        ...LlmProviderFields
+      }
+    }
+  }
+  ${LLM_MODEL_FRAGMENT}
+  ${LLM_PROVIDER_FRAGMENT}
+`;
+
+export const INFRA_MODEL_QUERY = gql`
+  query InfraModel($purpose: String!) {
+    infraModel(purpose: $purpose) {
+      ...LlmModelFields
+      provider {
+        ...LlmProviderFields
+      }
+    }
+  }
+  ${LLM_MODEL_FRAGMENT}
+  ${LLM_PROVIDER_FRAGMENT}
+`;
+
+// ============================================================================
+// MUTATIONS
+// ============================================================================
+
+export const CREATE_LLM_MODEL_MUTATION = gql`
+  mutation CreateLlmModel($input: CreateLlmModelInput!) {
+    createLlmModel(input: $input) {
+      ...LlmModelFields
+    }
+  }
+  ${LLM_MODEL_FRAGMENT}
+`;
+
+export const UPDATE_LLM_MODEL_MUTATION = gql`
+  mutation UpdateLlmModel($id: String!, $input: UpdateLlmModelInput!) {
+    updateLlmModel(id: $id, input: $input) {
+      ...LlmModelFields
+    }
+  }
+  ${LLM_MODEL_FRAGMENT}
+`;
+
+export const DEPRECATE_LLM_MODEL_MUTATION = gql`
+  mutation DeprecateLlmModel($id: String!) {
+    deprecateLlmModel(id: $id) {
+      model {
+        ...LlmModelFields
+      }
+      newDefault {
+        ...LlmModelFields
+      }
+    }
+  }
+  ${LLM_MODEL_FRAGMENT}
+`;
+
+export const REACTIVATE_LLM_MODEL_MUTATION = gql`
+  mutation ReactivateLlmModel($id: String!) {
+    reactivateLlmModel(id: $id) {
+      ...LlmModelFields
+    }
+  }
+  ${LLM_MODEL_FRAGMENT}
+`;
+
+export const SET_DEFAULT_LLM_MODEL_MUTATION = gql`
+  mutation SetDefaultLlmModel($id: String!) {
+    setDefaultLlmModel(id: $id) {
+      model {
+        ...LlmModelFields
+      }
+      previousDefault {
+        ...LlmModelFields
+      }
+    }
+  }
+  ${LLM_MODEL_FRAGMENT}
+`;
+
+export const UNSET_DEFAULT_LLM_MODEL_MUTATION = gql`
+  mutation UnsetDefaultLlmModel($id: String!) {
+    unsetDefaultLlmModel(id: $id) {
+      ...LlmModelFields
+    }
+  }
+  ${LLM_MODEL_FRAGMENT}
+`;
+
+export const UPDATE_LLM_PROVIDER_MUTATION = gql`
+  mutation UpdateLlmProvider($id: String!, $input: UpdateLlmProviderInput!) {
+    updateLlmProvider(id: $id, input: $input) {
+      ...LlmProviderFields
+    }
+  }
+  ${LLM_PROVIDER_FRAGMENT}
+`;
+
+export const UPDATE_SYSTEM_SETTING_MUTATION = gql`
+  mutation UpdateSystemSetting($input: UpdateSystemSettingInput!) {
+    updateSystemSetting(input: $input) {
+      id
+      key
+      value
+      updatedAt
+    }
+  }
+`;
+
+export const SET_PROVIDER_BALANCE_MUTATION = gql`
+  mutation SetProviderBalance($providerId: String!, $balance: Float) {
+    setProviderBalance(providerId: $providerId, balance: $balance) {
+      ...LlmProviderFields
+    }
+  }
+  ${LLM_PROVIDER_FRAGMENT}
+`;
+
+export const SYNC_PROVIDER_BALANCE_MUTATION = gql`
+  mutation SyncProviderBalance($providerId: String!, $realBalance: Float!) {
+    syncProviderBalance(providerId: $providerId, realBalance: $realBalance) {
+      id
+      providerId
+      systemBalanceAtSync
+      enteredBalance
+      delta
+      syncedAt
+    }
+  }
+`;
+
+// ============================================================================
+// RESULT TYPES
+// ============================================================================
+
+export type LlmProvidersQueryResult = {
+  llmProviders: LlmProvider[];
+};
+
+export type LlmModelsQueryResult = {
+  llmModels: LlmModel[];
+};
+
+export type InfraModelQueryResult = {
+  infraModel: LlmModel | null;
+};
+
+export type CreateLlmModelMutationResult = {
+  createLlmModel: LlmModel;
+};
+
+export type UpdateLlmModelMutationResult = {
+  updateLlmModel: LlmModel;
+};
+
+export type DeprecateLlmModelMutationResult = {
+  deprecateLlmModel: {
+    model: LlmModel;
+    newDefault: LlmModel | null;
+  };
+};
+
+export type ReactivateLlmModelMutationResult = {
+  reactivateLlmModel: LlmModel;
+};
+
+export type SetDefaultLlmModelMutationResult = {
+  setDefaultLlmModel: {
+    model: LlmModel;
+    previousDefault: LlmModel | null;
+  };
+};
+
+export type UnsetDefaultLlmModelMutationResult = {
+  unsetDefaultLlmModel: LlmModel;
+};
+
+export type UpdateLlmProviderMutationResult = {
+  updateLlmProvider: LlmProvider;
+};
+
+export type UpdateSystemSettingMutationResult = {
+  updateSystemSetting: SystemSetting;
+};
+
+export type ProviderBalanceSyncLog = {
+  id: string;
+  providerId: string;
+  systemBalanceAtSync: number;
+  enteredBalance: number;
+  delta: number;
+  syncedAt: string;
+};
+
+export type SetProviderBalanceMutationResult = {
+  setProviderBalance: LlmProvider;
+};
+
+export type SyncProviderBalanceMutationResult = {
+  syncProviderBalance: ProviderBalanceSyncLog;
+};
+
+// ============================================================================
+// INPUT TYPES
+// ============================================================================
+
+export type CreateLlmModelInput = {
+  providerId: string;
+  modelId: string;
+  displayName: string;
+  costInputPerMillion: number;
+  costOutputPerMillion: number;
+  setAsDefault?: boolean;
+};
+
+export type UpdateLlmModelInput = {
+  displayName?: string;
+  costInputPerMillion?: number;
+  costOutputPerMillion?: number;
+  apiConfig?: Record<string, unknown> | null;
+};
+
+export type UpdateLlmProviderInput = {
+  maxParallelRequests?: number;
+  requestsPerMinute?: number;
+  isEnabled?: boolean;
+};
+
+export type UpdateSystemSettingInput = {
+  key: string;
+  value: unknown;
+};
+
+
+Artifact: spec.md
+# Spec: balance-ui-merge
+
+## Summary
+
+Merge "Set Balance" and "Sync Balance" into a single unified action. Every balance save quietly creates an audit log record. The UI shows the current ValueRank-tracked balance next to the input so users can see drift at a glance. The separate Sync section and `lastSyncedAt` display are removed.
+
+## Problem
+
+The provider budget UI has two separate balance actions:
+- **Set Balance** — overrides the balance with no audit trail
+- **Sync Balance** — logs the delta between the tracked value and the real value
+
+Both actions mean "enter the number from my billing dashboard." In practice, all `lastSyncedAt` values are null in production — nobody uses Sync.
+
+## Solution
+
+One input. One button. Every save logs the delta automatically.
+
+## Scope
+
+### In Scope
+
+- Modify `setProviderBalance` backend mutation to also create a `ProviderBalanceSyncLog` when the balance changes (new balance ≠ old balance)
+- Keep `syncProviderBalance` mutation intact (backward compatibility, no changes)
+- Remove the "Sync" section from `ProviderSettingsModal` (the second input + "Sync" button)
+- Add a read-only "ValueRank balance: $X.XX" display near the Budget Balance input (hidden when balance is null)
+- Remove `lastSyncedAt` display from modal and provider section badge
+- Remove `lastSyncedAt` from the frontend GraphQL fragment and `LlmProvider` type
+- Remove `SYNC_PROVIDER_BALANCE_MUTATION` and related frontend types (no longer called from UI)
+- Remove `onSync` prop from `ProviderSettingsModalProps` and all call sites
+- Remove `handleSyncProvider` handler from `ModelsPanel`
+- Remove `syncProviderBalance` mutation import and usage from `ModelsPanel`
+
+### Out of Scope
+
+- Removing `syncProviderBalance` from the backend schema
+- Removing `lastSyncedAt` from the database or Prisma schema
+- Any changes to how balance is decremented during runs
+- Any migration or backfill
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `cloud/apps/api/src/graphql/mutations/llm.ts` | `setProviderBalance` wraps update + sync log creation in a `$transaction`; returns updated provider |
+| `cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx` | Remove sync section and state; add read-only balance display |
+| `cloud/apps/web/src/components/settings/models/types.ts` | Remove `onSync` from `ProviderSettingsModalProps` |
+| `cloud/apps/web/src/components/settings/models/ProviderSection.tsx` | Remove `lastSyncedAt` badge |
+| `cloud/apps/web/src/components/settings/models/ModelsPanel.tsx` | Remove `syncProviderBalance` mutation, `handleSyncProvider`, and `onSync` prop |
+| `cloud/apps/web/src/api/operations/llm.ts` | Remove `lastSyncedAt` from type/fragment; remove `SYNC_PROVIDER_BALANCE_MUTATION` and related types |
+
+## Do Not Touch
+
+- `CLAUDE.md`, `AGENTS.md`, `cloud/CLAUDE.md`, `cloud/AGENTS.md`, `MEMORY.md`, `.gitignore`
+- Any file not listed above
+- `syncProviderBalance` backend mutation (leave unchanged)
+- Prisma schema or migrations
+
+## Acceptance Criteria
+
+1. Saving provider settings with a new balance creates a `ProviderBalanceSyncLog` row recording the delta (new minus old)
+2. The modal shows "ValueRank balance: $X.XX" as read-only text near the Budget Balance input when balance is not null
+3. When balance is null, the read-only balance display is hidden
+4. The modal has no separate "Sync" section, input, or button
+5. `lastSyncedAt` is not displayed anywhere in the provider UI
+6. TypeScript build passes for `@valuerank/api` and `@valuerank/web`
+7. Lint passes for all changed workspaces
+
+## Assumptions
+
+- When balance is null and user sets a new value, the "old" balance for delta is 0 (existing behavior in `syncProviderBalance`)
+- `syncProviderBalance` backend mutation stays intact — only the frontend removes its call site
+- No log record is created if the balance doesn't change (guard: `existing.balance?.equals(balanceDecimal)`)
+
+## Known Limitations (Deferred)
+
+- **Non-atomic client-side save**: `ModelsPanel` calls `updateProvider` and `setProviderBalance` as two sequential mutations. A failure on the second call leaves rate limits updated but balance unchanged. This is a pre-existing issue unrelated to this feature's scope. Tracked for a future refactor that would combine them into one backend mutation.
+- **Float comparison in `hasChanges`**: The modal uses `parsedBalance !== provider.balance` to detect changes. Float precision can make this unreliable. Pre-existing, not introduced by this feature.
+
+## Implementation Note: Transaction Safety
+
+The `setProviderBalance` mutation must read the existing balance **inside** the Prisma transaction to avoid a race condition where a concurrent update makes the logged delta stale. Use the `$transaction` callback form:
+
+```ts
+await db.$transaction(async (tx) => {
+  const current = await tx.llmProvider.findUnique({ where: { id: args.providerId } });
+  if (!current) throw new NotFoundError('LlmProvider', args.providerId);
+  const systemBalanceAtSync = current.balance ?? new Prisma.Decimal(0);
+  // ... create log, update provider, return updated provider
+});
+```
+
+This ensures the balance read and write are atomic, and preserves the `NotFoundError` thrown before the transaction body. The `if (!existing)` check before the transaction can remain as an early exit for the non-balance-change path.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the spec against the code paths it claims to change, with an adversarial read for race conditions, broken assumptions, and places where the spec quietly widens scope. I’ll verify each issue against the provided code before calling it a finding.
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/api/src/graphql/mutations/llm.ts" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+/**
+ * LLM Provider & Model Mutations
+ *
+ * GraphQL mutations for managing LLM providers, models, and system settings.
+ */
+
+import { builder } from '../builder.js';
+import { LlmModelRef, LlmProviderRef, SystemSettingRef, ProviderBalanceSyncLogRef } from '../types/refs.js';
+import {
+  CreateLlmModelInput,
+  UpdateLlmModelInput,
+  UpdateLlmProviderInput,
+  UpdateSystemSettingInput,
+} from '../types/inputs/llm.js';
+import type { LlmModel } from '@valuerank/db';
+import { db, Prisma } from '@valuerank/db';
+import {
+  createModel,
+  updateModel,
+  deprecateModel,
+  reactivateModel,
+  setDefaultModel,
+  unsetDefaultModel,
+  updateProvider,
+  upsertSetting,
+} from '@valuerank/db';
+import { createAuditLog } from '../../services/audit/index.js';
+import { getBoss, isBossRunning } from '../../queue/boss.js';
+import { reregisterProviderHandler } from '../../queue/handlers/index.js';
+import { NotFoundError, ValidationError } from '@valuerank/shared';
+
+// Result type for model deprecation
+type DeprecateModelResultShape = {
+  model: LlmModel;
+  newDefault: LlmModel | null;
+};
+
+const DeprecateModelResultRef = builder.objectRef<DeprecateModelResultShape>('DeprecateModelResult');
+
+builder.objectType(DeprecateModelResultRef, {
+  description: 'Result of deprecating a model',
+  fields: (t) => ({
+    model: t.field({
+      type: LlmModelRef,
+      description: 'The deprecated model',
+      resolve: (parent) => parent.model,
+    }),
+    newDefault: t.field({
+      type: LlmModelRef,
+      nullable: true,
+      description: 'The new default model (if previous default was deprecated)',
+      resolve: (parent) => parent.newDefault,
+    }),
+  }),
+});
+
+// Result type for setting default model
+type SetDefaultResultShape = {
+  model: LlmModel;
+  previousDefault: LlmModel | null;
+};
+
+const SetDefaultResultRef = builder.objectRef<SetDefaultResultShape>('SetDefaultModelResult');
+
+builder.objectType(SetDefaultResultRef, {
+  description: 'Result of setting a default model',
+  fields: (t) => ({
+    model: t.field({
+      type: LlmModelRef,
+      description: 'The new default model',
+      resolve: (parent) => parent.model,
+    }),
+    previousDefault: t.field({
+      type: LlmModelRef,
+      nullable: true,
+      description: 'Always null when multiple defaults are allowed',
+      resolve: (parent) => parent.previousDefault,
+    }),
+  }),
+});
+
+// Mutation: createLlmModel
+builder.mutationField('createLlmModel', (t) =>
+  t.field({
+    type: LlmModelRef,
+    description: 'Create a new LLM model under a provider',
+    args: {
+      input: t.arg({ type: CreateLlmModelInput, required: true }),
+    },
+    resolve: async (_root, args, ctx) => {
+      ctx.log.debug({ providerId: args.input.providerId, modelId: args.input.modelId }, 'Creating LLM model');
+
+      const model = await createModel({
+        providerId: args.input.providerId,
+        modelId: args.input.modelId,
+        displayName: args.input.displayName,
+        costInputPerMillion: args.input.costInputPerMillion,
+        costOutputPerMillion: args.input.costOutputPerMillion,
+        setAsDefault: args.input.setAsDefault ?? false,
+        createdByUserId: ctx.user?.id ?? null,
+      });
+
+      ctx.log.info({ modelId: model.id, apiModelId: model.modelId }, 'LLM model created');
+
+      // Audit log (non-blocking)
+      void createAuditLog({
+        action: 'CREATE',
+        entityType: 'LlmModel',
+        entityId: model.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { modelId: model.modelId, displayName: model.displayName },
+      });
+
+      return model;
+    },
+  })
+);
+
+// Mutation: updateLlmModel
+builder.mutationField('updateLlmModel', (t) =>
+  t.field({
+    type: LlmModelRef,
+    description: 'Update an LLM model (display name, costs, API config)',
+    args: {
+      id: t.arg.string({ required: true, description: 'Model ID to update' }),
+      input: t.arg({ type: UpdateLlmModelInput, required: true }),
+    },
+    resolve: async (_root, args, ctx) => {
+      ctx.log.debug({ id: args.id }, 'Updating LLM model');
+
+      // Build update data - only include fields that were provided
+      const updateData: {
+        displayName?: string;
+        costInputPerMillion?: number;
+        costOutputPerMillion?: number;
+        apiConfig?: Record<string, unknown> | null;
+      } = {};
+
+      if (args.input.displayName !== undefined && args.input.displayName !== null) {
+        updateData.displayName = args.input.displayName;
+      }
+      if (args.input.costInputPerMillion !== undefined && args.input.costInputPerMillion !== null) {
+        updateData.costInputPerMillion = args.input.costInputPerMillion;
+      }
+      if (args.input.costOutputPerMillion !== undefined && args.input.costOutputPerMillion !== null) {
+        updateData.costOutputPerMillion = args.input.costOutputPerMillion;
+      }
+      // For apiConfig, explicitly allow null to clear the value
+      if (args.input.apiConfig !== undefined) {
+        updateData.apiConfig = args.input.apiConfig as Record<string, unknown> | null;
+      }
+
+      const model = await updateModel(args.id, updateData);
+
+      ctx.log.info({ modelId: model.id }, 'LLM model updated');
+
+      // Audit log (non-blocking)
+      void createAuditLog({
+        action: 'UPDATE',
+        entityType: 'LlmModel',
+        entityId: model.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { updatedFields: Object.keys(updateData) },
+      });
+
+      return model;
+    },
+  })
+);
+
+// Mutation: deprecateLlmModel
+builder.mutationField('deprecateLlmModel', (t) =>
+  t.field({
+    type: DeprecateModelResultRef,
+    description: 'Deprecate an LLM model (mark as no longer recommended for new runs)',
+    args: {
+      id: t.arg.string({ required: true, description: 'Model ID to deprecate' }),
+    },
+    resolve: async (_root, args, ctx) => {
+      ctx.log.debug({ id: args.id }, 'Deprecating LLM model');
+
+      const result = await deprecateModel(args.id);
+
+      ctx.log.info(
+        { modelId: result.model.id, newDefaultId: result.newDefault?.id },
+        'LLM model deprecated'
+      );
+
+      // Audit log (non-blocking)
+      void createAuditLog({
+        action: 'ACTION',
+        entityType: 'LlmModel',
+        entityId: result.model.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { action: 'deprecate', newDefaultId: result.newDefault?.id },
+      });
+
+      return result;
+    },
+  })
+);
+
+// Mutation: reactivateLlmModel
+builder.mutationField('reactivateLlmModel', (t) =>
+  t.field({
+    type: LlmModelRef,
+    description: 'Reactivate a deprecated LLM model',
+    args: {
+      id: t.arg.string({ required: true, description: 'Model ID to reactivate' }),
+    },
+    resolve: async (_root, args, ctx) => {
+      ctx.log.debug({ id: args.id }, 'Reactivating LLM model');
+
+      const model = await reactivateModel(args.id);
+
+      ctx.log.info({ modelId: model.id }, 'LLM model reactivated');
+
+      // Audit log (non-blocking)
+      void createAuditLog({
+        action: 'ACTION',
+
+exec
+/bin/zsh -lc 'rg -n "setProviderBalance|syncProviderBalance|lastSyncedAt|ProviderSettingsModalProps|handleSyncProvider|SYNC_PROVIDER_BALANCE_MUTATION|ValueRank balance|ProviderSection|ModelsPanel" cloud/apps -S' in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+cloud/apps/web/src/generated/graphql.ts:1248:  lastSyncedAt?: Maybe<Scalars['DateTime']['output']>;
+cloud/apps/web/src/generated/graphql.ts:1513:  setProviderBalance: LlmProvider;
+cloud/apps/web/src/generated/graphql.ts:1527:  syncProviderBalance: ProviderBalanceSyncLog;
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:4: * Tests setProviderBalance and syncProviderBalance against a real server and DB.
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:17:    setProviderBalance(providerId: $providerId, balance: $balance) {
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:25:const SYNC_PROVIDER_BALANCE_MUTATION = `
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:27:    syncProviderBalance(providerId: $providerId, realBalance: $realBalance) {
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:72:  describe('setProviderBalance', () => {
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:84:      expect(res.body.data.setProviderBalance.balance).toBeCloseTo(50.0);
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:107:      expect(res.body.data.setProviderBalance.balance).toBeNull();
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:125:  describe('syncProviderBalance', () => {
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:139:          query: SYNC_PROVIDER_BALANCE_MUTATION,
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:146:      const syncLog = res.body.data.syncProviderBalance;
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:163:          query: SYNC_PROVIDER_BALANCE_MUTATION,
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:180:          query: SYNC_PROVIDER_BALANCE_MUTATION,
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:187:      const syncLog = res.body.data.syncProviderBalance;
+cloud/apps/api/src/graphql/types/llm-provider.ts:61:    lastSyncedAt: t.field({
+cloud/apps/web/schema.graphql:1336:  lastSyncedAt: DateTime
+cloud/apps/web/schema.graphql:1626:  setProviderBalance(
+cloud/apps/web/schema.graphql:1644:  syncProviderBalance(
+cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx:170:                lastSyncedAt: NOW,
+cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx:197:                lastSyncedAt: NOW,
+cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx:636:                lastSyncedAt: NOW,
+cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx:663:                lastSyncedAt: NOW,
+cloud/apps/api/src/graphql/mutations/llm.ts:349:// Mutation: setProviderBalance
+cloud/apps/api/src/graphql/mutations/llm.ts:350:builder.mutationField('setProviderBalance', (t) =>
+cloud/apps/api/src/graphql/mutations/llm.ts:393:// Mutation: syncProviderBalance
+cloud/apps/api/src/graphql/mutations/llm.ts:394:builder.mutationField('syncProviderBalance', (t) =>
+cloud/apps/web/tests/components/runs/BudgetWarningDialog.test.tsx:90:    lastSyncedAt: null,
+cloud/apps/web/src/pages/SettingsModels.tsx:1:import { ModelsPanel } from '../components/settings/models';
+cloud/apps/web/src/pages/SettingsModels.tsx:7:      <ModelsPanel />
+cloud/apps/web/tests/components/domains/domainTrials/launch-state.test.ts:27:      lastSyncedAt: null,
+cloud/apps/web/tests/components/domains/domainTrials/launch-state.test.ts:51:            lastSyncedAt: null,
+cloud/apps/web/tests/components/domains/domainTrials/launch-state.test.ts:70:            lastSyncedAt: null,
+cloud/apps/web/tests/components/settings/ModelsPanel.test.tsx:2: * ModelsPanel Component Tests
+cloud/apps/web/tests/components/settings/ModelsPanel.test.tsx:9:import { ModelsPanel } from '../../../src/components/settings/models';
+cloud/apps/web/tests/components/settings/ModelsPanel.test.tsx:20:function renderModelsPanel(mockClient: ReturnType<typeof createMockClient>) {
+cloud/apps/web/tests/components/settings/ModelsPanel.test.tsx:23:      <ModelsPanel />
+cloud/apps/web/tests/components/settings/ModelsPanel.test.tsx:95:describe('ModelsPanel', () => {
+cloud/apps/web/tests/components/settings/ModelsPanel.test.tsx:102:    renderModelsPanel(mockClient);
+cloud/apps/web/tests/components/settings/ModelsPanel.test.tsx:116:    renderModelsPanel(mockClient);
+cloud/apps/web/tests/components/settings/ModelsPanel.test.tsx:132:    renderModelsPanel(mockClient);
+cloud/apps/web/tests/components/settings/ModelsPanel.test.tsx:151:    renderModelsPanel(mockClient);
+cloud/apps/web/tests/components/settings/ModelsPanel.test.tsx:168:    renderModelsPanel(mockClient);
+cloud/apps/web/tests/components/settings/ModelsPanel.test.tsx:188:    renderModelsPanel(mockClient);
+cloud/apps/web/tests/components/settings/ModelsPanel.test.tsx:216:    renderModelsPanel(mockClient);
+cloud/apps/web/tests/components/settings/ModelsPanel.test.tsx:242:    renderModelsPanel(mockClient);
+cloud/apps/web/tests/components/settings/ModelsPanel.test.tsx:269:    renderModelsPanel(mockClient);
+cloud/apps/web/tests/components/settings/ModelsPanel.test.tsx:295:    renderModelsPanel(mockClient);
+cloud/apps/web/src/components/settings/models/index.ts:7:export { ModelsPanel } from './ModelsPanel';
+cloud/apps/web/src/components/settings/models/index.ts:8:export { ProviderSection } from './ProviderSection';
+cloud/apps/web/src/api/operations/llm.ts:17:  lastSyncedAt: string | null;
+cloud/apps/web/src/api/operations/llm.ts:76:    lastSyncedAt
+cloud/apps/web/src/api/operations/llm.ts:215:    setProviderBalance(providerId: $providerId, balance: $balance) {
+cloud/apps/web/src/api/operations/llm.ts:222:export const SYNC_PROVIDER_BALANCE_MUTATION = gql`
+cloud/apps/web/src/api/operations/llm.ts:224:    syncProviderBalance(providerId: $providerId, realBalance: $realBalance) {
+cloud/apps/web/src/api/operations/llm.ts:299:  setProviderBalance: LlmProvider;
+cloud/apps/web/src/api/operations/llm.ts:303:  syncProviderBalance: ProviderBalanceSyncLog;
+cloud/apps/web/src/components/settings/models/ProviderSection.tsx:10:import type { ProviderSectionProps } from './types';
+cloud/apps/web/src/components/settings/models/ProviderSection.tsx:12:export function ProviderSection({
+cloud/apps/web/src/components/settings/models/ProviderSection.tsx:23:}: ProviderSectionProps) {
+cloud/apps/web/src/components/settings/models/ProviderSection.tsx:58:          {provider.lastSyncedAt != null ? (
+cloud/apps/web/src/components/settings/models/ProviderSection.tsx:60:              Last synced: {new Date(provider.lastSyncedAt).toLocaleDateString()}
+cloud/apps/web/src/components/settings/models/ModelsPanel.tsx:13:import { ProviderSection } from './ProviderSection';
+cloud/apps/web/src/components/settings/models/ModelsPanel.tsx:27:  SYNC_PROVIDER_BALANCE_MUTATION,
+cloud/apps/web/src/components/settings/models/ModelsPanel.tsx:30:export function ModelsPanel() {
+cloud/apps/web/src/components/settings/models/ModelsPanel.tsx:48:  const [, setProviderBalance] = useMutation(SET_PROVIDER_BALANCE_MUTATION);
+cloud/apps/web/src/components/settings/models/ModelsPanel.tsx:49:  const [, syncProviderBalance] = useMutation(SYNC_PROVIDER_BALANCE_MUTATION);
+cloud/apps/web/src/components/settings/models/ModelsPanel.tsx:103:      await setProviderBalance({ providerId: id, balance });
+cloud/apps/web/src/components/settings/models/ModelsPanel.tsx:109:  const handleSyncProvider = async (id: string, realBalance: number) => {
+cloud/apps/web/src/components/settings/models/ModelsPanel.tsx:110:    await syncProviderBalance({ providerId: id, realBalance });
+cloud/apps/web/src/components/settings/models/ModelsPanel.tsx:145:          <ProviderSection
+cloud/apps/web/src/components/settings/models/ModelsPanel.tsx:185:          onSync={(realBalance) => handleSyncProvider(editingProvider.id, realBalance)}
+cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx:11:import type { ProviderSettingsModalProps } from './types';
+cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx:18:}: ProviderSettingsModalProps) {
+cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx:128:              {provider.lastSyncedAt && (
+cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx:130:                  Last synced: {new Date(provider.lastSyncedAt).toLocaleString()}
+cloud/apps/web/src/components/settings/models/types.ts:9:export type ProviderSectionProps = {
+cloud/apps/web/src/components/settings/models/types.ts:38:export type ProviderSettingsModalProps = {
+
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/web/src/api/operations/llm.ts" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+import { gql } from 'urql';
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export type LlmModelStatus = 'ACTIVE' | 'DEPRECATED';
+
+export type LlmProvider = {
+  id: string;
+  name: string;
+  displayName: string;
+  maxParallelRequests: number;
+  requestsPerMinute: number;
+  isEnabled: boolean;
+  balance: number | null;
+  lastSyncedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  models: LlmModel[];
+};
+
+export type LlmModel = {
+  id: string;
+  providerId: string;
+  modelId: string;
+  displayName: string;
+  costInputPerMillion: number;
+  costOutputPerMillion: number;
+  status: LlmModelStatus;
+  isDefault: boolean;
+  isAvailable: boolean;
+  apiConfig?: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+  provider?: LlmProvider;
+};
+
+export type SystemSetting = {
+  id: string;
+  key: string;
+  value: unknown;
+  updatedAt: string;
+};
+
+// ============================================================================
+// FRAGMENTS
+// ============================================================================
+
+export const LLM_MODEL_FRAGMENT = gql`
+  fragment LlmModelFields on LlmModel {
+    id
+    providerId
+    modelId
+    displayName
+    costInputPerMillion
+    costOutputPerMillion
+    status
+    isDefault
+    isAvailable
+    apiConfig
+    createdAt
+    updatedAt
+  }
+`;
+
+export const LLM_PROVIDER_FRAGMENT = gql`
+  fragment LlmProviderFields on LlmProvider {
+    id
+    name
+    displayName
+    maxParallelRequests
+    requestsPerMinute
+    isEnabled
+    balance
+    lastSyncedAt
+    createdAt
+    updatedAt
+  }
+`;
+
+// ============================================================================
+// QUERIES
+// ============================================================================
+
+export const LLM_PROVIDERS_QUERY = gql`
+  query LlmProviders {
+    llmProviders {
+      ...LlmProviderFields
+      models {
+        ...LlmModelFields
+      }
+    }
+  }
+  ${LLM_PROVIDER_FRAGMENT}
+  ${LLM_MODEL_FRAGMENT}
+`;
+
+export const LLM_MODELS_QUERY = gql`
+  query LlmModels($providerId: String, $status: String) {
+    llmModels(providerId: $providerId, status: $status) {
+      ...LlmModelFields
+      provider {
+        ...LlmProviderFields
+      }
+    }
+  }
+  ${LLM_MODEL_FRAGMENT}
+  ${LLM_PROVIDER_FRAGMENT}
+`;
+
+export const INFRA_MODEL_QUERY = gql`
+  query InfraModel($purpose: String!) {
+    infraModel(purpose: $purpose) {
+      ...LlmModelFields
+      provider {
+        ...LlmProviderFields
+      }
+    }
+  }
+  ${LLM_MODEL_FRAGMENT}
+  ${LLM_PROVIDER_FRAGMENT}
+`;
+
+// ============================================================================
+// MUTATIONS
+// ============================================================================
+
+export const CREATE_LLM_MODEL_MUTATION = gql`
+  mutation CreateLlmModel($input: CreateLlmModelInput!) {
+    createLlmModel(input: $input) {
+      ...LlmModelFields
+    }
+  }
+  ${LLM_MODEL_FRAGMENT}
+`;
+
+export const UPDATE_LLM_MODEL_MUTATION = gql`
+  mutation UpdateLlmModel($id: String!, $input: UpdateLlmModelInput!) {
+    updateLlmModel(id: $id, input: $input) {
+      ...LlmModelFields
+    }
+  }
+  ${LLM_MODEL_FRAGMENT}
+`;
+
+export const DEPRECATE_LLM_MODEL_MUTATION = gql`
+  mutation DeprecateLlmModel($id: String!) {
+    deprecateLlmModel(id: $id) {
+      model {
+        ...LlmModelFields
+      }
+      newDefault {
+        ...LlmModelFields
+      }
+    }
+  }
+  ${LLM_MODEL_FRAGMENT}
+`;
+
+export const REACTIVATE_LLM_MODEL_MUTATION = gql`
+  mutation ReactivateLlmModel($id: String!) {
+    reactivateLlmModel(id: $id) {
+      ...LlmModelFields
+    }
+  }
+  ${LLM_MODEL_FRAGMENT}
+`;
+
+export const SET_DEFAULT_LLM_MODEL_MUTATION = gql`
+  mutation SetDefaultLlmModel($id: String!) {
+    setDefaultLlmModel(id: $id) {
+      model {
+        ...LlmModelFields
+      }
+      previousDefault {
+        ...LlmModelFields
+      }
+    }
+  }
+  ${LLM_MODEL_FRAGMENT}
+`;
+
+export const UNSET_DEFAULT_LLM_MODEL_MUTATION = gql`
+  mutation UnsetDefaultLlmModel($id: String!) {
+    unsetDefaultLlmModel(id: $id) {
+      ...LlmModelFields
+    }
+  }
+  ${LLM_MODEL_FRAGMENT}
+`;
+
+export const UPDATE_LLM_PROVIDER_MUTATION = gql`
+  mutation UpdateLlmProvider($id: String!, $input: UpdateLlmProviderInput!) {
+    updateLlmProvider(id: $id, input: $input) {
+      ...LlmProviderFields
+    }
+  }
+  ${LLM_PROVIDER_FRAGMENT}
+`;
+
+export const UPDATE_SYSTEM_SETTING_MUTATION = gql`
+  mutation UpdateSystemSetting($input: UpdateSystemSettingInput!) {
+    updateSystemSetting(input: $input) {
+      id
+      key
+      value
+      updatedAt
+    }
+  }
+`;
+
+export const SET_PROVIDER_BALANCE_MUTATION = gql`
+  mutation SetProviderBalance($providerId: String!, $balance: Float) {
+    setProviderBalance(providerId: $providerId, balance: $balance) {
+      ...LlmProviderFields
+    }
+  }
+  ${LLM_PROVIDER_FRAGMENT}
+`;
+
+export const SYNC_PROVIDER_BALANCE_MUTATION = gql`
+  mutation SyncProviderBalance($providerId: String!, $realBalance: Float!) {
+    syncProviderBalance(providerId: $providerId, realBalance: $realBalance) {
+      id
+      providerId
+      systemBalanceAtSync
+      enteredBalance
+      delta
+      syncedAt
+    }
+  }
+`;
+
+// ============================================================================
+// RESULT TYPES
+// ============================================================================
+
+export type LlmProvidersQueryResult = {
+  llmProviders: LlmProvider[];
+};
+
+export type LlmModelsQueryResult = {
+  llmModels: LlmModel[];
+};
+
+export type InfraModelQueryResult = {
+  infraModel: LlmModel | null;
+};
+
+export type CreateLlmModelMutationResult = {
+  createLlmModel: LlmModel;
+};
+
+export type UpdateLlmModelMutationResult = {
+  updateLlmModel: LlmModel;
+};
+
+export type DeprecateLlmModelMutationResult = {
+  deprecateLlmModel: {
+
+codex
+I’ve confirmed the current code still exposes `lastSyncedAt` in the web fragment and UI, and `setProviderBalance` currently does not write a sync log. Next I’m checking whether the spec’s proposed fix is actually sufficient, or whether it leaves a race or incomplete behavior behind.
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+/**
+ * Provider Settings Modal
+ *
+ * Modal for editing provider rate limit settings.
+ */
+
+import { useState } from 'react';
+import { X } from 'lucide-react';
+import { Button } from '../../ui/Button';
+import { Input } from '../../ui/Input';
+import type { ProviderSettingsModalProps } from './types';
+
+export function ProviderSettingsModal({
+  provider,
+  onClose,
+  onSave,
+  onSync,
+}: ProviderSettingsModalProps) {
+  const [requestsPerMinute, setRequestsPerMinute] = useState(provider.requestsPerMinute.toString());
+  const [maxParallelRequests, setMaxParallelRequests] = useState(
+    provider.maxParallelRequests.toString()
+  );
+  // Budget balance: empty string = no budget set (null); numeric string = tracked balance
+  const [balanceInput, setBalanceInput] = useState(
+    provider.balance != null ? provider.balance.toFixed(2) : ''
+  );
+  // Sync section: separate input for entering the real provider balance
+  const [syncInput, setSyncInput] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const parsedBalance = balanceInput.trim() === '' ? null : parseFloat(balanceInput);
+  const balanceIsValid =
+    balanceInput.trim() === '' || (!isNaN(parsedBalance!) && parsedBalance! >= 0);
+  const balanceChanged = parsedBalance !== provider.balance;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+
+    await onSave({
+      requestsPerMinute: parseInt(requestsPerMinute, 10),
+      maxParallelRequests: parseInt(maxParallelRequests, 10),
+      balance: parsedBalance,
+    });
+
+    setIsSaving(false);
+  };
+
+  const parsedSyncBalance = syncInput.trim() === '' ? null : parseFloat(syncInput);
+  const syncIsValid = parsedSyncBalance !== null && !isNaN(parsedSyncBalance) && parsedSyncBalance >= 0;
+
+  const handleSync = async () => {
+    if (!onSync || !syncIsValid || parsedSyncBalance === null) return;
+    setIsSyncing(true);
+    await onSync(parsedSyncBalance);
+    setSyncInput('');
+    setIsSyncing(false);
+  };
+
+  const hasChanges =
+    parseInt(requestsPerMinute, 10) !== provider.requestsPerMinute ||
+    parseInt(maxParallelRequests, 10) !== provider.maxParallelRequests ||
+    balanceChanged;
+
+  const isValid =
+    !!requestsPerMinute &&
+    !!maxParallelRequests &&
+    parseInt(requestsPerMinute, 10) > 0 &&
+    parseInt(maxParallelRequests, 10) > 0 &&
+    balanceIsValid;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-medium text-gray-900">
+            {provider.displayName} Settings
+          </h3>
+          <Button
+            onClick={onClose}
+            variant="ghost"
+            size="icon"
+            className="text-gray-400 hover:text-gray-600 hover:bg-transparent"
+            aria-label="Close modal"
+          >
+            <X className="w-5 h-5" />
+          </Button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <Input
+            label="Rate Limit (requests/minute)"
+            type="number"
+            min="1"
+            max="10000"
+            value={requestsPerMinute}
+            onChange={(e) => setRequestsPerMinute(e.target.value)}
+            required
+          />
+
+          <Input
+            label="Max Parallel Requests"
+            type="number"
+            min="1"
+            max="100"
+            value={maxParallelRequests}
+            onChange={(e) => setMaxParallelRequests(e.target.value)}
+            required
+          />
+
+          <Input
+            label="Budget Balance ($)"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Leave empty to disable budget tracking"
+            value={balanceInput}
+            onChange={(e) => setBalanceInput(e.target.value)}
+          />
+
+          {onSync && provider.balance != null && (
+            <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+              <p className="text-sm font-medium text-gray-700">Sync with real balance</p>
+              <p className="text-xs text-gray-500">
+                Enter the actual balance shown on your {provider.displayName} dashboard to correct drift.
+              </p>
+              {provider.lastSyncedAt && (
+                <p className="text-xs text-gray-400">
+                  Last synced: {new Date(provider.lastSyncedAt).toLocaleString()}
+                </p>
+              )}
+              <div className="flex gap-2 items-end">
+                <div className="flex-1">
+                  <Input
+                    label=""
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Real balance ($)"
+                    value={syncInput}
+                    onChange={(e) => setSyncInput(e.target.value)}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={!syncIsValid || isSyncing}
+                  isLoading={isSyncing}
+                  onClick={handleSync}
+                >
+                  Sync
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+            <p>
+              <strong>Rate Limit:</strong> Maximum API calls per minute to this provider.
+            </p>
+            <p className="mt-1">
+              <strong>Parallel Requests:</strong> Maximum concurrent API calls. Set to 1 for
+              conservative usage that avoids rate limit errors.
+            </p>
+            <p className="mt-1">
+              <strong>Budget Balance:</strong> Track remaining spend for this provider.
+              Leave empty to disable tracking. Balance is automatically decremented when runs complete.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={!isValid || !hasChanges || isSaving}
+              isLoading={isSaving}
+            >
+              Save Settings
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/web/src/components/settings/models/ModelsPanel.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+/**
+ * Models Panel
+ *
+ * Settings panel for managing LLM providers and their models.
+ */
+
+import { useState } from 'react';
+import { useQuery, useMutation } from 'urql';
+import { Cpu } from 'lucide-react';
+import { Loading } from '../../ui/Loading';
+import { EmptyState } from '../../ui/EmptyState';
+import { ErrorMessage } from '../../ui/ErrorMessage';
+import { ProviderSection } from './ProviderSection';
+import { ModelFormModal } from './ModelForm';
+import { ProviderSettingsModal } from './ProviderSettingsModal';
+import type { LlmProvidersQueryResult, LlmProvider, LlmModel, CreateLlmModelInput, UpdateLlmModelInput } from '../../../api/operations/llm';
+import {
+  LLM_PROVIDERS_QUERY,
+  CREATE_LLM_MODEL_MUTATION,
+  UPDATE_LLM_MODEL_MUTATION,
+  DEPRECATE_LLM_MODEL_MUTATION,
+  REACTIVATE_LLM_MODEL_MUTATION,
+  SET_DEFAULT_LLM_MODEL_MUTATION,
+  UNSET_DEFAULT_LLM_MODEL_MUTATION,
+  UPDATE_LLM_PROVIDER_MUTATION,
+  SET_PROVIDER_BALANCE_MUTATION,
+  SYNC_PROVIDER_BALANCE_MUTATION,
+} from '../../../api/operations/llm';
+
+export function ModelsPanel() {
+  const [expandedProviders, setExpandedProviders] = useState<Set<string>>(new Set());
+  const [isAddModelOpen, setIsAddModelOpen] = useState(false);
+  const [editingModel, setEditingModel] = useState<LlmModel | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<LlmProvider | null>(null);
+  const [editingProvider, setEditingProvider] = useState<LlmProvider | null>(null);
+
+  const [{ data, fetching, error }, reexecuteQuery] = useQuery<LlmProvidersQueryResult>({
+    query: LLM_PROVIDERS_QUERY,
+  });
+
+  const [, createModel] = useMutation(CREATE_LLM_MODEL_MUTATION);
+  const [, updateModel] = useMutation(UPDATE_LLM_MODEL_MUTATION);
+  const [, deprecateModel] = useMutation(DEPRECATE_LLM_MODEL_MUTATION);
+  const [, reactivateModel] = useMutation(REACTIVATE_LLM_MODEL_MUTATION);
+  const [, setDefaultModel] = useMutation(SET_DEFAULT_LLM_MODEL_MUTATION);
+  const [, unsetDefaultModel] = useMutation(UNSET_DEFAULT_LLM_MODEL_MUTATION);
+  const [, updateProvider] = useMutation(UPDATE_LLM_PROVIDER_MUTATION);
+  const [, setProviderBalance] = useMutation(SET_PROVIDER_BALANCE_MUTATION);
+  const [, syncProviderBalance] = useMutation(SYNC_PROVIDER_BALANCE_MUTATION);
+
+  const toggleProvider = (providerId: string) => {
+    setExpandedProviders((prev) => {
+      const next = new Set(prev);
+      if (next.has(providerId)) {
+        next.delete(providerId);
+      } else {
+        next.add(providerId);
+      }
+      return next;
+    });
+  };
+
+  const handleCreateModel = async (input: CreateLlmModelInput) => {
+    await createModel({ input });
+    setIsAddModelOpen(false);
+    setSelectedProvider(null);
+    reexecuteQuery({ requestPolicy: 'network-only' });
+  };
+
+  const handleUpdateModel = async (id: string, input: UpdateLlmModelInput) => {
+    await updateModel({ id, input });
+    setEditingModel(null);
+    reexecuteQuery({ requestPolicy: 'network-only' });
+  };
+
+  const handleDeprecateModel = async (id: string) => {
+    await deprecateModel({ id });
+    reexecuteQuery({ requestPolicy: 'network-only' });
+  };
+
+  const handleReactivateModel = async (id: string) => {
+    await reactivateModel({ id });
+    reexecuteQuery({ requestPolicy: 'network-only' });
+  };
+
+  const handleSetDefault = async (id: string) => {
+    await setDefaultModel({ id });
+    reexecuteQuery({ requestPolicy: 'network-only' });
+  };
+
+  const handleUnsetDefault = async (id: string) => {
+    await unsetDefaultModel({ id });
+    reexecuteQuery({ requestPolicy: 'network-only' });
+  };
+
+  const handleUpdateProvider = async (
+    id: string,
+    input: { requestsPerMinute?: number; maxParallelRequests?: number; balance?: number | null }
+  ) => {
+    const { balance, ...providerInput } = input;
+    await updateProvider({ id, input: providerInput });
+    if (balance !== undefined) {
+      await setProviderBalance({ providerId: id, balance });
+    }
+    setEditingProvider(null);
+    reexecuteQuery({ requestPolicy: 'network-only' });
+  };
+
+  const handleSyncProvider = async (id: string, realBalance: number) => {
+    await syncProviderBalance({ providerId: id, realBalance });
+    reexecuteQuery({ requestPolicy: 'network-only' });
+  };
+
+  const openAddModel = (provider: LlmProvider) => {
+    setSelectedProvider(provider);
+    setIsAddModelOpen(true);
+  };
+
+  if (fetching) return <Loading text="Loading models..." />;
+  if (error) {
+    return (
+      <ErrorMessage
+        message={error.message}
+        onRetry={() => reexecuteQuery({ requestPolicy: 'network-only' })}
+      />
+    );
+  }
+
+  const providers = data?.llmProviders ?? [];
+
+  if (providers.length === 0) {
+    return (
+      <EmptyState
+        icon={Cpu}
+        title="No providers configured"
+        description="LLM providers need to be seeded in the database"
+      />
+    );
+  }
+
+  return (
+    <>
+      <div className="space-y-4">
+        {providers.map((provider) => (
+          <ProviderSection
+            key={provider.id}
+            provider={provider}
+            isExpanded={expandedProviders.has(provider.id)}
+            onToggle={() => toggleProvider(provider.id)}
+            onAddModel={() => openAddModel(provider)}
+            onEditModel={setEditingModel}
+            onDeprecateModel={handleDeprecateModel}
+            onReactivateModel={handleReactivateModel}
+            onSetDefault={handleSetDefault}
+            onUnsetDefault={handleUnsetDefault}
+            onEditSettings={() => setEditingProvider(provider)}
+          />
+        ))}
+      </div>
+
+      {isAddModelOpen && selectedProvider && (
+        <ModelFormModal
+          provider={selectedProvider}
+          onClose={() => {
+            setIsAddModelOpen(false);
+            setSelectedProvider(null);
+          }}
+          onSave={handleCreateModel as (input: CreateLlmModelInput | UpdateLlmModelInput) => Promise<void>}
+        />
+      )}
+
+      {editingModel && (
+        <ModelFormModal
+          model={editingModel}
+          onClose={() => setEditingModel(null)}
+          onSave={(input) => handleUpdateModel(editingModel.id, input as UpdateLlmModelInput)}
+        />
+      )}
+
+      {editingProvider && (
+        <ProviderSettingsModal
+          provider={editingProvider}
+          onClose={() => setEditingProvider(null)}
+          onSave={(input) => handleUpdateProvider(editingProvider.id, input)}
+          onSync={(realBalance) => handleSyncProvider(editingProvider.id, realBalance)}
+        />
+      )}
+    </>
+  );
+}
+
+exec
+/bin/zsh -lc "sed -n '1,180p' cloud/apps/web/src/components/settings/models/ProviderSection.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+/**
+ * Provider Section
+ *
+ * Accordion-style section for a single LLM provider showing its models.
+ */
+
+import { Plus, ChevronDown, ChevronRight, Settings } from 'lucide-react';
+import { Button } from '../../ui/Button';
+import { ModelRow } from './ModelRow';
+import type { ProviderSectionProps } from './types';
+
+export function ProviderSection({
+  provider,
+  isExpanded,
+  onToggle,
+  onAddModel,
+  onEditModel,
+  onDeprecateModel,
+  onReactivateModel,
+  onSetDefault,
+  onUnsetDefault,
+  onEditSettings,
+}: ProviderSectionProps) {
+  const activeModels = provider.models.filter((m) => m.status === 'ACTIVE');
+  const deprecatedModels = provider.models.filter((m) => m.status === 'DEPRECATED');
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      {/* eslint-disable-next-line react/forbid-elements -- Accordion toggle requires custom semantic button styling */}
+      <button
+        onClick={onToggle}
+        className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          {isExpanded ? (
+            <ChevronDown className="w-5 h-5 text-gray-400" />
+          ) : (
+            <ChevronRight className="w-5 h-5 text-gray-400" />
+          )}
+          <div className="text-left">
+            <h3 className="font-medium text-gray-900">{provider.displayName}</h3>
+            <p className="text-sm text-gray-500">
+              {activeModels.length} active model{activeModels.length !== 1 ? 's' : ''}
+              {deprecatedModels.length > 0 && `, ${deprecatedModels.length} deprecated`}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {provider.balance != null ? (
+            <span className="px-2 py-1 text-xs rounded-full bg-yellow-50 text-yellow-700 border border-yellow-200">
+              ${provider.balance.toFixed(2)} remaining
+            </span>
+          ) : (
+            <span className="px-2 py-1 text-xs rounded-full bg-gray-50 text-gray-400 border border-gray-200">
+              No budget set
+            </span>
+          )}
+          {provider.lastSyncedAt != null ? (
+            <span className="text-xs text-gray-400">
+              Last synced: {new Date(provider.lastSyncedAt).toLocaleDateString()}
+            </span>
+          ) : null}
+          <span
+            className={`px-2 py-1 text-xs rounded-full ${
+              provider.isEnabled
+                ? 'bg-green-100 text-green-700'
+                : 'bg-gray-100 text-gray-500'
+            }`}
+          >
+            {provider.isEnabled ? 'Enabled' : 'Disabled'}
+          </span>
+        </div>
+      </button>
+
+      {isExpanded && (
+        <div className="border-t border-gray-200">
+          <div className="px-6 py-3 bg-gray-50 flex justify-between items-center">
+            <Button
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditSettings();
+              }}
+              variant="ghost"
+              size="sm"
+              className="text-gray-500 hover:text-gray-700 hover:bg-transparent px-0 group"
+              title="Edit rate limits"
+            >
+              <Settings className="w-4 h-4 text-gray-400 group-hover:text-gray-600 mr-1" />
+              Rate limit: {provider.requestsPerMinute}/min, {provider.maxParallelRequests} parallel
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onAddModel}>
+              <Plus className="w-4 h-4 mr-1" />
+              Add Model
+            </Button>
+          </div>
+
+          <div className="divide-y divide-gray-100">
+            {provider.models.map((model) => (
+              <ModelRow
+                key={model.id}
+                model={model}
+                onEdit={() => onEditModel(model)}
+                onDeprecate={() => onDeprecateModel(model.id)}
+                onReactivate={() => onReactivateModel(model.id)}
+                onSetDefault={() => onSetDefault(model.id)}
+                onUnsetDefault={() => onUnsetDefault(model.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+exec
+/bin/zsh -lc "sed -n '1,200p' cloud/apps/web/src/components/settings/models/types.ts" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+/**
+ * Shared types for Models Panel components
+ */
+
+import type { LlmProvider, LlmModel, CreateLlmModelInput, UpdateLlmModelInput } from '../../../api/operations/llm';
+
+export type { LlmProvider, LlmModel, CreateLlmModelInput, UpdateLlmModelInput };
+
+export type ProviderSectionProps = {
+  provider: LlmProvider;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onAddModel: () => void;
+  onEditModel: (model: LlmModel) => void;
+  onDeprecateModel: (id: string) => void;
+  onReactivateModel: (id: string) => void;
+  onSetDefault: (id: string) => void;
+  onUnsetDefault: (id: string) => void;
+  onEditSettings: () => void;
+};
+
+export type ModelRowProps = {
+  model: LlmModel;
+  onEdit: () => void;
+  onDeprecate: () => void;
+  onReactivate: () => void;
+  onSetDefault: () => void;
+  onUnsetDefault: () => void;
+};
+
+export type ModelFormModalProps = {
+  provider?: LlmProvider;
+  model?: LlmModel;
+  onClose: () => void;
+  onSave: (input: CreateLlmModelInput | UpdateLlmModelInput) => Promise<void>;
+};
+
+export type ProviderSettingsModalProps = {
+  provider: LlmProvider;
+  onClose: () => void;
+  onSave: (input: {
+    requestsPerMinute?: number;
+    maxParallelRequests?: number;
+    balance?: number | null;
+  }) => Promise<void>;
+  onSync?: (realBalance: number) => Promise<void>;
+};
+
+codex
+I’ve reached the main risk area: the spec’s backend note tries to make the balance-log write atomic, but the current code path is split enough that a small wording mistake in the spec could still leave a race. I’m checking whether the frontend also has any hidden dependencies on the fields the spec wants removed.
+exec
+/bin/zsh -lc 'rg -n "generated/graphql|lastSyncedAt" cloud/apps/web/src cloud/apps/web/tests -S' in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx:170:                lastSyncedAt: NOW,
+cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx:197:                lastSyncedAt: NOW,
+cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx:636:                lastSyncedAt: NOW,
+cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx:663:                lastSyncedAt: NOW,
+cloud/apps/web/src/generated/graphql.ts:1248:  lastSyncedAt?: Maybe<Scalars['DateTime']['output']>;
+cloud/apps/web/src/api/operations/auth.ts:3:export { MeDocument as ME_QUERY } from '../../generated/graphql';
+cloud/apps/web/tests/components/domains/domainTrials/launch-state.test.ts:27:      lastSyncedAt: null,
+cloud/apps/web/tests/components/domains/domainTrials/launch-state.test.ts:51:            lastSyncedAt: null,
+cloud/apps/web/tests/components/domains/domainTrials/launch-state.test.ts:70:            lastSyncedAt: null,
+cloud/apps/web/tests/components/runs/BudgetWarningDialog.test.tsx:90:    lastSyncedAt: null,
+cloud/apps/web/src/api/operations/temp-zero-verification.ts:5:} from '../../generated/graphql';
+cloud/apps/web/src/api/operations/temp-zero-verification.ts:31:export { TempZeroVerificationReportDocument as TEMP_ZERO_VERIFICATION_REPORT_QUERY } from '../../generated/graphql';
+cloud/apps/web/src/api/operations/models.ts:1:import type { AvailableModelsQuery as GeneratedAvailableModelsQuery } from '../../generated/graphql';
+cloud/apps/web/src/api/operations/models.ts:13:export { AvailableModelsDocument as AVAILABLE_MODELS_QUERY } from '../../generated/graphql';
+cloud/apps/web/src/api/operations/llm.ts:17:  lastSyncedAt: string | null;
+cloud/apps/web/src/api/operations/llm.ts:76:    lastSyncedAt
+cloud/apps/web/src/components/settings/models/ProviderSection.tsx:58:          {provider.lastSyncedAt != null ? (
+cloud/apps/web/src/components/settings/models/ProviderSection.tsx:60:              Last synced: {new Date(provider.lastSyncedAt).toLocaleDateString()}
+cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx:128:              {provider.lastSyncedAt && (
+cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx:130:                  Last synced: {new Date(provider.lastSyncedAt).toLocaleString()}
+
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/api/src/graphql/types/llm-provider.ts" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+/**
+ * LlmProvider GraphQL Type
+ *
+ * Represents an LLM API provider (e.g., OpenAI, Anthropic) with rate limiting settings.
+ */
+
+import { db } from '@valuerank/db';
+import { LlmProviderRef, LlmModelRef, ProviderBalanceSyncLogRef } from './refs.js';
+
+// ProviderBalanceSyncLog GQL object type
+ProviderBalanceSyncLogRef.implement({
+  description: 'A record of a manual balance sync for a provider',
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    providerId: t.exposeString('providerId'),
+    systemBalanceAtSync: t.field({
+      type: 'Float',
+      description: 'System-tracked balance at the time of sync',
+      resolve: (log) => log.systemBalanceAtSync.toNumber(),
+    }),
+    enteredBalance: t.field({
+      type: 'Float',
+      description: 'Real balance entered by the user',
+      resolve: (log) => log.enteredBalance.toNumber(),
+    }),
+    delta: t.field({
+      type: 'Float',
+      description: 'Difference: enteredBalance - systemBalanceAtSync',
+      resolve: (log) => log.delta.toNumber(),
+    }),
+    syncedAt: t.expose('syncedAt', { type: 'DateTime' }),
+    createdByUserId: t.exposeString('createdByUserId', { nullable: true }),
+  }),
+});
+
+LlmProviderRef.implement({
+  description: 'An LLM API provider with rate limiting and parallelism settings',
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    name: t.exposeString('name', {
+      description: 'Provider identifier (e.g., "openai", "anthropic")',
+    }),
+    displayName: t.exposeString('displayName', {
+      description: 'Human-readable name (e.g., "OpenAI")',
+    }),
+    maxParallelRequests: t.exposeInt('maxParallelRequests', {
+      description: 'Maximum concurrent API requests allowed',
+    }),
+    requestsPerMinute: t.exposeInt('requestsPerMinute', {
+      description: 'Rate limit (requests per minute)',
+    }),
+    isEnabled: t.exposeBoolean('isEnabled', {
+      description: 'Whether the provider is available for use',
+    }),
+    balance: t.field({
+      type: 'Float',
+      nullable: true,
+      description: 'Remaining budget balance in dollars (null = budget tracking disabled)',
+      resolve: (provider) => (provider.balance !== null ? provider.balance.toNumber() : null),
+    }),
+    lastSyncedAt: t.field({
+      type: 'DateTime',
+      nullable: true,
+      description: 'Timestamp of the most recent manual balance sync (null = never synced)',
+      resolve: async (provider) => {
+        const latest = await db.providerBalanceSyncLog.findFirst({
+          where: { providerId: provider.id },
+          orderBy: { syncedAt: 'desc' },
+          select: { syncedAt: true },
+        });
+        return latest?.syncedAt ?? null;
+      },
+    }),
+    createdAt: t.expose('createdAt', { type: 'DateTime' }),
+    updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
+
+    // Relations
+    models: t.field({
+      type: [LlmModelRef],
+      description: 'All models belonging to this provider',
+      resolve: async (provider) => {
+        return db.llmModel.findMany({
+          where: { providerId: provider.id },
+          orderBy: { displayName: 'asc' },
+        });
+      },
+    }),
+
+    activeModels: t.field({
+      type: [LlmModelRef],
+      description: 'Active models only (excludes deprecated)',
+      resolve: async (provider) => {
+        return db.llmModel.findMany({
+          where: { providerId: provider.id, status: 'ACTIVE' },
+          orderBy: { displayName: 'asc' },
+        });
+      },
+    }),
+
+    defaultModel: t.field({
+      type: LlmModelRef,
+      nullable: true,
+      description: 'The default model for this provider',
+      resolve: async (provider) => {
+        return db.llmModel.findFirst({
+          where: { providerId: provider.id, isDefault: true },
+        });
+      },
+    }),
+  }),
+});
+
+ succeeded in 0ms:
+/**
+ * Integration tests for provider balance mutations.
+ *
+ * Tests setProviderBalance and syncProviderBalance against a real server and DB.
+ */
+
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import request from 'supertest';
+import { db } from '@valuerank/db';
+import { createServer } from '../../../src/server.js';
+import { getAuthHeader, TEST_USER } from '../../test-utils.js';
+
+const app = createServer();
+
+const SET_PROVIDER_BALANCE_MUTATION = `
+  mutation SetProviderBalance($providerId: String!, $balance: Float) {
+    setProviderBalance(providerId: $providerId, balance: $balance) {
+      id
+      name
+      balance
+    }
+  }
+`;
+
+const SYNC_PROVIDER_BALANCE_MUTATION = `
+  mutation SyncProviderBalance($providerId: String!, $realBalance: Float!) {
+    syncProviderBalance(providerId: $providerId, realBalance: $realBalance) {
+      id
+      providerId
+      systemBalanceAtSync
+      enteredBalance
+      delta
+      syncedAt
+    }
+  }
+`;
+
+describe('provider balance mutations', () => {
+  let testProviderId: string;
+  const createdSyncLogIds: string[] = [];
+
+  beforeAll(async () => {
+    await db.user.upsert({
+      where: { id: TEST_USER.id },
+      create: { id: TEST_USER.id, email: TEST_USER.email, passwordHash: 'test-hash' },
+      update: {},
+    });
+
+    const provider = await db.llmProvider.upsert({
+      where: { name: 'test-provider-balance' },
+      create: { name: 'test-provider-balance', displayName: 'Test Provider Balance' },
+      update: {},
+    });
+    testProviderId = provider.id;
+  });
+
+  afterEach(async () => {
+    // Reset balance to null after each test
+    await db.llmProvider.update({
+      where: { id: testProviderId },
+      data: { balance: null },
+    });
+    // Cleanup sync logs
+    if (createdSyncLogIds.length > 0) {
+      await db.providerBalanceSyncLog.deleteMany({
+        where: { id: { in: createdSyncLogIds } },
+      });
+      createdSyncLogIds.length = 0;
+    }
+  });
+
+  describe('setProviderBalance', () => {
+    it('sets provider balance to a positive value', async () => {
+      const res = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SET_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: testProviderId, balance: 50.0 },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeUndefined();
+      expect(res.body.data.setProviderBalance.balance).toBeCloseTo(50.0);
+
+      const updated = await db.llmProvider.findUnique({ where: { id: testProviderId } });
+      expect(updated?.balance?.toNumber()).toBeCloseTo(50.0);
+    });
+
+    it('sets provider balance to null (disables tracking)', async () => {
+      // First set a balance
+      await db.llmProvider.update({
+        where: { id: testProviderId },
+        data: { balance: 10.0 },
+      });
+
+      const res = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SET_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: testProviderId, balance: null },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeUndefined();
+      expect(res.body.data.setProviderBalance.balance).toBeNull();
+    });
+
+    it('rejects negative balance with a validation error', async () => {
+      const res = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SET_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: testProviderId, balance: -1 },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeDefined();
+      expect(res.body.errors[0].message).toMatch(/[Bb]alance/);
+    });
+  });
+
+  describe('syncProviderBalance', () => {
+    beforeAll(async () => {
+      // Give the provider a starting balance of 7.50
+      await db.llmProvider.update({
+        where: { id: testProviderId },
+        data: { balance: 7.5 },
+      });
+    });
+
+    it('creates a sync log with correct delta and updates balance', async () => {
+      const res = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SYNC_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: testProviderId, realBalance: 8.1 },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeUndefined();
+
+      const syncLog = res.body.data.syncProviderBalance;
+      createdSyncLogIds.push(syncLog.id);
+
+      expect(syncLog.systemBalanceAtSync).toBeCloseTo(7.5);
+      expect(syncLog.enteredBalance).toBeCloseTo(8.1);
+      expect(syncLog.delta).toBeCloseTo(0.6);
+
+      // Balance updated in DB
+      const updated = await db.llmProvider.findUnique({ where: { id: testProviderId } });
+      expect(updated?.balance?.toNumber()).toBeCloseTo(8.1);
+    });
+
+    it('rejects negative real balance with a validation error', async () => {
+      const res = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SYNC_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: testProviderId, realBalance: -5 },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeDefined();
+      expect(res.body.errors[0].message).toMatch(/[Bb]alance/);
+    });
+
+    it('handles sync when provider has no existing balance (defaults to 0)', async () => {
+      // Temporarily clear balance
+      await db.llmProvider.update({ where: { id: testProviderId }, data: { balance: null } });
+
+      const res = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SYNC_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: testProviderId, realBalance: 25.0 },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeUndefined();
+
+      const syncLog = res.body.data.syncProviderBalance;
+      createdSyncLogIds.push(syncLog.id);
+
+      expect(syncLog.systemBalanceAtSync).toBeCloseTo(0);
+      expect(syncLog.enteredBalance).toBeCloseTo(25.0);
+      expect(syncLog.delta).toBeCloseTo(25.0);
+    });
+  });
+});
+
+exec
+/bin/zsh -lc "sed -n '280,460p' cloud/apps/api/src/graphql/mutations/llm.ts" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+      void createAuditLog({
+        action: 'ACTION',
+        entityType: 'LlmModel',
+        entityId: model.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { action: 'unsetDefault' },
+      });
+
+      return model;
+    },
+  })
+);
+
+// Mutation: updateLlmProvider
+builder.mutationField('updateLlmProvider', (t) =>
+  t.field({
+    type: LlmProviderRef,
+    description: 'Update LLM provider settings (rate limits, enabled status)',
+    args: {
+      id: t.arg.string({ required: true, description: 'Provider ID to update' }),
+      input: t.arg({ type: UpdateLlmProviderInput, required: true }),
+    },
+    resolve: async (_root, args, ctx) => {
+      ctx.log.debug({ id: args.id }, 'Updating LLM provider');
+
+      const provider = await updateProvider(args.id, {
+        maxParallelRequests: args.input.maxParallelRequests ?? undefined,
+        requestsPerMinute: args.input.requestsPerMinute ?? undefined,
+        isEnabled: args.input.isEnabled ?? undefined,
+      });
+
+      ctx.log.info({ providerId: provider.id }, 'LLM provider updated');
+
+      // Re-register queue handler if parallelism settings changed
+      const parallelismChanged =
+        args.input.maxParallelRequests !== undefined ||
+        args.input.requestsPerMinute !== undefined;
+
+      if (parallelismChanged && isBossRunning()) {
+        try {
+          const boss = getBoss();
+          await reregisterProviderHandler(boss, provider.name);
+          ctx.log.info(
+            { providerName: provider.name },
+            'Queue handler re-registered with new parallelism settings'
+          );
+        } catch (err) {
+          // Log but don't fail - settings are saved, restart will apply them
+          ctx.log.error(
+            { err, providerName: provider.name },
+            'Failed to re-register queue handler (settings saved, restart required)'
+          );
+        }
+      }
+
+      // Audit log (non-blocking)
+      void createAuditLog({
+        action: 'UPDATE',
+        entityType: 'LlmProvider',
+        entityId: provider.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { name: provider.name },
+      });
+
+      return provider;
+    },
+  })
+);
+
+// Mutation: setProviderBalance
+builder.mutationField('setProviderBalance', (t) =>
+  t.field({
+    type: LlmProviderRef,
+    description: 'Set the budget balance for a provider (null disables budget tracking)',
+    args: {
+      providerId: t.arg.string({ required: true, description: 'Provider ID' }),
+      balance: t.arg.float({ required: false, description: 'New balance in dollars (null = disable)' }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (args.balance !== null && args.balance !== undefined && args.balance < 0) {
+        throw new ValidationError('Balance must be greater than or equal to 0');
+      }
+
+      const existing = await db.llmProvider.findUnique({ where: { id: args.providerId } });
+      if (!existing) {
+        throw new NotFoundError('LlmProvider', args.providerId);
+      }
+
+      const balanceDecimal =
+        args.balance !== null && args.balance !== undefined
+          ? new Prisma.Decimal(args.balance)
+          : null;
+
+      const provider = await db.llmProvider.update({
+        where: { id: args.providerId },
+        data: { balance: balanceDecimal },
+      });
+
+      ctx.log.info({ providerId: provider.id, balance: args.balance }, 'Provider balance set');
+
+      void createAuditLog({
+        action: 'ACTION',
+        entityType: 'LlmProvider',
+        entityId: provider.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { action: 'set_provider_balance', balance: args.balance },
+      });
+
+      return provider;
+    },
+  })
+);
+
+// Mutation: syncProviderBalance
+builder.mutationField('syncProviderBalance', (t) =>
+  t.field({
+    type: ProviderBalanceSyncLogRef,
+    description: 'Sync the provider balance with the real balance from the provider dashboard',
+    args: {
+      providerId: t.arg.string({ required: true, description: 'Provider ID' }),
+      realBalance: t.arg.float({ required: true, description: 'Real balance in dollars from provider dashboard' }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (args.realBalance < 0) {
+        throw new ValidationError('Real balance must be greater than or equal to 0');
+      }
+
+      const provider = await db.llmProvider.findUnique({ where: { id: args.providerId } });
+      if (!provider) {
+        throw new NotFoundError('LlmProvider', args.providerId);
+      }
+
+      const systemBalanceAtSync = provider.balance ?? new Prisma.Decimal(0);
+      const enteredBalance = new Prisma.Decimal(args.realBalance);
+      const delta = enteredBalance.minus(systemBalanceAtSync);
+
+      const [syncLog] = await db.$transaction([
+        db.providerBalanceSyncLog.create({
+          data: {
+            providerId: args.providerId,
+            systemBalanceAtSync,
+            enteredBalance,
+            delta,
+            createdByUserId: ctx.user?.id ?? null,
+          },
+        }),
+        db.llmProvider.update({
+          where: { id: args.providerId },
+          data: { balance: enteredBalance },
+        }),
+      ]);
+
+      ctx.log.info(
+        { providerId: args.providerId, realBalance: args.realBalance, delta: delta.toNumber() },
+        'Provider balance synced'
+      );
+
+      void createAuditLog({
+        action: 'ACTION',
+        entityType: 'LlmProvider',
+        entityId: args.providerId,
+        userId: ctx.user?.id ?? null,
+        metadata: {
+          action: 'sync_provider_balance',
+          realBalance: args.realBalance,
+          delta: delta.toNumber(),
+        },
+      });
+
+      return syncLog;
+    },
+  })
+);
+
+// Mutation: updateSystemSetting
+builder.mutationField('updateSystemSetting', (t) =>
+  t.field({
+    type: SystemSettingRef,
+    description: 'Update a system setting (creates if not exists)',
+    args: {
+      input: t.arg({ type: UpdateSystemSettingInput, required: true }),
+
+exec
+/bin/zsh -lc "rg -n \"providerBalanceSyncLog|setProviderBalance|balance changed|equals\\(balanceDecimal\\)|lastSyncedAt\" cloud/packages cloud/apps/api -S" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+cloud/apps/api/src/graphql/types/llm-provider.ts:61:    lastSyncedAt: t.field({
+cloud/apps/api/src/graphql/types/llm-provider.ts:66:        const latest = await db.providerBalanceSyncLog.findFirst({
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:4: * Tests setProviderBalance and syncProviderBalance against a real server and DB.
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:17:    setProviderBalance(providerId: $providerId, balance: $balance) {
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:65:      await db.providerBalanceSyncLog.deleteMany({
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:72:  describe('setProviderBalance', () => {
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:84:      expect(res.body.data.setProviderBalance.balance).toBeCloseTo(50.0);
+cloud/apps/api/tests/graphql/mutations/provider-balance.test.ts:107:      expect(res.body.data.setProviderBalance.balance).toBeNull();
+cloud/apps/api/src/graphql/mutations/llm.ts:349:// Mutation: setProviderBalance
+cloud/apps/api/src/graphql/mutations/llm.ts:350:builder.mutationField('setProviderBalance', (t) =>
+cloud/apps/api/src/graphql/mutations/llm.ts:417:        db.providerBalanceSyncLog.create({
+
+codex
+I found a likely hidden dependency: the field the spec wants removed is still referenced outside the settings UI, including in generated GraphQL types and test fixtures. I’m checking whether those references are type-checked against the `LlmProvider` shape or just loose mocks, because that decides whether this is a real break or just dead data.
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/web/tests/components/runs/BudgetWarningDialog.test.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+/**
+ * Unit tests for BudgetWarningDialog component and checkBudgetOverdraft helper
+ */
+
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { BudgetWarningDialog } from '../../../src/components/runs/BudgetWarningDialog';
+import { checkBudgetOverdraft } from '../../../src/components/runs/RunForm';
+
+// ============================================================================
+// BudgetWarningDialog component tests (T029)
+// ============================================================================
+
+describe('BudgetWarningDialog', () => {
+  const overdraftProviders = [
+    { name: 'openai', displayName: 'OpenAI', estimatedCost: 5.0, balance: 2.0 },
+  ];
+
+  it('renders provider rows with correct data', () => {
+    render(
+      <BudgetWarningDialog
+        overdraftProviders={overdraftProviders}
+        onProceed={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('OpenAI')).toBeInTheDocument();
+    expect(screen.getByText('$5.00')).toBeInTheDocument();
+    expect(screen.getByText('$2.00')).toBeInTheDocument();
+  });
+
+  it('calls onProceed when Proceed Anyway button is clicked', async () => {
+    const onProceed = vi.fn();
+    render(
+      <BudgetWarningDialog
+        overdraftProviders={overdraftProviders}
+        onProceed={onProceed}
+        onCancel={vi.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /proceed anyway/i }));
+    expect(onProceed).toHaveBeenCalledOnce();
+  });
+
+  it('calls onCancel when Cancel button is clicked', async () => {
+    const onCancel = vi.fn();
+    render(
+      <BudgetWarningDialog
+        overdraftProviders={overdraftProviders}
+        onProceed={vi.fn()}
+        onCancel={onCancel}
+      />
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    expect(onCancel).toHaveBeenCalledOnce();
+  });
+
+  it('renders multiple overdraft providers', () => {
+    const multiProviders = [
+      { name: 'openai', displayName: 'OpenAI', estimatedCost: 5.0, balance: 2.0 },
+      { name: 'anthropic', displayName: 'Anthropic', estimatedCost: 3.0, balance: 1.0 },
+    ];
+    render(
+      <BudgetWarningDialog
+        overdraftProviders={multiProviders}
+        onProceed={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('OpenAI')).toBeInTheDocument();
+    expect(screen.getByText('Anthropic')).toBeInTheDocument();
+  });
+});
+
+// ============================================================================
+// checkBudgetOverdraft helper tests (T030)
+// ============================================================================
+
+describe('checkBudgetOverdraft', () => {
+  const makeProvider = (name: string, displayName: string, balance: number | null) => ({
+    id: `provider-${name}`,
+    name,
+    displayName,
+    balance,
+    lastSyncedAt: null,
+    maxParallelRequests: 5,
+    requestsPerMinute: 60,
+    isEnabled: true,
+    createdAt: '',
+    updatedAt: '',
+    models: [],
+  });
+
+  it('returns empty array when no provider is overdrawn', () => {
+    const providers = [makeProvider('openai', 'OpenAI', 100.0)];
+    const costEstimate = {
+      total: 5.0,
+      perModel: [{ modelId: 'openai:gpt-4o', totalCost: 5.0, displayName: '', scenarioCount: 1, inputTokens: 0, outputTokens: 0, inputCost: 0, outputCost: 0, avgInputPerProbe: 0, avgOutputPerProbe: 0, sampleCount: 1, isUsingFallback: false }],
+      scenarioCount: 1,
+      basedOnSampleCount: 1,
+      isUsingFallback: false,
+    };
+
+    const result = checkBudgetOverdraft(costEstimate, providers);
+    expect(result).toHaveLength(0);
+  });
+
+  it('returns overdraft entry when provider balance is insufficient', () => {
+    const providers = [makeProvider('openai', 'OpenAI', 1.0)];
+    const costEstimate = {
+      total: 5.0,
+      perModel: [{ modelId: 'openai:gpt-4o', totalCost: 5.0, displayName: '', scenarioCount: 1, inputTokens: 0, outputTokens: 0, inputCost: 0, outputCost: 0, avgInputPerProbe: 0, avgOutputPerProbe: 0, sampleCount: 1, isUsingFallback: false }],
+      scenarioCount: 1,
+      basedOnSampleCount: 1,
+      isUsingFallback: false,
+    };
+
+    const result = checkBudgetOverdraft(costEstimate, providers);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('openai');
+    expect(result[0].estimatedCost).toBeCloseTo(5.0);
+    expect(result[0].balance).toBeCloseTo(1.0);
+  });
+
+  it('does not include provider with null balance', () => {
+    const providers = [makeProvider('openai', 'OpenAI', null)];
+    const costEstimate = {
+      total: 5.0,
+      perModel: [{ modelId: 'openai:gpt-4o', totalCost: 5.0, displayName: '', scenarioCount: 1, inputTokens: 0, outputTokens: 0, inputCost: 0, outputCost: 0, avgInputPerProbe: 0, avgOutputPerProbe: 0, sampleCount: 1, isUsingFallback: false }],
+      scenarioCount: 1,
+      basedOnSampleCount: 1,
+      isUsingFallback: false,
+    };
+
+    const result = checkBudgetOverdraft(costEstimate, providers);
+    expect(result).toHaveLength(0);
+  });
+
+  it('handles multi-provider scenario — only includes overdrawn ones', () => {
+    const providers = [
+      makeProvider('openai', 'OpenAI', 100.0),
+      makeProvider('anthropic', 'Anthropic', 1.0),
+    ];
+    const costEstimate = {
+      total: 8.0,
+      perModel: [
+        { modelId: 'openai:gpt-4o', totalCost: 3.0, displayName: '', scenarioCount: 1, inputTokens: 0, outputTokens: 0, inputCost: 0, outputCost: 0, avgInputPerProbe: 0, avgOutputPerProbe: 0, sampleCount: 1, isUsingFallback: false },
+        { modelId: 'anthropic:claude-3', totalCost: 5.0, displayName: '', scenarioCount: 1, inputTokens: 0, outputTokens: 0, inputCost: 0, outputCost: 0, avgInputPerProbe: 0, avgOutputPerProbe: 0, sampleCount: 1, isUsingFallback: false },
+      ],
+      scenarioCount: 1,
+      basedOnSampleCount: 1,
+      isUsingFallback: false,
+    };
+
+    const result = checkBudgetOverdraft(costEstimate, providers);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('anthropic');
+  });
+
+  it('returns empty array when costEstimate has no perModel', () => {
+    const providers = [makeProvider('openai', 'OpenAI', 5.0)];
+    const costEstimate = {
+      total: 0,
+      perModel: [],
+      scenarioCount: 0,
+      basedOnSampleCount: 0,
+      isUsingFallback: false,
+    };
+
+    const result = checkBudgetOverdraft(costEstimate, providers);
+    expect(result).toHaveLength(0);
+  });
+});
+
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { DomainTrialsDashboard } from '../../src/pages/DomainTrialsDashboard';
+import {
+  BACKFILL_DOMAIN_EVALUATION_MODELS_MUTATION,
+  DOMAIN_EVALUATIONS_QUERY,
+  DOMAIN_EVALUATION_QUERY,
+  DOMAIN_EVALUATION_STATUS_QUERY,
+  DOMAIN_TRIAL_RUNS_STATUS_QUERY,
+  DOMAIN_TRIALS_PLAN_QUERY,
+  ESTIMATE_DOMAIN_EVALUATION_COST_QUERY,
+  START_DOMAIN_EVALUATION_MUTATION,
+} from '../../src/api/operations/domains';
+import { LLM_MODELS_QUERY } from '../../src/api/operations/llm';
+
+const useQueryMock = vi.fn();
+const useMutationMock = vi.fn();
+const useRunMock = vi.fn();
+const startDomainEvaluationMock = vi.fn();
+const backfillDomainEvaluationModelsMock = vi.fn();
+const NOW = new Date().toISOString();
+
+vi.mock('urql', async () => {
+  const actual = await vi.importActual<typeof import('urql')>('urql');
+  return {
+    ...actual,
+    useQuery: (args: unknown) => useQueryMock(args),
+    useMutation: (query: unknown) => useMutationMock(query),
+  };
+});
+
+vi.mock('../../src/hooks/useRun', () => ({
+  useRun: (...args: unknown[]) => useRunMock(...args),
+}));
+
+vi.mock('../../src/components/runs/RunProgress', () => ({
+  RunProgress: () => <div>Run progress mock</div>,
+}));
+
+function renderDomainTrialsDashboard(initialEntries: string[] = ['/domains/domain-a/run-trials']) {
+  return render(
+    <MemoryRouter initialEntries={initialEntries}>
+      <Routes>
+        <Route path="/domains/:domainId/run-trials" element={<DomainTrialsDashboard />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+function makeRunDetails(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'run-1',
+    definitionId: 'def-1',
+    experimentId: null,
+    status: 'RUNNING',
+    config: {
+      models: ['model-1', 'model-2'],
+      samplePercentage: 100,
+    },
+    runProgress: { total: 25, completed: 10, failed: 0, percentComplete: 40 },
+    summarizeProgress: null,
+    executionMetrics: null,
+    startedAt: '2026-03-15T12:01:00.000Z',
+    completedAt: null,
+    createdAt: '2026-03-15T12:00:00.000Z',
+    updatedAt: '2026-03-15T12:03:00.000Z',
+    lastAccessedAt: null,
+    transcripts: [],
+    transcriptCount: 0,
+    recentTasks: [],
+    definition: {
+      id: 'def-1',
+      name: 'Jobs A',
+    },
+    runCategory: 'PRODUCTION',
+    analysisStatus: 'computing',
+    stalledModels: [],
+    ...overrides,
+  };
+}
+
+function mockSetupQueries() {
+  useQueryMock.mockImplementation((args: { query: unknown }) => {
+    if (args.query === DOMAIN_TRIALS_PLAN_QUERY) {
+      return [{
+        data: {
+          domainTrialsPlan: {
+            domainId: 'domain-a',
+            domainName: 'Job domain',
+            vignettes: [
+              { definitionId: 'def-1', definitionName: 'Jobs A', definitionVersion: 1, signature: 'sig-a', scenarioCount: 25, existingBatchCount: 0 },
+              { definitionId: 'def-2', definitionName: 'Jobs B', definitionVersion: 1, signature: 'sig-b', scenarioCount: 25, existingBatchCount: 0 },
+            ],
+            models: [
+              { modelId: 'model-1', label: 'Model One', isDefault: true, supportsTemperature: true },
+              { modelId: 'model-2', label: 'Model Two', isDefault: false, supportsTemperature: true },
+            ],
+            cellEstimates: [
+              { definitionId: 'def-1', modelId: 'model-1', estimatedCost: 42 },
+              { definitionId: 'def-1', modelId: 'model-2', estimatedCost: 42 },
+              { definitionId: 'def-2', modelId: 'model-1', estimatedCost: 42 },
+              { definitionId: 'def-2', modelId: 'model-2', estimatedCost: 42 },
+            ],
+            totalEstimatedCost: 84,
+            existingTemperatures: [],
+            defaultTemperature: null,
+            temperatureWarning: null,
+          },
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === ESTIMATE_DOMAIN_EVALUATION_COST_QUERY) {
+      return [{
+        data: {
+          estimateDomainEvaluationCost: {
+            domainId: 'domain-a',
+            domainName: 'Job domain',
+            scopeCategory: 'PRODUCTION',
+            targetedDefinitions: 2,
+            totalScenarioCount: 50,
+            totalEstimatedCost: 84,
+            basedOnSampleCount: 50,
+            isUsingFallback: false,
+            fallbackReason: null,
+            estimateConfidence: 'HIGH',
+            knownExclusions: [],
+            models: [
+              { modelId: 'model-1', label: 'Model One', isDefault: true, supportsTemperature: true, estimatedCost: 42, basedOnSampleCount: 50, isUsingFallback: false },
+              { modelId: 'model-2', label: 'Model Two', isDefault: false, supportsTemperature: true, estimatedCost: 42, basedOnSampleCount: 50, isUsingFallback: false },
+            ],
+            definitions: [],
+            existingTemperatures: [],
+            defaultTemperature: null,
+            temperatureWarning: null,
+          },
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === LLM_MODELS_QUERY) {
+      return [{
+        data: {
+          llmModels: [
+            {
+              id: 'model-1-id',
+              providerId: 'openai',
+              modelId: 'model-1',
+              displayName: 'Model One',
+              costInputPerMillion: 1,
+              costOutputPerMillion: 2,
+              status: 'ACTIVE',
+              isDefault: true,
+              isAvailable: true,
+              apiConfig: null,
+              createdAt: '2026-03-01T00:00:00.000Z',
+              updatedAt: '2026-03-01T00:00:00.000Z',
+              provider: {
+                id: 'openai',
+                name: 'openai',
+                displayName: 'OpenAI',
+                maxParallelRequests: 5,
+                requestsPerMinute: 100,
+                isEnabled: true,
+                balance: 100,
+                lastSyncedAt: NOW,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+                models: [],
+              },
+            },
+            {
+              id: 'model-2-id',
+              providerId: 'anthropic',
+              modelId: 'model-2',
+              displayName: 'Model Two',
+              costInputPerMillion: 1,
+              costOutputPerMillion: 2,
+              status: 'ACTIVE',
+              isDefault: false,
+              isAvailable: true,
+              apiConfig: null,
+              createdAt: '2026-03-01T00:00:00.000Z',
+              updatedAt: '2026-03-01T00:00:00.000Z',
+              provider: {
+                id: 'anthropic',
+                name: 'anthropic',
+                displayName: 'Anthropic',
+                maxParallelRequests: 5,
+                requestsPerMinute: 100,
+                isEnabled: true,
+                balance: 100,
+                lastSyncedAt: NOW,
+                createdAt: '2026-03-01T00:00:00.000Z',
+                updatedAt: '2026-03-01T00:00:00.000Z',
+                models: [],
+              },
+            },
+          ],
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === DOMAIN_EVALUATIONS_QUERY) {
+      return [{ data: { domainEvaluations: [] }, fetching: false, error: undefined }, vi.fn()];
+    }
+    if (args.query === DOMAIN_EVALUATION_QUERY) {
+      return [{
+        data: {
+          domainEvaluation: null,
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === DOMAIN_EVALUATION_STATUS_QUERY) {
+      return [{
+        data: {
+          domainEvaluationStatus: null,
+        },
+        fetching: false,
+        error: undefined,
+      }, vi.fn()];
+    }
+    if (args.query === DOMAIN_TRIAL_RUNS_STATUS_QUERY) {
+      return [{ data: { domainTrialRunsStatus: [] }, fetching: false, error: undefined }, vi.fn()];
+    }
+    return [{ data: undefined, fetching: false, error: undefined }, vi.fn()];
+  });
+}
+
+function mockActiveLaunchQueries() {
+  useQueryMock.mockImplementation((args: { query: unknown }) => {
+    if (args.query === DOMAIN_TRIALS_PLAN_QUERY) {
+      return [{
+        data: {
+          domainTrialsPlan: {
+            domainId: 'domain-a',
+            domainName: 'Job domain',
+            vignettes: [
+              { definitionId: 'def-1', definitionName: 'Jobs A', definitionVersion: 1, signature: 'sig-a', scenarioCount: 25, existingBatchCount: 0 },
+              { definitionId: 'def-2', definitionName: 'Jobs B', definitionVersion: 1, signature: 'sig-b', scenarioCount: 25, existingBatchCount: 0 },
+            ],
+            models: [
+              { modelId: 'model-1', label: 'Model One', isDefault: true, supportsTemperature: true },
+              { modelId: 'model-2', label: 'Model Two', isDefault: false, supportsTemperature: true },
+            ],
+            cellEstimates: [
+              { definitionId: 'def-1', modelId: 'model-1', estimatedCost: 42 },
+              { definitionId: 'def-1', modelId: 'model-2', estimatedCost: 42 },
+              { definitionId: 'def-2', modelId: 'model-1', estimatedCost: 42 },
+              { definitionId: 'def-2', modelId: 'model-2', estimatedCost: 42 },
+            ],
+            totalEstimatedCost: 84,
+            existingTemperatures: [],
+
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/web/tests/components/domains/domainTrials/launch-state.test.ts" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+import { describe, expect, it } from 'vitest';
+import type { LlmModel } from '../../../../src/api/operations/llm';
+import { buildProviderBudgetEstimates } from '../../../../src/components/domains/domainTrials/launch-state';
+
+function makeModel(overrides: Partial<LlmModel> = {}): LlmModel {
+  return {
+    id: 'model-openai',
+    providerId: 'openai',
+    modelId: 'model-openai',
+    displayName: 'OpenAI Model',
+    costInputPerMillion: 1,
+    costOutputPerMillion: 2,
+    status: 'ACTIVE',
+    isDefault: true,
+    isAvailable: true,
+    apiConfig: null,
+    createdAt: '2026-03-01T00:00:00.000Z',
+    updatedAt: '2026-03-01T00:00:00.000Z',
+    provider: {
+      id: 'openai',
+      name: 'openai',
+      displayName: 'OpenAI',
+      maxParallelRequests: 5,
+      requestsPerMinute: 100,
+      isEnabled: true,
+      balance: 100,
+      lastSyncedAt: null,
+      createdAt: '2026-03-01T00:00:00.000Z',
+      updatedAt: '2026-03-01T00:00:00.000Z',
+      models: [],
+    },
+    ...overrides,
+  };
+}
+
+describe('buildProviderBudgetEstimates', () => {
+  it('scales spend by batches still needed for each vignette', () => {
+    const estimates = buildProviderBudgetEstimates({
+      selectedModels: [
+        makeModel({
+          modelId: 'model-openai',
+          displayName: 'OpenAI Model',
+          provider: {
+            id: 'openai',
+            name: 'openai',
+            displayName: 'OpenAI',
+            maxParallelRequests: 5,
+            requestsPerMinute: 100,
+            isEnabled: true,
+            balance: 100,
+            lastSyncedAt: null,
+            createdAt: '2026-03-01T00:00:00.000Z',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+            models: [],
+          },
+        }),
+        makeModel({
+          id: 'model-anthropic',
+          providerId: 'anthropic',
+          modelId: 'model-anthropic',
+          displayName: 'Anthropic Model',
+          provider: {
+            id: 'anthropic',
+            name: 'anthropic',
+            displayName: 'Anthropic',
+            maxParallelRequests: 5,
+            requestsPerMinute: 100,
+            isEnabled: true,
+            balance: 50,
+            lastSyncedAt: null,
+            createdAt: '2026-03-01T00:00:00.000Z',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+            models: [],
+          },
+        }),
+      ],
+      cellEstimates: [
+        { definitionId: 'def-1', modelId: 'model-openai', estimatedCost: 100 },
+        { definitionId: 'def-1', modelId: 'model-anthropic', estimatedCost: 50 },
+        { definitionId: 'def-2', modelId: 'model-openai', estimatedCost: 40 },
+      ],
+      vignettes: [
+        { definitionId: 'def-1', existingBatchCount: 2 },
+        { definitionId: 'def-2', existingBatchCount: 5 },
+      ],
+      targetBatchCount: 5,
+    });
+
+    expect(estimates).toHaveLength(2);
+    expect(estimates[0]).toMatchObject({
+      providerDisplayName: 'Anthropic',
+      expectedSpendUsd: 30,
+      budgetBalanceUsd: 50,
+      budgetReady: true,
+    });
+    expect(estimates[1]).toMatchObject({
+      providerDisplayName: 'OpenAI',
+      expectedSpendUsd: 60,
+      budgetBalanceUsd: 100,
+      budgetReady: true,
+    });
+  });
+});
+
+codex
+I have one likely build blocker now: the frontend type the spec wants to shrink is still used in typed test fixtures. I’m confirming whether those test files are actually included in the web TypeScript build, because that determines if this is a definite break or just an isolated test cleanup.
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/web/package.json" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/web/tsconfig.json" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+{
+  "name": "@valuerank/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 3030",
+    "build": "tsc && vite build",
+    "codegen": "graphql-codegen --config codegen.ts",
+    "preview": "vite preview",
+    "lint": "eslint src --ext .ts,.tsx",
+    "lint:fix": "eslint src --ext .ts,.tsx --fix",
+    "verify": "npm run codegen && git diff --exit-code -- src/generated/graphql.ts && npm run lint && npm run test && npm run build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "@radix-ui/react-popover": "^1.1.15",
+    "@tanstack/react-virtual": "^3.13.13",
+    "@urql/exchange-auth": "^2.1.6",
+    "@valuerank/shared": "*",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "graphql": "^16.8.0",
+    "html-to-image": "^1.11.13",
+    "html2canvas": "^1.4.1",
+    "lucide-react": "^0.294.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.21.0",
+    "recharts": "^3.5.1",
+    "tailwind-merge": "^3.4.0",
+    "urql": "^4.0.0"
+  },
+  "devDependencies": {
+    "@graphql-codegen/cli": "^6.2.1",
+    "@graphql-codegen/client-preset": "^5.2.4",
+    "@graphql-codegen/typescript": "^5.0.9",
+    "@graphql-codegen/typescript-operations": "^5.0.9",
+    "@graphql-codegen/typescript-urql": "^5.0.0",
+    "@testing-library/jest-dom": "^6.1.0",
+    "@testing-library/react": "^14.1.0",
+    "@testing-library/user-event": "^14.5.0",
+    "@types/react": "^18.2.45",
+    "@types/react-dom": "^18.2.18",
+    "@vitejs/plugin-react": "^4.2.1",
+    "@vitest/coverage-v8": "^1.1.0",
+    "autoprefixer": "^10.4.16",
+    "graphql-tag": "^2.12.6",
+    "jsdom": "^23.0.0",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.3.6",
+    "vite": "^5.0.10",
+    "vitest": "^1.1.0"
+  }
+}
+
+ succeeded in 0ms:
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": [
+      "ES2020",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": [
+      "vite/client",
+      "node"
+    ],
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src"
+  ]
+}
+exec
+/bin/zsh -lc "sed -n '1,200p' cloud/apps/web/src/api/operations/models.ts" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+import type { AvailableModelsQuery as GeneratedAvailableModelsQuery } from '../../generated/graphql';
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export type AvailableModel = GeneratedAvailableModelsQuery['availableModels'][number];
+
+// ============================================================================
+// QUERIES
+// ============================================================================
+
+export { AvailableModelsDocument as AVAILABLE_MODELS_QUERY } from '../../generated/graphql';
+
+// ============================================================================
+// RESULT TYPES
+// ============================================================================
+
+export type AvailableModelsQueryResult = GeneratedAvailableModelsQuery;
+
+exec
+/bin/zsh -lc "sed -n '1,200p' cloud/apps/web/src/components/settings/models/index.ts" in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+/**
+ * Models Settings Components
+ *
+ * Re-exports all models settings components for clean imports.
+ */
+
+export { ModelsPanel } from './ModelsPanel';
+export { ProviderSection } from './ProviderSection';
+export { ModelRow } from './ModelRow';
+export { ModelFormModal } from './ModelForm';
+export { ProviderSettingsModal } from './ProviderSettingsModal';
+export type * from './types';
+
+exec
+/bin/zsh -lc 'rg -n "ProviderBalanceSyncLog" cloud/apps/web/src cloud/apps/web/tests -S' in /Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur
+ succeeded in 0ms:
+cloud/apps/web/src/generated/graphql.ts:1527:  syncProviderBalance: ProviderBalanceSyncLog;
+cloud/apps/web/src/generated/graphql.ts:2246:export type ProviderBalanceSyncLog = {
+cloud/apps/web/src/generated/graphql.ts:2247:  __typename?: 'ProviderBalanceSyncLog';
+cloud/apps/web/src/api/operations/llm.ts:289:export type ProviderBalanceSyncLog = {
+cloud/apps/web/src/api/operations/llm.ts:303:  syncProviderBalance: ProviderBalanceSyncLog;
+
+codex
+## Findings
+- HIGH [CODE-CONFIRMED] The spec omits the generated web GraphQL artifact, but the web workspace verifies that file in CI. `cloud/apps/web/package.json` runs `codegen` and then fails if `src/generated/graphql.ts` differs, and that generated file still includes `lastSyncedAt`. Removing the field from the hand-written fragment in [cloud/apps/web/src/api/operations/llm.ts](/Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur/cloud/apps/web/src/api/operations/llm.ts) without updating [cloud/apps/web/src/generated/graphql.ts](/Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur/cloud/apps/web/src/generated/graphql.ts) will break the repo’s own `verify` gate. Evidence: [cloud/apps/web/package.json](/Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur/cloud/apps/web/package.json), [cloud/apps/web/src/generated/graphql.ts](/Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur/cloud/apps/web/src/generated/graphql.ts), [cloud/apps/web/src/api/operations/llm.ts](/Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur/cloud/apps/web/src/api/operations/llm.ts).
+
+- MEDIUM [CODE-CONFIRMED] The spec does not define how to log a balance clear to `null`, even though the current UI and mutation both allow it. [cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx](/Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur/cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx) lets the user submit an empty balance, and [cloud/apps/api/src/graphql/mutations/llm.ts](/Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur/cloud/apps/api/src/graphql/mutations/llm.ts) accepts `balance: null`, but [cloud/apps/api/src/graphql/types/llm-provider.ts](/Users/chrislaw/valuerank/.claude/worktrees/adoring-wilbur/cloud/apps/api/src/graphql/types/llm-provider.ts) shows `ProviderBalanceSyncLog` only stores numeric `systemBalanceAtSync`, `enteredBalance`, and `delta`. If the new rule is “log every balance change,” the null path has no valid delta payload and will either need a special case or will produce a bad record. 
+
+## Residual Risks
+- The backend keeps `syncProviderBalance` for backward compatibility, so any older client or script can still create sync logs with the old flow. That is intentional, but it means the API semantics are not fully unified.
+
+- The provider settings save path still uses two separate mutations in the UI. If `updateLlmProvider` succeeds and `setProviderBalance` fails, the provider ends up partially updated. The spec calls this out as a deferred limitation, but the consistency risk remains.
+tokens used
+46,052

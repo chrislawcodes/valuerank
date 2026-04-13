@@ -5,6 +5,7 @@ import {
   type Dimension,
   type Prisma,
 } from '@valuerank/db';
+import { NotFoundError, ValidationError } from '@valuerank/shared';
 import { builder } from '../../builder.js';
 import { DefinitionRef } from '../../types/refs.js';
 import { createAuditLog } from '../../../services/audit/index.js';
@@ -27,7 +28,7 @@ builder.mutationField('createDefinition', (t) =>
 
       const parseResult = zContentObject.safeParse(content);
       if (!parseResult.success) {
-        throw new Error('Content must be a JSON object');
+        throw new ValidationError('Content must be a JSON object');
       }
       const rawContent = parseResult.data;
       const processedContent = ensureSchemaVersion(rawContent);
@@ -37,7 +38,7 @@ builder.mutationField('createDefinition', (t) =>
           where: { id: parentId },
         });
         if (!parent) {
-          throw new Error(`Parent definition not found: ${parentId}`);
+          throw new NotFoundError('Parent definition', parentId);
         }
       }
 
@@ -50,7 +51,7 @@ builder.mutationField('createDefinition', (t) =>
           where: { id: preambleVersionId },
         });
         if (!preambleCheck) {
-          throw new Error(`Preamble version not found: ${preambleVersionId}`);
+          throw new NotFoundError('Preamble version', preambleVersionId);
         }
       }
 
@@ -106,7 +107,7 @@ builder.mutationField('forkDefinition', (t) =>
       });
 
       if (!parent) {
-        throw new Error(`Parent definition not found: ${parentId}`);
+        throw new NotFoundError('Parent definition', parentId);
       }
 
       let finalContent: Prisma.InputJsonValue;
@@ -114,7 +115,7 @@ builder.mutationField('forkDefinition', (t) =>
       if (content !== null && content !== undefined) {
         const parseResult = zContentObject.safeParse(content);
         if (!parseResult.success) {
-          throw new Error('Content must be a JSON object');
+          throw new ValidationError('Content must be a JSON object');
         }
         const contentObj = parseResult.data;
 

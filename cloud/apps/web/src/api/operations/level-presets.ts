@@ -1,4 +1,6 @@
-import { gql } from 'urql';
+// ============================================================================
+// TYPES
+// ============================================================================
 
 export type LevelPresetVersion = {
   id: string;
@@ -22,67 +24,16 @@ export type LevelPresetsQueryData = {
   levelPresets: LevelPreset[];
 };
 
-export const LEVEL_PRESETS_QUERY = gql`
-  query GetLevelPresets {
-    levelPresets {
-      id
-      name
-      updatedAt
-      latestVersion {
-        id
-        version
-        l1
-        l2
-        l3
-        l4
-        l5
-        createdAt
-      }
-    }
-  }
-`;
+// ============================================================================
+// QUERIES
+// ============================================================================
 
-export const CREATE_LEVEL_PRESET_MUTATION = gql`
-  mutation CreateLevelPreset($name: String!, $l1: String!, $l2: String!, $l3: String!, $l4: String!, $l5: String!) {
-    createLevelPreset(name: $name, l1: $l1, l2: $l2, l3: $l3, l4: $l4, l5: $l5) {
-      id
-      name
-      latestVersion {
-        id
-        version
-        l1
-        l2
-        l3
-        l4
-        l5
-      }
-    }
-  }
-`;
+export { GetLevelPresetsDocument as LEVEL_PRESETS_QUERY } from '../../generated/graphql';
 
-export const UPDATE_LEVEL_PRESET_MUTATION = gql`
-  mutation UpdateLevelPreset($id: ID!, $l1: String!, $l2: String!, $l3: String!, $l4: String!, $l5: String!) {
-    updateLevelPreset(id: $id, l1: $l1, l2: $l2, l3: $l3, l4: $l4, l5: $l5) {
-      id
-      name
-      updatedAt
-      latestVersion {
-        id
-        version
-        l1
-        l2
-        l3
-        l4
-        l5
-      }
-    }
-  }
-`;
+// ============================================================================
+// MUTATIONS
+// ============================================================================
 
-export const DELETE_LEVEL_PRESET_MUTATION = gql`
-  mutation DeleteLevelPreset($id: ID!) {
-    deleteLevelPreset(id: $id) {
-      id
-    }
-  }
-`;
+export { CreateLevelPresetDocument as CREATE_LEVEL_PRESET_MUTATION } from '../../generated/graphql';
+export { UpdateLevelPresetDocument as UPDATE_LEVEL_PRESET_MUTATION } from '../../generated/graphql';
+export { DeleteLevelPresetDocument as DELETE_LEVEL_PRESET_MUTATION } from '../../generated/graphql';

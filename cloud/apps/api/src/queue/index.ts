@@ -25,7 +25,6 @@ export type {
   JobOptions,
   ProbeScenarioJobData,
   AnalyzeBasicJobData,
-  AnalyzeDeepJobData,
   RunProgress,
   PriorityLevel,
   TaskResult,

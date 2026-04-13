@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation } from 'urql';
+import { createLogger } from '@valuerank/shared';
 import { ArrowLeft, FileText, GitBranch } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Loading } from '../../components/ui/Loading';
@@ -38,6 +39,8 @@ import { DeleteDefinitionModal } from './DeleteDefinitionModal';
 import { RunFormModal } from './RunFormModal';
 import { UnforkDefinitionModal } from './UnforkDefinitionModal';
 import { getDefinitionMethodology, getDefinitionMethodologyLabel } from '../../utils/methodology';
+
+const log = createLogger('definition-detail');
 
 export function DefinitionDetail() {
   const navigate = useNavigate();
@@ -165,8 +168,7 @@ export function DefinitionDetail() {
       navigate('/definitions');
     } catch (err) {
       setShowDeleteConfirm(false);
-      // eslint-disable-next-line no-console
-      console.error('Failed to delete definition:', err);
+      log.error({ err }, 'Failed to delete definition');
     }
   };
 
@@ -178,14 +180,13 @@ export function DefinitionDetail() {
       refetch();
     } catch (err) {
       setShowUnforkConfirm(false);
-      // eslint-disable-next-line no-console
-      console.error('Failed to unfork definition:', err);
+      log.error({ err }, 'Failed to unfork definition');
     }
   };
 
   const handleStartRun = () => {
     if (!definition) return;
-    if (methodology?.family === 'job-choice') {
+    if (methodology?.pair_key != null) {
       navigate(`/definitions/${definition.id}/start-paired-batch`, {
         state: {
           returnLabel: 'Back to Vignette',
@@ -316,9 +317,9 @@ export function DefinitionDetail() {
   const resolvedContent = definition.resolvedContent ?? definition.content;
   const methodology = getDefinitionMethodology(resolvedContent);
   const methodologyLabel = getDefinitionMethodologyLabel(resolvedContent, definition.domain?.name ?? null);
-  const startLabel = methodology?.family === 'job-choice' ? 'Start Paired Batch' : 'Start Trial';
+  const startLabel = methodology?.pair_key != null ? 'Start Paired Batch' : 'Start Trial';
   const handleEdit = () => {
-    if (methodology?.family === 'job-choice') {
+    if (methodology?.pair_key != null) {
       navigate(`/paired/${definition.id}/edit`);
       return;
     }

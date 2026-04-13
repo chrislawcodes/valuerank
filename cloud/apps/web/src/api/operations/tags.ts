@@ -1,13 +1,24 @@
-import { gql } from 'urql';
+import type {
+  TagsQuery as GeneratedTagsQuery,
+  CreateTagMutation as GeneratedCreateTagMutation,
+  DeleteTagMutation as GeneratedDeleteTagMutation,
+  AddTagToDefinitionMutation as GeneratedAddTagToDefinitionMutation,
+  RemoveTagFromDefinitionMutation as GeneratedRemoveTagFromDefinitionMutation,
+  CreateAndAssignTagMutation as GeneratedCreateAndAssignTagMutation,
+  TagsQueryVariables as GeneratedTagsQueryVariables,
+} from '../../generated/graphql';
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
+// Manual type — the base Tag shape used across the app.
+// Some queries return tags with only { id, name } (e.g. nested in definitions),
+// while the Tags query includes definitionCount. Keep optional to stay compatible.
 export type Tag = {
   id: string;
   name: string;
-  createdAt: string;
+  createdAt?: string;
   definitionCount?: number;
 };
 
@@ -15,147 +26,31 @@ export type Tag = {
 // QUERIES
 // ============================================================================
 
-// List all tags
-export const TAGS_QUERY = gql`
-  query Tags($search: String, $limit: Int) {
-    tags(search: $search, limit: $limit) {
-      id
-      name
-      createdAt
-      definitionCount
-    }
-  }
-`;
-
-// Single tag
-export const TAG_QUERY = gql`
-  query Tag($id: ID!) {
-    tag(id: $id) {
-      id
-      name
-      createdAt
-      definitionCount
-    }
-  }
-`;
+export { TagsDocument as TAGS_QUERY } from '../../generated/graphql';
 
 // ============================================================================
 // MUTATIONS
 // ============================================================================
 
-// Create a new tag
-export const CREATE_TAG_MUTATION = gql`
-  mutation CreateTag($name: String!) {
-    createTag(name: $name) {
-      id
-      name
-      createdAt
-    }
-  }
-`;
-
-// Delete a tag
-export const DELETE_TAG_MUTATION = gql`
-  mutation DeleteTag($id: String!) {
-    deleteTag(id: $id) {
-      success
-      affectedDefinitions
-    }
-  }
-`;
-
-// Add tag to definition
-export const ADD_TAG_TO_DEFINITION_MUTATION = gql`
-  mutation AddTagToDefinition($definitionId: String!, $tagId: String!) {
-    addTagToDefinition(definitionId: $definitionId, tagId: $tagId) {
-      id
-      tags {
-        id
-        name
-      }
-    }
-  }
-`;
-
-// Remove tag from definition
-export const REMOVE_TAG_FROM_DEFINITION_MUTATION = gql`
-  mutation RemoveTagFromDefinition($definitionId: String!, $tagId: String!) {
-    removeTagFromDefinition(definitionId: $definitionId, tagId: $tagId) {
-      id
-      tags {
-        id
-        name
-      }
-    }
-  }
-`;
-
-// Create and assign tag in one operation
-export const CREATE_AND_ASSIGN_TAG_MUTATION = gql`
-  mutation CreateAndAssignTag($definitionId: String!, $tagName: String!) {
-    createAndAssignTag(definitionId: $definitionId, tagName: $tagName) {
-      id
-      tags {
-        id
-        name
-      }
-    }
-  }
-`;
+export { CreateTagDocument as CREATE_TAG_MUTATION } from '../../generated/graphql';
+export { DeleteTagDocument as DELETE_TAG_MUTATION } from '../../generated/graphql';
+export { AddTagToDefinitionDocument as ADD_TAG_TO_DEFINITION_MUTATION } from '../../generated/graphql';
+export { RemoveTagFromDefinitionDocument as REMOVE_TAG_FROM_DEFINITION_MUTATION } from '../../generated/graphql';
+export { CreateAndAssignTagDocument as CREATE_AND_ASSIGN_TAG_MUTATION } from '../../generated/graphql';
 
 // ============================================================================
 // QUERY RESULT TYPES
 // ============================================================================
 
-export type TagsQueryVariables = {
-  search?: string;
-  limit?: number;
-};
-
-export type TagsQueryResult = {
-  tags: Tag[];
-};
-
-export type TagQueryVariables = {
-  id: string;
-};
-
-export type TagQueryResult = {
-  tag: Tag | null;
-};
+export type TagsQueryVariables = GeneratedTagsQueryVariables;
+export type TagsQueryResult = GeneratedTagsQuery;
 
 // ============================================================================
 // MUTATION RESULT TYPES
 // ============================================================================
 
-export type CreateTagResult = {
-  createTag: Tag;
-};
-
-export type DeleteTagResult = {
-  deleteTag: {
-    success: boolean;
-    affectedDefinitions: number;
-  };
-};
-
-export type AddTagToDefinitionResult = {
-  addTagToDefinition: {
-    id: string;
-    tags: Tag[];
-  };
-};
-
-export type RemoveTagFromDefinitionResult = {
-  removeTagFromDefinition: {
-    id: string;
-    tags: Tag[];
-  };
-};
-
-export type CreateAndAssignTagResult = {
-  createAndAssignTag: {
-    id: string;
-    tags: Tag[];
-  };
-};
+export type CreateTagResult = GeneratedCreateTagMutation;
+export type DeleteTagResult = GeneratedDeleteTagMutation;
+export type AddTagToDefinitionResult = GeneratedAddTagToDefinitionMutation;
+export type RemoveTagFromDefinitionResult = GeneratedRemoveTagFromDefinitionMutation;
+export type CreateAndAssignTagResult = GeneratedCreateAndAssignTagMutation;

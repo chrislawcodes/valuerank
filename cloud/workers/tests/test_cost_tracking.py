@@ -8,6 +8,7 @@ from common.cost import (
     calculate_cost,
     create_cost_snapshot,
 )
+from common.llm_adapters import LLMResponse
 
 
 class TestModelCost:
@@ -110,6 +111,22 @@ class TestCostSnapshot:
         assert result["inputTokens"] == 1000
         assert result["outputTokens"] == 500
         assert result["estimatedCost"] == 0.0075
+        assert "reasoningTokens" not in result
+
+    def test_to_dict_with_reasoning_tokens(self) -> None:
+        """Test serialization includes reasoning tokens."""
+        snapshot = CostSnapshot(
+            cost_input_per_million=2.5,
+            cost_output_per_million=10.0,
+            input_tokens=1000,
+            output_tokens=500,
+            estimated_cost=0.0075,
+            reasoning_tokens=300,
+        )
+
+        result = snapshot.to_dict()
+
+        assert result["reasoningTokens"] == 300
 
     def test_to_dict_rounding(self) -> None:
         """Test that estimated cost is rounded to 6 decimal places."""
@@ -141,6 +158,20 @@ class TestCreateCostSnapshot:
         assert snapshot.output_tokens == 500
         assert snapshot.cost_input_per_million == 2.5
         assert snapshot.cost_output_per_million == 10.0
+        assert abs(snapshot.estimated_cost - 0.0075) < 0.0001
+        assert snapshot.reasoning_tokens is None
+
+    def test_create_cost_snapshot_stores_reasoning_tokens(self) -> None:
+        """Test that create_cost_snapshot stores reasoning tokens."""
+        snapshot = create_cost_snapshot(
+            input_tokens=1000,
+            output_tokens=500,
+            cost_input_per_million=2.5,
+            cost_output_per_million=10.0,
+            reasoning_tokens=300,
+        )
+
+        assert snapshot.reasoning_tokens == 300
         assert abs(snapshot.estimated_cost - 0.0075) < 0.0001
 
     def test_create_cost_snapshot_with_large_values(self) -> None:
@@ -184,3 +215,80 @@ class TestCostIntegration:
         assert isinstance(result["inputTokens"], int)
         assert isinstance(result["outputTokens"], int)
         assert isinstance(result["estimatedCost"], (int, float))
+
+
+class TestReasoningTokenTracking:
+    """Tests for reasoning token serialization and probe accumulation."""
+
+    def test_llm_response_to_dict_includes_reasoning_tokens(self) -> None:
+        """Test LLMResponse serialization includes reasoning tokens when present."""
+        response = LLMResponse(
+            content="Hello",
+            reasoning_tokens=400,
+            reasoning_tokens_included_in_output=False,
+        )
+
+        result = response.to_dict()
+
+        assert result["reasoningTokens"] == 400
+        assert "reasoning_tokens_included_in_output" not in result
+
+    def test_llm_response_to_dict_omits_reasoning_tokens_when_missing(self) -> None:
+        """Test LLMResponse serialization omits missing reasoning tokens."""
+        response = LLMResponse(content="Hello")
+
+        result = response.to_dict()
+
+        assert "reasoningTokens" not in result
+
+    def test_probe_accumulation_counts_reasoning_tokens_separately(self) -> None:
+        """Test probe accumulation for xAI-style responses (reasoning not in output)."""
+        from probe import Transcript
+
+        transcript = Transcript()
+        response = LLMResponse(
+            content="Answer",
+            output_tokens=100,
+            reasoning_tokens=400,
+            reasoning_tokens_included_in_output=False,
+        )
+
+        transcript.accumulate_response(response)
+
+        assert transcript.total_output_tokens == 500
+        assert transcript.total_reasoning_tokens == 400
+
+    def test_probe_accumulation_does_not_double_count_included_reasoning_tokens(self) -> None:
+        """Test probe accumulation for OpenAI-style responses (reasoning already in output)."""
+        from probe import Transcript
+
+        transcript = Transcript()
+        response = LLMResponse(
+            content="Answer",
+            output_tokens=500,
+            reasoning_tokens=400,
+            reasoning_tokens_included_in_output=True,
+        )
+
+        transcript.accumulate_response(response)
+
+        assert transcript.total_output_tokens == 500
+        assert transcript.total_reasoning_tokens == 400
+
+    def test_probe_accumulation_bills_reasoning_tokens_when_output_is_zero(self) -> None:
+        """Test reasoning tokens are billed even when visible output is zero (e.g. Google blocked)."""
+        from probe import Transcript
+
+        transcript = Transcript()
+        response = LLMResponse(
+            content="",
+            output_tokens=0,
+            reasoning_tokens=100,
+            reasoning_tokens_included_in_output=False,
+        )
+
+        transcript.accumulate_response(response)
+
+        # reasoning tokens (not included in output) must be added to total_output_tokens for billing
+        assert transcript.total_output_tokens == 100
+        assert transcript.total_reasoning_tokens == 100

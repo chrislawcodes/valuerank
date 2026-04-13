@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/workers/common/llm_adapters/providers/deepseek.py",
+  "source_artifact_sha256": "1f818e8b52b7d9b773c7b7b17a055fffc6ecbabd8201b66cea6468a89677465b",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/reasoning-token-costs/reviews/spec.gemini.requirements-adversarial.review.context2.narrowed.txt",
+  "narrowed_artifact_sha256": "f5b43a36a476551a28d23cc857ec705b446d62e3e3daeab01658b91f8d98b303",
+  "strategy": "head-tail-numbered-lines"
+}

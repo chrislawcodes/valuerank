@@ -1,0 +1,25 @@
+mutation CreatePairedVignette($input: CreatePairedVignetteInput!) {
+  createPairedVignette(input: $input) {
+    definitionA {
+      id
+      name
+    }
+    definitionB {
+      id
+      name
+    }
+  }
+}
+
+mutation UpdatePairedVignette($input: UpdatePairedVignetteInput!) {
+  updatePairedVignette(input: $input) {
+    definitionA {
+      id
+      name
+    }
+    definitionB {
+      id
+      name
+    }
+  }
+}

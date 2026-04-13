@@ -157,20 +157,4 @@ describe('Provider Health Service', () => {
     });
   });
 
-  describe('clearProviderHealthCache', () => {
-    it('clears cache and forces new health check', async () => {
-      mockFetch.mockResolvedValue({ ok: true, status: 200, text: () => Promise.resolve('') });
-
-      const result1 = await getProviderHealth();
-      clearProviderHealthCache();
-
-      // Wait a bit
-      await new Promise((r) => setTimeout(r, 10));
-
-      const result2 = await getProviderHealth();
-
-      // Times should be different after cache clear
-      expect(result2.checkedAt.getTime()).toBeGreaterThan(result1.checkedAt.getTime());
-    });
-  });
 });

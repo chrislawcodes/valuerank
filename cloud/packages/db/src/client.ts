@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { softDeleteExtension } from './extensions/soft-delete.js';
 
 /**
  * CRITICAL SAFEGUARD: Prevent tests from accidentally using production database
@@ -45,12 +46,18 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-export const db =
+const basePrisma =
   globalForPrisma.prisma ??
   new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   });
 
 if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = db;
+  globalForPrisma.prisma = basePrisma;
 }
+
+// Apply soft-delete extension at runtime. The cast preserves the PrismaClient type
+// for consumers — $extends changes the type in ways that break $transaction callbacks
+// and TransactionClient parameters across the codebase. The runtime behavior is correct;
+// only the type is widened back to PrismaClient.
+export const db = basePrisma.$extends(softDeleteExtension) as unknown as PrismaClient;

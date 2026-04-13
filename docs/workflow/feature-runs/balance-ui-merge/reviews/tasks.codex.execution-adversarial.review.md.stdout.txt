@@ -1,0 +1,13 @@
+## Findings
+1. **[UNVERIFIED] Medium** The backend plan still has a race between the pre-transaction branch decision and the in-transaction reread. `Branch B` decides “unchanged” from the first `existing` read, but it does not recheck inside the transaction. If another write lands between those reads, this plan can wrongly skip the sync log or skip the update entirely for a changed balance.
+
+2. **Medium** `Branch A` explicitly suppresses the sync log for `balanceDecimal === null`, even though the slice goal says to “log delta on every balance set.” That means explicit clears are not audited, so the history becomes incomplete exactly on one of the state changes users can make.
+
+3. **[UNVERIFIED] Medium** The frontend display proposal assumes `provider.balance` is a number and calls `toFixed(2)` directly. If the generated GraphQL type exposes the balance as a string or decimal wrapper, this will either fail at runtime or require extra conversion that the task does not mention.
+
+4. **Low** The null path has no unchanged guard. Repeatedly setting a provider to `null` will still write to the database every time, unlike the non-null unchanged branch. That creates unnecessary writes and can churn `updatedAt` or other side effects for a no-op clear.
+
+## Residual Risks
+- I could not verify the actual GraphQL scalar shape, transaction isolation, or model hooks without code context, so the balance formatting and concurrency behavior may need adjustment after implementation.
+- The grep-based “no other call sites” check reduces risk, but it does not fully rule out indirect coupling through shared fragments, generated types, or helper code outside the obvious call sites.
+- The task set does not add any test for concurrent balance updates, so even a correct single-threaded implementation could still log the wrong delta under contention.

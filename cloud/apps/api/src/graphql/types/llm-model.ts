@@ -5,6 +5,7 @@
  */
 
 import { db } from '@valuerank/db';
+import { AppError } from '@valuerank/shared';
 import { LlmModelRef, LlmProviderRef } from './refs.js';
 import { UserRef } from './user.js';
 import { getAvailableProviders } from '../../config/models.js';
@@ -63,7 +64,7 @@ LlmModelRef.implement({
           where: { id: model.providerId },
         });
         if (provider === null || provider === undefined) {
-          throw new Error(`Provider not found for model ${model.id}`);
+          throw new AppError(`Provider not found for model ${model.id}`, 'NOT_FOUND', 404);
         }
         return provider;
       },

@@ -20,7 +20,7 @@ export function DefinitionContentView({ content, preambleVersion }: DefinitionCo
   }
 
   const { preamble = '', template = '', dimensions = [] } = content;
-  const isJobChoice = content.methodology?.family === 'job-choice';
+  const isPaired = content.methodology?.pair_key != null;
   const sharedScaleSignature = dimensions[0] == null
     ? null
     : JSON.stringify({
@@ -33,7 +33,7 @@ export function DefinitionContentView({ content, preambleVersion }: DefinitionCo
         values: dimensions[0].values ?? null,
       });
   const hasSharedScale =
-    isJobChoice &&
+    isPaired &&
     dimensions.length > 0 &&
     sharedScaleSignature != null &&
     dimensions.every((dimension) =>

@@ -231,7 +231,14 @@ export function formatTranscriptSummary(
  * Analysis output structure (stored in AnalysisResult.output)
  */
 type AnalysisOutput = {
-  perModel?: Record<string, { sampleSize?: number; meanScore?: number; stdDev?: number }>;
+  perModel?: Record<string, {
+    sampleSize?: number;
+    overall?: { mean?: number; stdDev?: number; min?: number; max?: number };
+    /** @deprecated Legacy field — use overall.mean instead */
+    meanScore?: number;
+    /** @deprecated Legacy field — use overall.stdDev instead */
+    stdDev?: number;
+  }>;
   modelAgreement?: { averageCorrelation?: number; outlierModels?: string[] };
   mostContestedScenarios?: Array<{ scenarioId: string; variance: number }>;
   insights?: string[];
@@ -302,10 +309,13 @@ export function formatRunSummary(
   if (output.perModel) {
     for (const [modelId, stats] of Object.entries(output.perModel)) {
       if (stats !== undefined) {
+        const overall = stats.overall;
         perModel[modelId] = {
           sampleSize: typeof stats.sampleSize === 'number' ? stats.sampleSize : 0,
-          meanScore: typeof stats.meanScore === 'number' ? stats.meanScore : 0,
-          stdDev: typeof stats.stdDev === 'number' ? stats.stdDev : 0,
+          meanScore: typeof overall?.mean === 'number' ? overall.mean
+            : typeof stats.meanScore === 'number' ? stats.meanScore : 0,
+          stdDev: typeof overall?.stdDev === 'number' ? overall.stdDev
+            : typeof stats.stdDev === 'number' ? stats.stdDev : 0,
         };
       }
     }

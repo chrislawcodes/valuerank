@@ -8,7 +8,7 @@
 import crypto from 'node:crypto';
 import { db } from '@valuerank/db';
 import type { Prisma } from '@valuerank/db';
-import { createLogger } from '@valuerank/shared';
+import { createLogger, NotFoundError } from '@valuerank/shared';
 
 const log = createLogger('services:domain-config:snapshot');
 
@@ -38,7 +38,7 @@ export async function ensureDomainConfigSnapshot(
   });
 
   if (!domain) {
-    throw new Error(`Domain not found: ${domainId}`);
+    throw new NotFoundError('Domain', domainId);
   }
 
   // Fetch latest ValueStatementVersion IDs for all statements in this domain

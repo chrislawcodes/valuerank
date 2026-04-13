@@ -1,4 +1,5 @@
 import { db } from '@valuerank/db';
+import { ValidationError } from '@valuerank/shared';
 
 /**
  * Generate a version label based on Pacific Time.
@@ -42,34 +43,6 @@ export type PreambleDto = {
     createdAt: Date;
     updatedAt: Date;
 };
-
-/**
- * List all preambles with their LATEST version.
- */
-export async function listPreambles(): Promise<PreambleDto[]> {
-    const preambles = await db.preamble.findMany({
-        include: {
-            versions: {
-                orderBy: { createdAt: 'desc' },
-                take: 1,
-            },
-        },
-        orderBy: { updatedAt: 'desc' },
-    });
-
-    return preambles.map(p => ({
-        id: p.id,
-        name: p.name,
-        latestVersion: p.versions[0] ? {
-            id: p.versions[0].id,
-            version: p.versions[0].version,
-            content: p.versions[0].content,
-            createdAt: p.versions[0].createdAt,
-        } : null,
-        createdAt: p.createdAt,
-        updatedAt: p.updatedAt,
-    }));
-}
 
 /**
  * Create a new preamble with initial version.
@@ -148,7 +121,7 @@ export async function deletePreamble(id: string) {
     });
 
     if (usageCount > 0) {
-        throw new Error(`Cannot delete preamble: used by ${usageCount} active definition(s). Please unassign it first.`);
+        throw new ValidationError(`Cannot delete preamble: used by ${usageCount} active definition(s). Please unassign it first.`);
     }
 
     return await db.preamble.delete({

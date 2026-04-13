@@ -1,4 +1,5 @@
 import { db } from '@valuerank/db';
+import { NotFoundError } from '@valuerank/shared';
 import { selectLatestDefinitionPerLineage, hydrateDefinitionAncestors } from '../../../../services/definition-lineage.js';
 import type { DefinitionRow } from './types.js';
 
@@ -14,7 +15,7 @@ export async function resolveDefinitionsForLaunch(params: {
   const { domainId, requestedDefinitionIds } = params;
 
   const domain = await db.domain.findUnique({ where: { id: domainId } });
-  if (!domain) throw new Error(`Domain not found: ${domainId}`);
+  if (!domain) throw new NotFoundError('Domain', domainId);
 
   const definitions: DefinitionRow[] = await db.definition.findMany({
     where: { domainId, deletedAt: null },

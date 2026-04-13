@@ -1,5 +1,6 @@
-import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
+import { NotFoundError, ValidationError } from '@valuerank/shared';
+import { builder } from '../builder.js';
 import { DefinitionRef } from '../types/refs.js';
 import { createAuditLog } from '../../services/audit/index.js';
 
@@ -33,7 +34,7 @@ builder.mutationField('addTagToDefinition', (t) =>
       });
 
       if (!definition || definition.deletedAt !== null) {
-        throw new Error(`Definition not found: ${definitionId}`);
+        throw new NotFoundError('Definition', definitionId);
       }
 
       // Verify tag exists
@@ -42,7 +43,7 @@ builder.mutationField('addTagToDefinition', (t) =>
       });
 
       if (!tag) {
-        throw new Error(`Tag not found: ${tagId}`);
+        throw new NotFoundError('Tag', tagId);
       }
 
       // Check if already assigned
@@ -101,7 +102,7 @@ builder.mutationField('removeTagFromDefinition', (t) =>
       });
 
       if (!definition || definition.deletedAt !== null) {
-        throw new Error(`Definition not found: ${definitionId}`);
+        throw new NotFoundError('Definition', definitionId);
       }
 
       // Try to delete the association (will fail silently if doesn't exist)
@@ -156,7 +157,7 @@ builder.mutationField('createAndAssignTag', (t) =>
 
       // Validate name format
       if (!TAG_NAME_REGEX.test(normalizedName)) {
-        throw new Error('Tag name must contain only lowercase letters, numbers, hyphens, and underscores');
+        throw new ValidationError('Tag name must contain only lowercase letters, numbers, hyphens, and underscores');
       }
 
       // Verify definition exists and is not deleted
@@ -165,7 +166,7 @@ builder.mutationField('createAndAssignTag', (t) =>
       });
 
       if (!definition || definition.deletedAt !== null) {
-        throw new Error(`Definition not found: ${definitionId}`);
+        throw new NotFoundError('Definition', definitionId);
       }
 
       // Find or create the tag

@@ -370,12 +370,57 @@ builder.mutationField('setProviderBalance', (t) =>
           ? new Prisma.Decimal(args.balance)
           : null;
 
-      const provider = await db.llmProvider.update({
-        where: { id: args.providerId },
-        data: { balance: balanceDecimal },
+      if (balanceDecimal === null) {
+        const provider = await db.llmProvider.update({
+          where: { id: args.providerId },
+          data: { balance: null },
+        });
+
+        ctx.log.info({ providerId: provider.id, balance: args.balance }, 'Provider balance set');
+
+        void createAuditLog({
+          action: 'ACTION',
+          entityType: 'LlmProvider',
+          entityId: provider.id,
+          userId: ctx.user?.id ?? null,
+          metadata: { action: 'set_provider_balance', balance: args.balance },
+        });
+
+        return provider;
+      }
+
+      if (existing.balance !== null && existing.balance.equals(balanceDecimal)) {
+        return existing;
+      }
+
+      const provider = await db.$transaction(async (tx) => {
+        const current = await tx.llmProvider.findUnique({ where: { id: args.providerId } });
+        if (!current) {
+          throw new NotFoundError('LlmProvider', args.providerId);
+        }
+
+        const systemBalanceAtSync = current.balance ?? new Prisma.Decimal(0);
+        const delta = balanceDecimal.minus(systemBalanceAtSync);
+
+        await tx.providerBalanceSyncLog.create({
+          data: {
+            providerId: args.providerId,
+            systemBalanceAtSync,
+            enteredBalance: balanceDecimal,
+            delta,
+            createdByUserId: ctx.user?.id ?? null,
+          },
+        });
+
+        const updated = await tx.llmProvider.update({
+          where: { id: args.providerId },
+          data: { balance: balanceDecimal },
+        });
+
+        return updated;
       });
 
-      ctx.log.info({ providerId: provider.id, balance: args.balance }, 'Provider balance set');
+      ctx.log.info({ providerId: provider.id, balance: balanceDecimal.toNumber() }, 'Provider balance set');
 
       void createAuditLog({
         action: 'ACTION',

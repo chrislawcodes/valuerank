@@ -7,10 +7,12 @@ import { useDomains } from '../hooks/useDomains';
 
 type FolderKey = string;
 
+const LAST_DOMAIN_KEY = 'valuerank:lastSelectedDomainId';
+
 export function Domains() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialSelectedFolder = searchParams.get('domainId');
-  const [selectedFolder, setSelectedFolder] = useState<FolderKey>(initialSelectedFolder ?? '');
+  const initialSelectedFolder = searchParams.get('domainId') ?? localStorage.getItem(LAST_DOMAIN_KEY) ?? '';
+  const [selectedFolder, setSelectedFolder] = useState<FolderKey>(initialSelectedFolder);
   const coverageRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -20,11 +22,13 @@ export function Domains() {
 
   const selectedDomain = domains.find((d) => d.id === selectedFolder) ?? null;
 
-  // Auto-select first domain when list loads
+  // Auto-select best domain when list loads: last picked > first in list
   useEffect(() => {
-    if (selectedFolder === '' && domains.length > 0 && domains[0] != null) {
-      setSelectedFolder(domains[0].id);
-    }
+    if (domains.length === 0) return;
+    if (selectedFolder !== '' && domains.some((d) => d.id === selectedFolder)) return;
+    const lastId = localStorage.getItem(LAST_DOMAIN_KEY);
+    const lastDomain = lastId != null ? domains.find((d) => d.id === lastId) : null;
+    setSelectedFolder(lastDomain?.id ?? domains[0]?.id ?? '');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [domains]);
 
@@ -54,7 +58,10 @@ export function Domains() {
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:flex-1">
             <select
               value={selectedFolder}
-              onChange={(e) => setSelectedFolder(e.target.value)}
+              onChange={(e) => {
+                setSelectedFolder(e.target.value);
+                localStorage.setItem(LAST_DOMAIN_KEY, e.target.value);
+              }}
               className="min-w-[220px] border border-gray-300 rounded px-3 py-2 text-sm bg-white"
             >
               {domains.map((d) => (
@@ -63,7 +70,7 @@ export function Domains() {
             </select>
             {selectedDomain != null && (
               <Link
-                to={`/domains/${selectedDomain.id}/run-trials`}
+                to={`/domains/start/${selectedDomain.id}`}
                 className="inline-flex items-center justify-center rounded-lg border border-teal-600 bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 md:ml-auto"
               >
                 Add Paired Batches for all Vignettes

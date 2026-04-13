@@ -68,12 +68,14 @@ type TranscriptOutput = {
     estimatedCost: number | null;
     createdAt: string;
     turns: TranscriptTurn[];
+    totalReasoningTokens?: number;
     costSnapshot?: {
       inputTokens: number;
       outputTokens: number;
       estimatedCost: number;
       costInputPerMillion: number;
       costOutputPerMillion: number;
+      reasoningTokens?: number;
     };
   };
 };
@@ -121,6 +123,7 @@ type CostSnapshot = {
   estimatedCost: number;
   costInputPerMillion: number;
   costOutputPerMillion: number;
+  reasoningTokens?: number;
 };
 
 /**
@@ -141,6 +144,7 @@ function extractCostSnapshot(content: unknown): CostSnapshot | undefined {
     estimatedCost: typeof cs.estimatedCost === 'number' ? cs.estimatedCost : 0,
     costInputPerMillion: typeof cs.costInputPerMillion === 'number' ? cs.costInputPerMillion : 0,
     costOutputPerMillion: typeof cs.costOutputPerMillion === 'number' ? cs.costOutputPerMillion : 0,
+    ...(typeof cs.reasoningTokens === 'number' && { reasoningTokens: cs.reasoningTokens }),
   };
 }
 
@@ -233,6 +237,10 @@ Limited to 10KB token budget.`,
         } else {
           const turns = extractTurns(transcript.content);
           const costSnapshot = extractCostSnapshot(transcript.content);
+          const contentObj = (transcript.content !== null && typeof transcript.content === 'object' && !Array.isArray(transcript.content))
+            ? (transcript.content as Record<string, unknown>)
+            : {};
+          const totalReasoningTokens = typeof contentObj.totalReasoningTokens === 'number' ? contentObj.totalReasoningTokens : undefined;
 
           data = {
             runId: transcript.runId,
@@ -248,6 +256,7 @@ Limited to 10KB token budget.`,
               estimatedCost: transcript.estimatedCost !== null && transcript.estimatedCost !== undefined ? Number(transcript.estimatedCost) : null,
               createdAt: transcript.createdAt.toISOString(),
               turns,
+              ...(totalReasoningTokens !== undefined && { totalReasoningTokens }),
               ...(costSnapshot !== undefined && costSnapshot !== null && { costSnapshot }),
             },
           };

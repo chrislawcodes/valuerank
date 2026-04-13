@@ -94,6 +94,8 @@ class XAIAdapter(BaseLLMAdapter):
             choice = data["choices"][0]
             content = choice["message"]["content"]
             usage = data.get("usage", {})
+            completion_details = usage.get("completion_tokens_details") or {}
+            reasoning_tokens = completion_details.get("reasoning_tokens")
 
             # Capture provider metadata (OpenAI-compatible format)
             raw_finish_reason = choice.get("finish_reason")
@@ -113,6 +115,8 @@ class XAIAdapter(BaseLLMAdapter):
                 output_tokens=usage.get("completion_tokens"),
                 model_version=data.get("model"),
                 provider_metadata=provider_metadata,
+                reasoning_tokens=reasoning_tokens,
+                reasoning_tokens_included_in_output=False,
             )
         except (KeyError, IndexError, TypeError) as exc:
             raise LLMError(

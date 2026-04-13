@@ -5,7 +5,7 @@ import { Button } from '../ui/Button';
 import { useClickOutside } from '../../hooks/useClickOutside';
 
 const utilityTabs: { name: string; path: string; icon: React.ComponentType<{ className?: string }>; aliases?: string[] }[] = [
-  { name: 'Status', path: '/status', icon: Activity, aliases: ['/run-trials'] },
+  { name: 'Status', path: '/status', icon: Activity, aliases: ['/domains/status'] },
 ];
 
 type MenuLinkItem = {
@@ -35,17 +35,8 @@ const domainMenuItems: MenuItem[] = [
 
 const archiveMenuItems: MenuItem[] = [
   { name: 'Overview', path: '/archive', aliases: [] as string[] },
-  { name: 'Legacy Survey Work', path: '/archive/surveys', aliases: ['/survey'] },
-  { name: 'Legacy Survey Results', path: '/archive/survey-results', aliases: ['/survey-results'] },
-  {
-    name: 'Validation',
-    children: [
-      { name: 'Overview', path: '/validation' },
-      { name: 'Temp=0 Effect', path: '/assumptions/temp-zero-effect' },
-      { name: 'Legacy Analysis', path: '/assumptions/analysis' },
-      { name: 'Analysis (old v1)', path: '/assumptions/analysis-v1' },
-    ],
-  },
+  { name: 'Legacy Survey Work', path: '/archive/surveys' },
+  { name: 'Legacy Survey Results', path: '/archive/survey-results' },
 ];
 
 const settingsMenuItems: MenuItem[] = [

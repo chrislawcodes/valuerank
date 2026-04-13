@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from 'urql';
 import { Plus, Edit2, Trash2, Clock, RotateCcw } from 'lucide-react';
+import { createLogger } from '@valuerank/shared';
 import { Button } from '../components/ui/Button';
+
+const log = createLogger('preambles');
 
 const PREAMBLES_QUERY = `
   query GetPreambles {
@@ -121,8 +124,7 @@ export function Preambles() {
             setIsModalOpen(false);
             reexecuteQuery({ requestPolicy: 'network-only' });
         } catch (err) {
-            // eslint-disable-next-line no-console
-            console.error(err);
+            log.error({ err }, 'Failed to save preamble');
             alert('Failed to save preamble');
         } finally {
             setIsSubmitting(false);

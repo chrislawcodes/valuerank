@@ -1,3 +1,5 @@
+import { db } from '@valuerank/db';
+
 export type TranscriptKey = {
   scenarioId: string;
   modelId: string;
@@ -44,4 +46,50 @@ export function findMissingTranscriptKeys({
   }
 
   return missing;
+}
+
+/**
+ * Finds which (scenarioId × modelId × sampleIndex) tuples are missing transcripts
+ * for a given run, by reading the run's config and scenario selections from the DB.
+ *
+ * Returns [] if the run does not exist or has no expected probes.
+ */
+export async function findMissingProbes(runId: string): Promise<TranscriptKey[]> {
+  const run = await db.run.findUnique({
+    where: { id: runId },
+    select: {
+      config: true,
+      scenarioSelections: {
+        select: { scenarioId: true },
+      },
+    },
+  });
+
+  if (run === null) {
+    return [];
+  }
+
+  const config =
+    run.config != null && typeof run.config === 'object'
+      ? (run.config as { models?: string[]; samplesPerScenario?: number })
+      : {};
+  const models = config.models ?? [];
+  const samplesPerScenario = normalizeSamplesPerScenario(config.samplesPerScenario);
+  const scenarioIds = run.scenarioSelections.map((s) => s.scenarioId);
+
+  const existingTranscripts = await db.transcript.findMany({
+    where: { runId },
+    select: { scenarioId: true, modelId: true, sampleIndex: true },
+  });
+
+  const existing = existingTranscripts
+    .filter((t): t is TranscriptKey => t.scenarioId !== null)
+    .map(({ scenarioId, modelId, sampleIndex }) => ({ scenarioId, modelId, sampleIndex }));
+
+  return findMissingTranscriptKeys({
+    scenarioIds,
+    models,
+    samplesPerScenario,
+    existingTranscripts: existing,
+  });
 }

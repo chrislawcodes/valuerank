@@ -1,4 +1,5 @@
 import { db, Prisma } from '@valuerank/db';
+import { ValidationError } from '@valuerank/shared';
 
 export type DefinitionFilterArgs = {
   rootOnly?: boolean | null;
@@ -93,7 +94,7 @@ function parseOptionalId(value: string | number | null | undefined, argName: str
   if (value === undefined || value === null) return null;
   const id = String(value).trim();
   if (id === '') {
-    throw new Error(`${argName} cannot be an empty string. Use null to indicate no selection.`);
+    throw new ValidationError(`${argName} cannot be an empty string. Use null to indicate no selection.`);
   }
   return id;
 }
@@ -116,7 +117,7 @@ export async function buildDefinitionWhere(args: DefinitionFilterArgs): Promise<
   }
   if (args.withoutDomain === true) {
     if (where.domainId !== undefined) {
-      throw new Error('Cannot combine domainId and withoutDomain filters');
+      throw new ValidationError('Cannot combine domainId and withoutDomain filters');
     }
     where.domainId = null;
   }

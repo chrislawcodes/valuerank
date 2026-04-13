@@ -1,0 +1,8 @@
+## Findings
+- [UNVERIFIED] MEDIUM: `cloud/workers/probe.py::Transcript.accumulate_response()` now folds non-included reasoning tokens into `totalOutputTokens`. That changes the meaning of `totalOutputTokens` from raw assistant output to billable output, but the field name did not change. Any downstream consumer, export, or report that still treats this as visible output will now be wrong.
+- [UNVERIFIED] MEDIUM: `cloud/workers/common/llm_adapters/types.py::LLMResponse.reasoning_tokens_included_in_output` defaults to `True`, and there is no validation that every producer sets it correctly. If any current or future `LLMResponse` path populates `reasoning_tokens` but forgets the flag, the probe will silently undercount billable tokens.
+- [UNVERIFIED] MEDIUM: `cloud/workers/common/cost.py::create_cost_snapshot()` accepts `reasoning_tokens`, but `estimated_cost` still ignores it. If a caller passes the new field without also folding it into `output_tokens`, the snapshot will record reasoning tokens while charging for none of them.
+
+## Residual Risks
+- I did not verify provider API semantics or units for `reasoning_tokens` versus `completion_tokens`, so one of the provider mappings may still double count or undercount.
+- I did not inspect other `LLMResponse` construction sites, so there may be additional adapters or helpers that need the new `reasoning_tokens_included_in_output` flag.

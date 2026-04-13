@@ -48,7 +48,7 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
         onKeyDown={isInteractive ? (e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            onClick?.(e as unknown as React.MouseEvent<HTMLDivElement>);
+            e.currentTarget.click();
           }
         } : undefined}
         role={onClick || variant === 'interactive' ? 'button' : undefined}

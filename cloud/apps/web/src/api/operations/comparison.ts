@@ -2,11 +2,13 @@
  * GraphQL operations for cross-run comparison
  */
 
-import { gql } from 'urql';
-import { ANALYSIS_RESULT_FRAGMENT, type AnalysisResult } from './analysis';
+import type { AnalysisResult } from './analysis';
+
+// Re-export AnalysisResult for backward compat (consumers import from ./comparison)
+export type { AnalysisResult } from './analysis';
 
 // ============================================================================
-// TYPES
+// TYPES (manual — JSON scalar fields need typed shapes)
 // ============================================================================
 
 /** Content structure inside resolvedContent JSON */
@@ -57,113 +59,20 @@ export type ComparisonRun = {
 // FRAGMENTS
 // ============================================================================
 
-/**
- * Lightweight fragment for runs list (no preamble/template).
- * Used by COMPARISON_RUNS_LIST_QUERY.
- */
-export const COMPARISON_RUN_LIST_FRAGMENT = gql`
-  fragment ComparisonRunListFields on Run {
-    id
-    name
-    definitionId
-    status
-    config
-    progress
-    startedAt
-    completedAt
-    createdAt
-    transcriptCount
-    analysisStatus
-    definition {
-      id
-      name
-      tags {
-        id
-        name
-      }
-    }
-  }
-`;
-
-/**
- * Full fragment for selected runs with definition content.
- * Used by RUNS_WITH_ANALYSIS_QUERY via runsWithAnalysis resolver.
- * Note: preamble/template are inside resolvedContent JSON, not separate fields.
- */
-export const COMPARISON_RUN_FULL_FRAGMENT = gql`
-  fragment ComparisonRunFullFields on Run {
-    id
-    name
-    definitionId
-    status
-    config
-    progress
-    startedAt
-    completedAt
-    createdAt
-    transcriptCount
-    analysisStatus
-    definition {
-      id
-      name
-      parentId
-      resolvedContent
-      tags {
-        id
-        name
-      }
-    }
-  }
-`;
+export {
+  ComparisonRunListFieldsFragmentDoc as COMPARISON_RUN_LIST_FRAGMENT,
+  ComparisonRunFullFieldsFragmentDoc as COMPARISON_RUN_FULL_FRAGMENT,
+} from '../../generated/graphql';
 
 // ============================================================================
 // QUERIES
 // ============================================================================
 
-/**
- * Query to fetch multiple runs with their full analysis data for comparison.
- * Limited to 10 runs maximum for performance.
- * Uses full fragment with preamble/template for diff view.
- */
-export const RUNS_WITH_ANALYSIS_QUERY = gql`
-  query RunsWithAnalysis($ids: [ID!]!) {
-    runsWithAnalysis(ids: $ids) {
-      ...ComparisonRunFullFields
-      analysis {
-        ...AnalysisResultFields
-      }
-    }
-  }
-  ${COMPARISON_RUN_FULL_FRAGMENT}
-  ${ANALYSIS_RESULT_FRAGMENT}
-`;
-
-/**
- * Query to fetch runs available for comparison (with analysis).
- * Uses lightweight fragment without preamble/template.
- */
-export const COMPARISON_RUNS_LIST_QUERY = gql`
-  query ComparisonRunsList(
-    $definitionId: String
-    $analysisStatus: String
-    $limit: Int
-    $offset: Int
-  ) {
-    runs(
-      hasAnalysis: true
-      definitionId: $definitionId
-      analysisStatus: $analysisStatus
-      limit: $limit
-      offset: $offset
-    ) {
-      ...ComparisonRunListFields
-    }
-  }
-  ${COMPARISON_RUN_LIST_FRAGMENT}
-`;
+export { RunsWithAnalysisDocument as RUNS_WITH_ANALYSIS_QUERY } from '../../generated/graphql';
+export { ComparisonRunsListDocument as COMPARISON_RUNS_LIST_QUERY } from '../../generated/graphql';
 
 // ============================================================================
-// QUERY TYPES
+// QUERY TYPES (manual — preserves app-level types without __typename)
 // ============================================================================
 
 export type RunsWithAnalysisQueryVariables = {

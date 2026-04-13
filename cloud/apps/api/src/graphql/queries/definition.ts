@@ -1,5 +1,6 @@
 import { builder } from '../builder.js';
 import { db, type Prisma } from '@valuerank/db';
+import { NotFoundError } from '@valuerank/shared';
 import { DefinitionRef } from '../types/definition.js';
 import { buildDefinitionWhere } from '../utils/definition-filters.js';
 
@@ -165,7 +166,7 @@ builder.queryField('definitionAncestors', (t) =>
       });
 
       if (definition === null || definition.deletedAt !== null) {
-        throw new Error(`Definition not found: ${id}`);
+        throw new NotFoundError('Definition', id);
       }
 
       // Use recursive CTE to get all ancestors (filtering out deleted)
@@ -236,7 +237,7 @@ builder.queryField('definitionDescendants', (t) =>
       });
 
       if (definition === null || definition.deletedAt !== null) {
-        throw new Error(`Definition not found: ${id}`);
+        throw new NotFoundError('Definition', id);
       }
 
       // Use recursive CTE to get all descendants (filtering out deleted)

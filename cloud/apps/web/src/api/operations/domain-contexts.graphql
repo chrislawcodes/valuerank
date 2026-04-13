@@ -1,0 +1,37 @@
+query DomainContexts($domainId: String) {
+  domainContexts(domainId: $domainId) {
+    id
+    domainId
+    domain {
+      id
+      name
+    }
+    text
+    version
+    updatedAt
+  }
+}
+
+mutation CreateDomainContext($input: CreateDomainContextInput!) {
+  createDomainContext(input: $input) {
+    id
+    domainId
+    text
+    version
+    updatedAt
+  }
+}
+
+mutation UpdateDomainContext($id: ID!, $input: UpdateDomainContextInput!) {
+  updateDomainContext(id: $id, input: $input) {
+    id
+    domainId
+    text
+    version
+    updatedAt
+  }
+}
+
+mutation DeleteDomainContext($id: ID!) {
+  deleteDomainContext(id: $id)
+}

@@ -7,8 +7,3 @@ export type {
 
 // Functions
 export { createAuditLog } from './create.js';
-export {
-  queryAuditLogs,
-  getEntityAuditHistory,
-  type AuditLogQueryResult,
-} from './query.js';

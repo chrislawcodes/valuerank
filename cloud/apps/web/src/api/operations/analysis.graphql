@@ -1,0 +1,55 @@
+fragment AnalysisResultFields on AnalysisResult {
+  id
+  runId
+  analysisType
+  status
+  codeVersion
+  inputHash
+  createdAt
+  computedAt
+  durationMs
+  perModel
+  preferenceSummary {
+    perModel
+  }
+  reliabilitySummary {
+    perModel
+  }
+  aggregateMetadata {
+    aggregateEligibility
+    aggregateIneligibilityReason
+    sourceRunCount
+    sourceRunIds
+    conditionCoverage
+    perModelRepeatCoverage
+    perModelDrift
+  }
+  modelAgreement
+  dimensionAnalysis
+  visualizationData
+  varianceAnalysis
+  mostContestedScenarios {
+    scenarioId
+    scenarioName
+    variance
+    modelScores
+  }
+  methodsUsed
+  warnings {
+    code
+    message
+    recommendation
+  }
+}
+
+query Analysis($runId: ID!) {
+  analysis(runId: $runId) {
+    ...AnalysisResultFields
+  }
+}
+
+mutation RecomputeAnalysis($runId: ID!) {
+  recomputeAnalysis(runId: $runId) {
+    ...AnalysisResultFields
+  }
+}

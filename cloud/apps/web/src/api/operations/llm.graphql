@@ -1,0 +1,120 @@
+fragment LlmModelFields on LlmModel {
+  id
+  providerId
+  modelId
+  displayName
+  costInputPerMillion
+  costOutputPerMillion
+  status
+  isDefault
+  isAvailable
+  apiConfig
+  createdAt
+  updatedAt
+}
+
+fragment LlmProviderFields on LlmProvider {
+  id
+  name
+  displayName
+  maxParallelRequests
+  requestsPerMinute
+  isEnabled
+  balance
+  createdAt
+  updatedAt
+}
+
+query LlmProviders {
+  llmProviders {
+    ...LlmProviderFields
+    models {
+      ...LlmModelFields
+    }
+  }
+}
+
+query LlmModels($providerId: String, $status: String) {
+  llmModels(providerId: $providerId, status: $status) {
+    ...LlmModelFields
+    provider {
+      ...LlmProviderFields
+    }
+  }
+}
+
+query InfraModel($purpose: String!) {
+  infraModel(purpose: $purpose) {
+    ...LlmModelFields
+    provider {
+      ...LlmProviderFields
+    }
+  }
+}
+
+mutation CreateLlmModel($input: CreateLlmModelInput!) {
+  createLlmModel(input: $input) {
+    ...LlmModelFields
+  }
+}
+
+mutation UpdateLlmModel($id: String!, $input: UpdateLlmModelInput!) {
+  updateLlmModel(id: $id, input: $input) {
+    ...LlmModelFields
+  }
+}
+
+mutation DeprecateLlmModel($id: String!) {
+  deprecateLlmModel(id: $id) {
+    model {
+      ...LlmModelFields
+    }
+    newDefault {
+      ...LlmModelFields
+    }
+  }
+}
+
+mutation ReactivateLlmModel($id: String!) {
+  reactivateLlmModel(id: $id) {
+    ...LlmModelFields
+  }
+}
+
+mutation SetDefaultLlmModel($id: String!) {
+  setDefaultLlmModel(id: $id) {
+    model {
+      ...LlmModelFields
+    }
+    previousDefault {
+      ...LlmModelFields
+    }
+  }
+}
+
+mutation UnsetDefaultLlmModel($id: String!) {
+  unsetDefaultLlmModel(id: $id) {
+    ...LlmModelFields
+  }
+}
+
+mutation UpdateLlmProvider($id: String!, $input: UpdateLlmProviderInput!) {
+  updateLlmProvider(id: $id, input: $input) {
+    ...LlmProviderFields
+  }
+}
+
+mutation UpdateSystemSetting($input: UpdateSystemSettingInput!) {
+  updateSystemSetting(input: $input) {
+    id
+    key
+    value
+    updatedAt
+  }
+}
+
+mutation SetProviderBalance($providerId: String!, $balance: Float) {
+  setProviderBalance(providerId: $providerId, balance: $balance) {
+    ...LlmProviderFields
+  }
+}

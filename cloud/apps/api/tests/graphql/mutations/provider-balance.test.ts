@@ -55,22 +55,17 @@ describe('provider balance mutations', () => {
   });
 
   afterEach(async () => {
-    // Reset balance to null after each test
     await db.llmProvider.update({
       where: { id: testProviderId },
       data: { balance: null },
     });
-    // Cleanup sync logs
-    if (createdSyncLogIds.length > 0) {
-      await db.providerBalanceSyncLog.deleteMany({
-        where: { id: { in: createdSyncLogIds } },
-      });
-      createdSyncLogIds.length = 0;
-    }
+    await db.providerBalanceSyncLog.deleteMany({
+      where: { providerId: testProviderId },
+    });
   });
 
   describe('setProviderBalance', () => {
-    it('sets provider balance to a positive value', async () => {
+    it('creates a sync log when balance changes', async () => {
       const res = await request(app)
         .post('/graphql')
         .set('Authorization', getAuthHeader())
@@ -85,13 +80,97 @@ describe('provider balance mutations', () => {
 
       const updated = await db.llmProvider.findUnique({ where: { id: testProviderId } });
       expect(updated?.balance?.toNumber()).toBeCloseTo(50.0);
+
+      const syncLog = await db.providerBalanceSyncLog.findFirst({
+        where: { providerId: testProviderId },
+        orderBy: { syncedAt: 'desc' },
+      });
+
+      expect(syncLog).not.toBeNull();
+      expect(syncLog?.systemBalanceAtSync.toNumber()).toBeCloseTo(0);
+      expect(syncLog?.enteredBalance.toNumber()).toBeCloseTo(50.0);
+      expect(syncLog?.delta.toNumber()).toBeCloseTo(50.0);
     });
 
-    it('sets provider balance to null (disables tracking)', async () => {
-      // First set a balance
+    it('uses zero as the system balance when setting from null', async () => {
       await db.llmProvider.update({
         where: { id: testProviderId },
-        data: { balance: 10.0 },
+        data: { balance: null },
+      });
+
+      const res = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SET_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: testProviderId, balance: 100.0 },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeUndefined();
+      expect(res.body.data.setProviderBalance.balance).toBeCloseTo(100.0);
+
+      const updated = await db.llmProvider.findUnique({ where: { id: testProviderId } });
+      expect(updated?.balance?.toNumber()).toBeCloseTo(100.0);
+
+      const syncLog = await db.providerBalanceSyncLog.findFirst({
+        where: { providerId: testProviderId },
+        orderBy: { syncedAt: 'desc' },
+      });
+
+      expect(syncLog).not.toBeNull();
+      expect(syncLog?.systemBalanceAtSync.toNumber()).toBeCloseTo(0);
+      expect(syncLog?.enteredBalance.toNumber()).toBeCloseTo(100.0);
+      expect(syncLog?.delta.toNumber()).toBeCloseTo(100.0);
+    });
+
+    it('does not create a sync log when the balance is unchanged', async () => {
+      const initialRes = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SET_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: testProviderId, balance: 25.0 },
+        });
+
+      expect(initialRes.status).toBe(200);
+      expect(initialRes.body.errors).toBeUndefined();
+      expect(initialRes.body.data.setProviderBalance.balance).toBeCloseTo(25.0);
+
+      const countBefore = await db.providerBalanceSyncLog.count({
+        where: { providerId: testProviderId },
+      });
+
+      const res = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SET_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: testProviderId, balance: 25.0 },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeUndefined();
+      expect(res.body.data.setProviderBalance.balance).toBeCloseTo(25.0);
+
+      const countAfter = await db.providerBalanceSyncLog.count({
+        where: { providerId: testProviderId },
+      });
+
+      expect(countAfter).toBe(countBefore);
+
+      const updated = await db.llmProvider.findUnique({ where: { id: testProviderId } });
+      expect(updated?.balance?.toNumber()).toBeCloseTo(25.0);
+    });
+
+    it('does not create a sync log when setting balance to null', async () => {
+      await db.llmProvider.update({
+        where: { id: testProviderId },
+        data: { balance: 30.0 },
+      });
+
+      const countBefore = await db.providerBalanceSyncLog.count({
+        where: { providerId: testProviderId },
       });
 
       const res = await request(app)
@@ -105,6 +184,15 @@ describe('provider balance mutations', () => {
       expect(res.status).toBe(200);
       expect(res.body.errors).toBeUndefined();
       expect(res.body.data.setProviderBalance.balance).toBeNull();
+
+      const countAfter = await db.providerBalanceSyncLog.count({
+        where: { providerId: testProviderId },
+      });
+
+      expect(countAfter).toBe(countBefore);
+
+      const updated = await db.llmProvider.findUnique({ where: { id: testProviderId } });
+      expect(updated?.balance).toBeNull();
     });
 
     it('rejects negative balance with a validation error', async () => {
@@ -119,6 +207,20 @@ describe('provider balance mutations', () => {
       expect(res.status).toBe(200);
       expect(res.body.errors).toBeDefined();
       expect(res.body.errors[0].message).toMatch(/[Bb]alance/);
+    });
+
+    it('returns a not found error for a missing provider', async () => {
+      const res = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: SET_PROVIDER_BALANCE_MUTATION,
+          variables: { providerId: 'missing-provider-id', balance: 12.5 },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeDefined();
+      expect(res.body.errors[0].message).toContain('not found');
     });
   });
 

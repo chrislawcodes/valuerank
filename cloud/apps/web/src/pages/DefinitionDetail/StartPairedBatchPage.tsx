@@ -69,7 +69,7 @@ export function StartPairedBatchPage() {
     () => getDefinitionMethodologyLabel(resolvedContent, definition?.domain?.name ?? null),
     [definition?.domain?.name, resolvedContent]
   );
-  const isPairedBatchEligible = methodology?.family === 'job-choice';
+  const isPairedBatchEligible = methodology?.pair_key != null;
   const backTo = routeState?.returnTo ?? (definition ? `/definitions/${definition.id}` : '/definitions');
   const backLabel = routeState?.returnLabel ?? 'Back to Vignette';
 

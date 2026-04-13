@@ -380,6 +380,7 @@ describe('RunForm', () => {
           schema_version: 1,
           methodology: {
             family: 'job-choice',
+            pair_key: 'test-pair',
             presentation_order: 'A_first',
           },
           components: {

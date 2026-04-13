@@ -100,31 +100,3 @@ export async function invalidateCache(runId: string): Promise<number> {
   return result.count;
 }
 
-/**
- * Get latest analysis result for a run regardless of cache status.
- */
-export async function getLatestAnalysis(runId: string) {
-  return db.analysisResult.findFirst({
-    where: {
-      runId,
-      status: 'CURRENT',
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
-}
-
-/**
- * Get analysis history for a run.
- *
- * @param runId - The run ID
- * @param limit - Maximum number of results
- */
-export async function getAnalysisHistory(runId: string, limit = 10) {
-  return db.analysisResult.findMany({
-    where: { runId },
-    orderBy: { createdAt: 'desc' },
-    take: limit,
-  });
-}

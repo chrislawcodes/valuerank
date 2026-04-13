@@ -27,7 +27,7 @@ from factory_state import (  # noqa: E402
     parse_review_frontmatter,
 )
 
-REVIEW_SCRIPTS = REPO_ROOT / "docs" / "operations" / "codex-skills" / "review-lens" / "scripts"
+REVIEW_SCRIPTS = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills" / "review-lens" / "scripts"
 if str(REVIEW_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(REVIEW_SCRIPTS))
 

@@ -39,7 +39,7 @@ describe('Queue Status Service', () => {
 
       expect(status.isRunning).toBe(true);
       expect(status.isPaused).toBe(false);
-      expect(status.jobTypes).toHaveLength(5);
+      expect(status.jobTypes).toHaveLength(4);
       expect(status.totals).toEqual({
         pending: 0,
         active: 0,
@@ -81,18 +81,6 @@ describe('Queue Status Service', () => {
       const basicType = status.jobTypes.find((jt) => jt.type === 'analyze_basic');
       expect(basicType?.active).toBe(2);
       expect(status.totals.active).toBe(2);
-    });
-
-    it('counts completed jobs from job table', async () => {
-      vi.mocked(db.$queryRaw).mockResolvedValueOnce([
-        { name: 'analyze_deep', state: 'completed', count: BigInt(10) },
-      ]);
-
-      const status = await getQueueStatus();
-
-      const deepType = status.jobTypes.find((jt) => jt.type === 'analyze_deep');
-      expect(deepType?.completed).toBe(10);
-      expect(status.totals.completed).toBe(10);
     });
 
     it('counts failed jobs from failed state', async () => {
@@ -152,7 +140,7 @@ describe('Queue Status Service', () => {
         { name: 'probe_scenario', state: 'created', count: BigInt(5) },
         { name: 'probe_scenario', state: 'failed', count: BigInt(1) },
         { name: 'analyze_basic', state: 'active', count: BigInt(2) },
-        { name: 'analyze_deep', state: 'completed', count: BigInt(10) },
+        { name: 'expand_scenarios', state: 'completed', count: BigInt(10) },
       ]);
 
       const status = await getQueueStatus();
@@ -182,7 +170,7 @@ describe('Queue Status Service', () => {
 
       expect(status.isRunning).toBe(true);
       expect(status.isPaused).toBe(false);
-      expect(status.jobTypes).toHaveLength(5);
+      expect(status.jobTypes).toHaveLength(4);
       expect(status.totals).toEqual({
         pending: 0,
         active: 0,
