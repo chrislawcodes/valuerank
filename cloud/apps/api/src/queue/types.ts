@@ -5,7 +5,16 @@
  */
 
 // Job type union
-export type JobType = 'probe_scenario' | 'summarize_transcript' | 'analyze_basic' | 'analyze_deep' | 'expand_scenarios' | 'compute_token_stats' | 'probe_dead_letter' | 'aggregate_analysis';
+export type JobType =
+  | 'probe_scenario'
+  | 'summarize_transcript'
+  | 'analyze_basic'
+  | 'analyze_deep'
+  | 'expand_scenarios'
+  | 'compute_token_stats'
+  | 'probe_dead_letter'
+  | 'aggregate_analysis'
+  | 'refresh_domain_analysis_snapshot';
 
 // Job data interfaces
 export type ProbeScenarioJobData = {
@@ -57,11 +66,25 @@ export type AggregateAnalysisJobData = {
   temperature?: number | null;
 };
 
+export type RefreshDomainAnalysisSnapshotJobData = {
+  domainId: string;
+  signature: string | null;
+  reason: string;
+};
+
 // Dead letter job data - same as probe scenario but handled separately for failed/expired jobs
 export type ProbeDeadLetterJobData = ProbeScenarioJobData;
 
 // Job data union type (ProbeDeadLetterJobData is same as ProbeScenarioJobData, so not duplicated here)
-export type JobData = ProbeScenarioJobData | SummarizeTranscriptJobData | AnalyzeBasicJobData | AnalyzeDeepJobData | ExpandScenariosJobData | ComputeTokenStatsJobData | AggregateAnalysisJobData;
+export type JobData =
+  | ProbeScenarioJobData
+  | SummarizeTranscriptJobData
+  | AnalyzeBasicJobData
+  | AnalyzeDeepJobData
+  | ExpandScenariosJobData
+  | ComputeTokenStatsJobData
+  | AggregateAnalysisJobData
+  | RefreshDomainAnalysisSnapshotJobData;
 
 // Job options interface
 export type JobOptions = {
@@ -119,6 +142,12 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
     retryBackoff: true,
     expireInSeconds: 300, // 5 minutes
     // singletonKey is set dynamically based on definitionId
+  },
+  'refresh_domain_analysis_snapshot': {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 300, // 5 minutes
   },
   'probe_dead_letter': {
     retryLimit: 0, // Don't retry dead letter jobs - just log and record

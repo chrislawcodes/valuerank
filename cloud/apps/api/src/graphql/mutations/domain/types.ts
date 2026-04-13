@@ -1,4 +1,5 @@
 import { builder } from '../../builder.js';
+import { ValidationError } from '@valuerank/shared';
 
 export type DomainMutationResult = {
   success: boolean;
@@ -64,10 +65,17 @@ export type RetryDomainTrialCellResult = {
   message: string | null;
 };
 
+export type DomainAnalysisRefreshResult = {
+  success: boolean;
+  mode: 'QUEUED' | 'REFRESHED';
+  message: string;
+};
+
 export const DomainMutationResultRef = builder.objectRef<DomainMutationResult>('DomainMutationResult');
 export const DomainTrialRunEntryRef = builder.objectRef<DomainTrialRunEntry>('DomainTrialRunEntry');
 export const DomainTrialRunResultRef = builder.objectRef<DomainTrialRunResult>('DomainTrialRunResult');
 export const RetryDomainTrialCellResultRef = builder.objectRef<RetryDomainTrialCellResult>('RetryDomainTrialCellResult');
+export const DomainAnalysisRefreshResultRef = builder.objectRef<DomainAnalysisRefreshResult>('DomainAnalysisRefreshResult');
 
 builder.objectType(DomainMutationResultRef, {
   fields: (t) => ({
@@ -113,11 +121,19 @@ builder.objectType(RetryDomainTrialCellResultRef, {
   }),
 });
 
+builder.objectType(DomainAnalysisRefreshResultRef, {
+  fields: (t) => ({
+    success: t.exposeBoolean('success'),
+    mode: t.exposeString('mode'),
+    message: t.exposeString('message'),
+  }),
+});
+
 export function parseOptionalId(value: string | number | null | undefined, argName: string): string | null {
   if (value === undefined || value === null) return null;
   const id = String(value).trim();
   if (id === '') {
-    throw new Error(`${argName} cannot be an empty string. Use null for unassignment.`);
+    throw new ValidationError(`${argName} cannot be an empty string. Use null for unassignment.`);
   }
   return id;
 }

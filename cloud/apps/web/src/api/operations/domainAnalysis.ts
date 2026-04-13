@@ -21,6 +21,7 @@ export const DOMAIN_ANALYSIS_QUERY = gql`
         missingModelLabels
       }
       definitionsWithAnalysis
+      cacheStatus
       generatedAt
       models {
         model
@@ -73,6 +74,16 @@ export const DOMAIN_ANALYSIS_QUERY = gql`
         }
         faultLinesByPair
       }
+    }
+  }
+`;
+
+export const REFRESH_DOMAIN_ANALYSIS_MUTATION = gql`
+  mutation RefreshDomainAnalysis($domainId: ID!, $signature: String) {
+    refreshDomainAnalysis(domainId: $domainId, signature: $signature) {
+      success
+      mode
+      message
     }
   }
 `;
@@ -317,6 +328,7 @@ export type DomainAnalysisResult = {
     missingModelLabels: string[];
   }[];
   definitionsWithAnalysis: number;
+  cacheStatus: 'FRESH' | 'UPDATING' | 'OUT_OF_DATE';
   generatedAt: string;
   models: DomainAnalysisModel[];
   unavailableModels: DomainAnalysisUnavailableModel[];
@@ -331,6 +343,19 @@ export type DomainAnalysisQueryResult = {
 export type DomainAnalysisQueryVariables = {
   domainId: string;
   scoreMethod?: 'LOG_ODDS' | 'FULL_BT';
+  signature?: string;
+};
+
+export type RefreshDomainAnalysisMutationResult = {
+  refreshDomainAnalysis: {
+    success: boolean;
+    mode: 'QUEUED' | 'REFRESHED';
+    message: string;
+  };
+};
+
+export type RefreshDomainAnalysisMutationVariables = {
+  domainId: string;
   signature?: string;
 };
 

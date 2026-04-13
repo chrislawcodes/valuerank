@@ -1,0 +1,49 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "This slice covers the Domain Analysis page only, not the value detail page or export flows.",
+      "We should keep the current domain analysis numbers and formulas unchanged while changing how they are computed and surfaced.",
+      "Cached results should be shown by default when present, and the page should explain freshness in plain language.",
+      "The background refresh should run both when the page detects stale or missing data and when new run analysis finishes."
+    ],
+    "summary": "Requirements were clear enough to proceed without extra discovery questions. Proceeding with explicit assumptions about scope, unchanged math, and a hybrid cache-refresh model.",
+    "updated_at": 1776102565,
+    "answers": {},
+    "non_goals": [
+      "Do not change score formulas or domain-analysis semantics in this slice."
+    ],
+    "acceptance_criteria": [
+      "A background refresh can be triggered after page load and after new run analysis completes without duplicate job storms."
+    ],
+    "unresolved": []
+  },
+  "delivery": {
+    "completed": true,
+    "updated_at": 1776109500,
+    "summary": "Shipped the hybrid domain-analysis freshness fix using the shared snapshot store, background refresh jobs, and a visible cached/fresh UI state."
+  },
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  }
+}

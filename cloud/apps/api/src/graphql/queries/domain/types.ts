@@ -39,6 +39,8 @@ export type DomainAnalysisModel = {
   rankingShape: RankingShape;
 };
 
+export type DomainAnalysisCacheStatus = 'FRESH' | 'UPDATING' | 'OUT_OF_DATE';
+
 export type DomainAnalysisResult = {
   domainId: string;
   domainName: string;
@@ -51,6 +53,7 @@ export type DomainAnalysisResult = {
   models: DomainAnalysisModel[];
   unavailableModels: DomainAnalysisUnavailableModel[];
   generatedAt: Date;
+  cacheStatus: DomainAnalysisCacheStatus;
   rankingShapeBenchmarks: RankingShapeBenchmarks;
   clusterAnalysis: ClusterAnalysis;
 };
@@ -230,6 +233,7 @@ builder.objectType(DomainAnalysisResultRef, {
       type: [DomainAnalysisUnavailableModelRef],
       resolve: (parent) => parent.unavailableModels,
     }),
+    cacheStatus: t.exposeString('cacheStatus'),
     generatedAt: t.field({
       type: 'DateTime',
       resolve: (parent) => parent.generatedAt,

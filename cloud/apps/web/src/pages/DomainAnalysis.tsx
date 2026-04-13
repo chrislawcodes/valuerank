@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useQuery } from 'urql';
+import { useMutation, useQuery } from 'urql';
 import { AlertTriangle, ChevronDown, Loader2 } from 'lucide-react';
 import { isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
@@ -11,6 +11,7 @@ import {
   DOMAIN_ANALYSIS_QUERY,
   DOMAIN_ANALYSIS_QUERY_LEGACY,
   DOMAIN_FINDINGS_ELIGIBILITY_QUERY,
+  REFRESH_DOMAIN_ANALYSIS_MUTATION,
   type DomainAvailableSignature,
   type DomainAvailableSignaturesQueryResult,
   type DomainAvailableSignaturesQueryVariables,
@@ -19,6 +20,8 @@ import {
   type DomainAnalysisQueryResult,
   type DomainAnalysisQueryVariables,
   type DomainFindingsEligibility,
+  type RefreshDomainAnalysisMutationResult,
+  type RefreshDomainAnalysisMutationVariables,
 } from '../api/operations/domainAnalysis';
 import { ModelGroupsSection } from '../components/domains/ModelGroupsSection';
 import { DominanceSection } from '../components/domains/DominanceSection';
@@ -294,6 +297,40 @@ function EvidenceScopeDisclosure({
   );
 }
 
+function getCacheStatusCopy(
+  cacheStatus: 'FRESH' | 'UPDATING' | 'OUT_OF_DATE' | undefined,
+  generatedAt: string | undefined,
+): {
+  badgeLabel: string;
+  badgeClassName: string;
+  detail: string;
+} | null {
+  if (cacheStatus == null || generatedAt == null) return null;
+  const generatedLabel = new Date(generatedAt).toLocaleString();
+
+  if (cacheStatus === 'FRESH') {
+    return {
+      badgeLabel: 'Fresh',
+      badgeClassName: 'border-green-200 bg-green-50 text-green-800',
+      detail: `Updated ${generatedLabel}.`,
+    };
+  }
+
+  if (cacheStatus === 'UPDATING') {
+    return {
+      badgeLabel: 'Cached',
+      badgeClassName: 'border-amber-200 bg-amber-50 text-amber-800',
+      detail: `Showing saved results from ${generatedLabel}. A refresh is running in the background.`,
+    };
+  }
+
+  return {
+    badgeLabel: 'Out of date',
+    badgeClassName: 'border-gray-300 bg-gray-50 text-gray-700',
+    detail: `Showing saved results from ${generatedLabel}. Refresh was not started automatically.`,
+  };
+}
+
 export function DomainAnalysis() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -303,6 +340,8 @@ export function DomainAnalysis() {
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
     DomainAvailableSignaturesQueryResult,
     DomainAvailableSignaturesQueryVariables
@@ -336,14 +375,6 @@ export function DomainAnalysis() {
     pause: selectedDomainId === '',
     requestPolicy: 'cache-and-network',
   });
-  const hasValidSelectedSignature = useMemo(
-    () => selectedSignature !== '' && signatureOptions.some((option) => option.signature === selectedSignature),
-    [selectedSignature, signatureOptions],
-  );
-  const signatureSelectionReady = selectedDomainId !== ''
-    && !signaturesLoading
-    && (signatureOptions.length === 0 || hasValidSelectedSignature);
-
   useEffect(() => {
     if (domains.length === 0) return;
     const selectedExists = selectedDomainId !== '' && domains.some((domain) => domain.id === selectedDomainId);
@@ -368,6 +399,11 @@ export function DomainAnalysis() {
   }, [selectedDomainId, selectedSignature]);
 
   useEffect(() => {
+    setRefreshNotice(null);
+    setRefreshError(null);
+  }, [selectedDomainId, selectedSignature]);
+
+  useEffect(() => {
     if (selectedDomainId === '') return;
     if (
       searchParams.get('domainId') === selectedDomainId
@@ -386,14 +422,17 @@ export function DomainAnalysis() {
     setSearchParams(next, { replace: true });
   }, [searchParams, selectedDomainId, selectedSignature, setSearchParams]);
 
-  const [{ data: scoredData, fetching: scoredFetching, error: scoredError }] = useQuery<DomainAnalysisQueryResult, DomainAnalysisQueryVariables>({
+  const [
+    { data: scoredData, fetching: scoredFetching, error: scoredError },
+    reexecuteScoredQuery,
+  ] = useQuery<DomainAnalysisQueryResult, DomainAnalysisQueryVariables>({
     query: DOMAIN_ANALYSIS_QUERY,
     variables: {
       domainId: selectedDomainId,
       scoreMethod: 'FULL_BT',
       signature: selectedSignature === '' ? undefined : selectedSignature,
     },
-    pause: selectedDomainId === '' || useLegacyQuery || !signatureSelectionReady,
+    pause: selectedDomainId === '' || useLegacyQuery,
     requestPolicy: 'cache-and-network',
   });
   const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<DomainAnalysisQueryResult, { domainId: string }>({
@@ -402,6 +441,10 @@ export function DomainAnalysis() {
     pause: selectedDomainId === '' || !useLegacyQuery,
     requestPolicy: 'cache-and-network',
   });
+  const [{ fetching: refreshFetching }, refreshDomainAnalysis] = useMutation<
+    RefreshDomainAnalysisMutationResult,
+    RefreshDomainAnalysisMutationVariables
+  >(REFRESH_DOMAIN_ANALYSIS_MUTATION);
 
   useEffect(() => {
     const message = scoredError?.message ?? '';
@@ -424,6 +467,11 @@ export function DomainAnalysis() {
     () => getEvidenceScopeState(findingsEligibility, findingsEligibilityLoading, findingsEligibilityError),
     [findingsEligibility, findingsEligibilityLoading, findingsEligibilityError],
   );
+  const cacheStatusCopy = useMemo(
+    () => getCacheStatusCopy(data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt),
+    [data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt],
+  );
+  const showPageLoader = domainsLoading || (selectedDomainId !== '' && data?.domainAnalysis == null && fetching);
 
   const models = useMemo<ModelEntry[]>(() => {
     const sourceModels = data?.domainAnalysis.models ?? [];
@@ -481,6 +529,25 @@ export function DomainAnalysis() {
     }
   };
 
+  const handleRefreshAnalysis = async () => {
+    if (selectedDomainId === '') return;
+    setRefreshNotice(null);
+    setRefreshError(null);
+
+    const result = await refreshDomainAnalysis({
+      domainId: selectedDomainId,
+      signature: selectedSignature === '' ? undefined : selectedSignature,
+    });
+
+    if (result.error != null) {
+      setRefreshError(result.error.message);
+      return;
+    }
+
+    setRefreshNotice(result.data?.refreshDomainAnalysis.message ?? 'Refresh started.');
+    reexecuteScoredQuery({ requestPolicy: 'network-only' });
+  };
+
   const handleRunMissingVignettes = () => {
     if (selectedDomainId === '' || allMissingDefinitionIds.length === 0) return;
     const query = new URLSearchParams();
@@ -512,7 +579,7 @@ export function DomainAnalysis() {
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-sm font-semibold text-gray-900">Domain Selection</h2>
-            <p className="text-xs text-gray-600">Analysis is computed from live aggregate runs for latest vignettes in this domain.</p>
+            <p className="text-xs text-gray-600">Analysis is shown from the latest saved snapshot for this domain.</p>
           </div>
           <div className="flex flex-col gap-2 md:flex-row md:items-center">
             <select
@@ -561,6 +628,31 @@ export function DomainAnalysis() {
         </div>
         {data?.domainAnalysis && (
           <div className="mt-2 space-y-1 text-xs text-gray-500">
+            {cacheStatusCopy && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold ${cacheStatusCopy.badgeClassName}`}>
+                  {cacheStatusCopy.badgeLabel}
+                </span>
+                <span>{cacheStatusCopy.detail}</span>
+                {!useLegacyQuery && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleRefreshAnalysis}
+                    disabled={refreshFetching}
+                  >
+                    {refreshFetching ? 'Refreshing…' : 'Refresh now'}
+                  </Button>
+                )}
+              </div>
+            )}
+            {refreshNotice !== null && (
+              <p className="text-green-700">{refreshNotice}</p>
+            )}
+            {refreshError !== null && (
+              <p className="text-amber-700">{refreshError}</p>
+            )}
             <p>
               {data.domainAnalysis.definitionsWithAnalysis} of {data.domainAnalysis.targetedDefinitions} latest vignettes currently have aggregate analysis data.
             </p>
@@ -606,7 +698,7 @@ export function DomainAnalysis() {
         <EvidenceScopeDisclosure state={evidenceScopeState} />
       )}
 
-      {(domainsLoading || signaturesLoading || (selectedDomainId !== '' && fetching)) ? (
+      {showPageLoader ? (
         <Loading size="lg" text="Loading domain analysis..." />
       ) : (
         <>

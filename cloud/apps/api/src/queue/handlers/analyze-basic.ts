@@ -11,9 +11,11 @@ import type * as PgBoss from 'pg-boss';
 import { db, resolveDefinitionContent } from '@valuerank/db';
 import type { Prisma } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
+import { formatTrialSignature, formatVnewSignature } from '@valuerank/shared/trial-signature';
 import type { AnalyzeBasicJobData } from '../types.js';
 import { spawnPython } from '../spawn.js';
 import { computeInputHash, getCachedAnalysis, invalidateCache } from '../../services/analysis/cache.js';
+import { queueDomainAnalysisRefresh } from '../../services/analysis/domain-analysis-cache.js';
 import {
   buildScenarioAnalysisDimensionRecord,
   normalizeScenarioAnalysisMetadata,
@@ -22,6 +24,7 @@ import {
   resolveAnalysisDecisionModel,
   resolveAnalysisValueOutcomes,
 } from '../../services/decision-model.js';
+import { parseDefinitionVersion } from '../../utils/definition-version.js';
 import { parseTemperature } from '../../utils/temperature.js';
 import { config } from '../../config.js';
 
@@ -331,10 +334,19 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
         try {
           const run = await db.run.findUnique({
             where: { id: runId },
-            include: { tags: { include: { tag: true } } }
+            include: {
+              definition: {
+                select: {
+                  domainId: true,
+                },
+              },
+              tags: { include: { tag: true } },
+            },
           });
 
           if (run) {
+            const runConfig = run.config as { temperature?: unknown } | null;
+            const temperature = parseTemperature(runConfig?.temperature);
             const isAggregate = run.tags.some(rt => rt.tag.name === 'Aggregate');
             if (!isAggregate) {
               const config = run.config as {
@@ -345,8 +357,6 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
                 }
               };
               const definitionId = run.definitionId;
-              const runConfig = run.config as { temperature?: unknown } | null;
-              const temperature = parseTemperature(runConfig?.temperature);
               const preambleVersionId =
                 config.definitionSnapshot?._meta?.preambleVersionId ??
                 config.definitionSnapshot?.preambleVersionId ??
@@ -386,6 +396,37 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
               );
 
               log.info({ runId, definitionId, preambleVersionId, definitionVersion, temperature }, 'Enqueued aggregate_analysis job');
+            }
+
+            const domainId = run.definition?.domainId ?? null;
+            if (domainId !== null) {
+              const requestedExactVersion =
+                parseDefinitionVersion((run.config as {
+                  definitionSnapshot?: {
+                    _meta?: { definitionVersion?: unknown };
+                    version?: unknown;
+                  };
+                } | null)?.definitionSnapshot?._meta?.definitionVersion)
+                ?? parseDefinitionVersion((run.config as {
+                  definitionSnapshot?: {
+                    _meta?: { definitionVersion?: unknown };
+                    version?: unknown;
+                  };
+                } | null)?.definitionSnapshot?.version);
+              const exactSignature = formatTrialSignature(requestedExactVersion, temperature);
+              await Promise.all([
+                queueDomainAnalysisRefresh({
+                  domainId,
+                  signature: formatVnewSignature(temperature),
+                  reason: 'analysis-complete',
+                }),
+                queueDomainAnalysisRefresh({
+                  domainId,
+                  signature: exactSignature,
+                  reason: 'analysis-complete',
+                }),
+              ]);
+              log.info({ runId, domainId, exactSignature, temperature }, 'Enqueued domain analysis snapshot refresh');
             }
           }
         } catch (err) {

@@ -26,6 +26,7 @@ describe('GraphQL domain analysis', () => {
 
   afterAll(async () => {
     if (createdRunIds.length > 0) {
+      await db.analysisResult.deleteMany({ where: { runId: { in: createdRunIds } } });
       await db.transcript.deleteMany({ where: { runId: { in: createdRunIds } } });
       await db.run.deleteMany({ where: { id: { in: createdRunIds } } });
       createdRunIds.length = 0;
@@ -191,6 +192,38 @@ describe('GraphQL domain analysis', () => {
       },
     });
 
+    await db.analysisResult.create({
+      data: {
+        runId: aRun.id,
+        analysisType: 'basic',
+        inputHash: `hash-${aRun.id}`,
+        codeVersion: 'test',
+        status: 'CURRENT',
+        output: {
+          perModel: {
+            'job-choice-analysis-model': {
+              values: {
+                Achievement: {
+                  count: {
+                    prioritized: 1,
+                    deprioritized: 0,
+                    neutral: 0,
+                  },
+                },
+                Benevolence_Dependability: {
+                  count: {
+                    prioritized: 0,
+                    deprioritized: 1,
+                    neutral: 0,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
     await db.transcript.create({
       data: {
         runId: bRun.id,
@@ -214,9 +247,42 @@ describe('GraphQL domain analysis', () => {
       },
     });
 
+    await db.analysisResult.create({
+      data: {
+        runId: bRun.id,
+        analysisType: 'basic',
+        inputHash: `hash-${bRun.id}`,
+        codeVersion: 'test',
+        status: 'CURRENT',
+        output: {
+          perModel: {
+            'job-choice-analysis-model': {
+              values: {
+                Achievement: {
+                  count: {
+                    prioritized: 1,
+                    deprioritized: 0,
+                    neutral: 0,
+                  },
+                },
+                Benevolence_Dependability: {
+                  count: {
+                    prioritized: 0,
+                    deprioritized: 1,
+                    neutral: 0,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
     const query = `
       query JobChoiceDomainAnalysis($domainId: ID!, $signature: String!, $modelId: String!, $valueKey: String!) {
         analysis: domainAnalysis(domainId: $domainId, signature: $signature) {
+          cacheStatus
           models {
             model
             values {
@@ -279,6 +345,7 @@ describe('GraphQL domain analysis', () => {
     expect(response.body.errors).toBeUndefined();
 
     const analysis = response.body.data.analysis as {
+      cacheStatus: string;
       models: Array<{
         model: string;
         values: Array<{
@@ -290,6 +357,7 @@ describe('GraphQL domain analysis', () => {
         }>;
       }>;
     };
+    expect(analysis.cacheStatus).toBe('FRESH');
     const model = analysis.models.find((entry) => entry.model === 'job-choice-analysis-model');
     expect(model).toBeDefined();
 

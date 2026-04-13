@@ -18,6 +18,7 @@ import type {
   ComputeTokenStatsJobData,
   ProbeDeadLetterJobData,
   AggregateAnalysisJobData,
+  RefreshDomainAnalysisSnapshotJobData,
 } from '../types.js';
 import { createProbeScenarioHandler } from './probe-scenario.js';
 import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
@@ -27,6 +28,7 @@ import { createExpandScenariosHandler } from './expand-scenarios.js';
 import { createComputeTokenStatsHandler } from './compute-token-stats.js';
 import { createProbeDeadLetterHandler } from './probe-dead-letter.js';
 import { createAggregateAnalysisHandler } from './aggregate-analysis.js';
+import { createRefreshDomainAnalysisSnapshotHandler } from './refresh-domain-analysis-snapshot.js';
 import {
   createProviderQueues,
   getAllProviderQueues,
@@ -35,7 +37,17 @@ import {
 const log = createLogger('queue:handlers');
 
 // Re-export job data types for handlers
-export type { ProbeScenarioJobData, SummarizeTranscriptJobData, AnalyzeBasicJobData, AnalyzeDeepJobData, ExpandScenariosJobData, ComputeTokenStatsJobData, ProbeDeadLetterJobData, AggregateAnalysisJobData };
+export type {
+  ProbeScenarioJobData,
+  SummarizeTranscriptJobData,
+  AnalyzeBasicJobData,
+  AnalyzeDeepJobData,
+  ExpandScenariosJobData,
+  ComputeTokenStatsJobData,
+  ProbeDeadLetterJobData,
+  AggregateAnalysisJobData,
+  RefreshDomainAnalysisSnapshotJobData,
+};
 
 // Dead letter queue name for probe jobs
 const PROBE_DEAD_LETTER_QUEUE = 'probe_dead_letter';
@@ -125,6 +137,16 @@ const handlerRegistrations: HandlerRegistration[] = [
         'aggregate_analysis',
         { batchSize }, // Usually batchSize=1 effectively for aggregation if we want strict serial per worker
         createAggregateAnalysisHandler()
+      );
+    },
+  },
+  {
+    name: 'refresh_domain_analysis_snapshot',
+    register: async (boss, batchSize) => {
+      await boss.work<RefreshDomainAnalysisSnapshotJobData>(
+        'refresh_domain_analysis_snapshot',
+        { batchSize },
+        createRefreshDomainAnalysisSnapshotHandler()
       );
     },
   },

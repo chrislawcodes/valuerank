@@ -253,7 +253,11 @@ export type DomainAnalysisConditionTranscript = {
   content: unknown;
 };
 
-export type DomainAnalysisMissingReasonCode = 'NO_COMPLETED_RUNS' | 'NO_SIGNATURE_MATCH' | 'NO_TRANSCRIPTS';
+export type DomainAnalysisMissingReasonCode =
+  | 'NO_COMPLETED_RUNS'
+  | 'NO_SIGNATURE_MATCH'
+  | 'NO_TRANSCRIPTS'
+  | 'NO_ANALYSIS';
 
 type SignatureResolutionResult = {
   selectedSignature: string | null;
@@ -286,6 +290,8 @@ export function getMissingReasonLabel(reasonCode: DomainAnalysisMissingReasonCod
       return 'Completed runs exist, but none matched the selected signature.';
     case 'NO_TRANSCRIPTS':
       return 'Matching runs exist, but no analyzed transcripts were found for this signature.';
+    case 'NO_ANALYSIS':
+      return 'Matching runs exist, but the fast domain snapshot has not been built yet.';
     default:
       return 'No compatible runs were found for this vignette.';
   }
@@ -584,4 +590,3 @@ export function supportsTemperature(apiConfig: unknown): boolean {
   if (typeof candidate === 'boolean') return candidate;
   return true;
 }
-

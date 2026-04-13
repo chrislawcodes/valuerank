@@ -7,9 +7,12 @@ import {
   DOMAIN_ANALYSIS_QUERY,
   DOMAIN_AVAILABLE_SIGNATURES_QUERY,
   DOMAIN_FINDINGS_ELIGIBILITY_QUERY,
+  REFRESH_DOMAIN_ANALYSIS_MUTATION,
 } from '../../src/api/operations/domainAnalysis';
 
 const useQueryMock = vi.fn();
+const useMutationMock = vi.fn();
+const refreshMutationExecuteMock = vi.fn();
 
 const defaultSignatureData = {
   domainAvailableSignatures: [
@@ -45,6 +48,7 @@ const defaultDomainAnalysis = {
     missingDefinitionIds: [],
     missingDefinitions: [],
     definitionsWithAnalysis: 2,
+    cacheStatus: 'FRESH',
     generatedAt: '2026-03-15T12:00:00.000Z',
     models: [],
     unavailableModels: [],
@@ -115,6 +119,7 @@ vi.mock('urql', async () => {
   return {
     ...actual,
     useQuery: (args: unknown) => useQueryMock(args),
+    useMutation: (query: unknown) => useMutationMock(query),
   };
 });
 
@@ -145,6 +150,14 @@ vi.mock('../../src/components/domains/ValuePrioritiesSection', () => ({
 describe('DomainAnalysis', () => {
   beforeEach(() => {
     useQueryMock.mockReset();
+    useMutationMock.mockReset();
+    refreshMutationExecuteMock.mockReset();
+    useMutationMock.mockImplementation((query: unknown) => {
+      if (query === REFRESH_DOMAIN_ANALYSIS_MUTATION) {
+        return [{ fetching: false }, refreshMutationExecuteMock];
+      }
+      return [{ fetching: false }, vi.fn()];
+    });
     installQueryResponses();
   });
 
@@ -169,6 +182,17 @@ describe('DomainAnalysis', () => {
     await user.keyboard('{Enter}');
 
     expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('shows the freshness badge for saved analysis', async () => {
+    render(
+      <MemoryRouter>
+        <DomainAnalysis />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/^Fresh$/)).toBeInTheDocument();
+    expect(screen.getByText(/updated 3\/15\/2026/i)).toBeInTheDocument();
   });
 
   it('shows a loading chip while the eligibility query is unresolved', async () => {
@@ -255,5 +279,28 @@ describe('DomainAnalysis', () => {
 
     const optionLabels = within(signatureSelect).getAllByRole('option').map((option) => option.textContent);
     expect(optionLabels.slice(0, 3)).toEqual(['Latest @ default', 'v1 @ default', 'Latest @ t=0']);
+  });
+
+  it('does not wait for signatures before starting the analysis query', async () => {
+    installQueryResponses({
+      signaturesData: undefined,
+      signaturesFetching: true,
+      signaturesError: undefined,
+    });
+
+    render(
+      <MemoryRouter>
+        <DomainAnalysis />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(useQueryMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query: DOMAIN_ANALYSIS_QUERY,
+          pause: false,
+        }),
+      );
+    });
   });
 });
