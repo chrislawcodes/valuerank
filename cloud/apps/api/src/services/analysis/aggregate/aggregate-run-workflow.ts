@@ -1,6 +1,6 @@
 import path from 'path';
 import { db, type Prisma } from '@valuerank/db';
-import { createLogger } from '@valuerank/shared';
+import { AppError, createLogger } from '@valuerank/shared';
 import { spawnPython } from '../../../queue/spawn.js';
 import {
   ANALYZE_WORKER_PATH,
@@ -266,11 +266,11 @@ export async function spawnAggregateWorker(prepared: AggregateRunPreparation): P
   );
 
   if (!workerResult.success) {
-    throw new Error(`Aggregate semantic worker failed: ${workerResult.error}`);
+    throw new AppError(`Aggregate semantic worker failed: ${workerResult.error}`, 'WORKER_FAILED');
   }
 
   if (!workerResult.data.success) {
-    throw new Error(`${workerResult.data.error.code}: ${workerResult.data.error.message}`);
+    throw new AppError(`${workerResult.data.error.code}: ${workerResult.data.error.message}`, 'WORKER_FAILED');
   }
 
   return workerResult.data;

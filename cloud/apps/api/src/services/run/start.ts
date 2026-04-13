@@ -7,7 +7,7 @@
 
 import { db, resolveDefinitionContent } from '@valuerank/db';
 import { ensureDomainConfigSnapshot } from '../domain-config/snapshot.js';
-import { createLogger, NotFoundError, ValidationError } from '@valuerank/shared';
+import { AppError, createLogger, NotFoundError, ValidationError } from '@valuerank/shared';
 import { estimateCost, type CostEstimate } from '../cost/index.js';
 import { getBoss } from '../../queue/boss.js';
 import { signalRunActivity } from './scheduler.js';
@@ -485,7 +485,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
       'Run failed during enqueue integrity check'
     );
 
-    throw new Error(`Run initialization failed: ${failureReason}`);
+    throw new AppError(`Run initialization failed: ${failureReason}`, 'RUN_INIT_FAILED');
   }
 
   log.info(

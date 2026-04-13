@@ -8,6 +8,7 @@
  */
 
 import AdmZip from 'adm-zip';
+import { AppError } from '@valuerank/shared';
 
 // ============================================================================
 // TYPES
@@ -76,7 +77,7 @@ function escapeXml(str: string): string {
 function parseCellRef(ref: string): { col: number; row: number } {
   const match = ref.match(/^([A-Z]+)(\d+)$/);
   if (match === null || match[1] === undefined || match[2] === undefined) {
-    throw new Error(`Invalid cell reference: ${ref}`);
+    throw new AppError(`Invalid cell reference: ${ref}`, 'XLSX_PARSE_ERROR');
   }
 
   const colStr = match[1];
@@ -178,21 +179,21 @@ function generatePivotTableDefinition(
   // Find field indices and their field info
   const rowFieldInfos = config.rowFields.map((name) => {
     const field = fields.find((f) => f.name === name);
-    if (field === undefined) throw new Error(`Row field not found: ${name}`);
+    if (field === undefined) throw new AppError(`Row field not found: ${name}`, 'XLSX_PARSE_ERROR');
     return field;
   });
   const rowFieldIndices = rowFieldInfos.map((f) => f.index);
 
   const colFieldInfos = config.columnFields.map((name) => {
     const field = fields.find((f) => f.name === name);
-    if (field === undefined) throw new Error(`Column field not found: ${name}`);
+    if (field === undefined) throw new AppError(`Column field not found: ${name}`, 'XLSX_PARSE_ERROR');
     return field;
   });
   const colFieldIndices = colFieldInfos.map((f) => f.index);
 
   const valueFieldIndex = fields.find((f) => f.name === config.valueField)?.index;
   if (valueFieldIndex === undefined) {
-    throw new Error(`Value field not found: ${config.valueField}`);
+    throw new AppError(`Value field not found: ${config.valueField}`, 'XLSX_PARSE_ERROR');
   }
 
   // Generate pivotFields - one for each source field
@@ -345,7 +346,7 @@ export function addPivotTable(
 
   // Find the target worksheet's sheet ID
   const workbookXml = zip.getEntry('xl/workbook.xml')?.getData().toString('utf-8');
-  if (workbookXml === undefined || workbookXml === null || workbookXml === '') throw new Error('workbook.xml not found');
+  if (workbookXml === undefined || workbookXml === null || workbookXml === '') throw new AppError('workbook.xml not found', 'XLSX_PARSE_ERROR');
 
   // Get sheet IDs from workbook
   const sheetMatches = workbookXml.matchAll(/<sheet[^>]*name="([^"]*)"[^>]*r:id="([^"]*)"/g);
@@ -359,15 +360,15 @@ export function addPivotTable(
   }
 
   const targetSheetRid = sheets.get(config.targetSheet);
-  if (targetSheetRid === undefined || targetSheetRid === null || targetSheetRid === '') throw new Error(`Target sheet not found: ${config.targetSheet}`);
+  if (targetSheetRid === undefined || targetSheetRid === null || targetSheetRid === '') throw new AppError(`Target sheet not found: ${config.targetSheet}`, 'XLSX_CONFIG_ERROR');
 
   // Get the worksheet path from relationships
   const workbookRels = zip.getEntry('xl/_rels/workbook.xml.rels')?.getData().toString('utf-8');
-  if (workbookRels === undefined || workbookRels === null || workbookRels === '') throw new Error('workbook.xml.rels not found');
+  if (workbookRels === undefined || workbookRels === null || workbookRels === '') throw new AppError('workbook.xml.rels not found', 'XLSX_PARSE_ERROR');
 
   const relMatch = workbookRels.match(new RegExp(`Id="${targetSheetRid}"[^>]*Target="([^"]*)"`));
   const worksheetPath = relMatch !== null ? `xl/${relMatch[1]}` : null;
-  if (worksheetPath === null) throw new Error(`Worksheet path not found for ${targetSheetRid}`);
+  if (worksheetPath === null) throw new AppError(`Worksheet path not found for ${targetSheetRid}`, 'XLSX_PARSE_ERROR');
 
   // Calculate target location for PivotTable
   const targetCellRef = parseCellRef(config.targetCell);
@@ -448,7 +449,7 @@ export function addPivotTable(
 
   // Update [Content_Types].xml
   const contentTypes = zip.getEntry('[Content_Types].xml')?.getData().toString('utf-8');
-  if (contentTypes === undefined || contentTypes === null || contentTypes === '') throw new Error('[Content_Types].xml not found');
+  if (contentTypes === undefined || contentTypes === null || contentTypes === '') throw new AppError('[Content_Types].xml not found', 'XLSX_PARSE_ERROR');
 
   const updatedContentTypes = contentTypes.replace(
     '</Types>',

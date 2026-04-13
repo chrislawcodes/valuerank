@@ -8,7 +8,7 @@
 
 import path from 'path';
 import { db, Prisma, type DefinitionContent } from '@valuerank/db';
-import { createLogger } from '@valuerank/shared';
+import { AppError, createLogger } from '@valuerank/shared';
 import { spawnPython, type ProgressUpdate } from '../../queue/spawn.js';
 import { getScenarioExpansionModel, isCodeGenerationEnabled } from '../infra-models.js';
 import { expandScenariosWithCode } from './expand-code.js';
@@ -191,7 +191,7 @@ export async function expandScenarios(
     if (!codeResult.success) {
       // This shouldn't happen as code expansion always succeeds
       log.error({ definitionId }, 'Code-based expansion failed unexpectedly');
-      throw new Error('Code-based scenario expansion failed');
+      throw new AppError('Code-based scenario expansion failed', 'EXPANSION_FAILED');
     }
 
     // Create scenario records from code expansion result
@@ -317,7 +317,7 @@ export async function expandScenarios(
     });
 
     // Always throw on spawn failure - don't hide errors with fallback scenarios
-    throw new Error(`Scenario expansion failed: ${result.error}`);
+    throw new AppError(`Scenario expansion failed: ${result.error}`, 'EXPANSION_FAILED');
   }
 
   const workerOutput = result.data;
@@ -350,7 +350,7 @@ export async function expandScenarios(
 
     // Always throw on worker errors - don't hide failures with fallback scenarios
     // Both retryable and non-retryable errors should surface to the user
-    throw new Error(`LLM generation failed: ${workerOutput.error.message}`);
+    throw new AppError(`LLM generation failed: ${workerOutput.error.message}`, 'LLM_FAILED');
   }
 
   // Handle empty scenarios - this is always an error since we checked for dimensions earlier
@@ -377,7 +377,7 @@ export async function expandScenarios(
     });
 
     // Always throw - empty scenarios is an error when we have dimensions
-    throw new Error(`Scenario generation failed: ${parseError}`);
+    throw new AppError(`Scenario generation failed: ${parseError}`, 'GENERATION_FAILED');
   }
 
   // Create scenario records from worker output

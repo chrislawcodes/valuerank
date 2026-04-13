@@ -1,5 +1,5 @@
 import { db, type DefinitionContent } from '@valuerank/db';
-import { createLogger, ValidationError } from '@valuerank/shared';
+import { AppError, createLogger, ValidationError } from '@valuerank/shared';
 import type { JobInsert } from 'pg-boss';
 import { getBoss } from '../../queue/boss.js';
 import type { JobOptions, ProbeScenarioJobData } from '../../queue/types.js';
@@ -70,7 +70,7 @@ export async function enqueueJobs(
       chunk.map(async (job) => {
         const id = await send(job.queueName, job.data, job.options);
         if (id === null) {
-          throw new Error('send returned null job id');
+          throw new AppError('send returned null job id', 'QUEUE_SEND_FAILED');
         }
         return id;
       })

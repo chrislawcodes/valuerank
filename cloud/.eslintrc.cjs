@@ -175,7 +175,7 @@ module.exports = {
       ],
       excludedFiles: ['**/*.test.ts', '**/tests/**/*.ts', '**/__tests__/**/*.ts'],
       rules: {
-        'no-restricted-syntax': ['warn', {
+        'no-restricted-syntax': ['error', {
           selector: 'ThrowStatement > NewExpression[callee.name="Error"]',
           message: 'Use typed errors from @valuerank/shared (ValidationError, NotFoundError, AuthenticationError, etc.) instead of generic Error.',
         }],

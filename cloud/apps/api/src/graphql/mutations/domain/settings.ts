@@ -2,7 +2,7 @@ import { builder } from '../../builder.js';
 import { db } from '@valuerank/db';
 import { DomainRef } from '../../types/domain.js';
 import { ensureDomainConfigSnapshot } from '../../../services/domain-config/snapshot.js';
-import { createLogger } from '@valuerank/shared';
+import { createLogger, NotFoundError, ValidationError } from '@valuerank/shared';
 
 const log = createLogger('graphql:mutations:domain-settings');
 
@@ -26,7 +26,7 @@ builder.mutationField('setDomainDefaults', (t) =>
     resolve: async (_root, args, ctx) => {
       const id = String(args.id);
       const existing = await db.domain.findUnique({ where: { id } });
-      if (!existing) throw new Error(`Domain not found: ${id}`);
+      if (!existing) throw new NotFoundError('Domain', id);
 
       const newDefaultModelIds = args.defaultModelIds != null ? args.defaultModelIds.map(String) : null;
 
@@ -38,7 +38,7 @@ builder.mutationField('setDomainDefaults', (t) =>
         const activeModelIds = new Set(activeModels.map((m) => m.modelId));
         const invalidIds = newDefaultModelIds.filter((mid) => !activeModelIds.has(mid));
         if (invalidIds.length > 0) {
-          throw new Error(`Invalid or inactive model IDs: ${invalidIds.join(', ')}`);
+          throw new ValidationError(`Invalid or inactive model IDs: ${invalidIds.join(', ')}`);
         }
       }
 
@@ -90,7 +90,7 @@ builder.mutationField('setDomainSettings', (t) =>
         const activeModelIds = new Set(activeModels.map((m) => m.modelId));
         const invalidIds = newDefaultModelIds.filter((mid) => !activeModelIds.has(mid));
         if (invalidIds.length > 0) {
-          throw new Error(`Invalid or inactive model IDs: ${invalidIds.join(', ')}`);
+          throw new ValidationError(`Invalid or inactive model IDs: ${invalidIds.join(', ')}`);
         }
       }
 

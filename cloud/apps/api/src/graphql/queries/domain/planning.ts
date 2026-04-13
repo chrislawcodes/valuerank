@@ -1,5 +1,5 @@
 import { db, Prisma } from '@valuerank/db';
-import { AuthenticationError } from '@valuerank/shared';
+import { AuthenticationError, NotFoundError } from '@valuerank/shared';
 import { builder } from '../../builder.js';
 import { estimateCost as estimateCostService } from '../../../services/cost/estimate.js';
 import {
@@ -94,7 +94,7 @@ async function buildDomainEstimate(input: DomainEstimateInput): Promise<DomainEs
   const effectiveScopeCategory = scopeCategory ?? 'PRODUCTION';
 
   const domain = await db.domain.findUnique({ where: { id: domainId } });
-  if (!domain) throw new Error(`Domain not found: ${domainId}`);
+  if (!domain) throw new NotFoundError('Domain', domainId);
 
   const definitions = await db.definition.findMany({
     where: { domainId, deletedAt: null },
@@ -540,7 +540,7 @@ builder.queryField('domainAvailableSignatures', (t) =>
       }
       const domainId = String(args.domainId);
       const domain = await db.domain.findUnique({ where: { id: domainId } });
-      if (!domain) throw new Error(`Domain not found: ${domainId}`);
+      if (!domain) throw new NotFoundError('Domain', domainId);
 
       const definitions = await db.definition.findMany({
         where: { domainId, deletedAt: null },

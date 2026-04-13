@@ -6,6 +6,7 @@
 
 import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
+import { NotFoundError } from '@valuerank/shared';
 import { ScenarioRef } from '../types/refs.js';
 
 const MAX_LIMIT = 100;
@@ -177,7 +178,7 @@ builder.queryField('scenarios', (t) =>
       });
 
       if (!definition || definition.deletedAt !== null) {
-        throw new Error(`Definition not found: ${definitionId}`);
+        throw new NotFoundError('Definition', definitionId);
       }
 
       // Fetch scenarios (excluding soft-deleted)
@@ -257,7 +258,7 @@ builder.queryField('scenarioCount', (t) =>
       });
 
       if (!definition || definition.deletedAt !== null) {
-        throw new Error(`Definition not found: ${definitionId}`);
+        throw new NotFoundError('Definition', definitionId);
       }
 
       const count = await db.scenario.count({
@@ -301,7 +302,7 @@ builder.queryField('runConditionGrid', (t) =>
       });
 
       if (!definition || definition.deletedAt !== null) {
-        throw new Error(`Definition not found: ${definitionId}`);
+        throw new NotFoundError('Definition', definitionId);
       }
 
       if (definition.scenarios.length === 0) {

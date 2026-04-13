@@ -200,7 +200,7 @@ type LoadedRun = NonNullable<Awaited<ReturnType<Context['loaders']['run']['load'
 async function loadRunForResult(runId: string, ctx: Context): Promise<LoadedRun> {
   const run = await ctx.loaders.run.load(runId);
   if (run == null) {
-    throw new Error(`Run not found: ${runId}`);
+    throw new NotFoundError('Run', runId);
   }
   return run;
 }

@@ -1,4 +1,5 @@
 import { db } from '@valuerank/db';
+import { ValidationError } from '@valuerank/shared';
 import { builder } from '../../../builder.js';
 import {
   DomainAnalysisConditionTranscriptRef,
@@ -28,7 +29,7 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
       const definitionId = String(args.definitionId);
       const rawValueKey = args.valueKey;
       if (!isDomainAnalysisValueKey(rawValueKey)) {
-        throw new Error(`Unsupported value key: ${rawValueKey}`);
+        throw new ValidationError(`Unsupported value key: ${rawValueKey}`);
       }
       const valueKey = rawValueKey;
       const limit = Math.max(1, Math.min(args.limit ?? 50, 200));

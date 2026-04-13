@@ -1,4 +1,5 @@
 import { builder } from '../../builder.js';
+import { ValidationError } from '@valuerank/shared';
 
 export type DomainMutationResult = {
   success: boolean;
@@ -117,7 +118,7 @@ export function parseOptionalId(value: string | number | null | undefined, argNa
   if (value === undefined || value === null) return null;
   const id = String(value).trim();
   if (id === '') {
-    throw new Error(`${argName} cannot be an empty string. Use null for unassignment.`);
+    throw new ValidationError(`${argName} cannot be an empty string. Use null for unassignment.`);
   }
   return id;
 }

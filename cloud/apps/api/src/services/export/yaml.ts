@@ -8,6 +8,7 @@
 import { stringify } from 'yaml';
 import type { Definition, Scenario, Tag } from '@prisma/client';
 import type { DefinitionContent, ScenarioContent } from '@valuerank/db';
+import { ValidationError } from '@valuerank/shared';
 import type { CLIScenarioFile, CLIScenario, ExportResult } from './types.js';
 
 // ============================================================================
@@ -146,7 +147,7 @@ export function exportScenariosAsYaml(
   tags: Tag[]
 ): ExportResult {
   if (scenarios.length === 0) {
-    throw new Error(
+    throw new ValidationError(
       'No scenarios to export. Generate scenarios first using the definition.'
     );
   }

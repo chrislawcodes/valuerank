@@ -7,9 +7,12 @@ import {
   type ScenarioContent,
 } from '@valuerank/db';
 import {
+  AppError,
   assembleTemplate,
   getJobChoiceValueStatementBody,
+  NotFoundError,
   getSoftwareApproachValueStatementBody,
+  ValidationError,
   type TemplateConfig,
 } from '@valuerank/shared';
 import { builder } from '../builder.js';
@@ -296,7 +299,7 @@ async function resolvePairedVignetteInputs(input: {
   } = input;
 
   if (valueFirstId === valueSecondId) {
-    throw new Error('valueFirstId and valueSecondId must be different');
+    throw new ValidationError('valueFirstId and valueSecondId must be different');
   }
 
   const [context, valueFirst, valueSecond, preambleVersion, domain] = await Promise.all([
@@ -309,22 +312,22 @@ async function resolvePairedVignetteInputs(input: {
     db.domain.findUnique({ where: { id: domainId }, select: { id: true, normalizedName: true, sentencePrefix: true, labelPrefix: true, defaultLevelPresetVersionId: true } }),
   ]);
 
-  if (context == null) throw new Error(`DomainContext not found: ${contextId}`);
+  if (context == null) throw new NotFoundError('DomainContext', contextId);
   if (context.domainId !== domainId) {
-    throw new Error(`DomainContext ${contextId} does not belong to domain ${domainId}`);
+    throw new ValidationError(`DomainContext ${contextId} does not belong to domain ${domainId}`);
   }
-  if (valueFirst == null) throw new Error(`ValueStatement not found: ${valueFirstId}`);
+  if (valueFirst == null) throw new NotFoundError('ValueStatement', valueFirstId);
   if (valueFirst.domainId !== domainId) {
-    throw new Error(`ValueStatement ${valueFirstId} does not belong to domain ${domainId}`);
+    throw new ValidationError(`ValueStatement ${valueFirstId} does not belong to domain ${domainId}`);
   }
-  if (valueSecond == null) throw new Error(`ValueStatement not found: ${valueSecondId}`);
+  if (valueSecond == null) throw new NotFoundError('ValueStatement', valueSecondId);
   if (valueSecond.domainId !== domainId) {
-    throw new Error(`ValueStatement ${valueSecondId} does not belong to domain ${domainId}`);
+    throw new ValidationError(`ValueStatement ${valueSecondId} does not belong to domain ${domainId}`);
   }
   if (preambleVersionId != null && preambleVersion == null) {
-    throw new Error(`Preamble version not found: ${preambleVersionId}`);
+    throw new NotFoundError('Preamble version', preambleVersionId);
   }
-  if (domain == null) throw new Error(`Domain not found: ${domainId}`);
+  if (domain == null) throw new NotFoundError('Domain', domainId);
 
   const resolvedLevelPresetVersionId =
     inputLevelPresetVersionId ?? (applyDomainDefault ? (domain.defaultLevelPresetVersionId ?? null) : null);
@@ -337,7 +340,7 @@ async function resolvePairedVignetteInputs(input: {
       select: { l1: true, l2: true, l3: true, l4: true, l5: true },
     });
     if (levelPresetVersion == null) {
-      throw new Error(`LevelPresetVersion not found: ${resolvedLevelPresetVersionId}`);
+      throw new NotFoundError('LevelPresetVersion', resolvedLevelPresetVersionId);
     }
   }
 
@@ -383,7 +386,7 @@ async function resolvePairedVignette(definitionId: string) {
   });
 
   if (definition == null || definition.deletedAt != null) {
-    throw new Error(`Definition not found: ${definitionId}`);
+    throw new NotFoundError('Definition', definitionId);
   }
 
   const contentRecord =
@@ -396,7 +399,7 @@ async function resolvePairedVignette(definitionId: string) {
       : null;
 
   if (typeof methodology?.family !== 'string' || methodology.family === '' || typeof methodology.pair_key !== 'string') {
-    throw new Error('Definition is not a paired vignette');
+    throw new ValidationError('Definition is not a paired vignette');
   }
 
   const candidates = await db.definition.findMany({
@@ -418,7 +421,7 @@ async function resolvePairedVignette(definitionId: string) {
   );
 
   if (companion == null) {
-    throw new Error('Paired vignette is missing its companion with mirrored value tokens');
+    throw new AppError('Paired vignette is missing its companion with mirrored value tokens', 'DATA_INTEGRITY');
   }
 
   const definitionB = companion as { id: string; name: string; content: unknown };
@@ -580,7 +583,7 @@ builder.mutationField('updatePairedVignette', (t) =>
       )?.domainId;
 
       if (domainId == null) {
-        throw new Error(`Definition ${definitionId} is not assigned to a domain`);
+        throw new ValidationError(`Definition ${definitionId} is not assigned to a domain`);
       }
 
       const resolvedInputs = await resolvePairedVignetteInputs({
@@ -779,7 +782,7 @@ builder.mutationField('updateJobChoicePair', (t) =>
 
       const existingPair = await resolvePairedVignette(definitionId);
       const domainId = (await db.definition.findUnique({ where: { id: existingPair.definitionA.id }, select: { domainId: true } }))?.domainId;
-      if (domainId == null) throw new Error(`Definition ${definitionId} is not assigned to a domain`);
+      if (domainId == null) throw new ValidationError(`Definition ${definitionId} is not assigned to a domain`);
       const resolvedInputs = await resolvePairedVignetteInputs({
         domainId, contextId, valueFirstId, valueSecondId, preambleVersionId,
         levelPresetVersionId: inputLevelPresetVersionId,
@@ -828,4 +831,3 @@ builder.mutationField('updateJobChoicePair', (t) =>
     },
   }),
 );
-

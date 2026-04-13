@@ -1,4 +1,5 @@
 import { db } from '@valuerank/db';
+import { ValidationError } from '@valuerank/shared';
 
 /**
  * Generate a version label based on Pacific Time.
@@ -120,7 +121,7 @@ export async function deletePreamble(id: string) {
     });
 
     if (usageCount > 0) {
-        throw new Error(`Cannot delete preamble: used by ${usageCount} active definition(s). Please unassign it first.`);
+        throw new ValidationError(`Cannot delete preamble: used by ${usageCount} active definition(s). Please unassign it first.`);
     }
 
     return await db.preamble.delete({
