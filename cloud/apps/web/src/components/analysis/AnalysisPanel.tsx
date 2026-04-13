@@ -330,6 +330,21 @@ export function AnalysisPanel({
 
     return mergePairedVisualizationData(analysis, companionAnalysis);
   }, [analysis, analysisMode, companionAnalysis]);
+
+  const filteredDecisionsVisualizationData = useMemo(() => {
+    if (!decisionsVisualizationData) return null;
+    return {
+      ...decisionsVisualizationData,
+      decisionDistribution: Object.fromEntries(
+        Object.entries(decisionsVisualizationData.decisionDistribution)
+          .filter(([modelId]) => effectiveModels.includes(modelId))
+      ),
+      modelScenarioMatrix: Object.fromEntries(
+        Object.entries(decisionsVisualizationData.modelScenarioMatrix)
+          .filter(([modelId]) => effectiveModels.includes(modelId))
+      ),
+    };
+  }, [decisionsVisualizationData, effectiveModels]);
   const decisionCoverage = useMemo(
     () => summarizeDecisionCoverage(transcripts),
     [transcripts],
@@ -671,7 +686,7 @@ export function AnalysisPanel({
         )}
         {activeTab === 'decisions' && filteredSemantics && (
           <DecisionsTab
-            visualizationData={decisionsVisualizationData}
+            visualizationData={filteredDecisionsVisualizationData}
             dimensionLabels={dimensionLabels}
             semantics={filteredOverviewSemantics ?? filteredSemantics}
             analysisMode={analysisMode}
@@ -684,7 +699,7 @@ export function AnalysisPanel({
             analysisBasePath={analysisBasePath}
             analysisSearchParams={analysisSearchParams}
             analysisMode={analysisMode}
-            visualizationData={decisionsVisualizationData}
+            visualizationData={filteredDecisionsVisualizationData}
             perModel={filteredPerModel}
             transcripts={scenariosTranscripts}
             expectedAttributes={expectedScenarioAttributes}
