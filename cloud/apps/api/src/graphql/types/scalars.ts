@@ -1,15 +1,16 @@
 import { builder } from '../builder.js';
+import { ValidationError } from '@valuerank/shared';
 
 // DateTime scalar - serializes to ISO 8601 string
 builder.scalarType('DateTime', {
   serialize: (value) => value.toISOString(),
   parseValue: (value) => {
     if (typeof value !== 'string') {
-      throw new Error('DateTime must be a string');
+      throw new ValidationError('DateTime must be a string');
     }
     const date = new Date(value);
     if (isNaN(date.getTime())) {
-      throw new Error('Invalid DateTime format');
+      throw new ValidationError('Invalid DateTime format');
     }
     return date;
   },

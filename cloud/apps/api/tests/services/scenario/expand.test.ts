@@ -278,7 +278,7 @@ describe('Scenario Expansion Service', () => {
         // Verify old scenario is soft deleted
         // Query active and deleted separately (soft-delete extension auto-filters)
         const activeCount = await db.scenario.count({
-          where: { definitionId: testDefinitionId },
+          where: { definitionId: testDefinitionId, deletedAt: null },
         });
         const deletedCount = await db.scenario.count({
           where: { definitionId: testDefinitionId, deletedAt: { not: null } },

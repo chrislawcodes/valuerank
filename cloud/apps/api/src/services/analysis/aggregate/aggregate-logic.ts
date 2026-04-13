@@ -1,5 +1,6 @@
 import { normalizeAnalysisArtifacts } from '../normalize-analysis-output.js';
 import { normalizeScenarioAnalysisMetadata } from '../scenario-metadata.js';
+import { AppError } from '@valuerank/shared';
 import {
   type AggregatedResult,
   type AggregateScenarioInput,
@@ -63,7 +64,7 @@ export function aggregateAnalysesLogic(
   scenarios: AggregateScenarioInput[]
 ): AggregatedResult {
   if (analyses.length === 0) {
-    throw new Error('Cannot aggregate empty analyses list');
+    throw new AppError('Cannot aggregate empty analyses list', 'INVALID_STATE');
   }
 
   const template = analyses[0]!;

@@ -1,5 +1,6 @@
 import { builder } from '../../builder.js';
 import type { Context } from '../../context.js';
+import { NotFoundError } from '@valuerank/shared';
 import { RunRef } from '../../types/refs.js';
 
 type RunPayloadShape = {
@@ -9,7 +10,7 @@ type RunPayloadShape = {
 async function resolveRunFromPayload(parent: RunPayloadShape, ctx: Context) {
   const run = await ctx.loaders.run.load(parent.run.id);
   if (run == null) {
-    throw new Error(`Run not found: ${parent.run.id}`);
+    throw new NotFoundError('Run', parent.run.id);
   }
   return run;
 }

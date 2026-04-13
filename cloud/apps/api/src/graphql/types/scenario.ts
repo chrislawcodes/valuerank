@@ -1,4 +1,5 @@
 import { builder } from '../builder.js';
+import { AppError } from '@valuerank/shared';
 import { ScenarioRef, DefinitionRef } from './refs.js';
 
 // Re-export for backward compatibility
@@ -19,7 +20,7 @@ builder.objectType(ScenarioRef, {
       resolve: async (scenario, _args, ctx) => {
         const definition = await ctx.loaders.definition.load(scenario.definitionId);
         if (!definition) {
-          throw new Error(`Definition not found for scenario ${scenario.id}`);
+          throw new AppError(`Definition not found for scenario ${scenario.id}`, 'NOT_FOUND', 404);
         }
         return definition;
       },

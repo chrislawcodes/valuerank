@@ -7,27 +7,19 @@
 
 import { db, resolveDefinitionContent } from '@valuerank/db';
 import { ensureDomainConfigSnapshot } from '../domain-config/snapshot.js';
-import { createLogger, NotFoundError, ValidationError } from '@valuerank/shared';
+import { AppError, createLogger, NotFoundError, ValidationError } from '@valuerank/shared';
 import { estimateCost, type CostEstimate } from '../cost/index.js';
-import { getBoss } from '../../queue/boss.js';
 import { signalRunActivity } from './scheduler.js';
-import { planFinalTrial } from './plan-final-trial.js';
 import { validateStartRunInput, type StartRunInput } from './start-validation.js';
 import {
   asRecord,
-  bulkEnqueueJobs,
   buildFindingsSnapshot,
   convertToAlpha,
-  enqueueJobs,
-  sampleScenarios,
   syncSurveyScenariosFromPlan,
-  type JobEntry,
   type SurveyPlan,
-  RETRY_ENQUEUE_CHUNK_SIZE,
 } from './start-helpers.js';
-import type { PriorityLevel } from '../../queue/types.js';
-import { PRIORITY_VALUES, DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
-import { getQueueNameForModel } from '../parallelism/index.js';
+import { buildRunJobPlan } from './start-plan.js';
+import { enqueueRunJobs } from './start-queue.js';
 
 const log = createLogger('services:run:start');
 
@@ -159,77 +151,17 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   }
 
   // Determine scenarios to run
-  let selectedScenarioIds: string[] = [];
-  const jobPlan: { modelId: string; scenarioId: string; samples: number }[] = [];
-
-  if (finalTrial) {
-    // Adaptive Sampling Strategy
-    const plan = await planFinalTrial(definitionId, models, temperature ?? null);
-
-    // Flatten plan into job entries
-    plan.models.forEach(modelPlan => {
-      modelPlan.conditions.forEach(condition => {
-        if (condition.neededSamples > 0) {
-          jobPlan.push({
-            modelId: modelPlan.modelId,
-            scenarioId: condition.scenarioId,
-            samples: condition.neededSamples
-          });
-        }
-      });
-    });
-
-    // Collect unique scenario IDs involved for the RunScenarioSelection linkage
-    selectedScenarioIds = Array.from(new Set(jobPlan.map(j => j.scenarioId)));
-
-    log.info({ runPlanSize: jobPlan.length, scenariosInvolved: selectedScenarioIds.length }, 'Final Trial plan generated');
-  } else if (Array.isArray(scenarioIds) && scenarioIds.length > 0) {
-    const allScenarioIds = definition.scenarios.map((s) => s.id);
-    const allScenarioIdSet = new Set(allScenarioIds);
-    selectedScenarioIds = Array.from(new Set(scenarioIds));
-
-    const invalidScenarioIds = selectedScenarioIds.filter((scenarioId) => !allScenarioIdSet.has(scenarioId));
-    if (invalidScenarioIds.length > 0) {
-      throw new ValidationError(
-        `Invalid scenarioIds for definition ${definitionId}: ${invalidScenarioIds.join(', ')}`
-      );
-    }
-
-    for (const modelId of models) {
-      for (const scenarioId of selectedScenarioIds) {
-        jobPlan.push({
-          modelId,
-          scenarioId,
-          samples: samplesPerScenario,
-        });
-      }
-    }
-
-    log.debug(
-      { definitionId, selectedScenarios: selectedScenarioIds.length },
-      'Using explicit scenario selection'
-    );
-  } else {
-    // Standard Percentage Sampling
-    const allScenarioIds = definition.scenarios.map((s) => s.id);
-    selectedScenarioIds = sampleScenarios(allScenarioIds, samplePercentage, definitionId, sampleSeed);
-
-    // Create uniform plan
-    for (const modelId of models) {
-      for (const scenarioId of selectedScenarioIds) {
-        jobPlan.push({
-          modelId,
-          scenarioId,
-          samples: samplesPerScenario
-        });
-      }
-    }
-
-    log.debug(
-      { definitionId, totalScenarios: allScenarioIds.length, sampledScenarios: selectedScenarioIds.length },
-      'Scenarios sampled'
-    );
-  }
+  const { selectedScenarioIds, jobPlan } = await buildRunJobPlan({
+    definitionId,
+    models,
+    definitionScenarioIds: definition.scenarios.map((scenario) => scenario.id),
+    finalTrial,
+    temperature,
+    scenarioIds,
+    samplePercentage,
+    sampleSeed,
+    samplesPerScenario,
+  });
 
   // Calculate total job count
   const totalJobs = jobPlan.reduce((sum, item) => sum + item.samples, 0);
@@ -367,125 +299,27 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
 
   log.info({ runId: run.id, totalJobs }, 'Run created, queuing jobs');
 
-  // Queue jobs
-  const boss = getBoss();
-  const priorityValue = PRIORITY_VALUES[priority as PriorityLevel];
-  const baseJobOptions = {
-    ...DEFAULT_JOB_OPTIONS['probe_scenario'],
-    priority: priorityValue,
-  };
-
-  const jobs: JobEntry[] = [];
-
-  // Parallel queue resolution cache
-  const queueNameCache = new Map<string, string>();
-  const getQueue = async (mId: string) => {
-    if (queueNameCache.has(mId)) return queueNameCache.get(mId)!;
-    const q = await getQueueNameForModel(mId);
-    queueNameCache.set(mId, q);
-    return q;
-  };
-
-  for (const item of jobPlan) {
-    const queueName = await getQueue(item.modelId);
-
-    // Create N jobs based on 'samples' count
-    // For adaptive sampling, we might want to start index at existing count?
-    // Job 'sampleIndex' assumes 0-based index for NEW jobs. 
-    // It acts as a differentiator.
-    // If we use it for seeding, we might want to offset it.
-    // For now, let's just push 0..N-1.
-    for (let i = 0; i < item.samples; i++) {
-      jobs.push({
-        queueName,
+  let jobIds: string[];
+  try {
+    jobIds = await enqueueRunJobs({
+      runId: run.id,
+      jobPlan,
+      priority,
+      temperature,
+      totalJobs,
+    });
+  } catch (error) {
+    if (error instanceof AppError && error.code === 'RUN_INIT_FAILED') {
+      await db.run.update({
+        where: { id: run.id },
         data: {
-          runId: run.id,
-          scenarioId: item.scenarioId,
-          modelId: item.modelId,
-          sampleIndex: i, // TODO: Consider offsetting if appending to existing results?
-          config: {
-            maxTurns: 10,
-            ...(temperature !== undefined ? { temperature } : {}),
-          },
+          status: 'FAILED',
+          completedAt: new Date(),
+          stalledModels: [],
         },
-        options: baseJobOptions
       });
     }
-  }
-
-  // Log distribution
-  const queueCounts = new Map<string, number>();
-  for (const job of jobs) {
-    queueCounts.set(job.queueName, (queueCounts.get(job.queueName) ?? 0) + 1);
-  }
-  log.debug({ runId: run.id, queueDistribution: Object.fromEntries(queueCounts) }, 'Job queue distribution');
-
-  // Bulk-insert all jobs in a single INSERT per queue. Falls back to
-  // individual boss.send() retries only for any jobs that failed to insert.
-  const firstPass = await bulkEnqueueJobs(jobs);
-  let jobIds = firstPass.jobIds;
-  let remainingFailures = firstPass.failures;
-
-  if (remainingFailures.length > 0) {
-    log.warn(
-      {
-        runId: run.id,
-        failedCount: remainingFailures.length,
-        sampleFailures: remainingFailures.slice(0, 5).map((failure) => ({
-          queueName: failure.job.queueName,
-          modelId: failure.job.data.modelId,
-          scenarioId: failure.job.data.scenarioId,
-          sampleIndex: failure.job.data.sampleIndex,
-          error: failure.error,
-        })),
-      },
-      'Initial enqueue had dropped jobs; retrying failed jobs'
-    );
-
-    const retryPass = await enqueueJobs(
-      remainingFailures.map((failure) => failure.job),
-      (queueName, data, options) => boss.send(queueName, data, options),
-      // Retry in smaller batches to reduce provider/queue backpressure bursts.
-      RETRY_ENQUEUE_CHUNK_SIZE
-    );
-
-    jobIds = jobIds.concat(retryPass.jobIds);
-    remainingFailures = retryPass.failures;
-  }
-
-  if (remainingFailures.length > 0 || jobIds.length !== totalJobs) {
-    const failureReason = remainingFailures.length > 0
-      ? `${remainingFailures.length} jobs failed to enqueue after retry`
-      : `Expected ${totalJobs} jobs but only ${jobIds.length} were enqueued`;
-
-    await db.run.update({
-      where: { id: run.id },
-      data: {
-        status: 'FAILED',
-        completedAt: new Date(),
-        stalledModels: [],
-      },
-    });
-    // Any jobs that were already enqueued before failure are safely ignored by workers:
-    // probe_scenario checks isRunTerminal(), which treats FAILED as terminal.
-
-    log.error(
-      {
-        runId: run.id,
-        totalJobs,
-        enqueuedJobs: jobIds.length,
-        remainingFailures: remainingFailures.slice(0, 10).map((failure) => ({
-          queueName: failure.job.queueName,
-          modelId: failure.job.data.modelId,
-          scenarioId: failure.job.data.scenarioId,
-          sampleIndex: failure.job.data.sampleIndex,
-          error: failure.error,
-        })),
-      },
-      'Run failed during enqueue integrity check'
-    );
-
-    throw new Error(`Run initialization failed: ${failureReason}`);
+    throw error;
   }
 
   log.info(

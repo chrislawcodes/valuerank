@@ -1,5 +1,6 @@
 import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
+import { NotFoundError, ValidationError } from '@valuerank/shared';
 import { ValueStatementRef } from '../types/refs.js';
 import { CreateValueStatementInput, UpdateValueStatementInput } from '../types/value-statement.js';
 
@@ -13,7 +14,7 @@ builder.mutationFields((t) => ({
       const existing = await db.valueStatement.findUnique({
         where: { domainId_token: { domainId, token } },
       });
-      if (existing != null) throw new Error(`Value statement for token "${token}" already exists in this domain`);
+      if (existing != null) throw new ValidationError(`Value statement for token "${token}" already exists in this domain`);
       return db.valueStatement.create({
         data: { domainId, token, body },
       });
@@ -29,7 +30,7 @@ builder.mutationFields((t) => ({
       const id = String(args.id);
       ctx.log.info({ id }, 'Updating value statement');
       const existing = await db.valueStatement.findUnique({ where: { id } });
-      if (existing == null) throw new Error(`ValueStatement ${id} not found`);
+      if (existing == null) throw new NotFoundError('ValueStatement', id);
       return db.valueStatement.update({
         where: { id },
         data: { body: args.input.body },

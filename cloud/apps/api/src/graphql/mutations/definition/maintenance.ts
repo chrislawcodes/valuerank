@@ -1,4 +1,5 @@
 import { db, softDeleteDefinition } from '@valuerank/db';
+import { NotFoundError } from '@valuerank/shared';
 import { builder } from '../../builder.js';
 import { createAuditLog } from '../../../services/audit/index.js';
 import {
@@ -68,7 +69,7 @@ builder.mutationField('regenerateScenarios', (t) =>
       });
 
       if (!definition) {
-        throw new Error(`Definition not found: ${definitionId}`);
+        throw new NotFoundError('Definition', definitionId);
       }
 
       const queueResult = await queueScenarioExpansion(definitionId, 'update');
@@ -119,7 +120,7 @@ builder.mutationField('cancelScenarioExpansion', (t) =>
       });
 
       if (!definition) {
-        throw new Error(`Definition not found: ${definitionId}`);
+        throw new NotFoundError('Definition', definitionId);
       }
 
       const result = await cancelScenarioExpansion(definitionId);

@@ -1,4 +1,5 @@
 import { db, resolveDefinitionContent, type Prisma } from '@valuerank/db';
+import { NotFoundError, ValidationError } from '@valuerank/shared';
 import { builder } from '../../builder.js';
 import { DefinitionRef } from '../../types/refs.js';
 import { createAuditLog } from '../../../services/audit/index.js';
@@ -43,7 +44,7 @@ builder.mutationField('updateDefinition', (t) =>
       });
 
       if (!existing) {
-        throw new Error(`Definition not found: ${id}`);
+        throw new NotFoundError('Definition', id);
       }
 
       const updateData: Prisma.DefinitionUncheckedUpdateInput = {};
@@ -60,7 +61,7 @@ builder.mutationField('updateDefinition', (t) =>
       if (content !== null && content !== undefined) {
         const parseResult = zContentObject.safeParse(content);
         if (!parseResult.success) {
-          throw new Error('Content must be a JSON object');
+          throw new ValidationError('Content must be a JSON object');
         }
         const processedContent = ensureSchemaVersion(parseResult.data);
         const exactContentEqual = jsonValuesEqual(existing.content, processedContent);
@@ -82,7 +83,7 @@ builder.mutationField('updateDefinition', (t) =>
         if (preambleVersionId !== null) {
           const check = await db.preambleVersion.findUnique({ where: { id: preambleVersionId } });
           if (!check) {
-            throw new Error(`Preamble version not found: ${preambleVersionId}`);
+            throw new NotFoundError('Preamble version', preambleVersionId);
           }
           updateData.preambleVersionId = preambleVersionId;
         } else {
@@ -182,7 +183,7 @@ builder.mutationField('updateDefinitionContent', (t) =>
       });
 
       if (!existing) {
-        throw new Error(`Definition not found: ${id}`);
+        throw new NotFoundError('Definition', id);
       }
 
       const existingContent = existing.content as Record<string, unknown>;
@@ -203,7 +204,7 @@ builder.mutationField('updateDefinitionContent', (t) =>
         // Inherit from parent by omitting the local field.
       } else if (dimensions !== undefined && dimensions !== null) {
         if (!Array.isArray(dimensions)) {
-          throw new Error('Dimensions must be an array');
+          throw new ValidationError('Dimensions must be an array');
         }
         newContent.dimensions = dimensions;
       } else if ('dimensions' in existingContent) {
@@ -269,11 +270,11 @@ builder.mutationField('unforkDefinition', (t) =>
       });
 
       if (!existing) {
-        throw new Error(`Definition not found: ${id}`);
+        throw new NotFoundError('Definition', id);
       }
 
       if (existing.parentId === null) {
-        throw new Error('Definition is already standalone');
+        throw new ValidationError('Definition is already standalone');
       }
 
       const oldParentId = existing.parentId;

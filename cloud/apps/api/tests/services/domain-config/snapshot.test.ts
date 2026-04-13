@@ -14,14 +14,18 @@ vi.mock('@valuerank/db', () => ({
   Prisma: {},
 }));
 
-vi.mock('@valuerank/shared', () => ({
-  createLogger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
-}));
+vi.mock('@valuerank/shared', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@valuerank/shared')>();
+  return {
+    ...actual,
+    createLogger: () => ({
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    }),
+  };
+});
 
 // Import AFTER mocks are set up
 import { ensureDomainConfigSnapshot } from '../../../src/services/domain-config/snapshot.js';

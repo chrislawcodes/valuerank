@@ -1,5 +1,6 @@
-import { builder } from '../builder.js';
 import { db, Prisma } from '@valuerank/db';
+import { NotFoundError, ValidationError } from '@valuerank/shared';
+import { builder } from '../builder.js';
 import { LevelPresetRef } from '../types/refs.js';
 import { createAuditLog } from '../../services/audit/index.js';
 
@@ -44,7 +45,7 @@ builder.mutationField('createLevelPreset', (t) =>
         });
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-          throw new Error(`Level preset "${args.name}" already exists`);
+          throw new ValidationError(`Level preset "${args.name}" already exists`);
         }
         throw error;
       }
@@ -76,7 +77,7 @@ builder.mutationField('updateLevelPreset', (t) =>
     resolve: async (_root, args, ctx) => {
       const id = String(args.id);
       const existing = await db.levelPreset.findUnique({ where: { id } });
-      if (existing == null) throw new Error(`Level preset not found: ${id}`);
+      if (existing == null) throw new NotFoundError('Level preset', id);
 
       // Count existing versions to derive a version label
       const versionCount = await db.levelPresetVersion.count({
@@ -126,7 +127,7 @@ builder.mutationField('deleteLevelPreset', (t) =>
     resolve: async (_root, args, ctx) => {
       const id = String(args.id);
       const existing = await db.levelPreset.findUnique({ where: { id } });
-      if (existing == null) throw new Error(`Level preset not found: ${id}`);
+      if (existing == null) throw new NotFoundError('Level preset', id);
 
       await db.levelPreset.delete({ where: { id } });
 

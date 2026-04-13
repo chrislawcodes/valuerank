@@ -1,5 +1,6 @@
 import { builder } from '../builder.js';
 import { config } from '../../config.js';
+import { AppError } from '@valuerank/shared';
 import { resolveTranscriptDecisionModel } from '../queries/domain/shared.js';
 import { TranscriptRef, RunRef, ScenarioRef } from './refs.js';
 
@@ -61,7 +62,7 @@ builder.objectType(TranscriptRef, {
       resolve: async (transcript, _args, ctx) => {
         const run = await ctx.loaders.run.load(transcript.runId);
         if (run === null || run === undefined) {
-          throw new Error(`Run not found for transcript ${transcript.id}`);
+          throw new AppError(`Run not found for transcript ${transcript.id}`, 'NOT_FOUND', 404);
         }
         return run;
       },

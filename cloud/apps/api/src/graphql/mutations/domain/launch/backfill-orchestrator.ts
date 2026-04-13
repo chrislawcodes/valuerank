@@ -1,4 +1,5 @@
 import { db } from '@valuerank/db';
+import { NotFoundError, ValidationError } from '@valuerank/shared';
 import { createAuditLog } from '../../../../services/audit/index.js';
 import type {
   DomainEvaluationModelBackfillInput,
@@ -23,13 +24,13 @@ export async function backfillDomainEvaluationModels(input: DomainEvaluationMode
   } = input;
 
   if (modelIds.length === 0) {
-    throw new Error('Select at least one model to backfill.');
+    throw new ValidationError('Select at least one model to backfill.');
   }
 
   const effectiveTargetBatchCount = targetBatchCount != null && targetBatchCount > 0 ? targetBatchCount : 1;
   const uniqueRequestedModelIds = Array.from(new Set(modelIds.map((modelId) => modelId.trim()).filter((modelId) => modelId !== '')));
   if (uniqueRequestedModelIds.length === 0) {
-    throw new Error('Select at least one model to backfill.');
+    throw new ValidationError('Select at least one model to backfill.');
   }
 
   const execution = await db.$transaction(async (tx) => {
@@ -52,18 +53,18 @@ export async function backfillDomainEvaluationModels(input: DomainEvaluationMode
       },
     });
     if (!evaluation) {
-      throw new Error(`Domain evaluation not found: ${domainEvaluationId}`);
+      throw new NotFoundError('Domain evaluation', domainEvaluationId);
     }
 
     const snapshot = getBackfillSnapshot(evaluation.configSnapshot);
     if (!snapshot) {
-      throw new Error('This evaluation does not have enough saved launch settings to support model backfill.');
+      throw new ValidationError('This evaluation does not have enough saved launch settings to support model backfill.');
     }
 
     const allowedModelIds = new Set(snapshot.models);
     const invalidRequestedModels = uniqueRequestedModelIds.filter((modelId) => !allowedModelIds.has(modelId));
     if (invalidRequestedModels.length > 0) {
-      throw new Error(`Selected models are not part of this evaluation: ${invalidRequestedModels.join(', ')}`);
+      throw new ValidationError(`Selected models are not part of this evaluation: ${invalidRequestedModels.join(', ')}`);
     }
 
     const activeModels = await tx.llmModel.findMany({
@@ -76,7 +77,7 @@ export async function backfillDomainEvaluationModels(input: DomainEvaluationMode
     const activeModelIdSet = new Set(activeModels.map((model) => model.modelId));
     const inactiveRequestedModels = uniqueRequestedModelIds.filter((modelId) => !activeModelIdSet.has(modelId));
     if (inactiveRequestedModels.length > 0) {
-      throw new Error(`Selected models are not active: ${inactiveRequestedModels.join(', ')}`);
+      throw new ValidationError(`Selected models are not active: ${inactiveRequestedModels.join(', ')}`);
     }
 
     const launchableDefinitionIdSet = new Set(snapshot.launchableDefinitionIds);
@@ -84,12 +85,12 @@ export async function backfillDomainEvaluationModels(input: DomainEvaluationMode
     const selectedDefinitionIds = uniqueRequestedDefinitionIds.length > 0 ? uniqueRequestedDefinitionIds : snapshot.launchableDefinitionIds;
     const outOfScopeDefinitionIds = selectedDefinitionIds.filter((definitionId) => !launchableDefinitionIdSet.has(definitionId));
     if (outOfScopeDefinitionIds.length > 0) {
-      throw new Error(`Selected vignettes are not part of this evaluation: ${outOfScopeDefinitionIds.join(', ')}`);
+      throw new ValidationError(`Selected vignettes are not part of this evaluation: ${outOfScopeDefinitionIds.join(', ')}`);
     }
 
     const domain = await tx.domain.findUnique({ where: { id: evaluation.domainId } });
     if (!domain) {
-      throw new Error(`Domain not found: ${evaluation.domainId}`);
+      throw new NotFoundError('Domain', evaluation.domainId);
     }
 
     const totalDefinitions = await tx.definition.count({
@@ -114,12 +115,12 @@ export async function backfillDomainEvaluationModels(input: DomainEvaluationMode
     const selectedDefinitionIdSet = new Set(selectedDefinitions.map((definition) => definition.id));
     const missingDefinitions = selectedDefinitionIds.filter((definitionId) => !selectedDefinitionIdSet.has(definitionId));
     if (missingDefinitions.length > 0) {
-      throw new Error(`Selected vignettes are missing or deleted: ${missingDefinitions.join(', ')}`);
+      throw new ValidationError(`Selected vignettes are missing or deleted: ${missingDefinitions.join(', ')}`);
     }
 
     const { groups: launchGroups, incompletePairKeys } = groupDefinitionsByPairKey(selectedDefinitions);
     if (incompletePairKeys.length > 0) {
-      throw new Error(`Backfill requires complete vignette pairs. Include both sides for: ${incompletePairKeys.join(', ')}`);
+      throw new ValidationError(`Backfill requires complete vignette pairs. Include both sides for: ${incompletePairKeys.join(', ')}`);
     }
 
     const { backfillGroups, projectedCostUsd } = await planBackfillGroups({

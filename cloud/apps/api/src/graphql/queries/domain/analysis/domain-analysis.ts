@@ -1,4 +1,5 @@
 import { db } from '@valuerank/db';
+import { NotFoundError } from '@valuerank/shared';
 import { builder } from '../../../builder.js';
 import {
   computeRankingShapes,
@@ -44,7 +45,7 @@ builder.queryField('domainAnalysis', (t) =>
         ctx.log.warn({ domainId }, 'domainAnalysis called without signature; defaulting to first vnew signature');
       }
       const domain = await db.domain.findUnique({ where: { id: domainId } });
-      if (!domain) throw new Error(`Domain not found: ${domainId}`);
+      if (!domain) throw new NotFoundError('Domain', domainId);
 
       const definitions = await db.definition.findMany({
         where: { domainId, deletedAt: null },

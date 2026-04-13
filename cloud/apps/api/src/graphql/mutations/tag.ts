@@ -1,5 +1,6 @@
-import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
+import { NotFoundError, ValidationError } from '@valuerank/shared';
+import { builder } from '../builder.js';
 import { TagRef } from '../types/refs.js';
 import { createAuditLog } from '../../services/audit/index.js';
 
@@ -50,7 +51,7 @@ builder.mutationField('createTag', (t) =>
 
       // Validate name format
       if (!TAG_NAME_REGEX.test(normalizedName)) {
-        throw new Error('Tag name must contain only lowercase letters, numbers, hyphens, and underscores');
+        throw new ValidationError('Tag name must contain only lowercase letters, numbers, hyphens, and underscores');
       }
 
       // Check for existing tag with same name
@@ -59,7 +60,7 @@ builder.mutationField('createTag', (t) =>
       });
 
       if (existing) {
-        throw new Error(`Tag "${normalizedName}" already exists`);
+        throw new ValidationError(`Tag "${normalizedName}" already exists`);
       }
 
       const tag = await db.tag.create({
@@ -106,7 +107,7 @@ builder.mutationField('deleteTag', (t) =>
       });
 
       if (!tag) {
-        throw new Error(`Tag not found: ${args.id}`);
+        throw new NotFoundError('Tag', args.id);
       }
 
       const affectedDefinitions = tag._count.definitions;

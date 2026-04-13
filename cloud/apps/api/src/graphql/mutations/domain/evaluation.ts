@@ -1,6 +1,6 @@
 import { builder } from '../../builder.js';
 import { db } from '@valuerank/db';
-import { AuthenticationError } from '@valuerank/shared';
+import { AuthenticationError, NotFoundError, ValidationError } from '@valuerank/shared';
 import { createAuditLog } from '../../../services/audit/index.js';
 import { startRun as startRunService } from '../../../services/run/index.js';
 import { parseTemperature } from '../../../utils/temperature.js';
@@ -151,14 +151,14 @@ builder.mutationField('retryDomainTrialCell', (t) =>
         : 'PRODUCTION';
 
       const domain = await db.domain.findUnique({ where: { id: domainId } });
-      if (!domain) throw new Error(`Domain not found: ${domainId}`);
+      if (!domain) throw new NotFoundError('Domain', domainId);
 
       const definition = await db.definition.findFirst({
         where: { id: definitionId, domainId, deletedAt: null },
         select: { id: true },
       });
       if (!definition) {
-        throw new Error('Selected vignette is not part of this domain.');
+        throw new ValidationError('Selected vignette is not part of this domain.');
       }
 
       const model = await db.llmModel.findFirst({
@@ -166,7 +166,7 @@ builder.mutationField('retryDomainTrialCell', (t) =>
         select: { modelId: true },
       });
       if (!model) {
-        throw new Error(`Model is not active: ${modelId}`);
+        throw new ValidationError(`Model is not active: ${modelId}`);
       }
 
       const activeRuns = await db.run.findMany({
@@ -187,7 +187,7 @@ builder.mutationField('retryDomainTrialCell', (t) =>
           && runModels[0] === modelId;
       });
       if (hasEquivalentActiveRun) {
-        throw new Error('Retry blocked: this model/vignette cell already has an active run at the same temperature.');
+        throw new ValidationError('Retry blocked: this model/vignette cell already has an active run at the same temperature.');
       }
 
       const run = await startRunService({

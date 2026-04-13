@@ -1,5 +1,5 @@
 import { db, type Prisma } from '@valuerank/db';
-import { AuthenticationError, NotFoundError } from '@valuerank/shared';
+import { AuthenticationError, NotFoundError, ValidationError } from '@valuerank/shared';
 import { builder } from '../../builder.js';
 import { RunRef, TranscriptRef } from '../../types/refs.js';
 import { triggerBasicAnalysis } from '../../../services/analysis/trigger.js';
@@ -165,7 +165,7 @@ builder.mutationField('updateTranscriptDecision', (t) =>
       const decisionCode = args.decisionCode.trim();
 
       if (!isValidManualDecisionCode(decisionCode)) {
-        throw new Error('decisionCode must be a positive integer');
+        throw new ValidationError('decisionCode must be a positive integer');
       }
 
       const transcript = await db.transcript.findUnique({

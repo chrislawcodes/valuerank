@@ -1,4 +1,5 @@
 import { db } from '@valuerank/db';
+import { ValidationError } from '@valuerank/shared';
 
 export async function resolveModelsForLaunch(params: {
   requestedModelIds: string[];
@@ -22,7 +23,7 @@ export async function resolveModelsForLaunch(params: {
     ? fallbackModels
     : (defaultModels.length > 0 ? defaultModels : fallbackModels);
   if (selectedModels.length === 0) {
-    throw new Error('No active models are configured. Add an active model before starting a domain evaluation.');
+    throw new ValidationError('No active models are configured. Add an active model before starting a domain evaluation.');
   }
   const normalizedModels = selectedModels.slice().sort((left, right) => left.localeCompare(right));
 

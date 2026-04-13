@@ -1,5 +1,6 @@
 import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
+import { NotFoundError } from '@valuerank/shared';
 import { DomainContextRef } from '../types/refs.js';
 import { CreateDomainContextInput, UpdateDomainContextInput } from '../types/domain-context.js';
 
@@ -27,7 +28,7 @@ builder.mutationFields((t) => ({
       const id = String(args.id);
       ctx.log.info({ id }, 'Updating domain context');
       const existing = await db.domainContext.findUnique({ where: { id } });
-      if (existing == null) throw new Error(`DomainContext ${id} not found`);
+      if (existing == null) throw new NotFoundError('DomainContext', id);
       return db.domainContext.update({
         where: { id },
         data: { text: args.input.text, version: existing.version + 1 },

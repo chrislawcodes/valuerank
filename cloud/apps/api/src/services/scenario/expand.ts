@@ -8,119 +8,25 @@
 
 import path from 'path';
 import { db, Prisma, type DefinitionContent } from '@valuerank/db';
-import { createLogger } from '@valuerank/shared';
+import { AppError, createLogger } from '@valuerank/shared';
 import { spawnPython, type ProgressUpdate } from '../../queue/spawn.js';
 import { getScenarioExpansionModel, isCodeGenerationEnabled } from '../infra-models.js';
 import { expandScenariosWithCode } from './expand-code.js';
+import {
+  type ExpandScenariosResult,
+  type GenerateScenariosInput,
+  type GenerateScenariosOutput,
+  getMaxTokensFromConfig,
+  normalizePreamble,
+  type ScenarioContent,
+} from './expand-helpers.js';
+
+export type { ExpandScenariosResult } from './expand-helpers.js';
 
 const log = createLogger('services:scenario:expand');
 
 // Path to Python worker (relative to cloud/ directory)
 const GENERATE_SCENARIOS_WORKER = 'workers/generate_scenarios.py';
-
-// Scenario content structure (matches what probe worker expects)
-type ScenarioContent = {
-  preamble?: string;
-  prompt: string;
-  followups?: Array<{ label: string; prompt: string }>;
-  // Dimension scores (1-5) for each dimension name
-  dimensions: Record<string, number>;
-};
-
-// Input for Python worker
-type GenerateScenariosInput = {
-  definitionId: string;
-  modelId: string;
-  content: {
-    preamble?: string;
-    template: string;
-    dimensions: unknown[];
-    matching_rules?: string;
-  };
-  config: {
-    temperature: number;
-    maxTokens: number;
-  };
-  modelConfig?: Record<string, unknown>;
-};
-
-// Debug info from Python worker for troubleshooting
-type ExpansionDebugInfo = {
-  rawResponse: string | null;
-  extractedYaml: string | null;
-  parseError: string | null;
-  // Optional fields populated during processing/errors
-  partialTokens?: number;
-  modelId?: string;
-  timestamp?: string;
-  stderr?: string;
-  errorDetails?: string;
-  method?: string;
-  scenariosCreated?: number;
-};
-
-// Output from Python worker
-type GenerateScenariosOutput = {
-  success: true;
-  scenarios: Array<{
-    name: string;
-    content: {
-      preamble?: string;
-      prompt: string;
-      dimensions: Record<string, number>;
-    };
-  }>;
-  metadata: {
-    inputTokens: number;
-    outputTokens: number;
-    modelVersion: string | null;
-  };
-  debug?: ExpansionDebugInfo;
-} | {
-  success: false;
-  error: {
-    message: string;
-    code: string;
-    retryable: boolean;
-    details?: string;
-  };
-  // Debug info is now included for failed responses too
-  debug?: ExpansionDebugInfo;
-};
-
-export type ExpandScenariosResult = {
-  created: number;
-  deleted: number;
-};
-
-/**
- * Normalize preamble - returns undefined if empty or whitespace-only.
- */
-function normalizePreamble(preamble: string | undefined): string | undefined {
-  if (preamble === undefined || preamble === null || preamble === '' || preamble.trim().length === 0) {
-    return undefined;
-  }
-  return preamble;
-}
-
-// Default max tokens for scenario expansion (conservative default)
-const DEFAULT_MAX_TOKENS = 8192;
-
-/**
- * Get maxTokens from model apiConfig, with conservative default.
- */
-function getMaxTokensFromConfig(apiConfig: Record<string, unknown> | null | undefined): number {
-  if (!apiConfig) {
-    return DEFAULT_MAX_TOKENS;
-  }
-
-  const maxTokens = apiConfig.maxTokens;
-  if (typeof maxTokens === 'number' && maxTokens > 0) {
-    return maxTokens;
-  }
-
-  return DEFAULT_MAX_TOKENS;
-}
 
 /**
  * Expands scenarios from a definition's content using the Python worker.
@@ -191,7 +97,7 @@ export async function expandScenarios(
     if (!codeResult.success) {
       // This shouldn't happen as code expansion always succeeds
       log.error({ definitionId }, 'Code-based expansion failed unexpectedly');
-      throw new Error('Code-based scenario expansion failed');
+      throw new AppError('Code-based scenario expansion failed', 'EXPANSION_FAILED');
     }
 
     // Create scenario records from code expansion result
@@ -317,7 +223,7 @@ export async function expandScenarios(
     });
 
     // Always throw on spawn failure - don't hide errors with fallback scenarios
-    throw new Error(`Scenario expansion failed: ${result.error}`);
+    throw new AppError(`Scenario expansion failed: ${result.error}`, 'EXPANSION_FAILED');
   }
 
   const workerOutput = result.data;
@@ -350,7 +256,7 @@ export async function expandScenarios(
 
     // Always throw on worker errors - don't hide failures with fallback scenarios
     // Both retryable and non-retryable errors should surface to the user
-    throw new Error(`LLM generation failed: ${workerOutput.error.message}`);
+    throw new AppError(`LLM generation failed: ${workerOutput.error.message}`, 'LLM_FAILED');
   }
 
   // Handle empty scenarios - this is always an error since we checked for dimensions earlier
@@ -377,7 +283,7 @@ export async function expandScenarios(
     });
 
     // Always throw - empty scenarios is an error when we have dimensions
-    throw new Error(`Scenario generation failed: ${parseError}`);
+    throw new AppError(`Scenario generation failed: ${parseError}`, 'GENERATION_FAILED');
   }
 
   // Create scenario records from worker output
