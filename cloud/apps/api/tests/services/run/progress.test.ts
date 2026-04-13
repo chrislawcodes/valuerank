@@ -157,6 +157,103 @@ describe('progress service', () => {
       expect(result.progress.failed).toBe(2);
       expect(result.status).toBe('PENDING');
     });
+
+    it('applies FAILED to SUCCESS correction swaps in SUMMARIZING', async () => {
+      const run = await createTestRun({ total: 4, completed: 2, failed: 2 });
+      await db.run.update({
+        where: { id: run.id },
+        data: { status: 'SUMMARIZING' },
+      });
+
+      const result = await updateProgress(run.id, {
+        incrementCompleted: 1,
+        incrementFailed: -1,
+      });
+
+      expect(result.progress).toEqual({ total: 4, completed: 3, failed: 1 });
+      expect(result.status).toBe('SUMMARIZING');
+    });
+
+    it('applies SUCCESS to FAILED correction swaps in SUMMARIZING', async () => {
+      const run = await createTestRun({ total: 4, completed: 3, failed: 1 });
+      await db.run.update({
+        where: { id: run.id },
+        data: { status: 'SUMMARIZING' },
+      });
+
+      const result = await updateProgress(run.id, {
+        incrementCompleted: -1,
+        incrementFailed: 1,
+      });
+
+      expect(result.progress).toEqual({ total: 4, completed: 2, failed: 2 });
+      expect(result.status).toBe('SUMMARIZING');
+    });
+
+    it('blocks non-correction increments in SUMMARIZING', async () => {
+      const run = await createTestRun({ total: 4, completed: 2, failed: 2 });
+      await db.run.update({
+        where: { id: run.id },
+        data: { status: 'SUMMARIZING' },
+      });
+
+      const result = await updateProgress(run.id, {
+        incrementCompleted: 1,
+        incrementFailed: 0,
+      });
+
+      expect(result.progress).toEqual({ total: 4, completed: 2, failed: 2 });
+      expect(result.status).toBe('SUMMARIZING');
+    });
+
+    it('does not call boss.send for SUMMARIZING correction swaps', async () => {
+      const run = await createTestRun({ total: 4, completed: 2, failed: 2 });
+      await db.run.update({
+        where: { id: run.id },
+        data: { status: 'SUMMARIZING' },
+      });
+
+      mockSend.mockClear();
+
+      await updateProgress(run.id, {
+        incrementCompleted: 1,
+        incrementFailed: -1,
+      });
+
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it('blocks non-correction increments in COMPLETED', async () => {
+      const run = await createTestRun({ total: 4, completed: 4, failed: 0 });
+      await db.run.update({
+        where: { id: run.id },
+        data: { status: 'COMPLETED', completedAt: new Date() },
+      });
+
+      const result = await updateProgress(run.id, {
+        incrementCompleted: 1,
+        incrementFailed: 0,
+      });
+
+      expect(result.progress).toEqual({ total: 4, completed: 4, failed: 0 });
+      expect(result.status).toBe('COMPLETED');
+    });
+
+    it('applies correction swaps in COMPLETED', async () => {
+      const run = await createTestRun({ total: 4, completed: 4, failed: 0 });
+      await db.run.update({
+        where: { id: run.id },
+        data: { status: 'COMPLETED', completedAt: new Date() },
+      });
+
+      const result = await updateProgress(run.id, {
+        incrementCompleted: -1,
+        incrementFailed: 1,
+      });
+
+      expect(result.progress).toEqual({ total: 4, completed: 3, failed: 1 });
+      expect(result.status).toBe('COMPLETED');
+    });
   });
 
   describe('status transitions', () => {

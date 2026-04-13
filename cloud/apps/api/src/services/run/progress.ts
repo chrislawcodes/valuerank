@@ -52,9 +52,14 @@ export async function updateProgress(
     throw new NotFoundError('Run', runId);
   }
 
-  // Don't update progress if run is not in PENDING or RUNNING state
-  // This prevents overcounting when probe jobs complete after the run has moved on
-  if (!['PENDING', 'RUNNING'].includes(currentRun.status)) {
+  // Allow correction swaps regardless of run status.
+  // A correction swap is exactly { +1, -1 } or { -1, +1 } - the counters offset each other.
+  // This handles FAILED -> SUCCESS or SUCCESS -> FAILED probe transitions during recovery
+  // even after the run has moved to SUMMARIZING or a terminal state.
+  const isCorrectionSwap =
+    (incrementCompleted === 1 && incrementFailed === -1) ||
+    (incrementCompleted === -1 && incrementFailed === 1);
+  if (!['PENDING', 'RUNNING'].includes(currentRun.status) && !isCorrectionSwap) {
     log.debug(
       { runId, status: currentRun.status, incrementCompleted, incrementFailed },
       'Skipping progress update - run not in PENDING/RUNNING state'
@@ -354,69 +359,5 @@ export function calculatePercentComplete(progress: ProgressData): number {
   return Math.round((done / progress.total) * 100);
 }
 
-/**
- * Updates summarize progress atomically using PostgreSQL JSONB operators.
- * Increments the completed or failed count for transcript summarization.
- */
-export async function updateSummarizeProgress(
-  runId: string,
-  update: { incrementCompleted?: number; incrementFailed?: number }
-): Promise<ProgressData | null> {
-  const { incrementCompleted = 0, incrementFailed = 0 } = update;
-
-  if (incrementCompleted === 0 && incrementFailed === 0) {
-    const run = await db.run.findUnique({
-      where: { id: runId },
-      select: { summarizeProgress: true },
-    });
-    return run?.summarizeProgress as ProgressData | null;
-  }
-
-  log.debug(
-    { runId, incrementCompleted, incrementFailed },
-    'Updating summarize progress'
-  );
-
-  // Use raw SQL for atomic JSONB increment
-  const result = await db.$queryRaw<Array<{
-    id: string;
-    summarize_progress: ProgressData;
-  }>>`
-    UPDATE runs
-    SET
-      summarize_progress = jsonb_set(
-        jsonb_set(
-          summarize_progress,
-          '{completed}',
-          to_jsonb((summarize_progress->>'completed')::int + ${incrementCompleted})
-        ),
-        '{failed}',
-        to_jsonb((summarize_progress->>'failed')::int + ${incrementFailed})
-      ),
-      updated_at = NOW()
-    WHERE id = ${runId}
-    RETURNING id, summarize_progress
-  `;
-
-  const updatedRun = result[0];
-  if (!updatedRun) {
-    return null;
-  }
-
-  log.debug({ runId, summarizeProgress: updatedRun.summarize_progress }, 'Summarize progress updated');
-  return updatedRun.summarize_progress;
-}
-
-/**
- * Increments summarize completed count by 1.
- */
-export async function incrementSummarizeCompleted(runId: string): Promise<ProgressData | null> {
-  return updateSummarizeProgress(runId, { incrementCompleted: 1 });
-}
-
-/**
- * Increments summarize failed count by 1.
- */
-export async function incrementSummarizeFailed(runId: string): Promise<ProgressData | null> {
-  return updateSummarizeProgress(runId, { incrementFailed: 1 });
-}
+// Summarize progress functions live in ./summarize-progress.ts
+export { updateSummarizeProgress, incrementSummarizeCompleted, incrementSummarizeFailed } from './summarize-progress.js';

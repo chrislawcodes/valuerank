@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LlmModel } from '../../../../src/api/operations/llm';
-import { buildProviderBudgetEstimates } from '../../../../src/components/domains/domainTrials/launch-state';
+import { buildProviderBudgetEstimates, getBatchRuntimeState } from '../../../../src/components/domains/domainTrials/launch-state';
 
 function makeModel(overrides: Partial<LlmModel> = {}): LlmModel {
   return {
@@ -102,5 +102,95 @@ describe('buildProviderBudgetEstimates', () => {
       budgetBalanceUsd: 100,
       budgetReady: false,
     });
+  });
+});
+
+describe('getBatchRuntimeState', () => {
+  it('treats COMPLETED runs with completed analysis and stale errors as TERMINAL', () => {
+    const run = {
+      status: 'COMPLETED',
+      analysisStatus: 'completed',
+      stalledModels: [],
+      latestErrorMessage: 'AUTH_ERROR',
+    } satisfies Parameters<typeof getBatchRuntimeState>[0];
+
+    expect(getBatchRuntimeState(run)).toBe('TERMINAL');
+  });
+
+  it('treats COMPLETED runs with completed analysis and stalled models as TERMINAL', () => {
+    const run = {
+      status: 'COMPLETED',
+      analysisStatus: 'completed',
+      stalledModels: ['model-a'],
+      latestErrorMessage: null,
+    } satisfies Parameters<typeof getBatchRuntimeState>[0];
+
+    expect(getBatchRuntimeState(run)).toBe('TERMINAL');
+  });
+
+  it('treats COMPLETED runs with failed analysis as EXCEPTION', () => {
+    const run = {
+      status: 'COMPLETED',
+      analysisStatus: 'failed',
+      stalledModels: [],
+      latestErrorMessage: null,
+    } satisfies Parameters<typeof getBatchRuntimeState>[0];
+
+    expect(getBatchRuntimeState(run)).toBe('EXCEPTION');
+  });
+
+  it('treats COMPLETED runs with null analysis status as TERMINAL', () => {
+    const run = {
+      status: 'COMPLETED',
+      analysisStatus: null,
+      stalledModels: [],
+      latestErrorMessage: null,
+    } satisfies Parameters<typeof getBatchRuntimeState>[0];
+
+    expect(getBatchRuntimeState(run)).toBe('TERMINAL');
+  });
+
+  it('treats baseline COMPLETED runs with completed analysis as TERMINAL', () => {
+    const run = {
+      status: 'COMPLETED',
+      analysisStatus: 'completed',
+      stalledModels: [],
+      latestErrorMessage: null,
+    } satisfies Parameters<typeof getBatchRuntimeState>[0];
+
+    expect(getBatchRuntimeState(run)).toBe('TERMINAL');
+  });
+
+  it('treats FAILED runs as EXCEPTION', () => {
+    const run = {
+      status: 'FAILED',
+      analysisStatus: null,
+      stalledModels: [],
+      latestErrorMessage: null,
+    } satisfies Parameters<typeof getBatchRuntimeState>[0];
+
+    expect(getBatchRuntimeState(run)).toBe('EXCEPTION');
+  });
+
+  it('treats RUNNING runs with no errors as LIVE', () => {
+    const run = {
+      status: 'RUNNING',
+      analysisStatus: null,
+      stalledModels: [],
+      latestErrorMessage: null,
+    } satisfies Parameters<typeof getBatchRuntimeState>[0];
+
+    expect(getBatchRuntimeState(run)).toBe('LIVE');
+  });
+
+  it('treats CANCELLED runs with errors as EXCEPTION', () => {
+    const run = {
+      status: 'CANCELLED',
+      analysisStatus: null,
+      stalledModels: [],
+      latestErrorMessage: 'AUTH_ERROR',
+    } satisfies Parameters<typeof getBatchRuntimeState>[0];
+
+    expect(getBatchRuntimeState(run)).toBe('EXCEPTION');
   });
 });
