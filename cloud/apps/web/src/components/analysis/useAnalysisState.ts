@@ -221,8 +221,6 @@ export function useAnalysisState({
     scenariosTranscripts,
     singleVignetteOptions,
     displayWarnings,
-    batches,
-    batchDetail,
     aggregateSourceRunCount,
     decisionCoverageMessage,
     coverageEvidenceMessage,
