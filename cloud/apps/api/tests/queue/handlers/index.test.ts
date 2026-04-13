@@ -94,7 +94,7 @@ describe('Handler Registration', () => {
 
       // Should still work
       const jobTypes = getJobTypes();
-      expect(jobTypes).toHaveLength(7);
+      expect(jobTypes).toHaveLength(8);
     });
   });
 
