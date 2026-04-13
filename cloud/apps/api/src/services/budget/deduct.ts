@@ -132,6 +132,64 @@ export async function deductActualProviderBalancesForRun(runId: string): Promise
 }
 
 /**
+ * Reverse the budget deduction for a run by crediting back the costs
+ * stored in each transcript's costSnapshot. Used by the backfill script
+ * before re-opening a prematurely completed run.
+ *
+ * Costs are read from transcript.content.costSnapshot.estimatedCost.
+ * Accepts an optional Prisma transaction client for atomic execution with
+ * status updates.
+ */
+export async function reverseDeductionForRun(
+  runId: string,
+  tx?: Prisma.TransactionClient,
+): Promise<void> {
+  const client = tx ?? db;
+  const transcripts = await client.transcript.findMany({
+    where: { runId },
+    select: { modelId: true, content: true },
+  });
+  if (transcripts.length === 0) return;
+
+  const costByModel = new Map<string, number>();
+  for (const t of transcripts) {
+    const cost = extractTranscriptCost(t.content);
+    if (cost > 0) {
+      costByModel.set(t.modelId, (costByModel.get(t.modelId) ?? 0) + cost);
+    }
+  }
+  if (costByModel.size === 0) return;
+
+  const modelIds = [...costByModel.keys()];
+  const models = await client.llmModel.findMany({
+    where: { modelId: { in: modelIds } },
+    select: { modelId: true, provider: { select: { name: true, balance: true } } },
+  });
+  const modelToProvider = new Map(models.map((m) => [m.modelId, m.provider]));
+
+  const costByProvider = new Map<string, number>();
+  for (const [modelId, cost] of costByModel) {
+    const provider = modelToProvider.get(modelId);
+    if (provider == null) continue;
+    costByProvider.set(provider.name, (costByProvider.get(provider.name) ?? 0) + cost);
+  }
+
+  for (const [providerName, cost] of costByProvider) {
+    if (tx != null) {
+      await tx.$executeRaw`
+        UPDATE "llm_providers"
+        SET "balance" = "balance" + ${new Prisma.Decimal(cost)}
+        WHERE "name" = ${providerName}
+          AND "balance" IS NOT NULL
+      `;
+    } else {
+      await atomicDeduct(providerName, -cost);
+    }
+    log.info({ runId, providerName, cost }, 'Reversed provider balance (backfill)');
+  }
+}
+
+/**
  * Deduct provider balances for a completed run.
  *
  * Reads `estimatedCosts.perModel` from the run's JSON config, groups costs by
