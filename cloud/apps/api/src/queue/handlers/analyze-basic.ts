@@ -11,19 +11,19 @@ import type * as PgBoss from 'pg-boss';
 import { db, resolveDefinitionContent } from '@valuerank/db';
 import type { Prisma } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
+import { formatTrialSignature, formatVnewSignature } from '@valuerank/shared/trial-signature';
 import type { AnalyzeBasicJobData } from '../types.js';
 import { spawnPython } from '../spawn.js';
 import { computeInputHash, getCachedAnalysis, invalidateCache } from '../../services/analysis/cache.js';
-import {
-  buildScenarioAnalysisDimensionRecord,
-  normalizeScenarioAnalysisMetadata,
-} from '../../services/analysis/scenario-metadata.js';
-import {
-  resolveAnalysisDecisionModel,
-  resolveAnalysisValueOutcomes,
-} from '../../services/decision-model.js';
+import { queueDomainAnalysisRefresh } from '../../services/analysis/domain-analysis-cache.js';
+import { parseDefinitionVersion } from '../../utils/definition-version.js';
 import { parseTemperature } from '../../utils/temperature.js';
 import { config } from '../../config.js';
+import {
+  buildTranscriptDataForAnalysis,
+  type AnalyzeWorkerInput,
+  type AnalyzeWorkerOutput,
+} from './analyze-basic-data.js';
 
 const log = createLogger('queue:analyze-basic');
 
@@ -32,105 +32,6 @@ const ANALYZE_WORKER_PATH = 'workers/analyze_basic.py';
 
 // Code version for tracking analysis versions
 const CODE_VERSION = '1.1.1';
-const BASELINE_COMPATIBLE_ASSUMPTION_KEYS = new Set(['temp_zero_determinism']);
-
-/**
- * Transcript data structure sent to Python worker.
- * Matches CSV export format for consistency.
- */
-type TranscriptData = {
-  id: string;
-  modelId: string;
-  scenarioId: string;
-  sampleIndex: number; // Multi-sample: index within sample set (0 to N-1)
-  orientationFlipped: boolean;
-  decisionModelV2: {
-    raw: unknown;
-    canonical: unknown;
-  } | null;
-  summary: {
-    values?: Record<string, 'prioritized' | 'deprioritized' | 'neutral'>;
-  };
-  scenario: {
-    name: string;
-    dimensions: Record<string, number | string>; // Canonical analysis dimensions for grouping/effects
-  };
-};
-
-function getAssumptionKey(config: unknown): string | null {
-  if (config == null || typeof config !== 'object') return null;
-  const value = (config as Record<string, unknown>).assumptionKey;
-  return typeof value === 'string' && value.trim() !== '' ? value : null;
-}
-
-function hasAssumptionRunTag(tags: Array<{ tag: { name: string } }>): boolean {
-  return tags.some((entry) => entry.tag.name === 'assumption-run');
-}
-
-function isBaselineCompatibleRun(
-  config: unknown,
-  tags: Array<{ tag: { name: string } }>,
-): boolean {
-  const assumptionKey = getAssumptionKey(config);
-  if (assumptionKey === null) {
-    return !hasAssumptionRunTag(tags);
-  }
-
-  return BASELINE_COMPATIBLE_ASSUMPTION_KEYS.has(assumptionKey);
-}
-
-/**
- * Python worker input structure.
- */
-type AnalyzeWorkerInput = {
-  runId: string;
-  emitVignetteSemantics: boolean;
-  transcripts: TranscriptData[];
-};
-
-/**
- * Analysis output from Python worker.
- */
-type AnalysisOutput = {
-  perModel: Record<string, unknown>;
-  preferenceSummary?: {
-    perModel: Record<string, unknown>;
-  } | null;
-  reliabilitySummary?: {
-    perModel: Record<string, unknown>;
-  } | null;
-  modelAgreement: Record<string, unknown>;
-  dimensionAnalysis: Record<string, unknown>;
-  visualizationData?: Record<string, unknown>;
-  varianceAnalysis: {
-    isMultiSample: boolean;
-    samplesPerScenario: number;
-    perModel: Record<string, unknown>;
-    mostVariableScenarios: Array<Record<string, unknown>>;
-    leastVariableScenarios: Array<Record<string, unknown>>;
-  };
-  mostContestedScenarios: Array<{
-    scenarioId: string;
-    scenarioName: string;
-    variance: number;
-    modelScores: Record<string, number>;
-  }>;
-  methodsUsed: Record<string, unknown>;
-  warnings: Array<{
-    code: string;
-    message: string;
-    recommendation: string;
-  }>;
-  computedAt: string;
-  durationMs: number;
-};
-
-/**
- * Python worker output structure.
- */
-type AnalyzeWorkerOutput =
-  | { success: true; analysis: AnalysisOutput }
-  | { success: false; error: { message: string; code: string; retryable: boolean } };
 
 /**
  * Creates a handler for analyze_basic jobs.
@@ -199,10 +100,6 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
             },
           },
         });
-        const emitVignetteSemantics = isBaselineCompatibleRun(
-          runMeta?.config ?? null,
-          runMeta?.tags ?? [],
-        );
         let valueA: string | null = null;
         let valueB: string | null = null;
         if (runMeta?.definitionId != null && runMeta.definitionId !== '') {
@@ -216,63 +113,17 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
         }
 
         // Transform to worker input format (matches CSV export structure)
-        const scenarioDimensions: Record<string, Record<string, number | string>> = {};
-        const useDecisionModelV2 = config.DECISION_MODEL_V2;
-        const transcriptData: TranscriptData[] = transcripts
-          .filter((t) => t.scenario !== null && t.scenarioId !== null)
-          .map((t) => {
-            const scenario = t.scenario;
-            if (scenario === null) {
-              throw new Error(`Scenario not found for transcript ${t.id}`);
-            }
-            const scenarioContent = scenario.content as Record<string, unknown> | null;
-            const normalizedScenarioMetadata = normalizeScenarioAnalysisMetadata(scenarioContent);
-            const dimensions = buildScenarioAnalysisDimensionRecord(normalizedScenarioMetadata);
-
-            if (normalizedScenarioMetadata) {
-              scenarioDimensions[scenario.id] = normalizedScenarioMetadata.groupingDimensions;
-            }
-
-            const orientationFlipped = scenario.orientationFlipped ?? false;
-            const decisionModel = resolveAnalysisDecisionModel(
-              {
-                decisionCode: t.decisionCode,
-                decisionMetadata: t.decisionMetadata,
-                definitionSnapshot: t.definitionSnapshot,
-                orientationFlipped,
-              },
-              useDecisionModelV2,
-            );
-            const values = resolveAnalysisValueOutcomes(
-              {
-                decisionCode: t.decisionCode,
-                decisionMetadata: t.decisionMetadata,
-                definitionSnapshot: t.definitionSnapshot,
-                orientationFlipped,
-              },
-              valueA,
-              valueB,
-            );
-
-            return {
-              id: t.id,
-              modelId: t.modelId,
-              scenarioId: t.scenarioId as string,
-              sampleIndex: t.sampleIndex,
-              orientationFlipped,
-              decisionModelV2: decisionModel
-                ? {
-                    raw: decisionModel.raw,
-                    canonical: decisionModel.canonical,
-                  }
-                : null,
-              summary: values ? { values } : {},
-              scenario: {
-                name: t.scenario!.name,
-                dimensions,
-              },
-            };
-          });
+        const {
+          transcriptData,
+          scenarioDimensions,
+          emitVignetteSemantics,
+        } = await buildTranscriptDataForAnalysis({
+          transcripts,
+          runMeta,
+          useDecisionModelV2: config.DECISION_MODEL_V2,
+          valueA,
+          valueB,
+        });
 
         // Execute Python analyze worker
         const result = await spawnPython<AnalyzeWorkerInput, AnalyzeWorkerOutput>(
@@ -331,10 +182,19 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
         try {
           const run = await db.run.findUnique({
             where: { id: runId },
-            include: { tags: { include: { tag: true } } }
+            include: {
+              definition: {
+                select: {
+                  domainId: true,
+                },
+              },
+              tags: { include: { tag: true } },
+            },
           });
 
           if (run) {
+            const runConfig = run.config as { temperature?: unknown } | null;
+            const temperature = parseTemperature(runConfig?.temperature);
             const isAggregate = run.tags.some(rt => rt.tag.name === 'Aggregate');
             if (!isAggregate) {
               const config = run.config as {
@@ -345,8 +205,6 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
                 }
               };
               const definitionId = run.definitionId;
-              const runConfig = run.config as { temperature?: unknown } | null;
-              const temperature = parseTemperature(runConfig?.temperature);
               const preambleVersionId =
                 config.definitionSnapshot?._meta?.preambleVersionId ??
                 config.definitionSnapshot?.preambleVersionId ??
@@ -386,6 +244,37 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
               );
 
               log.info({ runId, definitionId, preambleVersionId, definitionVersion, temperature }, 'Enqueued aggregate_analysis job');
+            }
+
+            const domainId = run.definition?.domainId ?? null;
+            if (domainId !== null) {
+              const requestedExactVersion =
+                parseDefinitionVersion((run.config as {
+                  definitionSnapshot?: {
+                    _meta?: { definitionVersion?: unknown };
+                    version?: unknown;
+                  };
+                } | null)?.definitionSnapshot?._meta?.definitionVersion)
+                ?? parseDefinitionVersion((run.config as {
+                  definitionSnapshot?: {
+                    _meta?: { definitionVersion?: unknown };
+                    version?: unknown;
+                  };
+                } | null)?.definitionSnapshot?.version);
+              const exactSignature = formatTrialSignature(requestedExactVersion, temperature);
+              await Promise.all([
+                queueDomainAnalysisRefresh({
+                  domainId,
+                  signature: formatVnewSignature(temperature),
+                  reason: 'analysis-complete',
+                }),
+                queueDomainAnalysisRefresh({
+                  domainId,
+                  signature: exactSignature,
+                  reason: 'analysis-complete',
+                }),
+              ]);
+              log.info({ runId, domainId, exactSignature, temperature }, 'Enqueued domain analysis snapshot refresh');
             }
           }
         } catch (err) {

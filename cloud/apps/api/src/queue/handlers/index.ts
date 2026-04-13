@@ -26,7 +26,6 @@ export type {
 } from './handler-config.js';
 
 const log = createLogger('queue:handlers');
-
 /**
  * Registers provider-specific probe queue handlers.
  * Each provider queue gets N workers where N = maxParallelRequests.

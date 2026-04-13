@@ -1,5 +1,6 @@
 import type {
   DomainAnalysisQueryVariables as GeneratedDomainAnalysisQueryVariables,
+  RefreshDomainAnalysisMutationVariables as GeneratedRefreshDomainAnalysisMutationVariables,
   DomainAnalysisValueDetailQueryVariables as GeneratedDomainAnalysisValueDetailQueryVariables,
   DomainAnalysisConditionTranscriptsQueryVariables as GeneratedDomainAnalysisConditionTranscriptsQueryVariables,
   DomainAvailableSignaturesQueryVariables as GeneratedDomainAvailableSignaturesQueryVariables,
@@ -13,6 +14,7 @@ import type { TranscriptDecisionModelV2 } from './runs';
 // ============================================================================
 
 export { DomainAnalysisDocument as DOMAIN_ANALYSIS_QUERY } from '../../generated/graphql';
+export { RefreshDomainAnalysisDocument as REFRESH_DOMAIN_ANALYSIS_MUTATION } from '../../generated/graphql';
 export { DomainAnalysisLegacyDocument as DOMAIN_ANALYSIS_QUERY_LEGACY } from '../../generated/graphql';
 export { DomainAnalysisValueDetailDocument as DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY } from '../../generated/graphql';
 export { DomainAnalysisConditionTranscriptsDocument as DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY } from '../../generated/graphql';
@@ -116,13 +118,14 @@ export type DomainAnalysisResult = {
   missingDefinitions: {
     definitionId: string;
     definitionName: string;
-    reasonCode: 'NO_COMPLETED_RUNS' | 'NO_SIGNATURE_MATCH' | 'NO_TRANSCRIPTS';
+    reasonCode: 'NO_COMPLETED_RUNS' | 'NO_SIGNATURE_MATCH' | 'NO_TRANSCRIPTS' | 'NO_ANALYSIS';
     reasonLabel: string;
     missingAllModels: boolean;
     missingModelIds: string[];
     missingModelLabels: string[];
   }[];
   definitionsWithAnalysis: number;
+  cacheStatus: 'FRESH' | 'UPDATING' | 'OUT_OF_DATE';
   generatedAt: string;
   models: DomainAnalysisModel[];
   unavailableModels: DomainAnalysisUnavailableModel[];
@@ -135,6 +138,16 @@ export type DomainAnalysisQueryResult = {
 };
 
 export type DomainAnalysisQueryVariables = GeneratedDomainAnalysisQueryVariables;
+
+export type RefreshDomainAnalysisMutationResult = {
+  refreshDomainAnalysis: {
+    success: boolean;
+    mode: 'QUEUED' | 'REFRESHED';
+    message: string;
+  };
+};
+
+export type RefreshDomainAnalysisMutationVariables = GeneratedRefreshDomainAnalysisMutationVariables;
 
 export type DomainFindingsEligibility = {
   domainId: string;

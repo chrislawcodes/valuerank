@@ -16,6 +16,7 @@ query DomainAnalysis($domainId: ID!, $scoreMethod: String, $signature: String) {
       missingModelLabels
     }
     definitionsWithAnalysis
+    cacheStatus
     generatedAt
     models {
       model
@@ -68,6 +69,14 @@ query DomainAnalysis($domainId: ID!, $scoreMethod: String, $signature: String) {
       }
       faultLinesByPair
     }
+  }
+}
+
+mutation RefreshDomainAnalysis($domainId: ID!, $signature: String) {
+  refreshDomainAnalysis(domainId: $domainId, signature: $signature) {
+    success
+    mode
+    message
   }
 }
 

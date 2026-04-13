@@ -729,7 +729,14 @@ type DomainAnalysisModel {
   values: [DomainAnalysisValueScore!]!
 }
 
+type DomainAnalysisRefreshResult {
+  message: String!
+  mode: String!
+  success: Boolean!
+}
+
 type DomainAnalysisResult {
+  cacheStatus: String!
   clusterAnalysis: ClusterAnalysis!
   coveredDefinitions: Int!
   definitionsWithAnalysis: Int!
@@ -1595,6 +1602,7 @@ type Mutation {
     """Tag to remove"""
     tagId: String!
   ): Definition!
+  refreshDomainAnalysis(domainId: ID!, signature: String): DomainAnalysisRefreshResult!
   renameDomain(id: ID!, name: String!): Domain!
 
   "\n      Restart summarization for a run.\n\n      Only works when run is in a terminal state (COMPLETED/FAILED/CANCELLED).\n      By default, only re-queues transcripts without summaries or with errors.\n      With force=true, re-queues all transcripts.\n\n      Requires authentication.\n    "

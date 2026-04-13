@@ -39,6 +39,7 @@
 | **conditions-scoring-display-fix** | `codex/domain-analysis-ordering-fix` | 🟢 Done | PR #425 merged 2026-03-27 — ties read as 0, isOpponent uses strict > |
 | **batch-depth-coverage-fix** | `claude/eager-euclid` | 🟢 Done | PR #430 merged 2026-03-27 — count samplesPerScenario as batch depth |
 | **analysis-transcripts-canonical-v2-cleanup** | `feat/winner-score-display` | 🟢 Done | Semantic transcript drilldowns are now canonical-only; PR 446 was squash-merged and the remaining first/second wording cleanup is tracked below. |
+| **domain-analysis-freshness-cache** | `cleanup/agents-memory-stale-refs` | 🟢 Done locally | Domain Analysis overview now reads from cached per-run analysis snapshots, shows fresh/cached status in the UI, and refreshes in the background after page load or new basic analysis completion. |
 
 ### Follow-up Cleanup
 

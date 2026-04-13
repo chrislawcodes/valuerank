@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useQuery } from 'urql';
-import { isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
+import { useMutation, useQuery } from 'urql';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
 import { Button } from '../components/ui/Button';
@@ -10,6 +9,7 @@ import {
   DOMAIN_ANALYSIS_QUERY,
   DOMAIN_ANALYSIS_QUERY_LEGACY,
   DOMAIN_FINDINGS_ELIGIBILITY_QUERY,
+  REFRESH_DOMAIN_ANALYSIS_MUTATION,
   type DomainAvailableSignature,
   type DomainAvailableSignaturesQueryResult,
   type DomainAvailableSignaturesQueryVariables,
@@ -17,6 +17,8 @@ import {
   type DomainFindingsEligibilityQueryVariables,
   type DomainAnalysisQueryResult,
   type DomainAnalysisQueryVariables,
+  type RefreshDomainAnalysisMutationResult,
+  type RefreshDomainAnalysisMutationVariables,
 } from '../api/operations/domainAnalysis';
 import { ModelGroupsSection } from '../components/domains/ModelGroupsSection';
 import { DominanceSection } from '../components/domains/DominanceSection';
@@ -31,37 +33,12 @@ import {
 } from '../data/domainAnalysisData';
 import { useDomains } from '../hooks/useDomains';
 import { exportDomainTranscriptsAsCSV } from '../api/export';
-
-function parseTemperatureFromSignature(signature: string): number | null {
-  if (signature.trim() === '') return null;
-  if (isVnewSignature(signature)) {
-    try { return parseVnewTemperature(signature); } catch { return null; }
-  }
-  const match = signature.match(/t(.+)$/);
-  if (match != null) {
-    const token = match[1] ?? '';
-    if (token === 'd') return null;
-    const parsed = Number.parseFloat(token);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-function getSignaturePriority(option: DomainAvailableSignature): number {
-  if (option.signature === 'vnewtd') return 0;
-  if (!option.isVirtual && /td$/i.test(option.signature)) return 1;
-  if (option.isVirtual) return 2;
-  return 3;
-}
-
-function formatSignatureOptionLabel(option: DomainAvailableSignature): string {
-  if (option.isVirtual) return option.label;
-  const defaultMatch = option.signature.match(/^v(\d+)td$/i);
-  if (defaultMatch != null) return `v${defaultMatch[1]} @ default`;
-  const tempMatch = option.signature.match(/^v(\d+)t(.+)$/i);
-  if (tempMatch != null) return `v${tempMatch[1]} @ t=${tempMatch[2]}`;
-  return option.label;
-}
+import {
+  formatSignatureOptionLabel,
+  getCacheStatusCopy,
+  getSignaturePriority,
+  parseTemperatureFromSignature,
+} from '../utils/domainAnalysisUtils';
 
 export function DomainAnalysis() {
   const navigate = useNavigate();
@@ -72,6 +49,8 @@ export function DomainAnalysis() {
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
   const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
     DomainAvailableSignaturesQueryResult, DomainAvailableSignaturesQueryVariables
@@ -102,13 +81,6 @@ export function DomainAnalysis() {
     requestPolicy: 'cache-and-network',
   });
 
-  const hasValidSelectedSignature = useMemo(
-    () => selectedSignature !== '' && signatureOptions.some((o) => o.signature === selectedSignature),
-    [selectedSignature, signatureOptions],
-  );
-  const signatureSelectionReady = selectedDomainId !== '' && !signaturesLoading
-    && (signatureOptions.length === 0 || hasValidSelectedSignature);
-
   useEffect(() => {
     if (domains.length === 0) return;
     if (selectedDomainId !== '' && domains.some((d) => d.id === selectedDomainId)) return;
@@ -124,6 +96,11 @@ export function DomainAnalysis() {
   useEffect(() => { setExportError(null); }, [selectedDomainId, selectedSignature]);
 
   useEffect(() => {
+    setRefreshNotice(null);
+    setRefreshError(null);
+  }, [selectedDomainId, selectedSignature]);
+
+  useEffect(() => {
     if (selectedDomainId === '') return;
     if (searchParams.get('domainId') === selectedDomainId && (searchParams.get('signature') ?? '') === selectedSignature) return;
     const next = new URLSearchParams(searchParams);
@@ -134,10 +111,13 @@ export function DomainAnalysis() {
     setSearchParams(next, { replace: true });
   }, [searchParams, selectedDomainId, selectedSignature, setSearchParams]);
 
-  const [{ data: scoredData, fetching: scoredFetching, error: scoredError }] = useQuery<DomainAnalysisQueryResult, DomainAnalysisQueryVariables>({
+  const [
+    { data: scoredData, fetching: scoredFetching, error: scoredError },
+    reexecuteScoredQuery,
+  ] = useQuery<DomainAnalysisQueryResult, DomainAnalysisQueryVariables>({
     query: DOMAIN_ANALYSIS_QUERY,
     variables: { domainId: selectedDomainId, scoreMethod: 'FULL_BT', signature: selectedSignature === '' ? undefined : selectedSignature },
-    pause: selectedDomainId === '' || useLegacyQuery || !signatureSelectionReady,
+    pause: selectedDomainId === '' || useLegacyQuery,
     requestPolicy: 'cache-and-network',
   });
   const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<DomainAnalysisQueryResult, { domainId: string }>({
@@ -146,6 +126,10 @@ export function DomainAnalysis() {
     pause: selectedDomainId === '' || !useLegacyQuery,
     requestPolicy: 'cache-and-network',
   });
+  const [{ fetching: refreshFetching }, refreshDomainAnalysis] = useMutation<
+    RefreshDomainAnalysisMutationResult,
+    RefreshDomainAnalysisMutationVariables
+  >(REFRESH_DOMAIN_ANALYSIS_MUTATION);
 
   useEffect(() => {
     const message = scoredError?.message ?? '';
@@ -164,6 +148,11 @@ export function DomainAnalysis() {
     () => getEvidenceScopeState(findingsEligibility, findingsEligibilityLoading, findingsEligibilityError),
     [findingsEligibility, findingsEligibilityLoading, findingsEligibilityError],
   );
+  const cacheStatusCopy = useMemo(
+    () => getCacheStatusCopy(data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt),
+    [data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt],
+  );
+  const showPageLoader = domainsLoading || (selectedDomainId !== '' && data?.domainAnalysis == null && fetching);
 
   const models = useMemo<ModelEntry[]>(() => {
     const sourceModels = data?.domainAnalysis.models ?? [];
@@ -202,6 +191,25 @@ export function DomainAnalysis() {
     }
   };
 
+  const handleRefreshAnalysis = async () => {
+    if (selectedDomainId === '') return;
+    setRefreshNotice(null);
+    setRefreshError(null);
+
+    const result = await refreshDomainAnalysis({
+      domainId: selectedDomainId,
+      signature: selectedSignature === '' ? undefined : selectedSignature,
+    });
+
+    if (result.error != null) {
+      setRefreshError(result.error.message);
+      return;
+    }
+
+    setRefreshNotice(result.data?.refreshDomainAnalysis.message ?? 'Refresh started.');
+    reexecuteScoredQuery({ requestPolicy: 'network-only' });
+  };
+
   const handleRunMissingVignettes = () => {
     if (selectedDomainId === '' || allMissingDefinitionIds.length === 0) return;
     const query = new URLSearchParams();
@@ -231,7 +239,7 @@ export function DomainAnalysis() {
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-sm font-semibold text-gray-900">Domain Selection</h2>
-            <p className="text-xs text-gray-600">Analysis is computed from live aggregate runs for latest vignettes in this domain.</p>
+            <p className="text-xs text-gray-600">Analysis is shown from the latest saved snapshot for this domain.</p>
           </div>
           <div className="flex flex-col gap-2 md:flex-row md:items-center">
             <select
@@ -264,6 +272,31 @@ export function DomainAnalysis() {
         </div>
         {data?.domainAnalysis != null && (
           <div className="mt-2 space-y-1 text-xs text-gray-500">
+            {cacheStatusCopy != null && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold ${cacheStatusCopy.badgeClassName}`}>
+                  {cacheStatusCopy.badgeLabel}
+                </span>
+                <span>{cacheStatusCopy.detail}</span>
+                {!useLegacyQuery && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleRefreshAnalysis}
+                    disabled={refreshFetching}
+                  >
+                    {refreshFetching ? 'Refreshing\u2026' : 'Refresh now'}
+                  </Button>
+                )}
+              </div>
+            )}
+            {refreshNotice !== null && (
+              <p className="text-green-700">{refreshNotice}</p>
+            )}
+            {refreshError !== null && (
+              <p className="text-amber-700">{refreshError}</p>
+            )}
             <p>{data.domainAnalysis.definitionsWithAnalysis} of {data.domainAnalysis.targetedDefinitions} latest vignettes currently have aggregate analysis data.</p>
             {data.domainAnalysis.definitionsWithAnalysis === 0 && data.domainAnalysis.targetedDefinitions > 0 && (
               <p className="text-amber-700">No latest vignettes produced analyzable transcript data for the selected signature.</p>
@@ -291,7 +324,7 @@ export function DomainAnalysis() {
 
       {selectedDomainId !== '' && <EvidenceScopeDisclosure state={evidenceScopeState} />}
 
-      {(domainsLoading || signaturesLoading || (selectedDomainId !== '' && fetching)) ? (
+      {showPageLoader ? (
         <Loading size="lg" text="Loading domain analysis..." />
       ) : (
         <>

@@ -65,10 +65,17 @@ export type RetryDomainTrialCellResult = {
   message: string | null;
 };
 
+export type DomainAnalysisRefreshResult = {
+  success: boolean;
+  mode: 'QUEUED' | 'REFRESHED';
+  message: string;
+};
+
 export const DomainMutationResultRef = builder.objectRef<DomainMutationResult>('DomainMutationResult');
 export const DomainTrialRunEntryRef = builder.objectRef<DomainTrialRunEntry>('DomainTrialRunEntry');
 export const DomainTrialRunResultRef = builder.objectRef<DomainTrialRunResult>('DomainTrialRunResult');
 export const RetryDomainTrialCellResultRef = builder.objectRef<RetryDomainTrialCellResult>('RetryDomainTrialCellResult');
+export const DomainAnalysisRefreshResultRef = builder.objectRef<DomainAnalysisRefreshResult>('DomainAnalysisRefreshResult');
 
 builder.objectType(DomainMutationResultRef, {
   fields: (t) => ({
@@ -111,6 +118,14 @@ builder.objectType(RetryDomainTrialCellResultRef, {
     modelId: t.exposeString('modelId'),
     runId: t.exposeID('runId', { nullable: true }),
     message: t.exposeString('message', { nullable: true }),
+  }),
+});
+
+builder.objectType(DomainAnalysisRefreshResultRef, {
+  fields: (t) => ({
+    success: t.exposeBoolean('success'),
+    mode: t.exposeString('mode'),
+    message: t.exposeString('message'),
   }),
 });
 
