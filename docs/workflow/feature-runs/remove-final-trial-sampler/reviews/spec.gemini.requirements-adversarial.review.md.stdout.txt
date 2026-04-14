@@ -1,0 +1,57 @@
+{
+  "session_id": "cce878b9-7aa7-45b8-b7fb-c50e7bd0458d",
+  "response": "## Findings\n\nHere is an adversarial review of the spec artifact. The findings focus on latent bugs in the feature being removed, which strengthen the case for its deletion as specified.\n\n### High Severity\n\n| Finding | Evidence |\n| :--- | :--- |\n| **Follow-up runs could fail due to model ID changes.** The adaptive sampling handler in `aggregate-analysis.ts` would re-trigger a `finalTrial` run by collecting model IDs from historical run configs. It then passed these raw IDs directly to the `startRun` service. However, `startRun` validates that all model IDs are `ACTIVE` and does not perform model alias resolution (e.g., mapping an old `gemini-2.5-flash-preview-05-20` to the current `gemini-2.5-flash`). The planning service (`planFinalTrial`) was alias-aware, but the service that re-launches the run was not. This would cause follow-up runs to fail with a `ValidationError` if any model ID had been superseded since the original run. | `[CODE-CONFIRMED]` |\n| **Legacy aggregation jobs could mix data from different definition versions.** The adaptive sampling logic in `aggregate-analysis.ts` had a compatibility \"wildcard\" for jobs queued without a `definitionVersion`. In this case, it would find all `finalTrial` runs that matched the `preambleVersionId` and `temperature`, regardless of their `definitionVersion`. This could lead to it collecting models from runs based on different versions of the definition's logic and then launching a new sampling run against the *current* definition version. This cross-version data mixing is a critical flaw that could lead to incorrect stability analysis and invalid follow-up runs. | `[CODE-CONFIRMED]` |\n\n### Medium Severity\n\n| Finding | Evidence |\n| :--- | :--- |\n| **Cost estimation for follow-up runs was consistently inaccurate.** The `startRun` service estimated costs for `finalTrial` runs using a hardcoded upper bound of 10 samples per condition. However, the `planFinalTrial` service calculated the precise number of `neededSamples`, which could be less than 10. `startRun` called the cost estimator *before* it generated the actual job plan, meaning the estimate shown to the user and stored in the config was always a loose, conservative over-estimation rather than a reflection of the real plan. | `[CODE-CONFIRMED]` |\n\n### Low Severity\n\n| Finding | Evidence |\n| :--- | :--- |\n| **The GraphQL `finalTrialPlan` query was inconsistent with the backend behavior.** The `finalTrialPlan` GraphQL query provided no way to specify a `temperature`, causing it to always invoke `planFinalTrial` for the `null` (default) temperature. However, the automated follow-up logic in the `aggregate-analysis` handler *did* partition runs by temperature and passed the specific temperature to `planFinalTrial`. This meant a plan viewed in the UI via the GraphQL query could show `STABLE` (for default temperature), while the backend handler could correctly determine more samples were needed for a non-default temperature, leading to a confusing user experience. | `[CODE-CONFIRMED]` |\n\n## Residual Risks\n\nThe specification is exceptionally thorough and proactively addresses most risks. The following are minor residual risks that remain even with the spec as written.\n\n1.  **Stale Database Keys:** The spec correctly notes that historical `Run.config` JSON blobs will retain a dead `isFinalTrial` key. While no code will read this, it creates documentation debt. A future developer querying the database might misinterpret the key's presence as meaningful, leading to confusion or incorrect assumptions during unrelated feature work or debugging.\n2.  **Brittle Grep-Based Validation:** The spec's acceptance criteria rely on a `grep` command returning an *exact* number of matches for the `isFinalTrial` string. While the primary guardrail is the unit test, this validation step is brittle. Minor, good-faith implementation changes in the sanitizer or test (e.g., adding a comment with the keyword) could break this check and cause CI friction, despite the code being functionally correct.\n3.  **Stale Browser Bundles:** The spec correctly identifies that a user with a cached browser bundle could see a `startRun` mutation fail because the server will no longer accept the `finalTrial` input field. While the blast radius is noted as small, this remains a guaranteed-to-occur negative user experience for at least some users post-deployment, requiring a hard refresh to resolve.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 55842
+        },
+        "tokens": {
+          "input": 49159,
+          "prompt": 49159,
+          "candidates": 979,
+          "total": 54449,
+          "cached": 0,
+          "thoughts": 4311,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 55842,
+            "tokens": {
+              "input": 49159,
+              "prompt": 49159,
+              "candidates": 979,
+              "total": 54449,
+              "cached": 0,
+              "thoughts": 4311,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

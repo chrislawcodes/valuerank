@@ -1,5 +1,4 @@
 import { createLogger, ValidationError } from '@valuerank/shared';
-import { planFinalTrial } from './plan-final-trial.js';
 import { sampleScenarios } from './start-helpers.js';
 
 const log = createLogger('services:run:start');
@@ -14,8 +13,6 @@ type BuildRunJobPlanInput = {
   definitionId: string;
   models: string[];
   definitionScenarioIds: string[];
-  finalTrial: boolean;
-  temperature?: number | null;
   scenarioIds?: string[];
   samplePercentage: number;
   sampleSeed?: number;
@@ -30,8 +27,6 @@ export async function buildRunJobPlan(input: BuildRunJobPlanInput): Promise<{
     definitionId,
     models,
     definitionScenarioIds,
-    finalTrial,
-    temperature,
     scenarioIds,
     samplePercentage,
     sampleSeed,
@@ -40,27 +35,6 @@ export async function buildRunJobPlan(input: BuildRunJobPlanInput): Promise<{
 
   let selectedScenarioIds: string[] = [];
   const jobPlan: RunJobPlanItem[] = [];
-
-  if (finalTrial) {
-    const plan = await planFinalTrial(definitionId, models, temperature ?? null);
-
-    plan.models.forEach((modelPlan) => {
-      modelPlan.conditions.forEach((condition) => {
-        if (condition.neededSamples > 0) {
-          jobPlan.push({
-            modelId: modelPlan.modelId,
-            scenarioId: condition.scenarioId,
-            samples: condition.neededSamples,
-          });
-        }
-      });
-    });
-
-    selectedScenarioIds = Array.from(new Set(jobPlan.map((job) => job.scenarioId)));
-
-    log.info({ runPlanSize: jobPlan.length, scenariosInvolved: selectedScenarioIds.length }, 'Final Trial plan generated');
-    return { selectedScenarioIds, jobPlan };
-  }
 
   if (Array.isArray(scenarioIds) && scenarioIds.length > 0) {
     const allScenarioIdSet = new Set(definitionScenarioIds);

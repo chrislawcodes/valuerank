@@ -1,0 +1,59 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "The Final Trial / adaptive sampler feature is plumbed end-to-end through the stack (planFinalTrial service \u2192 aggregate-analysis queue handler \u2192 finalTrialPlan GraphQL query \u2192 web RunForm checkbox \u2192 schema.graphql) but nobody uses it. Every default is finalTrial: false; every internal caller hardcodes finalTrial: false; user confirmed the UI checkbox is never flipped in practice.",
+      "Removing the sampler is a prerequisite for the winrate-honest-denominator feature. The sampler calls updateAggregateRun and reads aggregate winRate CIs to decide convergence, so changing the winRate math would also change its convergence behavior. Deleting the sampler removes that coupling entirely.",
+      "CORRECTION FROM VERIFICATION: There is no isFinalTrial Postgres column. The field lives inside the Run.config JSONB blob \u2014 written by start.ts line 227 (`isFinalTrial: finalTrial`), read by aggregate-analysis.ts line 165 (`config.isFinalTrial === true`). No Prisma schema change is needed. The intent of Option B still stands: leave historical Run.config JSON alone, stop writing isFinalTrial on new runs, leave runMode='FINAL' in the enum. User accepts that Final Trial tags on old JSON rows become dead weight.",
+      "No data backfill script and no Prisma migration are required. Historical rows keep their dead isFinalTrial JSON field in Run.config; going forward, start.ts stops writing it and aggregate-analysis.ts stops reading it. cloud/packages/db/prisma is listed in scope.json only to allow the option; it is expected to stay untouched.",
+      "The GraphQL schema change (removing FinalTrialPlan type and finalTrialPlan query) requires re-running the web client codegen. cloud/apps/web/src/generated/graphql.ts is not hand-edited.",
+      "Deletable whole files: cloud/apps/api/src/services/run/plan-final-trial.ts, cloud/apps/api/tests/services/run/plan-final-trial.test.ts, cloud/apps/api/src/graphql/queries/final-trial-plan.ts, cloud/apps/web/src/api/operations/final-trial.ts. Everything else is an edit to remove the finalTrial parameter or the Final Trial code block.",
+      "All test fixtures that set finalTrial: false must be updated to drop the field entirely, not flipped to true. Known sites: cloud/apps/web/tests/pages/StartPairedBatchPage.test.tsx, cloud/apps/web/tests/components/runs/RunForm.test.tsx (3 places), cloud/apps/api/tests/services/run/plan-final-trial.test.ts (deleted whole)."
+    ],
+    "summary": "Discovery completed inline with the human. The Final Trial / adaptive sampler is plumbed end-to-end but nobody uses it; removing it is a prerequisite for the winrate-honest-denominator feature because the sampler reads aggregate win rate CIs to decide convergence.",
+    "updated_at": 1776183805,
+    "answers": {},
+    "non_goals": [
+      "Preserve the Final Trial tag on historical runs. User has explicitly accepted losing that tag on any old rows that might have it.",
+      "Try to 'remove' runMode='FINAL' as if it were a Postgres enum. It is not an enum; it is a plain string field inside the Run.config JSONB blob written at start.ts:226. There is no schema.prisma enum to change and nothing to migrate. start.ts stops producing the 'FINAL' literal on new runs after this PR; historical rows keep it as dead data.",
+      "Rewrite historical Run.config JSON to strip the finalTrial: boolean field. That JSON stays as-is.",
+      "Change the winRate math or touch any file in scope for the winrate-honest-denominator feature. This PR is pure Final Trial removal."
+    ],
+    "acceptance_criteria": [
+      "planFinalTrial service, finalTrialPlan GraphQL query, final-trial.ts web operations file, FinalTrialPlan schema type, and the Final Trial follow-up block in aggregate-analysis.ts are all deleted",
+      "finalTrial is removed as an input on the startRun mutation, from StartRunInput in the web client, from useRunForm defaults, and from all internal callers (execute-runs.ts, evaluation.ts)",
+      "No Prisma schema change and no data migration are introduced; start.ts stops writing isFinalTrial into Run.config and aggregate-analysis.ts stops reading it; runMode is a JSON string field, not a Postgres enum, and simply stops being produced with value 'FINAL' on new runs",
+      "Historical Run.config.isFinalTrial JSON is left as-is on old rows; no data rewrite script is run",
+      "Web client GraphQL codegen is re-run; cloud/apps/web/src/generated/graphql.ts reflects a schema without FinalTrialPlan, finalTrialPlan query, or StartRunInput.finalTrial",
+      "All tests referencing finalTrial or isFinalTrial are updated or deleted; no new test failures are introduced",
+      "Preflight Gate passes for shared, db, api, and web workspaces",
+      "The PR is small and focused \u2014 pure deletion with no schema change and no metric math changes",
+      "After this PR lands, the winrate-honest-denominator feature can be unblocked and resumed safely"
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "checkpoint_fallback": {}
+}

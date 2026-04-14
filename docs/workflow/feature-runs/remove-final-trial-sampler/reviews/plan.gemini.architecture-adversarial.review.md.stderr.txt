@@ -1,0 +1,172 @@
+YOLO mode is enabled. All tool calls will be automatically approved.
+Keychain initialization encountered an error: UNIX[Operation not permitted]
+Using FileKeychain fallback for secure storage.
+Loaded cached credentials.
+YOLO mode is enabled. All tool calls will be automatically approved.
+Registering notification handlers for server 'agentchattr'. Capabilities: {
+  experimental: {},
+  prompts: { listChanged: false },
+  resources: { subscribe: false, listChanged: false },
+  tools: { listChanged: false }
+}
+Server 'agentchattr' has tools but did not declare 'listChanged' capability. Listening anyway for robustness...
+Server 'agentchattr' has resources but did not declare 'listChanged' capability. Listening anyway for robustness...
+Server 'agentchattr' has prompts but did not declare 'listChanged' capability. Listening anyway for robustness...
+Scheduling MCP context refresh...
+Executing MCP context refresh...
+MCP context refresh complete.
+Error stating path localhost:5433/valuerank_test" \
+JWT_SECRET="test-secret-that-is-at-least-32-characters-long" \
+npm run test --workspace @valuerank/api
+npm run test --workspace @valuerank/web
+```
+
+Expected: all tests pass. The new sanitizer test asserts the guard is in place and the non-object edge case is handled.
+
+## 7. Slice F — Final grep sweep + preflight
+
+**Goal.** Validate the repo is clean and the Preflight Gate passes for every workspace we touched. No code changes.
+
+### 7.1 Source-scoped grep sweep (spec §3.6)
+
+```bash
+grep -rn --include='*.ts' --include='*.tsx' \
+  -E 'finalTrial|isFinalTrial|planFinalTrial|FinalTrialPlan|final-trial' \
+  cloud/apps cloud/packages
+```
+
+Expected matches:
+
+- **`isFinalTrial`**: exactly two matches. One in `cloud/apps/api/src/services/run/start.ts` (the sanitizer destructure key from Slice C). One in `cloud/apps/api/tests/services/run/start.test.ts` (the `DEAD_KEY` constant from Slice E).
+- **All other keywords** (`finalTrial`, `planFinalTrial`, `FinalTrialPlan`, `final-trial`): **zero** matches.
+
+If the count is wrong in either direction, stop and trace the stray match before proceeding.
+
+### 7.2 File-scoped queue handler grep (spec §3.2)
+
+```bash
+grep -nE 'planFinalTrial|startRun|isFinalTrial' \
+  cloud/apps/api/src/queue/handlers/aggregate-analysis.ts
+```
+
+Expected: zero matches.
+
+### 7.3 Schema-scoped grep (raised by Codex plan testability review)
+
+The source grep in §7.1 uses `--include='*.ts' --include='*.tsx'` and therefore skips `cloud/apps/web/schema.graphql`. That file is the input to the web codegen step in Slice D, so stale entries there would round-trip back into `generated/graphql.ts` on the next codegen run. Verify it directly:
+
+```bash
+grep -nE 'finalTrial|isFinalTrial|planFinalTrial|FinalTrialPlan|final-trial' \
+  cloud/apps/web/schema.graphql
+```
+
+Expected: zero matches. If any keyword is still present, return to Slice D, delete it, re-run codegen, then re-run §7.1.
+
+### 7.4 Preflight Gate
+
+Run from `cloud/`:
+
+```bash
+npm run lint --workspace @valuerank/shared
+npm run lint --workspace @valuerank/db
+npm run lint --workspace @valuerank/api
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" \
+JWT_SECRET="test-secret-that-is-at-least-32-characters-long" \
+npm run test --workspace @valuerank/api
+npm run build --workspace @valuerank/api
+npm run lint --workspace @valuerank/web
+npm run test --workspace @valuerank/web
+npm run build --workspace @valuerank/web
+```
+
+All eight must pass before the PR is opened.
+
+### 7.5 Manual spot-check
+
+From `cloud/`:
+
+```bash
+npm run dev --workspace @valuerank/api
+npm run dev --workspace @valuerank/web
+```
+
+Open `http://localhost:3030`, navigate to the run form, and confirm:
+
+1. No "Final: ENAMETOOLONG: name too long, stat '/Users/chrislaw/valuerank/.claude/worktrees/goofy-shtern/localhost:5433/valuerank_test" \
+JWT_SECRET="test-secret-that-is-at-least-32-characters-long" \
+npm run test --workspace @valuerank/api
+npm run test --workspace @valuerank/web
+```
+
+Expected: all tests pass. The new sanitizer test asserts the guard is in place and the non-object edge case is handled.
+
+## 7. Slice F — Final grep sweep + preflight
+
+**Goal.** Validate the repo is clean and the Preflight Gate passes for every workspace we touched. No code changes.
+
+### 7.1 Source-scoped grep sweep (spec §3.6)
+
+```bash
+grep -rn --include='*.ts' --include='*.tsx' \
+  -E 'finalTrial|isFinalTrial|planFinalTrial|FinalTrialPlan|final-trial' \
+  cloud/apps cloud/packages
+```
+
+Expected matches:
+
+- **`isFinalTrial`**: exactly two matches. One in `cloud/apps/api/src/services/run/start.ts` (the sanitizer destructure key from Slice C). One in `cloud/apps/api/tests/services/run/start.test.ts` (the `DEAD_KEY` constant from Slice E).
+- **All other keywords** (`finalTrial`, `planFinalTrial`, `FinalTrialPlan`, `final-trial`): **zero** matches.
+
+If the count is wrong in either direction, stop and trace the stray match before proceeding.
+
+### 7.2 File-scoped queue handler grep (spec §3.2)
+
+```bash
+grep -nE 'planFinalTrial|startRun|isFinalTrial' \
+  cloud/apps/api/src/queue/handlers/aggregate-analysis.ts
+```
+
+Expected: zero matches.
+
+### 7.3 Schema-scoped grep (raised by Codex plan testability review)
+
+The source grep in §7.1 uses `--include='*.ts' --include='*.tsx'` and therefore skips `cloud/apps/web/schema.graphql`. That file is the input to the web codegen step in Slice D, so stale entries there would round-trip back into `generated/graphql.ts` on the next codegen run. Verify it directly:
+
+```bash
+grep -nE 'finalTrial|isFinalTrial|planFinalTrial|FinalTrialPlan|final-trial' \
+  cloud/apps/web/schema.graphql
+```
+
+Expected: zero matches. If any keyword is still present, return to Slice D, delete it, re-run codegen, then re-run §7.1.
+
+### 7.4 Preflight Gate
+
+Run from `cloud/`:
+
+```bash
+npm run lint --workspace @valuerank/shared
+npm run lint --workspace @valuerank/db
+npm run lint --workspace @valuerank/api
+DATABASE_URL="postgresql:/valuerank:valuerank@localhost:5433/valuerank_test" \
+JWT_SECRET="test-secret-that-is-at-least-32-characters-long" \
+npm run test --workspace @valuerank/api
+npm run build --workspace @valuerank/api
+npm run lint --workspace @valuerank/web
+npm run test --workspace @valuerank/web
+npm run build --workspace @valuerank/web
+```
+
+All eight must pass before the PR is opened.
+
+### 7.5 Manual spot-check
+
+From `cloud/`:
+
+```bash
+npm run dev --workspace @valuerank/api
+npm run dev --workspace @valuerank/web
+```
+
+Open `http:/localhost:3030`, navigate to the run form, and confirm:
+
+1. No "Final'

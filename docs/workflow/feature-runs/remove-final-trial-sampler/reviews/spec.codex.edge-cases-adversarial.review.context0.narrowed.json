@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/api/src/services/run/plan-final-trial.ts",
+  "source_artifact_sha256": "7d74dbceb785364018964f850f87e4b39e411f339c02bdfa975475d66737a105",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/remove-final-trial-sampler/reviews/spec.codex.edge-cases-adversarial.review.context0.narrowed.txt",
+  "narrowed_artifact_sha256": "b11e77d4e27a04326b7d77e45b86ee0fd95a29c65d64eecb7ae394ac30aeaa0c",
+  "strategy": "head-tail-numbered-lines"
+}

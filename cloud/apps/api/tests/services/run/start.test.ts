@@ -1798,5 +1798,135 @@ describe('startRun service', () => {
       });
       expect((dbRun?.config as { priority: string }).priority).toBe('LOW');
     });
+
+    describe('startRun configExtras sanitizer', () => {
+      const DEAD_KEY = 'isFinalTrial';
+
+      it('strips the dead legacy key from object configExtras and keeps other keys', async () => {
+        const definition = await db.definition.create({
+          data: {
+            name: 'Sanitizer Object Definition',
+            content: { schema_version: 1, preamble: 'Test' },
+          },
+        });
+        createdDefinitionIds.push(definition.id);
+
+        await db.scenario.create({
+          data: {
+            definitionId: definition.id,
+            name: 'Scenario 1',
+            content: { test: 1 },
+          },
+        });
+
+        const result = await startRun({
+          definitionId: definition.id,
+          models: ['gpt-4'],
+          userId: testUserId,
+          configExtras: { [DEAD_KEY]: true, otherField: 'keep-me' },
+        });
+        createdRunIds.push(result.run.id);
+
+        expect(result).toBeDefined();
+        expect(result.run).toBeDefined();
+        expect(result.run.config).toBeDefined();
+        expect(result.run.config).not.toHaveProperty(DEAD_KEY);
+        expect(result.run.config).toHaveProperty('otherField', 'keep-me');
+      });
+
+      it('tolerates a non-object configExtras primitive without throwing', async () => {
+        const definition = await db.definition.create({
+          data: {
+            name: 'Sanitizer Primitive Definition',
+            content: { schema_version: 1, preamble: 'Test' },
+          },
+        });
+        createdDefinitionIds.push(definition.id);
+
+        await db.scenario.create({
+          data: {
+            definitionId: definition.id,
+            name: 'Scenario 1',
+            content: { test: 1 },
+          },
+        });
+
+        const result = await startRun({
+          definitionId: definition.id,
+          models: ['gpt-4'],
+          userId: testUserId,
+          configExtras: 'not-an-object' as unknown as Record<string, unknown>,
+        });
+        createdRunIds.push(result.run.id);
+
+        expect(result).toBeDefined();
+        expect(result.run.config).toBeDefined();
+        expect(result.run.config).not.toHaveProperty(DEAD_KEY);
+      });
+
+      it('tolerates an array configExtras without spreading array indices into run.config', async () => {
+        const definition = await db.definition.create({
+          data: {
+            name: 'Sanitizer Array Definition',
+            content: { schema_version: 1, preamble: 'Test' },
+          },
+        });
+        createdDefinitionIds.push(definition.id);
+
+        await db.scenario.create({
+          data: {
+            definitionId: definition.id,
+            name: 'Scenario 1',
+            content: { test: 1 },
+          },
+        });
+
+        const result = await startRun({
+          definitionId: definition.id,
+          models: ['gpt-4'],
+          userId: testUserId,
+          configExtras: [{ [DEAD_KEY]: true }] as unknown as Record<string, unknown>,
+        });
+        createdRunIds.push(result.run.id);
+
+        expect(result).toBeDefined();
+        expect(result.run.config).toBeDefined();
+        expect(result.run.config).not.toHaveProperty(DEAD_KEY);
+        expect(result.run.config).not.toHaveProperty('0');
+      });
+
+      it.each([
+        { label: 'null', value: null },
+        { label: 'undefined', value: undefined },
+      ])('tolerates $label configExtras without throwing or leaking the dead key', async ({ value }) => {
+        const definition = await db.definition.create({
+          data: {
+            name: 'Sanitizer Nullish Definition',
+            content: { schema_version: 1, preamble: 'Test' },
+          },
+        });
+        createdDefinitionIds.push(definition.id);
+
+        await db.scenario.create({
+          data: {
+            definitionId: definition.id,
+            name: 'Scenario 1',
+            content: { test: 1 },
+          },
+        });
+
+        const result = await startRun({
+          definitionId: definition.id,
+          models: ['gpt-4'],
+          userId: testUserId,
+          configExtras: value as unknown as Record<string, unknown> | undefined,
+        });
+        createdRunIds.push(result.run.id);
+
+        expect(result).toBeDefined();
+        expect(result.run.config).toBeDefined();
+        expect(result.run.config).not.toHaveProperty(DEAD_KEY);
+      });
+    });
   });
 });

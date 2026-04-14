@@ -190,7 +190,6 @@ export function useRunForm({
       samplesPerScenario: formState.samplesPerScenario,
       scenarioIds: isSpecificConditionTrial ? selectedConditionScenarioIds : undefined,
       temperature,
-      finalTrial: false,
     };
 
     try {

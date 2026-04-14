@@ -1,0 +1,9 @@
+## Findings
+1. Medium - The plan removes the final-trial follow-up flow from `aggregate-analysis.ts`, but Slice B only verifies that with build/lint and a grep. The current code path is a single queue-driven block that can still enqueue a new run via `planFinalTrial(...)` and `startRun(...)`, so a partial deletion or refactor mistake would still satisfy the stated validation without any executable test proving the behavior is gone. [CODE-CONFIRMED]
+
+2. Low - Slice A replaces the removed `plan-final-trial.test.ts` with isolated helper tests for `resolveModelIdFromAvailable` and `getEquivalentModelIds`, but the production alias wiring now lives in the real `startRun` entry point (`cloud/apps/api/src/graphql/mutations/run/lifecycle.ts`). A helper-only test will not catch a resolver bug that breaks alias handling at the mutation boundary. [CODE-CONFIRMED]
+
+## Residual Risks
+- The plan leans on grep and codegen for removal checks. If a stale reference survives outside the searched paths or `schema.graphql` / generated output is not refreshed in the same run, the cleanup can still look complete.
+- The sanitizer coverage in Slice E is narrow. It checks one dead-key object case and optionally one primitive case, but not arrays or exotic objects.
+- There may be other `startRun` callers outside the provided snippets. Those call sites are not proven clean by the artifact itself.

@@ -1,0 +1,9 @@
+## Findings
+- Medium [CODE-CONFIRMED]: The spec deletes the live auto-relaunch path in `cloud/apps/api/src/queue/handlers/aggregate-analysis.ts` but explicitly chooses not to add any handler-level regression test. The code today really does re-launch follow-up runs from that worker, so build/grep only prove the text is gone, not that the queue behavior still stops in the right cases. That is a meaningful gap for production background automation.
+- Low [UNVERIFIED]: The spec’s ordering argument for waiting on this deletion before `winrate-honest-denominator` is not established by the supplied code. `plan-final-trial.ts` consumes `varianceAnalysis` and `modelScenarioMatrix`; the provided code does not show any direct `winRate` dependency. The blocker rationale may still be true, but it is not proven here.
+- Low [UNVERIFIED]: The claim that historical `Run.config.isFinalTrial` and `runMode='FINAL'` become dead data after the change is only partially checked. The provided search scope covers the API and web slices, but not other `cloud/` consumers such as workers or scripts. A hidden reader outside the supplied context would break that assumption.
+
+## Residual Risks
+- Cached web bundles can still submit the removed `finalTrial` GraphQL input once after deploy, causing a validation failure until refresh.
+- The `configExtras` sanitizer is intentionally narrow. It strips `isFinalTrial`, but it does not harden `configExtras` generally.
+- If any non-API/web code reads `Run.config.isFinalTrial` or `runMode='FINAL'`, this spec would not catch it.

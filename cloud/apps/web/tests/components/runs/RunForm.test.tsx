@@ -214,7 +214,6 @@ describe('RunForm', () => {
       models: ['gpt-4'],
       samplePercentage: 100,
       samplesPerScenario: 1,
-      finalTrial: false,
       launchMode: 'STANDARD',
     }));
   });
@@ -364,7 +363,6 @@ describe('RunForm', () => {
       models: ['gpt-4', 'claude-3'],
       samplePercentage: 100,
       samplesPerScenario: 1,
-      finalTrial: false,
       launchMode: 'STANDARD',
     }));
   });
@@ -456,7 +454,6 @@ describe('RunForm', () => {
       samplePercentage: undefined,
       samplesPerScenario: 1,
       scenarioIds: ['scenario-1'],
-      finalTrial: false,
       launchMode: 'STANDARD',
       temperature: undefined,
     }));

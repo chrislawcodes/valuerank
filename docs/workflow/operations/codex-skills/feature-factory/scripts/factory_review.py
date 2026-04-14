@@ -6,7 +6,6 @@ Builds review specs, runs fallback reviews, manages checkpoint progress.
 import argparse
 import concurrent.futures
 import json
-import re
 import subprocess
 import sys
 import time
@@ -50,6 +49,17 @@ from factory_stages import (  # noqa: E402
 
 from factory_git import current_branch_name  # noqa: E402
 
+from factory_review_specs import (  # noqa: E402,F401
+    DEFAULT_GEMINI_MODEL,
+    DEFAULT_CODEX_MODEL,
+    SMALL_TASK_SET_THRESHOLD,
+    _AUTO_ACCEPT_NOTE,
+    detect_actionable_findings,
+    trim_detail,
+    pick_secondary_lens,
+    required_reviews,
+)
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -60,150 +70,12 @@ UPDATE_REVIEW = REVIEW_SCRIPTS / "update_review_resolution.py"
 APPEND_RECONCILIATION = REVIEW_SCRIPTS / "append_reconciliation_entry.py"
 RUN_GEMINI_REVIEW = REVIEW_SCRIPTS / "run_gemini_review.py"
 RUN_CODEX_REVIEW = REVIEW_SCRIPTS / "run_codex_review.py"
-DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"
-DEFAULT_CODEX_MODEL = "gpt-5.4-mini"
-
-SMALL_TASK_SET_THRESHOLD = 15
-_AUTO_ACCEPT_NOTE = "No actionable findings detected — auto-accepted"
 
 # Gemini reviews launch GEMINI_STAGGER_SECONDS apart without the file lock so they overlap.
 # Codex reviews always run fully in parallel with Gemini (different API, no rate limit concern).
 # Validated 2026-03-30: zero 429s across parallel-implement-command checkpoints at 30s stagger.
 # Set to None to revert to strict serial execution if rate-limit errors reappear.
 GEMINI_STAGGER_SECONDS: int | None = 30
-
-
-# ---------------------------------------------------------------------------
-# Review helpers
-# ---------------------------------------------------------------------------
-
-_ACTIONABLE_FINDING_RE = re.compile(
-    r"(?:"
-    r"^\s*-\s+(?:\[[^\]]+\]\s+)?(high|medium):"  # bullet-list: "- high:" or "- [tag] high:"
-    r"|"
-    r"^\|\s*\*\*(critical|high|medium)\*\*"  # table row: "| **HIGH** |" or "| **CRITICAL** |"
-    r")",
-    re.MULTILINE,
-)
-
-
-def detect_actionable_findings(review_path: Path) -> bool:
-    """Return True if the review contains any HIGH or MEDIUM severity findings.
-
-    Lowercases the full text once so mixed-case headings (High, HIGH, high) all match.
-    Returns False if the file cannot be read, treating unreadable files as non-blocking.
-    """
-    try:
-        text = review_path.read_text(encoding="utf-8").lower()
-    except OSError:
-        return False
-    return bool(_ACTIONABLE_FINDING_RE.search(text))
-
-
-def trim_detail(text: str, limit: int = 240) -> str:
-    stripped = " ".join(text.split())
-    if len(stripped) <= limit:
-        return stripped
-    return stripped[: limit - 3] + "..."
-
-
-def pick_secondary_lens(primary: str, default: str, candidates: list[str]) -> str:
-    ordered = [*candidates, default]
-    seen: set[str] = set()
-    for lens in ordered:
-        if not lens or lens in seen:
-            continue
-        seen.add(lens)
-        if lens != primary:
-            return lens
-    return default if default != primary else f"{primary}-secondary"
-
-
-def required_reviews(
-    stage: str,
-    sensitive: bool,
-    large_structural: bool,
-    performance_sensitive: bool,
-    extra_gemini: list[str],
-    fast: bool = False,
-    small_task_set: bool = False,
-) -> list[dict[str, str]]:
-    if fast:
-        return [
-            {"reviewer": "gemini", "lens": "regression-adversarial", "model": DEFAULT_GEMINI_MODEL},
-            {"reviewer": "codex", "lens": "correctness-adversarial", "model": DEFAULT_CODEX_MODEL},
-        ]
-
-    primary_gemini = ""
-    secondary_default = ""
-    codex_lens = ""
-    extra_candidates = list(extra_gemini)
-
-    if stage == "spec":
-        primary_gemini = "requirements-adversarial"
-        secondary_default = "edge-cases-adversarial"
-        codex_lens = "feasibility-adversarial"
-        if sensitive:
-            extra_candidates.insert(0, "risk-adversarial")
-    elif stage == "plan":
-        primary_gemini = "architecture-adversarial"
-        secondary_default = "testability-adversarial"
-        codex_lens = "implementation-adversarial"
-        if sensitive:
-            extra_candidates.insert(0, "risk-adversarial")
-    elif stage == "tasks":
-        primary_gemini = "dependency-order-adversarial"
-        secondary_default = "coverage-adversarial"
-        codex_lens = "execution-adversarial"
-        if sensitive:
-            extra_candidates.insert(0, "risk-adversarial")
-    elif stage == "diff":
-        primary_gemini = "regression-adversarial"
-        secondary_default = "quality-adversarial"
-        codex_lens = "correctness-adversarial"
-        if sensitive:
-            extra_candidates.insert(0, "security-adversarial")
-        if performance_sensitive:
-            extra_candidates.insert(0, "performance-adversarial")
-        if large_structural:
-            extra_candidates.append("quality-adversarial")
-    elif stage == "closeout":
-        primary_gemini = "completeness-adversarial"
-        secondary_default = "residual-risk-adversarial"
-        codex_lens = "fidelity-adversarial"
-        if sensitive:
-            extra_candidates.insert(0, "rollout-risk-adversarial")
-    else:
-        raise ValueError(f"Unsupported stage: {stage}")
-
-    secondary_gemini = pick_secondary_lens(primary_gemini, secondary_default, extra_candidates)
-
-    if small_task_set and stage in ("tasks", "closeout"):
-        return [
-            {
-                "reviewer": "codex",
-                "lens": codex_lens,
-                "model": DEFAULT_CODEX_MODEL,
-            },
-        ]
-
-    return [
-        {
-            "reviewer": "gemini",
-            "lens": primary_gemini,
-            "model": DEFAULT_GEMINI_MODEL,
-        },
-        {
-            "reviewer": "gemini",
-            "lens": secondary_gemini,
-            "model": DEFAULT_GEMINI_MODEL,
-        },
-        {
-            "reviewer": "codex",
-            "lens": codex_lens,
-            "model": DEFAULT_CODEX_MODEL,
-        },
-    ]
 
 
 # ---------------------------------------------------------------------------
@@ -503,7 +375,7 @@ def recommended_next_action(
     if not stages["tasks"]["manifest_exists"] or not stages["tasks"]["healthy"]:
         return "repair_tasks_checkpoint"
     if not stages["diff"]["artifact_exists"]:
-        return "implement_next_slice"
+        return "dispatch_next_slice_to_codex"
     if not stages["diff"]["manifest_exists"] or not stages["diff"]["healthy"]:
         return "repair_diff_checkpoint"
     if diff_review_budget_state(slug).get("head_mismatch"):

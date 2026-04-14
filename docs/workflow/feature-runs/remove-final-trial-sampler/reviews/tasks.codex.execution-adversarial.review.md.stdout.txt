@@ -1,0 +1,7 @@
+## Findings
+- [UNVERIFIED] Medium: The plan deletes the `finalTrial` / `temperature` plumbing from `startRunService` and `buildRunJobPlan` based on local inspection and a small set of greps, but it never proves there are no other callers, helpers, or generated inputs still passing those fields. If one exists, Slices C/D turn a dead-code cleanup into a breaking API change.
+- [UNVERIFIED] Medium: The web-side removal is only fully validated by grep plus a manual spot-check. The artifact never updates or tests any persisted browser state path like draft storage or hydration, so a stale client can still send or display `finalTrial` even when CI passes.
+
+## Residual Risks
+- The validation is string-based, so it can miss semantic regressions that keep the old behavior under different names or in computed paths.
+- The manual spot-check depends on local state, login, and seeded data. If those prerequisites are missing or dirty, the check can be inconclusive even when the code changes are correct.

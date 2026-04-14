@@ -49,7 +49,6 @@ vi.mock('../../src/components/runs/RunForm', () => ({
             models: ['gpt-4'],
             samplePercentage: 100,
             samplesPerScenario: 1,
-            finalTrial: false,
           }).catch(() => undefined)
         }
       >

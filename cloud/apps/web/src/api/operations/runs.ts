@@ -240,7 +240,6 @@ export type StartRunInput = {
   priority?: 'LOW' | 'NORMAL' | 'HIGH';
   runCategory?: RunCategory;
   experimentId?: string;
-  finalTrial?: boolean;
   launchMode?: 'STANDARD' | 'PAIRED_BATCH' | 'AD_HOC_BATCH';
 };
 

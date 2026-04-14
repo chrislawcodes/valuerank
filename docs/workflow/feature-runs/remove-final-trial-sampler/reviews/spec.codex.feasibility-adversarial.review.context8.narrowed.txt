@@ -1,0 +1,260 @@
+00001: /**
+00002:  * Unit tests for startRun service
+00003:  *
+00004:  * Tests run creation and job queuing logic.
+00005:  */
+00006: 
+00007: import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
+00008: import { db } from '@valuerank/db';
+00009: import { startRun } from '../../../src/services/run/start.js';
+00010: import { NotFoundError, ValidationError } from '@valuerank/shared';
+00011: import { TEST_USER } from '../../test-utils.js';
+00012: 
+00013: // Mock PgBoss
+00014: const mockBoss = {
+00015:   send: vi.fn().mockResolvedValue('mock-job-id'),
+00016:   // insert() is used by bulkEnqueueJobs for the primary enqueue path.
+00017:   // Default implementation returns one ID per submitted job so the
+00018:   // integrity check always passes without triggering the retry path.
+00019:   insert: vi.fn().mockImplementation(
+00020:     (_queueName: string, jobs: unknown[]) =>
+00021:       Promise.resolve(jobs.map((_: unknown, i: number) => `mock-job-id-${i}`)),
+00022:   ),
+00023: };
+00024: 
+00025: vi.mock('../../../src/queue/boss.js', () => ({
+00026:   getBoss: vi.fn(() => mockBoss),
+00027: }));
+00028: 
+00029: // Mock parallelism service - always returns default queue in tests
+00030: vi.mock('../../../src/services/parallelism/index.js', () => ({
+00031:   getQueueNameForModel: vi.fn().mockResolvedValue('probe_scenario'),
+00032: }));
+00033: 
+00034: // Mock scheduler - prevent actual interval management in tests
+00035: vi.mock('../../../src/services/run/scheduler.js', () => ({
+00036:   signalRunActivity: vi.fn(),
+00037: }));
+00038: 
+00039: describe('startRun service', () => {
+00040:   const testUserId = TEST_USER.id;
+00041:   const createdDefinitionIds: string[] = [];
+00042:   const createdExperimentIds: string[] = [];
+00043:   const createdRunIds: string[] = [];
+00044:   const createdDomainIds: string[] = [];
+00045:   const createdPreambleIds: string[] = [];
+00046:   const createdPreambleVersionIds: string[] = [];
+00047:   const createdLevelPresetIds: string[] = [];
+00048:   const createdLevelPresetVersionIds: string[] = [];
+00049:   const createdContextIds: string[] = [];
+00050:   const createdSystemSettingKeys: string[] = [];
+00051: 
+00052:   // Ensure test user and required models exist before all tests
+00053:   beforeAll(async () => {
+00054:     await db.user.upsert({
+00055:       where: { id: TEST_USER.id },
+00056:       create: {
+00057:         id: TEST_USER.id,
+00058:         email: TEST_USER.email,
+00059:         passwordHash: 'test-hash',
+00060:       },
+00061:       update: {},
+00062:     });
+00063: 
+00064:     // Ensure test models exist as ACTIVE for model validation
+00065:     const testProvider = await db.llmProvider.upsert({
+00066:       where: { name: 'test-provider-start-run' },
+00067:       create: { name: 'test-provider-start-run', displayName: 'Test Provider (Start Run)' },
+00068:       update: {},
+00069:     });
+00070:     for (const modelId of ['gpt-4', 'claude-3', 'gemini-pro', 'judge-model', 'summarizer-model']) {
+00071:       await db.llmModel.upsert({
+00072:         where: { providerId_modelId: { providerId: testProvider.id, modelId } },
+00073:         create: { modelId, displayName: modelId, providerId: testProvider.id, status: 'ACTIVE', costInputPerMillion: 1.0, costOutputPerMillion: 2.0 },
+00074:         update: { status: 'ACTIVE' },
+00075:       });
+00076:     }
+00077:   });
+00078: 
+00079:   beforeEach(() => {
+00080:     vi.clearAllMocks();
+00081:     mockBoss.send.mockReset();
+00082:     mockBoss.send.mockResolvedValue('mock-job-id');
+00083:     mockBoss.insert.mockReset();
+00084:     mockBoss.insert.mockImplementation(
+00085:       (_queueName: string, jobs: unknown[]) =>
+00086:         Promise.resolve(jobs.map((_: unknown, i: number) => `mock-job-id-${i}`)),
+00087:     );
+00088:   });
+00089: 
+00090:   afterEach(async () => {
+00091:     // Clean up runs first (foreign key constraint)
+00092:     if (createdRunIds.length > 0) {
+00093:       await db.runScenarioSelection.deleteMany({
+00094:         where: { runId: { in: createdRunIds } },
+00095:       });
+00096:       await db.run.deleteMany({
+00097:         where: { id: { in: createdRunIds } },
+00098:       });
+00099:       createdRunIds.length = 0;
+00100:     }
+00101: 
+00102:     // Clean up experiments
+00103:     if (createdExperimentIds.length > 0) {
+00104:       await db.experiment.deleteMany({
+00105:         where: { id: { in: createdExperimentIds } },
+00106:       });
+00107:       createdExperimentIds.length = 0;
+00108:     }
+00109: 
+00110:     if (createdSystemSettingKeys.length > 0) {
+00111:       await db.systemSetting.deleteMany({
+00112:         where: { key: { in: createdSystemSettingKeys } },
+00113:       });
+00114:       createdSystemSettingKeys.length = 0;
+00115:     }
+00116: 
+00117:     // Clean up definitions (cascades scenarios)
+00118:     if (createdDefinitionIds.length > 0) {
+00119:       await db.scenario.deleteMany({
+00120:         where: { definitionId: { in: createdDefinitionIds } },
+00
+
+... [narrowed review slice: middle omitted] ...
+
+64:     it('multiplies cost estimate by samplesPerScenario', async () => {
+01665:       const definition = await db.definition.create({
+01666:         data: {
+01667:           name: 'Multi-Sample Cost Test',
+01668:           content: { schema_version: 1, preamble: 'Test' },
+01669:         },
+01670:       });
+01671:       createdDefinitionIds.push(definition.id);
+01672: 
+01673:       await db.scenario.createMany({
+01674:         data: [
+01675:           { definitionId: definition.id, name: 'Scenario 1', content: { test: 1 } },
+01676:           { definitionId: definition.id, name: 'Scenario 2', content: { test: 2 } },
+01677:         ],
+01678:       });
+01679: 
+01680:       // Run with samplesPerScenario=1
+01681:       const result1 = await startRun({
+01682:         definitionId: definition.id,
+01683:         models: ['gpt-4'],
+01684:         samplesPerScenario: 1,
+01685:         userId: testUserId,
+01686:       });
+01687:       createdRunIds.push(result1.run.id);
+01688: 
+01689:       // Run with samplesPerScenario=5
+01690:       const result5 = await startRun({
+01691:         definitionId: definition.id,
+01692:         models: ['gpt-4'],
+01693:         samplesPerScenario: 5,
+01694:         userId: testUserId,
+01695:       });
+01696:       createdRunIds.push(result5.run.id);
+01697: 
+01698:       // Cost should scale linearly with samples
+01699:       // Note: both use fallback costs so ratio should be exactly 5x
+01700:       expect(result5.estimatedCosts.total).toBeCloseTo(result1.estimatedCosts.total * 5, 5);
+01701:     });
+01702:   });
+01703: 
+01704:   describe('job priority', () => {
+01705:     it('stores priority in run config as HIGH', async () => {
+01706:       const definition = await db.definition.create({
+01707:         data: {
+01708:           name: 'Priority Test Definition',
+01709:           content: { schema_version: 1, preamble: 'Test' },
+01710:         },
+01711:       });
+01712:       createdDefinitionIds.push(definition.id);
+01713: 
+01714:       await db.scenario.create({
+01715:         data: {
+01716:           definitionId: definition.id,
+01717:           name: 'Test Scenario',
+01718:           content: { test: 1 },
+01719:         },
+01720:       });
+01721: 
+01722:       const result = await startRun({
+01723:         definitionId: definition.id,
+01724:         models: ['gpt-4'],
+01725:         priority: 'HIGH',
+01726:         userId: testUserId,
+01727:       });
+01728: 
+01729:       createdRunIds.push(result.run.id);
+01730: 
+01731:       // Verify run was created with HIGH priority
+01732:       const dbRun = await db.run.findUnique({
+01733:         where: { id: result.run.id },
+01734:       });
+01735:       expect((dbRun?.config as { priority: string }).priority).toBe('HIGH');
+01736:     });
+01737: 
+01738:     it('stores priority in run config as NORMAL by default', async () => {
+01739:       const definition = await db.definition.create({
+01740:         data: {
+01741:           name: 'Normal Priority Test',
+01742:           content: { schema_version: 1, preamble: 'Test' },
+01743:         },
+01744:       });
+01745:       createdDefinitionIds.push(definition.id);
+01746: 
+01747:       await db.scenario.create({
+01748:         data: {
+01749:           definitionId: definition.id,
+01750:           name: 'Test Scenario',
+01751:           content: { test: 1 },
+01752:         },
+01753:       });
+01754: 
+01755:       const result = await startRun({
+01756:         definitionId: definition.id,
+01757:         models: ['gpt-4'],
+01758:         // No priority specified, should default to NORMAL
+01759:         userId: testUserId,
+01760:       });
+01761: 
+01762:       createdRunIds.push(result.run.id);
+01763: 
+01764:       const dbRun = await db.run.findUnique({
+01765:         where: { id: result.run.id },
+01766:       });
+01767:       expect((dbRun?.config as { priority: string }).priority).toBe('NORMAL');
+01768:     });
+01769: 
+01770:     it('stores priority in run config as LOW', async () => {
+01771:       const definition = await db.definition.create({
+01772:         data: {
+01773:           name: 'Low Priority Test',
+01774:           content: { schema_version: 1, preamble: 'Test' },
+01775:         },
+01776:       });
+01777:       createdDefinitionIds.push(definition.id);
+01778: 
+01779:       await db.scenario.create({
+01780:         data: {
+01781:           definitionId: definition.id,
+01782:           name: 'Test Scenario',
+01783:           content: { test: 1 },
+01784:         },
+01785:       });
+01786: 
+01787:       const result = await startRun({
+01788:         definitionId: definition.id,
+01789:         models: ['gpt-4'],
+01790:         priority: 'LOW',
+01791:         userId: testUserId,
+01792:       });
+01793: 
+01794:       createdRunIds.push(result.run.id);
+01795: 
+01796:       const dbRun = await db.run.findUnique({
+01797:         where: { id: result.run.id },
+01798:       });
+01799:       expect((dbRun?.config as { priority: string }).priority).

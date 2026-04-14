@@ -55,13 +55,12 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     runCategory,
     experimentId,
     userId,
-    finalTrial = false,
     scenarioIds,
     configExtras,
   } = input;
 
   log.info(
-    { definitionId, modelCount: models.length, samplePercentage, sampleSeed, samplesPerScenario, experimentId, userId, finalTrial },
+    { definitionId, modelCount: models.length, samplePercentage, sampleSeed, samplesPerScenario, experimentId, userId },
     'Starting new run'
   );
 
@@ -155,8 +154,6 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     definitionId,
     models,
     definitionScenarioIds: definition.scenarios.map((scenario) => scenario.id),
-    finalTrial,
-    temperature,
     scenarioIds,
     samplePercentage,
     sampleSeed,
@@ -178,12 +175,11 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   const costEstimate = await estimateCost({
     definitionId,
     modelIds: models,
-    samplePercentage: finalTrial
-      ? 100
-      : (Array.isArray(scenarioIds) && scenarioIds.length > 0)
+    samplePercentage:
+      (Array.isArray(scenarioIds) && scenarioIds.length > 0)
         ? Math.max(1, Math.round((selectedScenarioIds.length / definition.scenarios.length) * 100))
         : samplePercentage,
-    samplesPerScenario: finalTrial ? 10 : samplesPerScenario, // Upper bound?
+    samplesPerScenario,
   });
 
   const resolvedDefinition = await resolveDefinitionContent(definitionId);
@@ -214,17 +210,27 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     }
   };
 
+  // Sanitize configExtras so a stale client payload with the legacy flag
+  // cannot sneak it into the persisted config.
+  // The runtime defense must be here, not at the type level — configExtras
+  // is typed as Record<string, unknown> by design (see spec §3.3).
+  const rawConfigExtras = configExtras;
+  const configExtrasObject: Record<string, unknown> =
+    rawConfigExtras != null && typeof rawConfigExtras === 'object' && !Array.isArray(rawConfigExtras)
+      ? rawConfigExtras
+      : {};
+  const { isFinalTrial: _dropIsFinalTrial, ...safeConfigExtras } = configExtrasObject;
+
   // Create run config
   const config = {
-    ...(configExtras ?? {}),
+    ...safeConfigExtras,
     models,
-    samplePercentage: finalTrial ? null : samplePercentage,
-    sampleSeed: finalTrial ? null : sampleSeed,
-    samplesPerScenario: finalTrial ? null : samplesPerScenario,
+    samplePercentage,
+    sampleSeed,
+    samplesPerScenario,
     temperature: temperature ?? null,
-    scenarioIds: finalTrial ? null : (selectedScenarioIds.length > 0 ? selectedScenarioIds : null),
-    runMode: finalTrial ? 'FINAL' : (Array.isArray(scenarioIds) && scenarioIds.length > 0 ? 'SPECIFIC_CONDITION' : 'PERCENTAGE'),
-    isFinalTrial: finalTrial,
+    scenarioIds: selectedScenarioIds.length > 0 ? selectedScenarioIds : null,
+    runMode: Array.isArray(scenarioIds) && scenarioIds.length > 0 ? 'SPECIFIC_CONDITION' : 'PERCENTAGE',
     priority,
     definitionSnapshot,
     estimatedCosts: costEstimate,
@@ -255,7 +261,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   const suffix = convertToAlpha(countToday);
   const month = today.toLocaleDateString('en-US', { month: 'short' });
   const day = today.toLocaleDateString('en-US', { day: '2-digit' });
-  const runName = `${month} ${day}-${suffix}${finalTrial ? ' (Final)' : ''}`;
+  const runName = `${month} ${day}-${suffix}`;
 
   // Create run in transaction
   const run = await db.$transaction(async (tx) => {
