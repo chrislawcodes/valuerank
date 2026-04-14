@@ -1802,7 +1802,7 @@ describe('startRun service', () => {
     describe('startRun configExtras sanitizer', () => {
       const DEAD_KEY = 'isFinalTrial';
 
-      it('strips isFinalTrial from object configExtras and keeps other keys', async () => {
+      it('strips the dead legacy key from object configExtras and keeps other keys', async () => {
         const definition = await db.definition.create({
           data: {
             name: 'Sanitizer Object Definition',

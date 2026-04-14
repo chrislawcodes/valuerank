@@ -3,11 +3,8 @@
  *
  * Exercises `resolveModelIdFromAvailable` and `getEquivalentModelIds` as pure
  * functions. This file replaces the alias-resolution coverage that was
- * previously embedded in plan-final-trial.test.ts — that test is deleted in
- * Slice B of the remove-final-trial-sampler feature run.
- *
- * Spec: docs/workflow/feature-runs/remove-final-trial-sampler/spec.md §3.7
- * Plan: docs/workflow/feature-runs/remove-final-trial-sampler/plan.md §2
+ * previously embedded in the now-deleted adaptive-sampler service test (see
+ * the adaptive-sampler removal feature run for context).
  */
 
 import { describe, it, expect } from 'vitest';
