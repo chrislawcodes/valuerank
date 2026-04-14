@@ -503,7 +503,7 @@ def recommended_next_action(
     if not stages["tasks"]["manifest_exists"] or not stages["tasks"]["healthy"]:
         return "repair_tasks_checkpoint"
     if not stages["diff"]["artifact_exists"]:
-        return "implement_next_slice"
+        return "dispatch_next_slice_to_codex"
     if not stages["diff"]["manifest_exists"] or not stages["diff"]["healthy"]:
         return "repair_diff_checkpoint"
     if diff_review_budget_state(slug).get("head_mismatch"):

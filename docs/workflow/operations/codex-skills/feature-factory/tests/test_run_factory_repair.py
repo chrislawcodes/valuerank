@@ -250,7 +250,7 @@ class RepairDecisionTests(unittest.TestCase):
             stages,
             True,
         )
-        self.assertEqual(action, "implement_next_slice")
+        self.assertEqual(action, "dispatch_next_slice_to_codex")
 
     def test_stage_status_reports_repairable_for_meaningful_uncheckpointed_plan(self) -> None:
         state = stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=False, healthy=False)
