@@ -34,6 +34,6 @@ describe('ValuePrioritiesSection', () => {
 
     expect(screen.getByRole('heading', { name: 'Value Priorities' })).toBeInTheDocument();
     expect(screen.queryByText(/model groups/i)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /win rate/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^win rate$/i })).toBeInTheDocument();
   });
 });
