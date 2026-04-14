@@ -35,7 +35,6 @@ type StartRunArgs = {
   priority?: string | null;
   runCategory?: RunCategory | null;
   experimentId?: string | number | null;
-  finalTrial?: boolean | null;
   launchMode?: string | null;
   scenarioIds?: Array<string | number> | null;
 };
@@ -107,7 +106,6 @@ builder.mutationField('startRun', (t) =>
             ? String(input.experimentId)
             : undefined,
         userId,
-        finalTrial: input.finalTrial ?? false,
         scenarioIds: input.scenarioIds?.map((scenarioId) => String(scenarioId)),
       };
 

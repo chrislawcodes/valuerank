@@ -1127,13 +1127,6 @@ export type ExportResult = {
   mimeType: Scalars['String']['output'];
 };
 
-export type FinalTrialPlan = {
-  __typename?: 'FinalTrialPlan';
-  definitionId: Scalars['String']['output'];
-  models: Array<ModelPlan>;
-  totalJobs: Scalars['Int']['output'];
-};
-
 export type ForkDefinitionInput = {
   /** Optional content override. If not provided, inherits everything from parent (stores minimal v2 content). */
   content?: InputMaybe<Scalars['JSON']['input']>;
@@ -2430,7 +2423,6 @@ export type Query = {
   /** Estimate cost for a potential run before starting it. Returns per-model breakdown with token predictions based on historical data. */
   estimateCost: CostEstimate;
   estimateDomainEvaluationCost: DomainEvaluationCostEstimate;
-  finalTrialPlan: FinalTrialPlan;
   /** Get the configured infrastructure model for a specific purpose (e.g., "scenario_expansion") */
   infraModel?: Maybe<LlmModel>;
   /** Get a specific level preset by ID */
@@ -2822,12 +2814,6 @@ export type QueryEstimateDomainEvaluationCostArgs = {
   samplesPerScenario?: InputMaybe<Scalars['Int']['input']>;
   scopeCategory?: InputMaybe<Scalars['String']['input']>;
   temperature?: InputMaybe<Scalars['Float']['input']>;
-};
-
-
-export type QueryFinalTrialPlanArgs = {
-  definitionId: Scalars['String']['input'];
-  models: Array<Scalars['String']['input']>;
 };
 
 
@@ -3293,8 +3279,6 @@ export type StartRunInput = {
   definitionId: Scalars['ID']['input'];
   /** Optional experiment to associate this run with */
   experimentId?: InputMaybe<Scalars['ID']['input']>;
-  /** If true, runs an adaptive sampling strategy to reach 10 samples per condition */
-  finalTrial?: InputMaybe<Scalars['Boolean']['input']>;
   /** Launch mode hint: STANDARD, PAIRED_BATCH, or AD_HOC_BATCH */
   launchMode?: InputMaybe<Scalars['String']['input']>;
   /** List of model IDs to evaluate (e.g., ["gpt-4", "claude-3"]) */

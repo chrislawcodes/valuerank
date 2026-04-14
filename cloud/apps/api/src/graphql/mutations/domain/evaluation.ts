@@ -199,7 +199,6 @@ builder.mutationField('retryDomainTrialCell', (t) =>
         priority: 'NORMAL',
         runCategory: scopeCategory,
         userId,
-        finalTrial: false,
       });
 
       await createAuditLog({

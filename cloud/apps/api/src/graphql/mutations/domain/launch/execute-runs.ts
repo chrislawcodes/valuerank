@@ -59,7 +59,6 @@ export async function executeLaunchRuns(params: {
           priority: 'NORMAL',
           runCategory: scopeCategory,
           userId,
-          finalTrial: false,
           ...(configExtras !== undefined ? { configExtras } : {}),
         });
       })
@@ -138,10 +137,9 @@ export async function executeBackfillRuns(params: {
           priority: 'NORMAL',
           runCategory: scopeCategory,
           userId,
-          finalTrial: false,
           ...(group.pairKey !== null
             ? {
-              configExtras: {
+                configExtras: {
                 jobChoiceLaunchMode: 'PAIRED_BATCH',
                 jobChoiceBatchGroupId: batchGroupId,
                 jobChoiceValueFirst: tokens?.value_first.token,
