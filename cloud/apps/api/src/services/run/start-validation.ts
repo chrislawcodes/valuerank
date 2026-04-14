@@ -12,7 +12,6 @@ export type StartRunInput = {
   runCategory?: RunCategory;
   experimentId?: string;
   userId?: string | null;
-  finalTrial?: boolean;
   scenarioIds?: string[];
   configExtras?: Record<string, unknown>;
 };
@@ -20,26 +19,22 @@ export type StartRunInput = {
 const VALID_PRIORITIES = ['LOW', 'NORMAL', 'HIGH'] as const;
 
 export function validateStartRunInput(input: StartRunInput): void {
-  const { models, samplePercentage = 100, samplesPerScenario = 1, temperature, priority = 'NORMAL', finalTrial = false, scenarioIds } = input;
+  const { models, samplePercentage = 100, samplesPerScenario = 1, temperature, priority = 'NORMAL' } = input;
 
   if (models.length === 0) {
     throw new ValidationError('At least one model must be specified');
   }
 
-  if (!finalTrial && (samplePercentage < 1 || samplePercentage > 100)) {
+  if (samplePercentage < 1 || samplePercentage > 100) {
     throw new ValidationError('samplePercentage must be between 1 and 100');
   }
 
-  if (!finalTrial && (samplesPerScenario < 1 || samplesPerScenario > 100)) {
+  if (samplesPerScenario < 1 || samplesPerScenario > 100) {
     throw new ValidationError('samplesPerScenario must be between 1 and 100');
   }
 
   if (temperature !== undefined && (temperature < 0 || temperature > 2)) {
     throw new ValidationError('temperature must be between 0 and 2');
-  }
-
-  if (finalTrial && Array.isArray(scenarioIds) && scenarioIds.length > 0) {
-    throw new ValidationError('scenarioIds cannot be used with finalTrial');
   }
 
   if (!VALID_PRIORITIES.includes(priority as typeof VALID_PRIORITIES[number])) {
