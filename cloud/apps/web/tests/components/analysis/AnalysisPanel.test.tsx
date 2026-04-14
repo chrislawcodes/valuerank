@@ -648,7 +648,7 @@ describe('AnalysisPanel', () => {
     expect(claudeRow).not.toBeNull();
     expect(gptRow).not.toBeNull();
     expect(within(claudeRow as HTMLTableRowElement).getByText('Achievement')).toBeInTheDocument();
-    expect(within(claudeRow as HTMLTableRowElement).getAllByText('—').length).toBeGreaterThan(0);
+    expect(within(claudeRow as HTMLTableRowElement).getByText('50%')).toBeInTheDocument();
     expect(within(gptRow as HTMLTableRowElement).getByText('Care')).toBeInTheDocument();
     expect(within(gptRow as HTMLTableRowElement).getByText('60%')).toBeInTheDocument();
     expect(screen.getByText('Run-level evidence: pooled across 2 companion runs')).toBeInTheDocument();

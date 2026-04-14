@@ -199,7 +199,11 @@ export function OverviewSummaryTable({
           <tbody>
             {models.map(({ modelId, preference, reliability }) => {
               const preferredValue = getPreferredValueName(preference);
-              const preferredValueWinRate = preference.topPrioritizedValues[0]?.winRate ?? null;
+              const preferredValueWinRate = (
+                preference.topPrioritizedValues[0]
+                ?? preference.neutralValues[0]
+                ?? preference.topDeprioritizedValues[0]
+              )?.winRate ?? null;
               const perSourceMetricsList = repeatPatternSources.map(
                 (source) => getRepeatPatternMetrics(modelId, source.varianceAnalysis, source.conditionRows),
               );
