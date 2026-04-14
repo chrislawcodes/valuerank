@@ -195,7 +195,6 @@ runsExportRouter.get(
 
       res.setHeader('Content-Type', result.mimeType);
       res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
-      res.setHeader('Content-Length', result.buffer.length);
 
       log.info(
         { runId, filename: result.filename, bufferSize: result.buffer.length },
