@@ -78,7 +78,13 @@ function getValueCountsFromAnalysis(output: unknown, modelId: string, valueKey: 
   if (values == null || typeof values !== 'object' || Array.isArray(values)) {
     return { prioritized: 0, deprioritized: 0, neutral: 0 };
   }
-  const valueData = (values as Record<string, unknown>)[valueKey];
+  // Analysis outputs store value keys in lowercase (e.g. "power_dominance") while
+  // the canonical ValueKey type uses PascalCase (e.g. "Power_Dominance"). Do a
+  // case-insensitive lookup so both conventions are handled.
+  const valuesRecord = values as Record<string, unknown>;
+  const keyLower = valueKey.toLowerCase();
+  const valueData = valuesRecord[valueKey]
+    ?? Object.entries(valuesRecord).find(([k]) => k.toLowerCase() === keyLower)?.[1];
   if (valueData == null || typeof valueData !== 'object' || Array.isArray(valueData)) {
     return { prioritized: 0, deprioritized: 0, neutral: 0 };
   }
