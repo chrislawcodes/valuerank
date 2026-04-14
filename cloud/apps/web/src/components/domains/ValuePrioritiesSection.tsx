@@ -361,9 +361,9 @@ export function ValuePrioritiesSection({
                                 const supportRate = model.supportRates?.[value] ?? null;
                                 const winRate = model.winRates?.[value] ?? null;
                                 if (supportRate === null && winRate === null) return 'n/a / n/a';
-                                if (winRate === null) return `Support ${Math.round(supportRate ?? 0)}% / Win n/a`;
-                                if (supportRate === null) return `n/a / Win ${Math.round(winRate)}%`;
-                                return `Support ${Math.round(supportRate)}% / Win ${Math.round(winRate)}%`;
+                                if (winRate === null) return `${Math.round(supportRate ?? 0)}% / n/a`;
+                                if (supportRate === null) return `n/a / ${Math.round(winRate)}%`;
+                                return `${Math.round(supportRate)}% / ${Math.round(winRate)}%`;
                               }
                               if (cellValue === null) return 'n/a';
                               if (scoreMode === 'WIN_RATE') return `${cellValue.toFixed(1)}%`;

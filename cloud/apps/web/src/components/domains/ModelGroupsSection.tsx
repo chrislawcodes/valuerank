@@ -114,9 +114,6 @@ export function ModelGroupsSection({ clusterAnalysis }: ModelGroupsSectionProps)
               return (
                 <div key={cluster.id} className={`min-w-[280px] max-w-[520px] rounded-lg border ${style.border} ${style.light} p-3`}>
                   <p className={`text-sm font-semibold ${style.text}`}>
-                    <span className="font-medium">Model Group:</span> {personality.title}
-                  </p>
-                  <p className="mt-1 text-xs text-gray-700">
                     <span className="font-medium">Members:</span> {cluster.members.map((member) => member.label).join(', ')}
                   </p>
                   <p className="mt-2 text-xs text-gray-700">
@@ -124,9 +121,6 @@ export function ModelGroupsSection({ clusterAnalysis }: ModelGroupsSectionProps)
                   </p>
                   <p className="mt-1 text-xs text-gray-700">
                     <span className="font-medium">De-prioritizes:</span> {personality.bottomValues.join(', ')}
-                  </p>
-                  <p className="mt-2 text-xs text-gray-700 italic">
-                    <span className="font-medium not-italic">Advising tendency:</span> &ldquo;{personality.tendency}&rdquo;
                   </p>
                 </div>
               );

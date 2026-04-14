@@ -161,29 +161,6 @@ describe('DomainAnalysis', () => {
     installQueryResponses();
   });
 
-  it('shows the compact scope chip and expands the details panel', async () => {
-    const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <DomainAnalysis />
-      </MemoryRouter>,
-    );
-
-    const disclosure = await screen.findByRole('button', { name: /show evidence scope details/i });
-    expect(screen.getByText(/current evidence scope: diagnostic evidence only/i)).toBeInTheDocument();
-
-    await user.click(disclosure);
-
-    expect(disclosure).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText(/this domain can show diagnostic signals/i)).toBeInTheDocument();
-    expect(screen.getByText(/launch snapshot boundary is not complete/i)).toBeInTheDocument();
-
-    disclosure.focus();
-    await user.keyboard('{Enter}');
-
-    expect(disclosure).toHaveAttribute('aria-expanded', 'false');
-  });
-
   it('shows the freshness badge for saved analysis', async () => {
     render(
       <MemoryRouter>
@@ -193,48 +170,6 @@ describe('DomainAnalysis', () => {
 
     expect(await screen.findByText(/^Fresh$/)).toBeInTheDocument();
     expect(screen.getByText(/updated 3\/15\/2026/i)).toBeInTheDocument();
-  });
-
-  it('shows a loading chip while the eligibility query is unresolved', async () => {
-    installQueryResponses({
-      findingsData: undefined,
-      findingsFetching: true,
-      findingsError: undefined,
-    });
-
-    render(
-      <MemoryRouter>
-        <DomainAnalysis />
-      </MemoryRouter>,
-    );
-
-    await screen.findByText(/loading scope/i);
-    expect(screen.queryByRole('button', { name: /show evidence scope details/i })).not.toBeInTheDocument();
-  });
-
-  it('keeps the report visible when the eligibility query fails', async () => {
-    installQueryResponses({
-      findingsData: undefined,
-      findingsFetching: false,
-      findingsError: new Error('Eligibility data could not load'),
-    });
-
-    render(
-      <MemoryRouter>
-        <DomainAnalysis />
-      </MemoryRouter>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /show evidence scope details/i })).toBeInTheDocument();
-    });
-
-    expect(screen.getByText(/scope unavailable/i)).toBeInTheDocument();
-    expect(screen.getByText(/eligibility data could not load/i)).toBeInTheDocument();
-    expect(screen.getByText(/Mock model groups section/i)).toBeInTheDocument();
-    expect(screen.getByText(/Mock value priorities section/i)).toBeInTheDocument();
-    expect(screen.getByText(/Mock dominance section/i)).toBeInTheDocument();
-    expect(screen.getByText(/Mock similarity section/i)).toBeInTheDocument();
   });
 
   it('renders the report sections in the requested order', async () => {

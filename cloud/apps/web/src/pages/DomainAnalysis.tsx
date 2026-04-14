@@ -8,13 +8,10 @@ import {
   DOMAIN_AVAILABLE_SIGNATURES_QUERY,
   DOMAIN_ANALYSIS_QUERY,
   DOMAIN_ANALYSIS_QUERY_LEGACY,
-  DOMAIN_FINDINGS_ELIGIBILITY_QUERY,
   REFRESH_DOMAIN_ANALYSIS_MUTATION,
   type DomainAvailableSignature,
   type DomainAvailableSignaturesQueryResult,
   type DomainAvailableSignaturesQueryVariables,
-  type DomainFindingsEligibilityQueryResult,
-  type DomainFindingsEligibilityQueryVariables,
   type DomainAnalysisQueryResult,
   type DomainAnalysisQueryVariables,
   type RefreshDomainAnalysisMutationResult,
@@ -24,7 +21,6 @@ import { ModelGroupsSection } from '../components/domains/ModelGroupsSection';
 import { DominanceSection } from '../components/domains/DominanceSection';
 import { SimilaritySection } from '../components/domains/SimilaritySection';
 import { ValuePrioritiesSection } from '../components/domains/ValuePrioritiesSection';
-import { EvidenceScopeDisclosure, getEvidenceScopeState } from '../components/domains/EvidenceScopeDisclosure';
 import {
   VALUES,
   type DomainAnalysisModelAvailability,
@@ -71,15 +67,6 @@ export function DomainAnalysis() {
       })
       .map(({ option }) => option);
   }, [signatureData]);
-
-  const [{ data: findingsEligibilityData, fetching: findingsEligibilityLoading, error: findingsEligibilityError }] = useQuery<
-    DomainFindingsEligibilityQueryResult, DomainFindingsEligibilityQueryVariables
-  >({
-    query: DOMAIN_FINDINGS_ELIGIBILITY_QUERY,
-    variables: { domainId: selectedDomainId },
-    pause: selectedDomainId === '',
-    requestPolicy: 'cache-and-network',
-  });
 
   useEffect(() => {
     if (domains.length === 0) return;
@@ -143,11 +130,6 @@ export function DomainAnalysis() {
   const data = useLegacyQuery ? legacyData : scoredData;
   const fetching = useLegacyQuery ? legacyFetching : scoredFetching;
   const error = useLegacyQuery ? legacyError : scoredError;
-  const findingsEligibility = findingsEligibilityData?.domainFindingsEligibility;
-  const evidenceScopeState = useMemo(
-    () => getEvidenceScopeState(findingsEligibility, findingsEligibilityLoading, findingsEligibilityError),
-    [findingsEligibility, findingsEligibilityLoading, findingsEligibilityError],
-  );
   const cacheStatusCopy = useMemo(
     () => getCacheStatusCopy(data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt),
     [data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt],
@@ -251,6 +233,30 @@ export function DomainAnalysis() {
         <p className="mt-1 text-sm text-gray-600">
           Structured domain interpretation across priorities, ranking behavior, and similarity for the selected domain.
         </p>
+        {data?.domainAnalysis != null && cacheStatusCopy != null && (
+          <div className="mt-2 space-y-1 text-xs text-gray-500">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold ${cacheStatusCopy.badgeClassName}`}>
+                {cacheStatusCopy.badgeLabel}
+              </span>
+              <span>{cacheStatusCopy.detail}</span>
+              {!useLegacyQuery && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-auto px-2.5 py-1 text-xs"
+                  onClick={handleRefreshAnalysis}
+                  disabled={refreshFetching}
+                >
+                  {refreshFetching ? 'Refreshing\u2026' : 'Refresh now'}
+                </Button>
+              )}
+            </div>
+            {refreshNotice !== null && <p className="text-green-700">{refreshNotice}</p>}
+            {refreshError !== null && <p className="text-amber-700">{refreshError}</p>}
+          </div>
+        )}
       </div>
 
       {(domainsError != null || signaturesError != null || error != null) && (
@@ -292,37 +298,8 @@ export function DomainAnalysis() {
           </div>
           {exportError !== null && <p className="mt-1 text-xs text-amber-700">{exportError}</p>}
         </div>
-        {data?.domainAnalysis != null && (
+        {data?.domainAnalysis != null && missingDefinitionCount > 0 && (
           <div className="mt-2 space-y-1 text-xs text-gray-500">
-            {cacheStatusCopy != null && (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold ${cacheStatusCopy.badgeClassName}`}>
-                  {cacheStatusCopy.badgeLabel}
-                </span>
-                <span>{cacheStatusCopy.detail}</span>
-                {!useLegacyQuery && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleRefreshAnalysis}
-                    disabled={refreshFetching}
-                  >
-                    {refreshFetching ? 'Refreshing\u2026' : 'Refresh now'}
-                  </Button>
-                )}
-              </div>
-            )}
-            {refreshNotice !== null && (
-              <p className="text-green-700">{refreshNotice}</p>
-            )}
-            {refreshError !== null && (
-              <p className="text-amber-700">{refreshError}</p>
-            )}
-            <p>{data.domainAnalysis.definitionsWithAnalysis} of {data.domainAnalysis.targetedDefinitions} latest vignettes currently have aggregate analysis data.</p>
-            {data.domainAnalysis.definitionsWithAnalysis === 0 && data.domainAnalysis.targetedDefinitions > 0 && (
-              <p className="text-amber-700">No latest vignettes produced analyzable transcript data for the selected signature.</p>
-            )}
             {missingDefinitionCount > 0 && (
               <>
                 <div className="flex flex-wrap items-center gap-2">
@@ -344,7 +321,6 @@ export function DomainAnalysis() {
         )}
       </section>
 
-      {selectedDomainId !== '' && <EvidenceScopeDisclosure state={evidenceScopeState} />}
 
       {showPageLoader ? (
         <Loading size="lg" text="Loading domain analysis..." />
