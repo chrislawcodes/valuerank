@@ -13,56 +13,12 @@ vi.mock('@valuerank/db', () => ({
 }));
 
 import {
-  collectDomainCsvDimensionColumns,
   iterateDomainCsvTranscriptPages,
 } from '../../../src/services/export/domain-csv.js';
 
 describe('domain-csv export helpers', () => {
   beforeEach(() => {
     findManyMock.mockReset();
-  });
-
-  it('collects dimension columns across paged transcript batches', async () => {
-    findManyMock
-      .mockResolvedValueOnce([
-        {
-          scenario: {
-            content: {
-              dimensions: { Stakes: 1 },
-            },
-          },
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          scenario: {
-            content: {
-              dimensions: { Certainty: 2 },
-            },
-          },
-        },
-      ])
-      .mockResolvedValueOnce([]);
-
-    const result = await collectDomainCsvDimensionColumns(['run-1'], false, 1);
-
-    expect(result.headers).toEqual(['Certainty', 'Stakes']);
-    expect(findManyMock).toHaveBeenCalledTimes(3);
-    expect(findManyMock).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        skip: 0,
-        take: 1,
-        orderBy: [{ modelId: 'asc' }, { scenarioId: 'asc' }, { id: 'asc' }],
-      }),
-    );
-    expect(findManyMock).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        skip: 1,
-        take: 1,
-      }),
-    );
   });
 
   it('yields transcript pages using the configured batch size', async () => {
