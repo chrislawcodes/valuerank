@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import { healthRouter } from './health.js';
 import { authRouter } from './routes/auth.js';
 import { exportRouter } from './routes/export.js';
@@ -30,6 +31,7 @@ export function createServer() {
   const app = express();
 
   // Middleware
+  app.use(compression());
   app.use(cors());
   app.use(express.json());
   app.use(express.urlencoded({ extended: true })); // For OAuth form submissions

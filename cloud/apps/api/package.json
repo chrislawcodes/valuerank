@@ -27,6 +27,7 @@
     "adm-zip": "^0.5.16",
     "bcrypt": "^5.1.1",
     "bottleneck": "^2.19.5",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dataloader": "^2.2.2",
     "dotenv": "^17.2.3",
@@ -42,6 +43,7 @@
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.7",
+    "@types/compression": "^1.8.1",
     "@types/bcrypt": "^5.0.2",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
