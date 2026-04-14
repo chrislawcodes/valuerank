@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/api/tests/services/run/start.test.ts",
+  "source_artifact_sha256": "e04878e0b38a27a3cb710980eca29015d3c93b56cce4e7f9c94079d16dad6f8f",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/remove-final-trial-sampler/reviews/spec.gemini.requirements-adversarial.review.context8.narrowed.txt",
+  "narrowed_artifact_sha256": "88e225b3b434f51158a1597bc3138f115771d002060598a70642fa12e280b503",
+  "strategy": "head-tail-numbered-lines"
+}

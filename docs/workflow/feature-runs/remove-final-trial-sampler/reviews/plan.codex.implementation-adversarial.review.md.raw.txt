@@ -1,0 +1,7 @@
+## Findings
+- HIGH [CODE-CONFIRMED] Slice B deletes the only adaptive-sampling continuation path in `aggregate-analysis.ts`. That block is the only code that checks `config.isFinalTrial === true` and then calls `planFinalTrial(...)` and `startRun(...)` for follow-up work. The plan gives no drain or compatibility window for already-running final-trial jobs, so any in-flight final-trial run that reaches aggregation after this commit will stop scheduling more samples.
+- MEDIUM [CODE-CONFIRMED] The plan deliberately leaves the repo in broken intermediate states. After B, `start-plan.ts` and `aggregate-analysis.ts` still import the deleted `plan-final-trial.ts`; after C, `lifecycle.ts`, `start-run.ts`, `evaluation.ts`, and `execute-runs.ts` still reference `finalTrial` until D lands. Because the plan explicitly expects build failures in the middle, later validation cannot tell planned breakage from a new regression.
+
+## Residual Risks
+- Cached web bundles and any non-browser GraphQL client that still sends `finalTrial` can fail or behave differently until they are refreshed against the new schema.
+- The sanitizer in `start.ts` only strips `isFinalTrial` from `configExtras`. If any other config source can inject that key later, it would still reach `run.config`; that path is not shown in the provided code, so this is lower confidence.

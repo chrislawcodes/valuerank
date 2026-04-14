@@ -1,0 +1,265 @@
+00001: import { db } from '@valuerank/db';
+00002: import { createLogger, NotFoundError } from '@valuerank/shared';
+00003: import { updateAggregateRun } from '../analysis/aggregate.js';
+00004: import { resolveModelIdFromAvailable } from '../models/aliases.js';
+00005: import { parseTemperature } from '../../utils/temperature.js';
+00006: 
+00007: const log = createLogger('services:run:plan-final-trial');
+00008: 
+00009: export type ConditionPlan = {
+00010:   scenarioId: string;
+00011:   conditionKey: string;
+00012:   currentSamples: number;
+00013:   currentSEM: number | null;
+00014:   status: 'STABLE' | 'MORE_INVESTIGATION' | 'UNDECIDED' | 'INSUFFICIENT_DATA';
+00015:   neededSamples: number;
+00016: };
+00017: 
+00018: export type ModelPlan = {
+00019:   modelId: string;
+00020:   conditions: ConditionPlan[];
+00021:   totalNeededSamples: number;
+00022: };
+00023: 
+00024: export type FinalTrialPlan = {
+00025:   definitionId: string;
+00026:   models: ModelPlan[];
+00027:   totalJobs: number;
+00028: };
+00029: 
+00030: type PerScenarioVarianceStats = {
+00031:   sampleCount: number;
+00032:   mean: number;
+00033:   variance: number;
+00034:   stdDev: number;
+00035: };
+00036: 
+00037: type AnalysisShape = {
+00038:   varianceAnalysis?: {
+00039:     perModel?: Record<
+00040:       string,
+00041:       {
+00042:         perScenario?: Record<string, PerScenarioVarianceStats>;
+00043:       }
+00044:     >;
+00045:   };
+00046:   visualizationData?: {
+00047:     modelScenarioMatrix?: Record<string, Record<string, number>>;
+00048:   };
+00049: };
+00050: 
+00051: type AggregateRunConfig = {
+00052:   definitionSnapshot?: {
+00053:     _meta?: {
+00054:       preambleVersionId?: string;
+00055:       definitionVersion?: number | string;
+00056:     };
+00057:     preambleVersionId?: string;
+00058:     version?: number | string;
+00059:   };
+00060:   temperature?: number | null;
+00061: };
+00062: 
+00063: function getConditionKey(dimensions: Record<string, string | number>): string {
+00064:   return Object.entries(dimensions)
+00065:     .sort(([k1], [k2]) => k1.localeCompare(k2))
+00066:     .map(([k, v]) => `${k}:${v}`)
+00067:     .join('|');
+00068: }
+00069: 
+00070: function calculateSemFromScores(scores: number[]): number | null {
+00071:   if (scores.length < 2) return null;
+00072:   const mean = scores.reduce((sum, v) => sum + v, 0) / scores.length;
+00073:   const variance =
+00074:     scores.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) /
+00075:     (scores.length - 1);
+00076:   return Math.sqrt(variance / scores.length);
+00077: }
+00078: 
+00079: function parseDefinitionVersion(value: unknown): number | null {
+00080:   if (typeof value === 'number' && Number.isFinite(value)) return value;
+00081:   if (typeof value !== 'string' || value.trim() === '') return null;
+00082:   const parsed = Number.parseInt(value, 10);
+00083:   return Number.isFinite(parsed) ? parsed : null;
+00084: }
+00085: 
+00086: function matchesAggregateTarget(
+00087:   config: AggregateRunConfig | null | undefined,
+00088:   preambleVersionId: string | null,
+00089:   definitionVersion: number,
+00090:   temperature: number | null
+00091: ): boolean {
+00092:   if (!config) return false;
+00093:   const snapshot = config.definitionSnapshot;
+00094:   const runPreambleVersionId =
+00095:     snapshot?._meta?.preambleVersionId ??
+00096:     snapshot?.preambleVersionId ??
+00097:     null;
+00098:   const runDefinitionVersion =
+00099:     parseDefinitionVersion(snapshot?._meta?.definitionVersion) ??
+00100:     parseDefinitionVersion(snapshot?.version);
+00101:   const runTemperature = parseTemperature(config.temperature);
+00102: 
+00103:   const preambleMatch = runPreambleVersionId === preambleVersionId;
+00104:   const versionMatch = runDefinitionVersion === definitionVersion;
+00105:   const temperatureMatch = runTemperature === temperature;
+00106:   return preambleMatch && versionMatch && temperatureMatch;
+00107: }
+00108: 
+00109: function calculateSemFromVarianceStats(
+00110:   statsByScenario: Record<string, PerScenarioVarianceStats>,
+00111:   scenarioIds: string[]
+00112: ): { n: number; sem: number | null } {
+00113:   const selected: PerScenarioVarianceStats[] = scenarioIds
+00114:     .map((id) => statsByScenario[id])
+00115:     .filter((s): s is PerScenarioVarianceStats => Boolean(s && s.sampleCount > 0));
+00116: 
+00117:   const totalN = selected.reduce((sum, s) => sum + s.sampleCount, 0);
+00118:   if (totalN < 2) return { n: totalN, sem: null };
+00119: 
+00120:   const globalMean =
+00121:     selected.reduce((sum, s) => sum + s.mean * s.sampleCount, 0) / totalN;
+00122: 
+00123:   let ssTotal = 0;
+00124:   for (const s of selected) {
+00125:     if (s.sampleCount > 1) {
+00126:       ssTotal += (s.sampleCount - 1) * s.variance;
+00127:     }
+00128:     ssTotal += s.sampleCount * Math.pow(s.mean - globalMean, 2);
+00129:   }
+00130: 
+00131:   const totalVariance = ssTotal / (totalN - 1);
+00132:   const sem = Math.sqrt(totalVariance / totalN);
+00133:   return { n: totalN, sem };
+00134: }
+00135: 
+0013
+
+... [narrowed review slice: middle omitted] ...
+
+26:   if (!definition) throw new NotFoundError('Definition', definitionId);
+00227: 
+00228:   if (modelIds.length === 0) {
+00229:     return {
+00230:       definitionId,
+00231:       models: [],
+00232:       totalJobs: 0,
+00233:     };
+00234:   }
+00235: 
+00236:   const conditionMap = new Map<string, string[]>();
+00237:   for (const scenario of definition.scenarios) {
+00238:     if (scenario.content === null || typeof scenario.content !== 'object' || Array.isArray(scenario.content)) {
+00239:       continue;
+00240:     }
+00241:     const content = scenario.content as Record<string, unknown>;
+00242:     const dims = (content.dimensions as Record<string, string | number> | undefined) ?? {};
+00243:     const key = getConditionKey(dims);
+00244:     if (key === '') continue;
+00245:     const existing = conditionMap.get(key) ?? [];
+00246:     existing.push(scenario.id);
+00247:     conditionMap.set(key, existing);
+00248:   }
+00249: 
+00250:   if (conditionMap.size === 0) {
+00251:     return {
+00252:       definitionId,
+00253:       models: modelIds.map((modelId) => ({
+00254:         modelId,
+00255:         conditions: [],
+00256:         totalNeededSamples: 0,
+00257:       })),
+00258:       totalJobs: 0,
+00259:     };
+00260:   }
+00261: 
+00262:   log.info({ definitionId, modelIds, temperature }, 'Planning final trial');
+00263: 
+00264:   await updateAggregateRun(definitionId, definition.preambleVersionId, definition.version, temperature);
+00265: 
+00266:   const aggregateRuns = await db.run.findMany({
+00267:     where: {
+00268:       definitionId,
+00269:       status: 'COMPLETED',
+00270:       tags: { some: { tag: { name: 'Aggregate' } } },
+00271:       deletedAt: null,
+00272:     },
+00273:     include: {
+00274:       analysisResults: {
+00275:         where: { status: 'CURRENT' },
+00276:         orderBy: { createdAt: 'desc' },
+00277:         take: 1,
+00278:       },
+00279:     },
+00280:     orderBy: { updatedAt: 'desc' },
+00281:   });
+00282: 
+00283:   const aggregateRun = aggregateRuns.find((run) => {
+00284:     const config = (run.config as AggregateRunConfig | null) ?? null;
+00285:     return matchesAggregateTarget(
+00286:       config,
+00287:       definition.preambleVersionId,
+00288:       definition.version,
+00289:       temperature
+00290:     );
+00291:   });
+00292: 
+00293:   const analysis = (aggregateRun?.analysisResults[0]?.output ?? null) as AnalysisShape | null;
+00294: 
+00295:   if (!analysis) {
+00296:     return generateInitialPlan(definitionId, conditionMap, modelIds);
+00297:   }
+00298: 
+00299:   const availableModelsInVariance = new Set(Object.keys(analysis.varianceAnalysis?.perModel ?? {}));
+00300:   const availableModelsInMatrix = new Set(Object.keys(analysis.visualizationData?.modelScenarioMatrix ?? {}));
+00301:   const availableKeys = new Set([...availableModelsInVariance, ...availableModelsInMatrix]);
+00302: 
+00303:   const models: ModelPlan[] = modelIds.map((requestedModelId) => {
+00304:     // Resolve alias if needed (e.g. gemini-2.5-flash -> gemini-2.5-flash-preview-09-2025)
+00305:     // If no match found, fallback to requested ID (which will result in 0 samples found, correctly)
+00306:     const lookupModelId = resolveModelIdFromAvailable(requestedModelId, availableKeys) ?? requestedModelId;
+00307: 
+00308:     const perScenarioVariance = analysis.varianceAnalysis?.perModel?.[lookupModelId]?.perScenario;
+00309:     const matrix = analysis.visualizationData?.modelScenarioMatrix?.[lookupModelId] ?? {};
+00310: 
+00311:     const conditions: ConditionPlan[] = Array.from(conditionMap.entries()).map(
+00312:       ([conditionKey, scenarioIds]) => {
+00313:         let n = 0;
+00314:         let sem: number | null = null;
+00315: 
+00316:         if (perScenarioVariance !== undefined) {
+00317:           const stats = calculateSemFromVarianceStats(perScenarioVariance, scenarioIds);
+00318:           n = stats.n;
+00319:           sem = stats.sem;
+00320:         } else {
+00321:           const scores = scenarioIds
+00322:             .map((id) => matrix[id])
+00323:             .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+00324:           n = scores.length;
+00325:           sem = calculateSemFromScores(scores);
+00326:         }
+00327: 
+00328:         const evaluation = evaluateCondition(n, sem);
+00329: 
+00330:         return {
+00331:           scenarioId: scenarioIds[0]!,
+00332:           conditionKey,
+00333:           currentSamples: n,
+00334:           currentSEM: sem,
+00335:           status: evaluation.status,
+00336:           neededSamples: evaluation.neededSamples,
+00337:         };
+00338:       }
+00339:     );
+00340: 
+00341:     return {
+00342:       modelId: requestedModelId,
+00343:       conditions,
+00344:       totalNeededSamples: conditions.reduce((sum, c) => sum + c.neededSamples, 0),
+00345:     };
+00346:   });
+00347: 
+00348:   return {
+00349:     definitionId,
+00350:     models,
+00351:     totalJobs: models.reduce((sum, m) => s

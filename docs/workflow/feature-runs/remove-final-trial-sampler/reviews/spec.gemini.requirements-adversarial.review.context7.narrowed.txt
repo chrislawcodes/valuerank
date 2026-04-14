@@ -1,0 +1,280 @@
+00001: /**
+00002:  * Start Run Service
+00003:  *
+00004:  * Creates a new run and queues probe_scenario jobs for each model-scenario pair.
+00005:  * Jobs are routed to provider-specific queues for parallelism enforcement.
+00006:  */
+00007: 
+00008: import { db, resolveDefinitionContent } from '@valuerank/db';
+00009: import { ensureDomainConfigSnapshot } from '../domain-config/snapshot.js';
+00010: import { AppError, createLogger, NotFoundError, ValidationError } from '@valuerank/shared';
+00011: import { estimateCost, type CostEstimate } from '../cost/index.js';
+00012: import { signalRunActivity } from './scheduler.js';
+00013: import { validateStartRunInput, type StartRunInput } from './start-validation.js';
+00014: import {
+00015:   asRecord,
+00016:   buildFindingsSnapshot,
+00017:   convertToAlpha,
+00018:   syncSurveyScenariosFromPlan,
+00019:   type SurveyPlan,
+00020: } from './start-helpers.js';
+00021: import { buildRunJobPlan } from './start-plan.js';
+00022: import { enqueueRunJobs } from './start-queue.js';
+00023: 
+00024: const log = createLogger('services:run:start');
+00025: 
+00026: export type StartRunResult = {
+00027:   run: {
+00028:     id: string;
+00029:     status: string;
+00030:     definitionId: string;
+00031:     experimentId: string | null;
+00032:     config: unknown;
+00033:     progress: {
+00034:       total: number;
+00035:       completed: number;
+00036:       failed: number;
+00037:     };
+00038:     createdAt: Date;
+00039:   };
+00040:   jobCount: number;
+00041:   estimatedCosts: CostEstimate;
+00042: };
+00043: 
+00044: export type { StartRunInput } from './start-validation.js';
+00045: 
+00046: export async function startRun(input: StartRunInput): Promise<StartRunResult> {
+00047:   const {
+00048:     definitionId,
+00049:     models,
+00050:     samplePercentage = 100,
+00051:     sampleSeed,
+00052:     samplesPerScenario = 1,
+00053:     temperature,
+00054:     priority = 'NORMAL',
+00055:     runCategory,
+00056:     experimentId,
+00057:     userId,
+00058:     finalTrial = false,
+00059:     scenarioIds,
+00060:     configExtras,
+00061:   } = input;
+00062: 
+00063:   log.info(
+00064:     { definitionId, modelCount: models.length, samplePercentage, sampleSeed, samplesPerScenario, experimentId, userId, finalTrial },
+00065:     'Starting new run'
+00066:   );
+00067: 
+00068:   validateStartRunInput(input);
+00069: 
+00070:   // Validate that all requested models are ACTIVE
+00071:   const activeModels = await db.llmModel.findMany({
+00072:     where: {
+00073:       modelId: { in: models },
+00074:       status: 'ACTIVE',
+00075:     },
+00076:     select: {
+00077:       modelId: true,
+00078:       displayName: true,
+00079:       apiConfig: true,
+00080:       providerId: true,
+00081:       provider: {
+00082:         select: {
+00083:           name: true,
+00084:         },
+00085:       },
+00086:     },
+00087:   });
+00088: 
+00089:   const activeModelIds = activeModels.map(m => m.modelId);
+00090:   const invalidModelIds = models.filter(m => !activeModelIds.includes(m));
+00091: 
+00092:   if (invalidModelIds.length > 0) {
+00093:     throw new ValidationError(
+00094:       `The following models are not active or valid: ${invalidModelIds.join(', ')}. Please refresh your page to get the latest model list.`
+00095:     );
+00096:   }
+00097: 
+00098:   // Validate experiment if provided. For surveys, always rebuild scenarios from the stored survey plan
+00099:   // so runs use one-question-per-prompt even for surveys created before this behavior existed.
+00100:   if (experimentId !== undefined && experimentId !== null && experimentId !== '') {
+00101:     const experiment = await db.experiment.findUnique({
+00102:       where: { id: experimentId },
+00103:       select: { id: true, analysisPlan: true },
+00104:     });
+00105:     if (!experiment) {
+00106:       throw new NotFoundError('Experiment', experimentId);
+00107:     }
+00108: 
+00109:     const plan = experiment.analysisPlan as SurveyPlan | null;
+00110:     if (plan?.kind === 'survey') {
+00111:       if (typeof plan.definitionId !== 'string' || plan.definitionId !== definitionId) {
+00112:         throw new ValidationError('Survey definition mismatch');
+00113:       }
+00114:       await syncSurveyScenariosFromPlan(definitionId, plan);
+00115:     }
+00116:   }
+00117: 
+00118:   // Fetch definition with scenarios (filtering out deleted)
+00119:   const definition = await db.definition.findUnique({
+00120:     where: { id: definitionId },
+00121:     include: {
+00122:       scenarios: {
+00123:         where: { deletedAt: null },
+00124:         select: { id: true },
+00125:       },
+00126:       preambleVersion: true,
+00127:       domainContext: true,
+00128:       levelPresetVersion: true,
+00129:       domain: {
+00130:         select: {
+00131:           id: true,
+00132:           valueStatements: {
+00133:             select: {
+00134:               id: true,
+00135:               token: true,
+00136:               body: true,
+00137:               domainId: true,
+00138:             },
+00139:
+
+... [narrowed review slice: middle omitted] ...
+
+efinition.preambleVersion?.content ?? content.preamble) as string | undefined,
+00207:     _meta: {
+00208:       definitionVersion: definition.version,
+00209:       preambleVersionId: definition.preambleVersion?.id,
+00210:       preambleVersionLabel: definition.preambleVersion?.version,
+00211:       preambleName: definition.preambleVersion ?
+00212:         (await db.preamble.findUnique({ where: { id: definition.preambleVersion.preambleId }, select: { name: true } }))?.name
+00213:         : undefined,
+00214:     }
+00215:   };
+00216: 
+00217:   // Create run config
+00218:   const config = {
+00219:     ...(configExtras ?? {}),
+00220:     models,
+00221:     samplePercentage: finalTrial ? null : samplePercentage,
+00222:     sampleSeed: finalTrial ? null : sampleSeed,
+00223:     samplesPerScenario: finalTrial ? null : samplesPerScenario,
+00224:     temperature: temperature ?? null,
+00225:     scenarioIds: finalTrial ? null : (selectedScenarioIds.length > 0 ? selectedScenarioIds : null),
+00226:     runMode: finalTrial ? 'FINAL' : (Array.isArray(scenarioIds) && scenarioIds.length > 0 ? 'SPECIFIC_CONDITION' : 'PERCENTAGE'),
+00227:     isFinalTrial: finalTrial,
+00228:     priority,
+00229:     definitionSnapshot,
+00230:     estimatedCosts: costEstimate,
+00231:     ...findingsSnapshot,
+00232:   };
+00233: 
+00234:   const initialProgress = {
+00235:     total: totalJobs,
+00236:     completed: 0,
+00237:     failed: 0,
+00238:   };
+00239: 
+00240:   // Generate run name
+00241:   const today = new Date();
+00242:   const startOfDay = new Date(today);
+00243:   startOfDay.setHours(0, 0, 0, 0);
+00244:   const endOfDay = new Date(today);
+00245:   endOfDay.setHours(23, 59, 59, 999);
+00246: 
+00247:   const countToday = await db.run.count({
+00248:     where: {
+00249:       definitionId,
+00250:       createdAt: { gte: startOfDay, lte: endOfDay },
+00251:       deletedAt: null,
+00252:     },
+00253:   });
+00254: 
+00255:   const suffix = convertToAlpha(countToday);
+00256:   const month = today.toLocaleDateString('en-US', { month: 'short' });
+00257:   const day = today.toLocaleDateString('en-US', { day: '2-digit' });
+00258:   const runName = `${month} ${day}-${suffix}${finalTrial ? ' (Final)' : ''}`;
+00259: 
+00260:   // Create run in transaction
+00261:   const run = await db.$transaction(async (tx) => {
+00262:     const newRun = await tx.run.create({
+00263:       data: {
+00264:         name: runName,
+00265:         definitionId,
+00266:         experimentId: experimentId ?? null,
+00267:         status: 'PENDING',
+00268:         runCategory: runCategory ?? 'UNKNOWN_LEGACY',
+00269:         config,
+00270:         progress: initialProgress,
+00271:         createdByUserId: userId ?? null,
+00272:       },
+00273:     });
+00274: 
+00275:     await tx.runScenarioSelection.createMany({
+00276:       data: selectedScenarioIds.map((scenarioId) => ({
+00277:         runId: newRun.id,
+00278:         scenarioId,
+00279:       })),
+00280:       skipDuplicates: true, // Safety for overlaps if any
+00281:     });
+00282: 
+00283:     // Capture domain config snapshot at run creation time
+00284:     if (definition.domain?.id) {
+00285:       try {
+00286:         const snapshotId = await ensureDomainConfigSnapshot(definition.domain.id, tx);
+00287:         await tx.run.update({
+00288:           where: { id: newRun.id },
+00289:           data: { domainConfigSnapshotId: snapshotId },
+00290:         });
+00291:       } catch (err) {
+00292:         // Non-fatal: log warning but don't fail run creation
+00293:         log.warn({ err, domainId: definition.domain.id }, 'Failed to capture domain config snapshot');
+00294:       }
+00295:     }
+00296: 
+00297:     return newRun;
+00298:   });
+00299: 
+00300:   log.info({ runId: run.id, totalJobs }, 'Run created, queuing jobs');
+00301: 
+00302:   let jobIds: string[];
+00303:   try {
+00304:     jobIds = await enqueueRunJobs({
+00305:       runId: run.id,
+00306:       jobPlan,
+00307:       priority,
+00308:       temperature,
+00309:       totalJobs,
+00310:     });
+00311:   } catch (error) {
+00312:     if (error instanceof AppError && error.code === 'RUN_INIT_FAILED') {
+00313:       await db.run.update({
+00314:         where: { id: run.id },
+00315:         data: {
+00316:           status: 'FAILED',
+00317:           completedAt: new Date(),
+00318:           stalledModels: [],
+00319:         },
+00320:       });
+00321:     }
+00322:     throw error;
+00323:   }
+00324: 
+00325:   log.info(
+00326:     { runId: run.id, jobsCreated: jobIds.length, totalJobs },
+00327:     'Jobs queued successfully'
+00328:   );
+00329: 
+00330:   signalRunActivity();
+00331: 
+00332:   return {
+00333:     run: {
+00334:       id: run.id,
+00335:       status: run.status,
+00336:       definitionId: run.definitionId,
+00337:       experimentId: run.experimentId,
+00338:       config: run.config,
+00339:       progress: initialProgress,
+00340:       createdAt: run.createdAt,
+00341:     },
+00342:     jobCount: jobIds.length,
+00343:     est

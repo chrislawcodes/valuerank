@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/api/src/services/run/start.ts",
+  "source_artifact_sha256": "c6537031108fa0fdb353646fac7c32a65e54fde9880f54dae8a702a4e6189a60",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/remove-final-trial-sampler/reviews/spec.codex.edge-cases-adversarial.review.context7.narrowed.txt",
+  "narrowed_artifact_sha256": "3871336091ff40f41aafcda13207255a0aa3ea370e0baf53ccdce9a7d56e657b",
+  "strategy": "head-tail-numbered-lines"
+}
