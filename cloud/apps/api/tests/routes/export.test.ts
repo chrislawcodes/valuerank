@@ -673,9 +673,10 @@ describe('Domain Transcript CSV Export Endpoint', () => {
     expect(response.text.charCodeAt(0)).toBe(0xfeff);
     const headerLine = response.text.split('\n')[0]?.replace('\uFEFF', '');
     expect(headerLine).toContain('AI Model Name');
-    expect(headerLine).toContain('Decision Direction');
+    expect(headerLine).toContain('Value 1');
+    expect(headerLine).toContain('Value 2');
+    expect(headerLine).toContain('Value Chosen');
     expect(headerLine).toContain('Decision Strength');
-    expect(headerLine).toContain('Decision Reason');
   });
 
   it('keeps unresolved transcripts in the export', async () => {
