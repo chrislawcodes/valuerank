@@ -21,6 +21,7 @@ export type ExportDecisionDisplay = {
   parseClass: string;
   parsePath: string;
   matchedLabel: string;
+  favoredValueKey: string | null;
 };
 
 export const DECISION_BUCKET_LABELS: readonly DecisionBucketLabel[] = [
@@ -197,6 +198,7 @@ export function formatDecisionDisplay(transcript: DecisionDisplayTranscript): Ex
     parseClass,
     parsePath: raw.parsePath ?? '',
     matchedLabel: raw.matchedLabel ?? '',
+    favoredValueKey: canonical.favoredValueKey,
   };
 }
 

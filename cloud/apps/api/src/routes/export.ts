@@ -26,7 +26,7 @@ import {
   generateExportFilename,
 } from '../services/export/csv.js';
 import { collectVisibleDimensionColumns } from '../services/export/decision-display.js';
-import { collectDomainCsvDimensionColumns, iterateDomainCsvTranscriptPages } from '../services/export/domain-csv.js';
+import { getDomainCSVHeader, formatDomainCSVRow, iterateDomainCsvTranscriptPages } from '../services/export/domain-csv.js';
 import { exportDefinitionAsMd } from '../services/export/md.js';
 import { exportScenariosAsYaml } from '../services/export/yaml.js';
 import { generateExcelExport, type RunExportData } from '../services/export/xlsx/index.js';
@@ -281,10 +281,9 @@ exportRouter.get(
       const signature = typeof req.query.signature === 'string' && req.query.signature.trim() !== ''
         ? req.query.signature.trim()
         : null;
-      const includeDecisionMetadata = parseBooleanQueryParam(req.query.includeDecisionMetadata);
 
       log.info(
-        { userId: req.user.id, domainId, signature, includeDecisionMetadata },
+        { userId: req.user.id, domainId, signature },
         'Exporting domain transcripts as CSV',
       );
 
@@ -294,12 +293,6 @@ exportRouter.get(
       }
 
       const { domain, filteredSourceRunIds, resolvedSignature } = resolved;
-
-      const dimensionColumns = await collectDomainCsvDimensionColumns(
-        filteredSourceRunIds,
-        includeDecisionMetadata,
-      );
-      const { headers: variableNames } = dimensionColumns;
 
       // Build filename: omit signature segment when not resolved
       const safeName = domain.name.replace(/[^a-z0-9-]/gi, '_').toLowerCase();
@@ -312,26 +305,19 @@ exportRouter.get(
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
       res.write('\uFEFF');
-      res.write(getCSVHeader(variableNames, { includeDecisionMetadata }));
+      res.write(getDomainCSVHeader());
       let rowsWritten = 0;
 
       for await (const transcripts of iterateDomainCsvTranscriptPages(filteredSourceRunIds)) {
         for (const transcript of transcripts) {
           res.write('\n');
-          const row = transcriptToCSVRow(transcript, dimensionColumns);
-          res.write(formatCSVRow(row, variableNames, { includeDecisionMetadata }));
+          res.write(formatDomainCSVRow(transcript));
           rowsWritten += 1;
         }
       }
 
       log.info(
-        {
-          domainId,
-          rowsWritten,
-          variableCount: variableNames.length,
-          includeDecisionMetadata,
-          resolvedSignature,
-        },
+        { domainId, rowsWritten, resolvedSignature },
         'Domain CSV export complete',
       );
 

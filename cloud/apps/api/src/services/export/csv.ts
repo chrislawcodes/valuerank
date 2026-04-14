@@ -90,7 +90,7 @@ export const POST_VARIABLE_HEADERS_WITH_METADATA = [
  * Escape a value for CSV format.
  * Handles commas, quotes, and newlines.
  */
-function escapeCSV(value: string | number | null | undefined): string {
+export function escapeCSV(value: string | number | null | undefined): string {
   if (value === null || value === undefined) {
     return '';
   }
@@ -109,7 +109,7 @@ function escapeCSV(value: string | number | null | undefined): string {
  * Extract short model name from model ID.
  * E.g., "anthropic:claude-3-5-haiku-20241022" -> "claude-3-5-haiku"
  */
-function getModelName(modelId: string): string {
+export function getModelName(modelId: string): string {
   // Remove provider prefix if present
   const withoutProvider = modelId.includes(':') ? modelId.split(':')[1] ?? modelId : modelId;
   // Remove version suffix (date pattern like -20241022)
@@ -135,7 +135,7 @@ type TranscriptContent = {
  * Extract the probe prompts from transcript content.
  * Combines prompts across turns.
  */
-function getProbePrompt(transcript: TranscriptWithScenario): string {
+export function getProbePrompt(transcript: TranscriptWithScenario): string {
   const content = transcript.content as TranscriptContent | null;
   if (!content?.turns || !Array.isArray(content.turns)) {
     return '';
@@ -152,7 +152,7 @@ function getProbePrompt(transcript: TranscriptWithScenario): string {
  * Extract the target response from transcript content.
  * Combines all target responses from all turns.
  */
-function getTargetResponse(transcript: TranscriptWithScenario): string {
+export function getTargetResponse(transcript: TranscriptWithScenario): string {
   const content = transcript.content as TranscriptContent | null;
   if (!content?.turns || !Array.isArray(content.turns)) {
     return '';
@@ -205,7 +205,7 @@ function getDecisionMetadata(
  * Format the trial signature from definition version and temperature.
  * Re-implemented cleanly here to avoid circular imports.
  */
-function extractTrialSignature(
+export function extractTrialSignature(
   definitionVersion: number | null | undefined,
   config: unknown
 ): string {
