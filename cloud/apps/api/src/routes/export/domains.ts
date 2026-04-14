@@ -50,11 +50,14 @@ domainsExportRouter.get(
 
       const { domain, filteredSourceRunIds, resolvedSignature } = resolved;
 
-      const safeName = domain.name.replace(/[^a-z0-9-]/gi, '_').toLowerCase();
-      const date = new Date().toISOString().slice(0, 10);
-      const filename = resolvedSignature !== null
-        ? `domain-${safeName}-${resolvedSignature.replace(/[^a-z0-9-]/gi, '_').toLowerCase()}-transcripts-${date}.csv`
-        : `domain-${safeName}-transcripts-${date}.csv`;
+      // Format datetime in PT, replacing colons with dashes for filename safety
+      // e.g. "2026-04-13 14-32-05"
+      const ptDateTime = new Date()
+        .toLocaleString('sv-SE', { timeZone: 'America/Los_Angeles' })
+        .replace(/:/g, '-');
+      // Strip characters invalid in filenames (keep spaces, dashes, alphanumeric)
+      const safeDomainName = domain.name.replace(/[/\\:*?"<>|]/g, '_');
+      const filename = `${safeDomainName} domain export - ${ptDateTime}.csv`;
 
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
