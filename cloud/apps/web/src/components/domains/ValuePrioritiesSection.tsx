@@ -11,6 +11,7 @@ import {
   type ValueKey,
 } from '../../data/domainAnalysisData';
 import { getPriorityColor } from './domainAnalysisColors';
+import { ValuePrioritiesHelpPanel } from './ValuePrioritiesHelpPanel';
 
 type SortState = {
   key: 'model' | ValueKey;
@@ -61,7 +62,7 @@ export function ValuePrioritiesSection({
   const detailedTableRef = useRef<HTMLDivElement>(null);
   const opennessGroupRef = useRef<HTMLTableCellElement>(null);
   const hedonismCellRef = useRef<HTMLTableCellElement>(null);
-  const [scoreMode, setScoreMode] = useState<'WIN_RATE' | 'FULL_BT'>('WIN_RATE');
+  const [scoreMode, setScoreMode] = useState<'WIN_RATE' | 'FULL_BT' | 'SUPPORT_WIN'>('WIN_RATE');
   const [sortState, setSortState] = useState<SortState>({ key: 'model', direction: 'asc' });
   const [showSectionHelp, setShowSectionHelp] = useState(false);
   const [opennessSplitPercent, setOpennessSplitPercent] = useState(33.3333);
@@ -84,6 +85,11 @@ export function ValuePrioritiesSection({
       );
     } else {
       nextModels.sort((a, b) => {
+        if (scoreMode === 'SUPPORT_WIN') {
+          const aVal = a.supportRates?.[key] ?? (sortState.direction === 'asc' ? Infinity : -Infinity);
+          const bVal = b.supportRates?.[key] ?? (sortState.direction === 'asc' ? Infinity : -Infinity);
+          return sortState.direction === 'asc' ? aVal - bVal : bVal - aVal;
+        }
         const aVal = scoreMode === 'WIN_RATE' ? (a.winRates?.[key] ?? -Infinity) : a.values[key];
         const bVal = scoreMode === 'WIN_RATE' ? (b.winRates?.[key] ?? -Infinity) : b.values[key];
         return sortState.direction === 'asc' ? aVal - bVal : bVal - aVal;
@@ -93,7 +99,7 @@ export function ValuePrioritiesSection({
   }, [models, sortState, scoreMode]);
 
   const valueRange = useMemo(() => {
-    if (scoreMode === 'WIN_RATE') {
+    if (scoreMode === 'WIN_RATE' || scoreMode === 'SUPPORT_WIN') {
       return { min: 0, max: 100 };
     }
     const all = models.flatMap((model) => COLUMN_VALUES.map((v) => model.values[v]));
@@ -151,6 +157,7 @@ export function ValuePrioritiesSection({
 
   function getCellValue(model: ModelEntry, valueKey: ValueKey): number | null {
     if (scoreMode === 'FULL_BT') return model.values[valueKey];
+    if (scoreMode === 'SUPPORT_WIN') return model.supportRates?.[valueKey] ?? null;
     return model.winRates?.[valueKey] ?? null;
   }
 
@@ -171,44 +178,7 @@ export function ValuePrioritiesSection({
             </Button>
           </div>
           <p className="text-sm text-gray-600">Which values each model favors most and least.</p>
-          {showSectionHelp && (
-            <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 p-2.5 text-xs text-gray-700">
-              {scoreMode === 'FULL_BT' ? (
-                <>
-                  <p className="font-medium text-gray-800">Score Method: Full Bradley-Terry</p>
-                  <p className="mt-1">
-                    We fit a full Bradley-Terry model over pairwise value matchups for this AI. The model estimates
-                    a latent strength for each value that best explains observed wins and losses.
-                  </p>
-                  <p className="mt-2 font-medium text-gray-800">Formula</p>
-                  <p className="mt-0.5 font-mono text-[11px] text-sky-900">
-                    Score = logarithm(estimated BT strength for this value)
-                  </p>
-                  <ul className="mt-2 list-disc space-y-0.5 pl-4">
-                    <li>Better than simple ratios when comparisons form a connected network across values.</li>
-                    <li>Strengths are estimated jointly, so each value is calibrated against all others.</li>
-                    <li>Positive values indicate above-average latent strength; negative values indicate below-average.</li>
-                  </ul>
-                </>
-              ) : (
-                <>
-                  <p className="font-medium text-gray-800">Score Method: Win Rate</p>
-                  <p className="mt-1">
-                    The percentage of pairwise comparisons in which the AI chose this value over another.
-                  </p>
-                  <p className="mt-2 font-medium text-gray-800">Formula</p>
-                  <p className="mt-0.5 font-mono text-[11px] text-sky-900">
-                    Win Rate = prioritized / (prioritized + deprioritized) × 100%
-                  </p>
-                  <ul className="mt-2 list-disc space-y-0.5 pl-4">
-                    <li>50% means the AI chose this value in half of all head-to-head comparisons.</li>
-                    <li>Easy to interpret: higher % = model prioritizes this value more often.</li>
-                    <li>Shows &ldquo;n/a&rdquo; when no comparison data exists for a value.</li>
-                  </ul>
-                </>
-              )}
-            </div>
-          )}
+          {showSectionHelp && <ValuePrioritiesHelpPanel scoreMode={scoreMode} />}
         </div>
         <div className="flex items-center gap-3">
           <p className="text-xs text-gray-500">Click a column heading to sort.</p>
@@ -221,6 +191,15 @@ export function ValuePrioritiesSection({
               className={`h-auto rounded-none px-3 py-1 text-xs ${scoreMode === 'WIN_RATE' ? 'bg-sky-600 text-white hover:bg-sky-600 hover:text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
             >
               Win Rate
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setScoreMode('SUPPORT_WIN')}
+              className={`h-auto rounded-none border-l border-gray-200 px-3 py-1 text-xs ${scoreMode === 'SUPPORT_WIN' ? 'bg-sky-600 text-white hover:bg-sky-600 hover:text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+            >
+              Support Rate / Win Rate
             </Button>
             <Button
               type="button"
@@ -375,12 +354,22 @@ export function ValuePrioritiesSection({
                           className="relative block h-full min-h-[34px] w-full rounded-none border border-transparent px-2 py-2 text-right text-xs text-gray-800 hover:border-sky-300 hover:bg-white/25 hover:underline focus-visible:!ring-1 focus-visible:!ring-sky-400"
                           onClick={() => handleValueCellClick(model.model, value)}
                           disabled={selectedDomainId === ''}
-                        >
-                          {(() => {
-                            if (cellValue === null) return 'n/a';
-                            if (scoreMode === 'WIN_RATE') return `${cellValue.toFixed(1)}%`;
-                            return `${cellValue > 0 ? '+' : ''}${cellValue.toFixed(2)}`;
-                          })()}
+                      >
+                          <span className={scoreMode === 'SUPPORT_WIN' ? 'whitespace-nowrap' : undefined}>
+                            {(() => {
+                              if (scoreMode === 'SUPPORT_WIN') {
+                                const supportRate = model.supportRates?.[value] ?? null;
+                                const winRate = model.winRates?.[value] ?? null;
+                                if (supportRate === null && winRate === null) return 'n/a / n/a';
+                                if (winRate === null) return `Support ${Math.round(supportRate ?? 0)}% / Win n/a`;
+                                if (supportRate === null) return `n/a / Win ${Math.round(winRate)}%`;
+                                return `Support ${Math.round(supportRate)}% / Win ${Math.round(winRate)}%`;
+                              }
+                              if (cellValue === null) return 'n/a';
+                              if (scoreMode === 'WIN_RATE') return `${cellValue.toFixed(1)}%`;
+                              return `${cellValue > 0 ? '+' : ''}${cellValue.toFixed(2)}`;
+                            })()}
+                          </span>
                         </Button>
                       </td>
                     );
