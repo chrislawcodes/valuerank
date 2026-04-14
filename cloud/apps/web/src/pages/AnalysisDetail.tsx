@@ -138,11 +138,16 @@ export function AnalysisDetail() {
   const [llmModelsResult] = useQuery<LlmModelsQueryResult>({
     query: LLM_MODELS_QUERY,
   });
+  // Pass null while fetching so useAnalysisState knows to defer model filtering
+  // (an empty array would look like "no defaults configured" and cause the filter
+  // to fall back to showing all transcript models before the query resolves).
   const globalDefaultModelIds = useMemo(
-    () => (llmModelsResult.data?.llmModels ?? [])
-      .filter((m) => m.isDefault)
-      .map((m) => m.modelId),
-    [llmModelsResult.data],
+    () => llmModelsResult.fetching
+      ? null
+      : (llmModelsResult.data?.llmModels ?? [])
+          .filter((m) => m.isDefault)
+          .map((m) => m.modelId),
+    [llmModelsResult.fetching, llmModelsResult.data],
   );
 
   const { analysis } = useAnalysis({

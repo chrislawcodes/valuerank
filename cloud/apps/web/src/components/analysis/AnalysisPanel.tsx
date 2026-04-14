@@ -46,8 +46,11 @@ type AnalysisPanelProps = {
   companionAnalysis?: AnalysisResult | null;
   currentRun?: Run | null;
   companionRun?: Run | null;
-  /** Model IDs with isDefault=true from the global LLM model list (Settings → Models). */
-  globalDefaultModelIds?: string[];
+  /**
+   * Model IDs with isDefault=true from the global LLM model list (Settings → Models).
+   * `null` means the list is still loading — defer model filtering until it resolves.
+   */
+  globalDefaultModelIds?: string[] | null;
 };
 
 export function AnalysisPanel({
@@ -278,12 +281,14 @@ export function AnalysisPanel({
         </div>
       )}
 
-      {/* Model filter — above tab bar */}
-      {transcriptModelIds.length > 0 && (
+      {/* Model filter — above tab bar.
+          selectedModels is null while globalDefaultModelIds is still loading;
+          skip rendering the filter (and the tabs below it guard on filteredSemantics != null). */}
+      {transcriptModelIds.length > 0 && selectedModels !== null && (
         <ModelFilter
           transcriptModelIds={transcriptModelIds}
           noTranscriptModelIds={noTranscriptModelIds}
-          defaultModelIds={defaultSelectedModels}
+          defaultModelIds={defaultSelectedModels ?? undefined}
           selectedModels={selectedModels}
           onSelectedModelsChange={setSelectedModels}
         />
