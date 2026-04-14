@@ -175,6 +175,7 @@ export function formatDecisionDisplay(transcript: DecisionDisplayTranscript): Ex
     parseClass,
     parsePath: raw.parsePath ?? '',
     matchedLabel: raw.matchedLabel ?? '',
+    favoredValueKey: null,
   });
   const preferenceScore = getDecisionPreferenceScore({
     direction,
@@ -186,6 +187,7 @@ export function formatDecisionDisplay(transcript: DecisionDisplayTranscript): Ex
     parseClass,
     parsePath: raw.parsePath ?? '',
     matchedLabel: raw.matchedLabel ?? '',
+    favoredValueKey: null,
   });
 
   return {
