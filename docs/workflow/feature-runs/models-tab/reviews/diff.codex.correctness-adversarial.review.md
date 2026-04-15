@@ -36,4 +36,4 @@ No correctness issues found in this patch.
 
 ## Resolution
 - status: accepted
-- note: No issues found — clean pass.
+- note: No issues found — clean pass

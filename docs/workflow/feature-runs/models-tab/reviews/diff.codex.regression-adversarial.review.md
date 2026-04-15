@@ -36,4 +36,4 @@ coverage_note: ""
 
 ## Resolution
 - status: accepted
-- note: No regression identified — clean pass.
+- note: No regression identified — clean pass

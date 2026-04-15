@@ -46,4 +46,4 @@ coverage_note: ""
 
 ## Resolution
 - status: accepted
-- note: MEDIUM fixed — added comment to useMemo reminding maintainers to update dependency array when adding new query inputs. LOW dismissed — memoization stays; it is correct, defensive, and already committed.
+- note: MEDIUM fixed — added comment to useMemo block warning about dependency array maintenance. LOW dismissed — memoization is correct and in place; urql already serializes variables so no actual redundant fetch risk.
