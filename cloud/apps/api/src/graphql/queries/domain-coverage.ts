@@ -8,14 +8,10 @@
 
 import { builder } from '../builder.js';
 import { db, resolveDefinitionContent } from '@valuerank/db';
-import { formatTrialSignature, isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
-import { parseDefinitionVersion } from '../../utils/definition-version.js';
-import { parseTemperature } from '../../utils/temperature.js';
 
 import {
   COVERAGE_VALUE_KEYS,
   type CoverageValueKey,
-  type CoverageModelBreakdown,
   extractValuePair,
   getCoverageBatchGroupId,
   getCoverageBatchIncrement,
@@ -24,109 +20,12 @@ import {
   deduplicateRunsByGroupId,
 } from './domain-coverage-utils.js';
 import { resolveEffectiveDefaultModelIds } from './domain/shared.js';
-
-type DomainValueCoverageCell = {
-  valueA: string;
-  valueB: string;
-  batchCount: number;
-  pairedBatchCount: number;
-  definitionId: string | null;
-  definitionName: string | null;
-  aggregateRunId: string | null;
-  minTrialCount: number | null;
-  maxTrialCount: number | null;
-  modelBreakdown: CoverageModelBreakdown[] | null;
-};
-
-type CoverageModelOption = {
-  modelId: string;
-  label: string;
-};
-
-type DomainValueCoverageResult = {
-  domainId: string;
-  values: string[];
-  cells: DomainValueCoverageCell[];
-  availableModels: CoverageModelOption[];
-};
-
-const CoverageModelOptionRef = builder
-  .objectRef<CoverageModelOption>('CoverageModelOption')
-  .implement({
-    fields: (t) => ({
-      modelId: t.exposeString('modelId'),
-      label: t.exposeString('label'),
-    }),
-  });
-
-const CoverageModelBreakdownRef = builder
-  .objectRef<CoverageModelBreakdown>('CoverageModelBreakdown')
-  .implement({
-    fields: (t) => ({
-      modelId: t.exposeString('modelId'),
-      label: t.exposeString('label'),
-      trialCount: t.exposeInt('trialCount'),
-    }),
-  });
-
-const DomainValueCoverageCellRef = builder
-  .objectRef<DomainValueCoverageCell>('DomainValueCoverageCell')
-  .implement({
-    fields: (t) => ({
-      valueA: t.exposeString('valueA'),
-      valueB: t.exposeString('valueB'),
-      batchCount: t.exposeInt('batchCount'),
-      pairedBatchCount: t.exposeInt('pairedBatchCount'),
-      definitionId: t.exposeString('definitionId', { nullable: true }),
-      definitionName: t.exposeString('definitionName', { nullable: true }),
-      aggregateRunId: t.exposeString('aggregateRunId', { nullable: true }),
-      minTrialCount: t.exposeInt('minTrialCount', { nullable: true }),
-      maxTrialCount: t.exposeInt('maxTrialCount', { nullable: true }),
-      modelBreakdown: t.expose('modelBreakdown', {
-        type: [CoverageModelBreakdownRef],
-        nullable: true,
-      }),
-    }),
-  });
-
-const DomainValueCoverageResultRef = builder
-  .objectRef<DomainValueCoverageResult>('DomainValueCoverageResult')
-  .implement({
-    fields: (t) => ({
-      domainId: t.exposeString('domainId'),
-      values: t.exposeStringList('values'),
-      cells: t.field({
-        type: [DomainValueCoverageCellRef],
-        resolve: (parent) => parent.cells,
-      }),
-      availableModels: t.field({
-        type: [CoverageModelOptionRef],
-        resolve: (parent) => parent.availableModels,
-      }),
-    }),
-  });
-
-function formatRunSignature(config: unknown): string {
-  const runConfig = config as {
-    definitionSnapshot?: {
-      _meta?: { definitionVersion?: unknown };
-      version?: unknown;
-    };
-    temperature?: unknown;
-  } | null;
-  const definitionVersion =
-    parseDefinitionVersion(runConfig?.definitionSnapshot?._meta?.definitionVersion) ??
-    parseDefinitionVersion(runConfig?.definitionSnapshot?.version);
-  const temperature = parseTemperature(runConfig?.temperature);
-  return formatTrialSignature(definitionVersion, temperature);
-}
-
-function runMatchesSignature(runConfig: unknown, signature: string): boolean {
-  if (isVnewSignature(signature)) {
-    return parseTemperature((runConfig as { temperature?: unknown } | null)?.temperature) === parseVnewTemperature(signature);
-  }
-  return formatRunSignature(runConfig) === signature;
-}
+import {
+  DomainValueCoverageResultRef,
+  type DomainValueCoverageCell,
+  type CoverageModelOption,
+  runMatchesSignature,
+} from './domain-coverage-gql-types.js';
 
 const VALUE_PAIR_RESOLVE_CHUNK_SIZE = 20;
 
@@ -233,6 +132,7 @@ builder.queryField('domainValueCoverage', (t) =>
       const pairedBatchIncrementsByGroupId = new Map<string, Map<string, number>>();
       const latestMatchingRunIdByDefinitionId = new Map<string, string>();
       const latestAggregateRunIdByDefinitionId = new Map<string, string>();
+      const incompleteBatchCountByDefinitionId = new Map<string, number>();
       const signatureScopedRunsByDefinitionId = new Map<string, Array<{
         id: string;
         definitionId: string;
@@ -261,6 +161,9 @@ builder.queryField('domainValueCoverage', (t) =>
               where: { deletedAt: null },
               select: { modelId: true },
             },
+            _count: {
+              select: { scenarioSelections: true },
+            },
           },
         });
 
@@ -281,6 +184,21 @@ builder.queryField('domainValueCoverage', (t) =>
             continue;
           }
 
+          // Completeness check: flag if actual transcript count < expected.
+          // Expected = scenarioSelections × models.length × samplesPerScenario.
+          const samplesPerScenario =
+            (run.config as { samplesPerScenario?: unknown } | null)?.samplesPerScenario;
+          const configModels = (run.config as { models?: unknown } | null)?.models;
+          const modelCount = Array.isArray(configModels) ? configModels.length : 0;
+          const expectedCount =
+            run._count.scenarioSelections * modelCount * getCoverageBatchIncrement(samplesPerScenario);
+          if (modelCount > 0 && run.transcripts.length < expectedCount) {
+            incompleteBatchCountByDefinitionId.set(
+              run.definitionId,
+              (incompleteBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+            );
+          }
+
           // Track non-aggregate runs for per-model trial count computation
           if (effectiveModelIds.length > 0) {
             const nonAggregateRuns = nonAggregateRunsByDefinitionId.get(run.definitionId) ?? [];
@@ -295,8 +213,6 @@ builder.queryField('domainValueCoverage', (t) =>
           if (!latestMatchingRunIdByDefinitionId.has(run.definitionId)) {
             latestMatchingRunIdByDefinitionId.set(run.definitionId, run.id);
           }
-          const samplesPerScenario =
-            (run.config as { samplesPerScenario?: unknown } | null)?.samplesPerScenario;
           const increment = getCoverageBatchIncrement(samplesPerScenario);
           batchCountByDefinitionId.set(
             run.definitionId,
@@ -370,6 +286,7 @@ builder.queryField('domainValueCoverage', (t) =>
               valueB,
               batchCount: 0,
               pairedBatchCount: 0,
+              incompleteBatchCount: 0,
               definitionId: null,
               definitionName: null,
               aggregateRunId: null,
@@ -395,6 +312,12 @@ builder.queryField('domainValueCoverage', (t) =>
                 ?? latestMatchingRunIdByDefinitionId.get(primaryDefId)
                 ?? null);
 
+            // Sum incompleteBatchCount across all definitions for this pair
+            const incompleteBatchCount = defIdsForPair.reduce(
+              (sum, defId) => sum + (incompleteBatchCountByDefinitionId.get(defId) ?? 0),
+              0,
+            );
+
             // Compute per-model trial counts across all definitions for this pair.
             // Deduplicate by group ID first: A-first and B-first companion definitions
             // share the same jobChoiceBatchGroupId, so flatMapping across both would
@@ -413,6 +336,7 @@ builder.queryField('domainValueCoverage', (t) =>
               valueB,
               batchCount,
               pairedBatchCount,
+              incompleteBatchCount,
               definitionId: primaryDefId !== '' ? primaryDefId : null,
               definitionName: primaryPair?.name ?? null,
               aggregateRunId,

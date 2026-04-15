@@ -16,6 +16,7 @@ type CoverageCellProps = {
   valueB: string;
   batchCount: number;
   pairedBatchCount: number;
+  incompleteBatchCount?: number | null;
   definitionId: string | null;
   aggregateRunId: string | null;
   minTrialCount?: number | null;
@@ -28,6 +29,7 @@ export function CoverageCell({
   valueB,
   batchCount,
   pairedBatchCount,
+  incompleteBatchCount,
   definitionId,
   aggregateRunId,
   minTrialCount,
@@ -37,6 +39,7 @@ export function CoverageCell({
   const [isOpen, setIsOpen] = useState(false);
   const isDiagonal = valueA === valueB;
   const hasVignette = definitionId !== null;
+  const hasIncompleteBatches = (incompleteBatchCount ?? 0) > 0;
   const hasPerModelData = minTrialCount !== null && minTrialCount !== undefined;
   const displayCount = hasPerModelData ? minTrialCount : (pairedBatchCount > 0 ? pairedBatchCount : batchCount);
   const hasMismatch = hasPerModelData && maxTrialCount !== null && maxTrialCount !== undefined && minTrialCount < maxTrialCount;
@@ -85,7 +88,7 @@ export function CoverageCell({
                 : `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}`
           }
           className={cn(
-            'w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border rounded-none focus:ring-0 focus:ring-offset-0',
+            'relative w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border rounded-none focus:ring-0 focus:ring-offset-0',
             hasMismatch ? 'border-orange-400 border-2' : 'border-gray-100',
             bgColorClass,
             isDiagonal && 'cursor-not-allowed text-transparent font-normal',
@@ -99,6 +102,12 @@ export function CoverageCell({
             <span className="text-[10px] text-orange-600 font-normal leading-none mt-0.5" aria-label="trial count mismatch across models">
               ⚠
             </span>
+          )}
+          {hasIncompleteBatches && (
+            <span
+              className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400"
+              aria-label={`${incompleteBatchCount ?? 0} incomplete batch${(incompleteBatchCount ?? 0) === 1 ? '' : 'es'}`}
+            />
           )}
         </button>
       </PopoverTrigger>
@@ -134,6 +143,12 @@ export function CoverageCell({
                         </span>
                       </div>
                     ))}
+                  </div>
+                )}
+                {hasIncompleteBatches && (
+                  <div className="mt-2 flex items-center gap-1.5 text-xs text-amber-700">
+                    <span className="inline-block w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+                    {incompleteBatchCount ?? 0} incomplete batch{(incompleteBatchCount ?? 0) === 1 ? '' : 'es'} — not all transcripts generated
                   </div>
                 )}
               </>
