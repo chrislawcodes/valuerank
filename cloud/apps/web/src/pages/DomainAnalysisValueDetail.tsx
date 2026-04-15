@@ -17,8 +17,8 @@ import {
 } from '../api/operations/domainAnalysis';
 import { VALUE_LABELS, type ValueKey } from '../data/domainAnalysisData';
 import {
-  CanonicalTranscriptRenderError,
-  requireRenderableTranscriptDecisionModelV2,
+  getTranscriptDecisionDisplayMode,
+  type TranscriptDecisionDisplayMode,
 } from '../utils/transcriptDecisionModel';
 import { compareConditionLevels } from '../utils/conditionOrdering';
 
@@ -321,48 +321,26 @@ export function DomainAnalysisValueDetail() {
   }, [detail, selectedCondition]);
 
   const selectedConditionTranscriptState = useMemo(() => {
-    if (selectedCondition === null) {
-      return {
-        error: null as CanonicalTranscriptRenderError | null,
-        transcripts: [] as Transcript[],
-      };
-    }
+    const transcripts: Transcript[] = (transcriptData?.domainAnalysisConditionTranscripts ?? []).map((transcript) => ({
+      id: transcript.id,
+      runId: transcript.runId,
+      scenarioId: transcript.scenarioId,
+      modelId: transcript.modelId,
+      modelVersion: null,
+      content: transcript.content,
+      decisionModelV2: transcript.decisionModelV2 ?? null,
+      turnCount: transcript.turnCount,
+      tokenCount: transcript.tokenCount,
+      durationMs: transcript.durationMs,
+      estimatedCost: null,
+      createdAt: transcript.createdAt,
+      lastAccessedAt: null,
+    }));
 
-    try {
-      const transcripts = (transcriptData?.domainAnalysisConditionTranscripts ?? []).map((transcript) => {
-        const normalizedTranscript: Transcript = {
-          id: transcript.id,
-          runId: transcript.runId,
-          scenarioId: transcript.scenarioId,
-          modelId: transcript.modelId,
-          modelVersion: null,
-          content: transcript.content,
-          decisionModelV2: transcript.decisionModelV2 ?? null,
-          turnCount: transcript.turnCount,
-          tokenCount: transcript.tokenCount,
-          durationMs: transcript.durationMs,
-          estimatedCost: null,
-          createdAt: transcript.createdAt,
-          lastAccessedAt: null,
-        };
-        return requireRenderableTranscriptDecisionModelV2(
-          normalizedTranscript,
-          `DomainAnalysisValueDetail.requireRenderableTranscriptDecisionModelV2 selected condition "${selectedCondition.conditionName}"`,
-        );
-      });
+    const displayMode: TranscriptDecisionDisplayMode = getTranscriptDecisionDisplayMode(transcripts);
 
-      return { error: null, transcripts };
-    } catch (error) {
-      if (error instanceof CanonicalTranscriptRenderError) {
-        return {
-          error,
-          transcripts: [] as Transcript[],
-        };
-      }
-
-      throw error;
-    }
-  }, [selectedCondition, transcriptData]);
+    return { transcripts, displayMode };
+  }, [transcriptData]);
 
   if (domainId === '' || modelId === '' || valueKey === '') {
     return (
@@ -392,7 +370,7 @@ export function DomainAnalysisValueDetail() {
   const mathDenominator = detail.deprioritized + 1;
   const ratio = mathNumerator / mathDenominator;
   const selectedConditionKey = selectedCondition === null ? '' : `${selectedCondition.definitionId}:${selectedCondition.scenarioId ?? '__unknown__'}`;
-  const reportDecisionDisplayMode = 'audit' as const;
+  const reportDecisionDisplayMode = selectedConditionTranscriptState.displayMode;
   const decisionColumnLabel = VALUE_DETAIL_COPY.decisionColumnLabel;
 
   const handleConditionClick = (definitionId: string, conditionName: string, scenarioId: string | null) => {
@@ -543,15 +521,10 @@ export function DomainAnalysisValueDetail() {
                   {transcriptsError && (
                     <ErrorMessage message={`Failed to load transcripts: ${transcriptsError.message}`} />
                   )}
-                  {!transcriptsFetching && !transcriptsError && selectedConditionTranscriptState.error !== null && (
-                    <ErrorMessage
-                      message={`Failed to render transcripts for ${selectedCondition.conditionName}: ${selectedConditionTranscriptState.error.message}`}
-                    />
-                  )}
-                  {!transcriptsFetching && !transcriptsError && selectedConditionTranscriptState.error === null && selectedConditionTranscriptState.transcripts.length === 0 && (
+                  {!transcriptsFetching && !transcriptsError && selectedConditionTranscriptState.transcripts.length === 0 && (
                     <p className="text-xs text-gray-500">No transcripts found for this condition and model.</p>
                   )}
-                  {!transcriptsFetching && !transcriptsError && selectedConditionTranscriptState.error === null && selectedConditionTranscriptState.transcripts.length > 0 && (
+                  {!transcriptsFetching && !transcriptsError && selectedConditionTranscriptState.transcripts.length > 0 && (
                     <TranscriptList
                       transcripts={selectedConditionTranscriptState.transcripts}
                       onSelect={setSelectedTranscript}
