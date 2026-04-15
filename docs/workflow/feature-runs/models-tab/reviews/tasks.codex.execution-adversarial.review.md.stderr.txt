@@ -1,0 +1,198 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/magical-mcclintock
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019d9324-b1b1-7c80-82ae-5a6063ea7dc3
+--------
+user
+Review this tasks artifact using a execution-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: tasks.md
+# Tasks: Models Tab
+
+## Slice A — API: types + resolver + schema SDL [CHECKPOINT]
+
+- [ ] A1. Create `cloud/apps/api/src/graphql/types/models-analysis.ts`
+  - Define and register these Pothos object types using `builder.objectRef` + `.implement`:
+    - `ModelsAnalysisDomainBreakdown`: fields `domainId: String!`, `domainName: String!`, `winRate: Float!`, `evidenceWeight: Int!`
+    - `ModelsAnalysisValueResult`: fields `valueKey: String!`, `pooledWinRate: Float` (nullable), `stabilityScore: Float` (nullable), `eligibleDomainCount: Int!`, `domains: [ModelsAnalysisDomainBreakdown!]!`
+    - `ModelsAnalysisModelResult`: fields `modelId: String!`, `label: String!`, `values: [ModelsAnalysisValueResult!]!`
+    - `ModelsAnalysisResult`: field `models: [ModelsAnalysisModelResult!]!`
+  - Export all four Refs
+  - Keep file under 100 lines
+
+- [ ] A2. Create `cloud/apps/api/src/graphql/queries/models-analysis.ts`
+  - Import `builder` from `../../builder.js`
+  - Import Pothos Refs from `../../types/models-analysis.js`
+  - Import `db` from `@valuerank/db`
+  - Import `parseSnapshotOutput`, `buildAssumptionKey`, `DOMAIN_ANALYSIS_ASSUMPTION_PREFIX` from `../../../services/analysis/domain-analysis-snapshot-builder.js`
+  - Import `DOMAIN_ANALYSIS_VALUE_KEYS` from `../domain-analysis-values.js`
+  - Import `DOMAIN_ANALYSIS_SNAPSHOT_TYPE` from `../../../services/analysis/domain-analysis-cache-types.js`
+  - Define pure helper functions (not exported):
+    - `computeWinRate(p: number, d: number): number | null` — returns null if p+d===0, else p/(p+d)*100
+    - `computePooledWinRate(domains: Array<{winRate: number; weight: number}>): number | null` — weighted mean; null if empty
+    - `computeStabilityScore(domains: Array<{winRate: number; weight: number}>): number | null` — spec MAD formula, null if < 2 domains
+  - Register `builder.queryField('modelsAnalysis', ...)` with:
+    - Return type: `ModelsAnalysisResultRef`
+    - Args: `domainId: t.arg.id({ required: false })`
+    - Resolver:
+      1. Load active models: `db.llmModel.findMany({ where: { status: 'ACTIVE' }, select: { modelId: true, displayName: true } })`
+      2. Build label map: `Map<string, string>` from modelId → displayName
+      3. Query snapshots: `db.assumptionAnalysisSnapshot.findMany({ where: { analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE, status: 'CURRENT', deletedAt: null, ...(domainId ? { assumptionKey: buildAssumptionKey(String(domainId)) } : {}) }, select: { assumptionKey: true, output: true, createdAt: true }, orderBy: { createdAt: 'desc' } })`
+      4. Deduplicate: keep only first snapshot per `assumptionKey` (since ordered desc, first = most recent)
+      5. Parse each snapshot: `parseSnapshotOutput(row.output)` — skip if null
+      6. Build accumulator: `Map<string, Map<string, Array<{domainId, domainName, prioritized, deprioritized}>>>` keyed by modelId → valueKey → domains
+      7. For each snapshot model: for each value key: push counts to accumulator
+      8. Compute result: iterate over ALL active models from step 1 (not just those in the accumulator) — every active model must appear in the output, even if it has no snapshot data. For each active model, for each valueKey in DOMAIN_ANALYSIS_VALUE_KEYS: get the domain list from the accumulator (or empty array if model not in accumulator), filter eligible (prioritized+deprioritized>0), compute pooledWinRate + stabilityScore.
+      9. Return `{ models }` sorted by label
+
+- [ ] A3. Modify `cloud/apps/api/src/graphql/types/index.ts`
+  - Add `import './models-analysis.js';` at the end of the file (after the existing `'./level-preset.js'` import)
+
+- [ ] A4. Append new types to `cloud/apps/web/schema.graphql`
+  - Add the four SDL type definitions before the closing of the file (alphabetical order preferred)
+  - Add `modelsAnalysis(domainId: ID): ModelsAnalysisResult!` to the `Query` type
+  - The exact SDL is in plan.md under Slice A
+
+- [ ] A5. Verify Slice A
+  - `npm run lint --workspace @valuerank/api` — fix all errors
+  - `npm run build --workspace @valuerank/api` — fix all errors
+  - Confirm `modelsAnalysis` field appears in compiled output
+  - Commit: `feat(models-tab): A — API resolver + schema SDL`
+
+**[CHECKPOINT]**
+
+---
+
+## Slice B — Web: GraphQL layer + routing + nav [CHECKPOINT]
+
+- [ ] B1. Create `cloud/apps/web/src/api/operations/modelsAnalysis.graphql`
+  - Write the query exactly as in plan.md Slice B
+
+- [ ] B2. Run codegen
+  - `npm run codegen --workspace @valuerank/web`
+  - Confirm `ModelsAnalysisDocument`, `ModelsAnalysisQuery`, `ModelsAnalysisQueryVariables` exist in `src/generated/graphql.ts`
+  - If codegen fails, check `schema.graphql` matches the Pothos types added in A4
+
+- [ ] B3. Create `cloud/apps/web/src/api/operations/modelsAnalysis.ts`
+  - Re-export from generated as in plan.md Slice B
+  - Ensure all type aliases match the generated type shapes
+
+- [ ] B4. Modify `cloud/apps/web/src/App.tsx`
+  - Add `import { Models } from './pages/Models';` at the top with other page imports
+  - Add the `/models` route after the `/domains/coverage` route (no `fullWidth`)
+  - The page component will be created in Slice C — use a placeholder export for now if needed, or just add the import and route and leave the page as a stub
+
+- [ ] B5. Modify `cloud/apps/web/src/components/layout/NavTabs.tsx`
+  - Add `Cpu` to the lucide-react imports
+  - Add a plain `NavLink` for `/models` after the `domainMenuRef` `renderMenu` call in the JSX return
+  - Style: same `border-b-2` active/inactive pattern as the `Status` tab (see the `utilityTabs.map` block for reference)
+
+- [ ] B6. Modify `cloud/apps/web/src/components/layout/MobileNav.tsx`
+  - Add `Cpu` to the lucide-react imports
+  - Add `{ name: 'Models', path: '/models', icon: Cpu }` to `navItems` after the Domains entry
+
+- [ ] B7. Verify Slice B
+  - `npm run codegen --workspace @valuerank/web` (already done in B2, re-run to confirm clean)
+  - `npm run lint --workspace @valuerank/web` — fix all errors
+  - `npm run build --workspace @valuerank/web` — fix all errors
+  - Commit: `feat(models-tab): B — web GraphQL layer + routing + nav`
+
+**[CHECKPOINT]**
+
+---
+
+## Slice C — Web: UI components [CHECKPOINT]
+
+- [ ] C1. Create `cloud/apps/web/src/components/models/stabilityDots.ts`
+  - Pure TypeScript, no React
+  - `export type DotState = 'full' | 'half' | 'empty' | 'muted'`
+  - `export function computeDots(score: number | null | undefined): DotState[]`
+    - If score is null/undefined: return `['muted','muted','muted','muted','muted']`
+    - `halfDots = Math.floor(score / 10)` (clamped: if score===100 then halfDots=10)
+    - `fullDots = Math.floor(halfDots / 2)`
+    - `hasHalf = halfDots % 2 === 1`
+    - For index 0–4: `'full'` if `index < fullDots`, `'half'` if `index === fullDots && hasHalf`, else `'empty'`
+  - `export function formatStabilityTooltip(score: number | null | undefined, eligibleDomainCount: number, mutedBySingleDomain?: boolean): string`
+    - If `mutedBySingleDomain === true`: return `"Cross-domain stability is not available when viewing a single domain."`
+    - Else if score is null: `"Stability not available — at least 2 eligible domains are needed. ${eligibleDomainCount === 1 ? '1 domain' : '0 domains'} found."`
+    - Else: build string per spec's tooltip generation rule
+  - Add vitest unit tests in the same directory or `__tests__/`
+
+- [ ] C2. Create `cloud/apps/web/src/components/models/ModelsMatrixCell.tsx`
+  - Props: `{ pooledWinRate: number | null | undefined; stabilityScore: number | null | undefined; eligibleDomainCount: number; muted?: boolean; onClick: () => void }`
+  - Render win rate line: `pooledWinRate != null ? ${pooledWinRate.toFixed(1)}% : 'n/a'`
+  - Render dot row: use `computeDots(muted ? null : stabilityScore)`, map DotState to chars (`●`/`◐`/`○`), then `{eligibleDomainCount}d`
+  - `title` attribute on dot row = `formatStabilityTooltip(muted ? null : stabilityScore, eligibleDomainCount, muted === true)`
+  - Muted dots: gray color class vs. normal color class
+  - Clickable via `onClick`, cursor-pointer
+
+- [ ] C3. Create `cloud/apps/web/src/components/models/ModelsMatrix.tsx`
+  - Import `DOMAIN_ANALYSIS_VALUE_KEYS` — these are from the API package; on the web side use the string array directly or import from a shared location. Check: `cloud/apps/web/src/` may not have direct access to api package. Define the array inline or import from wherever domainAnalysis.ts gets it.
+  - Define `VALUE_SHORT_LABELS` map as in plan.md
+  - Props: `{ models: ModelsAnalysisModelResult[]; loading: boolean; singleDomainActive: boolean; stabilityFilter: 'all' | 'stable' | 'low'; sortColumn: string | null; onCellClick: (modelId: string, valueKey: string) => void; }`
+  - Sorting: if `sortColumn` is set, sort rows by that value's `pooledWinRate` desc (nulls last); else by `label` asc
+  - Filter: for `stable`, cells with `stabilityScore < 75` render as n/a visually; for `low`, cells with `stabilityScore >= 50` render as n/a visually. Do not hide rows.
+  - When `singleDomainActive`: pass `muted={true}` to all `ModelsMatrixCell` instances
+  - Disable `Stable only` / `Low stability only` filter options (or hide them) when `singleDomainActive`
+  - Column headers: `VALUE_SHORT_LABELS[key]` as text, full `key` in `title` attribute
+  - Empty state: if all cells are n/a (no eligible data), show `<p>No data available for the selected filters.</p>`
+  - Loading state: show skeleton or spinner
+
+- [ ] C4. Create `cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx`
+  - Props: `{ model: ModelsAnalysisModelResult | null; valueKey: string | null; onClose: () => void; }`
+  - Render nothing if `model` or `valueKey` is null
+  - Find the value result: `model.values.find(v => v.valueKey === valueKey)`
+  - Layout: right-side fixed panel (similar to other drawers in the app — check existing drawer patterns)
+  - Show: model label, value key, pooled win rate, stability dots (use `computeDots`), domain count
+  - Domain table: columns `Domain | Win Rate | Evidence`
+
+- [ ] C5. Create `cloud/apps/web/src/pages/Models.tsx`
+  - Export named `Models` component
+  - Fetch domain list for filter dropdown — look for existing hook or query used by DomainAnalysis.tsx for the domain selector; reuse it
+  - State: `selectedDomain: string | null`, `stabilityFilter: 'all' | 'stable' | 'low'`, `sortColumn: string | null`, `openCell: { modelId: string; valueKey: string } | null`
+  - Query: `useQuery(MODELS_ANALYSIS_QUERY, { variables: selectedDomain != null ? { domainId: selectedDomain } : {} })`
+  - Pass `singleDomainActive={selectedDomain != null}` to `ModelsMatrix`
+  - Filter bar: domain scope dropdown + stability filter buttons/select + sort column select
+  - Handle loading and error states
+  - When `stabilityFilter !== 'all'` and `singleDomainActive`, show a note that stability is unavailable for single-domain view
+
+- [ ] C6. Verify Slice C
+  - `npm run lint --workspace @valuerank/web` — fix all errors
+  - `npm run test --workspace @valuerank/web` — fix all failures
+  - `npm run build --workspace @valuerank/web` — fix all errors
+  - Commit: `feat(models-tab): C — UI components`
+
+**[CHECKPOINT]**
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+1. **High**: Slice B is self-blocking. B4 adds `import { Models } from './pages/Models';` and a `/models` route, but the page file is only created later in Slice C. Unless B4 also creates a temporary stub, `npm run build --workspace @valuerank/web` in B7 will fail at compile time. As written, Slice B cannot pass its own checkpoint.
+2. **Medium**: The stability math is underspecified. `computeStabilityScore` is described only as “spec MAD formula,” but the artifact never pins down the exact equation, normalization, or whether evidence weights affect the result. That leaves room for API and UI implementations to diverge and makes the test target ambiguous.
+3. **Medium [UNVERIFIED]**: C3 does not define a single canonical source for `DOMAIN_ANALYSIS_VALUE_KEYS`. It allows importing from the API package, defining the array inline, or pulling it from some other place. That creates an easy drift path between the GraphQL schema, resolver, and UI columns. I cannot verify the current package boundaries from this artifact alone, so this is [UNVERIFIED].
+
+## Residual Risks
+- The resolver can still fail softly if `parseSnapshotOutput(row.output)` returns null for malformed rows. That would make the page look empty instead of surfacing a data problem.
+- Manually editing `cloud/apps/web/schema.graphql` still leaves room for schema drift if the Pothos types or codegen outputs change later.
+- The single-domain UI behavior is only partially defined. Even with the mute state and note, users may still see `n/a` cells without a clear distinction between “no data” and “intentionally hidden.”
+tokens used
+24,502

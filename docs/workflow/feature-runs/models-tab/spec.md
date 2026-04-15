@@ -1,0 +1,566 @@
+# Spec: Models Tab
+
+**Feature slug:** models-tab  
+**Created:** 2026-04-15  
+**Status:** draft  
+**Path:** Direct Path (`docs/`)
+
+---
+
+## Background
+
+ValueRank already has strong domain-first and run-first surfaces:
+
+- `Domains` answers "what do we know inside one domain?"
+- `Analysis` answers "what happened in one run or one analysis slice?"
+
+What is missing is a model-first surface that answers a different question:
+
+**At a glance, which values does each model favor, and how stable is that pattern across domains?**
+
+This spec adds a new top-level `Models` tab that treats:
+
+1. `model` as the main organizing unit
+2. `value` as the main comparison axis
+3. `cross-domain stability` as the secondary scan signal
+4. `domain` as supporting context, filter, and drilldown
+
+This is a product-facing analysis surface. It is not the publication-grade methods appendix.
+
+---
+
+## Discovery: Assumptions Carried In
+
+Requirements are stable enough to draft the spec without more questions. These assumptions are carried in explicitly:
+
+1. The new surface is a top-level tab named `Models`, not a sub-tab inside `Domains` or `Analysis`.
+2. The first version does **not** include a summary strip above the matrix.
+3. Each main matrix cell shows a pooled `win rate` as the primary number.
+4. Each cell also shows a compact dot-based `cross-domain stability` signal as a secondary cue.
+5. `Domain` remains lower priority than `model`, `value`, and `cross-domain stability`. Domain should appear as a filter, count, and drilldown, not as the main page structure.
+6. For this tab, `stability` means **how similar the value's win rate stays across domains**, not test-retest repeatability inside one run.
+7. The stability dots are a product metric for fast scanning. They do not need to be the final publication-grade heterogeneity statistic.
+
+---
+
+## Product Goal
+
+The `Models` tab should let a researcher quickly answer:
+
+1. Which values does each model tend to favor?
+2. Does that pattern hold across domains, or does it move around?
+3. How many domains support the finding?
+
+The page should make it easy to compare models row-by-row without clicking into each domain first.
+
+---
+
+## User Stories
+
+### US-1 — Scan model-value patterns across the whole project (P1)
+
+As a researcher, I want one table where rows are models and columns are values so I can compare model profiles at a glance.
+
+**Acceptance scenarios**
+
+1. **Given** I open the new `Models` tab, **when** the page loads, **then** I see a matrix with models on rows and values on columns.
+2. **Given** the matrix is visible, **when** I scan across one row, **then** I can see which values the model favors more or less.
+3. **Given** the matrix is visible, **when** I scan down one column, **then** I can compare how different models treat the same value.
+
+### US-2 — See pooled win rate in every cell (P1)
+
+As a researcher, I want each cell to show one primary number so I can compare strength of preference quickly.
+
+**Acceptance scenarios**
+
+1. **Given** a `model × value` cell has data, **when** it renders, **then** the main text is the pooled win rate percentage.
+2. **Given** a cell has no scored value comparisons across the selected scope, **when** it renders, **then** the primary number shows `n/a`.
+3. **Given** I hover or open cell details, **when** more context appears, **then** I can see how the pooled win rate was built from domain-level results.
+
+### US-3 — See cross-domain stability with dots (P1)
+
+As a researcher, I want a compact stability signal next to the win rate so I can tell whether a finding looks general or domain-specific.
+
+**Acceptance scenarios**
+
+1. **Given** a cell has enough domain evidence, **when** it renders, **then** it shows five dots with half-dot support based on cross-domain stability.
+2. **Given** a cell has too few domains to estimate stability, **when** it renders, **then** the dots appear muted and the tooltip says stability is not available yet.
+3. **Given** I hover the dots, **when** the tooltip opens, **then** it explains the score in plain language and shows the domain count used.
+
+### US-4 — Keep domain secondary but available (P1)
+
+As a researcher, I want domain to stay available as context without taking over the whole page.
+
+**Acceptance scenarios**
+
+1. **Given** I am on the `Models` tab, **when** I use the filter bar, **then** I can scope the table to `All domains` or one specific domain.
+2. **Given** I click a cell, **when** the detail view opens, **then** I can see the list of contributing domains and each domain's win rate.
+3. **Given** I stay in the default view, **when** I scan the matrix, **then** domain detail does not crowd the table.
+
+### US-5 — Low domain counts do not create fake certainty (P1)
+
+As a researcher, I need the page to stay honest when only a few domains are available.
+
+**Acceptance scenarios**
+
+1. **Given** a cell has zero eligible domains, **when** it renders, **then** win rate is `n/a` and stability is unavailable.
+2. **Given** a cell has one eligible domain, **when** it renders, **then** win rate shows, but stability dots remain muted and the tooltip says at least two domains are required.
+3. **Given** a cell has two or more eligible domains, **when** it renders, **then** stability dots are filled from the cross-domain stability score and the tooltip shows the exact domain count.
+
+---
+
+## Page Shape
+
+### Top-Level Navigation
+
+Add a new top-level navigation tab:
+
+- `Models`
+
+Recommended main-nav order:
+
+1. `Domains`
+2. `Models`
+3. `Vignettes`
+4. `Archive`
+5. `Settings`
+6. `Status`
+
+This signals that model comparison is now a first-class product surface instead of a hidden mode inside domain analysis.
+
+**NavTabs implementation note:** `Models` should be a plain `NavLink` (same pattern as `Status`), not a dropdown menu. Version 1 has one page and no sub-routes that need a menu. Do not use the `renderMenu` pattern for this tab.
+
+### Layout Width
+
+This page uses the **standard layout width**. Do NOT use `fullWidth={true}` on the route.
+
+The matrix has 10 value columns. To fit within standard page width, column headers must use abbreviated value names. The full name must appear in a tooltip on hover.
+
+Canonical short labels for column headers:
+
+| Full value key | Column header |
+|---|---|
+| `Self_Direction_Action` | Self-Dir |
+| `Universalism_Nature` | Univ |
+| `Benevolence_Dependability` | Bene |
+| `Security_Personal` | Security |
+| `Power_Dominance` | Power |
+| `Achievement` | Achieve |
+| `Tradition` | Tradition |
+| `Stimulation` | Stimulate |
+| `Hedonism` | Hedone |
+| `Conformity_Interpersonal` | Conform |
+
+### Main Layout
+
+The first version of the page should include:
+
+1. Page title and short explainer
+2. Filter row
+3. Main matrix
+4. Optional right-side or drawer-based cell detail view
+
+The first version should **not** include:
+
+- a summary strip
+- a leaderboard above the matrix
+- multiple competing chart types on the same page
+
+---
+
+## Cell Design
+
+Each `model × value` cell should contain:
+
+1. **Primary number:** pooled win rate
+2. **Secondary signal:** five-dot cross-domain stability indicator with half-dot support
+3. **Context label:** domain count, compact form such as `3d`
+
+Compact example:
+
+```text
+68%
+●●●◐○  4d
+```
+
+Meaning:
+
+- `68%` = pooled win rate across eligible domains
+- `●●●◐○` = cross-domain stability
+- `4d` = four eligible domains contributed to the score
+
+If stability is unavailable because domain count is too low:
+
+```text
+68%
+○○○○○  1d
+```
+
+The dots should be visually muted in this case so "unavailable" does not read as "unstable."
+
+---
+
+## Metric Definitions
+
+### 1. Pooled Win Rate
+
+For one `model × value` pair:
+
+- each eligible domain contributes a domain-level win rate
+- the cell shows the pooled (weighted mean) win rate across eligible domains
+
+**Domain-level win rate formula:**
+
+```text
+domain_win_rate = prioritized / (prioritized + deprioritized)  × 100
+```
+
+Neutral outcomes are excluded from the denominator. Win rate is undefined (domain is ineligible) if `prioritized + deprioritized = 0`.
+
+The pooled win rate is the weighted mean of eligible domain win rates, where each domain's weight is `w_d = prioritized + deprioritized`.
+
+Plain-language meaning:
+
+**How often does this model favor this value, across the selected domains?**
+
+**Display note:** The cell shows the count of eligible domains (e.g., `4d`), not the total number of domains in the project. The cell detail view should make this distinction clear so users know whether the signal comes from all available domains or a subset.
+
+### 2. Cross-Domain Stability
+
+For one `model × value` pair:
+
+- stability measures how close the domain-level win rates stay to each other
+- high stability means the scores stay similar across domains
+- low stability means the scores move around a lot across domains
+
+Plain-language meaning:
+
+**Does this model's value preference stay about the same across domains, or does it change a lot?**
+
+### 3. Eligible Domain
+
+A domain is eligible for one cell if:
+
+- the selected model has at least one scored comparison for that value in that domain
+- `w_d = prioritized + deprioritized > 0` (the domain-level win rate is defined)
+
+Domains with `prioritized + deprioritized = 0` do not count toward pooled win rate or stability. This also guards against division by zero in the weighted mean and MAD formulas.
+
+---
+
+## Stability Formula
+
+This version uses a simple, explainable product metric.
+
+For one `model × value` pair:
+
+1. Let each eligible domain have:
+   - domain win rate `p_d` on a `0-100` scale
+   - evidence weight `w_d`, where `w_d = prioritized + deprioritized`
+2. Compute the weighted pooled mean:
+
+```text
+mean = Σ(w_d * p_d) / Σ(w_d)
+```
+
+3. Compute the weighted mean absolute deviation from that pooled mean:
+
+```text
+mad = Σ(w_d * |p_d - mean|) / Σ(w_d)
+```
+
+4. Convert that spread into a `0-100` stability score:
+
+```text
+stability = max(0, 100 * (1 - mad / 50))
+```
+
+Why `/ 50`:
+
+- on a `0-100` win-rate scale, the largest meaningful average distance from the mean is `50`
+- if all domain scores are identical, `mad = 0` and stability = `100`
+- if domains are split as widely as possible, stability moves toward `0`
+
+This metric is intentionally easy to explain:
+
+- `100` = domain win rates are the same
+- `75` = domains are fairly close
+- `50` = domains are meaningfully different
+- `0` = domains are maximally spread out
+
+### Low Domain Count Rule
+
+- `0` eligible domains: no stability score
+- `1` eligible domain: no stability score
+- `2+` eligible domains: compute stability score
+
+This rule prevents one observed domain from looking "stable" when no cross-domain comparison exists yet.
+
+---
+
+## Dot Mapping
+
+Convert the `0-100` stability score to five dots with half-dot support.
+
+Rule:
+
+```text
+halfDots = Math.floor(stability / 10)
+```
+
+`Math.floor` ensures the score range `[N*10, N*10+9]` always maps to `N` half-dots. This avoids rounding ties and gives stable boundaries:
+
+- `0–9` → 0 half-dots = `○○○○○`
+- `50–59` → 5 half-dots = `●●◐○○`
+- `100` → 10 half-dots = `●●●●●`
+
+Examples:
+
+| Stability score | halfDots | Dot display |
+|---|---|---|
+| `100` | 10 | `●●●●●` |
+| `85` | 8 | `●●●●○` |
+| `75` | 7 | `●●●◐○` |
+| `50` | 5 | `●●◐○○` |
+| `20` | 2 | `●○○○○` |
+| unavailable | — | muted `○○○○○` |
+
+---
+
+## Worked Example
+
+For one `model × value` pair with two eligible domains:
+
+| Domain | Domain win rate | Evidence weight |
+|---|---:|---:|
+| Jobs | `75%` | `20` |
+| Politics | `50%` | `20` |
+
+Then:
+
+1. `mean = 62.5`
+2. `mad = 12.5`
+3. `stability = 100 * (1 - 12.5 / 50) = 75`
+4. dots = `●●●◐○`
+
+Rendered cell:
+
+```text
+62.5%
+●●●◐○  2d
+```
+
+Tooltip text:
+
+> Cross-domain stability shows how consistent this value's win rate is across domains.  
+> Score: 75/100 — domains are moderately consistent (average spread ≈ 12.5 points from the pooled mean).  
+> Based on 2 eligible domains.
+
+**Tooltip generation rule:** The tooltip must state the stability score, describe it in plain language, and show the eligible domain count. For the "average spread" phrase, use the `mad` value rounded to one decimal place. Do not try to name individual domains in the tooltip — that belongs in the cell detail view.
+
+---
+
+## Filters and Sorting
+
+### Filters
+
+The first version should include:
+
+- `Domain scope`
+  - `All domains` (default)
+  - one selected domain
+- `Model set`
+  - all visible models by default
+- `Stability visibility`
+  - `All` (default)
+  - `Stable only` — show only cells where stability ≥ 75
+  - `Low stability only` — show only cells where stability < 50
+
+**Single-domain filter behavior:** When the domain filter is set to one specific domain, every cell has at most one eligible domain. Stability is therefore unavailable for all cells (the 2+ domain rule applies). All stability dots must appear muted. The `Stable only` and `Low stability only` filters are disabled (or hidden) when a single domain is selected, because stability is not computable.
+
+**Empty state:** If the active filters leave no cells with data (all cells are `n/a`), or no rows after a `Model set` filter, display a clear empty state message explaining which filter caused the empty result and how to widen it. Do not show a blank matrix with no explanation.
+
+### Sorting
+
+The first version should support:
+
+- sort rows by model name
+- sort rows by one selected value column
+- when sorting by a value column:
+  - primary sort = pooled win rate
+  - secondary sort = stability
+  - null values (`n/a`) sort last in both directions
+
+---
+
+## Drilldown Behavior
+
+Clicking a cell should open a detail view with:
+
+1. model name
+2. value name
+3. pooled win rate
+4. cross-domain stability score and dots
+5. eligible domain count
+6. per-domain rows:
+   - domain name
+   - domain win rate
+   - evidence weight
+
+Optional follow-on:
+
+- link from a domain row into the existing domain analysis value detail page when that route supports the needed query shape
+
+---
+
+## Functional Requirements
+
+- **FR-001**: Add a new top-level authenticated route at `/models`.
+- **FR-002**: Add a new top-level main-nav tab labeled `Models`.
+- **FR-003**: The `Models` page MUST render a matrix with models on rows and values on columns.
+- **FR-004**: Each cell MUST show pooled win rate as the primary number.
+- **FR-005**: Each cell MUST show cross-domain stability as a five-dot indicator when at least two eligible domains exist.
+- **FR-006**: Each cell MUST show eligible domain count in compact form.
+- **FR-007**: Stability MUST be computed from weighted mean absolute deviation across eligible domain win rates.
+- **FR-008**: Stability MUST NOT be computed when fewer than two eligible domains exist.
+- **FR-009**: Dots MUST support half-dot increments by rounding the stability score to the nearest `10` points.
+- **FR-010**: Domains with undefined win rate MUST NOT count toward stability or pooled win rate.
+- **FR-011**: The default page scope MUST be `All domains`.
+- **FR-012**: The page MUST keep domain as secondary context, not the primary layout structure.
+- **FR-013**: Cell detail view MUST list the contributing domains and their domain-level win rates.
+- **FR-014**: Tooltip or helper copy MUST explain stability in plain language.
+- **FR-015**: The page MUST make low domain count explicit and MUST NOT present one observed domain as a stable cross-domain result.
+
+---
+
+## Success Criteria
+
+- **SC-001**: A researcher can identify each model's strongest and weakest values from one matrix without opening domain pages.
+- **SC-002**: A researcher can tell, from the same cell, whether a value signal looks stable across domains.
+- **SC-003**: Low domain counts do not appear visually "certain."
+- **SC-004**: The page remains scannable on a standard laptop viewport without a top summary strip.
+- **SC-005**: The stability explanation can be understood without statistical background.
+
+---
+
+## Implementation Scope (Expected Files)
+
+This is the expected implementation scope for the first delivery wave.
+
+### New files
+
+**Web (client):**
+
+- `cloud/apps/web/src/pages/Models.tsx`
+- `cloud/apps/web/src/api/operations/modelsAnalysis.graphql` — GraphQL query document; processed by codegen
+- `cloud/apps/web/src/api/operations/modelsAnalysis.ts` — re-exports typed Document and types from `../../generated/graphql`
+- `cloud/apps/web/src/components/models/ModelsMatrix.tsx`
+- `cloud/apps/web/src/components/models/ModelsMatrixCell.tsx`
+- `cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx`
+- `cloud/apps/web/src/components/models/stabilityDots.ts`
+
+**API (server):**
+
+- `cloud/apps/api/src/graphql/types/models-analysis.ts` — Pothos object type definitions for the new query return types
+- `cloud/apps/api/src/graphql/queries/models-analysis.ts` — resolver for the `modelsAnalysis` query; auto-imported by `autoImportDir`
+
+### Existing files to modify
+
+**Web:**
+
+- `cloud/apps/web/src/App.tsx` — add the `/models` route (standard layout, no `fullWidth`)
+- `cloud/apps/web/src/components/layout/NavTabs.tsx` — add plain `NavLink` for Models
+- `cloud/apps/web/src/components/layout/MobileNav.tsx` — add Models entry to mobile nav
+- `cloud/apps/web/schema.graphql` — regenerated schema snapshot; update by running codegen after API changes (see Verification)
+
+**API:**
+
+- `cloud/apps/api/src/graphql/types/index.ts` — add `import './models-analysis.js'` so the new types register with the builder
+
+### GraphQL query shape
+
+The `modelsAnalysis.graphql` file should define:
+
+```graphql
+query ModelsAnalysis($domainId: ID) {
+  modelsAnalysis(domainId: $domainId) {
+    models {
+      modelId
+      label
+      values {
+        valueKey
+        pooledWinRate
+        stabilityScore
+        eligibleDomainCount
+        domains {
+          domainId
+          domainName
+          winRate
+          evidenceWeight
+        }
+      }
+    }
+  }
+}
+```
+
+The API resolver at `queries/models-analysis.ts` computes `pooledWinRate` and `stabilityScore` server-side across all eligible domains (or the filtered domain if `domainId` is supplied). It reads from the same underlying data as `domainAnalysis` — no new schema tables are needed.
+
+### Existing product surfaces to reuse, not replace
+
+- `cloud/apps/web/src/pages/DomainAnalysis.tsx`
+- `cloud/apps/web/src/components/domains/ValuePrioritiesSection.tsx`
+
+The new `Models` tab should learn from those surfaces but should not simply copy the domain-first layout.
+
+---
+
+## Out of Scope
+
+- no changes to `Domains` page information architecture beyond adding navigation to `Models`
+- no removal of the existing `Domain Analysis` page
+- no redesign of `Analysis` run-detail tabs
+- no publication-grade heterogeneity modeling in this first UI release
+- no export workflow changes in this spec
+- no backfill or data migration work in this spec
+- no ranking or leaderboard summary strip above the matrix
+
+---
+
+## Do Not Touch
+
+DO NOT MODIFY: `CLAUDE.md`, `AGENTS.md`, `cloud/CLAUDE.md`, `cloud/AGENTS.md`, `cloud/agents.md`, `MEMORY.md`, `.gitignore`, or any file not listed in the implementation scope above. If another file appears necessary during implementation, note it in the output first and extend the spec before coding.
+
+---
+
+## Verification Expectations For Implementation
+
+When this spec is implemented:
+
+**API workspace (must pass before web can build):**
+
+1. run `npm run lint --workspace @valuerank/api`
+2. run `npm run build --workspace @valuerank/api`
+3. fix all resulting errors
+
+**Web workspace:**
+
+4. run `npm run codegen --workspace @valuerank/web` — regenerates `src/generated/graphql.ts` from `.graphql` files and the schema snapshot; this MUST run before the build step
+5. run `npm run lint --workspace @valuerank/web`
+6. run `npm run test --workspace @valuerank/web`
+7. run `npm run build --workspace @valuerank/web`
+8. fix all resulting errors
+9. do not use `@ts-ignore`
+
+**Note on schema.graphql:** After API changes are built, pull the updated schema into `cloud/apps/web/schema.graphql` so codegen has an accurate schema to validate against. Check how other features do this (look for a `schema:pull` or `schema:sync` script, or generate it from the running API).
+
+---
+
+## Open Questions Deferred From This Spec
+
+These questions are intentionally deferred so the tab can be scoped cleanly:
+
+1. Should the stability dots eventually be backed by a publication-grade heterogeneity metric in exported methods docs?
+2. Should the pooled win rate use only scored comparisons, or should a later view also show support rate that includes neutral outcomes?
+3. Should clicking a cell open a drawer, modal, or dedicated detail route?
+4. Should the `Models` tab eventually support compare-over-time views for model-version drift?

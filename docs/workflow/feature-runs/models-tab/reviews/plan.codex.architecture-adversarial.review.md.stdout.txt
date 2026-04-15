@@ -1,0 +1,10 @@
+## Findings
+1. **High**: The domain filter changes the meaning of the core metric instead of just narrowing the view. `modelsAnalysis(domainId)` switches the resolver to a single domain, so `pooledWinRate` becomes domain-local and `stabilityScore` will usually collapse to `null` because there is no longer a cross-domain set. That conflicts with the stated goal of a cross-domain model×value matrix and will mislead users if the filter is used as planned.
+
+2. **Medium**: The plan assumes `db.llmModel` rows with `status: 'ACTIVE'` are the complete set of models to render. If snapshots contain retired, renamed, or otherwise non-active model IDs, those rows will disappear from the matrix even though they still have evidence in the source snapshots. **[UNVERIFIED]** This depends on existing data shape, but the plan needs an explicit fallback for snapshot-only model IDs.
+
+3. **Medium**: The plan does not define how to handle mixed-quality data states in the matrix. Cases like only-neutral counts, missing model labels, values missing in some domains, or zero eligible domains are all reduced to `n/a` or `null` without a clear user-facing distinction. That creates ambiguity between “no evidence,” “filtered out,” and “data unavailable,” which weakens trust in the matrix and the drawer.
+
+## Residual Risks
+- The plan still relies on several unverified assumptions about the current schema and snapshot payload shape, especially the `assumptionKey` format, the `output` structure parsed by `parseSnapshotOutput`, and whether `CURRENT` snapshots are unique per domain.
+- The weighted stability formula is only described at a high level. If the spec and implementation disagree on the exact MAD variant or weighting rules, the displayed stability scores can drift from the intended meaning even if the code builds cleanly.

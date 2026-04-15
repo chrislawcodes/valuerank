@@ -1,0 +1,437 @@
+npm warn exec The following package was not found and will be installed: @openai/codex@0.121.0
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/magical-mcclintock
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019d9319-b83e-7612-8cdf-73ac764d8e96
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Implementation Plan: Models Tab
+
+**Branch:** `claude/magical-mcclintock` | **Date:** 2026-04-15 | **Spec:** `docs/workflow/feature-runs/models-tab/spec.md`
+
+## Summary
+
+Add a `/models` top-level page with a model×value matrix showing pooled win rate and cross-domain stability per cell. The API resolver reads from existing domain analysis snapshots (no new DB tables). The web layer uses the existing codegen pipeline. Three implementation slices: API types + resolver, web routing + GraphQL layer, then UI components.
+
+---
+
+## Technical Context
+
+| Aspect | Detail |
+|---|---|
+| Language | TypeScript (strict) |
+| API framework | Pothos (code-first GraphQL schema builder) |
+| API schema exposure | `cloud/apps/web/schema.graphql` — manually maintained SDL snapshot; codegen reads this |
+| Web framework | React + urql + Vite |
+| Codegen | `npm run codegen --workspace @valuerank/web` — reads `src/**/*.graphql` + `schema.graphql`, writes `src/generated/graphql.ts` |
+| DB access | Prisma — reads `assumptionAnalysisSnapshot` table for domain analysis data |
+| Testing | Vitest (web), Vitest (API) |
+| File size limit | 400 lines max per file |
+| New DB tables | None — reads from existing snapshots |
+| Performance | Trivial at current scale (~10 domains × ~10 models × 10 values); no caching needed in v1 |
+
+---
+
+## Architecture Decisions
+
+### Decision 1: API data source — existing snapshots, not live recalculation
+
+**Chosen:** Read from `assumptionAnalysisSnapshot` rows (same as `domainAnalysis` resolver), aggregate per-domain counts in memory, compute pooled win rate and stability server-side.
+
+**Rationale:**
+- The snapshot table already has per-domain, per-model, per-value counts (`prioritized`, `deprioritized`, `neutral`) stored as JSON
+- No new data collection required — `modelsAnalysis` is a cross-domain view of data that already exists
+- Each domain's "latest CURRENT snapshot" is the source of truth, consistent with `domainAnalysis`
+
+**How the resolver works:**
+1. Query `assumptionAnalysisSnapshot` for all domains (or one domain if `domainId` is supplied), filtering for `status: 'CURRENT'` and `analysisType: 'domain_overview'`
+2. Parse each snapshot's `output` JSON using `parseSnapshotOutput` from `domain-analysis-snapshot-builder.ts`
+3. For each model × value pair, collect per-domain `{prioritized, deprioritized}` counts
+4. Compute domain win rate: `prioritized / (prioritized + deprioritized) * 100` — skip if sum is 0
+5. Pool across eligible domains (weighted mean, weight = `prioritized + deprioritized`)
+6. Compute stability via weighted MAD formula from spec
+
+**Alternative considered:** Live re-aggregation from transcripts — rejected because it duplicates the snapshot builder logic and would be significantly slower.
+
+### Decision 2: Stability and win rate computed server-side
+
+**Chosen:** The resolver returns pre-computed `pooledWinRate`, `stabilityScore`, and per-domain breakdowns. The client does not compute.
+
+**Rationale:**
+- Formula involves weighted MAD across multiple domains — non-trivial client work
+- Server has direct access to all snapshot data in one query
+
+### Decision 3: Pothos type in new types file, query in new queries file
+
+**Chosen:**
+- `cloud/apps/api/src/graphql/types/models-analysis.ts` — registers Pothos object types
+- `cloud/apps/api/src/graphql/queries/models-analysis.ts` — registers the query field (auto-imported via `autoImportDir`)
+
+**Rationale:** Matches the existing pattern (`available-model.ts` in types + `models.ts` in queries). `types/index.ts` needs one new import; `queries/index.ts` does NOT need modification.
+
+### Decision 4: `schema.graphql` is manually extended
+
+**Chosen:** Codex manually appends the new SDL type definitions to `cloud/apps/web/schema.graphql`.
+
+**Rationale:** No schema export/introspection script exists. All prior features added types manually in the same commit. The SDL must be consistent with the Pothos definitions.
+
+### Decision 5: Web operations use the codegen pattern
+
+**Chosen:** `modelsAnalysis.graphql` + `modelsAnalysis.ts` re-exporting from `../../generated/graphql`.
+
+**Rationale:** Modern repo pattern (see `models.graphql` + `models.ts`, `domainCoverage.graphql` + `domainCoverage.ts`).
+
+### Decision 6: `Models` nav is a plain `NavLink`, not a dropdown
+
+**Chosen:** Plain `NavLink` styled like the `Status` tab.
+
+**Rationale:** V1 has one page at `/models` with no sub-routes.
+
+---
+
+## Implementation Slices
+
+### Slice A — API: types + resolver + schema SDL [CHECKPOINT]
+Estimated diff: ~180 lines
+
+**Files:**
+- `cloud/apps/api/src/graphql/types/models-analysis.ts` (NEW)
+- `cloud/apps/api/src/graphql/queries/models-analysis.ts` (NEW)
+- `cloud/apps/api/src/graphql/types/index.ts` (add 1 import line)
+- `cloud/apps/web/schema.graphql` (append new SDL types + Query field)
+
+**Pothos type structure in `types/models-analysis.ts`:**
+```
+ModelsAnalysisDomainBreakdown  { domainId: String, domainName: String, winRate: Float, evidenceWeight: Int }
+ModelsAnalysisValueResult      { valueKey: String, pooledWinRate: Float?, stabilityScore: Float?, eligibleDomainCount: Int, domains: [...] }
+ModelsAnalysisModelResult      { modelId: String, label: String, values: [...] }
+ModelsAnalysisResult           { models: [...] }
+```
+
+**Resolver logic in `queries/models-analysis.ts`:**
+```
+builder.queryField('modelsAnalysis', ...)
+args: domainId? (ID, optional)
+
+Step 1: Load active models from db.llmModel (status: 'ACTIVE') for label lookup
+Step 2: Query assumptionAnalysisSnapshot:
+  - analysisType: 'domain_overview'
+  - status: 'CURRENT'
+  - deletedAt: null
+  - if domainId: filter assumptionKey = `domain-analysis:${domainId}`
+  - select: { id, assumptionKey, output, createdAt }
+  - Deduplicate per-domain: keep only the most recent snapshot per assumptionKey
+Step 3: Parse each snapshot output via parseSnapshotOutput()
+Step 4: Build per-model per-value domain lists:
+  Map<modelId, Map<valueKey, Array<{domainId, domainName, prioritized, deprioritized}>>>
+Step 5: For each (modelId, valueKey):
+  - eligible = domains where prioritized + deprioritized > 0
+  - compute winRate per eligible domain: prioritized / (prioritized + deprioritized) * 100
+  - pooledWinRate = weighted mean (weight = prioritized + deprioritized), or null if 0 eligible
+  - stabilityScore = spec MAD formula if >=2 eligible, else null
+Step 6: Return models sorted by label
+```
+
+**Computation helpers (inline in the resolver file):**
+```typescript
+function computeWinRate(p: number, d: number): number | null  // null if p+d=0
+function computePooledWinRate(domains: Array<{winRate: number, weight: number}>): number | null
+function computeStabilityScore(domains: Array<{winRate: number, weight: number}>): number | null
+// stability = max(0, 100 * (1 - mad / 50))  where mad = weighted MAD
+// returns null if domains.length < 2
+```
+
+**SDL to append to `schema.graphql`** (insert alphabetically or at end of type list, before closing Query):
+```graphql
+type ModelsAnalysisDomainBreakdown {
+  domainId: String!
+  domainName: String!
+  evidenceWeight: Int!
+  winRate: Float!
+}
+
+type ModelsAnalysisModelResult {
+  label: String!
+  modelId: String!
+  values: [ModelsAnalysisValueResult!]!
+}
+
+type ModelsAnalysisResult {
+  models: [ModelsAnalysisModelResult!]!
+}
+
+type ModelsAnalysisValueResult {
+  domains: [ModelsAnalysisDomainBreakdown!]!
+  eligibleDomainCount: Int!
+  pooledWinRate: Float
+  stabilityScore: Float
+  valueKey: String!
+}
+```
+Add to the `Query` type: `modelsAnalysis(domainId: ID): ModelsAnalysisResult!`
+
+**Verification:**
+```
+npm run lint --workspace @valuerank/api
+npm run build --workspace @valuerank/api
+```
+
+---
+
+### Slice B — Web: GraphQL layer + routing + nav [CHECKPOINT]
+Estimated diff: ~100 lines
+
+**Files:**
+- `cloud/apps/web/src/api/operations/modelsAnalysis.graphql` (NEW)
+- `cloud/apps/web/src/api/operations/modelsAnalysis.ts` (NEW)
+- `cloud/apps/web/src/App.tsx` (add route)
+- `cloud/apps/web/src/components/layout/NavTabs.tsx` (add Models NavLink)
+- `cloud/apps/web/src/components/layout/MobileNav.tsx` (add Models entry)
+
+**`modelsAnalysis.graphql`:**
+```graphql
+query ModelsAnalysis($domainId: ID) {
+  modelsAnalysis(domainId: $domainId) {
+    models {
+      modelId
+      label
+      values {
+        valueKey
+        pooledWinRate
+        stabilityScore
+        eligibleDomainCount
+        domains {
+          domainId
+          domainName
+          winRate
+          evidenceWeight
+        }
+      }
+    }
+  }
+}
+```
+
+**`modelsAnalysis.ts`:**
+```typescript
+export { ModelsAnalysisDocument as MODELS_ANALYSIS_QUERY } from '../../generated/graphql';
+export type {
+  ModelsAnalysisQuery,
+  ModelsAnalysisQueryVariables,
+} from '../../generated/graphql';
+export type ModelsAnalysisModelResult = ModelsAnalysisQuery['modelsAnalysis']['models'][number];
+export type ModelsAnalysisValueResult = ModelsAnalysisModelResult['values'][number];
+export type ModelsAnalysisDomainBreakdown = ModelsAnalysisValueResult['domains'][number];
+```
+
+**`App.tsx`** — add (no `fullWidth`):
+```tsx
+import { Models } from './pages/Models';
+// ...
+<Route path="/models" element={<ProtectedLayout><Models /></ProtectedLayout>} />
+```
+Insert after the `/domains/coverage` route.
+
+**`NavTabs.tsx`** — add plain NavLink after Domains dropdown, before Vignettes:
+```tsx
+import { ..., Cpu } from 'lucide-react';
+// ...in the JSX return, after domainMenuRef renderMenu call:
+<NavLink
+  to="/models"
+  className={({ isActive }) =>
+    `flex items-center gap-2 px-3 py-3 min-h-[44px] text-sm font-medium transition-colors border-b-2 ${
+      isActive
+        ? 'text-white border-teal-500'
+        : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
+    }`
+  }
+>
+  <Cpu className="w-4 h-4" />
+  <span className="hidden sm:inline">Models</span>
+</NavLink>
+```
+
+**`MobileNav.tsx`** — add after the Domains navItem:
+```typescript
+{ name: 'Models', path: '/models', icon: Cpu },
+```
+
+**Verification:**
+```
+npm run codegen --workspace @valuerank/web   ← MUST run first
+npm run lint --workspace @valuerank/web
+npm run build --workspace @valuerank/web
+```
+
+---
+
+### Slice C — Web: UI components [CHECKPOINT]
+Estimated diff: ~380 lines
+
+**Files:**
+- `cloud/apps/web/src/components/models/stabilityDots.ts` (NEW)
+- `cloud/apps/web/src/components/models/ModelsMatrixCell.tsx` (NEW)
+- `cloud/apps/web/src/components/models/ModelsMatrix.tsx` (NEW)
+- `cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx` (NEW)
+- `cloud/apps/web/src/pages/Models.tsx` (NEW)
+
+**`stabilityDots.ts`** — pure utility, no React:
+```typescript
+export type DotState = 'full' | 'half' | 'empty' | 'muted';
+
+// Returns 5 DotState values
+// halfDots = Math.floor(score / 10); index i:
+//   full if i*2+1 <= halfDots  (i.e. 2*(i+1) <= halfDots)
+//   wait, simpler: fullDots = Math.floor(halfDots / 2), hasHalf = halfDots % 2 === 1
+//   dots[i] = i < fullDots ? 'full' : (i === fullDots && hasHalf) ? 'half' : 'empty'
+// If score is null/undefined: all 'muted'
+export function computeDots(score: number | null | undefined): DotState[]
+
+// Tooltip string from spec:
+// "Cross-domain stability shows how consistent this value's win rate is across domains.
+//  Score: {score}/100 — {description}. Based on {count} eligible domains."
+// description: 100='identical', >=75='fairly consistent', >=50='moderately consistent', else='varies significantly'
+export function formatStabilityTooltip(
+  score: number | null | undefined,
+  eligibleDomainCount: number,
+): string
+```
+
+**`ModelsMatrixCell.tsx`:**
+```tsx
+type Props = {
+  pooledWinRate: number | null | undefined;
+  stabilityScore: number | null | undefined;
+  eligibleDomainCount: number;
+  muted?: boolean;   // force muted dots (single-domain filter)
+  onClick: () => void;
+};
+// Renders:
+//   Line 1: pooledWinRate formatted as "68%" or "n/a"
+//   Line 2: dot string + eligibleDomainCount + "d"
+// Dot char render: ● full, ◐ half, ○ empty, ○ muted (same char but gray color class)
+// Click → onClick()
+// title attribute on dot row = formatStabilityTooltip(...)
+```
+
+**`ModelsMatrix.tsx`:**
+```tsx
+import { DOMAIN_ANALYSIS_VALUE_KEYS } from '../../../api/...' // or from shared
+
+const VALUE_SHORT_LABELS: Record<string, string> = {
+  Self_Direction_Action: 'Self-Dir',
+  Universalism_Nature: 'Univ',
+  Benevolence_Dependability: 'Bene',
+  Security_Personal: 'Security',
+  Power_Dominance: 'Power',
+  Achievement: 'Achieve',
+  Tradition: 'Tradition',
+  Stimulation: 'Stimulate',
+  Hedonism: 'Hedone',
+  Conformity_Interpersonal: 'Conform',
+};
+
+type Props = {
+  models: ModelsAnalysisModelResult[];
+  loading: boolean;
+  singleDomainActive: boolean;
+  stabilityFilter: 'all' | 'stable' | 'low';
+  sortColumn: string | null;
+  onCellClick: (modelId: string, valueKey: string) => void;
+};
+// Renders <table> — sticky first column, scrollable if needed
+// Column order: DOMAIN_ANALYSIS_VALUE_KEYS
+// Row order: sorted by model label (default) or sortColumn win rate desc (nulls last)
+// Empty state: if no rows have any data, show <p> message
+```
+
+**`ModelValueDetailDrawer.tsx`:**
+```tsx
+type Props = {
+  model: ModelsAnalysisModelResult | null;
+  valueKey: string | null;
+  onClose: () => void;
+};
+// Right-side panel (fixed position, same pattern as other drawers in the app)
+// Shows: model + value header, pooledWinRate big, stability dots, domain table
+// Domain table cols: Name | Win Rate | Evidence Weight
+```
+
+**`Models.tsx`:**
+```tsx
+// State: selectedDomain (string|null), stabilityFilter, sortColumn (string|null), openCell ({modelId,valueKey}|null)
+// Query: useQuery(MODELS_ANALYSIS_QUERY, { variables: { domainId: selectedDomain ?? undefined } })
+// Also fetch domain list for the filter dropdown (use existing domains query)
+// Render: title, subtitle, filter bar, <ModelsMatrix>, <ModelValueDetailDrawer>
+// Pass singleDomainActive = selectedDomain != null to matrix
+```
+
+**Verification:**
+```
+npm run lint --workspace @valuerank/web
+npm run test --workspace @valuerank/web
+npm run build --workspace @valuerank/web
+```
+
+---
+
+## Key Constraints
+
+| Constraint | Rule |
+|---|---|
+| No `fullWidth` | Standard `ProtectedLayout` — no `fullWidth` prop |
+| Codegen precedes build | `npm run codegen` before lint/build in web workspace |
+| `queries/index.ts` auto-imports | Do NOT add import there |
+| `types/index.ts` needs 1 import | Add `import './models-analysis.js'` |
+| No new DB tables | All data from `assumptionAnalysisSnapshot` |
+| File size ≤ 400 lines | Split if approaching limit |
+| No `any` types | Use `unknown` with type guards |
+| `strict-boolean-expressions` | Explicit `!= null` checks, not truthiness |
+| `schema.graphql` is manual SDL | Append alphabetically; add field to Query type |
+| DOMAIN_ANALYSIS_VALUE_KEYS import | Import from `cloud/apps/api/src/graphql/queries/domain-analysis-values.ts` on API side; on web side use the same key strings from the generated types or define locally |
+
+---
+
+## Do Not Touch
+
+DO NOT MODIFY: `CLAUDE.md`, `AGENTS.md`, `cloud/CLAUDE.md`, `cloud/AGENTS.md`, `MEMORY.md`, `.gitignore`, or any file not listed in the implementation scope.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+1. [UNVERIFIED] Medium: The resolver only loads `llmModel` rows with `status: 'ACTIVE'` for label lookup. If snapshots still contain retired models, the matrix will silently drop those models or render them without labels, which makes the historical view incomplete. The plan needs an explicit rule for inactive models instead of assuming they never appear.
+
+2. [UNVERIFIED] Medium: Snapshot deduping is underspecified. The plan says to “keep the most recent snapshot per assumptionKey,” but it never defines a deterministic `orderBy` or tie-break before deduping. If more than one `CURRENT` row exists for the same key, the chosen snapshot can vary run to run.
+
+3. Medium: The stability-dot helper spec is internally inconsistent. `computeDots()` is described with two different algorithms, and the bucket boundaries for scores are not pinned down for edge values. That makes the visual encoding easy to implement incorrectly.
+
+4. Medium: The plan does not add tests for the highest-risk logic: pooled win rate, weighted MAD, zero-evidence cells, or snapshot parsing/deduping. Lint and build will not catch arithmetic or edge-case regressions, so the feature can still ship with broken analysis math.
+
+## Residual Risks
+- The plan still assumes the snapshot output shape and value-key list are stable. If upstream snapshot generation changes, the API resolver, manual SDL, and web codegen artifacts will need coordinated updates.
+
+- The page’s filter and sort behavior is left mostly client-side. That is fine at the estimated scale, but if the domain or model count grows, the current table approach may need pagination or stronger memoization.
+tokens used
+25,430

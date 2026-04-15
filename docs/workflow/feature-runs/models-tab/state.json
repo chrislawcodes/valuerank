@@ -1,0 +1,56 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "The new surface is a top-level tab named Models, not a sub-tab inside Domains or Analysis",
+      "First version does not include a summary strip above the matrix",
+      "Each main matrix cell shows pooled win rate as the primary number",
+      "Cross-domain stability signal uses five dots with half-dot support",
+      "Domain appears as filter, count, and drilldown \u2014 not as main page structure",
+      "Stability means how similar the value win rate stays across domains, not test-retest repeatability",
+      "Models tab uses standard layout width (no fullWidth) with abbreviated column headers",
+      "NavTabs: Models is a plain NavLink like Status, not a dropdown menu"
+    ],
+    "summary": "Full spec exists at docs/models-tab-spec.md. No open questions. Requirements are stable. Discovery complete.",
+    "updated_at": 1776278161,
+    "answers": {},
+    "non_goals": [
+      "compare-over-time views for model-version drift"
+    ],
+    "acceptance_criteria": [
+      "Stability explanation can be understood without statistical background"
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "parallel_analysis": {
+    "reviewed": true,
+    "found": false,
+    "note": "Three sequential slices (A\u2192B\u2192C) with hard dependencies: Slice B depends on Slice A (API types must exist for codegen), Slice C depends on Slice B (routing must exist for UI). No safe parallelism.",
+    "updated_at": 1776289780
+  },
+  "init_head_sha": "b26923fbe83c2c0ec86c80180073de00a4461626",
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "checkpoint_fallback": {}
+}

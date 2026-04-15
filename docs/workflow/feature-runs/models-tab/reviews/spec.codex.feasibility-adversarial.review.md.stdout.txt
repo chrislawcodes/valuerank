@@ -1,0 +1,10 @@
+## Findings
+1. Medium: The stability-dot rule is internally inconsistent. The Dot Mapping section uses `Math.floor(stability / 10)`, but FR-009 says the dots should be supported "by rounding the stability score to the nearest 10 points." Those are different at threshold values, so scores like 74/75 or 84/85 will not have one clear canonical display.
+2. Medium: The abbreviated value headers depend on hover to reveal the full value name. That leaves touch users, keyboard users, and any non-hover interaction without a reliable way to decode the columns, which is a real problem for a 10-column matrix.
+3. Medium: The spec does not define any cap, paging, or virtualization strategy for model rows. A matrix with one row per model is only practical if the model set stays small; otherwise the page stops being "at a glance" and the standard-width layout becomes hard to use.
+4. [UNVERIFIED] Medium: The API plan assumes `modelsAnalysis` can be computed from the same underlying data as `domainAnalysis` with no new schema work. That may be true, but it is not proven here. If the current API does not already expose the per-domain scored counts and weights needed at the model/value grain, this will need extra plumbing or a narrower query shape.
+
+## Residual Risks
+- The chosen stability metric is easy to explain, but it can still hide uneven evidence patterns. A value can look "stable" while one or two heavy domains dominate the score.
+- The detail drawer and tooltip text are only lightly specified. The exact empty states, keyboard behavior, and accessibility treatment will still need implementation polish.
+- If the number of models or contributing domains grows, the page may still need later tuning for performance and scanability even if the first version works.
