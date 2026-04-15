@@ -23,6 +23,12 @@ FACTORY_STATE = sys.modules["factory_state"]
 STAGES_MODULE = sys.modules["factory_stages"]
 REVIEW_MODULE = sys.modules["factory_review"]
 FACTORY_GIT = sys.modules["factory_git"]
+CMD_CHECKPOINT_MODULE = sys.modules["factory_cmd_checkpoint"]
+CMD_STATUS_MODULE = sys.modules["factory_cmd_status"]
+CMD_DELIVER_MODULE = sys.modules["factory_cmd_deliver"]
+CMD_IMPLEMENT_MODULE = sys.modules["factory_cmd_implement"]
+NEXT_ACTION_MODULE = sys.modules["factory_next_action"]
+PARALLEL_MODULE = sys.modules["factory_parallel"]
 
 
 def stage_state(
@@ -88,7 +94,11 @@ class RepairDecisionTests(unittest.TestCase):
         }
         action = MODULE.recommended_next_action(
             "feature-workflow-repair",
-            {"blocked": {"active": False}, "delivery": {}},
+            {
+                "blocked": {"active": False},
+                "delivery": {},
+                "parallel_analysis": {"reviewed": True, "found": False, "note": "", "updated_at": 0},
+            },
             stages,
             True,
         )
@@ -104,7 +114,11 @@ class RepairDecisionTests(unittest.TestCase):
         }
         action = MODULE.recommended_next_action(
             "feature-workflow-repair",
-            {"blocked": {"active": False}, "delivery": {}},
+            {
+                "blocked": {"active": False},
+                "delivery": {},
+                "parallel_analysis": {"reviewed": True, "found": False, "note": "", "updated_at": 0},
+            },
             stages,
             True,
         )
@@ -246,7 +260,11 @@ class RepairDecisionTests(unittest.TestCase):
         }
         action = MODULE.recommended_next_action(
             "feature-workflow-repair",
-            {"blocked": {"active": False}, "delivery": {}},
+            {
+                "blocked": {"active": False},
+                "delivery": {},
+                "parallel_analysis": {"reviewed": True, "found": False, "note": "", "updated_at": 0},
+            },
             stages,
             True,
         )
@@ -313,13 +331,17 @@ class RepairDecisionTests(unittest.TestCase):
             "closeout": stage_state(),
         }
         with patch.object(
-            REVIEW_MODULE,
+            NEXT_ACTION_MODULE,
             "diff_review_budget_state",
             return_value={"head_mismatch": True, "recorded_head_sha": "abc123", "current_head_sha": "def456"},
         ):
             action = MODULE.recommended_next_action(
                 "feature-workflow-repair",
-                {"blocked": {"active": False}, "delivery": {}},
+                {
+                    "blocked": {"active": False},
+                    "delivery": {},
+                    "parallel_analysis": {"reviewed": True, "found": False, "note": "", "updated_at": 0},
+                },
                 stages,
                 True,
             )
@@ -348,7 +370,11 @@ class RepairDecisionTests(unittest.TestCase):
             for stage in ("spec", "plan", "tasks", "diff")
         }
         stages["closeout"] = stage_state()
-        state = {"blocked": {"active": False}, "delivery": {}}
+        state = {
+            "blocked": {"active": False},
+            "delivery": {},
+            "parallel_analysis": {"reviewed": True, "found": False, "note": "", "updated_at": 0},
+        }
         diff_budget = {
             "artifact_exists": True,
             "artifact_bytes": 512,
@@ -363,18 +389,18 @@ class RepairDecisionTests(unittest.TestCase):
             "artifact_changed_since_codex": False,
         }
         buffer = io.StringIO()
-        with patch.object(MODULE, "ensure_sync"), patch.object(
-            MODULE, "load_workflow_state", return_value=state
+        with patch.object(CMD_STATUS_MODULE, "ensure_sync"), patch.object(
+            CMD_STATUS_MODULE, "load_workflow_state", return_value=state
         ), patch.object(
-            MODULE, "stage_manifest_state", side_effect=lambda _slug, stage: stages[stage]
+            CMD_STATUS_MODULE, "stage_manifest_state", side_effect=lambda _slug, stage: stages[stage]
         ), patch.object(
-            MODULE, "reconciliation_state", return_value=(True, "")
+            CMD_STATUS_MODULE, "reconciliation_state", return_value=(True, "")
         ), patch.object(
-            MODULE, "current_branch_name", return_value="feature-branch"
+            CMD_STATUS_MODULE, "current_branch_name", return_value="feature-branch"
         ), patch.object(
-            MODULE, "upstream_branch_name", return_value="origin/feature-branch"
+            CMD_STATUS_MODULE, "upstream_branch_name", return_value="origin/feature-branch"
         ), patch.object(
-            MODULE, "diff_review_budget_state", return_value=diff_budget
+            CMD_STATUS_MODULE, "diff_review_budget_state", return_value=diff_budget
         ), redirect_stdout(buffer):
             MODULE.command_status(SimpleNamespace(slug="feature-workflow-repair"))
 
@@ -411,20 +437,22 @@ class RepairDecisionTests(unittest.TestCase):
             "non_goals": [],
             "acceptance_criteria": [],
         }
-        with patch.object(MODULE, "ensure_sync"), patch.object(
-            MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}, "discovery": discovery}
+        with patch.object(CMD_STATUS_MODULE, "ensure_sync"), patch.object(
+            CMD_STATUS_MODULE,
+            "load_workflow_state",
+            return_value={"blocked": {"active": False}, "delivery": {}, "discovery": discovery},
         ), patch.object(
-            MODULE, "stage_manifest_state", side_effect=lambda _slug, stage: stages[stage]
+            CMD_STATUS_MODULE, "stage_manifest_state", side_effect=lambda _slug, stage: stages[stage]
         ), patch.object(
-            MODULE, "reconciliation_state", return_value=(True, "")
+            CMD_STATUS_MODULE, "reconciliation_state", return_value=(True, "")
         ), patch.object(
-            MODULE, "current_branch_name", return_value="feature-branch"
+            CMD_STATUS_MODULE, "current_branch_name", return_value="feature-branch"
         ), patch.object(
-            MODULE, "upstream_branch_name", return_value="origin/feature-branch"
+            CMD_STATUS_MODULE, "upstream_branch_name", return_value="origin/feature-branch"
         ), patch.object(
-            MODULE, "diff_review_budget_state", return_value={"artifact_exists": False}
+            CMD_STATUS_MODULE, "diff_review_budget_state", return_value={"artifact_exists": False}
         ), patch.object(
-            MODULE, "discovery_state", return_value=discovery
+            CMD_STATUS_MODULE, "discovery_state", return_value=discovery
         ), redirect_stdout(buffer):
             MODULE.command_status(SimpleNamespace(slug="feature-workflow-discovery-shaping"))
 
@@ -460,20 +488,22 @@ class RepairDecisionTests(unittest.TestCase):
             "non_goals": [],
             "acceptance_criteria": [],
         }
-        with patch.object(MODULE, "ensure_sync"), patch.object(
-            MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}, "discovery": discovery}
+        with patch.object(CMD_STATUS_MODULE, "ensure_sync"), patch.object(
+            CMD_STATUS_MODULE,
+            "load_workflow_state",
+            return_value={"blocked": {"active": False}, "delivery": {}, "discovery": discovery},
         ), patch.object(
-            MODULE, "stage_manifest_state", side_effect=lambda _slug, stage: stages[stage]
+            CMD_STATUS_MODULE, "stage_manifest_state", side_effect=lambda _slug, stage: stages[stage]
         ), patch.object(
-            MODULE, "reconciliation_state", return_value=(True, "")
+            CMD_STATUS_MODULE, "reconciliation_state", return_value=(True, "")
         ), patch.object(
-            MODULE, "current_branch_name", return_value="feature-branch"
+            CMD_STATUS_MODULE, "current_branch_name", return_value="feature-branch"
         ), patch.object(
-            MODULE, "upstream_branch_name", return_value="origin/feature-branch"
+            CMD_STATUS_MODULE, "upstream_branch_name", return_value="origin/feature-branch"
         ), patch.object(
-            MODULE, "diff_review_budget_state", return_value={"artifact_exists": False}
+            CMD_STATUS_MODULE, "diff_review_budget_state", return_value={"artifact_exists": False}
         ), patch.object(
-            MODULE, "discovery_state", return_value=discovery
+            CMD_STATUS_MODULE, "discovery_state", return_value=discovery
         ), redirect_stdout(buffer):
             MODULE.command_status(SimpleNamespace(slug="feature-workflow-discovery-shaping"))
 
@@ -504,20 +534,22 @@ class RepairDecisionTests(unittest.TestCase):
             "non_goals": [],
             "acceptance_criteria": [],
         }
-        with patch.object(MODULE, "ensure_sync"), patch.object(
-            MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}, "discovery": discovery}
+        with patch.object(CMD_STATUS_MODULE, "ensure_sync"), patch.object(
+            CMD_STATUS_MODULE,
+            "load_workflow_state",
+            return_value={"blocked": {"active": False}, "delivery": {}, "discovery": discovery},
         ), patch.object(
-            MODULE, "stage_manifest_state", side_effect=lambda _slug, stage: stages[stage]
+            CMD_STATUS_MODULE, "stage_manifest_state", side_effect=lambda _slug, stage: stages[stage]
         ), patch.object(
-            MODULE, "reconciliation_state", return_value=(True, "")
+            CMD_STATUS_MODULE, "reconciliation_state", return_value=(True, "")
         ), patch.object(
-            MODULE, "current_branch_name", return_value="feature-branch"
+            CMD_STATUS_MODULE, "current_branch_name", return_value="feature-branch"
         ), patch.object(
-            MODULE, "upstream_branch_name", return_value="origin/feature-branch"
+            CMD_STATUS_MODULE, "upstream_branch_name", return_value="origin/feature-branch"
         ), patch.object(
-            MODULE, "diff_review_budget_state", return_value={"artifact_exists": False}
+            CMD_STATUS_MODULE, "diff_review_budget_state", return_value={"artifact_exists": False}
         ), patch.object(
-            MODULE, "discovery_state", return_value=discovery
+            CMD_STATUS_MODULE, "discovery_state", return_value=discovery
         ), redirect_stdout(buffer):
             MODULE.command_status(SimpleNamespace(slug="feature-workflow-discovery-shaping"))
 
@@ -531,10 +563,14 @@ class RepairDecisionTests(unittest.TestCase):
             for stage in ("spec", "plan", "tasks", "diff")
         }
         stages["closeout"] = stage_state()
-        with patch.object(MODULE, "diff_review_budget_state", return_value={"head_mismatch": False}):
+        with patch.object(NEXT_ACTION_MODULE, "diff_review_budget_state", return_value={"head_mismatch": False}):
             action = MODULE.recommended_next_action(
                 "feature-workflow-repair",
-                {"blocked": {"active": False}, "delivery": {"pr_url": "https://example.com", "head_mismatch": True}},
+                {
+                    "blocked": {"active": False},
+                    "delivery": {"pr_url": "https://example.com", "head_mismatch": True},
+                    "parallel_analysis": {"reviewed": True, "found": False, "note": "", "updated_at": 0},
+                },
                 stages,
                 True,
             )
@@ -561,24 +597,24 @@ class RepairDecisionTests(unittest.TestCase):
             def manifest_path(_slug: str, stage: str) -> Path:
                 return temp_root / f"{stage}.checkpoint.json"
 
-            with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "command_path", return_value="/usr/bin/gh"
+            with patch.object(CMD_DELIVER_MODULE, "ensure_sync"), patch.object(
+                CMD_DELIVER_MODULE, "command_path", return_value="/usr/bin/gh"
             ), patch.object(
-                MODULE, "verify_checkpoint_manifest", return_value=(True, "")
+                CMD_DELIVER_MODULE, "verify_checkpoint_manifest", return_value=(True, "")
             ), patch.object(
-                MODULE, "reconciliation_state", return_value=(True, "")
+                CMD_DELIVER_MODULE, "reconciliation_state", return_value=(True, "")
             ), patch.object(
-                MODULE,
+                CMD_DELIVER_MODULE,
                 "diff_review_budget_state",
                 return_value={"head_mismatch": True, "recorded_head_sha": "abc123", "current_head_sha": "def456"},
             ), patch.object(
-                MODULE, "current_branch_name", return_value="feature-branch"
+                CMD_DELIVER_MODULE, "current_branch_name", return_value="feature-branch"
             ), patch.object(
-                MODULE, "upstream_branch_name", return_value="origin/feature-branch"
+                CMD_DELIVER_MODULE, "upstream_branch_name", return_value="origin/feature-branch"
             ), patch.object(
-                MODULE, "checkpoint_manifest_path", side_effect=manifest_path
+                CMD_DELIVER_MODULE, "checkpoint_manifest_path", side_effect=manifest_path
             ), patch.object(
-                MODULE.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout="", stderr="")
+                CMD_DELIVER_MODULE.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout="", stderr="")
             ):
                 with self.assertRaises(SystemExit) as ctx:
                     MODULE.command_deliver(args)
@@ -586,31 +622,55 @@ class RepairDecisionTests(unittest.TestCase):
         self.assertIn("reviewed diff HEAD", str(ctx.exception))
 
     def test_command_repair_repairs_stale_diff_head(self) -> None:
-        stages = {
-            "spec": stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True),
-            "plan": stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True),
-            "tasks": stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True),
-            "diff": stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True),
-            "closeout": stage_state(),
-        }
-        diff_budget = {"head_mismatch": True, "recorded_head_sha": "abc123", "current_head_sha": "def456"}
+        healthy = stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True)
+        diff_initial = stage_state(
+            artifact_exists=True,
+            artifact_meaningful=True,
+            manifest_exists=True,
+            healthy=False,
+            detail="reviewed diff HEAD is stale",
+        )
+        diff_refreshed = stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True)
+        closeout = stage_state()
+        call_count = {"diff": 0}
+
+        def fake_manifest_state(_slug: str, stage: str) -> dict[str, object]:
+            if stage == "diff":
+                call_count["diff"] += 1
+                return diff_initial if call_count["diff"] == 1 else diff_refreshed
+            if stage == "closeout":
+                return closeout
+            return healthy
+
         args = SimpleNamespace(slug="feature-workflow-repair")
-        with patch.object(MODULE, "ensure_sync"), patch.object(
-            MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}, "checkpoint_fallback": {}}
+        with patch.object(CMD_STATUS_MODULE, "ensure_sync"), patch.object(
+            CMD_STATUS_MODULE,
+            "load_workflow_state",
+            return_value={"blocked": {"active": False}, "delivery": {}, "checkpoint_fallback": {}},
         ), patch.object(
-            MODULE, "stage_manifest_state", side_effect=lambda _slug, stage: stages[stage]
+            CMD_STATUS_MODULE, "stage_manifest_state", side_effect=fake_manifest_state
         ), patch.object(
-            MODULE, "stage_review_inventory", return_value=([], [])
+            CMD_STATUS_MODULE,
+            "stage_drift_class",
+            side_effect=lambda stage, _state: "unhealthy-manifest" if stage == "diff" else "healthy",
         ), patch.object(
-            MODULE, "diff_review_budget_state", return_value=diff_budget
+            CMD_STATUS_MODULE,
+            "stage_repairable",
+            side_effect=lambda _slug, stage, _state: stage == "diff",
         ), patch.object(
-            STAGES_MODULE, "diff_review_budget_state", return_value=diff_budget
+            CMD_STATUS_MODULE, "stage_review_inventory", return_value=([], [])
         ), patch.object(
-            MODULE, "repair_checkpoint_args", return_value=SimpleNamespace(slug="feature-workflow-repair", stage="diff")
+            CMD_STATUS_MODULE, "repair_checkpoint_args", return_value=SimpleNamespace(slug="feature-workflow-repair", stage="diff")
         ), patch.object(
-            MODULE, "command_checkpoint", return_value=0
+            CMD_CHECKPOINT_MODULE, "command_checkpoint", return_value=0
         ) as checkpoint_mock, patch.object(
-            MODULE, "reconciliation_state", return_value=(True, "")
+            CMD_STATUS_MODULE, "reconciliation_state", return_value=(True, "")
+        ), patch.object(
+            CMD_STATUS_MODULE, "recommended_next_action", return_value="deliver"
+        ), patch.object(
+            CMD_STATUS_MODULE, "stage_status_label", return_value="healthy"
+        ), patch.object(
+            CMD_STATUS_MODULE, "trim_detail", side_effect=lambda s: s
         ):
             exit_code = MODULE.command_repair(args)
 
@@ -637,10 +697,10 @@ class RepairDecisionTests(unittest.TestCase):
             allow_large_diff_rerun=False,
             required_reviews=None,
         )
-        with patch.object(MODULE, "ensure_sync"), patch.object(
-            MODULE, "prerequisite_failure", return_value=None
+        with patch.object(CMD_CHECKPOINT_MODULE, "ensure_sync"), patch.object(
+            CMD_CHECKPOINT_MODULE, "prerequisite_failure", return_value=None
         ), patch.object(
-            MODULE,
+            CMD_CHECKPOINT_MODULE,
             "discovery_state",
             return_value={
                 "required": True,
@@ -678,10 +738,10 @@ class RepairDecisionTests(unittest.TestCase):
             allow_large_diff_rerun=False,
             required_reviews=None,
         )
-        with patch.object(MODULE, "ensure_sync"), patch.object(
-            MODULE, "prerequisite_failure", return_value=None
+        with patch.object(CMD_CHECKPOINT_MODULE, "ensure_sync"), patch.object(
+            CMD_CHECKPOINT_MODULE, "prerequisite_failure", return_value=None
         ), patch.object(
-            MODULE,
+            CMD_CHECKPOINT_MODULE,
             "discovery_state",
             return_value={
                 "required": True,
@@ -1109,28 +1169,28 @@ class RepairDecisionTests(unittest.TestCase):
         )
         fake_manifest_path = MagicMock()
         fake_manifest_path.exists.return_value = True
-        with patch.object(MODULE, "ensure_sync"), patch.object(
-            MODULE, "command_path", return_value="/usr/bin/gh"
+        with patch.object(CMD_DELIVER_MODULE, "ensure_sync"), patch.object(
+            CMD_DELIVER_MODULE, "command_path", return_value="/usr/bin/gh"
         ), patch.object(
-            MODULE, "checkpoint_manifest_path", return_value=fake_manifest_path
+            CMD_DELIVER_MODULE, "checkpoint_manifest_path", return_value=fake_manifest_path
         ), patch.object(
-            MODULE, "verify_checkpoint_manifest", return_value=(True, "")
+            CMD_DELIVER_MODULE, "verify_checkpoint_manifest", return_value=(True, "")
         ), patch.object(
-            MODULE, "reconciliation_state", return_value=(True, "")
+            CMD_DELIVER_MODULE, "reconciliation_state", return_value=(True, "")
         ), patch.object(
-            MODULE, "current_branch_name", return_value="feature-branch"
+            CMD_DELIVER_MODULE, "current_branch_name", return_value="feature-branch"
         ), patch.object(
-            MODULE, "upstream_branch_name", return_value="origin/feature-branch"
+            CMD_DELIVER_MODULE, "upstream_branch_name", return_value="origin/feature-branch"
         ), patch.object(
-            MODULE, "current_pr_payload", return_value=None
+            CMD_DELIVER_MODULE, "current_pr_payload", return_value=None
         ), patch.object(
-            MODULE, "update_workflow_state"
+            CMD_DELIVER_MODULE, "update_workflow_state"
         ) as update_mock, patch.object(
-            MODULE.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout="", stderr="")
+            CMD_DELIVER_MODULE.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout="", stderr="")
         ), patch.object(
-            MODULE, "diff_review_budget_state", return_value={"head_mismatch": False}
+            CMD_DELIVER_MODULE, "diff_review_budget_state", return_value={"head_mismatch": False}
         ), patch.object(
-            MODULE, "required_check_summary", return_value=("unknown", [], "")
+            CMD_DELIVER_MODULE, "required_check_summary", return_value=("unknown", [], "")
         ):
             exit_code = MODULE.command_deliver(args)
 
@@ -1176,20 +1236,22 @@ class RepairDecisionTests(unittest.TestCase):
                 return workflow_root / f"{stage}.checkpoint.json"
 
             args = SimpleNamespace(slug="feature-workflow-discovery-shaping")
-            with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "workflow_dir", return_value=workflow_root
+            with patch.object(CMD_DELIVER_MODULE, "ensure_sync"), patch.object(
+                CMD_DELIVER_MODULE, "workflow_dir", return_value=workflow_root
             ), patch.object(
-                MODULE, "checkpoint_manifest_path", side_effect=checkpoint_manifest_path
+                CMD_DELIVER_MODULE, "checkpoint_manifest_path", side_effect=checkpoint_manifest_path
             ), patch.object(
-                MODULE, "load_workflow_state", return_value={"delivery": {}, "dirty_overrides": {}, "checkpoint_fallback": {}}
+                CMD_DELIVER_MODULE, "load_workflow_state", return_value={"delivery": {}, "dirty_overrides": {}, "checkpoint_fallback": {}}
             ), patch.object(
-                MODULE, "gather_all_review_paths", return_value=[review_path]
+                CMD_DELIVER_MODULE, "gather_all_review_paths", return_value=[review_path]
             ) as gather_mock, patch.object(
-                MODULE,
+                CMD_DELIVER_MODULE,
                 "refresh_delivery_snapshot",
                 return_value={"pr_number": 1, "pr_url": "https://example.com/pr/1", "checks_summary": "pass"},
             ), patch.object(
-                MODULE, "run", return_value=None
+                FACTORY_GIT, "run", return_value=None
+            ), patch.object(
+                CMD_CHECKPOINT_MODULE, "command_checkpoint", return_value=0
             ):
                 args.fallback = False
                 MODULE.command_closeout(args)
@@ -1238,31 +1300,31 @@ class RepairDecisionTests(unittest.TestCase):
             artifact_path.write_text("diff --git a/foo b/foo\n", encoding="utf-8")
             manifest_path = reviews_root / "diff.checkpoint.json"
 
-            with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "workflow_dir", return_value=workflow_root
+            with patch.object(CMD_CHECKPOINT_MODULE, "ensure_sync"), patch.object(
+                CMD_CHECKPOINT_MODULE, "workflow_dir", return_value=workflow_root
             ), patch.object(
-                MODULE, "reviews_dir", return_value=reviews_root
+                CMD_CHECKPOINT_MODULE, "reviews_dir", return_value=reviews_root
             ), patch.object(
-                MODULE, "default_artifact_path", return_value=artifact_path
+                CMD_CHECKPOINT_MODULE, "default_artifact_path", return_value=artifact_path
             ), patch.object(
-                MODULE, "checkpoint_manifest_path", return_value=manifest_path
+                CMD_CHECKPOINT_MODULE, "checkpoint_manifest_path", return_value=manifest_path
             ), patch.object(
-                MODULE, "prerequisite_failure", return_value=None
+                CMD_CHECKPOINT_MODULE, "prerequisite_failure", return_value=None
             ), patch.object(
-                MODULE, "resolved_review_policy", return_value={
+                CMD_CHECKPOINT_MODULE, "resolved_review_policy", return_value={
                     "sensitive": False,
                     "large_structural": False,
                     "performance_sensitive": False,
                     "extra_gemini_lenses": [],
                 }
             ), patch.object(
-                MODULE, "checkpoint_manifest", return_value={"stage": "diff", "required_reviews": []}
+                CMD_CHECKPOINT_MODULE, "checkpoint_manifest", return_value={"stage": "diff", "required_reviews": []}
             ), patch.object(
-                MODULE, "atomic_json_write"
+                CMD_CHECKPOINT_MODULE, "atomic_json_write"
             ), patch.object(
-                MODULE, "update_workflow_state", return_value={}
+                CMD_CHECKPOINT_MODULE, "update_workflow_state", return_value={}
             ), patch.object(
-                MODULE, "diff_review_budget_state",
+                CMD_CHECKPOINT_MODULE, "diff_review_budget_state",
                 return_value={
                     "artifact_exists": True,
                     "artifact_bytes": 20,
@@ -1277,11 +1339,11 @@ class RepairDecisionTests(unittest.TestCase):
                     "artifact_changed_since_codex": False,
                 },
             ), patch.object(
-                MODULE, "record_checkpoint_fallback"
+                CMD_CHECKPOINT_MODULE, "record_checkpoint_fallback"
             ) as record_fallback, patch.object(
-                MODULE, "run_checkpoint_fallback", return_value=(False, "boom")
+                CMD_CHECKPOINT_MODULE, "run_checkpoint_fallback", return_value=(False, "boom")
             ), patch.object(
-                MODULE.subprocess, "run", return_value=SimpleNamespace(returncode=1, stdout="", stderr="repair failed")
+                CMD_CHECKPOINT_MODULE.subprocess, "run", return_value=SimpleNamespace(returncode=1, stdout="", stderr="repair failed")
             ):
                 exit_code = MODULE.command_checkpoint(args)
 
@@ -1392,27 +1454,27 @@ class RepairDecisionTests(unittest.TestCase):
                     return SimpleNamespace(returncode=0, stdout="", stderr="")
                 raise AssertionError(f"unexpected command: {cmd}")
 
-            with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "workflow_dir", return_value=workflow_root
+            with patch.object(CMD_CHECKPOINT_MODULE, "ensure_sync"), patch.object(
+                CMD_CHECKPOINT_MODULE, "workflow_dir", return_value=workflow_root
             ), patch.object(
-                MODULE, "reviews_dir", return_value=reviews_root
+                CMD_CHECKPOINT_MODULE, "reviews_dir", return_value=reviews_root
             ), patch.object(
-                MODULE, "scope_manifest_path", return_value=scope_manifest
+                CMD_CHECKPOINT_MODULE, "scope_manifest_path", return_value=scope_manifest
             ), patch.object(
-                MODULE, "default_artifact_path", return_value=artifact_path
+                CMD_CHECKPOINT_MODULE, "default_artifact_path", return_value=artifact_path
             ), patch.object(
-                MODULE, "checkpoint_manifest_path", return_value=manifest_path
+                CMD_CHECKPOINT_MODULE, "checkpoint_manifest_path", return_value=manifest_path
             ), patch.object(
-                MODULE, "prerequisite_failure", return_value=None
+                CMD_CHECKPOINT_MODULE, "prerequisite_failure", return_value=None
             ), patch.object(
-                MODULE, "resolved_review_policy", return_value={
+                CMD_CHECKPOINT_MODULE, "resolved_review_policy", return_value={
                     "sensitive": False,
                     "large_structural": False,
                     "performance_sensitive": False,
                     "extra_gemini_lenses": [],
                 }
             ), patch.object(
-                MODULE, "diff_review_budget_state",
+                CMD_CHECKPOINT_MODULE, "diff_review_budget_state",
                 return_value={
                     "artifact_exists": True,
                     "artifact_bytes": 20,
@@ -1442,11 +1504,11 @@ class RepairDecisionTests(unittest.TestCase):
                     "artifact_changed_since_codex": False,
                 },
             ), patch.object(
-                MODULE, "required_reviews", return_value=[]
+                CMD_CHECKPOINT_MODULE, "required_reviews", return_value=[]
             ), patch.object(
-                MODULE, "update_workflow_state", return_value={}
+                CMD_CHECKPOINT_MODULE, "update_workflow_state", return_value={}
             ), patch.object(
-                MODULE.subprocess, "run", side_effect=fake_run
+                CMD_CHECKPOINT_MODULE.subprocess, "run", side_effect=fake_run
             ):
                 exit_code = MODULE.command_checkpoint(args)
 
@@ -1635,7 +1697,9 @@ class DefaultCodexModelTests(unittest.TestCase):
             small_task_set=False,
         )
         gemini_entries = [r for r in reviews if r.get("reviewer") == "gemini"]
-        self.assertEqual(len(gemini_entries), 2, "full task set should include two Gemini reviews")
+        codex_entries = [r for r in reviews if r.get("reviewer") == "codex"]
+        self.assertEqual(len(gemini_entries), 1, "full task set should include one Gemini review")
+        self.assertEqual(len(codex_entries), 2, "full task set should include two Codex reviews")
 
     def test_required_reviews_tasks_small_task_set_sensitive_still_skips_gemini(self) -> None:
         # sensitive flag adds risk-adversarial as an extra Gemini candidate, but
@@ -1676,7 +1740,9 @@ class DefaultCodexModelTests(unittest.TestCase):
             small_task_set=False,
         )
         gemini_entries = [r for r in reviews if r.get("reviewer") == "gemini"]
-        self.assertEqual(len(gemini_entries), 2)
+        codex_entries = [r for r in reviews if r.get("reviewer") == "codex"]
+        self.assertEqual(len(gemini_entries), 1, "full closeout should include one Gemini review")
+        self.assertEqual(len(codex_entries), 2, "full closeout should include two Codex reviews")
 
 
 class _CapturedBaseRef(Exception):
@@ -1738,17 +1804,17 @@ class BaseRefResetTests(unittest.TestCase):
 
             try:
                 with (
-                    patch.object(MODULE, "ensure_sync"),
-                    patch.object(MODULE, "workflow_dir", return_value=workflow_root),
-                    patch.object(MODULE, "reviews_dir", return_value=reviews_root),
-                    patch.object(MODULE, "prerequisite_failure", return_value=None),
-                    patch.object(MODULE, "resolved_review_policy", return_value={
+                    patch.object(CMD_CHECKPOINT_MODULE, "ensure_sync"),
+                    patch.object(CMD_CHECKPOINT_MODULE, "workflow_dir", return_value=workflow_root),
+                    patch.object(CMD_CHECKPOINT_MODULE, "reviews_dir", return_value=reviews_root),
+                    patch.object(CMD_CHECKPOINT_MODULE, "prerequisite_failure", return_value=None),
+                    patch.object(CMD_CHECKPOINT_MODULE, "resolved_review_policy", return_value={
                         "sensitive": False,
                         "large_structural": False,
                         "performance_sensitive": False,
                         "extra_gemini_lenses": [],
                     }),
-                    patch.object(MODULE, "diff_review_budget_state", return_value={
+                    patch.object(CMD_CHECKPOINT_MODULE, "diff_review_budget_state", return_value={
                         "artifact_exists": False,
                         "artifact_bytes": 0,
                         "large_artifact": False,
@@ -1761,11 +1827,11 @@ class BaseRefResetTests(unittest.TestCase):
                         "suggested_base_ref": "deadbeef111",
                         "artifact_changed_since_codex": False,
                     }),
-                    patch.object(MODULE, "checkpoint_progress_state", return_value=progress),
-                    patch.object(MODULE, "parse_checkpoint_markers", return_value=(marker_count, "CURRENT_SHA")),
-                    patch.object(MODULE, "_sha_is_valid_ancestor", return_value=ancestor_valid),
-                    patch.object(MODULE, "update_workflow_state"),
-                    patch.object(MODULE, "preferred_diff_base_ref", side_effect=capturing_preferred),
+                    patch.object(CMD_CHECKPOINT_MODULE, "checkpoint_progress_state", return_value=progress),
+                    patch.object(CMD_CHECKPOINT_MODULE, "parse_checkpoint_markers", return_value=(marker_count, "CURRENT_SHA")),
+                    patch.object(CMD_CHECKPOINT_MODULE, "_sha_is_valid_ancestor", return_value=ancestor_valid),
+                    patch.object(CMD_CHECKPOINT_MODULE, "update_workflow_state"),
+                    patch.object(CMD_CHECKPOINT_MODULE, "preferred_diff_base_ref", side_effect=capturing_preferred),
                     redirect_stdout(io.StringIO()),
                 ):
                     MODULE.command_checkpoint(args)
@@ -1860,17 +1926,17 @@ class BaseRefResetTests(unittest.TestCase):
 
             try:
                 with (
-                    patch.object(MODULE, "ensure_sync"),
-                    patch.object(MODULE, "workflow_dir", return_value=workflow_root),
-                    patch.object(MODULE, "reviews_dir", return_value=reviews_root),
-                    patch.object(MODULE, "prerequisite_failure", return_value=None),
-                    patch.object(MODULE, "resolved_review_policy", return_value={
+                    patch.object(CMD_CHECKPOINT_MODULE, "ensure_sync"),
+                    patch.object(CMD_CHECKPOINT_MODULE, "workflow_dir", return_value=workflow_root),
+                    patch.object(CMD_CHECKPOINT_MODULE, "reviews_dir", return_value=reviews_root),
+                    patch.object(CMD_CHECKPOINT_MODULE, "prerequisite_failure", return_value=None),
+                    patch.object(CMD_CHECKPOINT_MODULE, "resolved_review_policy", return_value={
                         "sensitive": False,
                         "large_structural": False,
                         "performance_sensitive": False,
                         "extra_gemini_lenses": [],
                     }),
-                    patch.object(MODULE, "diff_review_budget_state", return_value={
+                    patch.object(CMD_CHECKPOINT_MODULE, "diff_review_budget_state", return_value={
                         "artifact_exists": False,
                         "artifact_bytes": 0,
                         "large_artifact": False,
@@ -1883,12 +1949,12 @@ class BaseRefResetTests(unittest.TestCase):
                         "suggested_base_ref": "deadbeef111",
                         "artifact_changed_since_codex": False,
                     }),
-                    patch.object(MODULE, "checkpoint_progress_state", return_value=progress),
-                    patch.object(MODULE, "parse_checkpoint_markers", return_value=(1, "CURRENT_SHA")),
-                    patch.object(MODULE, "_sha_is_valid_ancestor", return_value=True),
-                    patch.object(MODULE, "update_workflow_state"),
-                    patch.object(MODULE, "preferred_diff_base_ref", side_effect=fake_preferred),
-                    patch.object(MODULE, "scope_manifest_path", side_effect=capturing_scope),
+                    patch.object(CMD_CHECKPOINT_MODULE, "checkpoint_progress_state", return_value=progress),
+                    patch.object(CMD_CHECKPOINT_MODULE, "parse_checkpoint_markers", return_value=(1, "CURRENT_SHA")),
+                    patch.object(CMD_CHECKPOINT_MODULE, "_sha_is_valid_ancestor", return_value=True),
+                    patch.object(CMD_CHECKPOINT_MODULE, "update_workflow_state"),
+                    patch.object(CMD_CHECKPOINT_MODULE, "preferred_diff_base_ref", side_effect=fake_preferred),
+                    patch.object(CMD_CHECKPOINT_MODULE, "scope_manifest_path", side_effect=capturing_scope),
                     redirect_stdout(io.StringIO()),
                 ):
                     MODULE.command_checkpoint(args)
@@ -1927,17 +1993,17 @@ class RepairCloseoutTests(unittest.TestCase):
         args = MODULE.argparse.Namespace(slug="test-slug")
 
         with (
-            patch.object(MODULE, "ensure_sync"),
-            patch.object(MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}}),
-            patch.object(MODULE, "stage_manifest_state", side_effect=lambda slug, stage: stages[stage]),
-            patch.object(MODULE, "stage_drift_class", side_effect=lambda stage, state: "not-checkpointed" if stage == "closeout" else "healthy"),
-            patch.object(MODULE, "stage_repairable", return_value=False),
-            patch.object(MODULE, "stage_review_inventory", return_value=([], [])),
-            patch.object(MODULE, "command_checkpoint", side_effect=counting_checkpoint),
-            patch.object(MODULE, "reconciliation_state", return_value=(True, "")),
-            patch.object(MODULE, "recommended_next_action", return_value="closeout"),
-            patch.object(MODULE, "stage_status_label", return_value="not-checkpointed"),
-            patch.object(MODULE, "trim_detail", side_effect=lambda s: s),
+            patch.object(CMD_STATUS_MODULE, "ensure_sync"),
+            patch.object(CMD_STATUS_MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}}),
+            patch.object(CMD_STATUS_MODULE, "stage_manifest_state", side_effect=lambda slug, stage: stages[stage]),
+            patch.object(CMD_STATUS_MODULE, "stage_drift_class", side_effect=lambda stage, state: "not-checkpointed" if stage == "closeout" else "healthy"),
+            patch.object(CMD_STATUS_MODULE, "stage_repairable", return_value=False),
+            patch.object(CMD_STATUS_MODULE, "stage_review_inventory", return_value=([], [])),
+            patch.object(CMD_CHECKPOINT_MODULE, "command_checkpoint", side_effect=counting_checkpoint),
+            patch.object(CMD_STATUS_MODULE, "reconciliation_state", return_value=(True, "")),
+            patch.object(CMD_STATUS_MODULE, "recommended_next_action", return_value="closeout"),
+            patch.object(CMD_STATUS_MODULE, "stage_status_label", return_value="not-checkpointed"),
+            patch.object(CMD_STATUS_MODULE, "trim_detail", side_effect=lambda s: s),
             redirect_stdout(io.StringIO()),
         ):
             result = MODULE.command_repair(args)
@@ -1964,17 +2030,17 @@ class RepairCloseoutTests(unittest.TestCase):
         output = io.StringIO()
 
         with (
-            patch.object(MODULE, "ensure_sync"),
-            patch.object(MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}}),
-            patch.object(MODULE, "stage_manifest_state", side_effect=fake_manifest_state),
-            patch.object(MODULE, "stage_drift_class", side_effect=lambda stage, state: "unhealthy-manifest" if stage == "closeout" else "healthy"),
-            patch.object(MODULE, "stage_repairable", side_effect=lambda slug, stage, state: stage == "closeout"),
-            patch.object(MODULE, "stage_review_inventory", return_value=([], [])),
-            patch.object(MODULE, "command_checkpoint", side_effect=lambda a: checkpoint_calls.append(a) or 0),
-            patch.object(MODULE, "reconciliation_state", return_value=(True, "")),
-            patch.object(MODULE, "recommended_next_action", return_value="deliver"),
-            patch.object(MODULE, "stage_status_label", return_value="ok"),
-            patch.object(MODULE, "trim_detail", side_effect=lambda s: s),
+            patch.object(CMD_STATUS_MODULE, "ensure_sync"),
+            patch.object(CMD_STATUS_MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}}),
+            patch.object(CMD_STATUS_MODULE, "stage_manifest_state", side_effect=fake_manifest_state),
+            patch.object(CMD_STATUS_MODULE, "stage_drift_class", side_effect=lambda stage, state: "unhealthy-manifest" if stage == "closeout" else "healthy"),
+            patch.object(CMD_STATUS_MODULE, "stage_repairable", side_effect=lambda slug, stage, state: stage == "closeout"),
+            patch.object(CMD_STATUS_MODULE, "stage_review_inventory", return_value=([], [])),
+            patch.object(CMD_CHECKPOINT_MODULE, "command_checkpoint", side_effect=lambda a: checkpoint_calls.append(a) or 0),
+            patch.object(CMD_STATUS_MODULE, "reconciliation_state", return_value=(True, "")),
+            patch.object(CMD_STATUS_MODULE, "recommended_next_action", return_value="deliver"),
+            patch.object(CMD_STATUS_MODULE, "stage_status_label", return_value="ok"),
+            patch.object(CMD_STATUS_MODULE, "trim_detail", side_effect=lambda s: s),
             redirect_stdout(output),
         ):
             result = MODULE.command_repair(args)
@@ -1991,17 +2057,17 @@ class RepairCloseoutTests(unittest.TestCase):
         args = MODULE.argparse.Namespace(slug="test-slug")
 
         with (
-            patch.object(MODULE, "ensure_sync"),
-            patch.object(MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}}),
-            patch.object(MODULE, "stage_manifest_state", side_effect=lambda slug, stage: closeout_initial if stage == "closeout" else healthy),
-            patch.object(MODULE, "stage_drift_class", side_effect=lambda stage, state: "unhealthy-manifest" if stage == "closeout" else "healthy"),
-            patch.object(MODULE, "stage_repairable", side_effect=lambda slug, stage, state: stage == "closeout"),
-            patch.object(MODULE, "stage_review_inventory", return_value=([], [])),
-            patch.object(MODULE, "command_checkpoint", return_value=1),
-            patch.object(MODULE, "reconciliation_state", return_value=(True, "")),
-            patch.object(MODULE, "recommended_next_action", return_value="deliver"),
-            patch.object(MODULE, "stage_status_label", return_value="ok"),
-            patch.object(MODULE, "trim_detail", side_effect=lambda s: s),
+            patch.object(CMD_STATUS_MODULE, "ensure_sync"),
+            patch.object(CMD_STATUS_MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}}),
+            patch.object(CMD_STATUS_MODULE, "stage_manifest_state", side_effect=lambda slug, stage: closeout_initial if stage == "closeout" else healthy),
+            patch.object(CMD_STATUS_MODULE, "stage_drift_class", side_effect=lambda stage, state: "unhealthy-manifest" if stage == "closeout" else "healthy"),
+            patch.object(CMD_STATUS_MODULE, "stage_repairable", side_effect=lambda slug, stage, state: stage == "closeout"),
+            patch.object(CMD_STATUS_MODULE, "stage_review_inventory", return_value=([], [])),
+            patch.object(CMD_CHECKPOINT_MODULE, "command_checkpoint", return_value=1),
+            patch.object(CMD_STATUS_MODULE, "reconciliation_state", return_value=(True, "")),
+            patch.object(CMD_STATUS_MODULE, "recommended_next_action", return_value="deliver"),
+            patch.object(CMD_STATUS_MODULE, "stage_status_label", return_value="ok"),
+            patch.object(CMD_STATUS_MODULE, "trim_detail", side_effect=lambda s: s),
             redirect_stdout(io.StringIO()),
         ):
             result = MODULE.command_repair(args)
@@ -2017,17 +2083,17 @@ class RepairCloseoutTests(unittest.TestCase):
         args = MODULE.argparse.Namespace(slug="test-slug")
 
         with (
-            patch.object(MODULE, "ensure_sync"),
-            patch.object(MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}}),
-            patch.object(MODULE, "stage_manifest_state", side_effect=lambda slug, stage: closeout_initial if stage == "closeout" else healthy),
-            patch.object(MODULE, "stage_drift_class", side_effect=lambda stage, state: "unhealthy-manifest" if stage == "closeout" else "healthy"),
-            patch.object(MODULE, "stage_repairable", return_value=False),
-            patch.object(MODULE, "stage_review_inventory", return_value=([], [])),
-            patch.object(MODULE, "command_checkpoint", side_effect=lambda a: checkpoint_calls.append(a) or 0),
-            patch.object(MODULE, "reconciliation_state", return_value=(True, "")),
-            patch.object(MODULE, "recommended_next_action", return_value="deliver"),
-            patch.object(MODULE, "stage_status_label", return_value="ok"),
-            patch.object(MODULE, "trim_detail", side_effect=lambda s: s),
+            patch.object(CMD_STATUS_MODULE, "ensure_sync"),
+            patch.object(CMD_STATUS_MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}}),
+            patch.object(CMD_STATUS_MODULE, "stage_manifest_state", side_effect=lambda slug, stage: closeout_initial if stage == "closeout" else healthy),
+            patch.object(CMD_STATUS_MODULE, "stage_drift_class", side_effect=lambda stage, state: "unhealthy-manifest" if stage == "closeout" else "healthy"),
+            patch.object(CMD_STATUS_MODULE, "stage_repairable", return_value=False),
+            patch.object(CMD_STATUS_MODULE, "stage_review_inventory", return_value=([], [])),
+            patch.object(CMD_CHECKPOINT_MODULE, "command_checkpoint", side_effect=lambda a: checkpoint_calls.append(a) or 0),
+            patch.object(CMD_STATUS_MODULE, "reconciliation_state", return_value=(True, "")),
+            patch.object(CMD_STATUS_MODULE, "recommended_next_action", return_value="deliver"),
+            patch.object(CMD_STATUS_MODULE, "stage_status_label", return_value="ok"),
+            patch.object(CMD_STATUS_MODULE, "trim_detail", side_effect=lambda s: s),
             redirect_stdout(io.StringIO()),
         ):
             result = MODULE.command_repair(args)
@@ -2059,17 +2125,17 @@ class RepairCloseoutTests(unittest.TestCase):
         args = MODULE.argparse.Namespace(slug="test-slug")
 
         with (
-            patch.object(MODULE, "ensure_sync"),
-            patch.object(MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}}),
-            patch.object(MODULE, "stage_manifest_state", side_effect=fake_manifest_state),
-            patch.object(MODULE, "stage_drift_class", side_effect=lambda stage, state: "unhealthy-manifest" if stage == "closeout" else "healthy"),
-            patch.object(MODULE, "stage_repairable", side_effect=lambda slug, stage, state: stage == "closeout"),
-            patch.object(MODULE, "stage_review_inventory", return_value=([], [])),
-            patch.object(MODULE, "command_checkpoint", return_value=0),  # checkpoint "succeeds"
-            patch.object(MODULE, "reconciliation_state", return_value=(True, "")),
-            patch.object(MODULE, "recommended_next_action", return_value="deliver"),
-            patch.object(MODULE, "stage_status_label", return_value="ok"),
-            patch.object(MODULE, "trim_detail", side_effect=lambda s: s),
+            patch.object(CMD_STATUS_MODULE, "ensure_sync"),
+            patch.object(CMD_STATUS_MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}}),
+            patch.object(CMD_STATUS_MODULE, "stage_manifest_state", side_effect=fake_manifest_state),
+            patch.object(CMD_STATUS_MODULE, "stage_drift_class", side_effect=lambda stage, state: "unhealthy-manifest" if stage == "closeout" else "healthy"),
+            patch.object(CMD_STATUS_MODULE, "stage_repairable", side_effect=lambda slug, stage, state: stage == "closeout"),
+            patch.object(CMD_STATUS_MODULE, "stage_review_inventory", return_value=([], [])),
+            patch.object(CMD_CHECKPOINT_MODULE, "command_checkpoint", return_value=0),
+            patch.object(CMD_STATUS_MODULE, "reconciliation_state", return_value=(True, "")),
+            patch.object(CMD_STATUS_MODULE, "recommended_next_action", return_value="deliver"),
+            patch.object(CMD_STATUS_MODULE, "stage_status_label", return_value="ok"),
+            patch.object(CMD_STATUS_MODULE, "trim_detail", side_effect=lambda s: s),
             redirect_stdout(io.StringIO()),
         ):
             result = MODULE.command_repair(args)
@@ -2106,18 +2172,18 @@ class RepairCloseoutTests(unittest.TestCase):
         args = MODULE.argparse.Namespace(slug="test-slug")
 
         with (
-            patch.object(MODULE, "ensure_sync"),
-            patch.object(MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}}),
-            patch.object(MODULE, "stage_manifest_state", side_effect=fake_manifest_state),
-            patch.object(MODULE, "stage_drift_class", side_effect=fake_drift),
-            patch.object(MODULE, "stage_repairable", side_effect=fake_repairable),
-            patch.object(MODULE, "stage_review_inventory", return_value=([], [])),
-            patch.object(MODULE, "later_progress_exists", return_value=(False, "")),
-            patch.object(MODULE, "command_checkpoint", side_effect=lambda a: checkpoint_calls.append(a) or 0),
-            patch.object(MODULE, "reconciliation_state", return_value=(True, "")),
-            patch.object(MODULE, "recommended_next_action", return_value="deliver"),
-            patch.object(MODULE, "stage_status_label", return_value="ok"),
-            patch.object(MODULE, "trim_detail", side_effect=lambda s: s),
+            patch.object(CMD_STATUS_MODULE, "ensure_sync"),
+            patch.object(CMD_STATUS_MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}}),
+            patch.object(CMD_STATUS_MODULE, "stage_manifest_state", side_effect=fake_manifest_state),
+            patch.object(CMD_STATUS_MODULE, "stage_drift_class", side_effect=fake_drift),
+            patch.object(CMD_STATUS_MODULE, "stage_repairable", side_effect=fake_repairable),
+            patch.object(CMD_STATUS_MODULE, "stage_review_inventory", return_value=([], [])),
+            patch.object(CMD_STATUS_MODULE, "later_progress_exists", return_value=(False, "")),
+            patch.object(CMD_CHECKPOINT_MODULE, "command_checkpoint", side_effect=lambda a: checkpoint_calls.append(a) or 0),
+            patch.object(CMD_STATUS_MODULE, "reconciliation_state", return_value=(True, "")),
+            patch.object(CMD_STATUS_MODULE, "recommended_next_action", return_value="deliver"),
+            patch.object(CMD_STATUS_MODULE, "stage_status_label", return_value="ok"),
+            patch.object(CMD_STATUS_MODULE, "trim_detail", side_effect=lambda s: s),
             redirect_stdout(io.StringIO()),
         ):
             result = MODULE.command_repair(args)
@@ -2566,11 +2632,11 @@ class TestCommandImplement(unittest.TestCase):
         return MagicMock(returncode=0, stdout="", stderr="")
 
     def test_serial_path_calls_run_serial(self) -> None:
-        with patch.object(MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
-            MODULE,
+        with patch.object(CMD_IMPLEMENT_MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
+            CMD_IMPLEMENT_MODULE,
             "parse_parallel_task_groups",
             return_value=[{"tasks": ["T001"], "parallel": False, "files": [], "overlap_warning": None}],
-        ) as mock_parse, patch.object(MODULE, "_run_serial", return_value=0) as mock_run_serial:
+        ) as mock_parse, patch.object(CMD_IMPLEMENT_MODULE, "_run_serial", return_value=0) as mock_run_serial:
             result = MODULE.command_implement(self._args())
 
         self.assertEqual(result, 0)
@@ -2579,9 +2645,9 @@ class TestCommandImplement(unittest.TestCase):
 
     def test_parallel_path_calls_run_parallel(self) -> None:
         group = {"tasks": ["T001", "T002"], "parallel": True, "files": ["a.ts", "b.ts"], "overlap_warning": None}
-        with patch.object(MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
-            MODULE, "parse_parallel_task_groups", return_value=[group]
-        ), patch.object(MODULE, "_run_parallel", return_value=0) as mock_run_parallel:
+        with patch.object(CMD_IMPLEMENT_MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
+            CMD_IMPLEMENT_MODULE, "parse_parallel_task_groups", return_value=[group]
+        ), patch.object(CMD_IMPLEMENT_MODULE, "_run_parallel", return_value=0) as mock_run_parallel:
             result = MODULE.command_implement(self._args())
 
         self.assertEqual(result, 0)
@@ -2598,9 +2664,9 @@ class TestCommandImplement(unittest.TestCase):
             "overlap_warning": "tasks 1,2 share file foo.ts",
         }
         stderr = io.StringIO()
-        with patch.object(MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
-            MODULE, "parse_parallel_task_groups", return_value=[group]
-        ), patch.object(MODULE, "_run_serial", return_value=0) as mock_run_serial, redirect_stderr(stderr):
+        with patch.object(CMD_IMPLEMENT_MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
+            CMD_IMPLEMENT_MODULE, "parse_parallel_task_groups", return_value=[group]
+        ), patch.object(CMD_IMPLEMENT_MODULE, "_run_serial", return_value=0) as mock_run_serial, redirect_stderr(stderr):
             result = MODULE.command_implement(self._args())
 
         self.assertEqual(result, 0)
@@ -2609,8 +2675,8 @@ class TestCommandImplement(unittest.TestCase):
 
     def test_dirty_working_tree_exits_1_without_codex(self) -> None:
         dirty_status = MagicMock(returncode=0, stdout="M foo.ts\n", stderr="")
-        with patch.object(MODULE.subprocess, "run", return_value=dirty_status), patch.object(
-            MODULE, "_run_serial", return_value=0
+        with patch.object(CMD_IMPLEMENT_MODULE.subprocess, "run", return_value=dirty_status), patch.object(
+            CMD_IMPLEMENT_MODULE, "_run_serial", return_value=0
         ) as mock_run_serial:
             result = MODULE.command_implement(self._args())
 
@@ -2619,8 +2685,8 @@ class TestCommandImplement(unittest.TestCase):
 
     def test_empty_groups_prints_nothing_to_implement_and_exits_0(self) -> None:
         stdout = io.StringIO()
-        with patch.object(MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
-            MODULE, "parse_parallel_task_groups", return_value=[]
+        with patch.object(CMD_IMPLEMENT_MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
+            CMD_IMPLEMENT_MODULE, "parse_parallel_task_groups", return_value=[]
         ), redirect_stdout(stdout):
             result = MODULE.command_implement(self._args())
 
@@ -2632,9 +2698,9 @@ class TestCommandImplement(unittest.TestCase):
             {"tasks": ["T001"], "parallel": False, "files": [], "overlap_warning": None},
             {"tasks": ["T002"], "parallel": False, "files": [], "overlap_warning": None},
         ]
-        with patch.object(MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
-            MODULE, "parse_parallel_task_groups", return_value=groups
-        ), patch.object(MODULE, "_run_serial", side_effect=[1, 0]) as mock_run_serial:
+        with patch.object(CMD_IMPLEMENT_MODULE.subprocess, "run", return_value=self._clean_status()), patch.object(
+            CMD_IMPLEMENT_MODULE, "parse_parallel_task_groups", return_value=groups
+        ), patch.object(CMD_IMPLEMENT_MODULE, "_run_serial", side_effect=[1, 0]) as mock_run_serial:
             result = MODULE.command_implement(self._args())
 
         self.assertEqual(result, 1)

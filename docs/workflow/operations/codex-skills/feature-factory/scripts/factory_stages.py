@@ -17,6 +17,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 from factory_state import (  # noqa: E402
     REPO_ROOT,
     CHECKPOINT_PROGRESS_KEY,
+    INIT_HEAD_SHA_KEY,
     read_json_file,
     workflow_dir,
     reviews_dir,
@@ -43,6 +44,27 @@ VERIFY_RECONCILIATION = REVIEW_SCRIPTS / "verify_reconciliation.py"
 
 HARD_DIFF_ARTIFACT_MAX_CHARS = 150000
 LARGE_DIFF_RERUN_WARN_CHARS = 80000
+
+NEXT_ACTION_LABELS: dict[str, str] = {
+    "mark_blocked": "workflow is blocked — human intervention required",
+    "discover": "complete discovery before writing spec",
+    "author_spec": "write spec.md",
+    "repair_spec_checkpoint": "run spec checkpoint",
+    "author_plan": "write plan.md",
+    "repair_plan_checkpoint": "run plan checkpoint",
+    "author_tasks": "write tasks.md with [CHECKPOINT] markers",
+    "record_parallel_analysis": "record parallel task analysis before checkpointing tasks",
+    "repair_tasks_checkpoint": "run tasks checkpoint",
+    "dispatch_next_slice_to_codex": "implement next slice",
+    "repair_diff_checkpoint": "run diff checkpoint",
+    "reconcile_reviews": "reconcile open review findings",
+    "deliver": "create PR and watch CI",
+    "closeout": "write closeout summary and run closeout checkpoint",
+    "repair_closeout_checkpoint": "re-run closeout checkpoint",
+    "write_postmortem": "write postmortem.md",
+    "update_status_md": "update STATUS.md",
+    "done": "workflow complete",
+}
 
 CHECKPOINT_STAGES = ["spec", "plan", "tasks", "diff", "closeout"]
 VERIFY_ON_CLOSEOUT_STAGES = ["spec", "plan", "tasks", "diff"]
@@ -346,135 +368,25 @@ def prerequisite_failure(slug: str, stage: str) -> str | None:
     return None
 
 
-def parse_p_annotation(line: str) -> list[str]:
-    match = re.search(r"\[P:\s*([^\]]*)\]", line)
-    if not match:
-        return []
+def status_md_changed_since_init(slug: str) -> bool:
+    """Return True if STATUS.md was modified after workflow init.
 
-    raw_paths = [part.strip() for part in match.group(1).split(",")]
-    if not any(raw_paths):
-        return []
-
-    repo_root = REPO_ROOT.resolve()
-    parsed_paths: list[str] = []
-    seen: set[str] = set()
-
-    for raw_path in raw_paths:
-        if not raw_path:
-            continue
-
-        cleaned = raw_path
-        while cleaned.startswith("./"):
-            cleaned = cleaned[2:]
-        while "//" in cleaned:
-            cleaned = cleaned.replace("//", "/")
-
-        if not cleaned:
-            continue
-
-        if cleaned.startswith("/"):
-            print(f"warning: rejecting absolute path in [P:] annotation: {raw_path}", file=sys.stderr)
-            continue
-
-        try:
-            resolved = (REPO_ROOT / cleaned).resolve()
-            resolved.relative_to(repo_root)
-        except Exception:
-            print(f"warning: rejecting path outside repository in [P:] annotation: {raw_path}", file=sys.stderr)
-            continue
-
-        normalized = resolved.relative_to(repo_root).as_posix()
-        if normalized in seen:
-            continue
-        seen.add(normalized)
-        parsed_paths.append(normalized)
-
-    return parsed_paths
+    Uses git diff between the recorded init HEAD SHA and the current working
+    tree. Returns True on any error so a missing or invalid SHA never blocks
+    the 'done' state.
+    """
+    state = load_workflow_state(slug)
+    init_sha = state.get(INIT_HEAD_SHA_KEY, "")
+    if not init_sha:
+        return True  # no init sha recorded — can't verify, don't block
+    result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "diff", "--quiet", init_sha, "--", "STATUS.md"],
+        capture_output=True,
+    )
+    # returncode 0: no diff; 1: diff exists; 128: git error
+    # Treat both "diff exists" and "error" as changed so workflow is never
+    # blocked by a broken or missing SHA.
+    return result.returncode != 0
 
 
-def parse_parallel_task_groups(slug: str) -> list[dict]:
-    tasks_path = workflow_dir(slug) / "tasks.md"
-    if not tasks_path.exists():
-        return []
-
-    unchecked_tasks: list[dict[str, object]] = []
-    for line in tasks_path.read_text(encoding="utf-8").splitlines():
-        if _CHECKPOINT_MARKER_RE.match(line):
-            break
-        if not re.match(r"^\s*-\s+\[\s\]\s+", line):
-            continue
-
-        unchecked_tasks.append(
-            {
-                "task": re.sub(r"\s*\[P(?::[^\]]*)?]", "", line).rstrip(),
-                "files": parse_p_annotation(line),
-            }
-        )
-
-    if not unchecked_tasks:
-        return []
-
-    annotated_indexes = [index for index, item in enumerate(unchecked_tasks) if item["files"]]
-    task_texts = [str(item["task"]) for item in unchecked_tasks]
-
-    def serial_group(overlap_warning: str | None = None) -> list[dict]:
-        return [
-            {
-                "tasks": task_texts,
-                "parallel": False,
-                "files": [],
-                "overlap_warning": overlap_warning,
-            }
-        ]
-
-    if len(annotated_indexes) < 2:
-        return serial_group()
-
-    file_to_indexes: dict[str, list[int]] = {}
-    for index, item in enumerate(unchecked_tasks):
-        for file_path in item["files"]:
-            file_to_indexes.setdefault(str(file_path), []).append(index)
-
-    overlap_warning = None
-    for file_path, indexes in file_to_indexes.items():
-        if len(indexes) > 1:
-            first, second = indexes[0] + 1, indexes[1] + 1
-            overlap_warning = f"tasks {first},{second} share file {file_path}"
-            break
-
-    if overlap_warning:
-        return serial_group(overlap_warning=overlap_warning)
-
-    annotated_tasks = [unchecked_tasks[index] for index in annotated_indexes]
-    unannotated_tasks = [item for index, item in enumerate(unchecked_tasks) if index not in set(annotated_indexes)]
-
-    parallel_files: list[str] = []
-    seen_files: set[str] = set()
-    for item in annotated_tasks:
-        for file_path in item["files"]:
-            file_name = str(file_path)
-            if file_name in seen_files:
-                continue
-            seen_files.add(file_name)
-            parallel_files.append(file_name)
-
-    groups: list[dict] = [
-        {
-            "tasks": [str(item["task"]) for item in annotated_tasks],
-            "parallel": True,
-            "files": parallel_files,
-            "overlap_warning": None,
-        }
-    ]
-
-    if unannotated_tasks:
-        groups.append(
-            {
-                "tasks": [str(item["task"]) for item in unannotated_tasks],
-                "parallel": False,
-                "files": [],
-                "overlap_warning": None,
-            }
-        )
-
-    return groups
+from factory_parallel import parse_p_annotation, parse_parallel_task_groups  # noqa: E402

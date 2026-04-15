@@ -6,6 +6,7 @@ Builds review specs, runs fallback reviews, manages checkpoint progress.
 import argparse
 import concurrent.futures
 import json
+import re
 import subprocess
 import sys
 import time
@@ -18,14 +19,11 @@ if str(_SCRIPT_DIR) not in sys.path:
 from factory_state import (  # noqa: E402
     REPO_ROOT,
     BLOCKED_KEY,
-    DISCOVERY_KEY,
-    DELIVERY_KEY,
     DIRTY_OVERRIDE_KEY,
     CHECKPOINT_FALLBACK_KEY,
     CHECKPOINT_PROGRESS_KEY,
     read_json_file,
     reviews_dir,
-    blocking_unresolved_items,
     load_workflow_state,
     save_workflow_state,
     update_workflow_state,
@@ -44,10 +42,9 @@ from factory_stages import (  # noqa: E402
     diff_review_budget_state,
     parse_checkpoint_markers,
     checkpoint_progress_state,
-    later_progress_exists,
 )
 
-from factory_git import current_branch_name  # noqa: E402
+from factory_next_action import recommended_next_action  # noqa: E402
 
 from factory_review_specs import (  # noqa: E402,F401
     DEFAULT_GEMINI_MODEL,
@@ -76,6 +73,44 @@ RUN_CODEX_REVIEW = REVIEW_SCRIPTS / "run_codex_review.py"
 # Validated 2026-03-30: zero 429s across parallel-implement-command checkpoints at 30s stagger.
 # Set to None to revert to strict serial execution if rate-limit errors reappear.
 GEMINI_STAGGER_SECONDS: int | None = 30
+
+# ---------------------------------------------------------------------------
+# Auto-context file extraction (used by command_checkpoint in factory_cmd_checkpoint)
+# ---------------------------------------------------------------------------
+
+_AUTO_CONTEXT_MAX_FILES = 10
+_AUTO_CONTEXT_EXTENSIONS = re.compile(
+    r"\.(tsx?|jsx?|py|prisma|sql|json|yaml|yml|md|sh|toml)$", re.IGNORECASE
+)
+_AUTO_CONTEXT_PATH_RE = re.compile(r"`([^`\n]+)`|(?<!\w)((?:cloud|docs|specs|scripts)/\S+)")
+
+
+def _extract_file_paths_from_artifact(artifact_path: Path, repo_root: Path) -> list[str]:
+    """Parse a spec or plan artifact and return repo-relative paths for files mentioned in scope sections.
+
+    Only includes paths that exist on disk. Capped at _AUTO_CONTEXT_MAX_FILES.
+    """
+    if not artifact_path.exists():
+        return []
+    text = artifact_path.read_text(encoding="utf-8")
+    found: list[str] = []
+    seen: set[str] = set()
+    for match in _AUTO_CONTEXT_PATH_RE.finditer(text):
+        if len(found) >= _AUTO_CONTEXT_MAX_FILES:
+            break
+        raw = (match.group(1) or match.group(2) or "").strip().rstrip(".,;)")
+        if not raw or "/" not in raw:
+            continue
+        if not _AUTO_CONTEXT_EXTENSIONS.search(raw):
+            continue
+        candidate = (repo_root / raw).resolve()
+        if not candidate.exists():
+            continue
+        rel = str(candidate.relative_to(repo_root))
+        if rel not in seen:
+            seen.add(rel)
+            found.append(rel)
+    return found
 
 
 # ---------------------------------------------------------------------------
@@ -339,60 +374,3 @@ def _advance_checkpoint_progress(slug: str, stage: str, pending_head_sha: str) -
     )
 
 
-# ---------------------------------------------------------------------------
-# Next-action decision tree
-# ---------------------------------------------------------------------------
-
-
-def recommended_next_action(
-    slug: str,
-    state: dict,
-    stages: dict[str, dict[str, object]],
-    reconciliation_ok: bool,
-) -> str:
-    blocked = state.get(BLOCKED_KEY, {})
-    if blocked.get("active"):
-        return "mark_blocked"
-    discovery = state.get(DISCOVERY_KEY, {})
-    if blocking_unresolved_items(discovery) or (discovery.get("required") and not discovery.get("complete")):
-        return "discover"
-    if not stages["spec"]["artifact_exists"] or not stages["spec"]["artifact_meaningful"]:
-        if later_progress_exists(stages, "spec")[0]:
-            return "mark_blocked"
-        return "author_spec"
-    if not stages["spec"]["manifest_exists"] or not stages["spec"]["healthy"]:
-        return "repair_spec_checkpoint"
-    if not stages["plan"]["artifact_exists"] or not stages["plan"]["artifact_meaningful"]:
-        if later_progress_exists(stages, "plan")[0]:
-            return "mark_blocked"
-        return "author_plan"
-    if not stages["plan"]["manifest_exists"] or not stages["plan"]["healthy"]:
-        return "repair_plan_checkpoint"
-    if not stages["tasks"]["artifact_exists"] or not stages["tasks"]["artifact_meaningful"]:
-        if later_progress_exists(stages, "tasks")[0]:
-            return "mark_blocked"
-        return "author_tasks"
-    if not stages["tasks"]["manifest_exists"] or not stages["tasks"]["healthy"]:
-        return "repair_tasks_checkpoint"
-    if not stages["diff"]["artifact_exists"]:
-        return "dispatch_next_slice_to_codex"
-    if not stages["diff"]["manifest_exists"] or not stages["diff"]["healthy"]:
-        return "repair_diff_checkpoint"
-    if diff_review_budget_state(slug).get("head_mismatch"):
-        return "repair_diff_checkpoint"
-    if not reconciliation_ok:
-        return "reconcile_reviews"
-    # Import here to avoid circular — refresh_delivery_snapshot is in factory_deliver
-    from factory_deliver import refresh_delivery_snapshot  # noqa: E402
-    delivery = refresh_delivery_snapshot(state.get(DELIVERY_KEY, {}))
-    if not delivery.get("pr_url"):
-        return "deliver"
-    if delivery.get("head_mismatch"):
-        return "deliver"
-    if delivery.get("checks_summary") in {"pending", "fail", "unknown"}:
-        return "deliver"
-    if not stages["closeout"]["manifest_exists"]:
-        return "closeout"
-    if not stages["closeout"]["healthy"]:
-        return "repair_closeout_checkpoint"
-    return "done"
