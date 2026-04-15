@@ -15,16 +15,8 @@ export type AnalysisWarning = {
   recommendation: string;
 };
 
-export type ConfidenceInterval = {
-  lower: number;
-  upper: number;
-  level: number;
-  method: string;
-};
-
 export type ValueStats = {
   winRate: number;
-  confidenceInterval: ConfidenceInterval;
   count: {
     prioritized: number;
     deprioritized: number;

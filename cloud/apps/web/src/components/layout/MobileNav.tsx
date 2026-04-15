@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { type LucideIcon, Archive, BarChart2, FileText, FolderTree, GitCompare, Home, Library, Menu, Settings, X } from 'lucide-react';
+import { type LucideIcon, Archive, BarChart2, FileText, FolderTree, Home, Library, Menu, Settings, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
 
@@ -42,7 +42,6 @@ const navItems: NavItem[] = [
       { name: 'Legacy Survey Results', path: '/archive/survey-results', icon: Archive },
     ],
   },
-  { name: 'Compare', path: '/compare', icon: GitCompare },
   {
     name: 'Settings',
     path: '/settings/account',

@@ -17,10 +17,8 @@ export { VirtualizedAnalysisFolderView } from './VirtualizedAnalysisFolderView';
 
 // Stats and charts
 export { StatCard } from './StatCard';
-export { ScoreDistributionChart } from './ScoreDistributionChart';
 export { VariableImpactChart } from './VariableImpactChart';
 export { ModelComparisonMatrix } from './ModelComparisonMatrix';
-export { MethodsDocumentation } from './MethodsDocumentation';
 export { ContestedScenariosList } from './ContestedScenariosList';
 
 // Filters
