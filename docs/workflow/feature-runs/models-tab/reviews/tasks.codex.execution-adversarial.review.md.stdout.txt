@@ -1,0 +1,9 @@
+## Findings
+- [MEDIUM] The stability math is not pinned down enough to implement safely. Slice A says `computeStabilityScore` should use the "spec MAD formula," but the artifact never states the exact formula, normalization, or rounding rules. Slice C then uses hard thresholds (`< 75`, `>= 50`) on that score, so even a small interpretation mismatch will change which cells are shown as stable or low-stability.
+- [MEDIUM] The plan leaves the core aggregation logic untested. The resolver has several failure-prone steps: snapshot dedupe, parse-error skipping, weighted pooling, and stability scoring. Lint, build, and codegen will not catch a wrong calculation or a bad edge case in malformed snapshots. This is the main correctness risk in the feature, so it needs explicit test coverage.
+- [MEDIUM][UNVERIFIED] The web/API contract for value keys is split and underspecified. Slice B3 says to "use the string array directly or import from wherever domainAnalysis.ts gets it," instead of naming one shared source of truth. That creates a real drift risk between the API resolver, GraphQL query, and table headers if the value-key set changes. This depends on the current codebase layout, so it is unverified.
+
+## Residual Risks
+- The artifact still depends on `plan.md` for the exact SDL, query text, value labels, and tooltip wording. If that file disagrees with these tasks, the implementation can still drift.
+- I could not verify any existing drawer, domain selector, or codegen patterns because no code context was provided. Any task that says "reuse existing hook/pattern" still has integration risk until the current code is checked.
+- The feature has no explicit performance guardrails. If the snapshot table is large, the resolver's full scan, dedupe, and per-model aggregation could become slow without an index or query shape review.

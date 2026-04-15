@@ -1,0 +1,20 @@
+query ModelsAnalysis($domainId: ID) {
+  modelsAnalysis(domainId: $domainId) {
+    models {
+      modelId
+      label
+      values {
+        valueKey
+        pooledWinRate
+        stabilityScore
+        eligibleDomainCount
+        domains {
+          domainId
+          domainName
+          winRate
+          evidenceWeight
+        }
+      }
+    }
+  }
+}

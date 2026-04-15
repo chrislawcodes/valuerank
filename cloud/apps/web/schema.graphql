@@ -2072,6 +2072,31 @@ type ProviderHealthStatus {
   remainingBudgetUsd: Float
 }
 
+type ModelsAnalysisDomainBreakdown {
+  domainId: String!
+  domainName: String!
+  evidenceWeight: Int!
+  winRate: Float!
+}
+
+type ModelsAnalysisModelResult {
+  label: String!
+  modelId: String!
+  values: [ModelsAnalysisValueResult!]!
+}
+
+type ModelsAnalysisResult {
+  models: [ModelsAnalysisModelResult!]!
+}
+
+type ModelsAnalysisValueResult {
+  domains: [ModelsAnalysisDomainBreakdown!]!
+  eligibleDomainCount: Int!
+  pooledWinRate: Float
+  stabilityScore: Float
+  valueKey: String!
+}
+
 type Query {
   """
   Get the average token statistics across all models. Used as fallback when model-specific stats are unavailable.
@@ -2175,6 +2200,7 @@ type Query {
     """Number of results to skip (default: 0)"""
     offset: Int
   ): [AvailableModel!]!
+  modelsAnalysis(domainId: ID): ModelsAnalysisResult!
   debugAssumptionsMismatches(modelId: String!, scenarioId: String!): DebugMismatchResult!
 
   """Fetch a single definition by ID. Returns null if not found."""

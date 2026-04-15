@@ -1,0 +1,23 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "238d34705bb54e94e0bcf6a65d04f519d3f891ba",
+  "git_base_ref": "f13c75868802ccf953d5af7f071660e523a6d56a",
+  "git_base_sha": "f13c75868802ccf953d5af7f071660e523a6d56a",
+  "paths": [
+    "cloud/apps/api/src/graphql/queries/models-analysis.ts",
+    "cloud/apps/api/src/graphql/types/index.ts",
+    "cloud/apps/api/src/graphql/types/models-analysis.ts",
+    "cloud/apps/web/schema.graphql",
+    "cloud/apps/web/src/App.tsx",
+    "cloud/apps/web/src/api/operations/modelsAnalysis.graphql",
+    "cloud/apps/web/src/api/operations/modelsAnalysis.ts",
+    "cloud/apps/web/src/components/layout/MobileNav.tsx",
+    "cloud/apps/web/src/components/layout/NavTabs.tsx",
+    "cloud/apps/web/src/components/models",
+    "cloud/apps/web/src/pages/Models.tsx"
+  ],
+  "allowed_dirty_paths": [],
+  "untracked_files_included": [],
+  "artifact_path": "docs/workflow/feature-runs/models-tab/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

@@ -1,0 +1,5 @@
+## Findings
+No findings.
+
+## Residual Risks
+The patch is comment-only, so there is no direct runtime regression to flag. The only risk is future drift: the new comment could become misleading if `queryVariables` starts depending on additional inputs but the dependency list is not updated.

@@ -1,0 +1,6 @@
+## Findings
+- No correctness issues found in this patch. It only adds comments and does not change runtime behavior.
+
+## Residual Risks
+- [UNVERIFIED] The `useMemo` dependency list is only correct if `selectedDomainId` is the sole input to `queryVariables`. Without surrounding code, I cannot verify that no other captured values matter.
+- [UNVERIFIED] If downstream code depends on a fresh object identity instead of a stable one, the memoization rationale may hide an existing coupling. This diff does not introduce that behavior, but the surrounding usage is not visible here.

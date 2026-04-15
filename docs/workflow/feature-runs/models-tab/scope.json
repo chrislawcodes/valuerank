@@ -1,0 +1,29 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/queries/models-analysis.ts",
+    "cloud/apps/api/src/graphql/types/index.ts",
+    "cloud/apps/api/src/graphql/types/models-analysis.ts",
+    "cloud/apps/web/schema.graphql",
+    "cloud/apps/web/src/App.tsx",
+    "cloud/apps/web/src/api/operations/modelsAnalysis.graphql",
+    "cloud/apps/web/src/api/operations/modelsAnalysis.ts",
+    "cloud/apps/web/src/components/layout/MobileNav.tsx",
+    "cloud/apps/web/src/components/layout/NavTabs.tsx",
+    "cloud/apps/web/src/components/models",
+    "cloud/apps/web/src/pages/Models.tsx"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/queries/models-analysis.ts",
+    "cloud/apps/api/src/graphql/types/index.ts",
+    "cloud/apps/api/src/graphql/types/models-analysis.ts",
+    "cloud/apps/web/schema.graphql",
+    "cloud/apps/web/src/App.tsx",
+    "cloud/apps/web/src/api/operations/modelsAnalysis.graphql",
+    "cloud/apps/web/src/api/operations/modelsAnalysis.ts",
+    "cloud/apps/web/src/components/layout/MobileNav.tsx",
+    "cloud/apps/web/src/components/layout/NavTabs.tsx",
+    "cloud/apps/web/src/components/models",
+    "cloud/apps/web/src/pages/Models.tsx",
+    "docs/workflow/feature-runs/models-tab"
+  ]
+}

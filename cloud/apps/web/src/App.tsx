@@ -16,6 +16,7 @@ import { DomainStatus } from './pages/DomainStatus';
 import { DomainAnalysis } from './pages/DomainAnalysis';
 import { DomainCoverage } from './pages/DomainCoverage';
 import { DomainAnalysisValueDetail } from './pages/DomainAnalysisValueDetail';
+import { Models } from './pages/Models';
 import { DefinitionDetail } from './pages/DefinitionDetail';
 import { StartPairedBatchPage } from './pages/DefinitionDetail/StartPairedBatchPage';
 import { Runs } from './pages/Runs';
@@ -154,6 +155,14 @@ function App() {
               element={
                 <ProtectedLayout fullWidth>
                   <DomainCoverage />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/models"
+              element={
+                <ProtectedLayout>
+                  <Models />
                 </ProtectedLayout>
               }
             />

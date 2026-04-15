@@ -1,0 +1,51 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/magical-mcclintock
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019d934c-0b1a-7d71-bc1e-3f3f3c8a6683
+--------
+user
+Review this diff artifact using a regression-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/apps/web/src/pages/Models.tsx b/cloud/apps/web/src/pages/Models.tsx
+index ad90f72a..27347fa3 100644
+--- a/cloud/apps/web/src/pages/Models.tsx
++++ b/cloud/apps/web/src/pages/Models.tsx
+@@ -24,6 +24,8 @@ export function Models() {
+ 
+   const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
+ 
++  // Memoized to keep the object reference stable across renders.
++  // If new query inputs are added, update the dependency array here too.
+   const queryVariables = useMemo(
+     () => (selectedDomainId != null ? { domainId: selectedDomainId } : {}),
+     [selectedDomainId],
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+No findings.
+
+## Residual Risks
+The patch is comment-only, so there is no direct runtime regression to flag. The only risk is future drift: the new comment could become misleading if `queryVariables` starts depending on additional inputs but the dependency list is not updated.
+tokens used
+16,993
