@@ -66,7 +66,6 @@ export type DimensionAnalysis = {
 };
 
 export type MethodsUsed = {
-  winRateCI: string;
   modelComparison: string;
   pValueCorrection: string;
   effectSize: string;

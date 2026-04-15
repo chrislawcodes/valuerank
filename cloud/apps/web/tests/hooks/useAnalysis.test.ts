@@ -35,7 +35,6 @@ const mockAnalysis = {
   dimensionAnalysis: null,
   mostContestedScenarios: [],
   methodsUsed: {
-    winRateCI: 'wilson_score',
     modelComparison: 'spearman_rho',
     pValueCorrection: 'holm_bonferroni',
     effectSize: 'cohens_d',

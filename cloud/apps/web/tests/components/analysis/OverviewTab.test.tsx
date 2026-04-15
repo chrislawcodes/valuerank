@@ -254,7 +254,6 @@ function createCompanionAnalysis(): AnalysisResult {
     },
     mostContestedScenarios: [],
     methodsUsed: {
-      winRateCI: 'wilson',
       modelComparison: 'spearman',
       pValueCorrection: 'holm',
       effectSize: 'cohens_d',
