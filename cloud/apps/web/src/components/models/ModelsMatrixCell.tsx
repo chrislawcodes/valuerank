@@ -59,7 +59,6 @@ export function ModelsMatrixCell({
     ? 'Filtered out by the current stability visibility setting.'
     : formatStabilityTooltip(stabilityScore, eligibleDomainCount, mad, singleDomainActive);
   const primaryLabel = hiddenByFilter || pooledWinRate == null ? 'n/a' : formatPercent(pooledWinRate);
-  const domainCountLabel = hiddenByFilter ? '—' : eligibleDomainCount > 0 ? `${eligibleDomainCount}d` : '—';
   const dots = renderDots(stabilityScore, mutedDots);
   const isClickable = !hiddenByFilter;
 
@@ -91,9 +90,8 @@ export function ModelsMatrixCell({
       <span className={`text-sm font-semibold ${hiddenByFilter || pooledWinRate == null ? 'text-gray-400' : 'text-gray-900'}`}>
         {primaryLabel}
       </span>
-      <span className={`mt-1 flex items-center gap-1 font-mono text-[11px] ${mutedDots ? 'text-gray-400' : 'text-gray-700'}`}>
+      <span className={`mt-1 font-mono text-[11px] ${mutedDots ? 'text-gray-400' : 'text-gray-700'}`}>
         <span aria-hidden="true">{dots}</span>
-        <span>{domainCountLabel}</span>
       </span>
       <span className="sr-only">{tooltip}</span>
     </Button>
