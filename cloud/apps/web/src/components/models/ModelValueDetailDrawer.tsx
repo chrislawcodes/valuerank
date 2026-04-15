@@ -53,12 +53,19 @@ export function ModelValueDetailDrawer({
       if (event.key === 'Escape') onClose();
     };
 
-    const originalOverflow = document.body.style.overflow;
+    // Lock both body and the layout's <main> scroll container. The app layout uses
+    // overflow-auto on <main> (not body), so only locking body has no effect — scroll
+    // events still reach <main> and scroll the background behind the drawer.
+    const main = document.querySelector<HTMLElement>('main');
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalMainOverflow = main?.style.overflow ?? '';
     document.body.style.overflow = 'hidden';
+    if (main != null) main.style.overflow = 'hidden';
     window.addEventListener('keydown', onKeyDown);
 
     return () => {
-      document.body.style.overflow = originalOverflow;
+      document.body.style.overflow = originalBodyOverflow;
+      if (main != null) main.style.overflow = originalMainOverflow;
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [open, onClose]);
