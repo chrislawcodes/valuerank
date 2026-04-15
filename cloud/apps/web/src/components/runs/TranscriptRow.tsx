@@ -199,9 +199,9 @@ export function TranscriptRow({
   const showGrid = !compact && Boolean(gridTemplateColumns);
   const rawDecision = transcript.decisionModelV2?.legacy?.canonicalScore ?? transcript.decisionCode ?? extractDecision(transcript.content);
   const decisionScaleLabels = decisionMetadata?.scaleLabels ?? [];
-  const rowDecisionDisplayMode = hasRenderableTranscriptDecisionModelV2(transcript)
-    ? (decisionDisplayMode ?? 'audit')
-    : 'legacy';
+  const rowDecisionDisplayMode = decisionDisplayMode ?? (
+    hasRenderableTranscriptDecisionModelV2(transcript) ? 'audit' : 'legacy'
+  );
   const legacyDecisionDisplay = getLegacyDecisionDisplay(transcript, String(rawDecision), normalizeDecision, dimensions);
   const canonicalDecision = transcript.decisionModelV2?.canonical ?? null;
   const canonicalDecisionDisplay = formatCanonicalDecisionHeadline(transcript);

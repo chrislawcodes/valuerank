@@ -170,7 +170,7 @@ export function formatCanonicalDecisionHeadline(transcript: Transcript): string 
     return 'Unknown';
   }
 
-  const strengthLabel = canonical.strength === 'strong' ? 'Strongly favors' : 'Somewhat favors';
+  const strengthLabel = canonical.strength === 'strong' ? 'Strongly supports' : 'Somewhat supports';
   return `${strengthLabel} ${formatDisplayLabel(canonical.favoredValueKey)}`;
 }
 

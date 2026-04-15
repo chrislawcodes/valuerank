@@ -350,17 +350,17 @@ describe('SurveyResults', () => {
     expect(screen.getByText('Question x AI Matrix')).toBeInTheDocument();
     expect(screen.getByText('Empty cell')).toBeInTheDocument();
     expect(screen.getByText('Unknown')).toBeInTheDocument();
-    expect(screen.getByText(/Strongly favors Benevolence Dependability/)).toBeInTheDocument();
+    expect(screen.getByText(/Strongly supports Benevolence Dependability/)).toBeInTheDocument();
     expect(screen.queryByText('4.00')).not.toBeInTheDocument();
     expect(screen.queryByText('5')).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
 
     const majorityButton = screen.getByRole('button', { name: /View transcript for Majority cell \/ model1/i });
-    expect(majorityButton).toHaveTextContent('Strongly favors Benevolence Dependability');
+    expect(majorityButton).toHaveTextContent('Strongly supports Benevolence Dependability');
     expect(majorityButton).toHaveTextContent('(n=3)');
     expect(majorityButton).toHaveAttribute(
       'title',
-      'View transcript: Strongly favors Benevolence Dependability. Strongly favors Benevolence Dependability (2), Somewhat favors Achievement (1)',
+      'View transcript: Strongly supports Benevolence Dependability. Strongly supports Benevolence Dependability (2), Somewhat supports Achievement (1)',
     );
     fireEvent.click(majorityButton);
     expect(screen.getByTestId('transcript-viewer')).toHaveTextContent('tx-majority-1');
@@ -370,7 +370,7 @@ describe('SurveyResults', () => {
     expect(mixedButton).toHaveTextContent('(n=2)');
     expect(mixedButton).toHaveAttribute(
       'title',
-      'View transcript: Mixed. Strongly favors Benevolence Dependability (1), Somewhat favors Achievement (1)',
+      'View transcript: Mixed. Strongly supports Benevolence Dependability (1), Somewhat supports Achievement (1)',
     );
   });
 
@@ -389,12 +389,12 @@ describe('SurveyResults', () => {
         [
           's-majority::model1',
           {
-            headline: 'Strongly favors Benevolence Dependability',
+            headline: 'Strongly supports Benevolence Dependability',
             totalCount: 1,
             renderableCount: 1,
             unknownCount: 0,
             buckets: [
-              { kind: 'strong', label: 'Strongly favors Benevolence Dependability', count: 1 },
+              { kind: 'strong', label: 'Strongly supports Benevolence Dependability', count: 1 },
             ],
           },
         ],
@@ -414,7 +414,7 @@ describe('SurveyResults', () => {
     } satisfies SurveyMatrixData);
 
     expect(csv).toContain('model1 decision summary');
-    expect(csv).toContain('Strongly favors Benevolence Dependability');
+    expect(csv).toContain('Strongly supports Benevolence Dependability');
     expect(csv).toContain('Unknown');
     expect(csv).not.toContain('decision code');
     expect(csv).not.toContain('4.00');

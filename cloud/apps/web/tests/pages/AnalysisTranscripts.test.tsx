@@ -372,7 +372,7 @@ describe('AnalysisTranscripts', () => {
     expect(headerMeta).toHaveTextContent('Repeat Pattern: Stable');
     expect(headerMeta).toHaveTextContent('Model: model1');
     expect(headerMeta).toHaveTextContent('Conditions: 1');
-    expect(headerMeta).toHaveTextContent('Decision summary: Strongly favors Benevolence Dependability');
+    expect(headerMeta).toHaveTextContent('Decision summary: Strongly supports Benevolence Dependability');
     expect(screen.queryByText('Decision: 1')).not.toBeInTheDocument();
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 2');
   });
@@ -886,7 +886,7 @@ describe('AnalysisTranscripts', () => {
 
     renderPage('/analysis/run-4/transcripts?modelId=model1&repeatPattern=stable&rowDim=Freedom&colDim=Harmony&conditionIds=High%7C%7CLow');
 
-    expect(screen.getByText('Strongly favors Benevolence Dependability')).toBeInTheDocument();
+    expect(screen.getByText('Strongly supports Benevolence Dependability')).toBeInTheDocument();
     expect(screen.getByText(/requires canonical decisionModelV2 data for every visible transcript/i)).toBeInTheDocument();
     expect(screen.queryByTestId('transcript-list')).not.toBeInTheDocument();
     expect(screen.queryByTestId('transcript-viewer')).not.toBeInTheDocument();

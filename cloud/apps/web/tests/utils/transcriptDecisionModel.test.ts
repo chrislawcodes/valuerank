@@ -229,7 +229,7 @@ describe('transcriptDecisionModel', () => {
     const transcript = createTranscript({ decisionModelV2: createRenderableV2Transcript() });
 
     expect(getTranscriptDecisionAuditBadge(transcript)).toBeNull();
-    expect(formatCanonicalDecisionHeadline(transcript)).toBe('Strongly favors Benevolence Dependability');
+    expect(formatCanonicalDecisionHeadline(transcript)).toBe('Strongly supports Benevolence Dependability');
   });
 
   it('uses canonical audit sort order instead of legacy canonical scores', () => {
