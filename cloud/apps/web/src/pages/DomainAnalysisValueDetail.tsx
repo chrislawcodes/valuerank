@@ -20,7 +20,7 @@ import {
   getTranscriptDecisionDisplayMode,
   type TranscriptDecisionDisplayMode,
 } from '../utils/transcriptDecisionModel';
-import { ConditionMatrix, type MatrixCondition } from '../components/domains/ConditionMatrix';
+import { ConditionMatrix } from '../components/domains/ConditionMatrix';
 
 const VALUE_DETAIL_COPY = {
   decisionColumnLabel: 'Decision summary',
