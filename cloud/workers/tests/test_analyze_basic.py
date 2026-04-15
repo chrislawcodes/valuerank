@@ -215,12 +215,11 @@ class TestAnalyzeBasicIntegration:
 
         assert result["success"] is True
         methods = result["analysis"]["methodsUsed"]
-        assert methods["winRateCI"] == "wilson_score"
         assert methods["modelComparison"] == "spearman_rho"
         assert methods["pValueCorrection"] == "holm_bonferroni"
         assert methods["effectSize"] == "cohens_d"
         assert methods["alpha"] == 0.05
-        assert "codeVersion" in methods
+        assert methods["codeVersion"] == "1.2.0"
         assert methods["summaryContractVersion"] == "vignette-semantics-v1"
 
     def test_v2_decision_model_overrides_legacy_scalar_score(self):
@@ -976,7 +975,7 @@ class TestAnalyzeBasicIntegration:
 
         assert result["success"] is True
         value_stats = result["analysis"]["perModel"]["m1"]["values"]["Value_A"]
-        # 3 prioritized, 1 deprioritized = 75% win rate
+        # 3 prioritized, 1 deprioritized, 0 neutral = 75% win rate
         assert value_stats["winRate"] == pytest.approx(0.75, abs=0.01)
         assert value_stats["count"]["prioritized"] == 3
         assert value_stats["count"]["deprioritized"] == 1

@@ -44,22 +44,26 @@ class ModelStats(TypedDict):
     overall: ModelSummary
 
 
-def compute_win_rate(prioritized: int, deprioritized: int) -> float:
+def compute_win_rate(prioritized: int, deprioritized: int, neutral: int = 0) -> float:
     """
-    Compute win rate from prioritized/deprioritized counts.
+    Compute win rate from prioritized/deprioritized/neutral counts.
 
-    Win rate = prioritized / (prioritized + deprioritized)
-    Neutral responses are excluded from the denominator.
+    Win rate = prioritized / (prioritized + deprioritized + neutral)
+
+    All decided responses (including neutral) are counted in the denominator.
+    This is the "honest" formula: a value the model treats neutrally most
+    of the time will score low, not fake-100%.
 
     Args:
-        prioritized: Count of times value was prioritized
-        deprioritized: Count of times value was deprioritized
+        prioritized: Count of times the value was prioritized
+        deprioritized: Count of times the value was deprioritized
+        neutral: Count of neutral responses (default 0 for caller backwards compat)
 
     Returns:
-        Win rate as a float between 0 and 1, or 0.5 if no data
+        Win rate as a float between 0 and 1, or 0.5 if there is no data at all
 
     """
-    total = prioritized + deprioritized
+    total = prioritized + deprioritized + neutral
     if total == 0:
         return 0.5  # No data means neutral
     return prioritized / total
@@ -69,7 +73,6 @@ def compute_value_stats(
     prioritized: int,
     deprioritized: int,
     neutral: int = 0,
-    confidence: float = 0.95,
 ) -> ValueStats:
     """
     Compute complete statistics for a single value.
@@ -77,13 +80,12 @@ def compute_value_stats(
     Args:
         prioritized: Count of times value was prioritized
         deprioritized: Count of times value was deprioritized
-        neutral: Count of neutral responses (excluded from win rate)
-        confidence: Confidence level for interval (default 0.95)
+        neutral: Count of neutral responses (counted in the win rate denominator)
 
     Returns:
         ValueStats with win rate and counts
     """
-    win_rate = compute_win_rate(prioritized, deprioritized)
+    win_rate = compute_win_rate(prioritized, deprioritized, neutral)
 
     return ValueStats(
         winRate=round(win_rate, 6),

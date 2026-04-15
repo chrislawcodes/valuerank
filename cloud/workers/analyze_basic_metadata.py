@@ -4,14 +4,13 @@ Extracted from analyze_basic.py to keep that script under the 400-line
 file-size limit. Pure metadata - no behavior.
 """
 
-CODE_VERSION = "1.1.1"
+CODE_VERSION = "1.2.0"
 SUMMARY_CONTRACT_VERSION = "vignette-semantics-v1"
 
 
 def build_methods_used() -> dict:
     """Return the methodsUsed metadata block for an analysis output."""
     return {
-        "winRateCI": "wilson_score",
         "modelComparison": "spearman_rho",
         "pValueCorrection": "holm_bonferroni",
         "effectSize": "cohens_d",
