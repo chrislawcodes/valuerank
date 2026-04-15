@@ -563,17 +563,22 @@ class RepairDecisionTests(unittest.TestCase):
             for stage in ("spec", "plan", "tasks", "diff")
         }
         stages["closeout"] = stage_state()
-        with patch.object(NEXT_ACTION_MODULE, "diff_review_budget_state", return_value={"head_mismatch": False}):
-            action = MODULE.recommended_next_action(
-                "feature-workflow-repair",
-                {
-                    "blocked": {"active": False},
-                    "delivery": {"pr_url": "https://example.com", "head_mismatch": True},
-                    "parallel_analysis": {"reviewed": True, "found": False, "note": "", "updated_at": 0},
-                },
-                stages,
-                True,
-            )
+        with tempfile.TemporaryDirectory() as tmp:
+            # All tasks checked off — no remaining slices to implement.
+            workflow_root = Path(tmp)
+            (workflow_root / "tasks.md").write_text("- [x] Task 1\n- [x] Task 2\n", encoding="utf-8")
+            with patch.object(NEXT_ACTION_MODULE, "workflow_dir", return_value=workflow_root), \
+                    patch.object(NEXT_ACTION_MODULE, "diff_review_budget_state", return_value={"head_mismatch": False}):
+                action = MODULE.recommended_next_action(
+                    "feature-workflow-repair",
+                    {
+                        "blocked": {"active": False},
+                        "delivery": {"pr_url": "https://example.com", "head_mismatch": True},
+                        "parallel_analysis": {"reviewed": True, "found": False, "note": "", "updated_at": 0},
+                    },
+                    stages,
+                    True,
+                )
         self.assertEqual(action, "deliver")
 
     def test_command_deliver_blocks_when_reviewed_diff_head_moves(self) -> None:

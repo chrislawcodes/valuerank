@@ -94,7 +94,8 @@ def command_deliver(args: argparse.Namespace) -> int:
         )
 
     pr = current_pr_payload()
-    if pr and pr.get("state") != "OPEN":
+    pr_closed = bool(pr) and pr.get("state") != "OPEN"
+    if pr_closed:
         pr = None
 
     if args.create_pr and not pr:
@@ -235,6 +236,14 @@ def command_deliver(args: argparse.Namespace) -> int:
             print(f"branch: {branch}")
             print(f"head: {head_sha}")
             print("pr: not created (dry-run)")
+            return 0
+        if pr_closed:
+            # PR is already merged or closed — preserve the recorded delivery state
+            # rather than overwriting pr_url with "" and resetting the workflow.
+            state_snapshot = load_workflow_state(args.slug).get(DELIVERY_KEY, {})
+            print(f"branch: {branch}")
+            print(f"head: {head_sha}")
+            print(f"pr: {state_snapshot.get('pr_url', '')} (already closed/merged, state preserved)")
             return 0
         update_workflow_state(
             args.slug,
