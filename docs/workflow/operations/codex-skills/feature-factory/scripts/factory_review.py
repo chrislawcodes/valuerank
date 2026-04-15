@@ -23,8 +23,10 @@ from factory_state import (  # noqa: E402
     DIRTY_OVERRIDE_KEY,
     CHECKPOINT_FALLBACK_KEY,
     CHECKPOINT_PROGRESS_KEY,
+    PARALLEL_ANALYSIS_KEY,
     read_json_file,
     reviews_dir,
+    workflow_dir,
     blocking_unresolved_items,
     load_workflow_state,
     save_workflow_state,
@@ -45,6 +47,7 @@ from factory_stages import (  # noqa: E402
     parse_checkpoint_markers,
     checkpoint_progress_state,
     later_progress_exists,
+    status_md_changed_since_init,
 )
 
 from factory_git import current_branch_name  # noqa: E402
@@ -372,6 +375,9 @@ def recommended_next_action(
         if later_progress_exists(stages, "tasks")[0]:
             return "mark_blocked"
         return "author_tasks"
+    parallel = state.get(PARALLEL_ANALYSIS_KEY, {})
+    if not parallel.get("reviewed"):
+        return "record_parallel_analysis"
     if not stages["tasks"]["manifest_exists"] or not stages["tasks"]["healthy"]:
         return "repair_tasks_checkpoint"
     if not stages["diff"]["artifact_exists"]:
@@ -395,4 +401,9 @@ def recommended_next_action(
         return "closeout"
     if not stages["closeout"]["healthy"]:
         return "repair_closeout_checkpoint"
+    postmortem_path = workflow_dir(slug) / "postmortem.md"
+    if not postmortem_path.exists() or not postmortem_path.read_text(encoding="utf-8").strip():
+        return "write_postmortem"
+    if not status_md_changed_since_init(slug):
+        return "update_status_md"
     return "done"

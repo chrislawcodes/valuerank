@@ -1635,7 +1635,9 @@ class DefaultCodexModelTests(unittest.TestCase):
             small_task_set=False,
         )
         gemini_entries = [r for r in reviews if r.get("reviewer") == "gemini"]
-        self.assertEqual(len(gemini_entries), 2, "full task set should include two Gemini reviews")
+        codex_entries = [r for r in reviews if r.get("reviewer") == "codex"]
+        self.assertEqual(len(gemini_entries), 1, "full task set should include one Gemini review")
+        self.assertEqual(len(codex_entries), 2, "full task set should include two Codex reviews")
 
     def test_required_reviews_tasks_small_task_set_sensitive_still_skips_gemini(self) -> None:
         # sensitive flag adds risk-adversarial as an extra Gemini candidate, but
@@ -1676,7 +1678,9 @@ class DefaultCodexModelTests(unittest.TestCase):
             small_task_set=False,
         )
         gemini_entries = [r for r in reviews if r.get("reviewer") == "gemini"]
-        self.assertEqual(len(gemini_entries), 2)
+        codex_entries = [r for r in reviews if r.get("reviewer") == "codex"]
+        self.assertEqual(len(gemini_entries), 1, "full closeout should include one Gemini review")
+        self.assertEqual(len(codex_entries), 2, "full closeout should include two Codex reviews")
 
 
 class _CapturedBaseRef(Exception):

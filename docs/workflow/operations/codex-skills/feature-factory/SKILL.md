@@ -64,19 +64,21 @@ Do not duplicate checkpoint manifest logic, review file validation, diff writing
 |---|---|---|---|
 | Discovery | Ask clarifying questions one at a time, record assumptions, determine if spec is stable enough to proceed | Claude | Codex |
 | Write spec | Research real file paths in codebase, author `spec.md` with scope boundaries and acceptance criteria | Claude (research) · Codex (file paths) | Gemini (research) · Codex (authors) |
-| Spec checkpoint | Adversarial attack on spec, semantic review, judge findings and reconcile into spec | Codex (attack) · Gemini (2 adversarial reviews, different lenses) · Claude (judges) | Codex (attack) · Gemini (2 adversarial reviews, different lenses) · Codex (judges, escalates blockers to human) |
+| Spec checkpoint | Adversarial attack on spec, semantic review, judge findings and reconcile into spec | Codex (2 adversarial reviews: `feasibility` + `edge-cases`) · Gemini (1 adversarial review: `requirements`) · Claude (judges) | Codex (2 adversarial reviews: `feasibility` + `edge-cases`) · Gemini (1 adversarial review: `requirements`) · Codex (judges, escalates blockers to human) |
 | Write plan | Author `plan.md` with architecture decisions, wave breakdown, and risk callouts | Claude | Codex |
-| Plan checkpoint | Adversarial attack on plan, architecture review, judge findings and reconcile into plan | Codex (attack) · Gemini (2 adversarial reviews, different lenses) · Claude (judges) | Codex (attack) · Gemini (2 adversarial reviews, different lenses) · Codex (judges, escalates blockers to human) |
+| Plan checkpoint | Adversarial attack on plan, architecture review, judge findings and reconcile into plan | Codex (2 adversarial reviews: `implementation` + `architecture`) · Gemini (1 adversarial review: `testability`) · Claude (judges) | Codex (2 adversarial reviews: `implementation` + `architecture`) · Gemini (1 adversarial review: `testability`) · Codex (judges, escalates blockers to human) |
 | Write tasks | Author `tasks.md` with executable slices, checkpoint boundaries (`[CHECKPOINT]`), estimated diff size per slice, dependencies, and verification steps. No slice should exceed ~300 lines changed. | Claude | Codex |
-| Tasks checkpoint | Adversarial attack on tasks, execution-order review, judge findings and reconcile into tasks | Codex (attack) · Gemini (2 adversarial reviews, different lenses) · Claude (judges) | Codex (attack) · Gemini (2 adversarial reviews, different lenses) · Codex (judges, escalates blockers to human) |
+| Record parallel analysis | Look for safe parallel implementation opportunities in tasks.md. Annotate parallel tasks with `[P: file1, file2]`. Run `parallel --slug <slug> --note "..." [--found]`. If opportunities exist, add `[P:]` annotations first — the command validates they are conflict-free. | Claude | Codex |
+| Tasks checkpoint | Adversarial attack on tasks, execution-order review, judge findings and reconcile into tasks | Codex (2 adversarial reviews: `execution` + `dependency-order`) · Gemini (1 adversarial review: `coverage`) · Claude (judges) | Codex (2 adversarial reviews: `execution` + `dependency-order`) · Gemini (1 adversarial review: `coverage`) · Codex (judges, escalates blockers to human) |
 | Implementation slice | Implement one `[CHECKPOINT]`-bounded slice from `tasks.md`, run build and tests, commit | Codex | Codex |
-| Diff checkpoint | Adversarial attack on the slice diff only (not the full branch), regression and correctness review, judge findings and reconcile | Codex (attack) · Gemini (2 adversarial reviews, different lenses) · Claude (judges) | Codex (attack) · Gemini (2 adversarial reviews, different lenses) · Codex (judges, escalates blockers to human) |
+| Diff checkpoint | Adversarial attack on the slice diff only (not the full branch), regression and correctness review, judge findings and reconcile | Codex (2 adversarial reviews: `correctness` + `regression`) · Gemini (1 adversarial review: `quality`) · Claude (judges) | Codex (2 adversarial reviews: `correctness` + `regression`) · Gemini (1 adversarial review: `quality`) · Codex (judges, escalates blockers to human) |
 | *(repeat per slice)* | Implementation slice → Diff checkpoint repeats for each `[CHECKPOINT]` boundary in `tasks.md` | | |
 | Deliver | Create PR, watch CI, record delivery state in workflow | Claude | Codex (stages) · Human (approves and creates PR) |
 | CI failure | Extract errors, implement fix, re-run CI | Claude (judges) · Codex (fixes) | Codex (fixes) · Human (approves) |
 | Write closeout | Write summary of what shipped, what remains open, and deferred risks | Claude | Codex |
-| Closeout checkpoint | Adversarial attack on closeout, final state review, judge findings and approve | Codex (attack) · Gemini (2 adversarial reviews, different lenses) · Claude (judges) | Codex (attack) · Gemini (2 adversarial reviews, different lenses) · Codex (judges, escalates blockers to human) |
-| Write post mortem | Review what went well, what didn't, and propose specific changes to the workflow | Claude | Codex |
+| Closeout checkpoint | Adversarial attack on closeout, final state review, judge findings and approve | Codex (2 adversarial reviews: `fidelity` + `completeness`) · Gemini (1 adversarial review: `residual-risk`) · Claude (judges) | Codex (2 adversarial reviews: `fidelity` + `completeness`) · Gemini (1 adversarial review: `residual-risk`) · Codex (judges, escalates blockers to human) |
+| Write post mortem | Write `postmortem.md` covering what went well, what didn't, and specific proposed workflow changes. Required before workflow is marked done. | Claude | Codex |
+| Update STATUS.md | Update `STATUS.md` to reflect what shipped. Required before workflow is marked done. | Claude | Codex |
 | Post mortem approval | Review proposed workflow changes and approve, reject, or defer each one | Human | Human |
 
 If the workflow already exists, resume from the earliest incomplete stage instead of starting over.
@@ -129,14 +131,14 @@ For workflow-system improvement work, treat the maintained plan as the source of
 
 Every checkpoint requires:
 
-- minimum 2 Gemini adversarial reviews, each using a different lens
-- 1 Codex adversarial attack
+- 2 Codex adversarial reviews, each using a different lens
+- 1 Gemini adversarial review
 
-All three are adversarial — each one is looking for ways the artifact is wrong, incomplete, or risky. Gemini's two reviews must use different lenses so they attack from different angles, not repeat the same critique.
+All three are adversarial — each one is looking for ways the artifact is wrong, incomplete, or risky. Codex runs two lenses because it has codebase context and is more likely to find hard technical issues. Gemini runs one lens chosen for its different perspective — it is less likely to find hard issues but adds signal from a different angle.
 
-The checkpoint runner selects the specific lenses by stage. Do not override to fewer than 2 Gemini reviews. The default lenses are configured for `spec`, `plan`, `tasks`, `diff`, and `closeout`.
+The checkpoint runner selects the specific lenses by stage. The default lenses are configured for `spec`, `plan`, `tasks`, `diff`, and `closeout`. Sensitive or performance-critical features may swap the Codex secondary lens for `risk-adversarial`, `security-adversarial`, or `performance-adversarial`.
 
-Keep the Codex review independent from the Gemini reviews. Do not merely restate Gemini findings.
+Keep the two Codex reviews independent from each other. Do not let the second Codex review merely restate the first.
 
 ## Codex Orchestrator: Escalation Protocol
 
@@ -159,15 +161,26 @@ When escalating, use `block --slug <slug> --reason "<specific decision needed>"`
 
 ### Keep Moving
 
-After `tasks.md` is ready and reviewed, continue into implementation unless one of these is true:
+After every runner command completes, read the `→ next:` line printed to stdout and proceed to that action immediately. Do not stop between steps unless the next action is `mark_blocked` or `done`.
 
-- the user explicitly asked to stop before coding
-- a checklist or review found a blocker that has not been reconciled
-- the repo state makes implementation unsafe
+Stop only when one of these is true:
 
-Do not stop merely because the old workflow used separate skills.
+- `recommended_next_action` is `mark_blocked` — human decision required
+- `recommended_next_action` is `done` — workflow complete
+- the user explicitly asked to stop at a specific point
+- the repo state makes the next action unsafe to proceed with
 
-If implementation cannot safely continue, record that explicitly with `block --slug <slug> --reason "<reason>"` so `status` reports a concrete blocked state instead of silently stalling.
+Do not stop merely because the old workflow used separate skills. Do not wait for the user to say "continue" between steps.
+
+If a step cannot safely continue, record that explicitly with `block --slug <slug> --reason "<reason>"` so `status` reports a concrete blocked state instead of silently stalling.
+
+### Report Status After Every Step
+
+After every runner command, emit a one-sentence status to the user before starting the next step. Include: what just completed, and what is starting next. This keeps the user informed without requiring them to ask.
+
+Example: "Spec checkpoint passed — starting plan authoring now."
+
+For long-running operations (checkpoint launching reviews, implement dispatching Codex workers), emit a "starting" message before the command so the user knows work is in progress.
 
 ### Use Review Gates
 
@@ -271,7 +284,7 @@ Each workflow lives in `docs/workflow/feature-runs/<slug>/`. The files have diff
 | File | Role |
 |------|------|
 | `state.json` | **Authoritative runtime state** — the runner reads and writes this; it is the single source of truth for phase, block status, delivery state, and discovery state |
-| `spec.md`, `plan.md`, `tasks.md`, `closeout.md` | **Authored artifacts** — source of truth for intent, scope, and decisions; edited by the orchestrator |
+| `spec.md`, `plan.md`, `tasks.md`, `closeout.md`, `postmortem.md` | **Authored artifacts** — source of truth for intent, scope, and decisions; edited by the orchestrator. `postmortem.md` is required before the workflow is marked done. |
 | `reviews/*.md` | **Generated + resolved state** — produced by the checkpoint runner, resolved via reconcile; do not edit manually except to update resolution fields |
 | `reviews/*.checkpoint.json` | **Generated state** — checkpoint metadata; do not edit manually |
 

@@ -35,6 +35,7 @@ from factory_state import (  # noqa: E402
     checkpoint_manifest_path,
     default_artifact_path,
     default_discovery_state,
+    default_parallel_analysis_state,
     blocking_unresolved_items,
     discovery_blockers_are_malformed,
     migrate_discovery_state,
@@ -47,6 +48,8 @@ from factory_state import (  # noqa: E402
     discovery_state,
     update_discovery_state,
     load_checkpoint_manifest,
+    PARALLEL_ANALYSIS_KEY,
+    INIT_HEAD_SHA_KEY,
 )
 
 REVIEW_SCRIPTS = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills" / "review-lens" / "scripts"
@@ -103,6 +106,7 @@ from factory_stages import (  # noqa: E402
     later_progress_exists,
     reconciliation_state,
     prerequisite_failure,
+    NEXT_ACTION_LABELS,
 )
 
 from factory_review import (  # noqa: E402
@@ -162,6 +166,31 @@ from factory_deliver import (  # noqa: E402
 
 
 
+def _emit_next_action(slug: str, completed: str) -> None:
+    """Print a step-complete banner with the recommended next action.
+
+    Called after every state-advancing command so both Claude and Codex
+    orchestrators always know what to do next without running status manually.
+    Never raises — if the banner fails, the parent command already succeeded.
+    """
+    try:
+        state = load_workflow_state(slug)
+        stages = {s: stage_manifest_state(slug, s) for s in CHECKPOINT_STAGES}
+        recon_ok, _ = reconciliation_state(slug)
+        action = recommended_next_action(slug, state, stages, recon_ok)
+        label = NEXT_ACTION_LABELS.get(action, action)
+        print(f"\n[workflow] ✓ {completed}")
+        print(f"[workflow] → next: {action} — {label}")
+        if action == "mark_blocked":
+            blocked = state.get(BLOCKED_KEY, {})
+            reason = str(blocked.get("reason", "")).strip()
+            if reason:
+                print(f"[workflow]   reason: {reason}")
+        print()
+    except Exception:
+        pass  # Never fail the parent command because the banner failed
+
+
 def command_init(args: argparse.Namespace) -> int:
     if not args.path:
         raise SystemExit(
@@ -187,9 +216,19 @@ def command_init(args: argparse.Namespace) -> int:
         },
     )
     existing_state.setdefault(DISCOVERY_KEY, default_discovery_state())
+    # For first-time init: require discovery before spec authoring.
+    # Re-inits of an in-progress workflow preserve the existing discovery state.
+    if not existing_state.get(INIT_HEAD_SHA_KEY):
+        discovery = existing_state[DISCOVERY_KEY]
+        discovery["required"] = True
+        discovery["complete"] = False
     # Always reset checkpoint_progress on init so stale slice state from a
     # previous run does not corrupt the new one.
     existing_state[CHECKPOINT_PROGRESS_KEY] = _default_checkpoint_progress()
+    # Record the HEAD SHA at init time so we can verify STATUS.md was updated.
+    head_sha = _git_head_sha(REPO_ROOT)
+    if head_sha:
+        existing_state[INIT_HEAD_SHA_KEY] = head_sha
     save_workflow_state(args.slug, existing_state)
     print(str(root))
     return 0
@@ -252,6 +291,14 @@ def command_checkpoint(args: argparse.Namespace) -> int:
         prereq_error = prerequisite_failure(args.slug, args.stage)
         if prereq_error:
             raise SystemExit(prereq_error)
+    if not fast and args.stage == "tasks":
+        parallel = load_workflow_state(args.slug).get(PARALLEL_ANALYSIS_KEY, {})
+        if not parallel.get("reviewed"):
+            raise SystemExit(
+                "tasks checkpoint requires parallel analysis first; "
+                "run 'parallel --slug <slug> --note \"...\"' to record whether "
+                "parallel implementation opportunities exist in tasks.md"
+            )
     if not fast and args.stage == "spec":
         discovery = discovery_state(args.slug)
         blocking = blocking_unresolved_items(discovery)
@@ -282,6 +329,13 @@ def command_checkpoint(args: argparse.Namespace) -> int:
     if args.stage == "diff":
         # Determine whether a checkpoint-scoped base_ref should override the default.
         marker_count, current_markers_sha = parse_checkpoint_markers(args.slug)
+        if marker_count == 0:
+            print(
+                "warning: tasks.md has no [CHECKPOINT] markers — diff review will cover "
+                "the full branch. Add [CHECKPOINT] markers to tasks.md to scope each "
+                "diff review to a single implementation slice.",
+                file=sys.stderr,
+            )
         progress = checkpoint_progress_state(args.slug)
         use_checkpoint_base = False
         if marker_count > 0 and not args.base_ref:
@@ -521,6 +575,7 @@ def command_checkpoint(args: argparse.Namespace) -> int:
             if reverted:
                 print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
             _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
+            _emit_next_action(args.slug, f"{args.stage} checkpoint")
             return 0
         if not args.fallback:
             return result.returncode
@@ -541,6 +596,7 @@ def command_checkpoint(args: argparse.Namespace) -> int:
     record_checkpoint_fallback(args.slug, args.stage, fallback_reason)
     _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
     print(f"warning: fallback checkpoint path used for {args.stage} on {args.slug}: {fallback_reason}", file=sys.stderr)
+    _emit_next_action(args.slug, f"{args.stage} checkpoint")
     return 0
 
 
@@ -556,6 +612,7 @@ def command_reconcile(args: argparse.Namespace) -> int:
     run([sys.executable, str(UPDATE_REVIEW), *review_args, "--status", args.status, "--note", args.note])
     run([sys.executable, str(APPEND_RECONCILIATION), "--plan", str(plan_path), *review_args, "--status", args.status, "--note", args.note])
     run([sys.executable, str(VERIFY_RECONCILIATION), "--plan", str(plan_path), *review_args])
+    _emit_next_action(args.slug, f"reconcile ({args.status})")
     return 0
 
 
@@ -624,6 +681,7 @@ def command_auto_reconcile(args: argparse.Namespace) -> int:
             print(f"  {path}")
     if not auto_accepted and not needs_review:
         print(f"all reviews for {args.stage} already reconciled")
+    _emit_next_action(args.slug, f"auto-reconcile {args.stage}")
     return 0
 
 
@@ -888,6 +946,8 @@ def command_discover(args: argparse.Namespace) -> int:
         for u in discovery["unresolved"]:
             status = " [deferred]" if u.get("deferred") else ""
             print(f"  - {u['item']}{status}")
+    if args.complete or getattr(args, "force_complete", False):
+        _emit_next_action(args.slug, "discovery complete")
     return 0
 
 
@@ -1384,6 +1444,7 @@ def command_deliver(args: argparse.Namespace) -> int:
             print("head-mismatch: yes")
     else:
         print("pr: not created")
+    _emit_next_action(args.slug, "deliver")
     return 0
 
 
@@ -1500,6 +1561,7 @@ def command_closeout(args: argparse.Namespace) -> int:
             return checkpoint_result
 
     print(str(summary_path))
+    _emit_next_action(args.slug, "closeout")
     return 0
 
 
@@ -1722,6 +1784,59 @@ def command_implement(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_parallel(args: argparse.Namespace) -> int:
+    """Record whether the agent looked for parallel implementation opportunities.
+
+    Enforces that the agent explicitly considered parallelisation before the
+    tasks checkpoint. If --found is passed, validates that [P: file...] annotations
+    exist in tasks.md and that no two annotated tasks share a file (which would
+    cause a conflict at implement time).
+    """
+    ensure_sync()
+    note = (args.note or "").strip()
+    if not note:
+        raise SystemExit(
+            "parallel requires --note explaining what was found or why nothing "
+            "was safe to parallelise (e.g. 'all tasks share the schema migration')"
+        )
+    tasks_path = workflow_dir(args.slug) / "tasks.md"
+    if not tasks_path.exists():
+        raise SystemExit("parallel requires tasks.md to exist — write tasks first")
+
+    if args.found:
+        groups = parse_parallel_task_groups(args.slug)
+        parallel_groups = [g for g in groups if g["parallel"]]
+        if not parallel_groups:
+            raise SystemExit(
+                "parallel --found requires [P: file1, file2] annotations on tasks in "
+                "tasks.md — no valid parallel task groups detected. Add annotations or "
+                "omit --found if no safe parallelism exists."
+            )
+        for group in groups:
+            if group.get("overlap_warning"):
+                raise SystemExit(
+                    f"parallel --found blocked: {group['overlap_warning']} — "
+                    "parallel tasks must not share files. Fix the [P:] annotations "
+                    "before recording parallel opportunities."
+                )
+        print(f"[parallel] {len(parallel_groups)} parallel group(s) validated, no file conflicts")
+
+    def mutate(state: dict) -> None:
+        state[PARALLEL_ANALYSIS_KEY] = {
+            "reviewed": True,
+            "found": bool(args.found),
+            "note": note,
+            "updated_at": int(time.time()),
+        }
+
+    update_workflow_state(args.slug, mutate)
+    result = "opportunities found and validated" if args.found else "no safe opportunities found"
+    print(f"[parallel] analysis recorded: {result}")
+    print(f"[parallel] note: {note}")
+    _emit_next_action(args.slug, "parallel analysis")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1819,6 +1934,23 @@ def build_parser() -> argparse.ArgumentParser:
     discover_parser.add_argument("--force-complete", action="store_true")
     discover_parser.add_argument("--clear", action="store_true")
     discover_parser.set_defaults(func=command_discover)
+
+    parallel_parser = subparsers.add_parser(
+        "parallel",
+        help="Record parallel task analysis result before tasks checkpoint",
+    )
+    parallel_parser.add_argument("--slug", required=True)
+    parallel_parser.add_argument(
+        "--note",
+        required=True,
+        help="Explain what was found or why nothing was safe to parallelise",
+    )
+    parallel_parser.add_argument(
+        "--found",
+        action="store_true",
+        help="Mark that parallel opportunities were found and annotated with [P:] in tasks.md",
+    )
+    parallel_parser.set_defaults(func=command_parallel)
 
     implement_parser = subparsers.add_parser("implement", help="dispatch Codex for next checkpoint slice")
     implement_parser.add_argument("--slug", required=True, help="workflow slug")

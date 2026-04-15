@@ -31,6 +31,8 @@ DELIVERY_KEY = "delivery"
 DIRTY_OVERRIDE_KEY = "dirty_overrides"
 CHECKPOINT_FALLBACK_KEY = "checkpoint_fallback"
 CHECKPOINT_PROGRESS_KEY = "checkpoint_progress"
+PARALLEL_ANALYSIS_KEY = "parallel_analysis"
+INIT_HEAD_SHA_KEY = "init_head_sha"
 
 # ---------------------------------------------------------------------------
 # Atomic JSON I/O
@@ -147,6 +149,15 @@ def default_discovery_state() -> dict:
         "non_goals": [],
         "acceptance_criteria": [],
         "unresolved": [],
+    }
+
+
+def default_parallel_analysis_state() -> dict:
+    return {
+        "reviewed": False,
+        "found": False,
+        "note": "",
+        "updated_at": 0,
     }
 
 
@@ -293,6 +304,8 @@ def load_workflow_state(slug: str) -> dict:
             DISCOVERY_KEY: default_discovery_state(),
             DELIVERY_KEY: {},
             DIRTY_OVERRIDE_KEY: {},
+            PARALLEL_ANALYSIS_KEY: default_parallel_analysis_state(),
+            INIT_HEAD_SHA_KEY: "",
         }
     state = json.loads(path.read_text(encoding="utf-8"))
     state.setdefault(
@@ -316,6 +329,8 @@ def load_workflow_state(slug: str) -> dict:
     state.setdefault(DELIVERY_KEY, {})
     state.setdefault(DIRTY_OVERRIDE_KEY, {})
     state.setdefault(CHECKPOINT_FALLBACK_KEY, {})
+    state.setdefault(PARALLEL_ANALYSIS_KEY, default_parallel_analysis_state())
+    state.setdefault(INIT_HEAD_SHA_KEY, "")
     return state
 
 

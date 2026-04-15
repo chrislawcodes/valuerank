@@ -47,17 +47,28 @@ python3 docs/workflow/operations/codex-skills/feature-factory/scripts/run_factor
 | **Write plan** | Author `plan.md` with architecture decisions | Write to `docs/workflow/feature-runs/<slug>/plan.md`, then checkpoint |
 | **Plan checkpoint** | Generate adversarial reviews, judge findings | `checkpoint --slug <slug> --stage plan` |
 | **Write tasks** | Author `tasks.md` with `[CHECKPOINT]` markers at slice boundaries | Write to `docs/workflow/feature-runs/<slug>/tasks.md`, then checkpoint |
+| **Record parallel analysis** | Look for safe parallel opportunities in tasks.md. Add `[P: file1, file2]` annotations if found. Record result. | `parallel --slug <slug> --note "..." [--found]` |
 | **Tasks checkpoint** | Generate adversarial reviews, judge findings | `checkpoint --slug <slug> --stage tasks` |
 | **Implementation** | Implement one slice, run build + tests, commit | `codex exec -s workspace-write "..."` |
 | **Diff checkpoint** | Generate adversarial reviews of the diff, judge findings | `checkpoint --slug <slug> --stage diff` |
 | **Deliver** | Create PR, notify human it is ready to squash merge | See Section 8 below |
 | **Closeout** | Write closeout summary | Write to `docs/workflow/feature-runs/<slug>/closeout.md`, then checkpoint |
 | **Closeout checkpoint** | Final adversarial review | `checkpoint --slug <slug> --stage closeout` |
+| **Write postmortem** | Write `postmortem.md` — what went well, what didn't, proposed workflow changes. Required before done. | Write to `docs/workflow/feature-runs/<slug>/postmortem.md` |
+| **Update STATUS.md** | Update `STATUS.md` to reflect what shipped. Required before done. | Edit `STATUS.md` in repo root |
 | **Reconcile a review** | Record your judgment on a review finding | `reconcile --slug <slug> --review <path> --status <accepted\|rejected\|deferred> --note "<judgment>"` |
 | **Block on a decision** | Escalate to human | `block --slug <slug> --reason "<specific decision needed>"` |
 | **Repair stale reviews** | Re-run stale reviews after artifact edits | `repair --slug <slug>` |
 
 ---
+
+## 3b. Keep Moving and Report Status
+
+After every runner command completes, read the `→ next:` line printed to stdout and proceed to that action immediately. Do not stop between steps unless the next action is `mark_blocked` or `done`.
+
+After every runner command, emit one sentence to the user before starting the next step: what just completed, and what is starting next. Example: "Spec checkpoint passed — starting plan authoring now."
+
+For long-running commands (checkpoint, implement), emit a "starting X" message before the command runs so the user knows work is in progress.
 
 ## 4. Escalation Protocol
 

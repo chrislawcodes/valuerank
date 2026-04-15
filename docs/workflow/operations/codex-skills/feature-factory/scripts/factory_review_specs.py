@@ -75,77 +75,67 @@ def required_reviews(
 ) -> list[dict[str, str]]:
     if fast:
         return [
-            {"reviewer": "gemini", "lens": "regression-adversarial", "model": DEFAULT_GEMINI_MODEL},
             {"reviewer": "codex", "lens": "correctness-adversarial", "model": DEFAULT_CODEX_MODEL},
+            {"reviewer": "gemini", "lens": "regression-adversarial", "model": DEFAULT_GEMINI_MODEL},
         ]
 
-    primary_gemini = ""
-    secondary_default = ""
-    codex_lens = ""
-    extra_candidates = list(extra_gemini)
+    # Codex runs two reviews (primary + secondary) — it has codebase context and finds hard issues.
+    # Gemini runs one review using the broadest-perspective lens for the stage.
+    gemini_lens = ""
+    codex_primary = ""
+    codex_secondary = ""
 
     if stage == "spec":
-        primary_gemini = "requirements-adversarial"
-        secondary_default = "edge-cases-adversarial"
-        codex_lens = "feasibility-adversarial"
-        if sensitive:
-            extra_candidates.insert(0, "risk-adversarial")
+        gemini_lens = "requirements-adversarial"
+        codex_primary = "feasibility-adversarial"
+        codex_secondary = "risk-adversarial" if sensitive else "edge-cases-adversarial"
     elif stage == "plan":
-        primary_gemini = "architecture-adversarial"
-        secondary_default = "testability-adversarial"
-        codex_lens = "implementation-adversarial"
-        if sensitive:
-            extra_candidates.insert(0, "risk-adversarial")
+        gemini_lens = "testability-adversarial"
+        codex_primary = "implementation-adversarial"
+        codex_secondary = "risk-adversarial" if sensitive else "architecture-adversarial"
     elif stage == "tasks":
-        primary_gemini = "dependency-order-adversarial"
-        secondary_default = "coverage-adversarial"
-        codex_lens = "execution-adversarial"
-        if sensitive:
-            extra_candidates.insert(0, "risk-adversarial")
+        gemini_lens = "coverage-adversarial"
+        codex_primary = "execution-adversarial"
+        codex_secondary = "risk-adversarial" if sensitive else "dependency-order-adversarial"
     elif stage == "diff":
-        primary_gemini = "regression-adversarial"
-        secondary_default = "quality-adversarial"
-        codex_lens = "correctness-adversarial"
+        gemini_lens = "quality-adversarial"
+        codex_primary = "correctness-adversarial"
         if sensitive:
-            extra_candidates.insert(0, "security-adversarial")
-        if performance_sensitive:
-            extra_candidates.insert(0, "performance-adversarial")
-        if large_structural:
-            extra_candidates.append("quality-adversarial")
+            codex_secondary = "security-adversarial"
+        elif performance_sensitive:
+            codex_secondary = "performance-adversarial"
+        else:
+            codex_secondary = "regression-adversarial"
     elif stage == "closeout":
-        primary_gemini = "completeness-adversarial"
-        secondary_default = "residual-risk-adversarial"
-        codex_lens = "fidelity-adversarial"
-        if sensitive:
-            extra_candidates.insert(0, "rollout-risk-adversarial")
+        gemini_lens = "residual-risk-adversarial"
+        codex_primary = "fidelity-adversarial"
+        codex_secondary = "rollout-risk-adversarial" if sensitive else "completeness-adversarial"
     else:
         raise ValueError(f"Unsupported stage: {stage}")
-
-    secondary_gemini = pick_secondary_lens(primary_gemini, secondary_default, extra_candidates)
 
     if small_task_set and stage in ("tasks", "closeout"):
         return [
             {
                 "reviewer": "codex",
-                "lens": codex_lens,
+                "lens": codex_primary,
                 "model": DEFAULT_CODEX_MODEL,
             },
         ]
 
     return [
         {
-            "reviewer": "gemini",
-            "lens": primary_gemini,
-            "model": DEFAULT_GEMINI_MODEL,
-        },
-        {
-            "reviewer": "gemini",
-            "lens": secondary_gemini,
-            "model": DEFAULT_GEMINI_MODEL,
+            "reviewer": "codex",
+            "lens": codex_primary,
+            "model": DEFAULT_CODEX_MODEL,
         },
         {
             "reviewer": "codex",
-            "lens": codex_lens,
+            "lens": codex_secondary,
             "model": DEFAULT_CODEX_MODEL,
+        },
+        {
+            "reviewer": "gemini",
+            "lens": gemini_lens,
+            "model": DEFAULT_GEMINI_MODEL,
         },
     ]

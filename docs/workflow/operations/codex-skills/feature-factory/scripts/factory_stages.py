@@ -17,6 +17,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 from factory_state import (  # noqa: E402
     REPO_ROOT,
     CHECKPOINT_PROGRESS_KEY,
+    INIT_HEAD_SHA_KEY,
     read_json_file,
     workflow_dir,
     reviews_dir,
@@ -43,6 +44,27 @@ VERIFY_RECONCILIATION = REVIEW_SCRIPTS / "verify_reconciliation.py"
 
 HARD_DIFF_ARTIFACT_MAX_CHARS = 150000
 LARGE_DIFF_RERUN_WARN_CHARS = 80000
+
+NEXT_ACTION_LABELS: dict[str, str] = {
+    "mark_blocked": "workflow is blocked — human intervention required",
+    "discover": "complete discovery before writing spec",
+    "author_spec": "write spec.md",
+    "repair_spec_checkpoint": "run spec checkpoint",
+    "author_plan": "write plan.md",
+    "repair_plan_checkpoint": "run plan checkpoint",
+    "author_tasks": "write tasks.md with [CHECKPOINT] markers",
+    "record_parallel_analysis": "record parallel task analysis before checkpointing tasks",
+    "repair_tasks_checkpoint": "run tasks checkpoint",
+    "dispatch_next_slice_to_codex": "implement next slice",
+    "repair_diff_checkpoint": "run diff checkpoint",
+    "reconcile_reviews": "reconcile open review findings",
+    "deliver": "create PR and watch CI",
+    "closeout": "write closeout summary and run closeout checkpoint",
+    "repair_closeout_checkpoint": "re-run closeout checkpoint",
+    "write_postmortem": "write postmortem.md",
+    "update_status_md": "update STATUS.md",
+    "done": "workflow complete",
+}
 
 CHECKPOINT_STAGES = ["spec", "plan", "tasks", "diff", "closeout"]
 VERIFY_ON_CLOSEOUT_STAGES = ["spec", "plan", "tasks", "diff"]
@@ -390,6 +412,27 @@ def parse_p_annotation(line: str) -> list[str]:
         parsed_paths.append(normalized)
 
     return parsed_paths
+
+
+def status_md_changed_since_init(slug: str) -> bool:
+    """Return True if STATUS.md was modified after workflow init.
+
+    Uses git diff between the recorded init HEAD SHA and the current working
+    tree. Returns True on any error so a missing or invalid SHA never blocks
+    the 'done' state.
+    """
+    state = load_workflow_state(slug)
+    init_sha = state.get(INIT_HEAD_SHA_KEY, "")
+    if not init_sha:
+        return True  # no init sha recorded — can't verify, don't block
+    result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "diff", "--quiet", init_sha, "--", "STATUS.md"],
+        capture_output=True,
+    )
+    # returncode 0: no diff; 1: diff exists; 128: git error
+    # Treat both "diff exists" and "error" as changed so workflow is never
+    # blocked by a broken or missing SHA.
+    return result.returncode != 0
 
 
 def parse_parallel_task_groups(slug: str) -> list[dict]:
