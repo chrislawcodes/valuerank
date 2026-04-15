@@ -377,7 +377,7 @@ describe('DomainAnalysisValueDetail', () => {
     });
   });
 
-  it('renders transcripts in legacy mode when decisionModelV2 is missing', async () => {
+  it('renders transcripts and always passes audit mode (TranscriptRow handles per-row fallback)', async () => {
     mockQueries({
       detail: createDetail([
         createVignette('def-1', 'One vignette', [
@@ -412,7 +412,7 @@ describe('DomainAnalysisValueDetail', () => {
       expect(screen.getByTestId('transcript-list')).toBeInTheDocument();
     });
 
-    expect(lastTranscriptListProps?.decisionDisplayMode).toBe('legacy');
+    expect(lastTranscriptListProps?.decisionDisplayMode).toBe('audit');
     expect(screen.queryByText(/Failed to render transcripts/)).not.toBeInTheDocument();
   });
 
