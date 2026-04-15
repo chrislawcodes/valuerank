@@ -9,8 +9,8 @@ git_head_sha: "f13c75868802ccf953d5af7f071660e523a6d56a"
 git_base_ref: "90c49005a5187225d2e1f3d75574cc771b4a2ea8"
 git_base_sha: "90c49005a5187225d2e1f3d75574cc771b4a2ea8"
 generation_method: "codex-runner"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "No regression identified — clean pass"
 raw_output_path: "docs/workflow/feature-runs/models-tab/reviews/diff.codex.regression-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -35,5 +35,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: open
-- note: 
+- status: accepted
+- note: No regression identified — clean pass.
