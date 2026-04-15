@@ -218,7 +218,6 @@ export function NavTabs() {
     <nav className="hidden sm:block bg-[#1A1A1A] border-t border-gray-800">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex gap-1">
-          {renderMenu(domainMenuRef, 'Domains', '/domains', FolderTree, domainMenuItems, isDomainsActive, isDomainsMenuOpen, setIsDomainsMenuOpen)}
           <NavLink
             to="/models"
             className={`flex items-center gap-2 px-3 py-3 min-h-[44px] text-sm font-medium transition-colors border-b-2 ${
@@ -230,6 +229,7 @@ export function NavTabs() {
             <Cpu className="w-4 h-4" />
             <span className="hidden sm:inline">Models</span>
           </NavLink>
+          {renderMenu(domainMenuRef, 'Domains', '/domains', FolderTree, domainMenuItems, isDomainsActive, isDomainsMenuOpen, setIsDomainsMenuOpen)}
           {renderMenu(vignettesMenuRef, 'Vignettes', '/definitions', Library, vignettesMenuItems, isVignettesActive, isVignettesMenuOpen, setIsVignettesMenuOpen)}
           {renderMenu(archiveMenuRef, 'Archive', '/archive', Archive, archiveMenuItems, isArchiveActive, isArchiveMenuOpen, setIsArchiveMenuOpen)}
           {renderMenu(settingsMenuRef, 'Settings', '/settings/account', Settings, settingsMenuItems, isSettingsActive, isSettingsMenuOpen, setIsSettingsMenuOpen)}

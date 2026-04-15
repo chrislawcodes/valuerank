@@ -11,6 +11,7 @@ import {
   type ModelsAnalysisQueryVariables,
   type ModelsAnalysisValueResult,
 } from '../api/operations/modelsAnalysis';
+import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import { ModelValueDetailDrawer } from '../components/models/ModelValueDetailDrawer';
 import {
   ModelsMatrix,
@@ -35,6 +36,11 @@ export function Models() {
     variables: queryVariables,
     requestPolicy: 'cache-and-network',
   });
+  const [{ data: llmModelsData }] = useQuery<LlmModelsQueryResult>({
+    query: LLM_MODELS_QUERY,
+    variables: { status: 'ACTIVE' },
+    requestPolicy: 'cache-and-network',
+  });
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<ModelsMatrixSortKey>('model');
   const [stabilityVisibility, setStabilityVisibility] = useState<StabilityVisibility>('all');
@@ -42,6 +48,10 @@ export function Models() {
   const initializedModelSelection = useRef(false);
 
   const models = useMemo(() => data?.modelsAnalysis.models ?? [], [data]);
+  const defaultModelIds = useMemo(
+    () => new Set((llmModelsData?.llmModels ?? []).filter((m) => m.isDefault).map((m) => m.modelId)),
+    [llmModelsData],
+  );
   const selectedDomain = selectedDomainId != null ? domains.find((domain) => domain.id === selectedDomainId) ?? null : null;
   const singleDomainActive = selectedDomainId != null;
 
@@ -54,9 +64,13 @@ export function Models() {
   useEffect(() => {
     if (initializedModelSelection.current) return;
     if (models.length === 0) return;
-    setSelectedModelIds(models.map((model) => model.modelId));
+    if (llmModelsData == null) return;
+    const availableIds = models.map((model) => model.modelId);
+    const defaultSelection = availableIds.filter((id) => defaultModelIds.has(id));
+    // Fall back to all models if no defaults are configured or none match the current result set
+    setSelectedModelIds(defaultSelection.length > 0 ? defaultSelection : availableIds);
     initializedModelSelection.current = true;
-  }, [models]);
+  }, [models, llmModelsData, defaultModelIds]);
 
   useEffect(() => {
     if (!initializedModelSelection.current) return;
