@@ -124,12 +124,12 @@ describe('reportDecisionDisplay', () => {
       }),
     ]);
 
-    expect(summary.headline).toBe('Strongly favors Benevolence Dependability');
+    expect(summary.headline).toBe('Strongly supports Benevolence Dependability');
     expect(summary.renderableCount).toBe(3);
     expect(summary.unknownCount).toBe(0);
     expect(summary.buckets.map((bucket) => `${bucket.kind}:${bucket.label}:${bucket.count}`)).toEqual([
-      'strong:Strongly favors Benevolence Dependability:2',
-      'lean:Somewhat favors Achievement:1',
+      'strong:Strongly supports Benevolence Dependability:2',
+      'lean:Somewhat supports Achievement:1',
     ]);
   });
 
@@ -164,8 +164,8 @@ describe('reportDecisionDisplay', () => {
 
     expect(summary.headline).toBe('Mixed');
     expect(summary.buckets.map((bucket) => bucket.label)).toEqual([
-      'Strongly favors Benevolence Dependability',
-      'Somewhat favors Achievement',
+      'Strongly supports Benevolence Dependability',
+      'Somewhat supports Achievement',
     ]);
   });
 
@@ -176,11 +176,11 @@ describe('reportDecisionDisplay', () => {
       createTranscript({ id: 'unknown-1', decisionModelV2: null }),
     ]);
 
-    expect(summary.headline).toBe('Strongly favors Benevolence Dependability');
+    expect(summary.headline).toBe('Strongly supports Benevolence Dependability');
     expect(summary.renderableCount).toBe(2);
     expect(summary.unknownCount).toBe(1);
     expect(summary.buckets.map((bucket) => bucket.label)).toEqual([
-      'Strongly favors Benevolence Dependability',
+      'Strongly supports Benevolence Dependability',
       'Unknown',
     ]);
   });
