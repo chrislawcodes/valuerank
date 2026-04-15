@@ -24,9 +24,13 @@ export function Models() {
 
   const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
 
+  const queryVariables = useMemo(
+    () => (selectedDomainId != null ? { domainId: selectedDomainId } : {}),
+    [selectedDomainId],
+  );
   const [{ data, fetching, error }] = useQuery<ModelsAnalysisQueryResult, ModelsAnalysisQueryVariables>({
     query: MODELS_ANALYSIS_QUERY,
-    variables: selectedDomainId != null ? { domainId: selectedDomainId } : {},
+    variables: queryVariables,
     requestPolicy: 'cache-and-network',
   });
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
