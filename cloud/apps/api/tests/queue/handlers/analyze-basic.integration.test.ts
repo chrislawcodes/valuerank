@@ -39,7 +39,6 @@ const MOCK_ANALYSIS = {
         decisionCounts: { A: 1, B: 1 },
         mean: 0.5,
         stdDev: 0.5,
-        confidenceInterval: { lower: 0.01, upper: 0.99 },
       },
     },
     preferenceSummary: {
@@ -86,7 +85,6 @@ const MOCK_ANALYSIS = {
       },
     ],
     methodsUsed: {
-      confidenceInterval: 'Wilson score',
       effectSize: 'eta-squared',
       multipleComparison: 'Holm-Bonferroni',
     },

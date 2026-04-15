@@ -215,7 +215,6 @@ class TestAnalyzeBasicIntegration:
 
         assert result["success"] is True
         methods = result["analysis"]["methodsUsed"]
-        assert methods["winRateCI"] == "wilson_score"
         assert methods["modelComparison"] == "spearman_rho"
         assert methods["pValueCorrection"] == "holm_bonferroni"
         assert methods["effectSize"] == "cohens_d"

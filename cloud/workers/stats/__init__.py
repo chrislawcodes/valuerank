@@ -2,13 +2,11 @@
 Stats module for Stage 11 Analysis.
 
 This module provides statistical functions for analyzing AI model behavior:
-- Confidence intervals (Wilson score)
 - Basic statistics (win rates, means, std dev)
 - Model comparison (Spearman's rho, Cohen's d)
 - Dimension impact analysis (effect sizes, R-squared)
 """
 
-from stats.confidence import wilson_score_ci, bootstrap_ci
 from stats.basic_stats import (
     compute_win_rate,
     compute_value_stats,
@@ -26,9 +24,6 @@ from stats.dimension_impact import (
 )
 
 __all__ = [
-    # Confidence intervals
-    "wilson_score_ci",
-    "bootstrap_ci",
     # Basic statistics
     "compute_win_rate",
     "compute_value_stats",

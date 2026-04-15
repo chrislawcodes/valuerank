@@ -71,22 +71,10 @@ describe('export_pairwise_outcomes tool', () => {
           [valueA]: {
             count: { prioritized: 3, deprioritized: 1, neutral: 1 },
             winRate: 0.75,
-            confidenceInterval: {
-              lower: 0.5,
-              upper: 0.95,
-              level: 0.95,
-              method: 'wilson',
-            },
           },
           [valueB]: {
             count: { prioritized: 1, deprioritized: 3, neutral: 1 },
             winRate: 0.25,
-            confidenceInterval: {
-              lower: 0.05,
-              upper: 0.5,
-              level: 0.95,
-              method: 'wilson',
-            },
           },
         },
       },
@@ -109,7 +97,6 @@ describe('export_pairwise_outcomes tool', () => {
           folder: expect.any(Object),
           tag: expect.any(Object),
           definition_ids: expect.any(Object),
-          include_ci: expect.any(Object),
           aggregate_only: expect.any(Object),
         }),
       }),
@@ -156,7 +143,7 @@ describe('export_pairwise_outcomes tool', () => {
     ] as never);
 
     const result = await toolHandler(
-      { folder: 'Ethics', aggregate_only: true, include_ci: false, limit: 100, offset: 0 },
+      { folder: 'Ethics', aggregate_only: true, limit: 100, offset: 0 },
       { requestId: 'req-1' }
     );
 
@@ -176,55 +163,13 @@ describe('export_pairwise_outcomes tool', () => {
     expect(row1.valueBWinRate).toBe(0.25);
     expect(row1.valueAPrioritized).toBe(3);
     expect(row1.valueBDeprioritized).toBe(3);
-
-    // CI fields should not be present when include_ci=false
-    expect(row1.valueACiLower).toBeUndefined();
-    expect(row1.valueACiUpper).toBeUndefined();
-  });
-
-  it('includes confidence intervals when include_ci=true', async () => {
-    const defs = makeDefinitions().slice(0, 1);
-    vi.mocked(db.definition.findMany).mockResolvedValue(defs as never);
-    vi.mocked(loadDefinitionContent).mockImplementation((raw) => raw as never);
-
-    vi.mocked(db.run.findMany).mockResolvedValue([
-      {
-        id: 'run-1',
-        definitionId: 'def-1',
-        createdAt: new Date('2026-01-01'),
-        analysisResults: [
-          {
-            id: 'ar-1',
-            output: makeAnalysisOutput(
-              'Achievement',
-              'Benevolence_Caring',
-              'claude-3'
-            ),
-          },
-        ],
-      },
-    ] as never);
-
-    const result = await toolHandler(
-      { include_ci: true, aggregate_only: true, limit: 100, offset: 0 },
-      { requestId: 'req-ci' }
-    );
-
-    const content = (result as { content: Array<{ text: string }> }).content;
-    const response = JSON.parse(content[0].text);
-
-    const row = response.data.rows[0];
-    expect(row.valueACiLower).toBe(0.5);
-    expect(row.valueACiUpper).toBe(0.95);
-    expect(row.valueBCiLower).toBe(0.05);
-    expect(row.valueBCiUpper).toBe(0.5);
   });
 
   it('returns empty result when no definitions match', async () => {
     vi.mocked(db.definition.findMany).mockResolvedValue([]);
 
     const result = await toolHandler(
-      { folder: 'nonexistent', aggregate_only: true, include_ci: false, limit: 100, offset: 0 },
+      { folder: 'nonexistent', aggregate_only: true, limit: 100, offset: 0 },
       { requestId: 'req-empty' }
     );
 
@@ -273,22 +218,10 @@ describe('export_pairwise_outcomes tool', () => {
                     Achievement: {
                       count: { prioritized: 1, deprioritized: 0, neutral: 0 },
                       winRate: 1.0,
-                      confidenceInterval: {
-                        lower: 0.5,
-                        upper: 1.0,
-                        level: 0.95,
-                        method: 'wilson',
-                      },
                     },
                     Benevolence_Caring: {
                       count: { prioritized: 0, deprioritized: 1, neutral: 0 },
                       winRate: 0.0,
-                      confidenceInterval: {
-                        lower: 0.0,
-                        upper: 0.5,
-                        level: 0.95,
-                        method: 'wilson',
-                      },
                     },
                   },
                 },
@@ -300,7 +233,7 @@ describe('export_pairwise_outcomes tool', () => {
     ] as never);
 
     const result = await toolHandler(
-      { aggregate_only: true, include_ci: false, limit: 100, offset: 0 },
+      { aggregate_only: true, limit: 100, offset: 0 },
       { requestId: 'req-dedup' }
     );
 
@@ -332,7 +265,7 @@ describe('export_pairwise_outcomes tool', () => {
     ] as never);
 
     const result = await toolHandler(
-      { aggregate_only: true, include_ci: false, limit: 100, offset: 0 },
+      { aggregate_only: true, limit: 100, offset: 0 },
       { requestId: 'req-invalid' }
     );
 
@@ -347,7 +280,7 @@ describe('export_pairwise_outcomes tool', () => {
     vi.mocked(db.definition.findMany).mockResolvedValue([]);
 
     await toolHandler(
-      { aggregate_only: true, include_ci: false, limit: 100, offset: 0 },
+      { aggregate_only: true, limit: 100, offset: 0 },
       { requestId: 'req-agg-filter' }
     );
 
@@ -362,7 +295,7 @@ describe('export_pairwise_outcomes tool', () => {
     vi.mocked(db.run.findMany).mockResolvedValue([]);
 
     await toolHandler(
-      { aggregate_only: false, include_ci: false, limit: 100, offset: 0 },
+      { aggregate_only: false, limit: 100, offset: 0 },
       { requestId: 'req-completed' }
     );
 

@@ -621,7 +621,6 @@ def run_analysis(data: dict[str, Any]) -> dict[str, Any]:
             "mostContestedScenarios": contested,
             "visualizationData": visualization_data,
             "methodsUsed": {
-                "winRateCI": "wilson_score",
                 "modelComparison": "spearman_rho",
                 "pValueCorrection": "holm_bonferroni",
                 "effectSize": "cohens_d",
