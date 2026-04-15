@@ -377,7 +377,7 @@ describe('DomainAnalysisValueDetail', () => {
     });
   });
 
-  it('fails loudly when canonical transcripts are missing for the selected condition', async () => {
+  it('renders transcripts in legacy mode when decisionModelV2 is missing', async () => {
     mockQueries({
       detail: createDetail([
         createVignette('def-1', 'One vignette', [
@@ -409,10 +409,11 @@ describe('DomainAnalysisValueDetail', () => {
     fireEvent.click(screen.getByTitle('Condition A'));
 
     await waitFor(() => {
-      expect(screen.getByText(/Failed to render transcripts for Condition A:/)).toBeInTheDocument();
+      expect(screen.getByTestId('transcript-list')).toBeInTheDocument();
     });
 
-    expect(screen.queryByTestId('transcript-list')).not.toBeInTheDocument();
+    expect(lastTranscriptListProps?.decisionDisplayMode).toBe('legacy');
+    expect(screen.queryByText(/Failed to render transcripts/)).not.toBeInTheDocument();
   });
 
   it.each([
@@ -444,7 +445,7 @@ describe('DomainAnalysisValueDetail', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText(/DomainAnalysisValueDetail\.ConditionMatrix requires canonical count data/)).toBeInTheDocument();
+      expect(screen.getByText(/ConditionMatrix requires canonical count data/)).toBeInTheDocument();
     });
   });
 });
