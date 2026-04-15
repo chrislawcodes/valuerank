@@ -8,7 +8,7 @@ approval: never
 sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
 reasoning effort: high
 reasoning summaries: none
-session id: 019d9325-37bf-7c51-9eaf-7fb0032f7466
+session id: 019d9329-39a1-7a00-a46e-4aea8c83c19e
 --------
 user
 Review this tasks artifact using a dependency-order-adversarial lens.
@@ -54,7 +54,7 @@ Artifact: tasks.md
       2. Build label map: `Map<string, string>` from modelId → displayName
       3. Query snapshots: `db.assumptionAnalysisSnapshot.findMany({ where: { analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE, status: 'CURRENT', deletedAt: null, ...(domainId ? { assumptionKey: buildAssumptionKey(String(domainId)) } : {}) }, select: { assumptionKey: true, output: true, createdAt: true }, orderBy: { createdAt: 'desc' } })`
       4. Deduplicate: keep only first snapshot per `assumptionKey` (since ordered desc, first = most recent)
-      5. Parse each snapshot: `parseSnapshotOutput(row.output)` — skip if null
+      5. Parse each snapshot: wrap `parseSnapshotOutput(row.output)` in a try/catch — on any error, log a warning with the `assumptionKey` and skip the row; do not throw
       6. Build accumulator: `Map<string, Map<string, Array<{domainId, domainName, prioritized, deprioritized}>>>` keyed by modelId → valueKey → domains
       7. For each snapshot model: for each value key: push counts to accumulator
       8. Compute result: iterate over ALL active models from step 1 (not just those in the accumulator) — every active model must appear in the output, even if it has no snapshot data. For each active model, for each valueKey in DOMAIN_ANALYSIS_VALUE_KEYS: get the domain list from the accumulator (or empty array if model not in accumulator), filter eligible (prioritized+deprioritized>0), compute pooledWinRate + stabilityScore.
@@ -168,6 +168,7 @@ Artifact: tasks.md
   - Query: `useQuery(MODELS_ANALYSIS_QUERY, { variables: selectedDomain != null ? { domainId: selectedDomain } : {} })`
   - Pass `singleDomainActive={selectedDomain != null}` to `ModelsMatrix`
   - Filter bar: domain scope dropdown + stability filter buttons/select + sort column select
+  - When `selectedDomain` changes to a non-null value, reset `stabilityFilter` to `'all'` (prevents disabled filter silently affecting the display)
   - Handle loading and error states
   - When `stabilityFilter !== 'all'` and `singleDomainActive`, show a note that stability is unavailable for single-domain view
 
@@ -185,14 +186,21 @@ Return only markdown with exactly these sections:
 ## Residual Risks
 Do not include any other sections.
 codex
+I’m reviewing the task order and dependency chain itself, not the code. I’m looking for places where the plan can break because a later slice assumes an earlier artifact, or because the tasks leave a gap that the next step cannot safely cross.
+codex
 ## Findings
-- Medium: Slice B is self-blocking. `App.tsx` is wired to import and route `/models` before Slice C creates `cloud/apps/web/src/pages/Models.tsx`. Since B5/B7 require the web build to pass, B will fail unless you add a temporary stub page in B or reorder the work so the page exists first.
-- Medium [UNVERIFIED]: The value-key list is not centralized. Slice A reads `DOMAIN_ANALYSIS_VALUE_KEYS` from the API side, while Slice C says the web side can define the array inline or import it from elsewhere. That creates a drift risk where the API query, matrix headers, and filters stop matching when the key list changes.
-- Medium [UNVERIFIED]: The stability logic is under-specified. Slice A says `computeStabilityScore` should use the “spec MAD formula,” and Slice C says the tooltip should follow the “spec’s tooltip generation rule,” but the artifact does not pin down the exact formula or boundary text. That leaves room for inconsistent API/UI behavior on null scores, 1-domain cases, and threshold edges.
+1. High - `A2` never specifies how to populate `eligibleDomainCount`, even though `A1` makes it a required non-null field and `C2`/`C5` depend on it for rendering and filtering. As written, the resolver spec is incomplete and will force an ad hoc implementation or a schema mismatch.
+
+2. High - `B4` adds the `/models` route and imports `./pages/Models` before `C5` creates that page module, but the task does not create a stub file or make the route lazy. If Slice B is verified on its own, the web build will fail on a missing module.
+
+3. Medium - `C1`’s null-score tooltip text is internally wrong. It prints `"0 domains found."` for any `eligibleDomainCount` other than 1, so the message becomes false as soon as 2+ eligible domains exist but stability is unavailable.
+
+4. Medium - `C3` leaves the value-key list split between API and web with no single source of truth. The task explicitly allows the array to be defined inline on the web side, which creates drift risk if `DOMAIN_ANALYSIS_VALUE_KEYS` changes later.
+
+5. Medium [UNVERIFIED] - `C5` assumes there is already a reusable domain-list hook or query in `DomainAnalysis.tsx`, but the artifact does not name it or provide a fallback. If that selector does not exist or its shape differs, the page task is blocked and the plan has no recovery path.
 
 ## Residual Risks
-- The resolver assumes `parseSnapshotOutput(output)` yields a shape that matches the accumulator fields, but the artifact does not define malformed-output handling beyond “skip if null.” Bad snapshots may be silently dropped.
-- The manual `schema.graphql` edit in Slice A can drift from the Pothos types if the API schema generation path changes, and the artifact does not add an explicit schema-regeneration check.
-- The UI slices assume existing domain-selector hooks, drawer patterns, and auth/navigation behavior can be reused without extra wiring. If those assumptions are wrong, the page may need additional integration work outside these tasks.
+- I could not verify the snapshot output shape, the stability-score formula details, or the existing domain-selector plumbing from the artifact alone.
+- If any of those hidden contracts differ from the assumptions in the tasks, the implementation will need rework even if the task order is fixed.
 tokens used
-9,558
+11,180

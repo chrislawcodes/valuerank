@@ -3,9 +3,9 @@ reviewer: "codex"
 lens: "execution-adversarial"
 stage: "tasks"
 artifact_path: "docs/workflow/feature-runs/models-tab/tasks.md"
-artifact_sha256: "4746a5920a6bc07659fb08ae18ea80df69efd420fa4a9097284e1394b30d8e01"
+artifact_sha256: "8b7f076f7c42784baccc12ba4ea84f4d3675c8f1e492a81f3ded60058b2b467a"
 repo_root: "."
-git_head_sha: "b26923fbe83c2c0ec86c80180073de00a4461626"
+git_head_sha: "de250c0d1d4a72072cffae43adf8b1a9a2b2554e"
 git_base_ref: "origin/main"
 git_base_sha: "b26923fbe83c2c0ec86c80180073de00a4461626"
 generation_method: "codex-runner"
@@ -22,15 +22,15 @@ coverage_note: ""
 
 ## Findings
 
-1. **High**: Slice B is self-blocking. B4 adds `import { Models } from './pages/Models';` and a `/models` route, but the page file is only created later in Slice C. Unless B4 also creates a temporary stub, `npm run build --workspace @valuerank/web` in B7 will fail at compile time. As written, Slice B cannot pass its own checkpoint.
-2. **Medium**: The stability math is underspecified. `computeStabilityScore` is described only as “spec MAD formula,” but the artifact never pins down the exact equation, normalization, or whether evidence weights affect the result. That leaves room for API and UI implementations to diverge and makes the test target ambiguous.
-3. **Medium [UNVERIFIED]**: C3 does not define a single canonical source for `DOMAIN_ANALYSIS_VALUE_KEYS`. It allows importing from the API package, defining the array inline, or pulling it from some other place. That creates an easy drift path between the GraphQL schema, resolver, and UI columns. I cannot verify the current package boundaries from this artifact alone, so this is [UNVERIFIED].
+- [MEDIUM] The stability math is not pinned down enough to implement safely. Slice A says `computeStabilityScore` should use the "spec MAD formula," but the artifact never states the exact formula, normalization, or rounding rules. Slice C then uses hard thresholds (`< 75`, `>= 50`) on that score, so even a small interpretation mismatch will change which cells are shown as stable or low-stability.
+- [MEDIUM] The plan leaves the core aggregation logic untested. The resolver has several failure-prone steps: snapshot dedupe, parse-error skipping, weighted pooling, and stability scoring. Lint, build, and codegen will not catch a wrong calculation or a bad edge case in malformed snapshots. This is the main correctness risk in the feature, so it needs explicit test coverage.
+- [MEDIUM][UNVERIFIED] The web/API contract for value keys is split and underspecified. Slice B3 says to "use the string array directly or import from wherever domainAnalysis.ts gets it," instead of naming one shared source of truth. That creates a real drift risk between the API resolver, GraphQL query, and table headers if the value-key set changes. This depends on the current codebase layout, so it is unverified.
 
 ## Residual Risks
 
-- The resolver can still fail softly if `parseSnapshotOutput(row.output)` returns null for malformed rows. That would make the page look empty instead of surfacing a data problem.
-- Manually editing `cloud/apps/web/schema.graphql` still leaves room for schema drift if the Pothos types or codegen outputs change later.
-- The single-domain UI behavior is only partially defined. Even with the mute state and note, users may still see `n/a` cells without a clear distinction between “no data” and “intentionally hidden.”
+- The artifact still depends on `plan.md` for the exact SDL, query text, value labels, and tooltip wording. If that file disagrees with these tasks, the implementation can still drift.
+- I could not verify any existing drawer, domain selector, or codegen patterns because no code context was provided. Any task that says "reuse existing hook/pattern" still has integration risk until the current code is checked.
+- The feature has no explicit performance guardrails. If the snapshot table is large, the resolver's full scan, dedupe, and per-model aggregation could become slow without an index or query shape review.
 
 ## Runner Stats
 - total_input=0

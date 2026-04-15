@@ -30,7 +30,7 @@
       2. Build label map: `Map<string, string>` from modelId → displayName
       3. Query snapshots: `db.assumptionAnalysisSnapshot.findMany({ where: { analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE, status: 'CURRENT', deletedAt: null, ...(domainId ? { assumptionKey: buildAssumptionKey(String(domainId)) } : {}) }, select: { assumptionKey: true, output: true, createdAt: true }, orderBy: { createdAt: 'desc' } })`
       4. Deduplicate: keep only first snapshot per `assumptionKey` (since ordered desc, first = most recent)
-      5. Parse each snapshot: `parseSnapshotOutput(row.output)` — skip if null
+      5. Parse each snapshot: wrap `parseSnapshotOutput(row.output)` in a try/catch — on any error, log a warning with the `assumptionKey` and skip the row; do not throw
       6. Build accumulator: `Map<string, Map<string, Array<{domainId, domainName, prioritized, deprioritized}>>>` keyed by modelId → valueKey → domains
       7. For each snapshot model: for each value key: push counts to accumulator
       8. Compute result: iterate over ALL active models from step 1 (not just those in the accumulator) — every active model must appear in the output, even if it has no snapshot data. For each active model, for each valueKey in DOMAIN_ANALYSIS_VALUE_KEYS: get the domain list from the accumulator (or empty array if model not in accumulator), filter eligible (prioritized+deprioritized>0), compute pooledWinRate + stabilityScore.
@@ -144,6 +144,7 @@
   - Query: `useQuery(MODELS_ANALYSIS_QUERY, { variables: selectedDomain != null ? { domainId: selectedDomain } : {} })`
   - Pass `singleDomainActive={selectedDomain != null}` to `ModelsMatrix`
   - Filter bar: domain scope dropdown + stability filter buttons/select + sort column select
+  - When `selectedDomain` changes to a non-null value, reset `stabilityFilter` to `'all'` (prevents disabled filter silently affecting the display)
   - Handle loading and error states
   - When `stabilityFilter !== 'all'` and `singleDomainActive`, show a note that stability is unavailable for single-domain view
 
