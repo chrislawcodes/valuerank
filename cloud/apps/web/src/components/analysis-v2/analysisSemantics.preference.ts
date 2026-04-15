@@ -85,32 +85,72 @@ export function deriveValueLists(byValue: Record<string, RawPreferenceValueStats
   topDeprioritizedValues: PreferenceValueSummary[];
   neutralValues: PreferenceValueSummary[];
 } {
-  const entries = Object.entries(byValue).map(([valueId, stats]) => ({
-    name: valueId,
-    winRate: stats.winRate,
-    distance: Math.abs(stats.winRate - 0.5),
+  const entriesWithWinRate = Object.entries(byValue)
+    .map(([valueId, stats]) => ({
+      name: valueId,
+      winRate: stats.winRate,
+    }))
+    .filter((entry): entry is { name: string; winRate: number } => entry.winRate != null);
+
+  if (entriesWithWinRate.length === 0) {
+    return {
+      topPrioritizedValues: [],
+      topDeprioritizedValues: [],
+      neutralValues: [],
+    };
+  }
+
+  const modelMean = entriesWithWinRate.reduce((sum, entry) => sum + entry.winRate, 0) / entriesWithWinRate.length;
+  const entries = entriesWithWinRate.map((entry) => ({
+    ...entry,
+    distance: entry.winRate - modelMean,
   }));
 
-  const sortByStrength = (left: { name: string; distance: number }, right: { name: string; distance: number }) => {
+  const sortByPositiveDistance = (
+    left: { name: string; distance: number },
+    right: { name: string; distance: number },
+  ) => {
     if (right.distance !== left.distance) {
       return right.distance - left.distance;
     }
     return left.name.localeCompare(right.name);
   };
 
+  const sortByNegativeDistance = (
+    left: { name: string; distance: number },
+    right: { name: string; distance: number },
+  ) => {
+    if (left.distance !== right.distance) {
+      return left.distance - right.distance;
+    }
+    return left.name.localeCompare(right.name);
+  };
+
+  const sortByNeutralDistance = (
+    left: { name: string; distance: number },
+    right: { name: string; distance: number },
+  ) => {
+    const leftDistance = Math.abs(left.distance);
+    const rightDistance = Math.abs(right.distance);
+    if (leftDistance !== rightDistance) {
+      return leftDistance - rightDistance;
+    }
+    return left.name.localeCompare(right.name);
+  };
+
   const prioritized = entries
-    .filter((entry) => entry.winRate > 0.5 + EPSILON)
-    .sort(sortByStrength)
+    .filter((entry) => entry.distance > EPSILON)
+    .sort(sortByPositiveDistance)
     .slice(0, 3)
     .map((entry) => ({ name: entry.name, winRate: entry.winRate }));
   const deprioritized = entries
-    .filter((entry) => entry.winRate < 0.5 - EPSILON)
-    .sort(sortByStrength)
+    .filter((entry) => entry.distance < -EPSILON)
+    .sort(sortByNegativeDistance)
     .slice(0, 3)
     .map((entry) => ({ name: entry.name, winRate: entry.winRate }));
   const neutral = entries
-    .filter((entry) => Math.abs(entry.winRate - 0.5) <= EPSILON)
-    .sort(sortByStrength)
+    .filter((entry) => Math.abs(entry.distance) <= EPSILON)
+    .sort(sortByNeutralDistance)
     .slice(0, 3)
     .map((entry) => ({ name: entry.name, winRate: entry.winRate }));
 
@@ -169,9 +209,9 @@ export function buildMergedPreferenceModel(
       const prioritized = stats.reduce((sum, entry) => sum + (entry.count?.prioritized ?? 0), 0);
       const deprioritized = stats.reduce((sum, entry) => sum + (entry.count?.deprioritized ?? 0), 0);
       const neutral = stats.reduce((sum, entry) => sum + (entry.count?.neutral ?? 0), 0);
-      const totalBattles = prioritized + deprioritized;
+      const totalResponses = prioritized + deprioritized + neutral;
       mergedByValue[valueId] = {
-        winRate: totalBattles > 0 ? prioritized / totalBattles : 0.5,
+        winRate: totalResponses > 0 ? prioritized / totalResponses : 0.5,
         count: {
           prioritized,
           deprioritized,

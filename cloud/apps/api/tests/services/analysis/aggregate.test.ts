@@ -637,7 +637,7 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
       orderBy: { createdAt: 'desc' },
     });
 
-    expect(aggregateAnalysis.codeVersion).toBe('1.2.0');
+    expect(aggregateAnalysis.codeVersion).toBe('1.3.0');
     expect(aggregateAnalysis.output).toMatchObject({
       preferenceSummary: { perModel: {} },
       reliabilitySummary: { perModel: {} },
@@ -763,7 +763,7 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
     expect(aggregateAnalysis.output).toMatchObject({
       methodsUsed: {
         aggregateSemantics: 'same-signature-v1',
-        codeVersion: '1.2.0',
+        codeVersion: '1.3.0',
       },
       visualizationData: {
         scenarioDimensions: {
@@ -868,6 +868,35 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
       somewhat: 1,
       strongly: 1,
     });
+  });
+
+  it('includes neutrals in the winRate denominator', () => {
+    const analyses: AnalysisOutput[] = [
+      {
+        perModel: {
+          'gpt-4': {
+            sampleSize: 10,
+            values: {
+              Achievement: {
+                count: {
+                  prioritized: 2,
+                  deprioritized: 1,
+                  neutral: 7,
+                },
+                winRate: 0.2,
+              },
+            },
+            overall: { mean: 0, stdDev: 0, min: 0, max: 0 },
+          },
+        },
+        modelAgreement: {},
+      },
+    ];
+
+    const scenarios = [{ id: 's1', name: 'S1', content: { name: 'S1' } }];
+    const result = aggregateAnalysesLogic(analyses, [], scenarios);
+
+    expect(result.perModel['gpt-4']?.values.Achievement?.winRate).toBeCloseTo(0.2, 6);
   });
 
   it('computes pooled overall stats from multiple source runs', () => {

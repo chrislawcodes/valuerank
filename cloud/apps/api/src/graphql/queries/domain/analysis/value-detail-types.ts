@@ -30,7 +30,8 @@ export type MutableVignette = {
 };
 
 export function mapCondition(condition: MutableCondition): DomainAnalysisConditionDetail {
-  const comparisonDenominator = condition.prioritized + condition.deprioritized;
+  const comparisonDenominator =
+    condition.prioritized + condition.deprioritized + condition.neutral;
   return {
     scenarioId: condition.scenarioId,
     conditionName: condition.conditionName,
@@ -52,7 +53,8 @@ export function mapVignette(vignette: MutableVignette): DomainAnalysisVignetteDe
   const conditions: DomainAnalysisConditionDetail[] = Array.from(vignette.conditions.values())
     .sort((left, right) => left.conditionName.localeCompare(right.conditionName))
     .map(mapCondition);
-  const comparisonDenominator = vignette.prioritized + vignette.deprioritized;
+  const comparisonDenominator =
+    vignette.prioritized + vignette.deprioritized + vignette.neutral;
   return {
     definitionId: vignette.definitionId,
     definitionName: vignette.definitionName,

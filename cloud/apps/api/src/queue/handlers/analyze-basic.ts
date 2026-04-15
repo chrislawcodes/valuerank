@@ -31,7 +31,7 @@ const log = createLogger('queue:analyze-basic');
 const ANALYZE_WORKER_PATH = 'workers/analyze_basic.py';
 
 // Code version for tracking analysis versions
-const CODE_VERSION = '1.1.1';
+const CODE_VERSION = '1.2.0';
 
 /**
  * Creates a handler for analyze_basic jobs.

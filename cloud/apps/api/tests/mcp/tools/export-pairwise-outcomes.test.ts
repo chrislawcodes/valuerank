@@ -70,11 +70,11 @@ describe('export_pairwise_outcomes tool', () => {
         values: {
           [valueA]: {
             count: { prioritized: 3, deprioritized: 1, neutral: 1 },
-            winRate: 0.75,
+            winRate: 0.6,
           },
           [valueB]: {
             count: { prioritized: 1, deprioritized: 3, neutral: 1 },
-            winRate: 0.25,
+            winRate: 0.2,
           },
         },
       },
@@ -159,8 +159,8 @@ describe('export_pairwise_outcomes tool', () => {
     expect(row1.valueA).toBe('Achievement');
     expect(row1.valueB).toBe('Benevolence_Caring');
     expect(row1.modelId).toBe('gpt-4');
-    expect(row1.valueAWinRate).toBe(0.75);
-    expect(row1.valueBWinRate).toBe(0.25);
+    expect(row1.valueAWinRate).toBe(0.6);
+    expect(row1.valueBWinRate).toBe(0.2);
     expect(row1.valueAPrioritized).toBe(3);
     expect(row1.valueBDeprioritized).toBe(3);
   });

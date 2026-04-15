@@ -141,7 +141,8 @@ export function DomainAnalysis() {
     return sourceModels.map((model) => {
       const valueMap = new Map(model.values.map((e) => [e.valueKey, e.score]));
       const winRateMap = new Map(model.values.map((e) => {
-        const denom = e.prioritized + e.deprioritized;
+        const neutral = e.neutral ?? 0;
+        const denom = e.prioritized + e.deprioritized + neutral;
         return [e.valueKey, denom > 0 ? (e.prioritized / denom) * 100 : null] as const;
       }));
       const supportRateMap = new Map(model.values.map((entry) => {

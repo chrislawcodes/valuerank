@@ -152,8 +152,9 @@ export function aggregateAnalysesLogic(
       if (!target) return;
 
       const totalWins = target.count.prioritized;
-      const totalBattles = target.count.prioritized + target.count.deprioritized;
-      target.winRate = totalBattles > 0 ? totalWins / totalBattles : 0;
+      const totalResponses =
+        target.count.prioritized + target.count.deprioritized + target.count.neutral;
+      target.winRate = totalResponses > 0 ? totalWins / totalResponses : 0;
 
       const rates = modelValueRates[valueId] || [];
       if (rates.length === 0) return;

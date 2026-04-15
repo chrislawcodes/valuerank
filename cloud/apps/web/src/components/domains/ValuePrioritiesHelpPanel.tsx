@@ -26,7 +26,7 @@ export function ValuePrioritiesHelpPanel({ scoreMode }: Props) {
         <>
           <p className="font-medium text-gray-800">Score Method: Support Rate / Win Rate</p>
           <p className="mt-1">
-            Shows both an estimated population-level support rate and a conditional win rate.
+            Shows both an estimated population-level support rate and a win rate.
           </p>
           <p className="mt-2 font-medium text-gray-800">Support Rate</p>
           <p className="mt-0.5 font-mono text-[11px] text-sky-900">
@@ -37,25 +37,27 @@ export function ValuePrioritiesHelpPanel({ scoreMode }: Props) {
           </p>
           <p className="mt-2 font-medium text-gray-800">Win Rate</p>
           <p className="mt-0.5 font-mono text-[11px] text-sky-900">
-            prioritized / (prioritized + deprioritized)
+            prioritized / (prioritized + deprioritized + neutral)
           </p>
           <p className="mt-1">
-            Shows how often a value wins once the model picks a side. Same calculation as the standalone Win
-            Rate mode, but rounded to a whole number for compactness.
+            The fraction of times the model prioritized this value across all decisions, including neutral
+            responses. Same calculation as the standalone Win Rate mode, but rounded to a whole number for
+            compactness.
           </p>
         </>
       ) : (
         <>
           <p className="font-medium text-gray-800">Score Method: Win Rate</p>
           <p className="mt-1">
-            The percentage of pairwise comparisons in which the AI chose this value over another.
+            The percentage of pairwise comparisons in which the AI prioritized this value across all decisions,
+            including neutral responses.
           </p>
           <p className="mt-2 font-medium text-gray-800">Formula</p>
           <p className="mt-0.5 font-mono text-[11px] text-sky-900">
-            Win Rate = prioritized / (prioritized + deprioritized) × 100%
+            Win Rate = prioritized / (prioritized + deprioritized + neutral) × 100%
           </p>
           <ul className="mt-2 list-disc space-y-0.5 pl-4">
-            <li>50% means the AI chose this value in half of all head-to-head comparisons.</li>
+            <li>50% means the AI prioritized this value in half of all recorded decisions.</li>
             <li>Easy to interpret: higher % = model prioritizes this value more often.</li>
             <li>Shows &ldquo;n/a&rdquo; when no comparison data exists for a value.</li>
           </ul>

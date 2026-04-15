@@ -1,35 +1,33 @@
 # Spec: winrate-honest-denominator
 
-**Author:** Claude (Sonnet, 2026-04-14)
-**Status:** draft — needs an Opus deep-read pass before plan stage (see § Model Policy)
+**Author:** Claude (Sonnet, 2026-04-14 — rewrite pass after remove-compare-page merged)
+**Status:** ready for plan stage
 **Delivery path:** Feature Factory
-**Unblocks:** no downstream features explicitly — this is a correctness fix on an analysis primitive
-**Prerequisite:** PR #630 merged (`5847c713`) — the adaptive sampler deletion, which removed an ambiguous winRate code path
+**Prerequisite:** `remove-compare-page` (PR #631, commit `27454f00`) merged — removed Wilson CI backend plumbing and the Compare page.
+**Unblocks:** nothing formally. This is a correctness fix on an analysis primitive that downstream features (cross-model rankings, model dominance analysis) rely on.
 
 ---
 
 ## Problem
 
-Today, ValueRank's `winRate` statistic drops **neutral responses from the denominator**:
+ValueRank's `winRate` statistic drops neutral responses from the denominator:
 
 ```python
-# cloud/workers/stats/basic_stats.py:49
+# cloud/workers/stats/basic_stats.py:47-65 (on main)
 def compute_win_rate(prioritized: int, deprioritized: int) -> float:
-    total = prioritized + deprioritized              # ← neutrals not counted
+    total = prioritized + deprioritized              # neutrals not counted
     if total == 0:
         return 0.5
     return prioritized / total
 ```
 
-This means a value that the model treats neutrally 90% of the time and prioritizes the remaining 10% (with 0 deprioritizations) reports **winRate = 1.0**. That is not an honest win rate. It inflates the apparent strength of any value a model rarely takes a strong stance on.
-
-The docstring even calls this out: *"Neutral responses are excluded from the denominator"* — it is a known shortcut, not a bug in implementation. The question is whether the shortcut is correct. The user's answer: **no**.
+A value the model treats neutrally 90 times out of 100 and prioritizes the other 10 times (with zero deprioritizations) reports `winRate = 1.0`. That is not an honest win rate. It inflates the apparent strength of any value the model rarely takes a strong stance on.
 
 ### Why this matters now
 
-1. **Scientific honesty.** ValueRank's public framing is that winRate measures how often a model prioritizes a value. Excluding neutrals misrepresents that.
-2. **Prerequisite for future analysis work.** Several upcoming features (cross-model comparison, value-strength rankings) lean on winRate as a primary ordering key. Fixing it now avoids rebuilding those features later.
-3. **Wilson CI is also wrong.** `compute_value_stats` passes the same truncated `total` into `wilson_score_ci(prioritized, total, confidence)`. A smaller total inflates CI width in one direction (fewer samples) but the successes-over-total shape is also wrong. Fixing winRate means fixing the CI inputs in the same commit.
+1. **Scientific honesty.** ValueRank's public framing is that `winRate` measures how often a model prioritizes a value. Excluding neutrals misrepresents that.
+2. **Downstream analysis work leans on `winRate` as a primary ordering key.** Fixing it before more features pile on avoids rebuilding those features later.
+3. **The bucket logic in `analysis-v2` is already subtly broken** because it uses `winRate > 0.5` / `winRate < 0.5` to label values as prioritized / deprioritized / neutral. That bucket logic only makes sense under the old formula. See § Risk — 0.5 threshold.
 
 ---
 
@@ -41,21 +39,26 @@ The docstring even calls this out: *"Neutral responses are excluded from the den
 winRate = prioritized / (prioritized + deprioritized + neutral)
 ```
 
-- Applied in every winRate computation site (Python stats worker, API aggregation, web aggregation mirror, standalone scripts, MCP export).
-- Applied to historical data via a backfill (user decision: **Option C**, backfill everything so old runs stay consistent with new runs).
-- Wilson score CI uses the same `total = prioritized + deprioritized + neutral` so the CI reflects actual sample size.
-- UI copy, tooltips, help text, and canonical docs updated so the displayed number matches the new definition.
+- Applied in every winRate computation site (Python stats worker, API aggregation, web aggregation, standalone ranking script).
+- The web `analysis-v2` bucket logic is redesigned so "top prioritized / top deprioritized" labels are **model-relative** (Option A — compare to the model's mean winRate across values), since 0.5 is no longer a meaningful neutral baseline.
+- The `compute_win_rate(0, 0, 0) == 0.5` fallback is preserved (still means "no data").
+- The `compute_win_rate(0, 0, neutral>0)` case flips from `0.5` to `0.0` — this is correct: we do have data and the model never prioritized the value.
+- **Two code-version constants bump in lockstep.** The Python worker's `CODE_VERSION` goes `"1.1.1"` → `"1.2.0"` (in `analyze_basic_metadata.py` after slice 0) AND the API TS handler's separately-duplicated `CODE_VERSION` at `cloud/apps/api/src/queue/handlers/analyze-basic.ts:34` also goes `"1.1.1"` → `"1.2.0"`. The TS constant is what the re-compute cache-hit check at `analyze-basic.ts:73` actually reads — bumping only the Python side would not invalidate a single cache hit. The aggregate constant `AGGREGATE_ANALYSIS_CODE_VERSION` at `cloud/apps/api/src/services/analysis/aggregate/constants.ts:1` (currently `"1.2.0"` on main) bumps to `"1.3.0"` so aggregate rows also get a version signal.
+- **One-shot migration marks all existing basic + aggregate `AnalysisResult` rows as SUPERSEDED.** Necessary because the read path `cloud/apps/api/src/graphql/queries/analysis.ts:21` queries by `status='CURRENT'` regardless of `codeVersion` — a version bump alone does not invalidate any existing row. The migration is the invalidation. After it runs, existing runs show the same UI state as a never-analyzed run; users trigger a fresh re-compute via the existing force-recompute mutation path. No eager recompute script — the worker re-runs on demand.
+- `domain-analysis-cache` (actually defined in `cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts:19` as `DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = "1.0.0"`, written in `domain-analysis-snapshot-builder.ts:365`) is a DIFFERENT cache that serves pre-computed domain-level rollups. It is not the stale-row problem above — that's the `AnalysisResult` table. For the domain snapshot cache, bump `DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION` to `"1.1.0"` so domain snapshots recompute after deploy.
+- UI help copy and canonical docs updated so the displayed formula matches reality.
 
 ---
 
 ## Non-goals
 
-- No change to how decisions are classified as prioritized/deprioritized/neutral. The upstream labeling is untouched.
-- No change to `overall.mean` or other per-model aggregates that are not winRate.
-- No new UI features, new columns, or new views. This is a semantics fix, not a product feature.
-- No rework of the `compute_rankings.py` script's non-winRate outputs.
-- No changes to `.gitignore` or CI config.
+- No change to how transcripts are classified as prioritized / deprioritized / neutral. The upstream labeling is untouched.
+- No new UI features, columns, or views. This is a semantics fix.
+- No reintroduction of Wilson CI or any confidence-interval machinery. That backend was deleted in `remove-compare-page` and stays deleted.
+- No consolidation of duplicated aggregation logic (API vs web). Out of scope — see § Follow-ups.
+- No changes to `.gitignore`, CI config, or test infrastructure.
 - No reopening of PR #627 (`fix(overview): show win rate for neutral preferred values`) — that fix is independently correct and stays.
+- No rework of the "overall.mean" per-model aggregate (that's a separate signed-distance average, not a winRate).
 
 ---
 
@@ -63,239 +66,328 @@ winRate = prioritized / (prioritized + deprioritized + neutral)
 
 | # | Question | Decision |
 |---|---|---|
-| 1 | Formula | Strict `prioritized / (prioritized + deprioritized + neutral)` |
-| 2 | Historical data | **Option C** — backfill so every run uses the new formula; no split-brain |
-| 3 | Scope | Everywhere winRate is used, including stats, for consistent semantics |
+| 1 | Formula | `prioritized / (prioritized + deprioritized + neutral)` everywhere. |
+| 2 | `analysisSemantics.preference.ts` bucket redesign | **Option A — model-relative mean.** Top 3 values by `winRate - model_mean` descending, bottom 3 ascending, neutral bucket for values near the model's mean. |
+| 3 | `analyze_basic.py` split scope | Split the file under 400 lines as **slice 0** of this feature before touching any winRate logic. Required because the file is 704 lines on main and the CI file-size check blocks any edits to over-limit files. |
+| 4 | Backfill | **One-shot migration at deploy time** (decision updated post-review — the original "lazy via CODE_VERSION bump" was premised on a read-path version check that does not exist; see § Stale data — resolved). A Prisma migration sets `status='SUPERSEDED'` on every `AnalysisResult` row where `analysisType IN ('basic', 'AGGREGATE')` and `status='CURRENT'`. Existing UI re-computes on-demand via the force-recompute path. No eager backfill script. In parallel, bump both basic-side `CODE_VERSION` constants (Python + TS handler) to `"1.2.0"`, bump aggregate `AGGREGATE_ANALYSIS_CODE_VERSION` to `"1.3.0"`, bump `DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION` to `"1.1.0"`. |
+| 5 | Wilson CI | Do not reintroduce. `remove-compare-page` removed the backend plumbing. The standalone `compute_rankings.py` script's internal `wilson_score_interval` helper stays (it's self-contained) but its `total` input changes to the new honest denominator. |
 
 ---
 
-## Affected surfaces — enumerated
+## Affected surfaces — enumerated from the current main branch
 
-Grepped `cloud/` and `docs/` for `winRate|win_rate` and reviewed each hit. Below is the full list of what changes.
+Numbers below are line references on `main` as of commit `27454f00`. Expect drift during implementation; the plan/tasks stages will re-verify.
 
-### Python stats worker (source of truth)
+### Python worker — source of truth
 
-| File | What changes |
-|---|---|
-| `cloud/workers/stats/basic_stats.py` | `compute_win_rate(prioritized, deprioritized, neutral)` — add `neutral` param, change denominator. `compute_value_stats` — pass new total to `wilson_score_ci`. Update docstrings. |
-| `cloud/workers/stats/tests/test_basic_stats.py` | All existing tests for `compute_win_rate` and `compute_value_stats` — rewrite expected values. Add new cases: all-neutral, mostly-neutral, zero-neutral-regression (old behavior still holds). |
-
-### API-side TypeScript aggregation (used by GraphQL resolvers)
-
-| File | What changes |
-|---|---|
-| `cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts` | Lines ~123-171 — `target.winRate = totalWins / totalBattles`. Rename `totalBattles` → `totalResponses` and include neutrals. Update `winRateMean`, `winRateSem`, `winRateSd` derivations so they're consistent with the new denominator. |
-| `cloud/apps/api/src/services/analysis/aggregate/__tests__/*.test.ts` | Fixture expectations. |
-
-### Web-side TypeScript aggregation (mirror of API-side)
-
-| File | What changes |
-|---|---|
-| `cloud/apps/web/src/services/AggregateAnalysisService.ts` | Line ~188 — same `totalWins / totalBattles` pattern. Keep in lockstep with API file. |
-| `cloud/apps/web/src/services/__tests__/AggregateAnalysisService.test.ts` | Fixtures. |
-
-> **Risk:** these two aggregation files were identical logic duplicated across API and web. The plan stage must decide whether this spec also extracts them into a shared `packages/shared` helper, or keeps them duplicated and adds a checklist item in closeout to verify both were updated. Recommendation: do **not** extract in this feature — it doubles the surface area and risk. Keep them duplicated, tag the commit message, and add a follow-up issue.
-
-### Web UI v2 — CRITICAL semantics risk
-
-| File | What changes |
-|---|---|
-| `cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts` | Lines 101-115 — hardcoded `0.5` thresholds for "prioritized / neutral / deprioritized" buckets. **After the formula change, 0.5 is no longer the neutral baseline.** See § Risk below for the redesign options. |
-| `cloud/apps/web/src/components/analysis-v2/__tests__/*.test.ts(x)` | Fixtures and snapshot tests. |
-| `cloud/apps/web/src/components/analysis-v2/AnalysisOverview.tsx` (and siblings) | Tooltips and help strings that reference winRate semantics. |
-
-### Overview / older analysis surfaces
-
-| File | What changes |
-|---|---|
-| `cloud/apps/web/src/components/analysis/AnalysisOverview.tsx` | Tooltip / label copy updates. No logic — it reads whatever the backend sends. |
-| `cloud/apps/web/src/components/analysis/*.tsx` | Any rendered "Win Rate" column header or tooltip. |
-
-### Standalone scripts — easy to miss
-
-| File | What changes |
-|---|---|
-| `cloud/scripts/analysis/compute_rankings.py` | Lines 60-116 — this script has its **own** `compute_win_rates` implementation of the old formula and writes `win-rate-rankings.csv`. Must be updated in the same feature or outputs silently diverge. |
-
-### MCP export surface (external-facing)
-
-| File | What changes |
-|---|---|
-| `cloud/apps/api/src/mcp/tools/export-pairwise-outcomes.ts` | Lines ~208, ~212 — `valueAWinRate` / `valueBWinRate` field values. Downstream user scripts and analyses may depend on this export format. **Add a note to the MCP tool description so callers know the semantics changed.** Do not rename the field. |
-| `cloud/apps/api/src/mcp/tools/__tests__/*.test.ts` | Expected values in export tests. |
-
-### GraphQL schema
-
-- Fields keep their names. No schema change. Only resolver math changes.
-- Codegen rerun to pick up any comment/description changes.
-
-### Historical data — the backfill
-
-| Target | Action |
-|---|---|
-| `RunSummary` JSON blobs in `runs` table (or wherever aggregated results persist) | Recompute from stored transcripts. |
-| `analysis-cache` | Invalidate. Let the next request recompute under the new formula. |
-| `domain-analysis-freshness-cache` | Invalidate. |
-| Any precomputed rankings in CSVs under `cloud/scripts/analysis/output/` (if tracked) | Rerun the script and commit updated CSVs, OR delete and regenerate on-demand. Plan stage decides. |
-
-**Data-critical-waves compliance is mandatory** (see `docs/workflow/rules/data-critical-waves.md`):
-
-1. Backfill script must have a `--dry-run` mode that prints first N rows of old vs new winRate and counts of changed rows.
-2. Use production-shaped fixtures (real `prioritized/deprioritized/neutral` triples pulled from a prod snapshot, not idealized schema).
-3. Dry-run output must be reviewed by the human before live prod execution.
-4. Live execution must happen in a controlled window with rollback steps documented.
-5. Post-deploy verification checklist: row counts pre/post, spot-check 3 random runs against hand-computed winRate, watch for error spikes for 10 minutes.
-
-### Canonical docs & glossary
-
-| File | What changes |
-|---|---|
-| `docs/values-summary.md` | If it defines winRate, update the definition. |
-| `docs/valuerank_prd.yaml` | If it defines winRate, update the definition. |
-| `docs/canonical-glossary.md` | Add or update the `winRate` entry to state the new formula explicitly. |
-| `docs/README.md` (architecture overview) | Only if it mentions winRate formula. |
-
----
-
-## Critical risk — the 0.5 threshold
-
-`analysisSemantics.preference.ts` uses `winRate > 0.5 + EPSILON` to bucket a value as "top prioritized", `< 0.5 - EPSILON` as "top deprioritized", and `≈ 0.5` as "neutral".
-
-**Under the current formula**, 0.5 really is the neutral baseline: a value prioritized as often as it is deprioritized scores 0.5. After the denominator change, **this is no longer true**. A value the model takes a strong "prioritize" stance on half the time and is neutral the other half will now score `0.5 * (0.5 / (0.5+0+0.5)) = ...` — in general, the 0.5 line becomes meaningless because the neutral baseline depends on the ratio of neutrals in the data for that (model, value) pair.
-
-### Options for the bucket logic
-
-| Option | Approach | Trade-off |
+| File | Size | What changes |
 |---|---|---|
-| A | Compare each value's winRate to the **model's mean winRate** across all values. Top/bottom 3 by distance from the model's mean. | Always produces 3 top + 3 bottom. No absolute "prioritized" meaning — a value is only "strongly prioritized" relative to the model. |
-| B | Use a significance test — bucket is "prioritized" if the Wilson CI lower bound > baseline (e.g., 1/N or the model's mean). | Honest statistical definition. May produce empty buckets for models with small samples. |
-| C | Compare to a fixed baseline = expected value under uniform random labeling, i.e. `1/3` if neutral is equally likely as prioritized and deprioritized. | Simple, interpretable. Assumes a 3-way uniform prior that may not match real data. |
-| D | Sort by winRate descending and take top 3, bottom 3, regardless of thresholds. | Simplest. Produces "top prioritized" and "bottom prioritized" labels that are always relative. |
+| `cloud/workers/analyze_basic.py` | **704 lines (over limit)** | **Slice 0 refactor, no logic change.** Extract `CODE_VERSION`, `SUMMARY_CONTRACT_VERSION`, and the `methodsUsed` dict into a new `cloud/workers/analyze_basic_metadata.py`. Extract aggregation helpers into `cloud/workers/analyze_basic_aggregation.py` (or similar — the plan stage decides the exact split). Target: every resulting file < 400 lines, `analyze_basic.py` itself < 400 lines. Must preserve behavior byte-for-byte. Then, in a later slice: drop the dead `"winRateCI": "wilson_score"` key from `methodsUsed`, bump `CODE_VERSION` to `"1.2.0"`. |
+| `cloud/workers/stats/basic_stats.py:47-95` | 254 lines | `compute_win_rate(prioritized, deprioritized, neutral=0)` — add `neutral` param (default 0 for caller backwards compat), change denominator to include neutrals. `compute_value_stats:86` — pass `neutral` through. Drop the unused `confidence: float = 0.95` parameter from `compute_value_stats` (dead param from the old Wilson CI era). Update docstrings. |
+| `cloud/workers/tests/test_analyze_basic.py` | — | Update the aggregation test around line 978-982 (`# 3 prioritized, 1 deprioritized = 75% win rate`) — the fixture already has zero neutrals for that case, so the expected value stays at `0.75`. BUT: also remove the `assert methods["winRateCI"] == "wilson_score"` assertion (line 218) since `winRateCI` leaves `methodsUsed` in this feature. Add new test cases for the headline change (see § Verification plan). |
+| `cloud/workers/stats/tests/test_basic_stats.py` | — | **Create this file.** Dedicated unit tests for `compute_win_rate` and `compute_value_stats` — the repo currently tests these only indirectly via `test_analyze_basic.py`. Not strictly required for the fix, but the spec calls for it because the edge cases (`0/0/0`, `0/0/N`, `P/D/0`) deserve direct coverage. |
 
-**Recommendation:** Option A (model-relative) — it's the most defensible without extra statistical assumptions, doesn't require UI to change bucket count, and degrades gracefully when a model has weak or missing data.
+### API TypeScript aggregation
 
-**This is a spec decision the human needs to confirm before plan stage.** Flagging as a blocking question for the Opus spec review pass.
+| File | What changes |
+|---|---|
+| `cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts:154-156` | Current: `totalBattles = prioritized + deprioritized; winRate = totalBattles > 0 ? totalWins / totalBattles : 0`. New: include `target.count.neutral` in the denominator. Rename `totalBattles` → `totalResponses`. Fallback stays `0` (not `0.5`) to match the existing behavior on this code path. |
+| `cloud/apps/api/src/services/analysis/aggregate/contracts.ts` | No schema change. Field names on `zValueStats` stay identical. |
+| `cloud/apps/api/src/services/analysis/aggregate/constants.ts:1` | **Bump** `AGGREGATE_ANALYSIS_CODE_VERSION = '1.2.0'` → `'1.3.0'`. Currently `'1.2.0'` on main. This is the version signal the aggregate pipeline writes into `analysisResult.codeVersion` at `aggregate-run-workflow.ts:168,193` when a new aggregate row is persisted. |
+| `cloud/apps/api/tests/services/analysis/aggregate.test.ts` | Add at least one test case with non-zero neutrals that proves the new denominator is used. |
+
+### API queue handler — TS-side CODE_VERSION duplicate
+
+The `analyze_basic` job handler has its OWN `CODE_VERSION` constant that gets used at two code paths: (a) cache-hit check before re-running the Python worker (line 73), (b) writing the version into the persisted `analysisResult.codeVersion` field (line 169). This is independent of the Python worker's constant — bumping only the Python side does not fire the cache-hit check or tag new rows.
+
+| File | What changes |
+|---|---|
+| `cloud/apps/api/src/queue/handlers/analyze-basic.ts:34` | Bump `const CODE_VERSION = '1.1.1';` → `'1.2.0'`. Must match the Python worker's `CODE_VERSION` in `analyze_basic_metadata.py` (bumped in slice 1). |
+| `cloud/apps/api/tests/queue/handlers/analyze-basic.integration.test.ts:284` | Update assertion `expect(result?.codeVersion).toBe('1.1.1');` → `'1.2.0'`. |
+
+### API — domain-analysis value-detail resolver (`selectedValueWinRate`)
+
+This is a second-tier winRate metric: "what fraction of the time did the selected value beat its opponent in a pairwise comparison, in this condition / vignette". The current formula drops neutrals, same bug as the primary `winRate`.
+
+| File | What changes |
+|---|---|
+| `cloud/apps/api/src/graphql/queries/domain/analysis/value-detail-types.ts:33,42` | `mapCondition` — change `comparisonDenominator = condition.prioritized + condition.deprioritized` → include `condition.neutral`. |
+| `cloud/apps/api/src/graphql/queries/domain/analysis/value-detail-types.ts:55,66` | `mapVignette` — same fix for the vignette-level `selectedValueWinRate`. |
+| `cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx:162-176` | Test fixture `createCondition` helper computes expected `selectedValueWinRate` with the old denominator (`prioritized / totalDirectionalTrials`). Update to match the new formula. |
+| `cloud/apps/api/tests/graphql/queries/domain-analysis.test.ts:320` | If this test hand-computes expected `selectedValueWinRate` values, update. Grep the file for assertions first. |
+
+Note: `cloud/apps/web/src/utils/canonicalConditionSummary.ts:128` computes `selectedValueWinRate = (counts.strongly + counts.somewhat) / totalTrials` where `totalTrials` already includes `neutral + opponent* `. **This is already the honest formula** — no change needed. The 0.5 threshold at line 129 (`isOpponent = selectedValueWinRate < 0.5`) is a different semantic question ("did the selected value win more than the opponent in pairwise outcomes?") and is unaffected by the denominator change.
+
+### API MCP export
+
+| File | What changes |
+|---|---|
+| `cloud/apps/api/src/mcp/tools/export-pairwise-outcomes.ts:200,204` | **No math changes needed** — this tool just passes through `valueAStats?.winRate` / `valueBStats?.winRate` from the upstream stats. It inherits the fix automatically. Update the tool description string to note the formula changed, so external MCP callers know. |
+| `cloud/apps/api/tests/mcp/tools/export-pairwise-outcomes.test.ts:72-77,162-163` | **Specific hand-computed fixture:** a test case with `neutral: 1` and expected `winRate: 0.75 / 0.25`. Under the new formula with `prioritized=3, deprioritized=1, neutral=1`, the expected value becomes `3 / 5 = 0.6` (and the opposing fixture becomes `1 / 5 = 0.2`). Update both the fixture-side `winRate` literal at ~72-77 and the matching assertion at ~162-163. Also grep the file for any OTHER hand-computed `winRate:` literals with non-zero neutrals and update. |
+
+### Web TypeScript — three computation sites and one copy site
+
+| File | What changes |
+|---|---|
+| `cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:101-115` | **Bucket redesign (Option A).** Compute `modelMean = average(winRate across all values for this model)`. Replace the `winRate > 0.5 + EPSILON` filter with `winRate > modelMean + EPSILON`. Same for deprioritized (`< modelMean - EPSILON`). Neutral bucket: `|winRate - modelMean| <= EPSILON`. Sorting key changes from `Math.abs(winRate - 0.5)` to `Math.abs(winRate - modelMean)`. Keep the top-3 / bottom-3 slices. |
+| `cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:167-182` | **Second web computation site** (merged winRate across multi-scope analyses). Add `neutral` to `totalBattles` → rename to `totalResponses`, include neutrals. Fallback stays `0.5` (matches current behavior for "no data"). |
+| `cloud/apps/web/src/pages/DomainAnalysis.tsx:143-146` | **Third web computation site.** Current: `denom = e.prioritized + e.deprioritized`. New: `denom = e.prioritized + e.deprioritized + (e.neutral ?? 0)`. The same file already computes `supportRate` with the honest denominator at lines 147-152 — use the same shape. |
+| `cloud/apps/web/src/components/domains/ValuePrioritiesHelpPanel.tsx:27-55` | **User-visible copy — broader than just the formula string.** The component currently has THREE outdated lines in the 27-55 range: (a) calls winRate a "conditional win rate", (b) says it "shows how often a value wins once the model picks a side", (c) shows the formula `prioritized / (prioritized + deprioritized)` at ~line 40, and (d) shows `Win Rate = prioritized / (prioritized + deprioritized) × 100%` at ~line 55. Under the honest denominator, "conditional" and "once the model picks a side" are false — neutrals are now in the denominator. Rewrite the help panel's winRate section so: the formula matches reality, the phrasing says "the fraction of times the model prioritized this value across all decisions including neutral", and any "conditional" framing is removed. Keep the support-mode help text unchanged (that is a different metric and is correct). |
+| `cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts` | Update test fixtures and assertions. The bucket assertions will change shape — they now depend on model-mean positioning, not absolute 0.5 positioning. Add an explicit test: a model where every value has `winRate = 0.3` should put the top-3 as the 3 values closest to 0.3 (not all "deprioritized"), because 0.3 IS that model's mean. |
+
+### Standalone script
+
+| File | What changes |
+|---|---|
+| `cloud/scripts/analysis/compute_rankings.py:60-111` | `compute_win_rates` (plural) iterates per-value and calls `compute_win_rate` internally. Current: `total_decisive = pri + dep; win_rate = pri / total_decisive`. New: include neutrals. Update `total` input to `wilson_score_interval` at the call site (line ~90) — the helper itself is correct, only its input changes. |
+| `cloud/scripts/analysis/compute_rankings.py:38-46` | Keep `wilson_score_interval` — it's a self-contained helper used by this script to emit CI columns to `win-rate-rankings.csv`. Do not delete. |
+
+### Cache invalidation — two distinct caches, two distinct mechanisms
+
+**Cache 1 — `AnalysisResult` rows (persisted per-run analysis output).** This is NOT a key-lookup cache; it's a Postgres table. Bumping `CODE_VERSION` does not affect existing rows. Handled by the slice 5 Prisma migration that sets `status='SUPERSEDED'` on every existing basic + aggregate row.
+
+**Cache 2 — Domain analysis snapshots (pre-computed domain-level rollups).**
+
+| File | What changes |
+|---|---|
+| `cloud/workers/analyze_basic_metadata.py` (new, from slice 0) | Bump `CODE_VERSION` from `"1.1.1"` to `"1.2.0"`. This is the Python-worker-side version stamp. |
+| `cloud/apps/api/src/queue/handlers/analyze-basic.ts:34` | Bump the duplicated TS-side `CODE_VERSION` from `'1.1.1'` to `'1.2.0'`. This is what the cache-hit check at `:73` actually reads. Must match the Python side. |
+| `cloud/apps/api/src/services/analysis/aggregate/constants.ts:1` | Bump `AGGREGATE_ANALYSIS_CODE_VERSION` from `'1.2.0'` to `'1.3.0'`. |
+| `cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts:19` | Bump `DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION` from `"1.0.0"` to `"1.1.0"`. The snapshot-builder at `domain-analysis-snapshot-builder.ts:365` already reads this constant when writing, and the read path is version-aware. Bumping the constant is the only edit needed — no migration, no startup hook. |
+
+### Canonical docs
+
+| File | What changes |
+|---|---|
+| `docs/features/analysis.md:71,86-96` | Update the winRate formula text. Current: `Win Rate = prioritized / (prioritized + deprioritized)` and "Neutral responses are excluded from the calculation." New: `Win Rate = prioritized / (prioritized + deprioritized + neutral)` and "All decided responses (including neutral) are counted in the denominator." Delete the stale "Wilson score confidence intervals handle small samples well" line — Wilson CI is gone. |
+| `docs/features/analysis.md:72-77` | **Additional cleanup:** the `ValueStats` type doc still declares a `confidenceInterval` field that no longer exists in the TypeScript type. Remove the field from the doc's type listing. |
+| `docs/features/analysis.md:184-193` | **Additional cleanup:** the `MethodsUsed` type doc still declares a `winRateCI: "wilson_score"` field. Slice 1 removes that key from `build_methods_used()` — update this doc to match. |
+| `docs/features/analysis.md:317-321` | **Additional cleanup:** a section-label string that reads "Per-value win rates and CIs". The "and CIs" suffix is stale. Change to "Per-value win rates". |
+| `docs/canonical-glossary.md` | **Add a new `winRate` entry.** Verified during exploration: the glossary currently has no `winRate` / `win rate` reference at all. Add an entry stating the new formula explicitly. |
+| `docs/valuerank_prd.yaml`, `docs/values-summary.md` | **No changes.** Verified during exploration: neither file has any `winRate` / `win_rate` / `Win Rate` reference. Listed here only so the plan stage doesn't re-grep. |
+
+### What does NOT change (verified during exploration)
+
+- `cloud/apps/web/src/services/` — this directory does not exist on main post-`remove-compare-page`. The stale draft spec listed `AggregateAnalysisService.ts` — that file is gone. No action.
+- `cloud/apps/api/src/` — no Wilson CI code remains. No action on CI.
+- `cloud/apps/web/src/components/domains/DominanceSectionChart.tsx:238` — uses `winRate = 1 / (1 + Math.exp(-edge.gap))` which is a logistic-from-gap-score, a completely different metric. Out of scope.
+- `cloud/apps/web/src/components/domains/ValuePrioritiesSection.tsx:362-366` — just reads `model.winRates[value]` and displays it. No math. Automatically correct once upstream producers are fixed.
+- `cloud/apps/web/src/utils/canonicalConditionSummary.ts:128-129` — the `selectedValueWinRate = (strongly+somewhat)/totalTrials` computation at line 128 already uses a neutral-inclusive denominator (because `totalTrials` has always included neutral), so the denominator is already correct. **However**, line 129 uses `isOpponent = selectedValueWinRate < 0.5` as a binary winner test, and under a neutral-inclusive denominator 0.5 is NOT the threshold between "selected wins" and "opponent wins" — a condition with 40% selected-prioritized / 30% opponent-prioritized / 30% neutral flags as "opponent winning" (winRate = 0.4) even though the selected value was prioritized more often. This is a **pre-existing bug**, present on main before this feature, and is explicitly **NOT fixed here**. It is a separate decision about a different metric. Noted for a follow-up. |
 
 ---
 
-## Wilson CI consequence
+## Risk — the 0.5 threshold (resolved)
 
-`wilson_score_ci(successes, total, confidence)` — both arguments change:
+Under the old formula, 0.5 was the neutral baseline: a value prioritized as often as it was deprioritized scored exactly 0.5. After the denominator change, **0.5 is no longer neutral**. The neutral baseline for a given (model, value) pair depends on how often that model is neutral overall.
 
-- **Old:** `successes = prioritized`, `total = prioritized + deprioritized`
-- **New:** `successes = prioritized`, `total = prioritized + deprioritized + neutral`
+### Decision: Option A — model-relative buckets
 
-Consequences:
+- Compute `modelMean` = average of `winRate` across all values for a given model.
+- "Top prioritized" = values with `winRate > modelMean + EPSILON`, sorted by `winRate - modelMean` descending, take top 3.
+- "Top deprioritized" = values with `winRate < modelMean - EPSILON`, sorted by `modelMean - winRate` descending, take top 3.
+- "Neutral" = values with `|winRate - modelMean| <= EPSILON`, sorted by absolute distance ascending, take top 3.
 
-1. The point estimate drops toward `prioritized / (total including neutrals)`.
-2. The CI width **narrows** for any value with non-zero neutrals, because `total` grows. This is correct — we actually have more data per value than the old formula pretended.
-3. For values where `prioritized + deprioritized = 0` but `neutral > 0`, the old code returned "no data" (full 0-to-1 CI). The new code will return `winRate = 0`, with a Wilson CI anchored at 0. **Decide in plan stage whether this is desirable** — arguably this is correct (we DO have data; the model just never prioritized this value).
+**Why:**
+- Defensible without new statistical machinery.
+- Bucket shape stays the same (top 3 / bottom 3 / neutral middle).
+- Degrades gracefully when a model has weak or missing data.
+- Meaning is "this value is prioritized more than this model usually does" — which is the question a reader of this UI is actually trying to answer.
+
+**Known limitations to document in the UI (spec requirement):**
+- A model that treats all values equally (all winRates within EPSILON of the mean) will show empty "top prioritized" and "top deprioritized" buckets, with 3 values in the neutral bucket. This is correct, not a bug.
+- A model with very weak signals may still produce small differences that land in the top/bottom buckets. A reader should interpret "model-relative top prioritized" as a ranking, not an absolute claim.
+
+**Implementation note for the bucket logic:** `winRate` is typed `number | null` in the current `PreferenceValueSummary` shape (`analysisSemantics.types.ts:19-21`). The model-mean computation **must filter out null winRates** before averaging, otherwise the mean is `NaN` and every comparison returns `false`. Values with `winRate: null` should be excluded from all three buckets.
 
 ---
 
 ## Verification plan
 
-At each stage, the factory's standard preflight runs; additionally:
+All stages run the feature-factory standard preflight. Plus:
 
-### Python stats (slice ~A)
-- `pytest cloud/workers/stats/tests/test_basic_stats.py` — all new and updated cases pass.
-- Specifically verify the all-neutral case: `compute_win_rate(0, 0, neutral=100) == 0.0` (not 0.5).
-- Specifically verify the zero-neutral case still matches old behavior: `compute_win_rate(3, 1, neutral=0) == 0.75`.
+### Slice 0 — analyze_basic.py split
+- `PYTHONPATH="$(pwd)/workers:$PYTHONPATH" pytest cloud/workers/tests/test_analyze_basic.py` — every test still passes with zero behavior change.
+- `wc -l` on `analyze_basic.py` and every new module < 400 lines.
+- Ensure new modules are importable from the same public names the rest of the worker uses.
 
-### API aggregation (slice ~B)
-- `npm run test --workspace @valuerank/api` — all existing tests pass after fixture updates.
-- New test: an aggregation fixture with neutrals produces the expected winRateMean and winRateSem.
+### Slice 1 — Python stats fix + metadata cleanup
+- `PYTHONPATH="$(pwd)/workers:$PYTHONPATH" pytest cloud/workers/tests/` — all pass.
+- New direct cases in `test_basic_stats.py`:
+  - `compute_win_rate(3, 1, 0) == 0.75` — zero-neutral matches old behavior.
+  - `compute_win_rate(1, 0, 9) == 0.1` — headline case: heavy neutral drags the honest rate down.
+  - `compute_win_rate(0, 0, 100) == 0.0` — all-neutral is honest zero, not fake 0.5.
+  - `compute_win_rate(0, 0, 0) == 0.5` — still no-data fallback.
+  - `compute_win_rate(5, 5, 0) == 0.5` — symmetric, no neutrals, unchanged.
+  - `compute_win_rate(5, 5, 10) == 0.25` — symmetric with neutrals.
+- The `assert methods["winRateCI"]` line in `test_analyze_basic.py` is removed.
+- `CODE_VERSION == "1.2.0"` is asserted in `test_analyze_basic.py`.
 
-### Web aggregation mirror (slice ~C)
-- `npm run test --workspace @valuerank/web` — all existing tests pass.
-- Explicit test that API and web aggregators produce identical winRate for the same input (duplicated logic must stay in lockstep).
+### Slice 2 — API aggregation fix + cache invalidation hook
+- `npm run test --workspace @valuerank/api` — all pass.
+- New aggregate.test.ts case: fixture with `(prioritized=2, deprioritized=1, neutral=7)` aggregated across 2 runs yields `winRate = 4/20 = 0.2` (not `4/6 = 0.667`).
+- `totalBattles` → `totalResponses` rename is consistent.
 
-### UI semantics redesign (slice ~D)
-- New tests for `analysisSemantics.preference.ts` covering the chosen bucket option (A/B/C/D).
-- Snapshot updates for affected v2 components.
+### Slice 3 — Web aggregation fix + bucket redesign + copy
+- `npm run test --workspace @valuerank/web` — all pass.
+- New `analysisSemantics.test.ts` case: model with three values (`A: 0.2, B: 0.3, C: 0.4`), all below the old 0.5 threshold. Under new logic, topPrioritizedValues = `[C]`, topDeprioritizedValues = `[A]`, because `modelMean = 0.3` and C is above it, A is below. Under the old logic, all three would have been in the `deprioritized` bucket and `prioritized` would have been empty.
+- Verify `ValuePrioritiesHelpPanel.tsx` renders the new formula string (snapshot or text-match).
 
-### Backfill dry-run (slice ~E)
-- `python cloud/scripts/analysis/compute_rankings.py --dry-run` on a prod snapshot.
-- Output: table of "first 20 rows, old winRate → new winRate", total rows changed count.
-- **Human review required** before live execution.
+### Slice 4 — Standalone script + docs
+- `python cloud/scripts/analysis/compute_rankings.py --help` — runs without error.
+- If the script has test coverage (grep first), update the tests. If not, skip test updates.
+- `docs/features/analysis.md` says the new formula in all three places (line ~71 type comment, ~88 text, and anywhere else).
+- `docs/features/analysis.md:72-77` no longer declares `confidenceInterval` on `ValueStats`.
+- `docs/features/analysis.md:184-193` no longer declares `winRateCI` on `MethodsUsed`.
+- `docs/features/analysis.md:317-321` "Per-value win rates and CIs" label changed to "Per-value win rates".
+- `docs/canonical-glossary.md` has a `winRate` entry matching the new formula.
 
-### Backfill live (slice ~F — gated on human approval)
-- Run against prod read replica first if available.
-- Run against prod primary.
-- Post-run: spot-check 3 random runs by hand.
-- Invalidate `analysis-cache` and `domain-analysis-freshness-cache`.
+### Slice 5 — Mark-superseded migration
+- New migration file created under `cloud/packages/db/prisma/migrations/<timestamp>_invalidate_stale_winrate_analyses/migration.sql`.
+- Migration body is an UPDATE statement setting `status='SUPERSEDED'` where `status='CURRENT' AND analysisType IN ('basic', 'AGGREGATE')`.
+- `npx prisma migrate dev --schema packages/db/prisma/schema.prisma` against the test database runs cleanly.
+- Post-migration: `SELECT COUNT(*) FROM "AnalysisResult" WHERE status='CURRENT' AND analysisType IN ('basic', 'AGGREGATE')` returns 0 on the test DB (after you've seeded some rows for the test).
+- The actual row counts on prod are logged during deploy for audit.
 
-### Full preflight gate
-All 8 commands from `cloud/CLAUDE.md` pass, including `npm run test --workspace @valuerank/api` and `npm run test --workspace @valuerank/web`.
+### Full preflight gate (before PR)
+All 8 commands from `cloud/CLAUDE.md`:
+1. `npm run lint --workspace @valuerank/shared`
+2. `npm run lint --workspace @valuerank/db`
+3. `npm run lint --workspace @valuerank/api`
+4. `npm run test --workspace @valuerank/api`
+5. `npm run build --workspace @valuerank/api`
+6. `npm run lint --workspace @valuerank/web`
+7. `npm run test --workspace @valuerank/web`
+8. `npm run build --workspace @valuerank/web`
+
+Plus Python: `PYTHONPATH="$(pwd)/workers:$PYTHONPATH" python -m pytest workers/tests/`
 
 ### Manual smoke (before merge)
-- Load analysis view for a run with known neutral values. Verify winRate matches hand calculation.
-- Verify the v2 "top prioritized" / "top deprioritized" / "neutral" buckets are non-empty and make sense under the new bucket logic.
-- Verify the MCP `export_pairwise_outcomes` tool returns new-formula values.
+- Load any analysis view for a run with known neutral values. Verify the displayed winRate matches a hand-computation using the new formula.
+- Verify the analysis-v2 "top prioritized / top deprioritized / neutral" buckets render sensible values under the new model-relative logic. Specifically: find a run where no value has winRate > 0.5 and confirm the top-prioritized bucket is no longer empty.
+- Verify `ValuePrioritiesHelpPanel` shows the new formula string.
+- Verify `export_pairwise_outcomes` via MCP returns winRate values computed under the new formula. (Requires a run that's been re-analyzed after the deploy.)
+
+---
+
+## Stale data — resolved
+
+### The problem (discovered during cold-read review)
+
+The initial "lazy via `CODE_VERSION` bump" story was premised on the read path checking the version. It doesn't.
+
+- `cloud/apps/api/src/graphql/queries/analysis.ts:21` — the `analysis(runId)` resolver — does:
+  ```typescript
+  const analysis = await db.analysisResult.findFirst({
+    where: { runId, status: 'CURRENT' },
+    orderBy: { createdAt: 'desc' },
+  });
+  ```
+  No `codeVersion` filter. An existing row with the old-formula math stays CURRENT indefinitely.
+- `cloud/apps/api/src/queue/handlers/analyze-basic.ts:73` — the cache-hit check inside the worker job — DOES check `CODE_VERSION`. But that code path only fires when a job is triggered. Passive GraphQL reads never trigger it.
+- Aggregate rows have the same issue — they're also `analysisResult` rows served by status only.
+
+Result: bumping code versions alone leaves every existing run serving old-formula winRates forever, plus the aggregate rows and the domain-analysis snapshots derived from them.
+
+### The fix (user-approved)
+
+A **one-shot Prisma migration** at deploy time, in its own slice, that runs:
+
+```sql
+UPDATE "AnalysisResult"
+SET "status" = 'SUPERSEDED'
+WHERE "status" = 'CURRENT'
+  AND "analysisType" IN ('basic', 'AGGREGATE');
+```
+
+(The actual migration file matches the project's existing Prisma migration conventions — raw SQL inside `packages/db/prisma/migrations/<timestamp>_invalidate_stale_winrate_analyses/migration.sql`. Codex writes the file in slice 5.)
+
+After the migration runs, the `analysis(runId)` resolver returns null for every previously-analyzed run. The UI's "no analysis yet, compute" state takes over, and users (or automated triggers) run fresh analyses under the new formula. Pre-existing `SUPERSEDED` rows stay `SUPERSEDED` — the WHERE clause only touches `CURRENT` rows.
+
+**The domain-analysis snapshot cache** is handled separately by bumping `DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION` from `"1.0.0"` to `"1.1.0"` in `cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts:19`. The snapshot-builder at `domain-analysis-snapshot-builder.ts:365` already reads that constant when writing new snapshots, and the read path is version-aware (snapshots carry their code version and are treated as stale if lower than current). That makes the snapshot cache lazy-backfill-compatible out of the box — unlike the `AnalysisResult` table.
+
+### What stays stale (intentionally)
+
+- `AnalysisResult` rows with `status IN ('SUPERSEDED', 'FAILED', 'STALE')` — the migration does NOT touch these. They're already invisible to the UI.
+- The `cloud/apps/web/src/utils/canonicalConditionSummary.ts:129` `isOpponent = selectedValueWinRate < 0.5` check is a **pre-existing** bug (the threshold is semantically wrong when winRate is computed on a neutral-inclusive denominator) and is NOT fixed here. It's a separate metric and a separate decision. Noted for a follow-up.
 
 ---
 
 ## Rollback plan
 
-1. Revert the merge commit. Because the Python, API, web, and UI changes are all in one PR, a single revert restores pre-feature behavior.
-2. **The backfill is NOT automatically reversible.** The old winRate values are gone from persisted caches and blobs. Rollback of code will re-derive on demand and match the old formula again, but any persisted `RunSummary` blobs written during the backfill window will contain new-formula values that no longer match the reverted code.
-3. Mitigation: the backfill script must write a sidecar file `cloud/scripts/analysis/output/backfill-<timestamp>.jsonl` containing `{runId, oldWinRate, newWinRate}` tuples so a reverse backfill is possible if needed.
+Rollback is a two-step sequence because the migration is persisted state.
+
+### Step 1 — Revert the merge commit
+
+Revert the squash commit on `main`. All Python / API / web / docs / version-bump changes are in one commit.
+
+### Step 2 — Decide what to do with post-merge writes
+
+Every run that was re-analyzed post-merge (before revert) has a new `analysisResult` row with:
+- `codeVersion: "1.2.0"` (basic) or `"1.3.0"` (aggregate)
+- `status: 'CURRENT'`
+- The new-formula winRate math in the output blob
+
+After revert, the reverted code's `CODE_VERSION` is back to `"1.1.1"` / `"1.2.0"`. Two options:
+
+**Option R1 (simple — reverted code reads new-math rows unchanged).** The reverted code does NOT check `codeVersion` on read, so it serves whatever `CURRENT` row exists — new-math rows included. Users see new-math values from the reverted code. Semantically mixed.
+
+**Option R2 (thorough — re-run the migration in reverse).** Write a rollback migration that does:
+```sql
+UPDATE "AnalysisResult"
+SET "status" = 'SUPERSEDED'
+WHERE "status" = 'CURRENT'
+  AND "codeVersion" IN ('1.2.0', '1.3.0')
+  AND "analysisType" IN ('basic', 'AGGREGATE');
+```
+This forces every post-merge row out of CURRENT. Users then trigger a re-run under the reverted code, which writes a fresh `1.1.1` / `1.2.0` row with the old math.
+
+**Recommendation: Option R2** if the rollback happens more than a few hours after the merge. If it's an immediate hotfix-style rollback (before any user-triggered re-runs happen), Option R1 is fine.
+
+### Step 3 — Domain snapshot cache rollback
+
+The `DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION` bump from `"1.0.0"` to `"1.1.0"` reverts naturally with the code revert. Old snapshots (tagged `"1.0.0"`) are still readable; new snapshots (tagged `"1.1.0"`) become "newer than current code" and are filtered by the snapshot reader's version-aware logic. No migration needed for this cache.
 
 ---
 
 ## Out of scope (intentional)
 
-- Rewriting the analysis pipeline to treat neutrals as first-class instead of a missing value.
-- Introducing a "neutrality rate" secondary metric alongside winRate (interesting idea, separate feature).
-- Extracting `aggregate-logic.ts` into `packages/shared` (see § Affected surfaces note).
-- Reopening the debate on whether winRate is the right top-line metric (separate product discussion).
+- Reintroducing Wilson confidence intervals or any CI widget. That backend is gone.
+- Adding a "neutralityRate" secondary metric alongside winRate (interesting idea, separate feature).
+- Extracting the API and web aggregation logic into a shared package (see Follow-ups).
+- Rewriting the analysis pipeline to treat neutrals as first-class instead of a drop-through.
+- Reopening the debate on whether winRate is the right top-line metric.
 - Any changes to `.gitignore`, CI config, or test infrastructure.
-- Any changes to how the feature-factory workflow itself operates.
 
 ---
 
 ## Follow-ups (after this ships)
 
-1. **Consider a "neutralityRate" metric** — the fraction of neutral responses per (model, value). It's now trivially derivable and would be a clean companion to winRate.
-2. **Consolidate API and web aggregation** — deduplicate `aggregate-logic.ts` / `AggregateAnalysisService.ts` into a shared package. Out of scope here to keep the diff small and reviewable.
-3. **Add a CI check** — lint rule or test that fails if any new `prioritized / (prioritized + deprioritized)` pattern is added to the codebase. Prevents regression.
+1. **Consider a `neutralityRate` metric** — `neutral / (prioritized + deprioritized + neutral)`. Trivially derivable after this feature and a clean companion to winRate.
+2. **Consolidate web + API aggregation** — right now two different files compute essentially the same aggregation math in TypeScript. A dedicated shared package would halve the surface area of future changes like this one. Explicitly scoped out here because it doubles the diff.
+3. **Lint rule** — fail CI on any new `prioritized / (prioritized + deprioritized)` pattern in TS or Python. Prevents regression. Low priority.
+4. **Split `analyze_basic.py` further** — slice 0 of this feature gets it under 400. A later feature could split the per-model aggregation from the summary emission for cleaner separation of concerns.
 
 ---
 
-## Model Policy (stage-by-stage)
+## Slice plan (authoritative — the plan stage will refine)
 
-> This feature touches a correctness primitive, a backfill of historical data, and downstream UI that has a non-obvious semantic risk (the 0.5 threshold). The spec and plan stages are the highest-risk writing; everything after is mechanical execution. Claude-Sonnet is safe for mechanical stages; Claude-Opus should own the risky thinking.
-
-| Stage | Model | Why |
+| Slice | Scope | Commit prefix |
 |---|---|---|
-| **Spec authoring** | **Opus** | Enumerating every winRate consumer, designing the backfill, and judging the 0.5-threshold redesign are high-risk writing. This draft was written by Sonnet as a starting point — **Opus must do a deep-read review before the spec checkpoint closes.** |
-| **Spec review reconciliation** | **Opus** | Resolving adversarial findings correctly requires judgment on the backfill strategy and the bucket-redesign options. Do not delegate. |
-| **Plan authoring** | **Opus** | Slice ordering has real consequences — e.g. the web aggregation mirror must land in the same PR as the API aggregation change, not a later slice. Backfill sequencing is data-critical. |
-| **Plan review reconciliation** | **Opus** | Same. |
-| **Tasks authoring** | **Sonnet** | Once the plan is locked, decomposing into tasks is mostly pattern-matching against the last feature run's task shape. |
-| **Tasks review reconciliation** | **Sonnet** | Same. |
-| **Slice dispatch to Codex** | **Sonnet** | Mechanical: write Codex spec, dispatch, verify. Follows the same template used in `remove-final-trial-sampler`. |
-| **Backfill dry-run execution** | **Sonnet + mandatory human review of output** | Sonnet runs the dry-run script and formats the diff. The human reads the diff. Do not proceed without explicit approval. |
-| **Backfill live execution** | **Human-gated** | Sonnet runs the commands; human holds the go/no-go. |
-| **Preflight / CI / ship** | **Sonnet** | Mechanical, same as every other feature run. |
-| **Closeout** | **Sonnet** | Mechanical summary. |
+| **0** | Split `analyze_basic.py` into smaller modules. Pure refactor, no logic changes. Target: every resulting module < 400 lines. | `winrate-honest-denominator: A — split analyze_basic.py under the file-size limit` |
+| **1** | Python stats fix: `compute_win_rate` signature + math. `compute_value_stats` passes `neutral` through. Drop unused `confidence` param. Drop dead `"winRateCI": "wilson_score"` metadata key. Bump Python-side `CODE_VERSION` → `"1.2.0"`. Update worker tests. Create `test_basic_stats.py`. | `winrate-honest-denominator: B — honest denominator in the Python worker` |
+| **2** | API aggregation fix: `aggregate-logic.ts` include neutrals in denominator, rename `totalBattles` → `totalResponses`. `value-detail-types.ts` — both `mapCondition` and `mapVignette` include neutrals in `comparisonDenominator`. Bump `analyze-basic.ts:34` TS-side `CODE_VERSION` → `'1.2.0'`. Bump `aggregate/constants.ts:1` `AGGREGATE_ANALYSIS_CODE_VERSION` → `'1.3.0'`. Bump `domain-analysis-cache-types.ts:19` `DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION` → `"1.1.0"`. MCP export tool description string update. Update tests: `aggregate.test.ts`, `domain-analysis.test.ts`, `analyze-basic.integration.test.ts` (codeVersion assertion), `export-pairwise-outcomes.test.ts` (hand-computed fixture at 72-77, 162-163). | `winrate-honest-denominator: C — honest denominator in the API aggregation` |
+| **3** | Web fix: `analysisSemantics.preference.ts` merged winRate math + Option A bucket redesign, `DomainAnalysis.tsx` winRate math, `ValuePrioritiesHelpPanel.tsx` full copy rewrite (not just the formula string — also the "conditional win rate" / "once the model picks a side" framing). Update web tests. | `winrate-honest-denominator: D — honest denominator in web aggregation and buckets` |
+| **4** | Standalone `compute_rankings.py` script fix. Update docs: `docs/features/analysis.md` (four sites: formula, `ValueStats.confidenceInterval` field removal, `MethodsUsed.winRateCI` field removal, "Per-value win rates and CIs" label), `docs/canonical-glossary.md` (new winRate entry). | `winrate-honest-denominator: E — honest denominator in standalone script and docs` |
+| **5** | **Prisma migration: mark existing basic + aggregate `AnalysisResult` rows as `SUPERSEDED`.** One-shot SQL migration file. No code changes. Required because the `analysis(runId)` read path does not check `codeVersion` — without this migration, every existing run keeps serving old-formula values forever. | `winrate-honest-denominator: F — invalidate stale analysisResult rows via migration` |
 
-### Why this split
-
-- **Opus-worth-it moments:** (1) spotting the 0.5-threshold risk in `analysisSemantics.preference.ts`, (2) designing a rollback-safe backfill, (3) deciding whether the Wilson CI change is desirable, (4) ordering slices so the API and web aggregation stay in lockstep.
-- **Sonnet-is-fine moments:** writing Codex specs, running tests, formatting closeout reports, dispatching slices once the plan is locked.
-
-### Enforcement
-
-- The Opus review pass on this spec must confirm: (a) the § Critical risk section is complete, (b) the bucket redesign option is chosen, (c) the backfill rollback plan is acceptable, (d) no winRate consumer is missing from the enumeration. Only after those four confirmations does the spec checkpoint close.
-- If Sonnet is mid-stage and hits a question that requires Opus judgment, **stop and ask the human to switch models**. Do not guess and continue.
+All 6 slices land in one PR. Slice 0 must go first because it unblocks slice 1. Slices 1-4 can land in any order relative to each other, but slice 2 and slice 3 must ship in the same PR (API and web math must stay in lockstep). Slice 5 is ordered last so the migration file timestamp is later than any code change in the same deploy — this is a cosmetic preference since all migrations run together on deploy anyway.
 
 ---
 
-## Blocking questions for the Opus spec-review pass
+## Open questions remaining for the plan stage
 
-1. **Which bucket-redesign option** (A model-relative, B significance test, C fixed 1/3 baseline, D pure top/bottom 3) does the human want in `analysisSemantics.preference.ts`?
-2. **Is the Wilson CI behavior change desirable** — specifically, the case where `prioritized + deprioritized = 0` but `neutral > 0` flips from "no data, full 0-to-1 CI" to "winRate = 0, Wilson CI anchored at 0"?
-3. **Should `aggregate-logic.ts` and `AggregateAnalysisService.ts` be consolidated** in this feature, or kept duplicated with a follow-up issue? (Recommendation: duplicated + follow-up.)
-4. **Does the backfill need a sidecar reverse-diff file** for hypothetical rollback? (Recommendation: yes.)
-5. **Is there a prod snapshot available** for the dry-run to run against, or does the plan stage need to define how to obtain one?
+None. All blocking questions were answered before this rewrite. The plan stage is expected to decide:
+
+- The exact boundary of the `analyze_basic.py` split in slice 0. Recommendation: extract `methodsUsed` / `CODE_VERSION` / `SUMMARY_CONTRACT_VERSION` into `analyze_basic_metadata.py`, extract aggregation helpers into `analyze_basic_aggregation.py`. Plan stage verifies this gets the main file under 400.
+- Whether the cache-key update in slice 2 includes `CODE_VERSION` (automatic future invalidation) or uses a one-shot startup hook (explicit this time only). Recommendation: include `CODE_VERSION` in the key.
+- Whether slice 1's `compute_value_stats` `confidence` parameter drop is safe — confirm no caller is passing it with a non-default value. Grep is cheap.

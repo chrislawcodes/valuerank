@@ -142,9 +142,12 @@ describe('buildAnalysisSemanticsView', () => {
     expect(Object.keys(semantics.preference.byModel)).toEqual(['claude-3', 'gpt-4']);
     expect(semantics.preference.byModel['claude-3']).toMatchObject({
       overallLean: 'A',
-      topPrioritizedValues: [{ name: 'Compassion', winRate: 0.7 }],
+      topPrioritizedValues: [
+        { name: 'Compassion', winRate: 0.7 },
+        { name: 'Balance', winRate: 0.5 },
+      ],
       topDeprioritizedValues: [{ name: 'Discipline', winRate: 0.2 }],
-      neutralValues: [{ name: 'Balance', winRate: 0.5 }],
+      neutralValues: [],
     });
     expect(semantics.reliability.byModel['gpt-4']).toMatchObject({
       baselineReliability: 0.92,
@@ -486,7 +489,7 @@ describe('buildPairedAnalysisSemanticsView', () => {
               byValue: {
                 Achievement: {
                   winRate: 0.2,
-                  count: { prioritized: 2, deprioritized: 8, neutral: 0 },
+                  count: { prioritized: 2, deprioritized: 8, neutral: 10 },
                 },
                 Care: {
                   winRate: 0.9,
@@ -544,7 +547,7 @@ describe('buildPairedAnalysisSemanticsView', () => {
     expect(semantics.reliability.rowAvailability).toEqual({ status: 'available' });
     expect(semantics.preference.byModel['claude-3']).toMatchObject({
       topPrioritizedValues: [{ name: 'Care', winRate: 0.6 }],
-      topDeprioritizedValues: [],
+      topDeprioritizedValues: [{ name: 'Achievement', winRate: 1 / 3 }],
       overallLean: 'B',
     });
     expect(semantics.reliability.byModel['claude-3']).toMatchObject({
@@ -563,5 +566,44 @@ describe('buildPairedAnalysisSemanticsView', () => {
       lowCoverageModels: ['claude-3'],
       highDriftModels: ['claude-3'],
     });
+  });
+
+  it('uses model-relative mean for bucket assignment', () => {
+    const semantics = buildAnalysisSemanticsView(
+      createAnalysis({
+        preferenceSummary: {
+          perModel: {
+            'claude-3': {
+              preferenceDirection: {
+                byValue: {
+                  Alpha: {
+                    winRate: 0.2,
+                    count: { prioritized: 2, deprioritized: 8, neutral: 0 },
+                  },
+                  Beta: {
+                    winRate: 0.3,
+                    count: { prioritized: 3, deprioritized: 7, neutral: 0 },
+                  },
+                  Gamma: {
+                    winRate: 0.4,
+                    count: { prioritized: 4, deprioritized: 6, neutral: 0 },
+                  },
+                },
+                overallLean: 'A',
+                overallSignedCenter: 0.2,
+              },
+              preferenceStrength: 0.5,
+            },
+          },
+        },
+      }),
+      false,
+    );
+
+    expect(semantics.preference.byModel['claude-3']).toMatchObject({
+      topPrioritizedValues: [{ name: 'Gamma', winRate: 0.4 }],
+      topDeprioritizedValues: [{ name: 'Alpha', winRate: 0.2 }],
+    });
+    expect(semantics.preference.byModel['claude-3']?.neutralValues).toEqual([{ name: 'Beta', winRate: 0.3 }]);
   });
 });

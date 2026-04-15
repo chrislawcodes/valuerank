@@ -267,6 +267,19 @@ Avoid confusion:
 - it is used to compare sensitivity across attributes and vignettes
 - it should be read as “how much the model moves when pressure increases,” not as a replacement for `direction + strength`
 
+### `winRate`
+
+`winRate` is the fraction of vignettes where a model prioritized a value out of all vignettes where a decision was recorded for that value. It uses `prioritized / (prioritized + deprioritized + neutral)` and returns `0.5` when there is no data at all. In code version `1.2.0`, this denominator includes neutrals.
+
+Example:
+
+- “The model’s `winRate` for Achievement was 0.73 after neutrals were included in the denominator.”
+
+Avoid confusion:
+
+- `winRate` is not the same as the share of only decisive responses
+- it is a rate for one `(model, value)` pair, not a whole run or vignette
+
 ### `Order Invariance`
 
 Order invariance means a model gives the same answer even when the order or presentation changes.

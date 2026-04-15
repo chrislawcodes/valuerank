@@ -140,9 +140,9 @@ function createCondition(overrides: {
     deprioritized: overrides.deprioritized,
     neutral: overrides.neutral,
     totalTrials: overrides.totalTrials,
-    selectedValueWinRate: overrides.prioritized + overrides.deprioritized === 0
+    selectedValueWinRate: overrides.prioritized + overrides.deprioritized + overrides.neutral === 0
       ? null
-      : overrides.prioritized / (overrides.prioritized + overrides.deprioritized),
+      : overrides.prioritized / (overrides.prioritized + overrides.deprioritized + overrides.neutral),
     strongly: 0,
     somewhat: 0,
     opponentSomewhat: 0,
@@ -159,7 +159,8 @@ function createVignette(
 ) {
   const prioritized = conditions.reduce((sum, condition) => sum + condition.prioritized, 0);
   const deprioritized = conditions.reduce((sum, condition) => sum + condition.deprioritized, 0);
-  const totalDirectionalTrials = prioritized + deprioritized;
+  const neutral = conditions.reduce((sum, condition) => sum + condition.neutral, 0);
+  const totalResponses = prioritized + deprioritized + neutral;
 
   return {
     definitionId,
@@ -169,11 +170,11 @@ function createVignette(
     otherValueKey: 'Benevolence_Dependability',
     prioritized,
     deprioritized,
-    neutral: conditions.reduce((sum, condition) => sum + condition.neutral, 0),
+    neutral,
     totalTrials: conditions.reduce((sum, condition) => sum + condition.totalTrials, 0),
-    selectedValueWinRate: totalDirectionalTrials === 0
+    selectedValueWinRate: totalResponses === 0
       ? null
-      : prioritized / totalDirectionalTrials,
+      : prioritized / totalResponses,
     conditions,
     ...overrides,
   };
