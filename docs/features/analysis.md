@@ -68,13 +68,7 @@ type ModelStats = {
 };
 
 type ValueStats = {
-  winRate: number;                     // prioritized / (prioritized + deprioritized)
-  confidenceInterval: {
-    lower: number;
-    upper: number;
-    level: 0.95;
-    method: 'wilson_score';
-  };
+  winRate: number;                     // prioritized / (prioritized + deprioritized + neutral)
   count: {
     prioritized: number;
     deprioritized: number;
@@ -88,12 +82,12 @@ type ValueStats = {
 Win rate measures how often a model prioritizes a specific value:
 
 ```
-Win Rate = prioritized / (prioritized + deprioritized)
+Win Rate = prioritized / (prioritized + deprioritized + neutral)
 ```
 
-- Neutral responses are excluded from the calculation
-- Wilson score confidence intervals handle small samples well
-- Returns 0.5 (neutral) if no data available
+- All decided responses, including neutrals, are counted in the denominator
+- Returns 0.5 (neutral) if no data at all
+- Returns 0.0 if the value was never prioritized but neutrals were observed
 
 ### Model Agreement
 
@@ -183,7 +177,6 @@ All analysis results include documentation of methods used:
 
 ```typescript
 type MethodsUsed = {
-  winRateCI: 'wilson_score';           // Confidence interval method
   modelComparison: 'spearman_rho';     // Correlation test
   pValueCorrection: 'holm_bonferroni'; // Multiple comparison correction
   effectSize: 'cohens_d';              // Effect size measure
@@ -195,7 +188,6 @@ type MethodsUsed = {
 
 ### Why These Methods?
 
-- **Wilson Score CI** - Better for small samples and proportions near 0 or 1
 - **Spearman's Rho** - Robust to non-normal distributions
 - **Holm-Bonferroni** - Controls family-wise error rate for multiple comparisons
 - **Kruskal-Wallis** - Non-parametric, handles categorical dimensions
@@ -240,8 +232,8 @@ Analysis generates warnings for statistical assumption violations:
 
 | Code | Description | Recommendation |
 |------|-------------|----------------|
-| `SMALL_SAMPLE` | Model has < 10 samples | Results have wide CIs |
-| `MODERATE_SAMPLE` | Model has 10-30 samples | Consider bootstrap CIs |
+| `SMALL_SAMPLE` | Model has < 10 samples | Results may be unstable |
+| `MODERATE_SAMPLE` | Model has 10-30 samples | Consider more samples |
 | `NO_DIMENSIONS` | No dimension data found | Impact analysis empty |
 
 ---
@@ -317,7 +309,7 @@ The analysis panel is organized into 6 tabs:
 1. **Overview** - Summary statistics and key metrics
 2. **Decisions** - Decision distribution charts
 3. **Scenarios** - Most contested scenarios list
-4. **Values** - Per-value win rates and CIs
+4. **Values** - Per-value win rates
 5. **Agreement** - Model comparison matrix
 6. **Methods** - Statistical methodology documentation
 
@@ -366,7 +358,6 @@ enum AnalysisStatus {
 - **Main worker:** `workers/analyze_basic.py`
 - **Statistics module:** `workers/stats/`
   - `basic_stats.py` - Win rates, means, aggregation
-  - `confidence.py` - Wilson score CI implementation
   - `model_comparison.py` - Spearman's rho, pairwise tests
   - `dimension_impact.py` - Kruskal-Wallis, effect sizes
 

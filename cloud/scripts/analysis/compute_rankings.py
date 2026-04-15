@@ -63,7 +63,7 @@ def compute_win_rates(df: pd.DataFrame) -> pd.DataFrame:
     For each model, for each of the 10 values:
       - Count how many times it was prioritized (as value_a or value_b)
       - Count how many times it was deprioritized
-      - global_win_rate = prioritized / (prioritized + deprioritized)
+      - global_win_rate = prioritized / (prioritized + deprioritized + neutral)
 
     IMPORTANT: Sum counts, don't average rates.
     """
@@ -85,9 +85,9 @@ def compute_win_rates(df: pd.DataFrame) -> pd.DataFrame:
         pri = c["prioritized"]
         dep = c["deprioritized"]
         neu = c["neutral"]
-        total_decisive = pri + dep
-        win_rate = pri / total_decisive if total_decisive > 0 else 0.5
-        ci_lower, ci_upper = wilson_score_interval(pri, total_decisive)
+        total_responses = pri + dep + neu
+        win_rate = pri / total_responses if total_responses > 0 else 0.5
+        ci_lower, ci_upper = wilson_score_interval(pri, total_responses)
 
         rows.append({
             "model_id": model,
@@ -96,7 +96,7 @@ def compute_win_rates(df: pd.DataFrame) -> pd.DataFrame:
             "total_prioritized": pri,
             "total_deprioritized": dep,
             "total_neutral": neu,
-            "total_decisive": total_decisive,
+            "total_responses": total_responses,
             "wilson_ci_lower": round(ci_lower, 4),
             "wilson_ci_upper": round(ci_upper, 4),
         })
