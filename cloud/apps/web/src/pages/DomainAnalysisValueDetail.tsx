@@ -16,10 +16,6 @@ import {
   type DomainAnalysisValueDetailQueryVariables,
 } from '../api/operations/domainAnalysis';
 import { VALUE_LABELS, type ValueKey } from '../data/domainAnalysisData';
-import {
-  getTranscriptDecisionDisplayMode,
-  type TranscriptDecisionDisplayMode,
-} from '../utils/transcriptDecisionModel';
 import { ConditionMatrix } from '../components/domains/ConditionMatrix';
 
 const VALUE_DETAIL_COPY = {
@@ -125,9 +121,7 @@ export function DomainAnalysisValueDetail() {
       lastAccessedAt: null,
     }));
 
-    const displayMode: TranscriptDecisionDisplayMode = getTranscriptDecisionDisplayMode(transcripts);
-
-    return { transcripts, displayMode };
+    return { transcripts };
   }, [transcriptData]);
 
   if (domainId === '' || modelId === '' || valueKey === '') {
@@ -158,7 +152,7 @@ export function DomainAnalysisValueDetail() {
   const mathDenominator = detail.deprioritized + 1;
   const ratio = mathNumerator / mathDenominator;
   const selectedConditionKey = selectedCondition === null ? '' : `${selectedCondition.definitionId}:${selectedCondition.scenarioId ?? '__unknown__'}`;
-  const reportDecisionDisplayMode = selectedConditionTranscriptState.displayMode;
+  const reportDecisionDisplayMode = 'audit' as const;
   const decisionColumnLabel = VALUE_DETAIL_COPY.decisionColumnLabel;
 
   const handleConditionClick = (definitionId: string, conditionName: string, scenarioId: string | null) => {
