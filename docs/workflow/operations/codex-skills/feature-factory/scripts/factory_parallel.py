@@ -68,10 +68,25 @@ def parse_parallel_task_groups(slug: str) -> list[dict]:
     if not tasks_path.exists():
         return []
 
+    # Determine which slice to read based on checkpoint progress.
+    # Slice N starts after the N-th [CHECKPOINT] marker.  Slice 0 starts at the top.
+    progress = _stages.checkpoint_progress_state(slug)
+    target_slice = progress.get("index", 0)
+
     unchecked_tasks: list[dict[str, object]] = []
+    markers_seen = 0
+    collecting = target_slice == 0  # slice 0 starts immediately
+
     for line in tasks_path.read_text(encoding="utf-8").splitlines():
         if _stages._CHECKPOINT_MARKER_RE.match(line):
-            break
+            if collecting:
+                break  # end of current slice
+            markers_seen += 1
+            if markers_seen == target_slice:
+                collecting = True
+            continue
+        if not collecting:
+            continue
         if not re.match(r"^\s*-\s+\[\s\]\s+", line):
             continue
 
@@ -82,7 +97,7 @@ def parse_parallel_task_groups(slug: str) -> list[dict]:
             }
         )
 
-    if not unchecked_tasks:
+    if not collecting or not unchecked_tasks:
         return []
 
     annotated_indexes = [index for index, item in enumerate(unchecked_tasks) if item["files"]]

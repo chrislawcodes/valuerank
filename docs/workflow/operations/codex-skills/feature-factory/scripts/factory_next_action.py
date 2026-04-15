@@ -64,6 +64,10 @@ def recommended_next_action(
         return "repair_diff_checkpoint"
     if not reconciliation_ok:
         return "reconcile_reviews"
+    # If any tasks remain unchecked there are more slices to implement before delivering.
+    tasks_path = workflow_dir(slug) / "tasks.md"
+    if tasks_path.exists() and "- [ ]" in tasks_path.read_text(encoding="utf-8"):
+        return "dispatch_next_slice_to_codex"
     # Import here to avoid circular — refresh_delivery_snapshot is in factory_deliver
     from factory_deliver import refresh_delivery_snapshot  # noqa: E402
     delivery = refresh_delivery_snapshot(state.get(DELIVERY_KEY, {}))
