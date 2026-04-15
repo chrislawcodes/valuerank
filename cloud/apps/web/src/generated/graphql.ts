@@ -1317,6 +1317,35 @@ export type ModelTokenStats = {
   sampleCount: Scalars['Int']['output'];
 };
 
+export type ModelsAnalysisDomainBreakdown = {
+  __typename?: 'ModelsAnalysisDomainBreakdown';
+  domainId: Scalars['String']['output'];
+  domainName: Scalars['String']['output'];
+  evidenceWeight: Scalars['Int']['output'];
+  winRate: Scalars['Float']['output'];
+};
+
+export type ModelsAnalysisModelResult = {
+  __typename?: 'ModelsAnalysisModelResult';
+  label: Scalars['String']['output'];
+  modelId: Scalars['String']['output'];
+  values: Array<ModelsAnalysisValueResult>;
+};
+
+export type ModelsAnalysisResult = {
+  __typename?: 'ModelsAnalysisResult';
+  models: Array<ModelsAnalysisModelResult>;
+};
+
+export type ModelsAnalysisValueResult = {
+  __typename?: 'ModelsAnalysisValueResult';
+  domains: Array<ModelsAnalysisDomainBreakdown>;
+  eligibleDomainCount: Scalars['Int']['output'];
+  pooledWinRate?: Maybe<Scalars['Float']['output']>;
+  stabilityScore?: Maybe<Scalars['Float']['output']>;
+  valueKey: Scalars['String']['output'];
+};
+
 export type Mutation = {
   __typename?: 'Mutation';
   /** Add a tag to a definition. No-op if tag is already assigned. */
@@ -2457,6 +2486,7 @@ export type Query = {
   me?: Maybe<User>;
   /** Get token statistics for specific models. Useful for understanding prediction quality. */
   modelTokenStats: Array<ModelTokenStats>;
+  modelsAnalysis: ModelsAnalysisResult;
   /** Get a specific preamble by ID */
   preamble?: Maybe<Preamble>;
   /** List all preambles */
@@ -2869,6 +2899,11 @@ export type QueryLlmProvidersArgs = {
 
 export type QueryModelTokenStatsArgs = {
   modelIds?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+
+export type QueryModelsAnalysisArgs = {
+  domainId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -4289,6 +4324,13 @@ export type AvailableModelsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
 export type AvailableModelsQuery = { __typename?: 'Query', availableModels: Array<{ __typename?: 'AvailableModel', id: string, providerId: string, displayName: string, versions: Array<string>, defaultVersion?: string | null, isAvailable: boolean, isDefault: boolean }> };
+
+export type ModelsAnalysisQueryVariables = Exact<{
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+}>;
+
+
+export type ModelsAnalysisQuery = { __typename?: 'Query', modelsAnalysis: { __typename?: 'ModelsAnalysisResult', models: Array<{ __typename?: 'ModelsAnalysisModelResult', modelId: string, label: string, values: Array<{ __typename?: 'ModelsAnalysisValueResult', valueKey: string, pooledWinRate?: number | null, stabilityScore?: number | null, eligibleDomainCount: number, domains: Array<{ __typename?: 'ModelsAnalysisDomainBreakdown', domainId: string, domainName: string, winRate: number, evidenceWeight: number }> }> }> } };
 
 export type CreatePairedVignetteMutationVariables = Exact<{
   input: CreatePairedVignetteInput;
@@ -6354,6 +6396,32 @@ export const AvailableModelsDocument = gql`
 
 export function useAvailableModelsQuery(options?: Omit<Urql.UseQueryArgs<AvailableModelsQueryVariables>, 'query'>) {
   return Urql.useQuery<AvailableModelsQuery, AvailableModelsQueryVariables>({ query: AvailableModelsDocument, ...options });
+};
+export const ModelsAnalysisDocument = gql`
+    query ModelsAnalysis($domainId: ID) {
+  modelsAnalysis(domainId: $domainId) {
+    models {
+      modelId
+      label
+      values {
+        valueKey
+        pooledWinRate
+        stabilityScore
+        eligibleDomainCount
+        domains {
+          domainId
+          domainName
+          winRate
+          evidenceWeight
+        }
+      }
+    }
+  }
+}
+    `;
+
+export function useModelsAnalysisQuery(options?: Omit<Urql.UseQueryArgs<ModelsAnalysisQueryVariables>, 'query'>) {
+  return Urql.useQuery<ModelsAnalysisQuery, ModelsAnalysisQueryVariables>({ query: ModelsAnalysisDocument, ...options });
 };
 export const CreatePairedVignetteDocument = gql`
     mutation CreatePairedVignette($input: CreatePairedVignetteInput!) {

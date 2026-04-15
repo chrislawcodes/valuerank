@@ -21,6 +21,7 @@ describe('MobileNav Component', () => {
 
     expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
     expect(screen.getByRole('link', { name: 'Domains' })).toHaveAttribute('href', '/domains');
+    expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/models');
     expect(screen.getByRole('link', { name: 'Archive' })).toHaveAttribute('href', '/archive');
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings/account');
   });
@@ -56,6 +57,6 @@ describe('MobileNav Component', () => {
     await renderMobileNav('/settings/models');
 
     expect(screen.getByRole('link', { name: 'Settings' }).className).not.toContain('border-teal-500');
-    expect(screen.getByRole('link', { name: 'Models' }).className).toContain('border-teal-500');
+    expect(screen.getByRole('link', { name: 'LLM Models' }).className).toContain('border-teal-500');
   });
 });

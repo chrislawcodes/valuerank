@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { type LucideIcon, Archive, BarChart2, FileText, FolderTree, Home, Library, Menu, Settings, X } from 'lucide-react';
+import { type LucideIcon, Archive, BarChart2, Cpu, FileText, FolderTree, Home, Library, Menu, Settings, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
 
@@ -15,6 +15,16 @@ type NavItem = {
 const navItems: NavItem[] = [
   { name: 'Home', path: '/', icon: Home },
   {
+    name: 'Domains',
+    path: '/domains',
+    icon: FolderTree,
+    children: [
+      { name: 'Domain Analysis', path: '/domains/analysis', icon: BarChart2 },
+      { name: 'Manage Domains', path: '/domains/manage', icon: FolderTree },
+    ],
+  },
+  { name: 'Models', path: '/models', icon: Cpu },
+  {
     name: 'Vignettes',
     path: '/definitions',
     icon: Library,
@@ -22,15 +32,6 @@ const navItems: NavItem[] = [
       { name: 'Vignette Library', path: '/definitions', icon: Library },
       { name: 'Runs', path: '/runs', icon: BarChart2 },
       { name: 'Analysis', path: '/analysis', icon: BarChart2 },
-    ],
-  },
-  {
-    name: 'Domains',
-    path: '/domains',
-    icon: FolderTree,
-    children: [
-      { name: 'Domain Analysis', path: '/domains/analysis', icon: BarChart2 },
-      { name: 'Manage Domains', path: '/domains/manage', icon: FolderTree },
     ],
   },
   {
@@ -53,7 +54,7 @@ const navItems: NavItem[] = [
       ]},
       { name: 'Account', path: '/settings/account', icon: Settings },
       { name: 'System Health', path: '/settings/system-health', icon: Settings },
-      { name: 'Models', path: '/settings/models', icon: Settings },
+      { name: 'LLM Models', path: '/settings/models', icon: Settings },
       { name: 'Infrastructure', path: '/settings/infrastructure', icon: Settings },
       { name: 'API Keys', path: '/settings/api-keys', icon: Settings },
     ],

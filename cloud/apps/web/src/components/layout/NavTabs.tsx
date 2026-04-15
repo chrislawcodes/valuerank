@@ -1,6 +1,6 @@
 import { type FocusEvent, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Activity, Archive, ChevronDown, ChevronRight, FolderTree, Library, Settings } from 'lucide-react';
+import { Activity, Archive, ChevronDown, ChevronRight, Cpu, FolderTree, Library, Settings } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useClickOutside } from '../../hooks/useClickOutside';
 
@@ -49,7 +49,7 @@ const settingsMenuItems: MenuItem[] = [
   },
   { name: 'Account', path: '/settings/account' },
   { name: 'System Health', path: '/settings/system-health' },
-  { name: 'Models', path: '/settings/models' },
+  { name: 'LLM Models', path: '/settings/models' },
   { name: 'Infrastructure', path: '/settings/infrastructure' },
   { name: 'API Keys', path: '/settings/api-keys' },
 ];
@@ -219,6 +219,17 @@ export function NavTabs() {
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex gap-1">
           {renderMenu(domainMenuRef, 'Domains', '/domains', FolderTree, domainMenuItems, isDomainsActive, isDomainsMenuOpen, setIsDomainsMenuOpen)}
+          <NavLink
+            to="/models"
+            className={`flex items-center gap-2 px-3 py-3 min-h-[44px] text-sm font-medium transition-colors border-b-2 ${
+              isTabActive('/models')
+                ? 'text-white border-teal-500'
+                : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
+            }`}
+          >
+            <Cpu className="w-4 h-4" />
+            <span className="hidden sm:inline">Models</span>
+          </NavLink>
           {renderMenu(vignettesMenuRef, 'Vignettes', '/definitions', Library, vignettesMenuItems, isVignettesActive, isVignettesMenuOpen, setIsVignettesMenuOpen)}
           {renderMenu(archiveMenuRef, 'Archive', '/archive', Archive, archiveMenuItems, isArchiveActive, isArchiveMenuOpen, setIsArchiveMenuOpen)}
           {renderMenu(settingsMenuRef, 'Settings', '/settings/account', Settings, settingsMenuItems, isSettingsActive, isSettingsMenuOpen, setIsSettingsMenuOpen)}
