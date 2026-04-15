@@ -66,11 +66,29 @@ export function CopyVisualButton({ targetRef, label }: CopyVisualButtonProps) {
     setIsCopying(true);
     setStatus('idle');
 
+    // Temporarily expand scroll containers so the full content is captured without scrollbars
+    const scrollEls = Array.from(
+      target.querySelectorAll<HTMLElement>('.overflow-x-auto, .overflow-y-auto, .overflow-auto'),
+    );
+    const saved = scrollEls.map((el) => ({
+      el,
+      overflow: el.style.overflow,
+      width: el.style.width,
+    }));
+    scrollEls.forEach((el) => {
+      el.style.overflow = 'visible';
+      el.style.width = `${el.scrollWidth}px`;
+    });
+    const captureWidth = target.scrollWidth;
+    const captureHeight = target.scrollHeight;
+
     try {
       const dataUrl = await toPng(target, {
         cacheBust: true,
         pixelRatio: 2,
         backgroundColor: '#ffffff',
+        width: captureWidth,
+        height: captureHeight,
         filter: (node) => {
           if (!(node instanceof Element)) return true;
           return !node.classList.contains(COPY_CONTROL_CLASS);
@@ -94,6 +112,11 @@ export function CopyVisualButton({ targetRef, label }: CopyVisualButtonProps) {
       setStatus('error');
       window.setTimeout(() => setStatus('idle'), 2200);
     } finally {
+      // Restore scroll container styles
+      saved.forEach(({ el, overflow, width }) => {
+        el.style.overflow = overflow;
+        el.style.width = width;
+      });
       setIsCopying(false);
     }
   };
