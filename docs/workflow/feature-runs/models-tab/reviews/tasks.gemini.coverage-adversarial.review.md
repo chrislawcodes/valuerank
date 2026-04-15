@@ -9,8 +9,8 @@ git_head_sha: "de250c0d1d4a72072cffae43adf8b1a9a2b2554e"
 git_base_ref: "origin/main"
 git_base_sha: "b26923fbe83c2c0ec86c80180073de00a4461626"
 generation_method: "gemini-cli"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "H-01: Scale is trivial (~10 domains); in-memory dedup is acceptable for V1. H-02: Added try/catch around parseSnapshotOutput in A2 with log+skip. M-01: Empty-state check is O(100) — trivial. M-02: stabilityScore formula uses max(0,...) which floors at 0. M-03: Addressed in C3 — define inline. L-01: Added reset to 'all' in C5 when selectedDomain changes to non-null."
 raw_output_path: "docs/workflow/feature-runs/models-tab/reviews/tasks.gemini.coverage-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -44,5 +44,5 @@ coverage_note: ""
 - `gemini-2.5-pro`: input=15724, output=812, total=20617
 
 ## Resolution
-- status: open
-- note:
+- status: accepted
+- note: H-01: Scale is trivial (~10 domains); in-memory dedup is acceptable for V1. H-02: Added try/catch around parseSnapshotOutput in A2 with log+skip. M-01: Empty-state check is O(100) — trivial. M-02: stabilityScore formula uses max(0,...) which floors at 0. M-03: Addressed in C3 — define inline. L-01: Added reset to 'all' in C5 when selectedDomain changes to non-null.

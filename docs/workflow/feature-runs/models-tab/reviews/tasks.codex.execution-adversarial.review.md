@@ -9,8 +9,8 @@ git_head_sha: "de250c0d1d4a72072cffae43adf8b1a9a2b2554e"
 git_base_ref: "origin/main"
 git_base_sha: "b26923fbe83c2c0ec86c80180073de00a4461626"
 generation_method: "codex-runner"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Active-model seeding added to A2 step 8: all active models appear in output even without snapshot data. Math helpers are specified in plan.md; tasks reference plan. Keyboard semantics are out of scope for V1."
 raw_output_path: "docs/workflow/feature-runs/models-tab/reviews/tasks.codex.execution-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -38,5 +38,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: open
-- note: 
+- status: accepted
+- note: Active-model seeding added to A2 step 8: all active models appear in output even without snapshot data. Math helpers are specified in plan.md; tasks reference plan. Keyboard semantics are out of scope for V1. 

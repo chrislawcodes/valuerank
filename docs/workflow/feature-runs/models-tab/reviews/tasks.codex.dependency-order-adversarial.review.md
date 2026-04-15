@@ -9,8 +9,8 @@ git_head_sha: "de250c0d1d4a72072cffae43adf8b1a9a2b2554e"
 git_base_ref: "origin/main"
 git_base_sha: "b26923fbe83c2c0ec86c80180073de00a4461626"
 generation_method: "codex-runner"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Single-domain tooltip: added mutedBySingleDomain param to formatStabilityTooltip in C1; C2 now passes muted===true for that branch, yielding distinct message 'Cross-domain stability is not available when viewing a single domain.' Active-model seeding addressed in A2. DOMAIN_ANALYSIS_VALUE_KEYS: C3 notes to define inline if web side cannot import from api package."
 raw_output_path: "docs/workflow/feature-runs/models-tab/reviews/tasks.codex.dependency-order-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -43,5 +43,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: open
-- note: 
+- status: accepted
+- note: Single-domain tooltip: added mutedBySingleDomain param to formatStabilityTooltip in C1; C2 now passes muted===true for that branch, yielding distinct message 'Cross-domain stability is not available when viewing a single domain.' Active-model seeding addressed in A2. DOMAIN_ANALYSIS_VALUE_KEYS: C3 notes to define inline if web side cannot import from api package. 
