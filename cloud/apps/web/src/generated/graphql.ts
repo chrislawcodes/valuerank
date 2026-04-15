@@ -3961,7 +3961,7 @@ export type DomainAnalysisConditionTranscriptsQueryVariables = Exact<{
 }>;
 
 
-export type DomainAnalysisConditionTranscriptsQuery = { __typename?: 'Query', domainAnalysisConditionTranscripts: Array<{ __typename?: 'DomainAnalysisConditionTranscript', id: string, runId: string, scenarioId?: string | null, modelId: string, decisionModelV2?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, createdAt: string, content: unknown }> };
+export type DomainAnalysisConditionTranscriptsQuery = { __typename?: 'Query', domainAnalysisConditionTranscripts: Array<{ __typename?: 'DomainAnalysisConditionTranscript', id: string, runId: string, scenarioId?: string | null, modelId: string, decisionCode?: string | null, decisionModelV2?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, createdAt: string, content: unknown }> };
 
 export type DomainAvailableSignaturesQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
@@ -5526,6 +5526,7 @@ export const DomainAnalysisConditionTranscriptsDocument = gql`
     runId
     scenarioId
     modelId
+    decisionCode
     decisionModelV2
     turnCount
     tokenCount
