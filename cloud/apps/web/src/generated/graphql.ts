@@ -655,8 +655,16 @@ export type DomainAnalysisModel = {
   values: Array<DomainAnalysisValueScore>;
 };
 
+export type DomainAnalysisRefreshResult = {
+  __typename?: 'DomainAnalysisRefreshResult';
+  message: Scalars['String']['output'];
+  mode: Scalars['String']['output'];
+  success: Scalars['Boolean']['output'];
+};
+
 export type DomainAnalysisResult = {
   __typename?: 'DomainAnalysisResult';
+  cacheStatus: Scalars['String']['output'];
   clusterAnalysis: ClusterAnalysis;
   coveredDefinitions: Scalars['Int']['output'];
   definitionsWithAnalysis: Scalars['Int']['output'];
@@ -881,13 +889,6 @@ export type DomainFindingsEligibility = {
   summary: Scalars['String']['output'];
 };
 
-export type DomainAnalysisRefreshResult = {
-  __typename?: 'DomainAnalysisRefreshResult';
-  message: Scalars['String']['output'];
-  mode: Scalars['String']['output'];
-  success: Scalars['Boolean']['output'];
-};
-
 export type DomainMutationResult = {
   __typename?: 'DomainMutationResult';
   affectedDefinitions: Scalars['Int']['output'];
@@ -1019,6 +1020,7 @@ export type DomainValueCoverageCell = {
   batchCount: Scalars['Int']['output'];
   definitionId?: Maybe<Scalars['String']['output']>;
   definitionName?: Maybe<Scalars['String']['output']>;
+  incompleteBatchCount: Scalars['Int']['output'];
   maxTrialCount?: Maybe<Scalars['Int']['output']>;
   minTrialCount?: Maybe<Scalars['Int']['output']>;
   modelBreakdown?: Maybe<Array<CoverageModelBreakdown>>;
@@ -1462,6 +1464,7 @@ export type Mutation = {
    *
    */
   recoverRun: RecoverRunPayload;
+  refreshDomainAnalysis: DomainAnalysisRefreshResult;
   /** Manually trigger scenario regeneration for a definition. Queues a new expansion job. */
   regenerateScenarios: RegenerateScenariosResult;
   /** Remove a tag from a definition. No-op if tag was not assigned. */
@@ -1801,6 +1804,12 @@ export type MutationRecomputeAnalysisArgs = {
 
 export type MutationRecoverRunArgs = {
   runId: Scalars['ID']['input'];
+};
+
+
+export type MutationRefreshDomainAnalysisArgs = {
+  domainId: Scalars['ID']['input'];
+  signature?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -3975,7 +3984,7 @@ export type DomainValueCoverageQueryVariables = Exact<{
 }>;
 
 
-export type DomainValueCoverageQuery = { __typename?: 'Query', domainValueCoverage?: { __typename?: 'DomainValueCoverageResult', domainId: string, values: Array<string>, cells: Array<{ __typename?: 'DomainValueCoverageCell', valueA: string, valueB: string, batchCount: number, pairedBatchCount: number, definitionId?: string | null, definitionName?: string | null, aggregateRunId?: string | null, minTrialCount?: number | null, maxTrialCount?: number | null, modelBreakdown?: Array<{ __typename?: 'CoverageModelBreakdown', modelId: string, label: string, trialCount: number }> | null }>, availableModels: Array<{ __typename?: 'CoverageModelOption', modelId: string, label: string }> } | null };
+export type DomainValueCoverageQuery = { __typename?: 'Query', domainValueCoverage?: { __typename?: 'DomainValueCoverageResult', domainId: string, values: Array<string>, cells: Array<{ __typename?: 'DomainValueCoverageCell', valueA: string, valueB: string, batchCount: number, pairedBatchCount: number, incompleteBatchCount: number, definitionId?: string | null, definitionName?: string | null, aggregateRunId?: string | null, minTrialCount?: number | null, maxTrialCount?: number | null, modelBreakdown?: Array<{ __typename?: 'CoverageModelBreakdown', modelId: string, label: string, trialCount: number }> | null }>, availableModels: Array<{ __typename?: 'CoverageModelOption', modelId: string, label: string }> } | null };
 
 export type DomainValueCoverageLegacyQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
@@ -5579,6 +5588,7 @@ export const DomainValueCoverageDocument = gql`
       valueB
       batchCount
       pairedBatchCount
+      incompleteBatchCount
       definitionId
       definitionName
       aggregateRunId

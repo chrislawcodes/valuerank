@@ -7,6 +7,7 @@ query DomainValueCoverage($domainId: ID!, $modelIds: [String!], $signature: Stri
       valueB
       batchCount
       pairedBatchCount
+      incompleteBatchCount
       definitionId
       definitionName
       aggregateRunId

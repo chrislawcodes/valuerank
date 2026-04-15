@@ -1064,6 +1064,7 @@ type DomainValueCoverageCell {
   batchCount: Int!
   definitionId: String
   definitionName: String
+  incompleteBatchCount: Int!
   maxTrialCount: Int
   minTrialCount: Int
   modelBreakdown: [CoverageModelBreakdown!]
