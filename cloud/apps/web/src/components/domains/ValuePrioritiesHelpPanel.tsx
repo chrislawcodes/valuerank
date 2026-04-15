@@ -1,4 +1,4 @@
-type ScoreMode = 'WIN_RATE' | 'FULL_BT' | 'SUPPORT_WIN';
+type ScoreMode = 'WIN_RATE' | 'FULL_BT';
 
 type Props = { scoreMode: ScoreMode };
 
@@ -21,29 +21,6 @@ export function ValuePrioritiesHelpPanel({ scoreMode }: Props) {
             <li>Strengths are estimated jointly, so each value is calibrated against all others.</li>
             <li>Positive values indicate above-average latent strength; negative values indicate below-average.</li>
           </ul>
-        </>
-      ) : scoreMode === 'SUPPORT_WIN' ? (
-        <>
-          <p className="font-medium text-gray-800">Score Method: Support Rate / Win Rate</p>
-          <p className="mt-1">
-            Shows both an estimated population-level support rate and a win rate.
-          </p>
-          <p className="mt-2 font-medium text-gray-800">Support Rate</p>
-          <p className="mt-0.5 font-mono text-[11px] text-sky-900">
-            (prioritized + 0.5 × neutral) / total
-          </p>
-          <p className="mt-1">
-            Neutral outcomes count as half-support. Good for broad comparison across models and domains.
-          </p>
-          <p className="mt-2 font-medium text-gray-800">Win Rate</p>
-          <p className="mt-0.5 font-mono text-[11px] text-sky-900">
-            prioritized / (prioritized + deprioritized + neutral)
-          </p>
-          <p className="mt-1">
-            The fraction of times the model prioritized this value across all decisions, including neutral
-            responses. Same calculation as the standalone Win Rate mode, but rounded to a whole number for
-            compactness.
-          </p>
         </>
       ) : (
         <>

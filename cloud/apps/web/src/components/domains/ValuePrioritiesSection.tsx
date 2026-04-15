@@ -62,7 +62,7 @@ export function ValuePrioritiesSection({
   const detailedTableRef = useRef<HTMLDivElement>(null);
   const opennessGroupRef = useRef<HTMLTableCellElement>(null);
   const hedonismCellRef = useRef<HTMLTableCellElement>(null);
-  const [scoreMode, setScoreMode] = useState<'WIN_RATE' | 'FULL_BT' | 'SUPPORT_WIN'>('WIN_RATE');
+  const [scoreMode, setScoreMode] = useState<'WIN_RATE' | 'FULL_BT'>('WIN_RATE');
   const [sortState, setSortState] = useState<SortState>({ key: 'model', direction: 'asc' });
   const [showSectionHelp, setShowSectionHelp] = useState(false);
   const [opennessSplitPercent, setOpennessSplitPercent] = useState(33.3333);
@@ -85,11 +85,6 @@ export function ValuePrioritiesSection({
       );
     } else {
       nextModels.sort((a, b) => {
-        if (scoreMode === 'SUPPORT_WIN') {
-          const aVal = a.supportRates?.[key] ?? (sortState.direction === 'asc' ? Infinity : -Infinity);
-          const bVal = b.supportRates?.[key] ?? (sortState.direction === 'asc' ? Infinity : -Infinity);
-          return sortState.direction === 'asc' ? aVal - bVal : bVal - aVal;
-        }
         const aVal = scoreMode === 'WIN_RATE' ? (a.winRates?.[key] ?? -Infinity) : a.values[key];
         const bVal = scoreMode === 'WIN_RATE' ? (b.winRates?.[key] ?? -Infinity) : b.values[key];
         return sortState.direction === 'asc' ? aVal - bVal : bVal - aVal;
@@ -99,7 +94,7 @@ export function ValuePrioritiesSection({
   }, [models, sortState, scoreMode]);
 
   const valueRange = useMemo(() => {
-    if (scoreMode === 'WIN_RATE' || scoreMode === 'SUPPORT_WIN') {
+    if (scoreMode === 'WIN_RATE') {
       return { min: 0, max: 100 };
     }
     const all = models.flatMap((model) => COLUMN_VALUES.map((v) => model.values[v]));
@@ -157,7 +152,6 @@ export function ValuePrioritiesSection({
 
   function getCellValue(model: ModelEntry, valueKey: ValueKey): number | null {
     if (scoreMode === 'FULL_BT') return model.values[valueKey];
-    if (scoreMode === 'SUPPORT_WIN') return model.supportRates?.[valueKey] ?? null;
     return model.winRates?.[valueKey] ?? null;
   }
 
@@ -191,15 +185,6 @@ export function ValuePrioritiesSection({
               className={`h-auto rounded-none px-3 py-1 text-xs ${scoreMode === 'WIN_RATE' ? 'bg-sky-600 text-white hover:bg-sky-600 hover:text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
             >
               Win Rate
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setScoreMode('SUPPORT_WIN')}
-              className={`h-auto rounded-none border-l border-gray-200 px-3 py-1 text-xs ${scoreMode === 'SUPPORT_WIN' ? 'bg-sky-600 text-white hover:bg-sky-600 hover:text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-            >
-              Support Rate / Win Rate
             </Button>
             <Button
               type="button"
@@ -355,16 +340,8 @@ export function ValuePrioritiesSection({
                           onClick={() => handleValueCellClick(model.model, value)}
                           disabled={selectedDomainId === ''}
                       >
-                          <span className={scoreMode === 'SUPPORT_WIN' ? 'whitespace-nowrap' : undefined}>
+                          <span>
                             {(() => {
-                              if (scoreMode === 'SUPPORT_WIN') {
-                                const supportRate = model.supportRates?.[value] ?? null;
-                                const winRate = model.winRates?.[value] ?? null;
-                                if (supportRate === null && winRate === null) return 'n/a / n/a';
-                                if (winRate === null) return `${Math.round(supportRate ?? 0)}% / n/a`;
-                                if (supportRate === null) return `n/a / ${Math.round(winRate)}%`;
-                                return `${Math.round(supportRate)}% / ${Math.round(winRate)}%`;
-                              }
                               if (cellValue === null) return 'n/a';
                               if (scoreMode === 'WIN_RATE') return `${cellValue.toFixed(1)}%`;
                               return `${cellValue > 0 ? '+' : ''}${cellValue.toFixed(2)}`;

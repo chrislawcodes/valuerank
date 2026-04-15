@@ -145,12 +145,6 @@ export function DomainAnalysis() {
         const denom = e.prioritized + e.deprioritized + neutral;
         return [e.valueKey, denom > 0 ? (e.prioritized / denom) * 100 : null] as const;
       }));
-      const supportRateMap = new Map(model.values.map((entry) => {
-        const neutral = entry.neutral ?? 0;
-        const total = entry.prioritized + entry.deprioritized + neutral;
-        const rate = total > 0 ? ((entry.prioritized + 0.5 * neutral) / total) * 100 : null;
-        return [entry.valueKey, rate] as const;
-      }));
       const values = VALUES.reduce<Record<ValueKey, number>>((acc, valueKey) => {
         acc[valueKey] = valueMap.get(valueKey) ?? 0;
         return acc;
@@ -159,16 +153,11 @@ export function DomainAnalysis() {
         acc[valueKey] = winRateMap.get(valueKey) ?? null;
         return acc;
       }, {} as Record<ValueKey, number | null>);
-      const supportRates = VALUES.reduce<Record<ValueKey, number | null>>((acc, valueKey) => {
-        acc[valueKey] = supportRateMap.get(valueKey) ?? null;
-        return acc;
-      }, {} as Record<ValueKey, number | null>);
       return {
         model: model.model,
         label: model.label,
         values,
         winRates,
-        supportRates,
       };
     });
   }, [data]);
