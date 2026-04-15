@@ -20,8 +20,8 @@ export const DOMAIN_CSV_HEADERS = [
   'AI Model Name',
   'Vignette Name',
   'Trial Signature',
-  'Value 1',
-  'Value 2',
+  'First Value',
+  'Second Value',
   'Value Chosen',
   'Decision Strength',
   'Transcript ID',
@@ -55,23 +55,25 @@ type DefinitionSnapshotComponents = {
 
 function getPromptOrderTokens(
   definitionSnapshot: unknown,
-  orientationFlipped: boolean,
 ): { firstToken: string | null; secondToken: string | null } {
   if (definitionSnapshot == null || typeof definitionSnapshot !== 'object' || Array.isArray(definitionSnapshot)) {
     return { firstToken: null, secondToken: null };
   }
 
   const snapshot = definitionSnapshot as { components?: DefinitionSnapshotComponents };
-  const canonicalFirst = snapshot.components?.value_first?.token ?? null;
-  const canonicalSecond = snapshot.components?.value_second?.token ?? null;
+  const firstToken = snapshot.components?.value_first?.token ?? null;
+  const secondToken = snapshot.components?.value_second?.token ?? null;
 
-  if (canonicalFirst == null || canonicalSecond == null) {
+  if (firstToken == null || secondToken == null) {
     return { firstToken: null, secondToken: null };
   }
 
-  return orientationFlipped
-    ? { firstToken: canonicalSecond, secondToken: canonicalFirst }
-    : { firstToken: canonicalFirst, secondToken: canonicalSecond };
+  // value_first in the definition snapshot is always the value that appeared
+  // first in the prompt shown to the model. orientationFlipped is an analysis
+  // normalization flag (used to compare A-first vs B-first definitions on the
+  // same scale) — it does NOT mean the prompt order is reversed relative to
+  // value_first/value_second.
+  return { firstToken, secondToken };
 }
 
 function getDimensionValues(scenarioContent: unknown): Record<string, string> {
@@ -116,10 +118,8 @@ function domainTranscriptToRow(transcript: DomainTranscriptWithScenario): string
     transcript.run?.config,
   );
 
-  const orientationFlipped = transcript.scenario?.orientationFlipped ?? false;
   const { firstToken, secondToken } = getPromptOrderTokens(
     transcript.definitionSnapshot,
-    orientationFlipped,
   );
 
   const dimensionValues = getDimensionValues(transcript.scenario?.content);
