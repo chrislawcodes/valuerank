@@ -1,6 +1,5 @@
 ## Findings
-- No concrete regression was identified in the patch itself. The change only memoizes the `variables` object passed to `useQuery`, which should preserve behavior while reducing unnecessary identity churn.
+No findings.
 
 ## Residual Risks
-- [UNVERIFIED] I could not check the surrounding component or query implementation, so I cannot confirm whether `useQuery` or any downstream effect depends on a fresh `variables` object each render.
-- The patch is small enough that any real risk would likely come from interaction with the existing cache-and-network behavior, not from the memoization change alone.
+The patch is comment-only, so there is no direct runtime regression to flag. The only risk is future drift: the new comment could become misleading if `queryVariables` starts depending on additional inputs but the dependency list is not updated.

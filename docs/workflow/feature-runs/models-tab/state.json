@@ -38,8 +38,14 @@
     ],
     "unresolved": []
   },
-  "delivery": {},
-  "dirty_overrides": {},
+  "delivery": {
+    "branch": "claude/magical-mcclintock",
+    "head_sha": "238d34705bb54e94e0bcf6a65d04f519d3f891ba",
+    "updated_at": 1776292852,
+    "upstream": "origin/main",
+    "pr_url": "",
+    "checks_summary": "not-started"
+  },
   "parallel_analysis": {
     "reviewed": true,
     "found": false,
@@ -52,5 +58,6 @@
     "markers_sha": "",
     "last_diff_head_sha": ""
   },
-  "checkpoint_fallback": {}
+  "checkpoint_fallback": {},
+  "dirty_overrides": {}
 }

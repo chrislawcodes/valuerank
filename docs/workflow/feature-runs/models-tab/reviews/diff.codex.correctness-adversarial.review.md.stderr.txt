@@ -8,7 +8,7 @@ approval: never
 sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
 reasoning effort: high
 reasoning summaries: none
-session id: 019d9346-4502-7b11-b2d9-3ec938067c76
+session id: 019d934b-f1bb-7473-9386-bb2e9f319d1d
 --------
 user
 Review this diff artifact using a correctness-adversarial lens.
@@ -23,24 +23,18 @@ Keep the response concrete and ordered by severity.
 
 Artifact: implementation.diff.patch
 diff --git a/cloud/apps/web/src/pages/Models.tsx b/cloud/apps/web/src/pages/Models.tsx
-index 2fb25e03..ad90f72a 100644
+index ad90f72a..27347fa3 100644
 --- a/cloud/apps/web/src/pages/Models.tsx
 +++ b/cloud/apps/web/src/pages/Models.tsx
-@@ -24,9 +24,13 @@ export function Models() {
+@@ -24,6 +24,8 @@ export function Models() {
  
    const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
  
-+  const queryVariables = useMemo(
-+    () => (selectedDomainId != null ? { domainId: selectedDomainId } : {}),
-+    [selectedDomainId],
-+  );
-   const [{ data, fetching, error }] = useQuery<ModelsAnalysisQueryResult, ModelsAnalysisQueryVariables>({
-     query: MODELS_ANALYSIS_QUERY,
--    variables: selectedDomainId != null ? { domainId: selectedDomainId } : {},
-+    variables: queryVariables,
-     requestPolicy: 'cache-and-network',
-   });
-   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
++  // Memoized to keep the object reference stable across renders.
++  // If new query inputs are added, update the dependency array here too.
+   const queryVariables = useMemo(
+     () => (selectedDomainId != null ? { domainId: selectedDomainId } : {}),
+     [selectedDomainId],
 
 
 Return only markdown with exactly these sections:
@@ -49,10 +43,10 @@ Return only markdown with exactly these sections:
 Do not include any other sections.
 codex
 ## Findings
-No correctness issues found in this patch.
+- No correctness issues found in this patch. It only adds comments and does not change runtime behavior.
 
 ## Residual Risks
-- [UNVERIFIED] This change assumes `useQuery` only needs `variables` to change when `selectedDomainId` changes, and does not rely on receiving a fresh object on every render for any side effect.
-- [UNVERIFIED] If there is code outside this diff that depends on the previous per-render object identity of `variables`, this memoization could subtly change behavior, but no such dependency is visible in the artifact itself.
+- [UNVERIFIED] The `useMemo` dependency list is only correct if `selectedDomainId` is the sole input to `queryVariables`. Without surrounding code, I cannot verify that no other captured values matter.
+- [UNVERIFIED] If downstream code depends on a fresh object identity instead of a stable one, the memoization rationale may hide an existing coupling. This diff does not introduce that behavior, but the surrounding usage is not visible here.
 tokens used
-2,379
+2,211

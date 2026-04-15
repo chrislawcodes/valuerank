@@ -8,7 +8,7 @@ approval: never
 sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
 reasoning effort: high
 reasoning summaries: none
-session id: 019d9346-62c1-7cf1-b80e-de908f00cf2d
+session id: 019d934c-0b1a-7d71-bc1e-3f3f3c8a6683
 --------
 user
 Review this diff artifact using a regression-adversarial lens.
@@ -23,24 +23,18 @@ Keep the response concrete and ordered by severity.
 
 Artifact: implementation.diff.patch
 diff --git a/cloud/apps/web/src/pages/Models.tsx b/cloud/apps/web/src/pages/Models.tsx
-index 2fb25e03..ad90f72a 100644
+index ad90f72a..27347fa3 100644
 --- a/cloud/apps/web/src/pages/Models.tsx
 +++ b/cloud/apps/web/src/pages/Models.tsx
-@@ -24,9 +24,13 @@ export function Models() {
+@@ -24,6 +24,8 @@ export function Models() {
  
    const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
  
-+  const queryVariables = useMemo(
-+    () => (selectedDomainId != null ? { domainId: selectedDomainId } : {}),
-+    [selectedDomainId],
-+  );
-   const [{ data, fetching, error }] = useQuery<ModelsAnalysisQueryResult, ModelsAnalysisQueryVariables>({
-     query: MODELS_ANALYSIS_QUERY,
--    variables: selectedDomainId != null ? { domainId: selectedDomainId } : {},
-+    variables: queryVariables,
-     requestPolicy: 'cache-and-network',
-   });
-   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
++  // Memoized to keep the object reference stable across renders.
++  // If new query inputs are added, update the dependency array here too.
+   const queryVariables = useMemo(
+     () => (selectedDomainId != null ? { domainId: selectedDomainId } : {}),
+     [selectedDomainId],
 
 
 Return only markdown with exactly these sections:
@@ -49,10 +43,9 @@ Return only markdown with exactly these sections:
 Do not include any other sections.
 codex
 ## Findings
-- No concrete regression was identified in the patch itself. The change only memoizes the `variables` object passed to `useQuery`, which should preserve behavior while reducing unnecessary identity churn.
+No findings.
 
 ## Residual Risks
-- [UNVERIFIED] I could not check the surrounding component or query implementation, so I cannot confirm whether `useQuery` or any downstream effect depends on a fresh `variables` object each render.
-- The patch is small enough that any real risk would likely come from interaction with the existing cache-and-network behavior, not from the memoization change alone.
+The patch is comment-only, so there is no direct runtime regression to flag. The only risk is future drift: the new comment could become misleading if `queryVariables` starts depending on additional inputs but the dependency list is not updated.
 tokens used
-2,579
+16,993

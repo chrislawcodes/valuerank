@@ -2,7 +2,7 @@
   "feature_slug": "models-tab",
   "stage": "diff",
   "artifact_path": "docs/workflow/feature-runs/models-tab/reviews/implementation.diff.patch",
-  "git_base_ref": "90c49005a5187225d2e1f3d75574cc771b4a2ea8",
+  "git_base_ref": "f13c75868802ccf953d5af7f071660e523a6d56a",
   "allowed_dirty_paths": [],
   "required_reviews": [
     {
