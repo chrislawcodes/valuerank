@@ -121,7 +121,6 @@ export function aggregateAnalysesLogic(
     type ValueStatsBuilder = {
       count: { prioritized: number; deprioritized: number; neutral: number };
       winRate: number;
-      confidenceInterval: { lower: number; upper: number; level: number; method: string };
     };
     const aggregatedValues: Record<string, ValueStatsBuilder> = {};
     const modelValueRates: Record<string, number[]> = {};
@@ -135,7 +134,6 @@ export function aggregateAnalysesLogic(
           aggregatedValues[valueId] = {
             count: { prioritized: 0, deprioritized: 0, neutral: 0 },
             winRate: 0,
-            confidenceInterval: { lower: 0, upper: 0, level: 0.95, method: 'aggregate' },
           };
           modelValueRates[valueId] = [];
         }
@@ -169,13 +167,6 @@ export function aggregateAnalysesLogic(
         winRateMean: mean,
         winRateSd: sd,
         winRateSem: sem,
-      };
-
-      target.confidenceInterval = {
-        lower: Math.max(0, mean - (1.96 * sem)),
-        upper: Math.min(1, mean + (1.96 * sem)),
-        level: 0.95,
-        method: 'aggregate-sem',
       };
     });
 

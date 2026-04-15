@@ -57,12 +57,10 @@ function createMockAnalysis(overrides: Partial<AnalysisResult> = {}): AnalysisRe
         values: {
           'Physical_Safety': {
             winRate: 0.8,
-            confidenceInterval: { lower: 0.7, upper: 0.9, level: 0.95, method: 'wilson' },
             count: { prioritized: 40, deprioritized: 10, neutral: 0 },
           },
           'Compassion': {
             winRate: 0.6,
-            confidenceInterval: { lower: 0.5, upper: 0.7, level: 0.95, method: 'wilson' },
             count: { prioritized: 30, deprioritized: 20, neutral: 0 },
           },
         },
@@ -73,7 +71,6 @@ function createMockAnalysis(overrides: Partial<AnalysisResult> = {}): AnalysisRe
         values: {
           'Physical_Safety': {
             winRate: 0.75,
-            confidenceInterval: { lower: 0.65, upper: 0.85, level: 0.95, method: 'wilson' },
             count: { prioritized: 38, deprioritized: 12, neutral: 0 },
           },
         },
@@ -91,7 +88,6 @@ function createMockAnalysis(overrides: Partial<AnalysisResult> = {}): AnalysisRe
     dimensionAnalysis: null,
     mostContestedScenarios: [],
     methodsUsed: {
-      winRateCI: 'wilson_score',
       modelComparison: 'spearman_rho',
       pValueCorrection: 'holm_bonferroni',
       effectSize: 'cohens_d',

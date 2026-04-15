@@ -22,9 +22,6 @@ export { useSystemHealth } from './useSystemHealth';
 // Scenario hooks
 export { useExpandedScenarios } from './useExpandedScenarios';
 
-// Comparison hooks
-export { useComparisonState } from './useComparisonState';
-export { useComparisonData } from './useComparisonData';
 export { useRunsWithAnalysis } from './useRunsWithAnalysis';
 
 // Viewport hooks

@@ -24,7 +24,6 @@ import { Analysis } from './pages/Analysis';
 import { AnalysisDetail } from './pages/AnalysisDetail';
 import { AnalysisConditionDetail } from './pages/AnalysisConditionDetail';
 import { AnalysisTranscripts } from './pages/AnalysisTranscripts';
-import { Compare } from './pages/Compare';
 import { Survey } from './pages/Survey';
 import { SurveyResults } from './pages/SurveyResults';
 import { SettingsAccount } from './pages/SettingsAccount';
@@ -227,14 +226,6 @@ function App() {
               element={
                 <ProtectedLayout fullWidth>
                   <AnalysisConditionDetail />
-                </ProtectedLayout>
-              }
-            />
-            <Route
-              path="/compare"
-              element={
-                <ProtectedLayout fullWidth>
-                  <Compare />
                 </ProtectedLayout>
               }
             />

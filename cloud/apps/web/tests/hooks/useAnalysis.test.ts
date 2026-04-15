@@ -21,7 +21,6 @@ const mockAnalysis = {
       values: {
         'Physical_Safety': {
           winRate: 0.8,
-          confidenceInterval: { lower: 0.7, upper: 0.9, level: 0.95, method: 'wilson' },
           count: { prioritized: 40, deprioritized: 10, neutral: 0 },
         },
       },
@@ -36,7 +35,6 @@ const mockAnalysis = {
   dimensionAnalysis: null,
   mostContestedScenarios: [],
   methodsUsed: {
-    winRateCI: 'wilson_score',
     modelComparison: 'spearman_rho',
     pValueCorrection: 'holm_bonferroni',
     effectSize: 'cohens_d',

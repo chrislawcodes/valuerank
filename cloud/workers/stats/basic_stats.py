@@ -9,7 +9,6 @@ from typing import Any, TypedDict
 
 import numpy as np
 
-from stats.confidence import wilson_score_ci, ConfidenceInterval
 from stats.decision_model import SIGNED_TO_BUCKET, resolve_transcript_signed_distance
 
 
@@ -25,7 +24,6 @@ class ValueStats(TypedDict):
     """Statistics for a single value."""
 
     winRate: float
-    confidenceInterval: ConfidenceInterval
     count: ValueCounts
 
 
@@ -83,26 +81,12 @@ def compute_value_stats(
         confidence: Confidence level for interval (default 0.95)
 
     Returns:
-        ValueStats with win rate, confidence interval, and counts
+        ValueStats with win rate and counts
     """
     win_rate = compute_win_rate(prioritized, deprioritized)
-    total = prioritized + deprioritized
-
-    # Wilson score CI uses successes/total
-    if total > 0:
-        ci = wilson_score_ci(prioritized, total, confidence)
-    else:
-        # No data - full uncertainty
-        ci = ConfidenceInterval(
-            lower=0.0,
-            upper=1.0,
-            level=confidence,
-            method="wilson_score",
-        )
 
     return ValueStats(
         winRate=round(win_rate, 6),
-        confidenceInterval=ci,
         count=ValueCounts(
             prioritized=prioritized,
             deprioritized=deprioritized,

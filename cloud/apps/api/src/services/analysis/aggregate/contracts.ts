@@ -20,13 +20,6 @@ export const zRunConfig = z.object({
 
 export type RunConfig = z.infer<typeof zRunConfig>;
 
-const zConfidenceInterval = z.object({
-  lower: z.number(),
-  upper: z.number(),
-  level: z.number(),
-  method: z.string(),
-});
-
 export const zValueStats = z.object({
   count: z.object({
     prioritized: z.number(),
@@ -34,7 +27,6 @@ export const zValueStats = z.object({
     neutral: z.number(),
   }),
   winRate: z.number(),
-  confidenceInterval: zConfidenceInterval,
 });
 
 export const zModelStats = z.object({

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Archive, FolderTree, GitCompare, Settings, ShieldCheck } from 'lucide-react';
+import { Archive, FolderTree, Settings, ShieldCheck } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { useDomains } from '../hooks/useDomains';
 
@@ -21,12 +21,6 @@ const quickLinks = [
     description: 'Open historical survey work and secondary research surfaces.',
     to: '/archive',
     icon: Archive,
-  },
-  {
-    title: 'Compare',
-    description: 'Use the global benchmark and comparison tooling as a cross-cutting utility.',
-    to: '/compare',
-    icon: GitCompare,
   },
 ];
 

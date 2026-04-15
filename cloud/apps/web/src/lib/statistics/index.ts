@@ -5,14 +5,6 @@
  * analysis results across runs.
  */
 
-// Cohen's d effect size
-export {
-  cohensD,
-  cohensDFromData,
-  interpretEffectSize,
-  type CohensDResult,
-} from './cohens-d';
-
 // Kolmogorov-Smirnov test
 export {
   ksStatistic,

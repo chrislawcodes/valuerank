@@ -27,10 +27,6 @@ const ExportPairwiseOutcomesInputSchema = {
     .array(z.string())
     .optional()
     .describe('Explicit definition IDs (overrides folder/tag filters)'),
-  include_ci: z
-    .boolean()
-    .default(false)
-    .describe('Include confidence interval bounds in output'),
   aggregate_only: z
     .boolean()
     .default(true)
@@ -51,10 +47,6 @@ type PairwiseOutcomeRow = {
   valueBDeprioritized: number;
   valueBNeutral: number;
   valueBWinRate: number;
-  valueACiLower?: number;
-  valueACiUpper?: number;
-  valueBCiLower?: number;
-  valueBCiUpper?: number;
 };
 
 type ExportPairwiseOutput = {
@@ -211,13 +203,6 @@ Limited to 100KB token budget.`,
               valueBNeutral: valueBStats?.count.neutral ?? 0,
               valueBWinRate: valueBStats?.winRate ?? 0,
             };
-
-            if (args.include_ci) {
-              row.valueACiLower = valueAStats?.confidenceInterval.lower ?? 0;
-              row.valueACiUpper = valueAStats?.confidenceInterval.upper ?? 0;
-              row.valueBCiLower = valueBStats?.confidenceInterval.lower ?? 0;
-              row.valueBCiUpper = valueBStats?.confidenceInterval.upper ?? 0;
-            }
 
             rows.push(row);
           }

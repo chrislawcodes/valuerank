@@ -31,7 +31,6 @@ function createAnalysisResult(overrides: Partial<AnalysisResult>): AnalysisResul
     varianceAnalysis: null,
     mostContestedScenarios: [],
     methodsUsed: {
-      winRateCI: 'wilson',
       modelComparison: 'spearman',
       pValueCorrection: 'holm',
       effectSize: 'cohens_d',
