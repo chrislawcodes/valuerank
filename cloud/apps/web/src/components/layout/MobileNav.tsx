@@ -14,6 +14,7 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { name: 'Home', path: '/', icon: Home },
+  { name: 'Models', path: '/models', icon: Cpu },
   {
     name: 'Domains',
     path: '/domains',
@@ -23,7 +24,6 @@ const navItems: NavItem[] = [
       { name: 'Manage Domains', path: '/domains/manage', icon: FolderTree },
     ],
   },
-  { name: 'Models', path: '/models', icon: Cpu },
   {
     name: 'Vignettes',
     path: '/definitions',
