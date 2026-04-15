@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "quality-adversarial"
 stage: "diff"
 artifact_path: "docs/workflow/feature-runs/models-tab/reviews/implementation.diff.patch"
-artifact_sha256: "f9d1f7d7135ac9e7facd6d388167aaf611b4b85a592e18d38caaa16f7b136931"
+artifact_sha256: "fe3dd8ad1dae8256aa236c038f3023837f8f9594527fc0dac60207cc9240fe3f"
 repo_root: "."
-git_head_sha: "90c49005a5187225d2e1f3d75574cc771b4a2ea8"
-git_base_ref: "12d265ac2d16b36d24ee9a5384f469763c5e91f0"
-git_base_sha: "12d265ac2d16b36d24ee9a5384f469763c5e91f0"
+git_head_sha: "f13c75868802ccf953d5af7f071660e523a6d56a"
+git_base_ref: "90c49005a5187225d2e1f3d75574cc771b4a2ea8"
+git_base_sha: "90c49005a5187225d2e1f3d75574cc771b4a2ea8"
 generation_method: "gemini-cli"
 resolution_status: "accepted"
-resolution_note: "HIGH fixed — memoized queryVariables; LOW dismissed — close-on-deselect is intended behavior per spec"
+resolution_note: "MEDIUM fixed — added comment to useMemo block warning about dependency array maintenance. LOW dismissed — memoization is correct and in place; urql already serializes variables so no actual redundant fetch risk."
 raw_output_path: "docs/workflow/feature-runs/models-tab/reviews/diff.gemini.quality-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,71 +22,28 @@ coverage_note: ""
 
 ## Findings
 
-| Severity | Finding |
-| --- | --- |
-| **HIGH** | **Potential for Excessive API Calls on Every Render** |
-| **LOW** | **Abrupt UI Change May Degrade User Experience** |
+**Finding 1: Increased Risk of Stale Data in Future Modifications**
+- **Severity:** [UNVERIFIED] MEDIUM
+- **Description:** The abstraction of query variables into a `useMemo` hook introduces a maintenance risk. While the current implementation is correct, any future change that adds a new variable to the query's input must also be reflected in the `useMemo` dependency array. Forgetting to update the dependency array would cause the query to run with stale variables, leading to subtle bugs that are not statically detectable and can be difficult to diagnose. The previous inline implementation, while theoretically less performant, was not susceptible to this category of error.
+- **Recommendation:** Add a code comment to the `useMemo` block that warns future maintainers to keep the dependency array synchronized with the variables being constructed.
 
-### **HIGH: Potential for Excessive API Calls on Every Render**
-
-The modification to the `useQuery` hook's variables introduces a critical performance issue.
-
-```diff
--    variables: {},
-+    variables: selectedDomainId != null ? { domainId: selectedDomainId } : {},
-```
-
-When `selectedDomainId` is `null`, a new empty object (`{}`) is passed to the `variables` prop on every single render of the `Models` component. Most GraphQL client libraries (like Apollo Client or `urql`) perform a shallow comparison of the `variables` object to determine if a query should be re-executed. Since `{}` is a new object reference on each render, the library will likely interpret this as a change in variables and trigger a new network request, even if no user action has occurred.
-
-This can lead to a high volume of unnecessary API calls, increased server load, and poor client-side performance, especially if the component re-renders for other reasons (e.g., sorting, parent component updates).
-
-**Recommendation:**
-Memoize the `variables` object to ensure its reference remains stable unless `selectedDomainId` actually changes.
-
-```typescript
-const variables = useMemo(
-  () => (selectedDomainId != null ? { domainId: selectedDomainId } : {}),
-  [selectedDomainId]
-);
-
-const [{ data, fetching, error }] = useQuery<ModelsAnalysisQueryResult, ModelsAnalysisQueryVariables>({
-  query: MODELS_ANALYSIS_QUERY,
-  variables,
-  requestPolicy: 'cache-and-network',
-});
-```
-
-### **LOW: Abrupt UI Change May Degrade User Experience**
-
-The new `useEffect` hook automatically closes the details drawer (`setSelectedCell(null)`) the moment its corresponding model is removed from the `selectedModelIds` list.
-
-```diff
-+  // Close the drawer when its model is no longer visible (filtered out or cleared)
-+  useEffect(() => {
-+    if (selectedCell == null) return;
-+    if (!selectedModelIds.includes(selectedCell.modelId)) {
-+      setSelectedCell(null);
-+    }
-+  }, [selectedModelIds, selectedCell]);
-```
-
-While functionally correct, this behavior can be jarring. A user might be filtering models with the intention of comparing the open drawer's content to the remaining items, or they might mis-click a filter and want to undo it. Instantly closing the drawer forces them to lose their context and re-open it.
-
-**Recommendation:**
-Consider a less abrupt UX. For example, instead of closing the drawer, display an overlay or a message within the drawer indicating that the selected model is not visible with the current filters. This preserves the user's context while still communicating the state of the UI.
+**Finding 2: Marginal Performance Gain at the Cost of Simplicity**
+- **Severity:** LOW
+- **Description:** The change memoizes the `variables` object to provide a stable reference to the `useQuery` hook. While this follows React best practices, the actual performance benefit is likely minimal. GraphQL clients like `urql` serialize query variables to generate a stable key, which already prevents redundant network fetches. The only work saved is the re-execution of the hook's internal `useEffect`, which is a micro-optimization. This change adds three lines of code and an extra layer of indirection for a benefit that may not be perceptible.
+- **Recommendation:** The change is not incorrect, but it adds complexity. Evaluate if this optimization pattern is a required standard for the project or if it should be applied more selectively to areas with a demonstrated performance need.
 
 ## Residual Risks
 
-*   **[UNVERIFIED] Library Behavior:** The high-severity finding assumes the GraphQL client library triggers refetches based on shallow-reference changes to the `variables` object. While this is standard behavior for the most common libraries, it is not guaranteed without seeing the project's dependencies and configuration. If the library uses a deep-compare (which is unlikely due to performance implications), this risk would be mitigated.
-*   **[UNVERIFIED] State Management Complexity:** The logic of the new `useEffect` hook appears sound in isolation. However, its true robustness depends on how state variables like `selectedCell` and `selectedModelIds` are managed and updated throughout the component. Without the full component context, there is a minor risk of unforeseen race conditions or interactions with other state-updating effects.
+- **Stale Dependencies:** The primary residual risk is that a future developer will add a new state-dependent property to the `queryVariables` object but forget to add the corresponding state to the `useMemo` dependency array, causing the query to execute with stale data.
+- **[UNVERIFIED] Unhandled Query States:** The logic passes an empty object (`{}`) as variables when `selectedDomainId` is null. If the GraphQL query `MODELS_ANALYSIS_QUERY` has non-nullable arguments without default values, this could result in API errors. This risk existed before the change but is worth noting as a potential weakness in the component's data-fetching logic.
 
 ## Token Stats
 
-- total_input=12948
-- total_output=819
-- total_tokens=15733
-- `gemini-2.5-pro`: input=12948, output=819, total=15733
+- total_input=12755
+- total_output=496
+- total_tokens=15965
+- `gemini-2.5-pro`: input=12755, output=496, total=15965
 
 ## Resolution
 - status: accepted
-- note: HIGH fixed — memoized queryVariables with useMemo to stabilize the object reference across renders (defensive improvement; urql uses string-serialized keys so no actual refetch risk, but memoization is cleaner). LOW dismissed — abrupt drawer close on model deselect is the intended behavior per spec and was explicitly required by the regression-adversarial review.
+- note: MEDIUM fixed — added comment to useMemo reminding maintainers to update dependency array when adding new query inputs. LOW dismissed — memoization stays; it is correct, defensive, and already committed.

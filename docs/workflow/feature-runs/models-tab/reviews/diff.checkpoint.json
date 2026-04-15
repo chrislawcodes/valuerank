@@ -1,0 +1,36 @@
+{
+  "feature_slug": "models-tab",
+  "stage": "diff",
+  "artifact_path": "docs/workflow/feature-runs/models-tab/reviews/implementation.diff.patch",
+  "git_base_ref": "90c49005a5187225d2e1f3d75574cc771b4a2ea8",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "correctness-adversarial",
+      "stage": "diff",
+      "path": "docs/workflow/feature-runs/models-tab/reviews/diff.codex.correctness-adversarial.review.md",
+      "context_paths": [],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "regression-adversarial",
+      "stage": "diff",
+      "path": "docs/workflow/feature-runs/models-tab/reviews/diff.codex.regression-adversarial.review.md",
+      "context_paths": [],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "quality-adversarial",
+      "stage": "diff",
+      "path": "docs/workflow/feature-runs/models-tab/reviews/diff.gemini.quality-adversarial.review.md",
+      "context_paths": [],
+      "model": "gemini-2.5-pro"
+    }
+  ],
+  "max_artifact_chars": null,
+  "max_context_chars": null,
+  "max_total_chars": null
+}

@@ -1,0 +1,6 @@
+## Findings
+No correctness issues found in this patch.
+
+## Residual Risks
+- [UNVERIFIED] This change assumes `useQuery` only needs `variables` to change when `selectedDomainId` changes, and does not rely on receiving a fresh object on every render for any side effect.
+- [UNVERIFIED] If there is code outside this diff that depends on the previous per-render object identity of `variables`, this memoization could subtly change behavior, but no such dependency is visible in the artifact itself.

@@ -3,14 +3,14 @@ reviewer: "codex"
 lens: "correctness-adversarial"
 stage: "diff"
 artifact_path: "docs/workflow/feature-runs/models-tab/reviews/implementation.diff.patch"
-artifact_sha256: "f9d1f7d7135ac9e7facd6d388167aaf611b4b85a592e18d38caaa16f7b136931"
+artifact_sha256: "fe3dd8ad1dae8256aa236c038f3023837f8f9594527fc0dac60207cc9240fe3f"
 repo_root: "."
-git_head_sha: "90c49005a5187225d2e1f3d75574cc771b4a2ea8"
-git_base_ref: "12d265ac2d16b36d24ee9a5384f469763c5e91f0"
-git_base_sha: "12d265ac2d16b36d24ee9a5384f469763c5e91f0"
+git_head_sha: "f13c75868802ccf953d5af7f071660e523a6d56a"
+git_base_ref: "90c49005a5187225d2e1f3d75574cc771b4a2ea8"
+git_base_sha: "90c49005a5187225d2e1f3d75574cc771b4a2ea8"
 generation_method: "codex-runner"
-resolution_status: "dismissed"
-resolution_note: "Finding not a real bug — visibility flows through models→selectedModelIds→drawer-close chain: domain change triggers query refresh, models updates, selectedModelIds trim effect fires, then drawer-close effect fires. All paths covered."
+resolution_status: "accepted"
+resolution_note: "No issues found — clean pass"
 raw_output_path: "docs/workflow/feature-runs/models-tab/reviews/diff.codex.correctness-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,12 +22,12 @@ coverage_note: ""
 
 ## Findings
 
-- [UNVERIFIED] Medium: The new drawer-closing effect only checks `selectedModelIds`, but the comment says it should close when the model is “filtered out or cleared.” If the visible set can change through `selectedDomainId` or any other filter that does not also update `selectedModelIds`, the drawer will stay open on a model that is no longer visible. That leaves stale `selectedCell` state and can show details for an invisible row.
+No correctness issues found in this patch.
 
 ## Residual Risks
 
-- I could not verify whether `selectedModelIds` is the sole source of visibility in this page. If it is, the finding above does not apply; if not, the current guard is incomplete.
-- No test coverage is shown for the domain-switch and filter-change paths, so regressions here could slip through even if the logic looks correct in the happy path.
+- [UNVERIFIED] This change assumes `useQuery` only needs `variables` to change when `selectedDomainId` changes, and does not rely on receiving a fresh object on every render for any side effect.
+- [UNVERIFIED] If there is code outside this diff that depends on the previous per-render object identity of `variables`, this memoization could subtly change behavior, but no such dependency is visible in the artifact itself.
 
 ## Runner Stats
 - total_input=0
@@ -35,5 +35,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: dismissed
-- note: Finding not a real bug. Domain change → query refresh → models updates → selectedModelIds trim effect removes disappeared models → drawer-close effect fires. The chain is complete; selectedModelIds is the correct and sole visibility gate.
+- status: accepted
+- note: No issues found — clean pass.

@@ -24,6 +24,8 @@ export function Models() {
 
   const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
 
+  // Memoized to keep the object reference stable across renders.
+  // If new query inputs are added, update the dependency array here too.
   const queryVariables = useMemo(
     () => (selectedDomainId != null ? { domainId: selectedDomainId } : {}),
     [selectedDomainId],
