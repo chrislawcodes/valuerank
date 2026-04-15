@@ -281,7 +281,7 @@ describe('analyze-basic integration', () => {
 
       expect(result).not.toBeNull();
       expect(result?.analysisType).toBe('basic');
-      expect(result?.codeVersion).toBe('1.1.1');
+      expect(result?.codeVersion).toBe('1.2.0');
       expect(result?.status).toBe('CURRENT');
 
       // Verify output structure

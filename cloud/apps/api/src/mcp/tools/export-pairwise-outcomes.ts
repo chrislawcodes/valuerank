@@ -67,6 +67,7 @@ function registerExportPairwiseOutcomesTool(server: McpServer): void {
 For each vignette and model, returns prioritized/deprioritized/neutral counts and win rates for both values.
 By default uses only Aggregate-tagged runs. Set aggregate_only=false for all completed runs.
 Supports filtering by folder name, tag, or explicit definition IDs.
+Win rate is computed as prioritized / (prioritized + deprioritized + neutral). Neutrals are included in the denominator as of code version 1.2.0.
 Limited to 100KB token budget.`,
       inputSchema: ExportPairwiseOutcomesInputSchema,
     },
