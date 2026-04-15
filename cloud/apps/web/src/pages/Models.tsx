@@ -21,13 +21,14 @@ import {
 
 export function Models() {
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
-  const [{ data, fetching, error }] = useQuery<ModelsAnalysisQueryResult, ModelsAnalysisQueryVariables>({
-    query: MODELS_ANALYSIS_QUERY,
-    variables: {},
-    requestPolicy: 'cache-and-network',
-  });
 
   const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
+
+  const [{ data, fetching, error }] = useQuery<ModelsAnalysisQueryResult, ModelsAnalysisQueryVariables>({
+    query: MODELS_ANALYSIS_QUERY,
+    variables: selectedDomainId != null ? { domainId: selectedDomainId } : {},
+    requestPolicy: 'cache-and-network',
+  });
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<ModelsMatrixSortKey>('model');
   const [stabilityVisibility, setStabilityVisibility] = useState<StabilityVisibility>('all');
@@ -60,6 +61,14 @@ export function Models() {
       return next.length === current.length ? current : next;
     });
   }, [models]);
+
+  // Close the drawer when its model is no longer visible (filtered out or cleared)
+  useEffect(() => {
+    if (selectedCell == null) return;
+    if (!selectedModelIds.includes(selectedCell.modelId)) {
+      setSelectedCell(null);
+    }
+  }, [selectedModelIds, selectedCell]);
 
   const modelOptions = useMemo(() => models.map((model) => ({
     value: model.modelId,
