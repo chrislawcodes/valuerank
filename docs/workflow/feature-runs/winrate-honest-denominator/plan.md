@@ -16,7 +16,7 @@ Six slices. All land in one PR. Slice 0 must go first (it unblocks the file-size
 |---|---|---|---|
 | **0** | **Split `analyze_basic.py` under the file-size limit** | `cloud/workers/analyze_basic.py` (shrunk), new `cloud/workers/analyze_basic_metadata.py`, new `cloud/workers/analyze_basic_aggregation.py`, `cloud/workers/tests/test_analyze_basic.py` (unchanged — must still pass byte-for-byte) | Pure refactor, no behavior change. Must land first because `analyze_basic.py` is 704 lines on main and the CI file-size check blocks any other PR commits that touch it. |
 | **1** | **Honest denominator in the Python worker** | `cloud/workers/stats/basic_stats.py`, `cloud/workers/stats/tests/test_basic_stats.py` (new), `cloud/workers/tests/test_analyze_basic.py`, `cloud/workers/analyze_basic_metadata.py` (from slice 0) | Core math change. Must land before slice 2 because the API TS tests re-run the worker indirectly via fixtures and would see the new math. |
-| **2** | **Honest denominator in the API aggregation + cache invalidation + version bumps** | `cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts`, `cloud/apps/api/src/graphql/queries/domain/analysis/value-detail-types.ts`, `cloud/apps/api/src/queue/handlers/analyze-basic.ts` (TS-side CODE_VERSION bump), `cloud/apps/api/src/services/analysis/aggregate/constants.ts` (AGGREGATE version bump), `cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts` (snapshot version bump), `cloud/apps/api/src/mcp/tools/export-pairwise-outcomes.ts` (tool description only), `cloud/apps/api/tests/services/analysis/aggregate.test.ts`, `cloud/apps/api/tests/graphql/queries/domain-analysis.test.ts`, `cloud/apps/api/tests/mcp/tools/export-pairwise-outcomes.test.ts`, `cloud/apps/api/tests/queue/handlers/analyze-basic.integration.test.ts` (codeVersion assertion at line 284) | Must ship in the same PR as slice 3 so API + web math stay in lockstep. Can ship before or after slice 3 inside the PR. |
+| **2** | **Honest denominator in the API aggregation + version bumps** | `cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts`, `cloud/apps/api/src/graphql/queries/domain/analysis/value-detail-types.ts`, `cloud/apps/api/src/queue/handlers/analyze-basic.ts` (TS-side CODE_VERSION bump), `cloud/apps/api/src/services/analysis/aggregate/constants.ts` (AGGREGATE version bump), `cloud/apps/api/src/mcp/tools/export-pairwise-outcomes.ts` (tool description only), `cloud/apps/api/tests/services/analysis/aggregate.test.ts` (lines 640 + 766 bump to `'1.3.0'`), `cloud/apps/api/tests/graphql/queries/domain-analysis.test.ts`, `cloud/apps/api/tests/mcp/tools/export-pairwise-outcomes.test.ts`, `cloud/apps/api/tests/queue/handlers/analyze-basic.integration.test.ts` (codeVersion assertion at line 284) | Must ship in the same PR as slice 3 so API + web math stay in lockstep. Can ship before or after slice 3 inside the PR. |
 | **3** | **Honest denominator in web aggregation + model-relative buckets + copy** | `cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts`, `cloud/apps/web/src/pages/DomainAnalysis.tsx`, `cloud/apps/web/src/components/domains/ValuePrioritiesHelpPanel.tsx` (full help-panel rewrite, not just formula string), `cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts`, `cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx` (fixture hand-compute update) | Same PR as slice 2. Also brings in the bucket-logic redesign (Option A from spec). |
 | **4** | **Honest denominator in standalone script + docs** | `cloud/scripts/analysis/compute_rankings.py`, `docs/features/analysis.md` (six sites — formula type comment + `ValueStats.confidenceInterval` removal + "Win Rate Calculation" narrative + `MethodsUsed.winRateCI` removal + "Per-value win rates and CIs" label + repo-wide grep), `docs/canonical-glossary.md` (add new entry) | Should be late — docs reference the other slices' changes. Has no build dependency on 0-3. |
 | **5** | **Prisma migration: mark-all-superseded for stale AnalysisResult rows** | New `cloud/packages/db/prisma/migrations/<timestamp>_invalidate_stale_winrate_analyses/migration.sql`. No code changes. | Required because `queries/analysis.ts:21` does not version-check on read. Without this, every existing run serves old-formula winRates forever after the deploy. Ordered last so the migration timestamp is the highest in the deploy batch. |
@@ -330,9 +330,9 @@ const comparisonDenominator = vignette.prioritized + vignette.deprioritized + vi
 
 The null fallback stays — `comparisonDenominator === 0` still means "no data at all".
 
-### 4.3 Three version-constant bumps
+### 4.3 Two version-constant bumps
 
-Codex cold-read review established that the spec's original "cache invalidation" target was the wrong file. Three distinct version constants need to bump in this slice:
+Codex cold-read review established that only two version constants actually drive cache behavior for this feature:
 
 **Bump 1 — TS-side `analyze_basic` CODE_VERSION duplicate.**
 
@@ -364,20 +364,15 @@ export const AGGREGATE_ANALYSIS_CODE_VERSION = '1.3.0';
 
 This constant is written into `analysisResult.codeVersion` by `aggregate-run-workflow.ts:168,193` when a new aggregate row is persisted. Because it was ALREADY at `1.2.0` on main, bumping the basic side to `1.2.0` without bumping the aggregate side would give the aggregate math change no version signal at all. Bump to `1.3.0` to keep the aggregate ahead of basic semantically.
 
-**Bump 3 — `DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION`.**
+**Why NOT bump `DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION`.** The cold-read verification pass found that:
 
-File: `cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts:19`
+1. Domain snapshots do NOT store `winRate` at all. A grep of `domain-analysis-cache-types.ts` and `domain-analysis-snapshot-builder.ts` for `winRate` returns zero hits — snapshots only store the raw `{ prioritized, deprioritized, neutral }` counts, and the UI (`DomainAnalysis.tsx:143`, fixed in slice 3) computes `winRate` at render time.
+2. The snapshot read path at `domain-analysis-cache.ts:232-235` compares `currentSnapshot.inputHash === state.inputHash`. It does NOT compare `codeVersion`.
+3. `computeInputHash` in `domain-analysis-snapshot-builder.ts:127-145` does NOT include `codeVersion` in the hashed content — only `domainId`, `signature`, `latestDefinitions`, and per-run `{ runId, inputHash }` fingerprints.
 
-```typescript
-// OLD
-export const DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.0.0';
-// NEW
-export const DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.1.0';
-```
+Therefore bumping `DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION` would be a no-op: old snapshots would continue to be served until their `inputHash` changes (which requires new vignettes or new runs). The real fix for the snapshot display layer is slice 3's `DomainAnalysis.tsx:143` edit, which changes how the UI derives `winRate` from the unchanged-shape counts. **No snapshot-constant bump is needed.**
 
-This is the domain-snapshot cache's own version constant, read when writing new snapshots at `domain-analysis-snapshot-builder.ts:365`. The snapshot read path IS version-aware (unlike the basic/aggregate `analysisResult` read path), so bumping this constant is the only edit needed for the snapshot cache. Old snapshots with `codeVersion: "1.0.0"` are automatically treated as stale on the next read and regenerated.
-
-**No file to grep for a "cache key" and no startup hook.** The previous draft of this section chased a `domain-analysis-cache.ts` file that doesn't exist. The three constant bumps above are the complete cache story for slice 2. The `AnalysisResult` table (basic + aggregate) is handled by slice 5, not here.
+**The `AnalysisResult` table (basic + aggregate) is handled by slice 5, not here.**
 
 ### 4.4 `cloud/apps/api/src/mcp/tools/export-pairwise-outcomes.ts`
 
@@ -391,6 +386,8 @@ Keep the field names (`valueAWinRate`, `valueBWinRate`) unchanged. This is a bre
 
 Update `cloud/apps/api/tests/services/analysis/aggregate.test.ts`:
 
+- **Line 640** — `expect(aggregateAnalysis.codeVersion).toBe('1.2.0');` → `expect(aggregateAnalysis.codeVersion).toBe('1.3.0');` (matches `AGGREGATE_ANALYSIS_CODE_VERSION` bump).
+- **Line 766** — inside a `toMatchObject({ methodsUsed: { ..., codeVersion: '1.2.0' } })` block. Bump the literal to `'1.3.0'`.
 - Any fixture that sets a `neutral` count > 0 and asserts a specific `winRate` value must be updated. The new expected value is `prioritized / (prioritized + deprioritized + neutral)`.
 - Add at least one new test case that exercises the new formula explicitly. Suggested fixture:
 
@@ -634,15 +631,14 @@ All green. The test suite is the biggest risk point in this slice because the bu
 
 ### 6.1 `cloud/scripts/analysis/compute_rankings.py`
 
-Lines 60-111 (`compute_win_rates` — note the plural is a misnomer; the function iterates per-value and computes one rate each).
+Three edits in this file, all inside `compute_win_rates` (the function iterates per-value and computes one rate each):
 
-Current relevant lines (approximately 88-90):
+**Edit 1 — lines 88-90, compute the denominator from all three counts.** Current:
 
 ```python
 total_decisive = pri + dep
 win_rate = pri / total_decisive if total_decisive > 0 else 0.5
-# Wilson CI
-ci_low, ci_high = wilson_score_interval(pri, total_decisive)
+ci_lower, ci_upper = wilson_score_interval(pri, total_decisive)
 ```
 
 Change to:
@@ -650,22 +646,40 @@ Change to:
 ```python
 total_responses = pri + dep + neu
 win_rate = pri / total_responses if total_responses > 0 else 0.5
-# Wilson CI uses the same total
-ci_low, ci_high = wilson_score_interval(pri, total_responses)
+ci_lower, ci_upper = wilson_score_interval(pri, total_responses)
 ```
 
-The variable name should flip from `total_decisive` to `total_responses` since "decisive" is no longer accurate (neutrals are included). Verify that `neu` (the neutral count) is available in scope at this point — if not, trace back through the function to find where the per-value counts come from and wire it through.
+The variable name flips from `total_decisive` to `total_responses` since "decisive" is no longer accurate (neutrals are counted). `neu` is already in scope at line 87 (`neu = c["neutral"]`), so no extra wiring is needed.
+
+**Edit 2 — line 99, rename the output dict key.** Current:
+
+```python
+rows.append({
+    ...
+    "total_neutral": neu,
+    "total_decisive": total_decisive,
+    ...
+})
+```
+
+Change to:
+
+```python
+rows.append({
+    ...
+    "total_neutral": neu,
+    "total_responses": total_responses,
+    ...
+})
+```
+
+This is a CSV schema change — downstream consumers of this script's output will see a renamed column. The script is a standalone dev script (no production consumers), so this is safe.
+
+**Edit 3 — docstring/comment around line 66.** Update the module-level comment that describes the formula to the honest version.
 
 **Do not delete `wilson_score_interval`.** It's a self-contained helper and still emits valid CIs; only its `total` input changes.
 
-Update the module-level docstring or comments that describe the formula (around line 66 of the file):
-
-```python
-# Old (line 66): global_win_rate = prioritized / (prioritized + deprioritized)
-# New: global_win_rate = prioritized / (prioritized + deprioritized + neutral)
-```
-
-Check the CLI help text (grep for `argparse` in the file) and update any text that describes what `winRate` means.
+`compute_rankings.py` has NO argparse / CLI help text — it reads `INPUT_CSV` and `OUTPUT_CSV` as module-level constants. No CLI copy to update.
 
 ### 6.2 `docs/features/analysis.md`
 
@@ -709,13 +723,21 @@ Verified during exploration: the glossary has no existing `winRate` entry. **Add
 
 ### 6.5 Verification commands
 
+`compute_rankings.py` has no CLI help — it hard-codes input/output paths. Verify by static read-back:
+
 ```bash
 cd cloud
-python scripts/analysis/compute_rankings.py --help
-# Runs without error. Help text reflects the new formula (if help text mentions formula).
+grep -n "total_decisive" scripts/analysis/compute_rankings.py
+# Expected: ZERO matches (variable renamed to total_responses).
+
+grep -n "total_responses" scripts/analysis/compute_rankings.py
+# Expected: at least 2 matches (variable def + output dict key).
+
+grep -n "pri + dep + neu" scripts/analysis/compute_rankings.py
+# Expected: 1 match (the new denominator).
 ```
 
-Docs are markdown/yaml — no build step. Verify by grepping for `prioritized / (prioritized + deprioritized)` in the repo to confirm zero hits after slice 4:
+Docs are markdown/yaml — no build step. Verify by grepping for the old formula in the repo to confirm zero hits after slice 4:
 
 ```bash
 cd $(git rev-parse --show-toplevel)
@@ -728,91 +750,111 @@ Zero matches expected.
 
 ---
 
-## 6b. Slice 5 — Prisma migration: mark-all-superseded for stale AnalysisResult rows
+## 6b. Slice 5 — Prisma migration: mark-all-superseded for stale analysis_results rows
 
-**Goal.** One-shot SQL migration that marks every existing `CURRENT` `basic` or `AGGREGATE` `AnalysisResult` row as `SUPERSEDED`. After this runs, the next time a user requests an analysis for any existing run, the system behaves as if no analysis has ever been computed for that run — and re-queues with the new-formula math.
+**Goal.** One-shot SQL migration that marks every existing `CURRENT` `basic` or `AGGREGATE` row in `analysis_results` as `SUPERSEDED`. After this runs, the next time a user views an existing run in the UI, they see an empty analysis state and can click the existing "Recompute" button to trigger a fresh analysis with the new formula.
 
 **Spec reference.** `spec.md` § Stale data — resolved. § Slice plan row 5. § User decisions already made row 4 (Option B approved).
 
-### 6b.1 Why this slice exists
+### 6b.1 Why this slice exists, and what it actually does
 
-`cloud/apps/api/src/graphql/queries/analysis.ts:21` reads the current `AnalysisResult` row by status alone — it does not compare `codeVersion`. That means bumping `CODE_VERSION` and `AGGREGATE_ANALYSIS_CODE_VERSION` in slice 2 does NOT cause existing runs to recompute. Without this slice, every existing basic and aggregate analysis in prod keeps serving old-formula win rates forever after deploy.
+**The read path is version-blind.** `cloud/apps/api/src/graphql/queries/analysis.ts:17-35` reads the latest `analysisResult` row by `runId` and `status: 'CURRENT'` alone — it does NOT compare `codeVersion`, and it does NOT re-queue anything. If a row exists with `status: 'CURRENT'`, it is returned verbatim, regardless of which formula produced it.
 
-The fix is a one-shot `UPDATE` at deploy time that flips every existing `CURRENT` basic/aggregate row to `SUPERSEDED`. The read path at `queries/analysis.ts:21` returns `null` for a run whose only rows are `SUPERSEDED`, and the downstream logic then re-queues the analysis with the new code. The first request after deploy for each run pays a recompute cost; subsequent requests hit the freshly-written new-formula row.
+That means bumping `CODE_VERSION` and `AGGREGATE_ANALYSIS_CODE_VERSION` in slice 2 by itself has ZERO effect on existing runs. Every existing basic and aggregate analysis would keep serving old-formula win rates forever after deploy.
 
-Domain-analysis snapshots are NOT handled here — they use a separate version constant (bumped in slice 2) and the snapshot read path already compares `codeVersion`, so old snapshots self-invalidate.
+**What marking rows SUPERSEDED actually achieves.** When the resolver at `analysis.ts:17-35` finds no `CURRENT` row for a run, it returns `null`. The web client (`cloud/apps/web/src/components/analysis/AnalysisPanel.tsx` around lines 155-162) treats `null` as "no analysis computed yet" and surfaces the existing **manual recompute button** to the user. Clicking that button calls the `recomputeAnalysis` mutation at `cloud/apps/api/src/graphql/mutations/analysis.ts:16-132`, which enqueues a fresh analysis job. The job runs with the new-formula code and writes a new `CURRENT` row.
+
+**This is the existing product pattern**, not a regression. Users who have never viewed a given run's analysis will never notice anything changed. Users who view a previously-computed run will see an "analysis not available" state and click recompute — the same UX they already have today when a run is new.
+
+**There is NO automatic post-deploy re-queue.** An earlier draft of this section claimed "the downstream logic then re-queues" — that is false. Nothing in the API's read path triggers a recompute on a missing row. The user explicitly initiates it.
+
+Domain-analysis snapshots are NOT handled here (they live in a separate `assumption_analysis_snapshots` table with `AssumptionAnalysisStatus` enum, and they don't store `winRate` at all — slice 3's `DomainAnalysis.tsx:143` edit recomputes winRate at render time from the unchanged-shape counts).
 
 ### 6b.2 Migration file
 
-Create a new Prisma migration folder. Use `prisma migrate dev` to let Prisma pick the timestamp:
+Create a new Prisma migration folder. Use `prisma migrate dev --create-only` to let Prisma pick the timestamp and generate the folder without running it:
 
 ```bash
 cd cloud
-DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank?pgbouncer=true" \
+DIRECT_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
   npx prisma migrate dev \
     --name invalidate_stale_winrate_analyses \
     --schema packages/db/prisma/schema.prisma \
     --create-only
 ```
 
-The `--create-only` flag generates the migration folder without running it, so we can hand-write the SQL. The resulting path will be:
+Both `DATABASE_URL` and `DIRECT_URL` are required because `schema.prisma:5-10` declares both — missing either causes Prisma to error out before touching the DB. The `--create-only` flag is effectively the "dry-run" stage: the folder is created, the SQL file is empty, nothing is applied to the DB yet.
+
+The resulting path will be:
 
 ```
 cloud/packages/db/prisma/migrations/<timestamp>_invalidate_stale_winrate_analyses/migration.sql
 ```
 
-Replace the auto-generated SQL (Prisma defaults to an empty migration when no schema diff exists) with:
+Replace the empty auto-generated file with:
 
 ```sql
--- Mark all existing CURRENT basic and AGGREGATE AnalysisResult rows as SUPERSEDED.
--- This forces the next read for each run to re-queue analysis with the new
--- winRate formula (prioritized / (prioritized + deprioritized + neutral)).
+-- Mark all existing CURRENT basic and AGGREGATE rows in analysis_results as SUPERSEDED.
+-- This forces the frontend to show the "no analysis computed" state, prompting users
+-- to click the existing manual recompute button. That triggers the recomputeAnalysis
+-- mutation which enqueues a fresh job using the new winRate formula
+-- (prioritized / (prioritized + deprioritized + neutral)).
 -- See docs/workflow/feature-runs/winrate-honest-denominator/spec.md for context.
 
-UPDATE "AnalysisResult"
-SET "status" = 'SUPERSEDED',
-    "updatedAt" = NOW()
+UPDATE "analysis_results"
+SET "status" = 'SUPERSEDED'
 WHERE "status" = 'CURRENT'
-  AND "analysisType" IN ('basic', 'AGGREGATE');
+  AND "analysis_type" IN ('basic', 'AGGREGATE');
 ```
 
-**Column casing.** Prisma's generated SQL uses double-quoted PascalCase column names (`"AnalysisResult"`, `"status"`, `"analysisType"`, `"updatedAt"`). Verify by grepping an existing migration in `cloud/packages/db/prisma/migrations/` for reference — the casing MUST match the generated schema. If prod-verification shows a different casing (e.g. snake_case with `@map`), adjust the SQL to match.
+**Schema verification.** Verified via `cloud/packages/db/prisma/schema.prisma:681-705`:
 
-**Enum value verification.** The `analysisType` column's production values MUST be `'basic'` and `'AGGREGATE'` (as strings) — verify before committing by reading the Prisma schema enum and grepping for any `@map` directives. Per `~/.claude/rules/data-critical-waves.md`, do NOT assume dev/test enum values match prod. The exact values can also be confirmed by running this against prod:
+- `@@map("analysis_results")` — the underlying table name is snake_case.
+- Field `analysisType` → `@map("analysis_type")` — column is snake_case.
+- Field `status` → no `@map`, so column is literally `status` (lowercase — Prisma defaults).
+- Field `codeVersion` → `@map("code_version")` — column is snake_case.
+- **There is NO `updatedAt` column on `AnalysisResult`** — the model has only `createdAt` and `deletedAt`. Do NOT write `updatedAt = NOW()`; the column does not exist and the migration will fail.
+- `AnalysisStatus` enum is `CURRENT | SUPERSEDED` (verified at `schema.prisma:702-705`) — exactly those uppercase string values.
+- `analysis_type` in `AnalysisResult` is stored as a String (not a Prisma enum). Verified string values via grep of application writers:
+  - `cloud/apps/api/src/queue/handlers/analyze-basic.ts:167` → `analysisType: 'basic'` (lowercase).
+  - `cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts:191` → `analysisType: 'AGGREGATE'` (uppercase).
+  - Both string literals match the `IN ('basic', 'AGGREGATE')` filter above.
 
-```sql
-SELECT DISTINCT "analysisType" FROM "AnalysisResult";
-```
+**Why no `codeVersion` filter in the WHERE clause.** We want to mark EVERY existing row superseded, regardless of its old version string. There is no harm in touching an already-old row.
 
-**Why no `codeVersion` filter in the WHERE clause.** We want to mark EVERY existing row superseded, regardless of its old version string. There is no harm in marking an already-superseded row superseded (the clause filters on `status = 'CURRENT'` so it only touches CURRENT rows). There's also no harm in superseding a row whose codeVersion happens to already be `1.2.0` in test data — the next request re-runs and writes a new row identical to the old one.
-
-**Why no `WHERE createdAt <` date filter.** The migration must run atomically at deploy time. Filtering by date adds a surface for race conditions ("what if a job finishes between migration-start and deploy-cut-over?"). Cleaner to invalidate everything and let the first-request recompute absorb the cost.
+**Why no `WHERE created_at <` date filter.** The migration must run atomically at deploy time. Filtering by date adds a surface for race conditions ("what if a job finishes between migration-start and deploy-cut-over?"). Cleaner to invalidate everything and let the manual recompute absorb the cost.
 
 ### 6b.3 Dry-run verification (before push)
 
-Per the data-critical waves rule, test the migration on a local dev DB first:
+Per the data-critical waves rule, test the migration on a local dev DB first. Both env vars must be set for any Prisma command:
 
 ```bash
 cd cloud
 
-# Snapshot counts BEFORE
-DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
-  psql "$DATABASE_URL" -c "SELECT status, \"analysisType\", COUNT(*) FROM \"AnalysisResult\" GROUP BY status, \"analysisType\" ORDER BY status, \"analysisType\";"
+# Snapshot counts BEFORE (read via psql, bypassing Prisma):
+psql "postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+  -c "SELECT status, analysis_type, COUNT(*) FROM analysis_results GROUP BY status, analysis_type ORDER BY status, analysis_type;"
 
-# Apply the migration
-DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+# Apply the migration (Prisma requires BOTH env vars):
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank?pgbouncer=true" \
+DIRECT_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
   npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
 
-# Snapshot counts AFTER
-DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
-  psql "$DATABASE_URL" -c "SELECT status, \"analysisType\", COUNT(*) FROM \"AnalysisResult\" GROUP BY status, \"analysisType\" ORDER BY status, \"analysisType\";"
+# Snapshot counts AFTER:
+psql "postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+  -c "SELECT status, analysis_type, COUNT(*) FROM analysis_results GROUP BY status, analysis_type ORDER BY status, analysis_type;"
 ```
 
-Expected delta:
-- The `CURRENT` + `basic` row count drops to 0.
-- The `CURRENT` + `AGGREGATE` row count drops to 0.
-- The `SUPERSEDED` counts for both types increase by the amounts the CURRENT rows dropped.
-- Other analysis types (if any — `dimension` etc., check the schema) are untouched.
+Note: inside the psql `-c` argument, `analysis_type` and `analysis_results` are unquoted lowercase identifiers — Postgres folds unquoted names to lowercase by default, and the Prisma `@map` names are already lowercase, so no double-quoting is needed. Double-quoting is only required when the identifier contains uppercase letters or reserved words.
+
+**Expected delta:**
+- `CURRENT` + `basic` row count drops to 0.
+- `CURRENT` + `AGGREGATE` row count drops to 0.
+- `SUPERSEDED` counts for both types increase by the amounts the CURRENT rows dropped.
+- Other analysis types (if any — e.g. `dimension` — check via the BEFORE snapshot) are untouched.
+
+**Production-shaped fixture.** The dev DB's `analysis_results` table should already contain at least one `CURRENT` + `basic` row and one `CURRENT` + `AGGREGATE` row from local runs. If it doesn't, run any existing run once via `npm run dev` to populate it before the dry-run. This satisfies the "production-shaped fixture" requirement of `~/.claude/rules/data-critical-waves.md`.
 
 ### 6b.4 Production rollout
 
@@ -822,9 +864,12 @@ Railway runs `prisma migrate deploy` on container startup before the API server 
 2. Railway builds new container image.
 3. Container starts, runs `prisma migrate deploy` (applies this migration + any others in the batch).
 4. API server starts accepting requests.
-5. First user request for an existing run finds no CURRENT row, queues a fresh analysis, writes a new row with the new formula.
+5. Users who visit a previously-computed run's analysis page see an empty state and the "Recompute" button. Clicking it queues a fresh analysis job. The job runs with the new-formula code and writes a new `CURRENT` row.
+6. Subsequent views of the same run hit the freshly-written new-formula row directly.
 
-**Do NOT add any explicit "wait for migration" hook in application code.** The Railway startup order already guarantees this.
+**Do NOT add any explicit "wait for migration" hook in application code.** The Railway startup order already guarantees migrations finish before the server accepts traffic.
+
+**Race window consideration.** Between `prisma migrate deploy` finishing and the new API container accepting requests, there is a tiny window where the old container could still write a new `CURRENT` row with old-formula data. Railway's rolling-deploy model typically shuts down the old container before the new one's migration runs, making this window effectively zero. If prod uses blue/green rollout instead, the window is still short (seconds) — worst case a handful of post-deploy runs that land with old-formula data would need one manual recompute via the same UI button.
 
 ### 6b.5 Verification commands (part of the slice)
 
@@ -834,32 +879,46 @@ cd cloud
 # The migration file exists at the expected path
 ls packages/db/prisma/migrations/*_invalidate_stale_winrate_analyses/migration.sql
 
-# The SQL file contains the expected UPDATE
-grep -n "UPDATE \"AnalysisResult\"" packages/db/prisma/migrations/*_invalidate_stale_winrate_analyses/migration.sql
+# The SQL file contains the expected UPDATE, and does NOT contain updatedAt
+grep -n "UPDATE \"analysis_results\"" packages/db/prisma/migrations/*_invalidate_stale_winrate_analyses/migration.sql
+grep -n "analysis_type" packages/db/prisma/migrations/*_invalidate_stale_winrate_analyses/migration.sql
+! grep -n "updatedAt" packages/db/prisma/migrations/*_invalidate_stale_winrate_analyses/migration.sql
 
-# Applying the migration locally does not error
-DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" \
+# Applying the migration locally does not error (against test DB)
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test?pgbouncer=true" \
+DIRECT_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" \
   npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
 ```
 
-No code files change in this slice. Lint/build are unaffected. Test suite runs against the migrated test DB.
+No application code files change in this slice. Lint/build are unaffected. Tests run against the migrated test DB.
 
-### 6b.6 Post-deploy verification (per data-critical-waves rule)
+### 6b.6 Post-deploy verification checklist (per data-critical-waves rule)
 
-After merging to main and Railway deploys, confirm against prod DB:
+After merging to main and Railway deploys, confirm:
+
+- [ ] Deployed commit is on prod (check Railway dashboard or `gh`)
+- [ ] Migration applied (Railway startup log shows `invalidate_stale_winrate_analyses` applied)
+- [ ] Row-count delta matches expected (run the psql snapshot queries against prod via Railway CLI)
 
 ```sql
--- Should return ZERO rows (or only rows that got recomputed post-deploy)
-SELECT COUNT(*) FROM "AnalysisResult"
-WHERE status = 'CURRENT'
-  AND "analysisType" IN ('basic', 'AGGREGATE')
-  AND "codeVersion" NOT IN ('1.2.0', '1.3.0');
+-- Expected: ZERO rows (until users start recomputing)
+SELECT COUNT(*) FROM analysis_results
+WHERE status = 'CURRENT' AND analysis_type IN ('basic', 'AGGREGATE');
 
--- Error-rate and latency checks for 10 minutes post-deploy
--- (recompute traffic may spike briefly)
+-- After a few manual recomputes, new-formula rows appear — they should have the new code versions:
+SELECT code_version, COUNT(*) FROM analysis_results
+WHERE status = 'CURRENT' AND analysis_type = 'basic' GROUP BY code_version;
+-- Expected: all 1.2.0 (or empty if no one has recomputed yet)
+
+SELECT code_version, COUNT(*) FROM analysis_results
+WHERE status = 'CURRENT' AND analysis_type = 'AGGREGATE' GROUP BY code_version;
+-- Expected: all 1.3.0 (or empty if no one has recomputed yet)
 ```
 
-Record the counts in the closeout document.
+- [ ] UI end-to-end: visit a known run's analysis page, confirm empty state + recompute button, click recompute, confirm new analysis renders and shows new-formula values
+- [ ] No error spikes for 10 minutes post-deploy (check logs + metrics dashboard)
+
+Record row counts and end-to-end check results in the closeout document.
 
 **Expected build state after slice 5:** All workspaces green. The migration is included in the PR diff but does not affect lint/build. Tests run against the migrated test DB cleanly.
 
@@ -895,8 +954,9 @@ All pass. Then manual smoke per `spec.md` § Verification plan — Manual smoke.
 |---|---|
 | Slice 2 and slice 3 fall out of lockstep (API uses new formula, web uses old). | Both land in the same PR. CI runs the full test suite before merge. Slice 3's bucket-logic tests explicitly catch the old-formula assumption in `analysisSemantics.test.ts`. |
 | `analyze_basic.py` split in slice 0 accidentally changes behavior. | Slice 0 ships with zero edits to `test_analyze_basic.py`. The test suite is the contract. If any test fails, the split is wrong. |
-| `CODE_VERSION` bump without row invalidation leaves stale `AnalysisResult` rows (basic + aggregate) because `queries/analysis.ts:21` does not version-check on read. | Slice 5 runs a Prisma migration that marks every existing `CURRENT` basic/aggregate row as `SUPERSEDED`. Railway runs Prisma migrations on container startup before accepting requests. Domain-analysis snapshots are invalidated separately via the `DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION` bump in slice 2 — the snapshot read path IS version-aware. |
-| The `analysisType` enum values in the slice 5 migration don't match prod (e.g. `'basic'` vs `'BASIC'`). | Per `~/.claude/rules/data-critical-waves.md`: verify actual prod values via `SELECT DISTINCT "analysisType" FROM "AnalysisResult"` before shipping. Adjust the migration's `IN (...)` list to match. |
+| `CODE_VERSION` bump without row invalidation leaves stale `AnalysisResult` rows (basic + aggregate) because `queries/analysis.ts:17-35` does not version-check on read. | Slice 5 runs a Prisma migration that marks every existing `CURRENT` basic/aggregate row as `SUPERSEDED`. Railway runs Prisma migrations on container startup before accepting requests. The `null` analysis result triggers the existing UI empty state + manual recompute button, which is the same UX existing users see for runs that have never been analyzed. |
+| Domain-analysis snapshots are not version-invalidated by the code-version bump (snapshot hash does not include `codeVersion`). | Snapshots store raw `{prioritized, deprioritized, neutral}` counts, NOT `winRate`. Slice 3's `DomainAnalysis.tsx:143` edit changes how the UI derives winRate from the unchanged-shape counts, so snapshots stay valid without any constant bump. |
+| The `analysisType` string values in the slice 5 migration don't match prod (e.g. `'basic'` vs `'BASIC'`). | Verified via grep of application writers: `analyze-basic.ts:167` writes `'basic'`, `aggregate-run-workflow.ts:191` writes `'AGGREGATE'`. Confirm again via `SELECT DISTINCT analysis_type FROM analysis_results` against local/prod before shipping. |
 | The model-relative bucket logic produces empty "prioritized" / "deprioritized" buckets for a flat model. | Documented in the spec as correct behavior. Tests include a flat-model fixture. |
 | A downstream consumer silently depends on `winRate >= 0.5` as a sanity check. | Spec review pass (Codex cold-read review) checks for this. If found, fixed in this PR. |
 | Test fixtures with hand-computed `winRate:` literals not listed in the spec. | Each slice's verification step includes a full workspace test run. Failed tests surface missed fixtures. |
@@ -908,6 +968,6 @@ All pass. Then manual smoke per `spec.md` § Verification plan — Manual smoke.
 None that are blocking. The plan deliberately leaves two judgment calls to the implementer:
 
 1. **Slice 0 — the exact boundary of the `analyze_basic.py` split.** The plan specifies "extract metadata + aggregation helpers" but the implementer picks the exact function boundaries to hit the 400-line target. The only hard constraint is that the file must end up under 400 lines and all tests must still pass.
-2. **Slice 5 — exact column casing in the migration SQL.** The plan specifies the Prisma-generated PascalCase casing (`"AnalysisResult"`, `"analysisType"`), but the implementer must verify against an existing migration in `cloud/packages/db/prisma/migrations/` and against any `@map` directives in the schema before committing.
+2. **Slice 5 — the final migration SQL is resolved.** Schema verification confirmed snake_case column names via `@map` and no `updatedAt` column. The SQL is: `UPDATE "analysis_results" SET "status" = 'SUPERSEDED' WHERE "status" = 'CURRENT' AND "analysis_type" IN ('basic', 'AGGREGATE');`. No remaining judgment calls.
 
 Both of these can be resolved in-flight without returning to the plan stage.
