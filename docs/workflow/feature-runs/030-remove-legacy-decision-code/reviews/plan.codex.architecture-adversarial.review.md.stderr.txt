@@ -1,3 +1,27 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/serene-meitner
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019d9511-11fd-7c42-b825-64cf1d591b3b
+--------
+user
+Review this plan artifact using a architecture-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
 # Implementation Plan: 030 — Remove Legacy Decision Code and Unify Scoring Model
 
 **Branch**: `030-remove-legacy-decision-code` | **Date**: 2026-04-02 | **Revised**: 2026-04-15 | **Spec**: [spec.md](spec.md)
@@ -151,14 +175,22 @@ Update all test fixtures. Add regression test for `decisionCode` fallback. Add p
 | GraphQL clients still requesting `legacy` sub-object | Build breaks catch remaining references |
 | `decisionCode` fallback regression | Wave 5 adds explicit regression test |
 
-## Review Reconciliation
 
-- review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
-- review: reviews/spec.codex.edge-cases-adversarial.review.md | status: accepted | note: Valid findings, addressed in plan. ConditionMatrix collapse uses winnerScore formula, rounds to nearest int. In-flight payloads already have canonical fields. Sort uses direction+strength ordering. normalizeBucketCode keeps backward compat. Null handling exists.
-- review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: HIGH ambiguity: plan Decision 2 resolves ConditionMatrix approach (option a: 5-bucket data). US-7 migration: normalizeBucketCode keeps backward compat during transition. HIGH float-to-int: uses Math.round on winnerScore. MEDIUM bucket names: opponentSomewhat naming is established convention in canonical reference impl, renaming out of scope. MEDIUM malformed metadata: resolver already handles per original spec. CRITICAL deployment coupling: TS+Python deploy together via Railway, canonical fields present in payloads for months. HIGH exports: only affects newly generated files.
-- review: reviews/plan.codex.implementation-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
-- review: reviews/plan.codex.architecture-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
-- review: reviews/plan.gemini.testability-adversarial.review.md | status: accepted | note: HIGH test-last: accepted, will update tasks to move relevant test updates into each wave instead of deferring to Wave 5. HIGH 5-bucket dependency: accepted, Slice 1.1 already starts with investigation step. MEDIUM single gateway: accepted, grep sweep in Wave 5 catches stragglers. MEDIUM in-flight jobs: canonical fields have been present in payloads for months alongside legacy. MEDIUM normalizer lifecycle: accepted, will add tests. LOW fixtures: accepted, legacy fixtures preserved for fallback test.
-- review: reviews/tasks.codex.execution-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
-- review: reviews/tasks.codex.dependency-order-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
-- review: reviews/tasks.gemini.coverage-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+1. **Medium [UNVERIFIED]** The `ConditionMatrix` fix is underspecified and may be impossible with the data the plan names. The chosen approach needs a 5-bucket strong/somewhat breakdown, but the artifact only lists existing aggregate `prioritized/deprioritized/neutral` counts and does not include any upstream producer or prop-shape update. If that richer data is not already available, the component cannot compute the canonical strength value and will either guess or fall back to a lossy approximation.
+
+2. **Medium [UNVERIFIED]** The worker cleanup assumes every queue payload is already normalized by TypeScript. Removing the numeric-score fallback paths from `analyze-basic`, `decision_model.py`, and the variance code without a compatibility shim leaves retries, replays, or any non-TS producer with no safe path. That is a hidden contract break unless the plan explicitly proves that no legacy-shaped payload can still reach the workers.
+
+3. **Medium [UNVERIFIED]** The GraphQL and transcript-summary removals are treated as safe because in-repo build breaks will expose remaining references, but that does not protect external clients, persisted queries, or downstream tooling. Removing `legacy` and `decisionCode` without a deprecation window or versioned replacement is a breaking API cutover, not just an internal cleanup.
+
+## Residual Risks
+- Legacy numeric shapes may still exist in stored JSON, cached aggregates, or archived transcripts. The plan relies on normalizers catching every entry point, so any missed parser will create inconsistent behavior.
+- The TS and Python analysis paths now depend on the same ordinal mapping. If one code path misses the new signed-strength conversion, the outputs can drift silently.
+- The artifact keeps `decisionCode` in the DB and a fallback in `resolveTranscriptDecisionModel`, so the system will still carry two representations for a while. That is workable, but it means the cleanup is not complete until every read path is audited.
+tokens used
+23,611

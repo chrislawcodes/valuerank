@@ -44,5 +44,12 @@
     "markers_sha": "",
     "last_diff_head_sha": ""
   },
-  "checkpoint_fallback": {}
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": true,
+    "found": false,
+    "note": "Slices within each wave touch disjoint file sets. Cross-wave dependencies are sequential. No within-wave parallelism needed since slices are small.",
+    "updated_at": 1776322530
+  },
+  "init_head_sha": ""
 }

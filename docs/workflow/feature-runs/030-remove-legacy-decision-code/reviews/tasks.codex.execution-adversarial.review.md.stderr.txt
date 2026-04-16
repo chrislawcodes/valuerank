@@ -1,14 +1,14 @@
 Reading additional input from stdin...
-OpenAI Codex v0.118.0 (research preview)
+OpenAI Codex v0.121.0 (research preview)
 --------
-workdir: /Users/chrislaw/valuerank
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/serene-meitner
 model: gpt-5.4-mini
 provider: openai
 approval: never
-sandbox: read-only
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
 reasoning effort: high
 reasoning summaries: none
-session id: 019d5091-83fb-7402-bf38-f7143588e210
+session id: 019d9512-f673-7461-a378-9120b2b959b9
 --------
 user
 Review this tasks artifact using a execution-adversarial lens.
@@ -22,15 +22,36 @@ Return markdown using exactly these sections:
 Keep the response concrete and ordered by severity.
 
 Artifact: tasks.md
-# Tasks: 030 — Remove Legacy 1-5 Decision Code System
+# Tasks: 030 — Remove Legacy Decision Code and Unify Scoring Model
 
-## Wave 1 — P1: Core TypeScript decision model + aggregate logic
+## Wave 1 — P1: ConditionMatrix bug fix + core TS API cleanup
 
-### Slice 1.1 — Remove `LegacyDecisionCompat` type and all producers
-[P: cloud/apps/api/src/graphql/queries/domain/decision-model.ts, cloud/apps/api/src/graphql/queries/domain/shared.ts, cloud/apps/api/src/services/decision-model.ts]
+### Slice 1.1 — Fix ConditionMatrix scoring display
+[P: cloud/apps/web/src/components/domains/ConditionMatrix.tsx]
 
+- [ ] In `cloud/apps/web/src/components/domains/ConditionMatrix.tsx`:
+  - Investigate the data source: check what parent component passes `MatrixCondition[]` and whether it can provide the 5-bucket breakdown (`strongly`/`somewhat`/`neutral`/`opponentSomewhat`/`opponentStrongly`) instead of just `prioritized`/`deprioritized`/`neutral`
+  - If 5-bucket data is available: update `MatrixCondition` type to include `strongly`, `somewhat`, `opponentSomewhat`, `opponentStrongly` counts
+  - If only aggregate `prioritized`/`deprioritized`/`neutral` is available: compute an approximate strength from the win-rate ratio (lower quality, document the limitation)
+  - Rewrite `getConditionMatrixDisplay`:
+    - Compute `isOpponent = deprioritized > prioritized` (keep this — already correct)
+    - Compute strength score using `winnerScore = (2 * winnerStrong + 1 * winnerSomewhat) / totalTrials` (same formula as `canonicalConditionSummary.ts`)
+    - Round to nearest integer for label: `0` (neutral), `1` (somewhat), `2` (strongly)
+    - Label is the strength number, NOT which side won
+    - Background color from `isOpponent` (blue = selected value, orange = opponent)
+  - Update `getPreferenceBackground` to accept the 0-2 strength score for opacity scaling (already does this correctly)
+- [ ] Run `npm run build --workspace @valuerank/web` — fix all TypeScript errors
+
+[CHECKPOINT]
+
+### Slice 1.2 — Remove `LegacyDecisionCompat` type, `canonicalDecisionScoreFromDirectionStrength`, and all producers
+[P: cloud/apps/api/src/graphql/queries/domain/decision-model.ts, cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts, cloud/apps/api/src/graphql/queries/domain/shared.ts, cloud/apps/api/src/services/decision-model.ts]
+
+- [ ] In `cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts`:
+  - Delete `canonicalDecisionScoreFromDirectionStrength()` function (lines ~207-217)
+  - Fix all callers (likely `decision-model.ts`)
 - [ ] In `cloud/apps/api/src/graphql/queries/domain/decision-model.ts`:
-  - Delete `LegacyDecisionCompat` type (lines ~39-42)
+  - Delete `LegacyDecisionCompat` type
   - Delete `parseLegacyScore()` function
   - Delete `canonicalDecisionToLegacyScore()` function
   - Delete `resolveLegacyDecisionCompat()` function
@@ -50,12 +71,12 @@ Artifact: tasks.md
 
 [CHECKPOINT]
 
-### Slice 1.2 — Clean variance analysis and aggregate logic
+### Slice 1.3 — Clean variance analysis and aggregate logic
 [P: cloud/apps/api/src/services/analysis/aggregate/variance.ts, cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts]
 
 - [ ] In `cloud/apps/api/src/services/analysis/aggregate/variance.ts`:
   - Replace `resolved.legacy.canonicalScore` reads with canonical direction/strength
-  - Replace `Math.abs(score - 3)` distance calculation with the mapping table from spec US-1:
+  - Replace `Math.abs(score - 3)` distance calculation with the mapping table:
     - favor_first + strong → 2, favor_first + lean → 1, neutral → 0, favor_second + lean → 1, favor_second + strong → 2
   - Replace `score - 3` signed calculation with signed values from the same table
   - Replace `scoreCounts` histogram (1-5) with `directionCounts` histogram (canonical buckets)
@@ -66,14 +87,14 @@ Artifact: tasks.md
   - Delete `decisionBucketCodeToScore()` function
   - Delete `normalizeDecisionBucketCode()` function (including numeric string parsing)
   - Delete `resolveBucketValue()` function
-  - Update all callers to work with canonical bucket codes directly (already named `strongly`, `somewhat`, `neutral`, `opponentSomewhat`, `opponentStrongly` — no conversion needed)
+  - Update all callers to work with canonical bucket codes directly
 - [ ] Run `npm run build --workspace @valuerank/api` — fix all TypeScript errors before continuing
 
 [CHECKPOINT]
 
 ---
 
-## Wave 2 — P1: GraphQL schema + Python workers
+## Wave 2 — P1/P2: GraphQL schema + Python workers
 
 ### Slice 2.1 — Remove `legacy` from GraphQL type
 [P: cloud/apps/api/src/graphql/types/transcript.ts, cloud/apps/api/src/queue/handlers/analyze-basic.ts]
@@ -96,14 +117,13 @@ Artifact: tasks.md
   - Delete `_parse_compat_score()` function
   - Delete `resolve_transcript_score()` function
   - Delete `resolve_transcript_normalized_score()` function
-  - Rewrite `resolve_transcript_score_details()` to return `(direction, strength, source)` tuple instead of `(score, already_normalized)`
+  - Rewrite `resolve_transcript_score_details()` to return `(direction, strength, source)` tuple
     - Read `canonical.direction` and `canonical.strength` from transcript JSON
-    - Source should be `'canonical'` when from `decisionMetadata`, or `'legacy_fallback'` if synthesized from `decisionCode` (but this path should never occur — workers receive TS-resolved data)
-    - Return `(None, None, None)` when fields are absent (unscored transcript)
+    - Return `(None, None, None)` when fields are absent
 - [ ] In `cloud/workers/stats/variance_analysis.py`:
-  - Replace calls to `resolve_transcript_score_details()` that return numeric score with the new `(direction, strength, source)` signature
-  - Replace `signed = [s - 3.0 for s in scores]` with direction enum math using the canonical mapping table from spec US-1
-  - Replace `score_counts` tally (1-5 counting) with `direction_counts` tally by direction/strength bucket
+  - Replace calls to `resolve_transcript_score_details()` with new `(direction, strength, source)` signature
+  - Replace `signed = [s - 3.0 for s in scores]` with direction enum math using the canonical mapping table
+  - Replace `score_counts` tally (1-5) with `direction_counts` tally by direction/strength bucket
   - Remove all calls to `normalize_resolved_score()`
 - [ ] Run Python worker tests to verify correctness
 
@@ -111,27 +131,49 @@ Artifact: tasks.md
 
 ---
 
-## Wave 3 — P2/P3: Frontend + exports + order-effect
+## Wave 3 — P2: Frontend statistics and distribution cleanup
 
-### Slice 3.1 — Frontend cleanup
-[P: cloud/apps/web/src/utils/transcriptDecisionModel.ts, cloud/apps/web/src/api/operations/runs.ts, cloud/apps/web/src/components/analysis/tabs/OverviewTab.tsx]
+### Slice 3.1 — Frontend sort + distribution display + KS-test
+[P: cloud/apps/web/src/utils/transcriptDecisionModel.ts, cloud/apps/web/src/utils/decisionDistributionDisplay.ts, cloud/apps/web/src/lib/statistics/ks-test.ts, cloud/apps/web/src/api/operations/runs.ts]
 
 - [ ] In `cloud/apps/web/src/utils/transcriptDecisionModel.ts`:
   - Delete `normalizeLegacyDecisionCode()` function
-  - Rewrite `getTranscriptDecisionSortValue()` to use `decisionModelV2.canonical.direction` and `canonical.strength` only — no legacy fallback chain
+  - Rewrite `getTranscriptDecisionSortValue()` to use `decisionModelV2.canonical.direction` and `canonical.strength` only
   - Remove any import of `LegacyDecisionCompat` or legacy score fields
+- [ ] In `cloud/apps/web/src/utils/decisionDistributionDisplay.ts`:
+  - In `normalizeBucketCode()`: remove all `'1'`-`'5'` numeric string branches
+  - In `formatBucketLabel()`: remove the `sourceKeyByCode` map that maps bucket codes to `'1'`-`'5'`. Use bucket code names directly for label resolution from `dimensionLabels`
+  - Update `dimensionLabels` key expectations if needed (callers may need to pass bucket names as keys instead of `'1'`-`'5'`)
+- [ ] In `cloud/apps/web/src/lib/statistics/ks-test.ts`:
+  - In `countsToSample()`: replace `bucketScoreByKey` mapping with signed strength:
+    ```
+    opponentStrongly: -2, opponentSomewhat: -1, neutral: 0, somewhat: 1, strongly: 2
+    ```
+  - Remove numeric string key fallbacks (`'1'`-`'5'`)
 - [ ] In `cloud/apps/web/src/api/operations/runs.ts`:
   - Remove `TranscriptDecisionModelV2LegacyCompat` type
-  - Update any type references that used it to use canonical types
-- [ ] In `cloud/apps/web/src/components/analysis/tabs/OverviewTab.tsx`:
-  - Replace `scoreCounts` references with `directionCounts`
-  - Add a shape normalizer inline: if data has `scoreCounts` (old stored aggregate), map it to `directionCounts` — this handles stored aggregate results that haven't been recomputed
+  - Update any type references
 - [ ] Run `npm run build --workspace @valuerank/web` — fix all TypeScript errors
 
 [CHECKPOINT]
 
-### Slice 3.2 — Exports + order-effect cleanup
-[P: cloud/apps/api/src/services/export/decision-display.ts, cloud/apps/api/src/services/assumptions/order-effect-analysis.ts, cloud/apps/api/src/services/assumptions/order-effect-comparison.ts]
+### Slice 3.2 — OverviewTab + GraphQL regeneration
+[P: cloud/apps/web/src/components/analysis/tabs/OverviewTab.tsx]
+
+- [ ] In `cloud/apps/web/src/components/analysis/tabs/OverviewTab.tsx`:
+  - Replace `scoreCounts` references with `directionCounts`
+  - Add shape normalizer: if data has `scoreCounts` (old stored aggregate), map it to `directionCounts`
+- [ ] Regenerate `cloud/apps/web/src/generated/graphql.ts` (run `npm run codegen` or equivalent)
+- [ ] Run `npm run build --workspace @valuerank/web` — fix all TypeScript errors
+
+[CHECKPOINT]
+
+---
+
+## Wave 4 — P2/P3: Exports + order-effect + MCP
+
+### Slice 4.1 — Exports + order-effect + MCP cleanup
+[P: cloud/apps/api/src/services/export/decision-display.ts, cloud/apps/api/src/services/assumptions/order-effect-analysis.ts, cloud/apps/api/src/services/assumptions/order-effect-comparison.ts, cloud/apps/api/src/mcp/tools/get-transcript-summary.ts]
 
 - [ ] In `cloud/apps/api/src/services/export/decision-display.ts`:
   - Remove any `legacy` sub-object references
@@ -142,26 +184,23 @@ Artifact: tasks.md
 - [ ] In `cloud/apps/api/src/services/assumptions/order-effect-comparison.ts`:
   - Remove `rawScore` field from variant cell types
   - Update comparisons to use direction/strength
-- [ ] Run grep sweep to catch any remaining consumers:
-  ```
-  grep -r "legacy\|rawScore\|canonicalScore\|LegacyDecisionCompat\|normalizeLegacyDecisionCode" cloud/apps/web/src --include="*.ts" --include="*.tsx"
-  ```
-  Fix anything found before continuing.
-- [ ] Regenerate `cloud/apps/web/src/generated/graphql.ts` (run `npm run codegen` or equivalent in the web workspace)
-- [ ] Run `npm run build --workspace @valuerank/api` and `npm run build --workspace @valuerank/web`
+- [ ] In `cloud/apps/api/src/mcp/tools/get-transcript-summary.ts`:
+  - Remove `decisionCode` from response
+  - Replace with canonical direction/strength/label
+- [ ] Run `npm run build --workspace @valuerank/api`
 
 [CHECKPOINT]
 
 ---
 
-## Wave 4 — Test cleanup + regression coverage
+## Wave 5 — Test cleanup + regression coverage
 
-### Slice 4.1 — Update test fixtures and add regression tests
+### Slice 5.1 — Update test fixtures and add regression tests
 [P: cloud/apps/api/tests, cloud/apps/web/src]
 
 - [ ] Search for all test files referencing legacy shapes:
   ```
-  grep -rl "rawScore\|canonicalScore\|decisionCode\|LegacyDecisionCompat\|scoreCounts" cloud/apps/api/tests cloud/apps/web/src
+  grep -rl "rawScore\|canonicalScore\|decisionCode\|LegacyDecisionCompat\|scoreCounts\|canonicalDecisionScoreFromDirectionStrength" cloud/apps/api cloud/apps/web/src --include="*.ts" --include="*.tsx"
   ```
 - [ ] Update each found test file:
   - Replace `rawScore`/`canonicalScore` numeric fixtures with `direction`/`strength` canonical fixtures
@@ -175,16 +214,23 @@ Artifact: tasks.md
   - Expected: resolver returns null
 - [ ] Add parity test for variance analysis:
   - Given: same set of transcript decisions (mix of directions/strengths)
-  - Expected: `directionCounts` correctly maps to the same buckets as the old `scoreCounts` would have
-  - Use the canonical stability distance mapping table from spec US-1 as the reference
+  - Expected: `directionCounts` correctly maps to the same buckets as old `scoreCounts`
+- [ ] Add ConditionMatrix display test:
+  - Given: condition with `strongly=3, somewhat=2, neutral=1, opponentSomewhat=1, opponentStrongly=0`
+  - Expected: label = `2` (strength), isOpponent = false (more prioritized than deprioritized), blue background
+  - Given: condition with `strongly=0, somewhat=1, neutral=1, opponentSomewhat=2, opponentStrongly=3`
+  - Expected: label = `2` (strength), isOpponent = true, orange background
+- [ ] Add KS-test equivalence test:
+  - Given: same bucket counts
+  - Expected: KS statistic is identical whether computed with old 1-5 or new signed strength (-2 to +2) mapping
 - [ ] Run full test suite: `npm run test --workspace @valuerank/api`
 - [ ] Run full test suite: `npm run test --workspace @valuerank/web`
-- [ ] Run Python worker tests (from `cloud/workers/` directory)
+- [ ] Run Python worker tests
 - [ ] Run final grep verification (success criterion):
   ```
-  grep -r "LegacyDecisionCompat\|rawScore\|canonicalScore\|parseLegacyScore\|canonicalDecisionToLegacyScore\|decisionBucketCodeToScore\|normalize_resolved_score" --include="*.ts" --include="*.py" cloud/
+  grep -r "LegacyDecisionCompat\|rawScore\|canonicalScore\|parseLegacyScore\|canonicalDecisionToLegacyScore\|canonicalDecisionScoreFromDirectionStrength\|decisionBucketCodeToScore\|normalize_resolved_score" --include="*.ts" --include="*.py" cloud/
   ```
-  Must return zero hits outside any documented exception.
+  Must return zero hits outside documented exceptions.
 
 [CHECKPOINT]
 
@@ -194,17 +240,18 @@ Return only markdown with exactly these sections:
 ## Residual Risks
 Do not include any other sections.
 codex
-I’m reviewing the task plan itself for gaps and brittle assumptions, not the implementation. I’ll look for places where the workflow can miss consumers, break compatibility, or rely on unstated behavior.
+I’m reviewing the task plan itself as an execution target, not the code. I’ll look for places where the plan could break on old data, miss a dependency, or make an incorrect assumption about how values flow through the system.
 codex
 ## Findings
-- **MEDIUM** [UNVERIFIED] The plan does not include a real backfill or recompute step for persisted aggregate data or exported artifacts. The only compatibility shim is an inline web normalizer for old `scoreCounts`, so any other reader of stored aggregates will still see stale shapes after rollout.
-- **MEDIUM** The final “success criterion” grep is too narrow. It only scans `*.ts` and `*.py` under `cloud/`, so legacy references in generated files, JSON fixtures, SQL, docs, schemas, or other non-code artifacts can survive while the task still reports success.
-- **MEDIUM** The Python worker plan keeps a `legacy_fallback` source even though it says that path should “never occur.” That creates a silent compatibility path instead of forcing an explicit failure or alert if unexpected legacy data reaches the worker.
-- **MEDIUM** [UNVERIFIED] The export cleanup changes column names from `score` to `direction`/`strength` with no versioning or dual-write strategy. If any downstream consumer relies on the current export contract, this will break them during rollout.
+- [MEDIUM][UNVERIFIED] The plan removes legacy parsers and compat helpers across API, workers, and web, but it does not define a migration or a compatibility boundary for old stored data. If any persisted transcript, aggregate, export, or cached GraphQL payload still carries `legacy`, `rawScore`, `canonicalScore`, `decisionCode`, or numeric bucket codes, the refactor can stop translating them and produce nulls or wrong values instead. The single normalizer in `OverviewTab` is not enough to cover all read paths.
+
+- [MEDIUM][UNVERIFIED] The `ConditionMatrix` rewrite does not specify a safe fallback for empty or partially populated data. The proposed strength formula divides by `totalTrials`, so a zero-total condition can produce `NaN` or an invalid label. The plan also leaves the approximation behavior underspecified when only aggregate `prioritized` / `deprioritized` / `neutral` counts are available, which can make the display misleading for edge cases.
+
+- [MEDIUM][UNVERIFIED] The final verification step is too narrow to prove the cleanup is complete. The grep list checks only a small set of legacy tokens, so surviving references to `legacy` fields, score-based labels, or other compatibility code can slip through without failing the check. A "zero hits" result here would not guarantee that all legacy paths were removed.
 
 ## Residual Risks
-- [UNVERIFIED] Some older transcripts or aggregate rows may still contain legacy shapes even after the code changes, and the plan only partially addresses that by normalizing in the frontend.
-- The regression coverage is light on malformed legacy inputs. `decisionCode = 4` and `null` are covered, but the plan does not explicitly test out-of-range or corrupt legacy values.
-- The grep-based cleanup can still miss generated or non-code assets unless the verification scope is widened beyond `*.ts`/`*.py`.
+- Old records and mixed-version runtime paths remain the biggest risk. If any consumer still emits legacy score shapes after these changes, the system may silently degrade rather than fail fast.
+- The new canonical direction/strength mapping needs end-to-end consistency across API, Python, and web layers. The plan changes each layer separately, but it does not define a single source of truth or a cross-layer parity check beyond a few targeted tests.
+- Display and statistics code still depend on how missing, neutral, and tie cases are handled. If those edge cases are common in real data, the refactor may change UX behavior even when the type checks pass.
 tokens used
-22,907
+9,077
