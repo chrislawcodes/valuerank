@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useState } from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { AnalysisPanel } from '../../../src/components/analysis/AnalysisPanel';
@@ -429,7 +429,7 @@ describe('AnalysisPanel', () => {
     expect(screen.getByText('Unknown canonical trials are excluded from condition scores.')).toBeInTheDocument();
   });
 
-  it('pools overview summary semantics across the companion run in paired mode', () => {
+  it('pools overview summary semantics across the companion run in paired mode', async () => {
     const analysis = createMockAnalysis({
       codeVersion: '1.1.1',
       preferenceSummary: {
@@ -636,16 +636,18 @@ describe('AnalysisPanel', () => {
       </MemoryRouter>
     );
 
-    const claudeRow = screen.getAllByText('claude-3')[0]?.closest('tr');
-    const gptRow = screen.getAllByText('gpt-4')[0]?.closest('tr');
+    await waitFor(() => {
+      const claudeRow = screen.getAllByText('claude-3')[0]?.closest('tr');
+      const gptRow = screen.getAllByText('gpt-4')[0]?.closest('tr');
 
-    expect(claudeRow).not.toBeNull();
-    expect(gptRow).not.toBeNull();
-    expect(within(claudeRow as HTMLTableRowElement).getByText('Achievement')).toBeInTheDocument();
-    expect(within(claudeRow as HTMLTableRowElement).getByText('50%')).toBeInTheDocument();
-    expect(within(gptRow as HTMLTableRowElement).getByText('Care')).toBeInTheDocument();
-    expect(within(gptRow as HTMLTableRowElement).getByText('60%')).toBeInTheDocument();
-    expect(screen.getByText('Run-level evidence: pooled across 2 companion runs')).toBeInTheDocument();
+      expect(claudeRow).not.toBeNull();
+      expect(gptRow).not.toBeNull();
+      expect(within(claudeRow as HTMLTableRowElement).getByText('Achievement')).toBeInTheDocument();
+      expect(within(claudeRow as HTMLTableRowElement).getByText('50%')).toBeInTheDocument();
+      expect(within(gptRow as HTMLTableRowElement).getByText('Care')).toBeInTheDocument();
+      expect(within(gptRow as HTMLTableRowElement).getByText('60%')).toBeInTheDocument();
+      expect(screen.getByText('Run-level evidence: pooled across 2 companion runs')).toBeInTheDocument();
+    });
   });
 
   it('pools Decisions tab distribution data across the companion run in paired mode', async () => {
