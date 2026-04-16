@@ -34,10 +34,11 @@
       ".railwayignore",
       "cloud/apps/api/specs",
       "cloud/scripts",
-      "cloud/workers"
+      "cloud/workers",
+      "docs/workflow/operations"
     ],
     "used": true,
-    "updated_at": 1775177668
+    "updated_at": 1776358990
   },
   "checkpoint_progress": {
     "index": 0,

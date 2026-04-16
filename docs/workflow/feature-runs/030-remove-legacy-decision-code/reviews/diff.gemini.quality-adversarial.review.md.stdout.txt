@@ -1,35 +1,35 @@
 {
-  "session_id": "f64f77fd-457f-4021-8343-2e96bf5a98e4",
-  "response": "## Findings\n\n| Severity | Finding |\n| :--- | :--- |\n| **HIGH** | **Incomplete Refactoring Introduces Technical Debt and Inconsistency** |\n| | The primary goal of this change appears to be the removal of the numeric `score` (1-5) in favor of a canonical decision object (`{direction, strength}`). While this is accomplished in `analyze-basic.ts` and the `decision-model.ts` service, the refactoring was not carried through to `order-effect-comparison.ts`. Instead of updating this service to use the new canonical model, a private shim `_canonicalToScore` was introduced to convert the new model *back* into the deprecated numeric score. This undermines the refactoring effort, creates significant technical debt (as acknowledged by the `TODO` comment), and forces a core part of the analysis codebase to operate on a legacy data model that has been explicitly removed elsewhere. |\n| **MEDIUM** | **Duplicated Business Logic Creates Maintenance Hazard** |\n| | The logic for converting a canonical decision into a numeric score was correctly removed from its central location in `decision-model.ts` (`canonicalDecisionToScore`). However, this logic was then copied verbatim into `order-effect-comparison.ts` (`_canonicalToScore`). This duplication means that if the mapping between canonical decisions and numeric scores ever needs to change, it's highly likely the isolated copy will be missed, leading to inconsistent analysis results between the order-effect module and any other part of the system that might rely on a similar conversion in the future. |\n| **LOW** | **[UNVERIFIED] Potential Divergence Between API and Background Job Behavior** |\n| | In `analyze-basic.ts`, the code path for handling the absence of the \"V2\" decision model has been removed, suggesting the `DECISION_MODEL_V2` feature flag is considered obsolete or permanently enabled for background analysis. However, in `graphql/types/transcript.ts`, the resolver for `decisionModelV2` still explicitly checks this flag and returns `null` if it's disabled. This creates a potential for divergence: the background analysis job may process data assuming the V2 model is always present, while an API query for the same data could return a `null` decision model, leading to inconsistent state depending on the data access path. |\n\n## Residual Risks\n\n| Risk | Description |\n| :--- | :--- |\n| **Legacy Pattern Persistence** | The incomplete refactoring in `order-effect-comparison.ts` creates a risk that future developers will copy this pattern, re-introducing the deprecated numeric score in new features. This will increase system complexity and make it harder to fully remove the legacy model. The `TODO` comment is helpful, but the presence of the anti-pattern in the codebase is a more powerful influence. |\n| **[UNVERIFIED] Breaking Change with Unverified Consumer Impact** | The removal of the `score` field from the `summary` object in the data produced by `analyze-basic.ts` is a breaking change. The provided diff does not include changes to any downstream consumers of this data (e.g., frontend components, data export scripts, other analysis services). There is a risk that these consumers have not been updated to handle the absence of the `score` field, which could lead to runtime errors or incorrect data visualizations/calculations post-deployment. |",
+  "session_id": "31d9837d-3553-4cc4-9dd5-0e7efaf5ac1e",
+  "response": "This review assesses the provided diff from a quality-adversarial perspective, focusing on potential flaws, regressions, and unhandled edge cases.\n\n## Findings\n\nThe findings are ordered by severity, from highest to lowest.\n\n### 1. **HIGH: Silent Data Loss in Critical Analytics**\n\n-   **`cloud/workers/stats/decision_model.py`:** The function `resolve_transcript_signed_distance` has been stripped of its fallback logic for `legacy.canonicalScore` and `summary.score`. The previous implementation had comments indicating these fallbacks were crucial for compatibility with older transcripts. Removing them means any transcript that has not been perfectly migrated to the new `decisionModelV2.canonical` format will now return `None` for its signed distance. This will silently corrupt downstream statistical analysis by treating scored data as unscored, potentially skewing results or causing failures.\n-   **`cloud/apps/web/src/lib/statistics/ks-test.ts`:** The `countsToSample` function no longer handles numeric keys (e.g., `'1'`, `'2'`). The previous implementation explicitly mapped these to scores. If any part of the system still generates distribution counts using numeric keys instead of descriptive ones (`somewhat`, `strongly`, etc.), those data points will be silently dropped from the sample, leading to incorrect Kolmogorov-Smirnov test results.\n\n### 2. **HIGH: High Risk of Incorrect Data Display**\n\n-   **`cloud/apps/web/src/utils/transcriptDecisionModel.ts`**: The function `normalizeLegacyDecisionCode` has been completely removed. Its implementation (`6 - Number(decision)`) suggests it was responsible for inverting a 1-5 score, likely to correct for an inconsistency in how data was stored versus how it should be displayed (e.g., flipping a \"favor opponent\" score to a \"favor self\" scale). Removing this client-side correction without 100% certainty that all underlying data has been fixed at the source will cause affected transcripts to display with the wrong meaning (e.g., showing strong agreement instead of strong disagreement).\n\n### 3. **HIGH: Bug in UI Logic Enables Invalid Actions**\n\n-   **`cloud/apps/web/src/components/runs/TranscriptRow.tsx`**: The condition `isAnalyzableDecision` was changed from a specific check `['1', '2', '3', '4', '5'].includes(String(rawDecision))` to a loose check `Boolean(rawDecision)`. The `rawDecision` value can be `'-'` if no decision is found. `Boolean('-')` evaluates to `true`. As a result, a transcript with no valid decision will be considered \"analyzable\", which in turn makes the decision override UI available (`isDecisionOverrideAllowed`). This could allow users to attempt to modify unscored or un-analyzable transcripts, which may lead to errors or invalid data states.\n\n### 4. **MEDIUM: [UNVERIFIED] UI Components Depend on New, Unverified Data Contracts**\n\n-   **`cloud/apps/web/src/components/domains/ConditionMatrix.tsx`**: The rendering logic was rewritten to depend on new `MatrixCondition` properties: `strongly`, `somewhat`, `opponentSomewhat`, and `opponentStrongly`.\n-   **`cloud/apps/web/src/utils/decisionDistributionDisplay.ts`**: The `formatBucketLabel` utility now assumes its `dimensionLabels` input uses descriptive keys (e.g., `somewhat`) instead of the previous numeric keys (e.g., `4`).\n\nIf the backend APIs that supply the data for these components have not been updated to provide these new fields and key structures, these UI components will likely fail at runtime or display incorrect/empty data. This is marked as unverified as the data source is not visible in the diff.\n\n### 5. **LOW: Expanded Error Handling Adds Complexity**\n\n-   **`cloud/apps/api/src/server.ts`**: The global error handler was changed to use duck-typing to identify `AppError`-like objects, in addition to the standard `instanceof AppError` check. While this makes the handler more resilient to scenarios where `instanceof` might fail (e.g., across different package versions in a monorepo), it adds complexity. The need for this change may hint at an underlying architectural issue with dependency management that is being papered over, rather than fixed at the root.\n\n### 6. **LOW: [UNVERIFIED] Breaking GraphQL Schema Change**\n\n-   **`cloud/apps/web/schema.graphql`**: The field `rawScore` was removed from the `OrderInvarianceRow` type. This is a breaking API change. While the diff shows updates to some consumers within the web application, it cannot be verified that all consumers (including potentially external ones, or other parts of the frontend) have been updated. Any client still querying for this field will receive a GraphQL error.\n\n## Residual Risks\n\n-   **Incomplete Data Migration:** The entire change set is predicated on the assumption that a data migration from the legacy 1-5 score to the new `direction`/`strength` model has been performed flawlessly. Any transcripts missed by this migration will now either be lost to analysis (per Finding #1) or displayed incorrectly (per Finding #2).\n-   **Brittleness to Historical Data:** The removal of multiple fallback paths and data normalization routines makes the system more brittle. If any process ever surfaces historical data that does not conform to the new, strict format, it will be silently ignored or misinterpreted, whereas the previous implementation could handle it gracefully.\n-   **Integration Blind Spots:** The changes are wide-ranging, affecting the data worker, API, and frontend. While many related files were updated, there is a risk that some consuming component or client was missed, which would lead to runtime failures that may not be covered by automated testing.",
   "stats": {
     "models": {
       "gemini-2.5-pro": {
         "api": {
-          "totalRequests": 1,
-          "totalErrors": 0,
-          "totalLatencyMs": 30897
+          "totalRequests": 5,
+          "totalErrors": 4,
+          "totalLatencyMs": 210025
         },
         "tokens": {
-          "input": 13695,
-          "prompt": 13695,
-          "candidates": 717,
-          "total": 16722,
+          "input": 20394,
+          "prompt": 20394,
+          "candidates": 1254,
+          "total": 25780,
           "cached": 0,
-          "thoughts": 2310,
+          "thoughts": 4132,
           "tool": 0
         },
         "roles": {
           "main": {
-            "totalRequests": 1,
-            "totalErrors": 0,
-            "totalLatencyMs": 30897,
+            "totalRequests": 5,
+            "totalErrors": 4,
+            "totalLatencyMs": 210025,
             "tokens": {
-              "input": 13695,
-              "prompt": 13695,
-              "candidates": 717,
-              "total": 16722,
+              "input": 20394,
+              "prompt": 20394,
+              "candidates": 1254,
+              "total": 25780,
               "cached": 0,
-              "thoughts": 2310,
+              "thoughts": 4132,
               "tool": 0
             }
           }

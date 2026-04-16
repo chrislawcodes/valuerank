@@ -8,10 +8,10 @@ approval: never
 sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
 reasoning effort: high
 reasoning summaries: none
-session id: 019d9738-4658-7ee1-b8a2-0c382fdef8aa
+session id: 019d9738-e220-73c3-8de4-cb47666347a6
 --------
 user
-Review this diff artifact using a correctness-adversarial lens.
+Review this diff artifact using a regression-adversarial lens.
 Stay scoped to that lens.
 Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
 No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
@@ -607,13 +607,17 @@ Return only markdown with exactly these sections:
 ## Residual Risks
 Do not include any other sections.
 codex
+I’m reading the patch adversarially and checking for regressions caused by deleted compatibility paths, renamed fields, and behavior changes that look broader than the refactor. I’ll keep the review scoped to concrete break risks from the diff itself.
+codex
 ## Findings
-- **Medium [UNVERIFIED]** `cloud/workers/stats/decision_model.py` removed both legacy fallbacks (`decisionModelV2.legacy.canonicalScore` and `summary.score`) from `resolve_transcript_signed_distance()`. Any historical transcript that has not been reprocessed into the new `raw`/`canonical` shape will now resolve to `None`, which will drop it from downstream signed-distance and directional analysis instead of preserving the previously documented behavior.
-- **Medium [UNVERIFIED]** `cloud/apps/web/src/components/domains/ConditionMatrix.tsx` now computes the cell label and color from `(2 * strongly + somewhat) / totalTrials`. If `totalTrials` includes `unknownCount`, a cell with a clear directional winner but many unknowns will be rendered as `0`/neutral or much weaker than before. That changes the meaning of the matrix, not just the display logic.
-- **Medium [UNVERIFIED]** `cloud/apps/web/src/components/runs/TranscriptRow.tsx` changed `isAnalyzableDecision` from a numeric `1`-`5` check to `Boolean(rawDecision)`. Any non-empty but non-numeric legacy decision code will now be treated as analyzable, which can incorrectly disable manual overrides for rows that still need them.
-- **Medium [UNVERIFIED]** `cloud/apps/web/src/utils/decisionDistributionDisplay.ts` and `cloud/apps/web/src/lib/statistics/ks-test.ts` removed support for numeric bucket codes and the old `scoreCounts` shape. If any cached or persisted analysis payloads still use legacy `1`-`5` keys, those counts will now be ignored or mislabeled instead of being translated, which will skew both display and KS sampling.
+1. [UNVERIFIED] Medium - `cloud/workers/stats/decision_model.py` no longer falls back to `decisionModelV2.legacy.canonicalScore` or `summary.score` when resolving signed distance. If older transcripts still rely on those legacy fields, they will now be treated as unscored, which will silently drop them from downstream variance and KS-style analysis instead of preserving historical results.
+
+2. [UNVERIFIED] Medium - `cloud/apps/web/src/components/runs/TranscriptRow.tsx`, `TranscriptViewer.tsx`, and `TranscriptList.tsx` removed the legacy score normalization path and now treat any truthy `rawDecision` as analyzable. That means placeholder values like `'-'` can be treated as real decisions, and historical 1-5 codes that depended on the old inversion logic can display in the wrong orientation or expose edit controls when they should not.
+
+3. [UNVERIFIED] Medium - `cloud/apps/web/src/utils/decisionDistributionDisplay.ts` and `cloud/apps/web/src/lib/statistics/ks-test.ts` dropped support for numeric bucket codes and the numeric label mapping. If existing persisted aggregates or API payloads still emit `1`-`5` keys, those counts will now be ignored or relabeled generically, which will make older charts and statistics look incomplete rather than backward-compatible.
 
 ## Residual Risks
-- I could not verify whether all historical transcripts, cached analysis payloads, and label maps have already been migrated to the new direction-based formats. If not, the compatibility removals in this diff will cause older data to lose fidelity or disappear from analysis paths.
+- I could not verify whether every producer and persisted dataset has already been migrated to the new symbolic bucket/decision formats, so backward-compatibility risk remains for historical records.
+- The error-handler and GraphQL schema changes look aligned with the refactor, but without surrounding context I could not confirm that no remaining callers still depend on the removed `legacy`/`rawScore` shapes.
 tokens used
-15,510
+12,655

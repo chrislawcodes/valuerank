@@ -1,0 +1,45 @@
+{
+  "feature_slug": "030-remove-legacy-decision-code",
+  "stage": "diff",
+  "artifact_path": "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/implementation.diff.patch",
+  "git_base_ref": "adee0cd3",
+  "allowed_dirty_paths": [
+    "docs/feature-runs",
+    "specs",
+    ".claude/worktrees",
+    ".railwayignore",
+    "cloud/apps/api/specs",
+    "cloud/scripts",
+    "cloud/workers",
+    "docs/workflow/operations"
+  ],
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "correctness-adversarial",
+      "stage": "diff",
+      "path": "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/diff.codex.correctness-adversarial.review.md",
+      "context_paths": [],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "regression-adversarial",
+      "stage": "diff",
+      "path": "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/diff.codex.regression-adversarial.review.md",
+      "context_paths": [],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "quality-adversarial",
+      "stage": "diff",
+      "path": "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/diff.gemini.quality-adversarial.review.md",
+      "context_paths": [],
+      "model": "gemini-2.5-pro"
+    }
+  ],
+  "max_artifact_chars": 60000,
+  "max_context_chars": 5000,
+  "max_total_chars": 70000
+}

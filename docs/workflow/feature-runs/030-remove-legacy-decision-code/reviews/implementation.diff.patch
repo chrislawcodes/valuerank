@@ -1,27 +1,3 @@
-Reading additional input from stdin...
-OpenAI Codex v0.121.0 (research preview)
---------
-workdir: /Users/chrislaw/valuerank/.claude/worktrees/serene-meitner
-model: gpt-5.4-mini
-provider: openai
-approval: never
-sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
-reasoning effort: high
-reasoning summaries: none
-session id: 019d9738-4658-7ee1-b8a2-0c382fdef8aa
---------
-user
-Review this diff artifact using a correctness-adversarial lens.
-Stay scoped to that lens.
-Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
-No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
-The full review artifact text is included below in this prompt.
-Return markdown using exactly these sections:
-## Findings
-## Residual Risks
-Keep the response concrete and ordered by severity.
-
-Artifact: implementation.diff.patch
 diff --git a/cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts b/cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts
 index 5c3094b4..acdddb2a 100644
 --- a/cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts
@@ -600,20 +576,3 @@ index 65ebad18..c220c51b 100644
 -            return float(score) - 3.0
 -
      return None
-
-
-Return only markdown with exactly these sections:
-## Findings
-## Residual Risks
-Do not include any other sections.
-codex
-## Findings
-- **Medium [UNVERIFIED]** `cloud/workers/stats/decision_model.py` removed both legacy fallbacks (`decisionModelV2.legacy.canonicalScore` and `summary.score`) from `resolve_transcript_signed_distance()`. Any historical transcript that has not been reprocessed into the new `raw`/`canonical` shape will now resolve to `None`, which will drop it from downstream signed-distance and directional analysis instead of preserving the previously documented behavior.
-- **Medium [UNVERIFIED]** `cloud/apps/web/src/components/domains/ConditionMatrix.tsx` now computes the cell label and color from `(2 * strongly + somewhat) / totalTrials`. If `totalTrials` includes `unknownCount`, a cell with a clear directional winner but many unknowns will be rendered as `0`/neutral or much weaker than before. That changes the meaning of the matrix, not just the display logic.
-- **Medium [UNVERIFIED]** `cloud/apps/web/src/components/runs/TranscriptRow.tsx` changed `isAnalyzableDecision` from a numeric `1`-`5` check to `Boolean(rawDecision)`. Any non-empty but non-numeric legacy decision code will now be treated as analyzable, which can incorrectly disable manual overrides for rows that still need them.
-- **Medium [UNVERIFIED]** `cloud/apps/web/src/utils/decisionDistributionDisplay.ts` and `cloud/apps/web/src/lib/statistics/ks-test.ts` removed support for numeric bucket codes and the old `scoreCounts` shape. If any cached or persisted analysis payloads still use legacy `1`-`5` keys, those counts will now be ignored or mislabeled instead of being translated, which will skew both display and KS sampling.
-
-## Residual Risks
-- I could not verify whether all historical transcripts, cached analysis payloads, and label maps have already been migrated to the new direction-based formats. If not, the compatibility removals in this diff will cause older data to lose fidelity or disappear from analysis paths.
-tokens used
-15,510
