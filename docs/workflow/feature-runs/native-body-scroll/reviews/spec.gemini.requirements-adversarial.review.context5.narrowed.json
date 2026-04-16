@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/src/App.tsx",
+  "source_artifact_sha256": "328a10e6678b4eca37199ff5da7f0a586d89354178e0ea39aedb52d2e91a538f",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/native-body-scroll/reviews/spec.gemini.requirements-adversarial.review.context5.narrowed.txt",
+  "narrowed_artifact_sha256": "1f0b94ed880ae9ed5bcaa9339f191a0c2f6f6f3397b40a3a0bb26f0b0838a4e0",
+  "strategy": "head-tail-numbered-lines"
+}

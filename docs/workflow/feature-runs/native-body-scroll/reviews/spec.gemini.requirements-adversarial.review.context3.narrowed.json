@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx",
+  "source_artifact_sha256": "8627bc61ac7bb5d62338493ad59972316172f74f368eb0805e35429d39683641",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/native-body-scroll/reviews/spec.gemini.requirements-adversarial.review.context3.narrowed.txt",
+  "narrowed_artifact_sha256": "7548e2ad8e9cd688100c9b17445c909ad8b14e51ae397835c98657d15c7d5989",
+  "strategy": "head-tail-numbered-lines"
+}

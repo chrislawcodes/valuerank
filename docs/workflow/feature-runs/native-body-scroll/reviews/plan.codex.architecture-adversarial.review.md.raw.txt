@@ -1,0 +1,8 @@
+## Findings
+1. [MEDIUM][UNVERIFIED] The layout swap from `h-screen`/`overflow-auto` to `min-h-screen` body flow does not preserve a definite height contract for descendants. The plan assumes `flex-1` on `<main>` is enough for existing `h-full` pages, but that is only reliably true when the parent has an explicit height. Once content exceeds the viewport, `main` can become auto-sized, so any subtree that measures against `height:100%`, uses internal sticky sections, or depends on `main` as the scroll box can still break.
+2. [MEDIUM][UNVERIFIED] The rewritten wheel hook returns after the first `overflow-x-auto`/`overflow-x-scroll` ancestor even if that element cannot scroll further in the wheel direction. In nested horizontal layouts, that can swallow wheel input that should have bubbled to an outer scrollable container, so the new behavior may regress on complex tables or analysis panels.
+3. [MEDIUM][UNVERIFIED] The drawer change assumes this drawer is the only component managing body scroll lock. If another modal, drawer, or popover is already open, restoring `document.body.style.overflow` from a stale snapshot can re-enable page scrolling while another overlay still needs it locked. That is an overlay-stack coordination bug, not just a cosmetic shift.
+
+## Residual Risks
+- The plan still leaves the sticky header/nav offset coupled to a fixed `h-14` header height. Any responsive or future header height change will require a matching `top-*` update.
+- Switching to body scroll will change how scroll position behaves across route changes and overlay opens/closes unless there is separate scroll-restoration logic elsewhere.

@@ -1,0 +1,8 @@
+## Findings
+- **MEDIUM [UNVERIFIED]** Task 4 removes the `VERTICAL` guard, but the only safety check is a grep over “page components.” That does not prove there are no vertical scroll containers in shared layouts, drawers, modals, or inline `overflow` styles. If a horizontal table sits inside any such container, the global wheel handler can hijack scroll away from that parent and break normal vertical scrolling.
+- **MEDIUM [UNVERIFIED]** Task 5 assumes `document.body.style.overflow = 'hidden'` is enough to lock background scroll after removing the `<main>` lock. That only works if `body` is the active scroll root in the target browser. If the page actually scrolls on `document.documentElement`, the drawer can still allow background movement.
+
+## Residual Risks
+- The verification plan does not cover touch or mobile browser behavior, especially Safari/iOS, where scroll locking and sticky positioning often differ.
+- The wheel handler is only smoke-tested on a few pages, so other horizontal scrollers may behave differently if they use different overflow patterns or nesting.
+- Sticky header/nav layering is only checked manually; any future ancestor overflow or z-index changes could still break stickiness.

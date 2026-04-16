@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/src/components/layout/NavTabs.tsx",
+  "source_artifact_sha256": "feffc7ca5269d42f66c1deb0e86e196f154d7c5f042cc3feadebbf9fce68d70d",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/native-body-scroll/reviews/spec.gemini.requirements-adversarial.review.context2.narrowed.txt",
+  "narrowed_artifact_sha256": "7348c7c38c58c3ce1e3ef2dd0859fee4ee575cd602d1f44d7aaab6509475bbb9",
+  "strategy": "head-tail-numbered-lines"
+}

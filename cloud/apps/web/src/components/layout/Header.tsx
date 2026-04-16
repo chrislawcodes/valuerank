@@ -25,7 +25,7 @@ export function Header() {
     : user?.email?.slice(0, 2).toUpperCase() || 'U';
 
   return (
-    <header className="bg-[#1A1A1A] h-14">
+    <header className="bg-[#1A1A1A] h-14 sticky top-0 z-10">
       <div className="h-full max-w-7xl mx-auto px-4 flex items-center justify-between">
         {/* Mobile navigation - hamburger menu (visible only on mobile < 640px) */}
         <MobileNav className="mr-2" />
