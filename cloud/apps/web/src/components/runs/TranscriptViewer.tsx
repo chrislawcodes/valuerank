@@ -8,6 +8,7 @@ import { X, User, Bot, Clock, Hash, Calendar } from 'lucide-react';
 import type { ChangeEvent } from 'react';
 import { Button } from '../ui/Button';
 import type { Transcript } from '../../api/operations/runs';
+import { formatTranscriptDate } from '../../lib/format';
 import { getDecisionMetadata } from '../../utils/methodology';
 import {
   formatCanonicalDecisionHeadline,
@@ -86,21 +87,6 @@ function parseTranscriptContent(content: unknown): TranscriptContent {
   };
 }
 
-function formatCreatedAt(dateString: string): string {
-  const date = new Date(dateString);
-  const datePart = date.toLocaleDateString('en-US', {
-    month: '2-digit',
-    day: '2-digit',
-    year: 'numeric',
-    timeZone: 'America/Los_Angeles',
-  });
-  const timePart = date.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'America/Los_Angeles',
-  });
-  return `${datePart} ${timePart} Pacific`;
-}
 
 /**
  * Format duration in ms to human readable.
@@ -195,7 +181,7 @@ export function TranscriptViewer({
           </span>
           <span className="flex items-center gap-1">
             <Calendar className="w-4 h-4" />
-            {formatCreatedAt(transcript.createdAt)}
+            {formatTranscriptDate(transcript.createdAt)}
           </span>
           {isAuditMode ? (
             <span className="flex items-center gap-2">

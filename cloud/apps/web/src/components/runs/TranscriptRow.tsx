@@ -1,6 +1,7 @@
 import { FileText } from 'lucide-react';
 import type { ChangeEvent } from 'react';
 import type { Transcript } from '../../api/operations/runs';
+import { formatTranscriptDate } from '../../lib/format';
 import { formatDisplayLabel } from '../../utils/displayLabels';
 import { getDecisionMetadata } from '../../utils/methodology';
 import {
@@ -26,21 +27,6 @@ type TranscriptRowProps = {
 };
 
 
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  const datePart = date.toLocaleDateString('en-US', {
-    month: '2-digit',
-    day: '2-digit',
-    year: 'numeric',
-    timeZone: 'America/Los_Angeles',
-  });
-  const timePart = date.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'America/Los_Angeles',
-  });
-  return `${datePart} ${timePart} Pacific`;
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -348,7 +334,7 @@ export function TranscriptRow({
               </div>
             )}
           </div>
-          <div className="text-xs text-gray-500">{formatDate(transcript.createdAt)}</div>
+          <div className="text-xs text-gray-500">{formatTranscriptDate(transcript.createdAt)}</div>
         </div>
       ) : (
         <div className="flex items-center justify-between gap-4">
@@ -389,7 +375,7 @@ export function TranscriptRow({
               )}
             </span>
             <span className="text-xs" title="Created at">
-              {formatDate(transcript.createdAt)}
+              {formatTranscriptDate(transcript.createdAt)}
             </span>
           </div>
         </div>
