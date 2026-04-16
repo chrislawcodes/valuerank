@@ -19,7 +19,6 @@ import type { SetDomainSettingsMutationVariables } from '../../api/operations/do
 import { labelFromBody, DEFAULT_SENTENCE_PREFIX } from '@valuerank/shared';
 import {
   PREAMBLES_QUERY,
-  type Preamble,
   type PreamblesQueryData,
 } from '../../api/operations/preambles';
 
