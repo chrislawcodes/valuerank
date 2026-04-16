@@ -167,10 +167,10 @@ builder.objectType(DomainAnalysisValueScoreRef, {
   fields: (t) => ({
     valueKey: t.exposeString('valueKey'),
     score: t.exposeFloat('score'),
-    prioritized: t.exposeInt('prioritized'),
-    deprioritized: t.exposeInt('deprioritized'),
-    neutral: t.exposeInt('neutral'),
-    totalComparisons: t.exposeInt('totalComparisons'),
+    prioritized: t.exposeFloat('prioritized'),
+    deprioritized: t.exposeFloat('deprioritized'),
+    neutral: t.exposeFloat('neutral'),
+    totalComparisons: t.exposeFloat('totalComparisons'),
   }),
 });
 
