@@ -80,14 +80,15 @@ function buildDomainAnalysisResultFromSnapshot(params: {
         ? (btScores?.get(valueKey) ?? 0)
         : computeSmoothedLogOddsScore(wins, losses);
       // Counts may be fractional after run-count normalisation (equal-weight per vignette).
-      // Round to the nearest integer so GraphQL Int serialisation succeeds.
+      // Fractional values (e.g. 10.5) signal that a vignette was run multiple times with
+      // mixed results — preserve the decimal so the UI can surface that inconsistency.
       return {
         valueKey,
         score,
-        prioritized: Math.round(counts.prioritized),
-        deprioritized: Math.round(counts.deprioritized),
-        neutral: Math.round(counts.neutral),
-        totalComparisons: Math.round(wins + losses),
+        prioritized: counts.prioritized,
+        deprioritized: counts.deprioritized,
+        neutral: counts.neutral,
+        totalComparisons: wins + losses,
       };
     });
 

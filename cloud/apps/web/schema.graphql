@@ -777,11 +777,11 @@ type DomainAnalysisValueDetailResult {
 }
 
 type DomainAnalysisValueScore {
-  deprioritized: Int!
-  neutral: Int!
-  prioritized: Int!
+  deprioritized: Float!
+  neutral: Float!
+  prioritized: Float!
   score: Float!
-  totalComparisons: Int!
+  totalComparisons: Float!
   valueKey: String!
 }
 

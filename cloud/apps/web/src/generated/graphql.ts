@@ -710,11 +710,11 @@ export type DomainAnalysisValueDetailResult = {
 
 export type DomainAnalysisValueScore = {
   __typename?: 'DomainAnalysisValueScore';
-  deprioritized: Scalars['Int']['output'];
-  neutral: Scalars['Int']['output'];
-  prioritized: Scalars['Int']['output'];
+  deprioritized: Scalars['Float']['output'];
+  neutral: Scalars['Float']['output'];
+  prioritized: Scalars['Float']['output'];
   score: Scalars['Float']['output'];
-  totalComparisons: Scalars['Int']['output'];
+  totalComparisons: Scalars['Float']['output'];
   valueKey: Scalars['String']['output'];
 };
 
