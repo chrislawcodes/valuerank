@@ -66,10 +66,14 @@ export function CopyVisualButton({ targetRef, label }: CopyVisualButtonProps) {
     setIsCopying(true);
     setStatus('idle');
 
-    // Temporarily expand scroll containers so the full content is captured without scrollbars
-    const scrollEls = Array.from(
-      target.querySelectorAll<HTMLElement>('.overflow-x-auto, .overflow-y-auto, .overflow-auto'),
-    );
+    // Temporarily expand scroll containers so the full content is captured without scrollbars.
+    // Include the target itself in case it IS the overflow container (e.g. CoverageMatrix),
+    // not just its descendants.
+    const overflowSelector = '.overflow-x-auto, .overflow-y-auto, .overflow-auto';
+    const scrollEls: HTMLElement[] = [
+      ...(target.matches(overflowSelector) ? [target] : []),
+      ...Array.from(target.querySelectorAll<HTMLElement>(overflowSelector)),
+    ];
     const saved = scrollEls.map((el) => ({
       el,
       overflow: el.style.overflow,
