@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { MobileNav } from '../../../src/components/layout/MobileNav';
 
+const user = userEvent.setup({ delay: null });
+
 async function renderMobileNav(initialRoute: string) {
   const result = render(
     <MemoryRouter initialEntries={[initialRoute]}>
@@ -11,7 +13,7 @@ async function renderMobileNav(initialRoute: string) {
     </MemoryRouter>
   );
 
-  await userEvent.click(screen.getByRole('button', { name: /open navigation menu/i }));
+  await user.click(screen.getByRole('button', { name: /open navigation menu/i }));
   return result;
 }
 

@@ -89,7 +89,7 @@ jobs:
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-        run: npx turbo build --filter=@valuerank/shared --force
+        run: npx turbo build --filter=@valuerank/shared
 
       - name: Run web tests (shard ${{ matrix.shard }}/${{ matrix.total }})
         working-directory: cloud/apps/web
