@@ -1,0 +1,7 @@
+## Findings
+- [MEDIUM][UNVERIFIED] `cloud/apps/web/src/components/layout/Layout.tsx` changes the shell from a fixed-height layout with an internal scroll region to page-level scrolling. Removing `overflow-auto min-h-0` from `<main>` means long pages will now scroll the whole document, so `Header` and `NavTabs` will no longer stay pinned and any code that assumed `<main>` was the scroll root can break.
+- [MEDIUM][UNVERIFIED] `cloud/apps/web/src/hooks/useHorizontalScrollOnWheel.ts` now hijacks wheel input based on a literal `overflow-x-auto` / `overflow-x-scroll` class match instead of actual scroll behavior. That means a container that also needs vertical scrolling can still get its vertical wheel gestures redirected sideways, which is a regression from the old “horizontal-only” check.
+
+## Residual Risks
+- [UNVERIFIED] `cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx` now only locks `body`. If any route still scrolls through a different ancestor, the background can remain scrollable under the drawer.
+- [UNVERIFIED] The wheel hook now depends on exact Tailwind class names. Any horizontally scrollable container styled through other CSS paths will lose the wheel-to-horizontal behavior and fall back to normal page scrolling.

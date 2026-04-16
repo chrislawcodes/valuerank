@@ -1,0 +1,119 @@
+diff --git a/cloud/apps/web/src/components/layout/Layout.tsx b/cloud/apps/web/src/components/layout/Layout.tsx
+index f8794b57..24419d36 100644
+--- a/cloud/apps/web/src/components/layout/Layout.tsx
++++ b/cloud/apps/web/src/components/layout/Layout.tsx
+@@ -9,11 +9,11 @@ type LayoutProps = {
+ 
+ export function Layout({ children, fullWidth = false }: LayoutProps) {
+   return (
+-    <div className="h-screen flex flex-col bg-[#FDFBF7]">
++    <div className="min-h-screen flex flex-col bg-[#FDFBF7]">
+       <Header />
+       {/* NavTabs hidden on mobile (sm breakpoint), shown on tablet/desktop */}
+       <NavTabs />
+-      <main className={`flex-1 min-h-0 overflow-auto ${fullWidth ? 'px-4 py-8' : 'max-w-7xl mx-auto px-4 py-8 w-full'}`}>
++      <main className={`flex-1 ${fullWidth ? 'px-4 py-8' : 'max-w-7xl mx-auto px-4 py-8 w-full'}`}>
+         {children}
+       </main>
+     </div>
+diff --git a/cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx b/cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx
+index f4866e3e..deba52eb 100644
+--- a/cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx
++++ b/cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx
+@@ -68,19 +68,12 @@ export function ModelValueDetailDrawer({
+       if (event.key === 'Escape') onClose();
+     };
+ 
+-    // Lock both body and the layout's <main> scroll container. The app layout uses
+-    // overflow-auto on <main> (not body), so only locking body has no effect — scroll
+-    // events still reach <main> and scroll the background behind the drawer.
+-    const main = document.querySelector<HTMLElement>('main');
+     const originalBodyOverflow = document.body.style.overflow;
+-    const originalMainOverflow = main?.style.overflow ?? '';
+     document.body.style.overflow = 'hidden';
+-    if (main != null) main.style.overflow = 'hidden';
+     window.addEventListener('keydown', onKeyDown);
+ 
+     return () => {
+       document.body.style.overflow = originalBodyOverflow;
+-      if (main != null) main.style.overflow = originalMainOverflow;
+       window.removeEventListener('keydown', onKeyDown);
+     };
+   }, [open, onClose]);
+diff --git a/cloud/apps/web/src/hooks/useHorizontalScrollOnWheel.ts b/cloud/apps/web/src/hooks/useHorizontalScrollOnWheel.ts
+index ce44b050..fd66f514 100644
+--- a/cloud/apps/web/src/hooks/useHorizontalScrollOnWheel.ts
++++ b/cloud/apps/web/src/hooks/useHorizontalScrollOnWheel.ts
+@@ -2,44 +2,47 @@ import { useEffect } from 'react';
+ 
+ /**
+  * Attaches a global wheel listener that redirects vertical scroll to horizontal
+- * when the nearest scrollable ancestor is a horizontal-only overflow container.
++ * when the scroll target is inside a Tailwind `overflow-x-auto` / `overflow-x-scroll`
++ * container.
+  *
+- * This fixes the UX issue where hovering over the left-side labels of a wide
+- * table and scrolling moves the page instead of the table.
+- *
+- * Logic:
+- * - Walk up from the event target to find the first element that can actually scroll.
+- * - If that element can only scroll horizontally (not vertically), redirect deltaY
+- *   to scrollLeft so the table moves instead of the page.
+- * - If the first scrollable ancestor is vertical (or both), let the browser handle
+- *   the event normally — we never interfere with intentional page/modal scroll.
++ * Behaviour:
++ *   Walk up from the event target.
++ *   • First hit with `overflow-x-auto` / `overflow-x-scroll` class:
++ *       - If the element overflows horizontally AND is not at its scroll edge in the
++ *         direction of the delta → redirect deltaY to scrollLeft.
++ *       - If the element is at its edge (can't scroll further), let the event fall
++ *         through to the browser so the page can scroll vertically instead.
++ *       - Either way, stop — this is the relevant container.
++ *   • No match found → do nothing, browser handles normally.
+  */
+ export function useHorizontalScrollOnWheel(): void {
+   useEffect(() => {
++    const HORIZONTAL = ['overflow-x-auto', 'overflow-x-scroll'] as const;
++
+     const handleWheel = (e: WheelEvent): void => {
+-      // Only intercept pure vertical scroll input
++      // Only intercept pure vertical scroll input (scroll wheel or vertical trackpad swipe)
+       if (e.deltaX !== 0 || e.deltaY === 0) return;
+ 
+       let el: HTMLElement | null =
+         e.target instanceof HTMLElement ? e.target : null;
+ 
+       while (el !== null && el !== document.documentElement) {
+-        const style = window.getComputedStyle(el);
+-        const ox = style.overflowX;
+-        const oy = style.overflowY;
+-        const canScrollX =
+-          (ox === 'auto' || ox === 'scroll') && el.scrollWidth > el.clientWidth;
+-        const canScrollY =
+-          (oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight;
++        const cls = el.classList;
+ 
+-        if (canScrollX || canScrollY) {
+-          if (canScrollX && !canScrollY) {
+-            // Horizontal-only container: redirect wheel to horizontal scroll
+-            e.preventDefault();
+-            el.scrollLeft += e.deltaY;
++        // Explicit horizontal-scroll container
++        if (HORIZONTAL.some((c) => cls.contains(c))) {
++          if (el.scrollWidth > el.clientWidth) {
++            // Only redirect — and only prevent default — if the container can still
++            // scroll in the requested direction. At an edge, let the browser handle
++            // the event so the page can continue to scroll vertically.
++            const atRightEdge = e.deltaY > 0 && el.scrollLeft + el.clientWidth >= el.scrollWidth;
++            const atLeftEdge = e.deltaY < 0 && el.scrollLeft <= 0;
++            if (!atRightEdge && !atLeftEdge) {
++              e.preventDefault();
++              el.scrollLeft += e.deltaY;
++            }
+           }
+-          // If vertical (or both), fall through — browser handles normally
+-          return;
++          return; // Stop regardless — this is the container in scope
+         }
+ 
+         el = el.parentElement;
