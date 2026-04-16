@@ -1,62 +1,31 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from 'urql';
-import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '../ui/Button';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { useDomainSettings } from '../../hooks/useDomainSettings';
+import { ConfigHistorySection } from './ConfigHistorySection';
+import { CreateVignettesSection } from './CreateVignettesSection';
 import {
   LEVEL_PRESETS_QUERY,
   type LevelPresetsQueryData,
 } from '../../api/operations/level-presets';
 import {
   DOMAIN_CONTEXTS_QUERY,
-  type DomainContext,
+  type DomainContextsQueryResult,
 } from '../../api/operations/domain-contexts';
 import type { SetDomainSettingsMutationVariables } from '../../api/operations/domains';
 import { labelFromBody, DEFAULT_SENTENCE_PREFIX } from '@valuerank/shared';
-
-const PREAMBLES_QUERY = `
-  query PreamblesForDomainSettings {
-    preambles {
-      id
-      name
-      latestVersion {
-        id
-        version
-      }
-    }
-  }
-`;
-
-type Preamble = {
-  id: string;
-  name: string;
-  latestVersion: { id: string; version: string } | null;
-};
-
-type PreamblesQueryData = {
-  preambles: Preamble[];
-};
-
-type DomainContextsQueryData = {
-  domainContexts: DomainContext[];
-};
+import {
+  PREAMBLES_QUERY,
+  type PreamblesQueryData,
+} from '../../api/operations/preambles';
 
 type Props = {
   domainId: string;
   onSaved?: () => void;
 };
-
-function formatSnapshotDate(isoString: string): string {
-  try {
-    const d = new Date(isoString);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  } catch {
-    return isoString;
-  }
-}
 
 export function DomainSettingsPanel({ domainId, onSaved }: Props) {
   const { settings, snapshots, loading, saving, error, setDomainSettings } =
@@ -70,7 +39,6 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [editingToken, setEditingToken] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Sync local state when settings load
   useEffect(() => {
@@ -92,7 +60,7 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
     query: LEVEL_PRESETS_QUERY,
   });
 
-  const [{ data: contextsData }] = useQuery<DomainContextsQueryData>({
+  const [{ data: contextsData }] = useQuery<DomainContextsQueryResult>({
     query: DOMAIN_CONTEXTS_QUERY,
     variables: { domainId },
   });
@@ -145,6 +113,14 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
   const sortedStatements = [...(settings?.valueStatements ?? [])].sort((a, b) =>
     a.token.localeCompare(b.token)
   );
+
+  const hasPendingChanges =
+    Object.keys(drafts).length > 0 ||
+    localPreambleVersionId !== (settings?.preambleVersionId ?? null) ||
+    localLevelPresetVersionId !== (settings?.levelPresetVersionId ?? null) ||
+    localContextId !== (settings?.contextId ?? null) ||
+    localSentencePrefix !== (settings?.sentencePrefix ?? '') ||
+    localLabelPrefix !== (settings?.labelPrefix ?? '');
 
   return (
     <div className="space-y-6 mt-6">
@@ -391,59 +367,15 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
       </div>
 
       {/* Config history */}
-      <div className="border-t border-gray-200 pt-4">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="flex items-center gap-1 !px-0 text-sm font-medium text-gray-600 hover:text-teal-700"
-          onClick={() => setHistoryOpen((v) => !v)}
-        >
-          {historyOpen ? (
-            <ChevronDown className="w-4 h-4" />
-          ) : (
-            <ChevronRight className="w-4 h-4" />
-          )}
-          Config history ({snapshots.length})
-        </Button>
+      <ConfigHistorySection snapshots={snapshots} />
 
-        {historyOpen && (
-          <div className="mt-3">
-            {snapshots.length === 0 ? (
-              <p className="text-sm text-gray-500">No history yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {snapshots.map((snap) => (
-                  <div
-                    key={snap.id}
-                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs space-y-0.5"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-700">
-                        {formatSnapshotDate(snap.createdAt)}
-                      </span>
-                      <span className="text-gray-400">
-                        {snap.valueStatementCount} value stmt{snap.valueStatementCount === 1 ? '' : 's'}
-                      </span>
-                    </div>
-                    <div className="text-gray-500 space-y-0.5">
-                      {snap.preambleLabel != null && (
-                        <div>Preamble: {snap.preambleLabel}</div>
-                      )}
-                      {snap.levelPresetLabel != null && (
-                        <div>Level preset: {snap.levelPresetLabel}</div>
-                      )}
-                      {snap.contextLabel != null && (
-                        <div>Context: {snap.contextLabel}</div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      {settings != null && (
+        <CreateVignettesSection
+          domainId={domainId}
+          valueStatements={settings.valueStatements}
+          hasPendingChanges={hasPendingChanges}
+        />
+      )}
     </div>
   );
 }

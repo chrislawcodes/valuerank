@@ -1426,6 +1426,25 @@ type ModelTokenStats {
   sampleCount: Int!
 }
 
+enum VignettePairStatus {
+  CREATED
+  UPDATED
+  SKIPPED
+  SKIPPED_HAS_RUNS
+}
+
+type EnsureDomainVignettePairResult {
+  status: VignettePairStatus!
+  definitionAId: ID
+  definitionBId: ID
+}
+
+input EnsureDomainVignettePairInput {
+  domainId: ID!
+  valueFirstId: ID!
+  valueSecondId: ID!
+}
+
 type Mutation {
   """Add a tag to a definition. No-op if tag is already assigned."""
   addTagToDefinition(
@@ -1476,6 +1495,7 @@ type Mutation {
   createDefinition(input: CreateDefinitionInput!): Definition!
   createDomain(name: String!): Domain!
   createDomainContext(input: CreateDomainContextInput!): DomainContext!
+  ensureDomainVignettePair(input: EnsureDomainVignettePairInput!): EnsureDomainVignettePairResult!
   createJobChoicePair(input: CreatePairedVignetteInput!): CreatePairedVignetteResult! @deprecated(reason: "Renamed to createPairedVignette")
   createPairedVignette(input: CreatePairedVignetteInput!): CreatePairedVignetteResult!
   createLevelPreset(l1: String!, l2: String!, l3: String!, l4: String!, l5: String!, name: String!): LevelPreset!
