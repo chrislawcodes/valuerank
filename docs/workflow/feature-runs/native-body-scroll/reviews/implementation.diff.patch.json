@@ -1,0 +1,17 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "99973c909a487332913c5daab45738abdde7b2e2",
+  "git_base_ref": "origin/main",
+  "git_base_sha": "abe39ae0d4893c5db5b2ece4889efdfd4cbc4d91",
+  "paths": [
+    "cloud/apps/web/src/App.tsx",
+    "cloud/apps/web/src/components/layout/Layout.tsx",
+    "cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx",
+    "cloud/apps/web/src/hooks/index.ts",
+    "cloud/apps/web/src/hooks/useHorizontalScrollOnWheel.ts"
+  ],
+  "allowed_dirty_paths": [],
+  "untracked_files_included": [],
+  "artifact_path": "docs/workflow/feature-runs/native-body-scroll/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

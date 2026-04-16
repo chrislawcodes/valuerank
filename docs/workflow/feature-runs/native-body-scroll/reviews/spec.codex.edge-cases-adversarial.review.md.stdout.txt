@@ -1,0 +1,9 @@
+## Findings
+- MEDIUM [UNVERIFIED] `NavTabs.tsx` uses `sticky top-14`, which hard-codes the header height as 56px. That only works if the header never changes height across breakpoints, content states, or future controls. Any height drift will make the nav overlap the header or leave a gap.
+- MEDIUM [UNVERIFIED] The spec assumes `flex-1` on `<main>` is enough to preserve all `h-full flex flex-col` descendants after removing the scroll container. That is not proven in the artifact, and pages that depended on `<main>` as the bounded scroll ancestor can regress into double scroll or mis-sized layouts.
+- MEDIUM Body-only scroll locking is not sufficient on some mobile browsers, especially iOS Safari. `document.body.style.overflow = 'hidden'` can still allow background rubber-banding or scroll leakage, so the drawer can fail to fully freeze the page in the edge case that matters most for touch users.
+
+## Residual Risks
+- Sticky positioning can fail if any ancestor of the header or nav has an overflow, transform, or containment rule that changes the sticky containing block.
+- Content targeted by hash links, focus jumps, or validation errors may land under the sticky header/nav unless the layout adds matching scroll padding elsewhere.
+- The wheel-hook edge detection is only specified at a high level. If the hook is reused outside the intended table scrollers, it could still intercept wheel input in places the spec does not account for.

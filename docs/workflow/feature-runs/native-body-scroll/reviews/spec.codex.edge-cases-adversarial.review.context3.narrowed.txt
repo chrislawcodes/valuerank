@@ -1,0 +1,193 @@
+00001: import { useEffect } from 'react';
+00002: import { createPortal } from 'react-dom';
+00003: import { Link } from 'react-router-dom';
+00004: import { Info, X } from 'lucide-react';
+00005: import { type ModelsAnalysisModelResult, type ModelsAnalysisValueResult } from '../../api/operations/modelsAnalysis';
+00006: import { VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
+00007: import { Button } from '../ui/Button';
+00008: import { Tooltip } from '../ui/Tooltip';
+00009: import { computeDots, computeWeightedMad, computeWeightedMean, formatStabilityTooltip } from './stabilityDots';
+00010: 
+00011: type ModelValueDetailDrawerProps = {
+00012:   open: boolean;
+00013:   model: ModelsAnalysisModelResult | null;
+00014:   value: ModelsAnalysisValueResult | null;
+00015:   singleDomainActive: boolean;
+00016:   onClose: () => void;
+00017: };
+00018: 
+00019: function formatPercent(value: number | null): string {
+00020:   if (value == null || Number.isNaN(value)) return 'n/a';
+00021:   return `${Math.round(value)}%`;
+00022: }
+00023: 
+00024: function InfoIcon() {
+00025:   return <Info className="h-3.5 w-3.5" />;
+00026: }
+00027: 
+00028: function Dots({ score }: { score: number | null }) {
+00029:   const states = computeDots(score);
+00030:   return (
+00031:     <span className="inline-flex items-center gap-0.5" aria-hidden="true">
+00032:       {states.map((state, i) => {
+00033:         if (state === 'full') {
+00034:           return <span key={i} className="inline-block w-3 h-3 rounded-full flex-shrink-0 bg-current" />;
+00035:         }
+00036:         if (state === 'half') {
+00037:           return (
+00038:             <span
+00039:               key={i}
+00040:               className="inline-block w-3 h-3 rounded-full flex-shrink-0"
+00041:               style={{
+00042:                 background: 'linear-gradient(to right, currentColor 50%, transparent 50%)',
+00043:                 boxShadow: '0 0 0 1px currentColor',
+00044:               }}
+00045:             />
+00046:           );
+00047:         }
+00048:         if (state === 'muted') {
+00049:           return <span key={i} className="inline-block w-3 h-3 rounded-full flex-shrink-0 border border-current opacity-30" />;
+00050:         }
+00051:         return <span key={i} className="inline-block w-3 h-3 rounded-full flex-shrink-0 border border-current" />;
+00052:       })}
+00053:     </span>
+00054:   );
+00055: }
+00056: 
+00057: export function ModelValueDetailDrawer({
+00058:   open,
+00059:   model,
+00060:   value,
+00061:   singleDomainActive,
+00062:   onClose,
+00063: }: ModelValueDetailDrawerProps) {
+00064:   useEffect(() => {
+00065:     if (!open) return;
+00066: 
+00067:     const onKeyDown = (event: KeyboardEvent) => {
+00068:       if (event.key === 'Escape') onClose();
+00069:     };
+00070: 
+00071:     // Lock both body and the layout's <main> scroll container. The app layout uses
+00072:     // overflow-auto on <main> (not body), so only locking body has no effect — scroll
+00073:     // events still reach <main> and scroll the background behind the drawer.
+00074:     const main = document.querySelector<HTMLElement>('main');
+00075:     const originalBodyOverflow = document.body.style.overflow;
+00076:     const originalMainOverflow = main?.style.overflow ?? '';
+00077:     document.body.style.overflow = 'hidden';
+00078:     if (main != null) main.style.overflow = 'hidden';
+00079:     window.addEventListener('keydown', onKeyDown);
+00080: 
+00081:     return () => {
+00082:       document.body.style.overflow = originalBodyOverflow;
+00083:       if (main != null) main.style.overflow = originalMainOverflow;
+00084:       window.removeEventListener('keydown', onKeyDown);
+00085:     };
+00086:   }, [open, onClose]);
+00087: 
+00088:   if (!open || model == null || value == null) return null;
+00089: 
+00090:   const valueKey = value.valueKey as ValueKey;
+00091:   const valueLabel = VALUE_LABELS[valueKey] ?? value.valueKey;
+00092:   const mad = computeWeightedMad(value.domains);
+00093:   const stabilityCardText = formatStabilityTooltip(value.stabilityScore, value.eligibleDomainCount, mad, singleDomainActive);
+00094:   const domains = [...value.domains].sort((left, right) => {
+00095:     const diff = right.evidenceWeight - left.evidenceWeight;
+00096:     return diff !== 0 ? diff : left.domainName.localeCompare(right.domainName);
+00097:   });
+00098: 
+00099:   // --- Pooled win rate tooltip data ---
+00100:   const totalWeight = domains.reduce((sum, d) => sum + d.evidenceWeight, 0);
+00101:   const weightedSum = domains.reduce((sum, d) => sum + d.evidenceWeight * d.winRate, 0);
+00102: 
+00103:   const pooledWinRateTooltip = (
+00104:     <div className="space-y-2">
+00105:       <p>
+00106:         <strong>What it means:</strong> A weighted average of win rates across each eligible domain.
+00107:         Each scenario pitted two values head-to-head and was scored as prioritized, deprioritized, or neutral.
+00108:         Win rate = prioritized ÷ (prioritized + deprioritized + neutr
+
+... [narrowed review slice: middle omitted] ...
+
+in stability</span>
+00296:                 <Tooltip
+00297:                   content={crossDomainStabilityTooltip}
+00298:                   position="bottom"
+00299:                   variant="light"
+00300:                   className="w-96 px-3 py-3 text-xs leading-relaxed normal-case tracking-normal font-normal"
+00301:                 >
+00302:                   <Button type="button" variant="ghost" size="icon" className="cursor-help p-0 min-w-0 min-h-0 h-4 w-4 text-gray-400 hover:text-gray-600 hover:bg-transparent" aria-label="How cross-domain stability is calculated">
+00303:                     <InfoIcon />
+00304:                   </Button>
+00305:                 </Tooltip>
+00306:               </div>
+00307:               <div className="mt-2 flex items-center gap-2 text-lg text-gray-900">
+00308:                 <Dots score={value.stabilityScore} />
+00309:                 <span className="font-mono">{value.stabilityScore == null ? 'n/a' : `${Math.round(value.stabilityScore)}/100`}</span>
+00310:               </div>
+00311:               <p className="mt-2 text-sm text-gray-600">{stabilityCardText}</p>
+00312:             </div>
+00313:           </section>
+00314: 
+00315:           <section className="rounded-xl border border-gray-200 bg-white">
+00316:             <div className="border-b border-gray-200 px-4 py-3">
+00317:               <h3 className="text-sm font-semibold text-gray-900">Contributing domains</h3>
+00318:               <p className="text-xs text-gray-600">
+00319:                 Each row shows the eligible domains that contributed to this cell. The link opens the existing domain value detail page.
+00320:               </p>
+00321:             </div>
+00322:             {domains.length === 0 ? (
+00323:               <div className="px-4 py-4 text-sm text-gray-500">
+00324:                 No eligible domains contributed to this cell yet.
+00325:               </div>
+00326:             ) : (
+00327:               <div className="overflow-x-auto">
+00328:                 <table className="min-w-full border-collapse text-sm">
+00329:                   <thead>
+00330:                     <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
+00331:                       <th className="border-b border-gray-200 px-4 py-3">Domain</th>
+00332:                       <th className="border-b border-gray-200 px-4 py-3">Win rate</th>
+00333:                       <th className="border-b border-gray-200 px-4 py-3">
+00334:                         <div className="flex items-center gap-1">
+00335:                           <span>Evidence weight</span>
+00336:                           <Tooltip
+00337:                             content={evidenceWeightTooltip}
+00338:                             position="bottom"
+00339:                             variant="light"
+00340:                             className="w-72 px-3 py-3 text-xs leading-relaxed normal-case tracking-normal font-normal"
+00341:                           >
+00342:                             <Button type="button" variant="ghost" size="icon" className="cursor-help p-0 min-w-0 min-h-0 h-4 w-4 text-gray-400 hover:text-gray-600 hover:bg-transparent" aria-label="What evidence weight means">
+00343:                               <InfoIcon />
+00344:                             </Button>
+00345:                           </Tooltip>
+00346:                         </div>
+00347:                       </th>
+00348:                     </tr>
+00349:                   </thead>
+00350:                   <tbody>
+00351:                     {domains.map((domain) => (
+00352:                       <tr key={domain.domainId} className="hover:bg-gray-50">
+00353:                         <td className="border-b border-gray-100 px-4 py-3">
+00354:                           <Link
+00355:                             to={`/domains/analysis/value-detail?domainId=${encodeURIComponent(domain.domainId)}&modelId=${encodeURIComponent(model.modelId)}&valueKey=${encodeURIComponent(value.valueKey)}`}
+00356:                             className="font-medium text-teal-700 hover:text-teal-900 hover:underline"
+00357:                           >
+00358:                             {domain.domainName}
+00359:                           </Link>
+00360:                         </td>
+00361:                         <td className="border-b border-gray-100 px-4 py-3 font-mono text-gray-900">
+00362:                           {formatPercent(domain.winRate)}
+00363:                         </td>
+00364:                         <td className="border-b border-gray-100 px-4 py-3 font-mono text-gray-900">
+00365:                           {domain.evidenceWeight}
+00366:                         </td>
+00367:                       </tr>
+00368:                     ))}
+00369:                   </tbody>
+00370:                 </table>
+00371:               </div>
+00372:             )}
+00373:           </section>
+00374:         </div>
+00375:       </aside>
+00376:     </d

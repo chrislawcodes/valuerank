@@ -1,0 +1,17 @@
+{
+  "paths": [
+    "cloud/apps/web/src/App.tsx",
+    "cloud/apps/web/src/components/layout/Layout.tsx",
+    "cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx",
+    "cloud/apps/web/src/hooks/index.ts",
+    "cloud/apps/web/src/hooks/useHorizontalScrollOnWheel.ts"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/web/src/App.tsx",
+    "cloud/apps/web/src/components/layout/Layout.tsx",
+    "cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx",
+    "cloud/apps/web/src/hooks/index.ts",
+    "cloud/apps/web/src/hooks/useHorizontalScrollOnWheel.ts",
+    "docs/workflow/feature-runs/native-body-scroll"
+  ]
+}

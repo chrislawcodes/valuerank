@@ -215,7 +215,7 @@ export function NavTabs() {
   };
 
   return (
-    <nav className="hidden sm:block bg-[#1A1A1A] border-t border-gray-800">
+    <nav className="hidden sm:block bg-[#1A1A1A] border-t border-gray-800 sticky top-14 z-10">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex gap-1">
           <NavLink

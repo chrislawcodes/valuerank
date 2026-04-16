@@ -1,0 +1,158 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/sweet-faraday
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019d94b8-72b7-71e2-b97b-79c587b289ea
+--------
+user
+Review this plan artifact using a architecture-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Plan: Switch to Native Browser (Body) Scroll
+
+**Workflow slug:** native-body-scroll
+**Created:** 2026-04-15
+**Status:** Ready for tasks
+
+## Architecture Decision
+
+The current layout uses `h-screen flex flex-col` + `<main class="overflow-auto">` to create a locked viewport where only the content area scrolls. Switching to body scroll means:
+- Replace `h-screen` with `min-h-screen` (outer div can now grow beyond viewport)
+- Remove `overflow-auto` and `min-h-0` from `<main>` (content just flows into the document)
+- Keep `flex-1` on `<main>` (still needed so `h-full` children in pages like Runs/Analysis resolve correctly)
+- Add `sticky` positioning to header and nav (replaces flexbox pinning)
+
+### Why keep `flex-1` on `<main>`
+
+Several pages use `h-full flex flex-col` at their root div (verified: Runs.tsx line 95, Analysis.tsx, SurveyResults.tsx). These need `<main>` to have a definite computed height. With `min-h-screen flex flex-col` on the outer div and `flex-1` on `<main>`, the flex layout gives `<main>` a computed height of at least `100vh - header (56px) - nav (~44px)`. Child elements with `h-full` resolve against this correctly.
+
+### Why keep the scroll hook (simplified)
+
+`useHorizontalScrollOnWheel` has two distinct functions:
+1. **VERTICAL exclusion check** — needed only to stop `<main class="overflow-auto">` from being treated as a horizontal redirect target. Goes away entirely with this change.
+2. **Horizontal redirect** — redirects vertical scroll wheel input to `scrollLeft` on `overflow-x-auto` containers. Independently useful for standard mice on tables (CoverageMatrix, domain analysis tables, etc.).
+
+The simplified hook removes the `VERTICAL` array and the entire VERTICAL check branch. The remaining code is about 25 lines instead of 60+.
+
+## Wave Breakdown
+
+### Wave 1: Layout restructure (Layout.tsx + Header.tsx + NavTabs.tsx)
+
+These three files are independent of each other and their changes are small. Implement together.
+
+**Layout.tsx changes:**
+- Outer div: `h-screen flex flex-col bg-[#FDFBF7]` → `min-h-screen flex flex-col bg-[#FDFBF7]`
+- `<main>` classes: remove `overflow-auto` and `min-h-0`, keep `flex-1` and all padding/width classes unchanged
+
+**Header.tsx changes:**
+- `<header className="bg-[#1A1A1A] h-14">` → `<header className="bg-[#1A1A1A] h-14 sticky top-0 z-10">`
+
+**NavTabs.tsx changes:**
+- `<nav className="hidden sm:block bg-[#1A1A1A] border-t border-gray-800">` → `<nav className="hidden sm:block bg-[#1A1A1A] border-t border-gray-800 sticky top-14 z-10">`
+
+### Wave 2: Hook simplification (useHorizontalScrollOnWheel.ts)
+
+Remove the VERTICAL detection entirely. Replace the entire file content with the simplified version below. Also update the JSDoc to remove references to the VERTICAL logic.
+
+Simplified hook (removes `VERTICAL` array and the VERTICAL classList check branch):
+
+```typescript
+import { useEffect } from 'react';
+
+/**
+ * Attaches a global wheel listener that redirects vertical scroll to horizontal
+ * when the scroll target is inside a Tailwind `overflow-x-auto` / `overflow-x-scroll`
+ * container.
+ *
+ * Behaviour:
+ *   Walk up from the event target.
+ *   • First hit with `overflow-x-auto` / `overflow-x-scroll` class:
+ *       - If the element actually overflows horizontally → redirect deltaY to scrollLeft.
+ *       - Either way, stop — this is the relevant container.
+ *   • No match found → do nothing, browser handles normally.
+ */
+export function useHorizontalScrollOnWheel(): void {
+  useEffect(() => {
+    const HORIZONTAL = ['overflow-x-auto', 'overflow-x-scroll'] as const;
+
+    const handleWheel = (e: WheelEvent): void => {
+      if (e.deltaX !== 0 || e.deltaY === 0) return;
+
+      let el: HTMLElement | null =
+        e.target instanceof HTMLElement ? e.target : null;
+
+      while (el !== null && el !== document.documentElement) {
+        const cls = el.classList;
+        if (HORIZONTAL.some((c) => cls.contains(c))) {
+          if (el.scrollWidth > el.clientWidth) {
+            // Only redirect if not at the horizontal edge — prevents swallowing
+            // scroll events when the table can't scroll further in that direction.
+            const atRightEdge = e.deltaY > 0 && el.scrollLeft + el.clientWidth >= el.scrollWidth;
+            const atLeftEdge = e.deltaY < 0 && el.scrollLeft <= 0;
+            if (!atRightEdge && !atLeftEdge) {
+              e.preventDefault();
+              el.scrollLeft += e.deltaY;
+            }
+          }
+          return;
+        }
+        el = el.parentElement;
+      }
+    };
+
+    document.addEventListener('wheel', handleWheel, { passive: false });
+    return () => document.removeEventListener('wheel', handleWheel);
+  }, []);
+}
+```
+
+### Wave 3: Drawer simplification (ModelValueDetailDrawer.tsx)
+
+Remove the `main` scroll lock from the `useEffect`. Specifically:
+- Delete line 74: `const main = document.querySelector<HTMLElement>('main');`
+- Delete line 76: `const originalMainOverflow = main?.style.overflow ?? '';`
+- Delete line 78: `if (main != null) main.style.overflow = 'hidden';`
+- Delete lines 83–84: `if (main != null) main.style.overflow = originalMainOverflow;`
+- Delete lines 72–73: the comment explaining why dual locking was needed
+
+Keep `document.body.style.overflow = 'hidden'` and its save/restore.
+
+## Risk Callouts
+
+- **`h-full` pages (mitigated):** `flex-1` is preserved on `<main>`. Verified against Runs.tsx, Analysis.tsx, SurveyResults.tsx.
+- **Scroll lock CLS on drawer open (residual):** Removing the body scrollbar causes a layout shift. MobileNav already has this same behavior. Acceptable for internal tool; out of scope to fix here.
+- **Sticky `top-14` coupling:** If `Header` height changes from `h-14`, the NavTabs sticky offset needs updating. Known coupling between two design constants.
+- **Wave ordering:** No dependencies between waves. All three can be done in a single commit.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m reviewing the plan as if I had to break it. I’m checking for places where the proposed layout, sticky behavior, and scroll handling could fail even if each individual change looks reasonable.
+codex
+## Findings
+1. [MEDIUM][UNVERIFIED] The layout swap from `h-screen`/`overflow-auto` to `min-h-screen` body flow does not preserve a definite height contract for descendants. The plan assumes `flex-1` on `<main>` is enough for existing `h-full` pages, but that is only reliably true when the parent has an explicit height. Once content exceeds the viewport, `main` can become auto-sized, so any subtree that measures against `height:100%`, uses internal sticky sections, or depends on `main` as the scroll box can still break.
+2. [MEDIUM][UNVERIFIED] The rewritten wheel hook returns after the first `overflow-x-auto`/`overflow-x-scroll` ancestor even if that element cannot scroll further in the wheel direction. In nested horizontal layouts, that can swallow wheel input that should have bubbled to an outer scrollable container, so the new behavior may regress on complex tables or analysis panels.
+3. [MEDIUM][UNVERIFIED] The drawer change assumes this drawer is the only component managing body scroll lock. If another modal, drawer, or popover is already open, restoring `document.body.style.overflow` from a stale snapshot can re-enable page scrolling while another overlay still needs it locked. That is an overlay-stack coordination bug, not just a cosmetic shift.
+
+## Residual Risks
+- The plan still leaves the sticky header/nav offset coupled to a fixed `h-14` header height. Any responsive or future header height change will require a matching `top-*` update.
+- Switching to body scroll will change how scroll position behaves across route changes and overlay opens/closes unless there is separate scroll-restoration logic elsewhere.
+tokens used
+7,347
