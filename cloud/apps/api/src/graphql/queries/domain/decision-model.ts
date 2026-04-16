@@ -1,5 +1,5 @@
 import { DOMAIN_ANALYSIS_VALUE_KEYS, extractValuePair, toPascalCaseKey, type DomainAnalysisValueKey, type DomainAnalysisValuePair } from '../domain-analysis-values.js';
-import { labelFromBody } from '@valuerank/shared';
+import { JOB_CHOICE_VALUE_STATEMENTS, labelFromBody } from '@valuerank/shared';
 
 export type DecisionDirection = 'favor_first' | 'favor_second' | 'neutral' | 'refusal' | 'unknown';
 export type DecisionStrength = 'strong' | 'lean' | 'neutral' | 'unknown';
@@ -644,7 +644,13 @@ export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDe
       );
     }
 
-    const favoredValueKey = resolveValueKeyFromText(candidateText, input.valueStatements, input.labelPrefix ?? null);
+    // When the caller supplies pairOverride without a definitionSnapshot (e.g. domain-analysis
+    // aggregation paths), valueStatements is undefined. For job-choice-v2 transcripts, fall back
+    // to the global JOB_CHOICE_VALUE_STATEMENTS so all 10 values resolve correctly.
+    const effectiveValueStatements = (input.valueStatements != null && input.valueStatements.length > 0)
+      ? input.valueStatements
+      : (input.raw.parserVersion === 'job-choice-v2' ? JOB_CHOICE_VALUE_STATEMENTS : undefined);
+    const favoredValueKey = resolveValueKeyFromText(candidateText, effectiveValueStatements, input.labelPrefix ?? null);
     if (favoredValueKey === null) {
       return buildUnknownCanonicalDecision('unknown');
     }
