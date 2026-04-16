@@ -298,6 +298,12 @@ export async function buildSnapshotOutput(
   // into global aggregates. Dividing by runCount gives the average per-run count, so a
   // vignette run 6 times contributes the same weight as one run once. Models that appear
   // in fewer runs for a given vignette are normalized by their own run count.
+  //
+  // Simultaneously, record a per-vignette win rate for each (modelId, valueKey) pair.
+  // These win rates are later averaged (equal-weight) to produce the cross-domain
+  // pooled win rate — every vignette counts once regardless of scenario count.
+  const vignetteWinRatesByModel = new Map<string, Map<DomainAnalysisValueKey, number[]>>();
+
   for (const [definitionId, modelMap] of defModelAcc) {
     for (const [modelId, acc] of modelMap) {
       if (acc.runCount === 0) continue;
@@ -312,6 +318,12 @@ export async function buildSnapshotOutput(
       if (!pairwiseWins) {
         pairwiseWins = new Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>();
         pairwiseWinsByModel.set(modelId, pairwiseWins);
+      }
+
+      let vigRates = vignetteWinRatesByModel.get(modelId);
+      if (!vigRates) {
+        vigRates = new Map<DomainAnalysisValueKey, number[]>();
+        vignetteWinRatesByModel.set(modelId, vigRates);
       }
 
       const n = acc.runCount;
@@ -331,7 +343,43 @@ export async function buildSnapshotOutput(
       addPairwiseWins(pairwiseWins, acc.valueA, acc.valueB, acc.first.prioritized / n);
       addPairwiseWins(pairwiseWins, acc.valueB, acc.valueA, acc.second.prioritized / n);
 
+      // Per-vignette win rate: use the raw (pre-normalization) accumulated counts.
+      // The ratio is the same whether we divide by n or not, so we use raw counts
+      // to avoid floating-point amplification. Each vignette contributes exactly
+      // one win rate entry — no matter how many runs it had.
+      const totalA = acc.first.prioritized + acc.first.deprioritized + acc.first.neutral;
+      if (totalA > 0) {
+        const ratesA = vigRates.get(acc.valueA) ?? [];
+        ratesA.push(acc.first.prioritized / totalA);
+        vigRates.set(acc.valueA, ratesA);
+      }
+
+      const totalB = acc.second.prioritized + acc.second.deprioritized + acc.second.neutral;
+      if (totalB > 0) {
+        const ratesB = vigRates.get(acc.valueB) ?? [];
+        ratesB.push(acc.second.prioritized / totalB);
+        vigRates.set(acc.valueB, ratesB);
+      }
+
       analyzedDefinitionIds.add(definitionId);
+    }
+  }
+
+  // Compute the equal-weight mean win rate and vignette count for each (model, value).
+  const valueWinRatesByModel = new Map<string, Map<DomainAnalysisValueKey, number>>();
+  const vignetteCountByModel = new Map<string, Map<DomainAnalysisValueKey, number>>();
+
+  for (const [modelId, vigRates] of vignetteWinRatesByModel) {
+    const winRateMap = new Map<DomainAnalysisValueKey, number>();
+    const countMap = new Map<DomainAnalysisValueKey, number>();
+    valueWinRatesByModel.set(modelId, winRateMap);
+    vignetteCountByModel.set(modelId, countMap);
+
+    for (const [valueKey, rates] of vigRates) {
+      if (rates.length === 0) continue;
+      const mean = rates.reduce((sum, r) => sum + r, 0) / rates.length;
+      winRateMap.set(valueKey, mean * 100); // store as 0–100 percentage
+      countMap.set(valueKey, rates.length);
     }
   }
 
@@ -362,6 +410,12 @@ export async function buildSnapshotOutput(
       counts: toCountsRecord(valueMap),
       pairwiseWins: toPairwiseRecord(
         pairwiseWinsByModel.get(modelId) ?? new Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>(),
+      ),
+      valueWinRates: Object.fromEntries(
+        valueWinRatesByModel.get(modelId) ?? new Map<DomainAnalysisValueKey, number>()
+      ),
+      vignetteCount: Object.fromEntries(
+        vignetteCountByModel.get(modelId) ?? new Map<DomainAnalysisValueKey, number>()
       ),
     }))
     .sort((left, right) => left.model.localeCompare(right.model));

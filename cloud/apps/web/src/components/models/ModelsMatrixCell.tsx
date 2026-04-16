@@ -1,7 +1,7 @@
 import { type KeyboardEvent } from 'react';
 import { Button } from '../ui/Button';
 import { type ModelsAnalysisDomainBreakdown } from '../../api/operations/modelsAnalysis';
-import { computeDots, computeWeightedMad, formatStabilityTooltip } from './stabilityDots';
+import { computeDots, computeSimpleMad, formatStabilityTooltip } from './stabilityDots';
 
 type ModelsMatrixCellProps = {
   modelLabel: string;
@@ -63,7 +63,7 @@ export function ModelsMatrixCell({
   selected = false,
   onClick,
 }: ModelsMatrixCellProps) {
-  const mad = computeWeightedMad(domains);
+  const mad = computeSimpleMad(domains);
   const mutedDots = hiddenByFilter || stabilityScore == null || eligibleDomainCount < 2;
   const tooltip = hiddenByFilter
     ? 'Filtered out by the current stability visibility setting.'
