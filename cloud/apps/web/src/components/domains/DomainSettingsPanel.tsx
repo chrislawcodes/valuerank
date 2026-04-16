@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '../ui/Button';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { useDomainSettings } from '../../hooks/useDomainSettings';
+import { CreateVignettesSection } from './CreateVignettesSection';
 import {
   LEVEL_PRESETS_QUERY,
   type LevelPresetsQueryData,
@@ -145,6 +146,14 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
   const sortedStatements = [...(settings?.valueStatements ?? [])].sort((a, b) =>
     a.token.localeCompare(b.token)
   );
+
+  const hasPendingChanges =
+    Object.keys(drafts).length > 0 ||
+    localPreambleVersionId !== (settings?.preambleVersionId ?? null) ||
+    localLevelPresetVersionId !== (settings?.levelPresetVersionId ?? null) ||
+    localContextId !== (settings?.contextId ?? null) ||
+    localSentencePrefix !== (settings?.sentencePrefix ?? '') ||
+    localLabelPrefix !== (settings?.labelPrefix ?? '');
 
   return (
     <div className="space-y-6 mt-6">
@@ -444,6 +453,14 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
           </div>
         )}
       </div>
+
+      {settings != null && (
+        <CreateVignettesSection
+          domainId={domainId}
+          valueStatements={settings.valueStatements}
+          hasPendingChanges={hasPendingChanges}
+        />
+      )}
     </div>
   );
 }
