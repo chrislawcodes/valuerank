@@ -163,10 +163,7 @@ describe('Access Tracking', () => {
       expect(initialRun?.lastAccessedAt).toBeNull();
 
       // Track access
-      trackRunAccess(testRunId!);
-
-      // Wait for async update
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await trackRunAccess(testRunId!);
 
       // Verify update
       const updatedRun = await db.run.findUnique({
@@ -180,12 +177,7 @@ describe('Access Tracking', () => {
       const { trackRunAccess } = await import('../../src/middleware/access-tracking.js');
 
       // Should not throw, just log warning
-      expect(() => {
-        trackRunAccess('invalid-id-that-does-not-exist');
-      }).not.toThrow();
-
-      // Wait to ensure promise settles
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await expect(trackRunAccess('invalid-id-that-does-not-exist')).resolves.not.toThrow();
     });
 
     it('trackDefinitionAccess updates lastAccessedAt', async () => {
@@ -201,10 +193,7 @@ describe('Access Tracking', () => {
       expect(initialDef?.lastAccessedAt).toBeNull();
 
       // Track access
-      trackDefinitionAccess(testDefinitionId!);
-
-      // Wait for async update
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await trackDefinitionAccess(testDefinitionId!);
 
       // Verify update
       const updatedDef = await db.definition.findUnique({
@@ -220,12 +209,7 @@ describe('Access Tracking', () => {
       );
 
       // Should not throw, just log warning
-      expect(() => {
-        trackDefinitionAccess('invalid-id-that-does-not-exist');
-      }).not.toThrow();
-
-      // Wait to ensure promise settles
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await expect(trackDefinitionAccess('invalid-id-that-does-not-exist')).resolves.not.toThrow();
     });
   });
 
@@ -272,10 +256,7 @@ describe('Access Tracking', () => {
       expect(initialTranscript?.lastAccessedAt).toBeNull();
 
       // Track access
-      trackTranscriptAccess(testTranscriptId!);
-
-      // Wait for async update
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await trackTranscriptAccess(testTranscriptId!);
 
       // Verify update
       const updatedTranscript = await db.transcript.findUnique({
@@ -291,12 +272,7 @@ describe('Access Tracking', () => {
       );
 
       // Should not throw, just log warning
-      expect(() => {
-        trackTranscriptAccess('invalid-id-that-does-not-exist');
-      }).not.toThrow();
-
-      // Wait to ensure promise settles
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await expect(trackTranscriptAccess('invalid-id-that-does-not-exist')).resolves.not.toThrow();
     });
 
     it('trackTranscriptsAccess updates lastAccessedAt for multiple transcripts', async () => {
@@ -332,10 +308,7 @@ describe('Access Tracking', () => {
       expect(initial2?.lastAccessedAt).toBeNull();
 
       // Track access for both
-      trackTranscriptsAccess([testTranscriptId!, testTranscript2Id!]);
-
-      // Wait for async update
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await trackTranscriptsAccess([testTranscriptId!, testTranscript2Id!]);
 
       // Verify both were updated
       const [updated1, updated2] = await Promise.all([
@@ -358,9 +331,7 @@ describe('Access Tracking', () => {
       );
 
       // Should return early without error
-      expect(() => {
-        trackTranscriptsAccess([]);
-      }).not.toThrow();
+      await expect(trackTranscriptsAccess([])).resolves.not.toThrow();
     });
 
     it('trackTranscriptsAccess does not throw for invalid ids', async () => {
@@ -369,12 +340,7 @@ describe('Access Tracking', () => {
       );
 
       // Should not throw, just log warning
-      expect(() => {
-        trackTranscriptsAccess(['invalid-id-1', 'invalid-id-2']);
-      }).not.toThrow();
-
-      // Wait to ensure promise settles
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await expect(trackTranscriptsAccess(['invalid-id-1', 'invalid-id-2'])).resolves.not.toThrow();
     });
   });
 });

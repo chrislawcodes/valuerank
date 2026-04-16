@@ -18,8 +18,8 @@ const log = createLogger('access-tracking');
  * This ensures that polling the run status doesn't reset updatedAt, which would
  * prevent the orphaned run recovery service from detecting stuck runs.
  */
-export function trackRunAccess(runId: string): void {
-  db.$executeRaw`
+export function trackRunAccess(runId: string): Promise<void> {
+  return db.$executeRaw`
     UPDATE runs
     SET last_accessed_at = NOW()
     WHERE id = ${runId}
@@ -37,8 +37,8 @@ export function trackRunAccess(runId: string): void {
  * Update lastAccessedAt for a transcript.
  * Non-blocking - fire and forget.
  */
-export function trackTranscriptAccess(transcriptId: string): void {
-  db.transcript
+export function trackTranscriptAccess(transcriptId: string): Promise<void> {
+  return db.transcript
     .update({
       where: { id: transcriptId },
       data: { lastAccessedAt: new Date() },
@@ -56,10 +56,10 @@ export function trackTranscriptAccess(transcriptId: string): void {
  * Update lastAccessedAt for multiple transcripts.
  * Non-blocking - fire and forget.
  */
-export function trackTranscriptsAccess(transcriptIds: string[]): void {
-  if (transcriptIds.length === 0) return;
+export function trackTranscriptsAccess(transcriptIds: string[]): Promise<void> {
+  if (transcriptIds.length === 0) return Promise.resolve();
 
-  db.transcript
+  return db.transcript
     .updateMany({
       where: { id: { in: transcriptIds } },
       data: { lastAccessedAt: new Date() },
@@ -77,8 +77,8 @@ export function trackTranscriptsAccess(transcriptIds: string[]): void {
  * Update lastAccessedAt for a definition.
  * Non-blocking - fire and forget.
  */
-export function trackDefinitionAccess(definitionId: string): void {
-  db.definition
+export function trackDefinitionAccess(definitionId: string): Promise<void> {
+  return db.definition
     .update({
       where: { id: definitionId },
       data: { lastAccessedAt: new Date() },
