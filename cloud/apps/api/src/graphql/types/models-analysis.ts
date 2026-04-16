@@ -3,7 +3,8 @@ import { builder } from '../builder.js';
 export type ModelsAnalysisDomainBreakdownShape = {
   domainId: string;
   domainName: string;
-  evidenceWeight: number;
+  /** Vignette count from v1.2.0+ snapshots. Null for older snapshots that predate this field. */
+  evidenceWeight: number | null;
   winRate: number;
 };
 
@@ -42,7 +43,7 @@ builder.objectType(ModelsAnalysisDomainBreakdownRef, {
   fields: (t) => ({
     domainId: t.exposeString('domainId'),
     domainName: t.exposeString('domainName'),
-    evidenceWeight: t.exposeInt('evidenceWeight'),
+    evidenceWeight: t.exposeInt('evidenceWeight', { nullable: true }),
     winRate: t.exposeFloat('winRate'),
   }),
 });

@@ -85,7 +85,7 @@ export function ModelValueDetailDrawer({
   const mad = computeSimpleMad(value.domains);
   const stabilityCardText = formatStabilityTooltip(value.stabilityScore, value.eligibleDomainCount, mad, singleDomainActive);
   const domains = [...value.domains].sort((left, right) => {
-    const diff = right.evidenceWeight - left.evidenceWeight;
+    const diff = (right.evidenceWeight ?? 0) - (left.evidenceWeight ?? 0);
     return diff !== 0 ? diff : left.domainName.localeCompare(right.domainName);
   });
 
@@ -115,7 +115,7 @@ export function ModelValueDetailDrawer({
               {domains.map((d) => (
                 <tr key={d.domainId} className="border-b border-gray-100">
                   <td className="py-0.5 pr-3">{d.domainName}</td>
-                  <td className="text-right py-0.5 px-2">{d.evidenceWeight}</td>
+                  <td className="text-right py-0.5 px-2">{d.evidenceWeight ?? '—'}</td>
                   <td className="text-right py-0.5 pl-2">{formatPercent(d.winRate)}</td>
                 </tr>
               ))}
@@ -347,7 +347,7 @@ export function ModelValueDetailDrawer({
                           {formatPercent(domain.winRate)}
                         </td>
                         <td className="border-b border-gray-100 px-4 py-3 font-mono text-gray-900">
-                          {domain.evidenceWeight}
+                          {domain.evidenceWeight ?? '—'}
                         </td>
                       </tr>
                     ))}
