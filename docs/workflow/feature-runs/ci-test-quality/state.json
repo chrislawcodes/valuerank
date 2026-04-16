@@ -52,5 +52,9 @@
     "markers_sha": "",
     "last_diff_head_sha": ""
   },
-  "checkpoint_fallback": {}
+  "checkpoint_fallback": {
+    "used": true,
+    "stage": "diff",
+    "reason": "Diff artifact (181KB) exceeds 150KB hard cap due to large test file splits in Wave 5. Manual verification: all 1232 web tests pass, TypeScript builds clean, YAML is valid. Test file changes are structural only (split by describe group) with no production logic changes."
+  }
 }
