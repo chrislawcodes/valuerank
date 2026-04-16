@@ -1,54 +1,34 @@
-import { describe, expect, it, vi, beforeEach, beforeAll } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { db as DbType } from '@valuerank/db';
 import type { findMissingProbes as FindMissingProbesType } from '../../../src/services/run/coverage-completeness.js';
-import type { checkAllSummarized as CheckAllSummarizedType } from '../../../src/queue/handlers/summarize-persistence.js';
 
-/**
- * Why vi.doMock + vi.resetModules()?
- *
- * This suite runs in a singleFork process alongside integration tests (e.g.
- * summarize-transcript.test.ts) that load summarize-persistence.ts with real
- * @valuerank/db bindings before this file runs. Without a module cache reset,
- * Vitest may return that cached instance, so mocks miss the already-bound db
- * reference inside the module under test.
- *
- * vi.resetModules() clears the module cache (but NOT the mock factory registry).
- * vi.doMock (non-hoisted) is called AFTER vi.resetModules() so that the mock
- * factories are registered before the subsequent dynamic imports. This is the
- * canonical pattern when the test file is not co-located with the source (e.g.
- * tests/ vs src/), where top-level vi.mock path resolution may differ from the
- * source file's own import resolution after a cache reset.
- */
-
-let checkAllSummarized: typeof CheckAllSummarizedType;
-let mockCount: ReturnType<typeof vi.mocked<typeof DbType.transcript.count>>;
-let mockFindMissingProbes: ReturnType<typeof vi.mocked<typeof FindMissingProbesType>>;
-
-beforeAll(async () => {
-  vi.resetModules();
-
-  vi.doMock('@valuerank/db', () => ({
-    db: {
-      transcript: {
-        count: vi.fn(),
-      },
+// These vi.mock() calls are hoisted above all imports by Vitest's transform.
+vi.mock('@valuerank/db', () => ({
+  db: {
+    transcript: {
+      count: vi.fn(),
     },
-    Prisma: { DbNull: null },
-  }));
+  },
+  Prisma: { DbNull: null },
+}));
 
-  vi.doMock('../../../src/services/run/coverage-completeness.js', () => ({
-    findMissingProbes: vi.fn(),
-  }));
+vi.mock('../../../src/services/run/coverage-completeness.js', () => ({
+  findMissingProbes: vi.fn(),
+}));
 
-  const dbModule = await import('@valuerank/db');
-  const ccModule = await import('../../../src/services/run/coverage-completeness.js');
-  const spModule = await import('../../../src/queue/handlers/summarize-persistence.js');
+// Static imports execute after the hoisted vi.mock() factories are registered,
+// so these resolve to the mocked modules.
+import { db } from '@valuerank/db';
+import * as coverageCompleteness from '../../../src/services/run/coverage-completeness.js';
+import { checkAllSummarized } from '../../../src/queue/handlers/summarize-persistence.js';
 
-  // eslint-disable-next-line @typescript-eslint/unbound-method
-  mockCount = vi.mocked(dbModule.db.transcript.count);
-  mockFindMissingProbes = vi.mocked(ccModule.findMissingProbes);
-  checkAllSummarized = spModule.checkAllSummarized;
-});
+// eslint-disable-next-line @typescript-eslint/unbound-method
+const mockCount: ReturnType<typeof vi.mocked<typeof DbType.transcript.count>> = vi.mocked(
+  db.transcript.count
+);
+const mockFindMissingProbes: ReturnType<
+  typeof vi.mocked<typeof FindMissingProbesType>
+> = vi.mocked(coverageCompleteness.findMissingProbes);
 
 describe('checkAllSummarized', () => {
   beforeEach(() => {
