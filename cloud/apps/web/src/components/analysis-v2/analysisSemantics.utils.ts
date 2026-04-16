@@ -10,7 +10,7 @@ import type {
   SemverTuple,
 } from './analysisSemantics.types';
 
-export const log = createLogger('analysis-semantics-adapter');
+export const log: ReturnType<typeof createLogger> = createLogger('analysis-semantics-adapter');
 
 export const SUMMARY_VERSION_FLOOR = [1, 1, 1] as const;
 export const EPSILON = 0.000001;

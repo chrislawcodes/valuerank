@@ -33,35 +33,18 @@ export function computeDots(score: number | null | undefined): DotState[] {
   });
 }
 
-export function computeWeightedMean(domains: StabilityDomainContribution[]): number | null {
+export function computeSimpleMean(domains: StabilityDomainContribution[]): number | null {
   if (domains.length === 0) return null;
-
-  let totalWeight = 0;
-  let weightedSum = 0;
-  for (const domain of domains) {
-    totalWeight += domain.evidenceWeight;
-    weightedSum += domain.evidenceWeight * domain.winRate;
-  }
-
-  if (totalWeight <= 0) return null;
-  return weightedSum / totalWeight;
+  const sum = domains.reduce((acc, d) => acc + d.winRate, 0);
+  return sum / domains.length;
 }
 
-export function computeWeightedMad(domains: StabilityDomainContribution[]): number | null {
+export function computeSimpleMad(domains: StabilityDomainContribution[]): number | null {
   if (domains.length === 0) return null;
-
-  const mean = computeWeightedMean(domains);
+  const mean = computeSimpleMean(domains);
   if (mean == null) return null;
-
-  let totalWeight = 0;
-  let weightedDeviation = 0;
-  for (const domain of domains) {
-    totalWeight += domain.evidenceWeight;
-    weightedDeviation += domain.evidenceWeight * Math.abs(domain.winRate - mean);
-  }
-
-  if (totalWeight <= 0) return null;
-  return weightedDeviation / totalWeight;
+  const sum = domains.reduce((acc, d) => acc + Math.abs(d.winRate - mean), 0);
+  return sum / domains.length;
 }
 
 export function formatStabilityTooltip(
@@ -79,6 +62,6 @@ export function formatStabilityTooltip(
   }
 
   const roundedScore = Math.round(Math.max(0, Math.min(100, score)));
-  const spreadText = mad != null ? ` (average spread \u2248 ${mad.toFixed(1)} points from the pooled mean)` : '';
+  const spreadText = mad != null ? ` (average spread \u2248 ${mad.toFixed(1)} points from the mean)` : '';
   return `Cross-domain stability shows how consistent this value's win rate is across domains. Score: ${roundedScore}/100 - ${describeStability(roundedScore)}${spreadText}. Based on ${formatDomainCount(eligibleDomainCount)}.`;
 }

@@ -6,7 +6,7 @@ import { type ModelsAnalysisModelResult, type ModelsAnalysisValueResult } from '
 import { VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
 import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
-import { computeDots, computeWeightedMad, computeWeightedMean, formatStabilityTooltip } from './stabilityDots';
+import { computeDots, computeSimpleMad, computeSimpleMean, formatStabilityTooltip } from './stabilityDots';
 
 type ModelValueDetailDrawerProps = {
   open: boolean;
@@ -82,7 +82,7 @@ export function ModelValueDetailDrawer({
 
   const valueKey = value.valueKey as ValueKey;
   const valueLabel = VALUE_LABELS[valueKey] ?? value.valueKey;
-  const mad = computeWeightedMad(value.domains);
+  const mad = computeSimpleMad(value.domains);
   const stabilityCardText = formatStabilityTooltip(value.stabilityScore, value.eligibleDomainCount, mad, singleDomainActive);
   const domains = [...value.domains].sort((left, right) => {
     const diff = right.evidenceWeight - left.evidenceWeight;
@@ -90,19 +90,15 @@ export function ModelValueDetailDrawer({
   });
 
   // --- Pooled win rate tooltip data ---
-  const totalWeight = domains.reduce((sum, d) => sum + d.evidenceWeight, 0);
-  const weightedSum = domains.reduce((sum, d) => sum + d.evidenceWeight * d.winRate, 0);
-
   const pooledWinRateTooltip = (
     <div className="space-y-2">
       <p>
-        <strong>What it means:</strong> A weighted average of win rates across each eligible domain.
-        Each scenario pitted two values head-to-head and was scored as prioritized, deprioritized, or neutral.
-        Win rate = prioritized ÷ (prioritized + deprioritized + neutral) — all outcomes count in the denominator.
-        Domains with more scenarios (higher evidence weight) count more in the average.
+        <strong>What it means:</strong> A simple average of win rates across eligible domains.
+        Each domain counts equally — a domain with more vignettes does not pull the average harder.
+        Win rate per domain = prioritized ÷ (prioritized + deprioritized + neutral) across all its vignettes for this value.
       </p>
       <p>
-        <strong>Formula:</strong> add up (weight × win rate) for every domain, then divide by the total weight.
+        <strong>Formula:</strong> add up all domain win rates, then divide by the number of domains.
       </p>
       {domains.length > 0 && (
         <div className="border-t border-gray-200 pt-2">
@@ -111,9 +107,8 @@ export function ModelValueDetailDrawer({
             <thead>
               <tr className="border-b border-gray-200 text-gray-500">
                 <th className="text-left pb-1 pr-3 font-medium">Domain</th>
-                <th className="text-right pb-1 px-2 font-medium">Weight</th>
-                <th className="text-right pb-1 px-2 font-medium">Win rate</th>
-                <th className="text-right pb-1 pl-2 font-medium">W × WR</th>
+                <th className="text-right pb-1 px-2 font-medium">Vignettes</th>
+                <th className="text-right pb-1 pl-2 font-medium">Win rate</th>
               </tr>
             </thead>
             <tbody>
@@ -121,15 +116,14 @@ export function ModelValueDetailDrawer({
                 <tr key={d.domainId} className="border-b border-gray-100">
                   <td className="py-0.5 pr-3">{d.domainName}</td>
                   <td className="text-right py-0.5 px-2">{d.evidenceWeight}</td>
-                  <td className="text-right py-0.5 px-2">{formatPercent(d.winRate)}</td>
-                  <td className="text-right py-0.5 pl-2">{Math.round(d.evidenceWeight * d.winRate)}</td>
+                  <td className="text-right py-0.5 pl-2">{formatPercent(d.winRate)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t border-gray-300 font-semibold">
-                <td className="pt-1 pr-3 text-gray-500 font-normal" colSpan={3}>
-                  {Math.round(weightedSum)} ÷ {totalWeight} =
+                <td className="pt-1 pr-3 text-gray-500 font-normal" colSpan={2}>
+                  sum ÷ {domains.length} =
                 </td>
                 <td className="text-right pt-1 pl-2">{formatPercent(value.pooledWinRate)}</td>
               </tr>
@@ -141,7 +135,7 @@ export function ModelValueDetailDrawer({
   );
 
   // --- Cross-domain stability tooltip data ---
-  const pooledMean = computeWeightedMean(domains);
+  const simpleMean = computeSimpleMean(domains);
 
   const crossDomainStabilityTooltip = (
     <div className="space-y-2">
@@ -155,12 +149,11 @@ export function ModelValueDetailDrawer({
       </p>
       <ol className="list-decimal pl-4 space-y-0.5">
         <li>Find each domain&apos;s win rate (table below).</li>
-        <li>Measure how far each domain&apos;s win rate is from the pooled mean — the &quot;spread.&quot;</li>
+        <li>Measure how far each domain&apos;s win rate is from the mean — the &quot;spread.&quot;</li>
         <li>
-          Take a weighted average of those distances, where domains with more comparisons count more.
-          This is called the <strong>weighted MAD</strong> (Mean Absolute Deviation) — it&apos;s just
-          the average distance between each domain&apos;s win rate and the overall mean,
-          with bigger domains pulling the average more than smaller ones.
+          Take a simple average of those distances.
+          This is called the <strong>MAD</strong> (Mean Absolute Deviation).
+          Every domain counts equally — a domain with more vignettes does not pull the average harder.
         </li>
         <li>
           Convert to a score: <strong>score = 100 × (1 − MAD ÷ 50)</strong>.
@@ -168,10 +161,10 @@ export function ModelValueDetailDrawer({
           A MAD of 50 → score 0 (maximum disagreement possible).
         </li>
       </ol>
-      {!singleDomainActive && value.eligibleDomainCount >= 2 && pooledMean != null && domains.length > 0 && (
+      {!singleDomainActive && value.eligibleDomainCount >= 2 && simpleMean != null && domains.length > 0 && (
         <div className="border-t border-gray-200 pt-2">
           <p className="font-semibold mb-1">
-            Calculation for this cell <span className="font-normal text-gray-500">(pooled mean: {formatPercent(pooledMean)})</span>:
+            Calculation for this cell <span className="font-normal text-gray-500">(mean: {formatPercent(simpleMean)})</span>:
           </p>
           <table className="w-full border-collapse">
             <thead>
@@ -186,13 +179,13 @@ export function ModelValueDetailDrawer({
                 <tr key={d.domainId} className="border-b border-gray-100">
                   <td className="py-0.5 pr-3">{d.domainName}</td>
                   <td className="text-right py-0.5 px-2">{formatPercent(d.winRate)}</td>
-                  <td className="text-right py-0.5 pl-2">{Math.round(Math.abs(d.winRate - pooledMean))} pts</td>
+                  <td className="text-right py-0.5 pl-2">{Math.round(Math.abs(d.winRate - simpleMean))} pts</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t border-gray-300 font-semibold">
-                <td className="pt-1 pr-3" colSpan={2}>Weighted MAD</td>
+                <td className="pt-1 pr-3" colSpan={2}>MAD</td>
                 <td className="text-right pt-1 pl-2">{mad != null ? `${Math.round(mad)} pts` : 'n/a'}</td>
               </tr>
               <tr className="font-semibold">
@@ -221,21 +214,20 @@ export function ModelValueDetailDrawer({
     </div>
   );
 
-  // --- Evidence weight tooltip ---
-  const evidenceWeightTooltip = (
+  // --- Vignette count tooltip ---
+  const vignetteCountTooltip = (
     <div className="space-y-2">
       <p>
-        <strong>What it means:</strong> The total number of scenario-level decisions recorded
-        for this model and value in this domain — prioritized, deprioritized, and neutral outcomes
-        all count. One scenario = one decision = one unit of evidence.
+        <strong>What it means:</strong> The number of distinct vignettes in this domain that test this value.
+        A vignette is a head-to-head scenario set where two values are compared.
       </p>
       <p>
-        Each vignette runs 25 scenarios, so the count tends to land near multiples of 25.
-        Multiple runs of the same vignette add to the total.
+        Multiple runs of the same vignette are pooled into a single win rate before counting,
+        so this number reflects distinct vignettes, not total scenarios or runs.
       </p>
       <p>
-        Domains with more evidence get more weight when calculating the pooled win rate —
-        a domain with 2000 decisions pulls the average twice as hard as one with 1000.
+        Every vignette counts equally when computing the domain win rate —
+        a domain with 5 vignettes does not pull the average harder than one with 1.
       </p>
     </div>
   );
@@ -280,7 +272,7 @@ export function ModelValueDetailDrawer({
                 {formatPercent(value.pooledWinRate)}
               </div>
               <p className="mt-2 text-sm text-gray-600">
-                Weighted mean across the eligible domains shown below.
+                Simple mean across the eligible domains shown below — each domain counts equally.
               </p>
             </div>
             <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
@@ -325,14 +317,14 @@ export function ModelValueDetailDrawer({
                       <th className="border-b border-gray-200 px-4 py-3">Win rate</th>
                       <th className="border-b border-gray-200 px-4 py-3">
                         <div className="flex items-center gap-1">
-                          <span>Evidence weight</span>
+                          <span>Vignette count</span>
                           <Tooltip
-                            content={evidenceWeightTooltip}
+                            content={vignetteCountTooltip}
                             position="bottom"
                             variant="light"
                             className="w-72 px-3 py-3 text-xs leading-relaxed normal-case tracking-normal font-normal"
                           >
-                            <Button type="button" variant="ghost" size="icon" className="cursor-help p-0 min-w-0 min-h-0 h-4 w-4 text-gray-400 hover:text-gray-600 hover:bg-transparent" aria-label="What evidence weight means">
+                            <Button type="button" variant="ghost" size="icon" className="cursor-help p-0 min-w-0 min-h-0 h-4 w-4 text-gray-400 hover:text-gray-600 hover:bg-transparent" aria-label="What vignette count means">
                               <InfoIcon />
                             </Button>
                           </Tooltip>

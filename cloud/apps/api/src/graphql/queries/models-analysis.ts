@@ -22,36 +22,19 @@ function computeDomainWinRate(prioritized: number, deprioritized: number, neutra
   return (prioritized / evidenceWeight) * 100;
 }
 
+// Equal-weight pooled win rate: each domain counts once regardless of vignette count.
 function computePooledWinRate(domains: DomainContribution[]): number | null {
   if (domains.length === 0) return null;
-  let totalWeight = 0;
-  let weightedSum = 0;
-  for (const domain of domains) {
-    totalWeight += domain.evidenceWeight;
-    weightedSum += domain.winRate * domain.evidenceWeight;
-  }
-  if (totalWeight <= 0) return null;
-  return weightedSum / totalWeight;
+  const sum = domains.reduce((acc, d) => acc + d.winRate, 0);
+  return sum / domains.length;
 }
 
-function computeWeightedMean(domains: DomainContribution[]): number | null {
-  return computePooledWinRate(domains);
-}
-
+// Unweighted MAD stability score: each domain counts equally.
 function computeStabilityScore(domains: DomainContribution[]): number | null {
   if (domains.length < 2) return null;
-  const mean = computeWeightedMean(domains);
+  const mean = computePooledWinRate(domains);
   if (mean === null) return null;
-
-  let totalWeight = 0;
-  let weightedDeviation = 0;
-  for (const domain of domains) {
-    totalWeight += domain.evidenceWeight;
-    weightedDeviation += domain.evidenceWeight * Math.abs(domain.winRate - mean);
-  }
-  if (totalWeight <= 0) return null;
-
-  const mad = weightedDeviation / totalWeight;
+  const mad = domains.reduce((acc, d) => acc + Math.abs(d.winRate - mean), 0) / domains.length;
   return Math.max(0, 100 * (1 - mad / 50));
 }
 
@@ -149,20 +132,35 @@ builder.queryField('modelsAnalysis', (t) =>
           if (valueMap == null) continue;
 
           for (const valueKey of DOMAIN_ANALYSIS_VALUE_KEYS) {
-            const counts = model.counts[valueKey] ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
-            const evidenceWeight = counts.prioritized + counts.deprioritized + counts.neutral;
-            if (evidenceWeight <= 0) continue;
-            const winRate = computeDomainWinRate(counts.prioritized, counts.deprioritized, counts.neutral);
-            if (winRate == null) continue;
-
             const contributions = valueMap.get(valueKey);
             if (contributions == null) continue;
-            contributions.push({
-              domainId: domainMatch ?? parsed.domainId,
-              domainName: parsed.domainName,
-              evidenceWeight,
-              winRate,
-            });
+
+            // Prefer pre-computed equal-weight fields from snapshots v1.2.0+.
+            // Fall back to raw counts for older snapshots (before the version bump).
+            const vigCount = model.vignetteCount?.[valueKey] ?? 0;
+            const precomputedWinRate = model.valueWinRates?.[valueKey];
+
+            if (vigCount > 0 && precomputedWinRate != null) {
+              contributions.push({
+                domainId: domainMatch ?? parsed.domainId,
+                domainName: parsed.domainName,
+                evidenceWeight: vigCount,
+                winRate: precomputedWinRate,
+              });
+            } else {
+              // Fallback: compute win rate directly from accumulated counts
+              const counts = model.counts[valueKey] ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
+              const evidenceWeight = counts.prioritized + counts.deprioritized + counts.neutral;
+              if (evidenceWeight <= 0) continue;
+              const winRate = computeDomainWinRate(counts.prioritized, counts.deprioritized, counts.neutral);
+              if (winRate == null) continue;
+              contributions.push({
+                domainId: domainMatch ?? parsed.domainId,
+                domainName: parsed.domainName,
+                evidenceWeight,
+                winRate,
+              });
+            }
           }
         }
       }
