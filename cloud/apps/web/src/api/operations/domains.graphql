@@ -352,3 +352,11 @@ mutation SetDomainSettings(
     defaultContextId
   }
 }
+
+mutation EnsureDomainVignettePair($input: EnsureDomainVignettePairInput!) {
+  ensureDomainVignettePair(input: $input) {
+    status
+    definitionAId
+    definitionBId
+  }
+}
