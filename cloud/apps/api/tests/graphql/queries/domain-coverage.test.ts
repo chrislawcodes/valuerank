@@ -7,7 +7,7 @@ import {
   selectPrimaryDefinitionCounts,
   computePerModelTrialCounts,
   deduplicateRunsByGroupId,
-} from '../domain-coverage-utils.js';
+} from '../../../src/graphql/queries/domain-coverage-utils.js';
 
 describe('extractValuePair', () => {
   it('normalizes lowercase dimension names to canonical coverage keys', () => {

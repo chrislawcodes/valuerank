@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach, beforeAll } from 'vitest';
 import type { db as DbType } from '@valuerank/db';
-import type { findMissingProbes as FindMissingProbesType } from '../../../services/run/coverage-completeness.js';
-import type { checkAllSummarized as CheckAllSummarizedType } from '../summarize-persistence.js';
+import type { findMissingProbes as FindMissingProbesType } from '../../../src/services/run/coverage-completeness.js';
+import type { checkAllSummarized as CheckAllSummarizedType } from '../../../src/queue/handlers/summarize-persistence.js';
 
 // These vi.mock() calls are hoisted above all imports by Vitest's transform.
 vi.mock('@valuerank/db', () => ({
@@ -13,7 +13,7 @@ vi.mock('@valuerank/db', () => ({
   Prisma: { DbNull: null },
 }));
 
-vi.mock('../../../services/run/coverage-completeness.js', () => ({
+vi.mock('../../../src/services/run/coverage-completeness.js', () => ({
   findMissingProbes: vi.fn(),
 }));
 
@@ -38,8 +38,8 @@ beforeAll(async () => {
   vi.resetModules();
 
   const dbModule = await import('@valuerank/db');
-  const ccModule = await import('../../../services/run/coverage-completeness.js');
-  const spModule = await import('../summarize-persistence.js');
+  const ccModule = await import('../../../src/services/run/coverage-completeness.js');
+  const spModule = await import('../../../src/queue/handlers/summarize-persistence.js');
 
   // eslint-disable-next-line @typescript-eslint/unbound-method
   mockCount = vi.mocked(dbModule.db.transcript.count);
