@@ -225,13 +225,14 @@ export function ModelValueDetailDrawer({
   const evidenceWeightTooltip = (
     <div className="space-y-2">
       <p>
-        <strong>What it means:</strong> The total number of scenario-level decisions recorded
-        for this model and value in this domain — prioritized, deprioritized, and neutral outcomes
-        all count. One scenario = one decision = one unit of evidence.
+        <strong>What it means:</strong> The number of individual scenario-level decisions recorded
+        for this model and value in this domain — specifically, the count of non-neutral outcomes
+        (prioritized + deprioritized). Neutral decisions, where the model didn&apos;t clearly favor
+        one value over the other, are excluded.
       </p>
       <p>
-        Each vignette runs 25 scenarios, so the count tends to land near multiples of 25.
-        Multiple runs of the same vignette add to the total.
+        Each vignette runs 25 scenarios, but the count won&apos;t always be a multiple of 25
+        because neutral outcomes are dropped. Multiple runs of the same vignette also add to the total.
       </p>
       <p>
         Domains with more evidence get more weight when calculating the pooled win rate —
