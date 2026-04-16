@@ -145,24 +145,19 @@ export function ksFromCounts(
 function countsToSample(counts: Record<string, number>): number[] {
   const sample: number[] = [];
   const bucketScoreByKey: Record<string, number> = {
-    opponentStrongly: 1,
-    opponentSomewhat: 2,
-    neutral: 3,
-    somewhat: 4,
-    strongly: 5,
-    1: 1,
-    2: 2,
-    3: 3,
-    4: 4,
-    5: 5,
+    opponentStrongly: -2,
+    opponentSomewhat: -1,
+    neutral: 0,
+    somewhat: 1,
+    strongly: 2,
   };
   for (const [value, count] of Object.entries(counts)) {
     if (!Number.isFinite(count) || count <= 0) {
       continue;
     }
 
-    const numValue = bucketScoreByKey[value] ?? Number(value);
-    if (!Number.isFinite(numValue)) {
+    const numValue = bucketScoreByKey[value];
+    if (numValue === undefined || !Number.isFinite(numValue)) {
       continue;
     }
 

@@ -31,9 +31,7 @@ function createTranscript(
           source: 'deterministic',
         },
         legacy: {
-          rawScore: 5,
-          canonicalScore: 5,
-        },
+          },
       }
     : decisionCode === '4'
       ? {
@@ -56,9 +54,7 @@ function createTranscript(
             source: 'deterministic',
           },
           legacy: {
-            rawScore: 4,
-            canonicalScore: 4,
-          },
+            },
         }
       : decisionCode === '3'
         ? {
@@ -81,9 +77,7 @@ function createTranscript(
               source: 'deterministic',
             },
             legacy: {
-              rawScore: 3,
-              canonicalScore: 3,
-            },
+              },
           }
         : decisionCode === '2'
           ? {
@@ -106,9 +100,7 @@ function createTranscript(
                 source: 'deterministic',
               },
               legacy: {
-                rawScore: 2,
-                canonicalScore: 2,
-              },
+                },
             }
           : decisionCode === '1'
             ? {
@@ -131,9 +123,7 @@ function createTranscript(
                   source: 'deterministic',
                 },
                 legacy: {
-                  rawScore: 1,
-                  canonicalScore: 1,
-                },
+                  },
               }
             : null;
 

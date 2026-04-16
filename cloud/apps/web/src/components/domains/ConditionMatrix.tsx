@@ -59,32 +59,17 @@ function validateMatrixCondition(condition: MatrixCondition): string | null {
 }
 
 function getConditionMatrixDisplay(condition: MatrixCondition): {
-  label: '0' | '1' | '2' | '-';
+  label: '0' | '1' | '2';
   isOpponent: boolean;
   backgroundColor: string | undefined;
   textColorClass: string;
 } {
-  const prioritized = condition.prioritized;
-  const deprioritized = condition.deprioritized;
-  const totalDirectionalTrials = prioritized + deprioritized;
-
-  if (totalDirectionalTrials === 0 || prioritized === deprioritized) {
-    return {
-      label: '-',
-      isOpponent: false,
-      backgroundColor: undefined,
-      textColorClass: 'text-gray-400',
-    };
-  }
-
-  const isOpponent = deprioritized > prioritized;
-
-  // Strength score: weighted average of the winning side's conviction.
-  // Same formula as canonicalConditionSummary.ts:winnerScore.
-  // 2 * strong + 1 * somewhat, divided by total trials.
+  const isOpponent = condition.deprioritized > condition.prioritized;
   const winnerStrongly = isOpponent ? condition.opponentStrongly : condition.strongly;
   const winnerSomewhat = isOpponent ? condition.opponentSomewhat : condition.somewhat;
-  const winnerScore = (2 * winnerStrongly + 1 * winnerSomewhat) / Math.max(1, condition.totalTrials);
+  const winnerScore = condition.totalTrials === 0
+    ? 0
+    : (2 * winnerStrongly + 1 * winnerSomewhat) / condition.totalTrials;
 
   // Round to nearest integer for the cell label: 0 (neutral), 1 (somewhat), 2 (strongly)
   const strengthLabel = String(Math.round(winnerScore)) as '0' | '1' | '2';

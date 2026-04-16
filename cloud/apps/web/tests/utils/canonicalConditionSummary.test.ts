@@ -46,9 +46,7 @@ function createTranscript(
             source: 'deterministic',
           },
           legacy: {
-            rawScore: direction === 'favor_first' ? 5 : direction === 'favor_second' ? 1 : 3,
-            canonicalScore: direction === 'favor_first' ? 5 : direction === 'favor_second' ? 1 : 3,
-          },
+            },
         },
   } as Transcript;
 }
@@ -94,9 +92,7 @@ function createTranscriptKeysMismatch(id: string): Transcript {
         source: 'deterministic',
       },
       legacy: {
-        rawScore: 5,
-        canonicalScore: 5,
-      },
+        },
     },
   } as Transcript;
 }

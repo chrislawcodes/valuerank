@@ -87,15 +87,9 @@ export type TranscriptDecisionModelV2Canonical = {
   source: 'deterministic' | 'manual' | 'error' | 'unknown';
 };
 
-export type TranscriptDecisionModelV2LegacyCompat = {
-  rawScore: 1 | 2 | 3 | 4 | 5 | null;
-  canonicalScore: 1 | 2 | 3 | 4 | 5 | null;
-};
-
 export type TranscriptDecisionModelV2 = {
   raw: TranscriptDecisionModelV2RawEvidence;
   canonical: TranscriptDecisionModelV2Canonical;
-  legacy: TranscriptDecisionModelV2LegacyCompat;
 };
 
 export type Transcript = {

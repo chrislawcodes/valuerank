@@ -114,8 +114,6 @@ function createRenderableTranscript(
         ...overrides.canonical,
       },
       legacy: {
-        rawScore: null,
-        canonicalScore: 1,
         ...overrides.legacy,
       },
     },
@@ -343,8 +341,8 @@ describe('DomainAnalysisValueDetail', () => {
     expect(rows.slice(2).map((row) => within(row).getAllByRole('cell')[1].textContent?.trim())).toEqual([
       '1',  // Condition 1: strength 1 (selected wins)
       '1',  // Condition 2: strength 1 (opponent wins — shown in orange)
-      '-',  // Condition 3: tied
-      '-',  // Condition 4: no directional trials
+      '0',  // Condition 3: tied
+      '0',  // Condition 4: no directional trials
       '2',  // Condition 5: strength 2 (selected wins)
     ]);
 

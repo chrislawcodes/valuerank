@@ -19,19 +19,19 @@ export type DecisionDistributionCounts = Record<DecisionDistributionBucketCode, 
 function normalizeBucketCode(rawCode: string): DecisionDistributionBucketCode | null {
   const normalized = rawCode.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 
-  if (normalized === '1' || normalized === 'opponentstrongly' || normalized === 'stronglyopponent') {
+  if (normalized === 'opponentstrongly' || normalized === 'stronglyopponent') {
     return 'opponentStrongly';
   }
-  if (normalized === '2' || normalized === 'opponentsomewhat' || normalized === 'somewhatopponent') {
+  if (normalized === 'opponentsomewhat' || normalized === 'somewhatopponent') {
     return 'opponentSomewhat';
   }
-  if (normalized === '3' || normalized === 'neutral' || normalized === 'middle') {
+  if (normalized === 'neutral' || normalized === 'middle') {
     return 'neutral';
   }
-  if (normalized === '4' || normalized === 'somewhat' || normalized === 'somewhatthis') {
+  if (normalized === 'somewhat' || normalized === 'somewhatthis') {
     return 'somewhat';
   }
-  if (normalized === '5' || normalized === 'strongly' || normalized === 'stronglythis') {
+  if (normalized === 'strongly' || normalized === 'stronglythis') {
     return 'strongly';
   }
 
@@ -47,14 +47,7 @@ function formatBucketLabel(
   code: DecisionDistributionBucketCode,
   dimensionLabels?: Record<string, string>,
 ): string {
-  const sourceKeyByCode: Record<DecisionDistributionBucketCode, string> = {
-    opponentStrongly: '1',
-    opponentSomewhat: '2',
-    neutral: '3',
-    somewhat: '4',
-    strongly: '5',
-  };
-  const label = dimensionLabels?.[sourceKeyByCode[code]]?.trim();
+  const label = dimensionLabels?.[code]?.trim();
   if (label && label.length > 0) {
     return label;
   }

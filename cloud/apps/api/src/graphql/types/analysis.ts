@@ -45,7 +45,7 @@ type PerScenarioVarianceStats = {
   max: number;
   range: number;
   // Directional stability fields (optional - populated by Waves 2 and 3)
-  scoreCounts?: Record<string, number>;
+  directionCounts?: Record<string, number>;
   direction?: 'A' | 'B' | 'NEUTRAL' | null;
   directionalAgreement?: number | null;
   medianSignedDistance?: number | null;
@@ -73,7 +73,7 @@ type ScenarioVarianceEntry = {
   range: number;
   sampleCount: number;
   mean: number;
-  scoreCounts?: Record<string, number>;
+  directionCounts?: Record<string, number>;
   direction?: 'A' | 'B' | 'NEUTRAL' | null;
   directionalAgreement?: number | null;
   medianSignedDistance?: number | null;

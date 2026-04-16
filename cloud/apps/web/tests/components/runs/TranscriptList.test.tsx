@@ -200,9 +200,7 @@ describe('TranscriptList', () => {
           source: 'deterministic',
         },
         legacy: {
-          rawScore: null,
-          canonicalScore: null,
-        },
+          },
       },
     });
 
@@ -243,9 +241,7 @@ describe('TranscriptList', () => {
           source: 'deterministic',
         },
         legacy: {
-          rawScore: null,
-          canonicalScore: null,
-        },
+          },
       },
     });
 
@@ -368,7 +364,7 @@ describe('TranscriptList', () => {
       />
     );
 
-    expect(screen.getByText('1 - Strongly support (Achievement)')).toBeInTheDocument();
+    expect(screen.getByText('5 - Strongly support (Benevolence)')).toBeInTheDocument();
   });
 
   it('sorts flat transcript rows by the first value and then the second by default', () => {
@@ -467,9 +463,7 @@ describe('TranscriptList', () => {
     expect(rowIds).toEqual(['t2', 't3', 't1']);
   });
 
-  it('renders decision override dropdown for transcripts with decisionCode "other"', async () => {
-    const user = userEvent.setup();
-    const onDecisionChange = vi.fn();
+  it('renders the raw decision label for transcripts with decisionCode "other"', () => {
     const transcript = createMockTranscript({ decisionCode: 'other' });
 
     render(
@@ -477,14 +471,10 @@ describe('TranscriptList', () => {
         transcripts={[transcript]}
         onSelect={mockOnSelect}
         groupByModel={false}
-        onDecisionChange={onDecisionChange}
       />
     );
 
-    const dropdown = screen.getByLabelText(`Set decision for transcript ${transcript.id}`);
     expect(screen.getByText('other')).toBeInTheDocument();
-    await user.selectOptions(dropdown, '4');
-
-    expect(onDecisionChange).toHaveBeenCalledWith(transcript, '4');
+    expect(screen.queryByLabelText(`Set decision for transcript ${transcript.id}`)).not.toBeInTheDocument();
   });
 });

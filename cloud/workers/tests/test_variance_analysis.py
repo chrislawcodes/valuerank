@@ -185,7 +185,6 @@ class TestVarianceAnalysis:
                 "summary": {"score": 1},
                 "decisionModelV2": {
                     "canonical": {"direction": "favor_first", "strength": "lean"},
-                    "legacy": {"rawScore": 1, "canonicalScore": 4},
                 },
                 "scenario": {"name": "Scenario 1"},
             },
@@ -196,7 +195,6 @@ class TestVarianceAnalysis:
                 "summary": {"score": 1},
                 "decisionModelV2": {
                     "canonical": {"direction": "favor_first", "strength": "lean"},
-                    "legacy": {"rawScore": 1, "canonicalScore": 4},
                 },
                 "scenario": {"name": "Scenario 1"},
             },
@@ -219,7 +217,6 @@ class TestVarianceAnalysis:
                 "summary": {"score": 1},
                 "decisionModelV2": {
                     "canonical": {"direction": "favor_first", "strength": "lean"},
-                    "legacy": {"rawScore": 1, "canonicalScore": 4},
                 },
                 "scenario": {"name": "Scenario 1"},
             },
@@ -231,7 +228,6 @@ class TestVarianceAnalysis:
                 "summary": {"score": 1},
                 "decisionModelV2": {
                     "canonical": {"direction": "favor_first", "strength": "lean"},
-                    "legacy": {"rawScore": 1, "canonicalScore": 4},
                 },
                 "scenario": {"name": "Scenario 1"},
             },

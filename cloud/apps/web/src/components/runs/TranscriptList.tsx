@@ -16,7 +16,6 @@ import { formatDisplayLabel } from '../../utils/displayLabels';
 import {
   hasRenderableTranscriptDecisionModelV2,
   getTranscriptDecisionSortValue,
-  normalizeLegacyDecisionCode,
   type TranscriptDecisionDisplayMode,
 } from '../../utils/transcriptDecisionModel';
 import { Tooltip } from '../ui/Tooltip';
@@ -165,7 +164,6 @@ function isSameSortColumn(a: SortColumn, b: SortColumn): boolean {
 function getTranscriptDecisionValue(
   transcript: Transcript,
   displayMode: TranscriptDecisionDisplayMode,
-  normalizedDecisionTranscriptIds?: Set<string>,
 ): string | number {
   if (displayMode === 'audit') {
     if (!hasRenderableTranscriptDecisionModelV2(transcript)) {
@@ -174,14 +172,7 @@ function getTranscriptDecisionValue(
     return getTranscriptDecisionSortValue(transcript, displayMode);
   }
 
-  const sortValue = getTranscriptDecisionSortValue(transcript, displayMode);
-  if (
-    normalizedDecisionTranscriptIds?.has(transcript.id)
-    && ['1', '2', '3', '4', '5'].includes(String(sortValue))
-  ) {
-    return normalizeLegacyDecisionCode(String(sortValue), true);
-  }
-  return sortValue;
+  return getTranscriptDecisionSortValue(transcript, displayMode);
 }
 
 function SortHeaderButton({
@@ -334,8 +325,8 @@ export function TranscriptList({
       }
       case 'decision':
         return compareDimensionValues(
-          getTranscriptDecisionValue(a, decisionDisplayMode, normalizedDecisionTranscriptIds),
-          getTranscriptDecisionValue(b, decisionDisplayMode, normalizedDecisionTranscriptIds),
+          getTranscriptDecisionValue(a, decisionDisplayMode),
+          getTranscriptDecisionValue(b, decisionDisplayMode),
         );
       case 'created':
         return a.createdAt.localeCompare(b.createdAt);

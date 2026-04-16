@@ -64,9 +64,7 @@ function createTranscript(
           source: 'deterministic',
         },
         legacy: {
-          rawScore: 5,
-          canonicalScore: 5,
-        },
+          },
       }
       : decisionCode === '1'
       ? {
@@ -89,9 +87,7 @@ function createTranscript(
             source: 'deterministic',
           },
           legacy: {
-            rawScore: 1,
-            canonicalScore: 1,
-          },
+            },
         }
       : null;
 
@@ -154,9 +150,7 @@ function createRun(
       source: 'deterministic',
     },
     legacy: {
-      rawScore: null,
-      canonicalScore: null,
-    },
+      },
   };
 
   return {

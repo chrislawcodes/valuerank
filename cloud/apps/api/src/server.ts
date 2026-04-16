@@ -100,8 +100,19 @@ export function createServer() {
   app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
     req.log.error({ err }, 'Request failed');
 
-    if (err instanceof AppError) {
-      res.status(err.statusCode).json({ error: err.code, message: err.message });
+    const appError =
+      err instanceof AppError
+        ? err
+        : typeof err === 'object' && err !== null && 'statusCode' in err && 'code' in err && 'message' in err
+          ? {
+              statusCode: typeof err.statusCode === 'number' ? err.statusCode : 500,
+              code: typeof err.code === 'string' ? err.code : 'INTERNAL_ERROR',
+              message: typeof err.message === 'string' ? err.message : 'Something went wrong',
+            }
+          : null;
+
+    if (appError !== null) {
+      res.status(appError.statusCode).json({ error: appError.code, message: appError.message });
     } else {
       res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Something went wrong' });
     }

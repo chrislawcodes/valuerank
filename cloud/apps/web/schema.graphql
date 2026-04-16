@@ -1845,7 +1845,6 @@ type OrderInvarianceRow {
   modelId: String!
   modelLabel: String!
   ordinalDistance: Int
-  rawScore: Int
   variantType: String
   vignetteId: ID!
   vignetteTitle: String!

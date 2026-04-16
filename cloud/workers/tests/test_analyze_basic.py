@@ -237,10 +237,6 @@ class TestAnalyzeBasicIntegration:
                             "direction": "favor_first",
                             "strength": "lean",
                         },
-                        "legacy": {
-                            "rawScore": 1,
-                            "canonicalScore": 4,
-                        },
                     },
                     "scenario": {"dimensions": {"stakes": "high"}},
                 },
@@ -269,10 +265,6 @@ class TestAnalyzeBasicIntegration:
                         "canonical": {
                             "direction": "favor_first",
                             "strength": "lean",
-                        },
-                        "legacy": {
-                            "rawScore": 1,
-                            "canonicalScore": 4,
                         },
                     },
                     "scenario": {"dimensions": {"stakes": "high"}},

@@ -7,7 +7,6 @@ import {
   formatCanonicalDecisionHeadline,
   getTranscriptDecisionAuditBadge,
   hasRenderableTranscriptDecisionModelV2,
-  normalizeLegacyDecisionCode,
   type TranscriptDecisionDisplayMode,
 } from '../../utils/transcriptDecisionModel';
 
@@ -156,17 +155,13 @@ function extractDecision(content: unknown): string {
 function getLegacyDecisionDisplay(
   transcript: Transcript,
   decision: string,
-  normalizeDecision: boolean,
   dimensions?: Record<string, string | number> | null,
 ): string {
   const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
   const decisionScaleLabels = decisionMetadata?.scaleLabels ?? [];
-  const normalizedDecision = normalizeLegacyDecisionCode(decision, normalizeDecision);
-  const decisionScaleEntry = decisionScaleLabels.find((entry) => entry.code === String(normalizedDecision));
+  const decisionScaleEntry = decisionScaleLabels.find((entry) => entry.code === String(decision));
   const rawMatchedLabel = (decisionMetadata as Record<string, unknown> | null)?.['matchedLabel'] as string | null;
-  const labelText = normalizeDecision
-    ? (decisionScaleEntry?.label ?? null)
-    : (rawMatchedLabel ?? decisionScaleEntry?.label ?? null);
+  const labelText = rawMatchedLabel ?? decisionScaleEntry?.label ?? null;
   const shortDirection = labelText != null ? extractShortDirection(labelText) : null;
   const primaryDimKey = dimensions != null ? (Object.keys(dimensions)[0] ?? null) : null;
   const subject = labelText != null
@@ -176,9 +171,9 @@ function getLegacyDecisionDisplay(
 
   return shortDirection != null
     ? (formattedSubject != null
-        ? `${normalizedDecision} - ${shortDirection} (${formattedSubject})`
-        : (primaryDimKey != null ? `${normalizedDecision} - ${shortDirection} ${formatDisplayLabel(primaryDimKey)}` : `${normalizedDecision} - ${shortDirection}`))
-    : String(normalizedDecision);
+        ? `${decision} - ${shortDirection} (${formattedSubject})`
+        : (primaryDimKey != null ? `${decision} - ${shortDirection} ${formatDisplayLabel(primaryDimKey)}` : `${decision} - ${shortDirection}`))
+    : String(decision);
 }
 
 export function TranscriptRow({
@@ -197,12 +192,12 @@ export function TranscriptRow({
 }: TranscriptRowProps) {
   const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
   const showGrid = !compact && Boolean(gridTemplateColumns);
-  const rawDecision = transcript.decisionModelV2?.legacy?.canonicalScore ?? transcript.decisionCode ?? extractDecision(transcript.content);
+  const rawDecision = transcript.decisionCode ?? extractDecision(transcript.content);
   const decisionScaleLabels = decisionMetadata?.scaleLabels ?? [];
   const rowDecisionDisplayMode = decisionDisplayMode ?? (
     hasRenderableTranscriptDecisionModelV2(transcript) ? 'audit' : 'legacy'
   );
-  const legacyDecisionDisplay = getLegacyDecisionDisplay(transcript, String(rawDecision), normalizeDecision, dimensions);
+  const legacyDecisionDisplay = getLegacyDecisionDisplay(transcript, String(rawDecision), dimensions);
   const canonicalDecision = transcript.decisionModelV2?.canonical ?? null;
   const canonicalDecisionDisplay = formatCanonicalDecisionHeadline(transcript);
   const auditDecisionBadge = rowDecisionDisplayMode === 'audit'
@@ -212,7 +207,7 @@ export function TranscriptRow({
   const decisionDisplay = rowDecisionDisplayMode === 'audit'
     ? canonicalDecisionDisplay
     : legacyDecisionDisplay;
-  const isAnalyzableDecision = ['1', '2', '3', '4', '5'].includes(String(rawDecision));
+  const isAnalyzableDecision = Boolean(rawDecision);
   const isDecisionOverrideAllowed = rowDecisionDisplayMode === 'legacy' && Boolean(onDecisionChange) && (
     decisionMetadata?.parseClass === 'ambiguous'
     || !isAnalyzableDecision
