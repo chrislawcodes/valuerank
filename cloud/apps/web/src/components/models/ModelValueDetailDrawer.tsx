@@ -104,9 +104,9 @@ export function ModelValueDetailDrawer({
     <div className="space-y-2">
       <p>
         <strong>What it means:</strong> A weighted average of win rates across each eligible domain.
-        Head-to-head comparisons were run where judges picked which model response better showed this value.
-        Win rate = % of those comparisons this model won.
-        Domains with more comparisons (higher evidence weight) count more in the average.
+        Each scenario pitted two values head-to-head and was scored as prioritized, deprioritized, or neutral.
+        Win rate = prioritized ÷ (prioritized + deprioritized + neutral) — all outcomes count in the denominator.
+        Domains with more scenarios (higher evidence weight) count more in the average.
       </p>
       <p>
         <strong>Formula:</strong> add up (weight × win rate) for every domain, then divide by the total weight.
@@ -232,14 +232,13 @@ export function ModelValueDetailDrawer({
   const evidenceWeightTooltip = (
     <div className="space-y-2">
       <p>
-        <strong>What it means:</strong> The number of individual scenario-level decisions recorded
-        for this model and value in this domain — specifically, the count of non-neutral outcomes
-        (prioritized + deprioritized). Neutral decisions, where the model didn&apos;t clearly favor
-        one value over the other, are excluded.
+        <strong>What it means:</strong> The total number of scenario-level decisions recorded
+        for this model and value in this domain — prioritized, deprioritized, and neutral outcomes
+        all count. One scenario = one decision = one unit of evidence.
       </p>
       <p>
-        Each vignette runs 25 scenarios, but the count won&apos;t always be a multiple of 25
-        because neutral outcomes are dropped. Multiple runs of the same vignette also add to the total.
+        Each vignette runs 25 scenarios, so the count tends to land near multiples of 25.
+        Multiple runs of the same vignette add to the total.
       </p>
       <p>
         Domains with more evidence get more weight when calculating the pooled win rate —
