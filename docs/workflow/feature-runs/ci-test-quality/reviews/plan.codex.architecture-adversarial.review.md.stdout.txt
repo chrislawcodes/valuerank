@@ -1,0 +1,10 @@
+## Findings
+- [MEDIUM][UNVERIFIED] Wave 1 removes `src/**/*.test.ts` from Vitest discovery and deletes/moves files based on the assumption that coverage already exists elsewhere. If any `src` test remains relevant, CI will silently stop running it, which is a coverage regression rather than a cleanup.
+- [MEDIUM] Adding `--force` to `turbo build` in CI is a blunt workaround. It guarantees rebuilds but also bypasses cache correctness signals, so the workflow can keep passing while the underlying stale-build or dependency-graph problem remains hidden and every run becomes slower.
+- [MEDIUM][UNVERIFIED] Wave 2 changes `access-tracking` from `void` to `Promise<void>` but only names one test file for updates. That is an API contract change, so any unaccounted caller or middleware wrapper can now observe different async timing or unhandled rejections.
+- [LOW][UNVERIFIED] Wave 5’s split plan is too vague about fixture ownership and shared mocks. Without a defined boundary for what lives in the extracted fixture files, the split can recreate hidden coupling across files or duplicate setup in slightly different ways.
+
+## Residual Risks
+- The plan still relies on the moved tests being behaviorally equivalent after path changes, glob changes, and file deletions.
+- Wave 4 only addresses the currently identified async `getBy*` patterns; similar flake patterns elsewhere in the web suite may remain.
+- The CI changes may reduce visible flakiness in the short term while increasing runtime or hiding the root cause of cache-related failures.

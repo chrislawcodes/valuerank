@@ -7,7 +7,7 @@ import {
   selectPrimaryDefinitionCounts,
   computePerModelTrialCounts,
   deduplicateRunsByGroupId,
-} from '../domain-coverage-utils.js';
+} from '../../../src/graphql/queries/domain-coverage-utils.js';
 
 describe('extractValuePair', () => {
   it('normalizes lowercase dimension names to canonical coverage keys', () => {
@@ -177,7 +177,7 @@ describe('selectPrimaryDefinitionCounts', () => {
 
   it('deduplicates with samplesPerScenario increments across companions', () => {
     // 3 paired batch groups shared across A_first and B_first.
-    // Group 1: sps=1, Group 2: sps=1, Group 3: sps=3 → total 5 batches per side.
+    // Group 1: sps=1, Group 2: sps=1, Group 3: sps=3 -> total 5 batches per side.
     const batchCounts = new Map<string, number>([
       ['def-a-first', 10],
       ['def-b-first', 10],
@@ -335,7 +335,7 @@ describe('computePerModelTrialCounts', () => {
     ]);
   });
 
-  it('counts paired runs as-is — caller must dedup via deduplicateRunsByGroupId first', () => {
+  it('counts paired runs as-is - caller must dedup via deduplicateRunsByGroupId first', () => {
     // computePerModelTrialCounts does NOT deduplicate. The call site is responsible.
     // This test documents the contract: duplicate group IDs are counted twice here.
     const runs = [
@@ -343,7 +343,7 @@ describe('computePerModelTrialCounts', () => {
       { config: { jobChoiceBatchGroupId: 'group-1', samplesPerScenario: 1 }, transcripts: [{ modelId: 'model-a' }] },
     ];
     const result = computePerModelTrialCounts(runs, ['model-a'], labels);
-    expect(result.minTrialCount).toBe(2); // both counted — caller didn't dedup
+    expect(result.minTrialCount).toBe(2); // both counted - caller didn't dedup
   });
 
   it('respects samplesPerScenario as the increment', () => {
@@ -378,7 +378,7 @@ describe('deduplicateRunsByGroupId', () => {
     const runs = [
       { config: { jobChoiceBatchGroupId: 'g1' }, transcripts: [] },
       { config: { jobChoiceBatchGroupId: 'g1' }, transcripts: [] }, // duplicate
-      { config: {}, transcripts: [] }, // ungrouped — keep
+      { config: {}, transcripts: [] }, // ungrouped - keep
       { config: { jobChoiceBatchGroupId: 'g2' }, transcripts: [] },
     ];
     expect(deduplicateRunsByGroupId(runs)).toHaveLength(3);
@@ -399,6 +399,6 @@ describe('deduplicateRunsByGroupId', () => {
     ];
     const deduped = deduplicateRunsByGroupId(runs);
     const result = computePerModelTrialCounts(deduped, ['model-a'], labels);
-    expect(result.minTrialCount).toBe(10); // 2 groups × 5 samples each
+    expect(result.minTrialCount).toBe(10); // 2 groups x 5 samples each
   });
 });

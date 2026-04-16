@@ -1,0 +1,5540 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 4a975728..ddd2f0ff 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -34,6 +34,8 @@ jobs:
+         with:
+           path: cloud/node_modules
+           key: ${{ runner.os }}-node-modules-${{ hashFiles('cloud/package-lock.json') }}
++          restore-keys: |
++            ${{ runner.os }}-node-modules-
+ 
+       - name: Install Node dependencies
+         if: steps.node-cache.outputs.cache-hit != 'true'
+@@ -75,6 +77,8 @@ jobs:
+         with:
+           path: cloud/node_modules
+           key: ${{ runner.os }}-node-modules-${{ hashFiles('cloud/package-lock.json') }}
++          restore-keys: |
++            ${{ runner.os }}-node-modules-
+ 
+       - name: Install Node dependencies
+         if: steps.node-cache.outputs.cache-hit != 'true'
+@@ -86,7 +90,7 @@ jobs:
+         env:
+           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+-        run: npx turbo build --filter=@valuerank/shared
++        run: npx turbo build --filter=@valuerank/shared --force
+ 
+       - name: Run web tests (shard ${{ matrix.shard }}/${{ matrix.total }})
+         working-directory: cloud/apps/web
+@@ -96,6 +100,7 @@ jobs:
+     name: API & DB Tests
+     runs-on: ubuntu-latest
+     needs: lint-build
++    timeout-minutes: 20
+ 
+     services:
+       postgres:
+@@ -131,6 +136,8 @@ jobs:
+         with:
+           path: cloud/node_modules
+           key: ${{ runner.os }}-node-modules-${{ hashFiles('cloud/package-lock.json') }}
++          restore-keys: |
++            ${{ runner.os }}-node-modules-
+ 
+       - name: Install Node dependencies
+         if: steps.node-cache.outputs.cache-hit != 'true'
+diff --git a/cloud/apps/api/src/cli/create-user.test.ts b/cloud/apps/api/src/cli/create-user.test.ts
+deleted file mode 100644
+index bd6299f4..00000000
+--- a/cloud/apps/api/src/cli/create-user.test.ts
++++ /dev/null
+@@ -1,21 +0,0 @@
+-import { describe, expect, it } from 'vitest';
+-import { ValidationError } from '@valuerank/shared';
+-import { validateEmail, validatePassword } from './create-user.js';
+-
+-describe('create-user validations', () => {
+-  it('accepts valid emails', () => {
+-    expect(() => validateEmail('user@example.com')).not.toThrow();
+-  });
+-
+-  it('rejects invalid emails', () => {
+-    expect(() => validateEmail('not-an-email')).toThrow(ValidationError);
+-  });
+-
+-  it('accepts valid passwords', () => {
+-    expect(() => validatePassword('long-enough')).not.toThrow();
+-  });
+-
+-  it('rejects short passwords', () => {
+-    expect(() => validatePassword('short')).toThrow(ValidationError);
+-  });
+-});
+diff --git a/cloud/apps/api/src/middleware/access-tracking.ts b/cloud/apps/api/src/middleware/access-tracking.ts
+index cef80050..9f8b4d75 100644
+--- a/cloud/apps/api/src/middleware/access-tracking.ts
++++ b/cloud/apps/api/src/middleware/access-tracking.ts
+@@ -18,8 +18,8 @@ const log = createLogger('access-tracking');
+  * This ensures that polling the run status doesn't reset updatedAt, which would
+  * prevent the orphaned run recovery service from detecting stuck runs.
+  */
+-export function trackRunAccess(runId: string): void {
+-  db.$executeRaw`
++export function trackRunAccess(runId: string): Promise<void> {
++  return db.$executeRaw`
+     UPDATE runs
+     SET last_accessed_at = NOW()
+     WHERE id = ${runId}
+@@ -37,8 +37,8 @@ export function trackRunAccess(runId: string): void {
+  * Update lastAccessedAt for a transcript.
+  * Non-blocking - fire and forget.
+  */
+-export function trackTranscriptAccess(transcriptId: string): void {
+-  db.transcript
++export function trackTranscriptAccess(transcriptId: string): Promise<void> {
++  return db.transcript
+     .update({
+       where: { id: transcriptId },
+       data: { lastAccessedAt: new Date() },
+@@ -56,10 +56,10 @@ export function trackTranscriptAccess(transcriptId: string): void {
+  * Update lastAccessedAt for multiple transcripts.
+  * Non-blocking - fire and forget.
+  */
+-export function trackTranscriptsAccess(transcriptIds: string[]): void {
+-  if (transcriptIds.length === 0) return;
++export function trackTranscriptsAccess(transcriptIds: string[]): Promise<void> {
++  if (transcriptIds.length === 0) return Promise.resolve();
+ 
+-  db.transcript
++  return db.transcript
+     .updateMany({
+       where: { id: { in: transcriptIds } },
+       data: { lastAccessedAt: new Date() },
+@@ -77,8 +77,8 @@ export function trackTranscriptsAccess(transcriptIds: string[]): void {
+  * Update lastAccessedAt for a definition.
+  * Non-blocking - fire and forget.
+  */
+-export function trackDefinitionAccess(definitionId: string): void {
+-  db.definition
++export function trackDefinitionAccess(definitionId: string): Promise<void> {
++  return db.definition
+     .update({
+       where: { id: definitionId },
+       data: { lastAccessedAt: new Date() },
+diff --git a/cloud/apps/api/src/graphql/queries/__tests__/domain-coverage.test.ts b/cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts
+similarity index 97%
+rename from cloud/apps/api/src/graphql/queries/__tests__/domain-coverage.test.ts
+rename to cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts
+index 4bd4bacc..6b665ade 100644
+--- a/cloud/apps/api/src/graphql/queries/__tests__/domain-coverage.test.ts
++++ b/cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts
+@@ -177,7 +177,7 @@ describe('selectPrimaryDefinitionCounts', () => {
+ 
+   it('deduplicates with samplesPerScenario increments across companions', () => {
+     // 3 paired batch groups shared across A_first and B_first.
+-    // Group 1: sps=1, Group 2: sps=1, Group 3: sps=3 → total 5 batches per side.
++    // Group 1: sps=1, Group 2: sps=1, Group 3: sps=3 -> total 5 batches per side.
+     const batchCounts = new Map<string, number>([
+       ['def-a-first', 10],
+       ['def-b-first', 10],
+@@ -335,7 +335,7 @@ describe('computePerModelTrialCounts', () => {
+     ]);
+   });
+ 
+-  it('counts paired runs as-is — caller must dedup via deduplicateRunsByGroupId first', () => {
++  it('counts paired runs as-is - caller must dedup via deduplicateRunsByGroupId first', () => {
+     // computePerModelTrialCounts does NOT deduplicate. The call site is responsible.
+     // This test documents the contract: duplicate group IDs are counted twice here.
+     const runs = [
+@@ -343,7 +343,7 @@ describe('computePerModelTrialCounts', () => {
+       { config: { jobChoiceBatchGroupId: 'group-1', samplesPerScenario: 1 }, transcripts: [{ modelId: 'model-a' }] },
+     ];
+     const result = computePerModelTrialCounts(runs, ['model-a'], labels);
+-    expect(result.minTrialCount).toBe(2); // both counted — caller didn't dedup
++    expect(result.minTrialCount).toBe(2); // both counted - caller didn't dedup
+   });
+ 
+   it('respects samplesPerScenario as the increment', () => {
+@@ -378,7 +378,7 @@ describe('deduplicateRunsByGroupId', () => {
+     const runs = [
+       { config: { jobChoiceBatchGroupId: 'g1' }, transcripts: [] },
+       { config: { jobChoiceBatchGroupId: 'g1' }, transcripts: [] }, // duplicate
+-      { config: {}, transcripts: [] }, // ungrouped — keep
++      { config: {}, transcripts: [] }, // ungrouped - keep
+       { config: { jobChoiceBatchGroupId: 'g2' }, transcripts: [] },
+     ];
+     expect(deduplicateRunsByGroupId(runs)).toHaveLength(3);
+@@ -399,6 +399,6 @@ describe('deduplicateRunsByGroupId', () => {
+     ];
+     const deduped = deduplicateRunsByGroupId(runs);
+     const result = computePerModelTrialCounts(deduped, ['model-a'], labels);
+-    expect(result.minTrialCount).toBe(10); // 2 groups × 5 samples each
++    expect(result.minTrialCount).toBe(10); // 2 groups x 5 samples each
+   });
+ });
+diff --git a/cloud/apps/api/tests/middleware/access-tracking.test.ts b/cloud/apps/api/tests/middleware/access-tracking.test.ts
+index eb3a5ee0..3a0f2080 100644
+--- a/cloud/apps/api/tests/middleware/access-tracking.test.ts
++++ b/cloud/apps/api/tests/middleware/access-tracking.test.ts
+@@ -163,10 +163,7 @@ describe('Access Tracking', () => {
+       expect(initialRun?.lastAccessedAt).toBeNull();
+ 
+       // Track access
+-      trackRunAccess(testRunId!);
+-
+-      // Wait for async update
+-      await new Promise((resolve) => setTimeout(resolve, 100));
++      await trackRunAccess(testRunId!);
+ 
+       // Verify update
+       const updatedRun = await db.run.findUnique({
+@@ -180,12 +177,7 @@ describe('Access Tracking', () => {
+       const { trackRunAccess } = await import('../../src/middleware/access-tracking.js');
+ 
+       // Should not throw, just log warning
+-      expect(() => {
+-        trackRunAccess('invalid-id-that-does-not-exist');
+-      }).not.toThrow();
+-
+-      // Wait to ensure promise settles
+-      await new Promise((resolve) => setTimeout(resolve, 100));
++      await expect(trackRunAccess('invalid-id-that-does-not-exist')).resolves.not.toThrow();
+     });
+ 
+     it('trackDefinitionAccess updates lastAccessedAt', async () => {
+@@ -201,10 +193,7 @@ describe('Access Tracking', () => {
+       expect(initialDef?.lastAccessedAt).toBeNull();
+ 
+       // Track access
+-      trackDefinitionAccess(testDefinitionId!);
+-
+-      // Wait for async update
+-      await new Promise((resolve) => setTimeout(resolve, 100));
++      await trackDefinitionAccess(testDefinitionId!);
+ 
+       // Verify update
+       const updatedDef = await db.definition.findUnique({
+@@ -220,12 +209,7 @@ describe('Access Tracking', () => {
+       );
+ 
+       // Should not throw, just log warning
+-      expect(() => {
+-        trackDefinitionAccess('invalid-id-that-does-not-exist');
+-      }).not.toThrow();
+-
+-      // Wait to ensure promise settles
+-      await new Promise((resolve) => setTimeout(resolve, 100));
++      await expect(trackDefinitionAccess('invalid-id-that-does-not-exist')).resolves.not.toThrow();
+     });
+   });
+ 
+@@ -272,10 +256,7 @@ describe('Access Tracking', () => {
+       expect(initialTranscript?.lastAccessedAt).toBeNull();
+ 
+       // Track access
+-      trackTranscriptAccess(testTranscriptId!);
+-
+-      // Wait for async update
+-      await new Promise((resolve) => setTimeout(resolve, 100));
++      await trackTranscriptAccess(testTranscriptId!);
+ 
+       // Verify update
+       const updatedTranscript = await db.transcript.findUnique({
+@@ -291,12 +272,7 @@ describe('Access Tracking', () => {
+       );
+ 
+       // Should not throw, just log warning
+-      expect(() => {
+-        trackTranscriptAccess('invalid-id-that-does-not-exist');
+-      }).not.toThrow();
+-
+-      // Wait to ensure promise settles
+-      await new Promise((resolve) => setTimeout(resolve, 100));
++      await expect(trackTranscriptAccess('invalid-id-that-does-not-exist')).resolves.not.toThrow();
+     });
+ 
+     it('trackTranscriptsAccess updates lastAccessedAt for multiple transcripts', async () => {
+@@ -332,10 +308,7 @@ describe('Access Tracking', () => {
+       expect(initial2?.lastAccessedAt).toBeNull();
+ 
+       // Track access for both
+-      trackTranscriptsAccess([testTranscriptId!, testTranscript2Id!]);
+-
+-      // Wait for async update
+-      await new Promise((resolve) => setTimeout(resolve, 100));
++      await trackTranscriptsAccess([testTranscriptId!, testTranscript2Id!]);
+ 
+       // Verify both were updated
+       const [updated1, updated2] = await Promise.all([
+@@ -358,9 +331,7 @@ describe('Access Tracking', () => {
+       );
+ 
+       // Should return early without error
+-      expect(() => {
+-        trackTranscriptsAccess([]);
+-      }).not.toThrow();
++      await expect(trackTranscriptsAccess([])).resolves.not.toThrow();
+     });
+ 
+     it('trackTranscriptsAccess does not throw for invalid ids', async () => {
+@@ -369,12 +340,7 @@ describe('Access Tracking', () => {
+       );
+ 
+       // Should not throw, just log warning
+-      expect(() => {
+-        trackTranscriptsAccess(['invalid-id-1', 'invalid-id-2']);
+-      }).not.toThrow();
+-
+-      // Wait to ensure promise settles
+-      await new Promise((resolve) => setTimeout(resolve, 100));
++      await expect(trackTranscriptsAccess(['invalid-id-1', 'invalid-id-2'])).resolves.not.toThrow();
+     });
+   });
+ });
+diff --git a/cloud/apps/api/src/queue/handlers/__tests__/summarize-persistence.test.ts b/cloud/apps/api/tests/queue/handlers/summarize-persistence.test.ts
+similarity index 100%
+rename from cloud/apps/api/src/queue/handlers/__tests__/summarize-persistence.test.ts
+rename to cloud/apps/api/tests/queue/handlers/summarize-persistence.test.ts
+diff --git a/cloud/apps/api/vitest.config.ts b/cloud/apps/api/vitest.config.ts
+index af5e2d31..7545861e 100644
+--- a/cloud/apps/api/vitest.config.ts
++++ b/cloud/apps/api/vitest.config.ts
+@@ -6,7 +6,6 @@ export default defineConfig({
+     environment: 'node',
+     include: [
+       'tests/**/*.test.ts',
+-      'src/**/*.test.ts',
+       '../../scripts/__tests__/**/*.test.ts',
+     ],
+     setupFiles: ['tests/setup.ts'],
+diff --git a/cloud/apps/web/tests/api/export.test.ts b/cloud/apps/web/tests/api/export.test.ts
+index f37d0ede..1924263f 100644
+--- a/cloud/apps/web/tests/api/export.test.ts
++++ b/cloud/apps/web/tests/api/export.test.ts
+@@ -29,31 +29,17 @@ const mockAppendChild = vi.fn();
+ const mockRemoveChild = vi.fn();
+ 
+ describe('exportRunAsCSV', () => {
+-  let originalLocalStorage: Storage;
+-  let originalFetch: typeof fetch;
+-  let originalURL: typeof URL;
+   let exportRunAsCSV: (runId: string) => Promise<void>;
+   let exportRunAdjudicationCSV: (runId: string) => Promise<void>;
+ 
+   beforeEach(async () => {
+-    // Save originals
+-    originalLocalStorage = global.localStorage;
+-    originalFetch = global.fetch;
+-    originalURL = global.URL;
+-
+-    // Mock localStorage
+-    Object.defineProperty(global, 'localStorage', {
+-      value: mockLocalStorage,
+-      writable: true,
+-    });
+-
+-    // Mock fetch
+-    global.fetch = mockFetch;
+-
+-    // Mock URL
+     mockCreateObjectURL.mockReturnValue('blob:test-url');
+-    global.URL.createObjectURL = mockCreateObjectURL;
+-    global.URL.revokeObjectURL = mockRevokeObjectURL;
++    vi.stubGlobal('localStorage', mockLocalStorage);
++    vi.stubGlobal('fetch', mockFetch);
++    vi.stubGlobal('URL', {
++      createObjectURL: mockCreateObjectURL,
++      revokeObjectURL: mockRevokeObjectURL,
++    });
+ 
+     // Mock document.createElement
+     const mockLink = {
+@@ -75,13 +61,7 @@ describe('exportRunAsCSV', () => {
+   });
+ 
+   afterEach(() => {
+-    // Restore originals
+-    Object.defineProperty(global, 'localStorage', {
+-      value: originalLocalStorage,
+-      writable: true,
+-    });
+-    global.fetch = originalFetch;
+-    global.URL = originalURL;
++    vi.unstubAllGlobals();
+     vi.restoreAllMocks();
+   });
+ 
+@@ -193,30 +173,16 @@ describe('exportRunAsCSV', () => {
+ });
+ 
+ describe('exportDefinitionAsMd', () => {
+-  let originalLocalStorage: Storage;
+-  let originalFetch: typeof fetch;
+-  let originalURL: typeof URL;
+   let exportDefinitionAsMd: (definitionId: string) => Promise<void>;
+ 
+   beforeEach(async () => {
+-    // Save originals
+-    originalLocalStorage = global.localStorage;
+-    originalFetch = global.fetch;
+-    originalURL = global.URL;
+-
+-    // Mock localStorage
+-    Object.defineProperty(global, 'localStorage', {
+-      value: mockLocalStorage,
+-      writable: true,
+-    });
+-
+-    // Mock fetch
+-    global.fetch = mockFetch;
+-
+-    // Mock URL
+     mockCreateObjectURL.mockReturnValue('blob:test-url');
+-    global.URL.createObjectURL = mockCreateObjectURL;
+-    global.URL.revokeObjectURL = mockRevokeObjectURL;
++    vi.stubGlobal('localStorage', mockLocalStorage);
++    vi.stubGlobal('fetch', mockFetch);
++    vi.stubGlobal('URL', {
++      createObjectURL: mockCreateObjectURL,
++      revokeObjectURL: mockRevokeObjectURL,
++    });
+ 
+     // Mock document.createElement
+     const mockLink = {
+@@ -237,13 +203,7 @@ describe('exportDefinitionAsMd', () => {
+   });
+ 
+   afterEach(() => {
+-    // Restore originals
+-    Object.defineProperty(global, 'localStorage', {
+-      value: originalLocalStorage,
+-      writable: true,
+-    });
+-    global.fetch = originalFetch;
+-    global.URL = originalURL;
++    vi.unstubAllGlobals();
+     vi.restoreAllMocks();
+   });
+ 
+@@ -331,30 +291,16 @@ describe('exportDefinitionAsMd', () => {
+ });
+ 
+ describe('exportScenariosAsYaml', () => {
+-  let originalLocalStorage: Storage;
+-  let originalFetch: typeof fetch;
+-  let originalURL: typeof URL;
+   let exportScenariosAsYaml: (definitionId: string) => Promise<void>;
+ 
+   beforeEach(async () => {
+-    // Save originals
+-    originalLocalStorage = global.localStorage;
+-    originalFetch = global.fetch;
+-    originalURL = global.URL;
+-
+-    // Mock localStorage
+-    Object.defineProperty(global, 'localStorage', {
+-      value: mockLocalStorage,
+-      writable: true,
+-    });
+-
+-    // Mock fetch
+-    global.fetch = mockFetch;
+-
+-    // Mock URL
+     mockCreateObjectURL.mockReturnValue('blob:test-url');
+-    global.URL.createObjectURL = mockCreateObjectURL;
+-    global.URL.revokeObjectURL = mockRevokeObjectURL;
++    vi.stubGlobal('localStorage', mockLocalStorage);
++    vi.stubGlobal('fetch', mockFetch);
++    vi.stubGlobal('URL', {
++      createObjectURL: mockCreateObjectURL,
++      revokeObjectURL: mockRevokeObjectURL,
++    });
+ 
+     // Mock document.createElement
+     const mockLink = {
+@@ -375,13 +321,7 @@ describe('exportScenariosAsYaml', () => {
+   });
+ 
+   afterEach(() => {
+-    // Restore originals
+-    Object.defineProperty(global, 'localStorage', {
+-      value: originalLocalStorage,
+-      writable: true,
+-    });
+-    global.fetch = originalFetch;
+-    global.URL = originalURL;
++    vi.unstubAllGlobals();
+     vi.restoreAllMocks();
+   });
+ 
+@@ -469,24 +409,16 @@ describe('exportScenariosAsYaml', () => {
+ });
+ 
+ describe('exportDomainTranscriptsAsCSV', () => {
+-  let originalLocalStorage: Storage;
+-  let originalFetch: typeof fetch;
+   let exportDomainTranscriptsAsCSV: (domainId: string, signature?: string) => Promise<void>;
+ 
+   beforeEach(async () => {
+-    originalLocalStorage = global.localStorage;
+-    originalFetch = global.fetch;
+-
+-    Object.defineProperty(global, 'localStorage', {
+-      value: mockLocalStorage,
+-      writable: true,
+-    });
+-
+-    global.fetch = mockFetch;
+-
+     mockCreateObjectURL.mockReturnValue('blob:test-url');
+-    global.URL.createObjectURL = mockCreateObjectURL;
+-    global.URL.revokeObjectURL = mockRevokeObjectURL;
++    vi.stubGlobal('localStorage', mockLocalStorage);
++    vi.stubGlobal('fetch', mockFetch);
++    vi.stubGlobal('URL', {
++      createObjectURL: mockCreateObjectURL,
++      revokeObjectURL: mockRevokeObjectURL,
++    });
+ 
+     const mockLink = { href: '', download: '', click: mockClick };
+     vi.spyOn(document, 'createElement').mockReturnValue(mockLink as unknown as HTMLElement);
+@@ -500,11 +432,7 @@ describe('exportDomainTranscriptsAsCSV', () => {
+   });
+ 
+   afterEach(() => {
+-    Object.defineProperty(global, 'localStorage', {
+-      value: originalLocalStorage,
+-      writable: true,
+-    });
+-    global.fetch = originalFetch;
++    vi.unstubAllGlobals();
+     vi.restoreAllMocks();
+   });
+ 
+diff --git a/cloud/apps/web/tests/components/analysis/AnalysisPanel.layout.test.tsx b/cloud/apps/web/tests/components/analysis/AnalysisPanel.layout.test.tsx
+new file mode 100644
+index 00000000..af3ab500
+--- /dev/null
++++ b/cloud/apps/web/tests/components/analysis/AnalysisPanel.layout.test.tsx
+@@ -0,0 +1,298 @@
++import { beforeEach, describe, expect, it, vi } from 'vitest';
++import { render, screen } from '@testing-library/react';
++import userEvent from '@testing-library/user-event';
++import { MemoryRouter } from 'react-router-dom';
++import { AnalysisPanelHarness, createMockAnalysis } from './analysisPanel.fixtures';
++import { useAnalysis } from '../../../src/hooks/useAnalysis';
++
++vi.mock('../../../src/hooks/useAnalysis', () => ({
++  useAnalysis: vi.fn(),
++}));
++
++const mockUseAnalysis = vi.mocked(useAnalysis);
++
++describe('AnalysisPanel', () => {
++  beforeEach(() => {
++    vi.clearAllMocks();
++  });
++
++  it('removes the old summary cards and paired scope copy from the top of the page', () => {
++    const analysis = createMockAnalysis({
++      varianceAnalysis: {
++        isMultiSample: true,
++        samplesPerScenario: 2,
++        perModel: {},
++        mostVariableScenarios: [],
++        leastVariableScenarios: [],
++        orientationCorrectedCount: 4,
++      },
++    } as any);
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" analysisMode="paired" />
++      </MemoryRouter>
++    );
++
++    expect(screen.queryByText('Models')).not.toBeInTheDocument();
++    expect(screen.queryByText('Total Trials')).not.toBeInTheDocument();
++    expect(screen.queryByText('Status')).not.toBeInTheDocument();
++    expect(screen.queryByText('Orientation Pairs')).not.toBeInTheDocument();
++    expect(screen.queryByText(/Paired vignette scope/i)).not.toBeInTheDocument();
++  });
++
++  it('keeps non-semantic tabs visible for ineligible aggregates', async () => {
++    const user = userEvent.setup();
++    const analysis = createMockAnalysis({
++      analysisType: 'AGGREGATE',
++      codeVersion: '1.2.0',
++      aggregateMetadata: {
++        aggregateEligibility: 'ineligible_run_type',
++        aggregateIneligibilityReason: 'This aggregate mixes in assumption or manipulated runs.',
++        sourceRunCount: 4,
++        sourceRunIds: ['run-a', 'run-b', 'run-c', 'run-d'],
++        conditionCoverage: {
++          plannedConditionCount: 2,
++          observedConditionCount: 2,
++          complete: true,
++        },
++        perModelRepeatCoverage: {},
++        perModelDrift: {},
++      },
++      visualizationData: {
++        decisionDistribution: {},
++        scenarioDimensions: {
++          'scenario-1': { 'Dim A': '1', 'Dim B': '1' },
++          'scenario-2': { 'Dim A': '2', 'Dim B': '2' },
++        },
++        modelScenarioMatrix: {
++          'gpt-4': { 'scenario-1': 2, 'scenario-2': 4 },
++          'claude-3': { 'scenario-1': 2, 'scenario-2': 3 },
++        },
++      },
++      varianceAnalysis: {
++        isMultiSample: true,
++        samplesPerScenario: 2,
++        perModel: {},
++        mostVariableScenarios: [],
++        leastVariableScenarios: [],
++      },
++    });
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" isAggregate />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByText('This aggregate mixes in assumption or manipulated runs.')).toBeInTheDocument();
++    expect(screen.getByRole('button', { name: 'Conditions' })).toBeInTheDocument();
++    await user.click(screen.getByRole('button', { name: 'Conditions' }));
++    expect(screen.queryByText('Overview Summary')).not.toBeInTheDocument();
++  });
++
++  it('renders overview table titles', () => {
++    const analysis = createMockAnalysis({
++      visualizationData: {
++        decisionDistribution: {},
++        scenarioDimensions: {
++          'scenario-1': { 'Dim A': '1', 'Dim B': '1' },
++          'scenario-2': { 'Dim A': '2', 'Dim B': '2' },
++        },
++        modelScenarioMatrix: {
++          'gpt-4': { 'scenario-1': 2, 'scenario-2': 4 },
++          'claude-3': { 'scenario-1': 2, 'scenario-2': 3 },
++        },
++      },
++    });
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" />
++      </MemoryRouter>
++    );
++
++    expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
++  });
++
++  it('uses Condition Decisions on the Conditions tab', async () => {
++    const user = userEvent.setup();
++    const analysis = createMockAnalysis({
++      visualizationData: {
++        decisionDistribution: {},
++        scenarioDimensions: {
++          'scenario-1': { 'Dim A': '1', 'Dim B': '1' },
++          'scenario-2': { 'Dim A': '2', 'Dim B': '2' },
++        },
++        modelScenarioMatrix: {
++          'gpt-4': { 'scenario-1': 2, 'scenario-2': 4 },
++          'claude-3': { 'scenario-1': 2, 'scenario-2': 3 },
++        },
++      },
++      mostContestedScenarios: [],
++    });
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" />
++      </MemoryRouter>
++    );
++
++    await user.click(screen.getByRole('button', { name: 'Conditions' }));
++
++    expect(screen.getAllByText('Condition Decisions').length).toBeGreaterThan(0);
++    expect(screen.queryByText('Condition Analysis')).not.toBeInTheDocument();
++  });
++
++  it('does not render removed tabs', () => {
++    const analysis = createMockAnalysis();
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" />
++      </MemoryRouter>
++    );
++
++    expect(screen.queryByRole('button', { name: /^Agreement$/i })).not.toBeInTheDocument();
++    expect(screen.queryByRole('button', { name: /^Methods$/i })).not.toBeInTheDocument();
++    expect(screen.queryByRole('button', { name: /^Stability$/i })).not.toBeInTheDocument();
++  });
++
++  it('renders warnings when present', () => {
++    const analysis = createMockAnalysis({
++      warnings: [
++        {
++          code: 'NO_DIMENSIONS',
++          message: 'No scenario dimensions found in transcripts',
++          recommendation: 'Variable impact analysis will be empty',
++        },
++      ],
++    });
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByText('No scenario dimensions found in transcripts')).toBeInTheDocument();
++    expect(screen.getByText('Variable impact analysis will be empty')).toBeInTheDocument();
++  });
++
++  it('does not render low-sample warnings', () => {
++    const analysis = createMockAnalysis({
++      warnings: [
++        { code: 'SMALL_SAMPLE', message: 'Model a has only 9 samples', recommendation: 'Results may have wide confidence intervals' },
++        { code: 'MODERATE_SAMPLE', message: 'Model b has 20 samples', recommendation: 'Consider using bootstrap confidence intervals' },
++      ],
++    });
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" />
++      </MemoryRouter>
++    );
++
++    expect(screen.queryByText(/Model a has only 9 samples/)).not.toBeInTheDocument();
++    expect(screen.queryByText(/Model b has 20 samples/)).not.toBeInTheDocument();
++  });
++
++  it('keeps recompute hidden until details are expanded', () => {
++    const analysis = createMockAnalysis();
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" />
++      </MemoryRouter>
++    );
++
++    expect(screen.queryByRole('button', { name: /^Recompute$/ })).not.toBeInTheDocument();
++  });
++
++  it('shows recompute inside details and disables it while recomputing', async () => {
++    const analysis = createMockAnalysis();
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: true,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" />
++      </MemoryRouter>
++    );
++
++    await userEvent.click(screen.getByRole('button', { name: /^details$/i }));
++
++    const button = screen.getByRole('button', { name: /^Recompute$/ });
++    expect(button).toBeDisabled();
++  });
++});
+diff --git a/cloud/apps/web/tests/components/analysis/AnalysisPanel.pairedContent.test.tsx b/cloud/apps/web/tests/components/analysis/AnalysisPanel.pairedContent.test.tsx
+new file mode 100644
+index 00000000..86c901d1
+--- /dev/null
++++ b/cloud/apps/web/tests/components/analysis/AnalysisPanel.pairedContent.test.tsx
+@@ -0,0 +1,599 @@
++import { beforeEach, describe, expect, it, vi } from 'vitest';
++import { render, screen, waitFor, within } from '@testing-library/react';
++import userEvent from '@testing-library/user-event';
++import { MemoryRouter } from 'react-router-dom';
++import { AnalysisPanelHarness, createCanonicalTranscript, createMockAnalysis } from './analysisPanel.fixtures';
++import { useAnalysis } from '../../../src/hooks/useAnalysis';
++
++vi.mock('../../../src/hooks/useAnalysis', () => ({
++  useAnalysis: vi.fn(),
++}));
++
++const mockUseAnalysis = vi.mocked(useAnalysis);
++
++describe('AnalysisPanel', () => {
++  beforeEach(() => {
++    vi.clearAllMocks();
++  });
++
++  it('threads transcripts into the scenarios tab and renders canonical scores there', async () => {
++    const analysis = createMockAnalysis({
++      perModel: {
++        'gpt-4': {
++          sampleSize: 2,
++          values: {},
++          overall: { mean: 3, stdDev: 0, min: 3, max: 3 },
++        },
++      },
++      visualizationData: {
++        decisionDistribution: {},
++        scenarioDimensions: {
++          'scenario-1': { Achievement: 'high', Care: 'high' },
++          'scenario-2': { Achievement: 'high', Care: 'high' },
++        },
++        modelScenarioMatrix: {
++          'gpt-4': {
++            'scenario-1': 3,
++            'scenario-2': 3,
++          },
++        },
++      } as any,
++    });
++
++    const transcripts = [
++      createCanonicalTranscript({ id: 't1', scenarioId: 'scenario-1', direction: 'favor_first', strength: 'strong' }),
++      createCanonicalTranscript({ id: 't2', scenarioId: 'scenario-2', direction: 'favor_first', strength: 'lean' }),
++    ];
++
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" transcripts={transcripts} />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByText('Analysis')).toBeInTheDocument();
++
++    await userEvent.click(screen.getByRole('button', { name: /^Conditions$/i }));
++
++    // PivotAnalysisTable and ConditionDecisionsTable now show winner's weighted score (0–2).
++    // t1=strongly(1) + t2=somewhat(1), totalTrials=2 → winnerScore=(2×1+1×1)/2=1.5
++    const winnerScoreElement = screen
++      .getAllByText('1.5')
++      .find((element) => element.className.includes('text-blue-700'));
++    expect(winnerScoreElement).toBeDefined();
++    expect(winnerScoreElement).toHaveClass('text-blue-700');
++    expect(screen.getByText('Unknown canonical trials are excluded from condition scores.')).toBeInTheDocument();
++  });
++
++  it('pools overview summary semantics across the companion run in paired mode', async () => {
++    const analysis = createMockAnalysis({
++      codeVersion: '1.1.1',
++      preferenceSummary: {
++        perModel: {
++          'claude-3': {
++            preferenceDirection: {
++              byValue: {
++                Achievement: {
++                  winRate: 0.9,
++                  count: { prioritized: 9, deprioritized: 1, neutral: 0 },
++                },
++                Care: {
++                  winRate: 0.2,
++                  count: { prioritized: 2, deprioritized: 8, neutral: 0 },
++                },
++              },
++              overallLean: 'A',
++              overallSignedCenter: 0.6,
++            },
++            preferenceStrength: 0.9,
++          },
++          'gpt-4': {
++            preferenceDirection: {
++              byValue: {
++                Achievement: {
++                  winRate: 0.8,
++                  count: { prioritized: 8, deprioritized: 2, neutral: 0 },
++                },
++                Care: {
++                  winRate: 0.3,
++                  count: { prioritized: 3, deprioritized: 7, neutral: 0 },
++                },
++              },
++              overallLean: 'A',
++              overallSignedCenter: 0.4,
++            },
++            preferenceStrength: 0.8,
++          },
++        },
++      },
++      reliabilitySummary: {
++        perModel: {
++          'claude-3': {
++            baselineNoise: 0.2,
++            baselineReliability: 0.8,
++            directionalAgreement: 0.8,
++            neutralShare: 0.1,
++            coverageCount: 4,
++            uniqueScenarios: 4,
++          },
++          'gpt-4': {
++            baselineNoise: 0.2,
++            baselineReliability: 0.8,
++            directionalAgreement: 0.75,
++            neutralShare: 0.1,
++            coverageCount: 4,
++            uniqueScenarios: 4,
++          },
++        },
++      },
++      visualizationData: {
++        decisionDistribution: {},
++        scenarioDimensions: {
++          s1: { Achievement: 'low', Care: 'high' },
++        },
++        modelScenarioMatrix: {
++          'claude-3': { s1: 5 },
++          'gpt-4': { s1: 4 },
++        },
++      },
++      varianceAnalysis: {
++        isMultiSample: true,
++        samplesPerScenario: 4,
++        orientationCorrectedCount: 1,
++        perModel: {
++          'claude-3': {
++            totalSamples: 4,
++            uniqueScenarios: 1,
++            samplesPerScenario: 4,
++            avgWithinScenarioVariance: 0.1,
++            maxWithinScenarioVariance: 0.1,
++            consistencyScore: 0.9,
++            perScenario: {
++              s1: {
++                sampleCount: 4,
++                mean: 4.5,
++                stdDev: 0.2,
++                variance: 0.04,
++                min: 4,
++                max: 5,
++                range: 1,
++                directionalAgreement: 0.8,
++                medianSignedDistance: 0.9,
++                neutralShare: 0,
++              },
++            },
++          },
++          'gpt-4': {
++            totalSamples: 4,
++            uniqueScenarios: 1,
++            samplesPerScenario: 4,
++            avgWithinScenarioVariance: 0.1,
++            maxWithinScenarioVariance: 0.1,
++            consistencyScore: 0.9,
++            perScenario: {
++              s1: {
++                sampleCount: 4,
++                mean: 4.2,
++                stdDev: 0.2,
++                variance: 0.04,
++                min: 4,
++                max: 5,
++                range: 1,
++                directionalAgreement: 0.75,
++                medianSignedDistance: 0.7,
++                neutralShare: 0,
++              },
++            },
++          },
++        },
++        mostVariableScenarios: [],
++        leastVariableScenarios: [],
++      },
++    });
++    const companionAnalysis = createMockAnalysis({
++      runId: 'run-2',
++      codeVersion: '1.1.1',
++      preferenceSummary: {
++        perModel: {
++          'claude-3': {
++            preferenceDirection: {
++              byValue: {
++                Achievement: {
++                  winRate: 0.1,
++                  count: { prioritized: 1, deprioritized: 9, neutral: 0 },
++                },
++                Care: {
++                  winRate: 0.8,
++                  count: { prioritized: 8, deprioritized: 2, neutral: 0 },
++                },
++              },
++              overallLean: 'B',
++              overallSignedCenter: -0.5,
++            },
++            preferenceStrength: 1.0,
++          },
++          'gpt-4': {
++            preferenceDirection: {
++              byValue: {
++                Achievement: {
++                  winRate: 0.2,
++                  count: { prioritized: 2, deprioritized: 8, neutral: 0 },
++                },
++                Care: {
++                  winRate: 0.9,
++                  count: { prioritized: 9, deprioritized: 1, neutral: 0 },
++                },
++              },
++              overallLean: 'B',
++              overallSignedCenter: -0.6,
++            },
++            preferenceStrength: 1.0,
++          },
++        },
++      },
++      reliabilitySummary: {
++        perModel: {
++          'claude-3': {
++            baselineNoise: 0.2,
++            baselineReliability: 0.9,
++            directionalAgreement: 0.9,
++            neutralShare: 0.1,
++            coverageCount: 4,
++            uniqueScenarios: 4,
++          },
++          'gpt-4': {
++            baselineNoise: 0.2,
++            baselineReliability: 0.85,
++            directionalAgreement: 0.85,
++            neutralShare: 0.1,
++            coverageCount: 4,
++            uniqueScenarios: 4,
++          },
++        },
++      },
++    });
++
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness
++          runId="run-1"
++          analysisMode="paired"
++          companionAnalysis={companionAnalysis}
++        />
++      </MemoryRouter>
++    );
++
++    await waitFor(() => {
++      const claudeRow = screen.getAllByText('claude-3')[0]?.closest('tr');
++      const gptRow = screen.getAllByText('gpt-4')[0]?.closest('tr');
++
++      expect(claudeRow).not.toBeNull();
++      expect(gptRow).not.toBeNull();
++      expect(within(claudeRow as HTMLTableRowElement).getByText('Achievement')).toBeInTheDocument();
++      expect(within(claudeRow as HTMLTableRowElement).getByText('50%')).toBeInTheDocument();
++      expect(within(gptRow as HTMLTableRowElement).getByText('Care')).toBeInTheDocument();
++      expect(within(gptRow as HTMLTableRowElement).getByText('60%')).toBeInTheDocument();
++      expect(screen.getByText('Run-level evidence: pooled across 2 companion runs')).toBeInTheDocument();
++    });
++  });
++
++  it('pools Decisions tab distribution data across the companion run in paired mode', async () => {
++    const analysis = createMockAnalysis({
++      visualizationData: {
++        decisionDistribution: {},
++        scenarioDimensions: {
++          s1: { Freedom: 'high', Harmony: 'low' },
++        },
++        modelScenarioMatrix: {
++          'gpt-4': { s1: 5 },
++        },
++      },
++    });
++
++    const companionAnalysis = createMockAnalysis({
++      id: 'analysis-2',
++      runId: 'run-2',
++      visualizationData: {
++        decisionDistribution: {
++          'gpt-4': { '1': 3, '5': 1 },
++        },
++        scenarioDimensions: {
++          s2: { Freedom: 'high', Harmony: 'low' },
++        },
++        modelScenarioMatrix: {
++          'gpt-4': { s2: 1 },
++        },
++      },
++    });
++
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness
++          runId="run-1"
++          analysisMode="paired"
++          companionAnalysis={companionAnalysis}
++        />
++      </MemoryRouter>
++    );
++
++    await userEvent.click(screen.getByRole('button', { name: 'Decisions' }));
++
++    expect(screen.queryByText(/uses pooled companion data for decision mix and baseline reliability when that data is available/i)).not.toBeInTheDocument();
++    expect(screen.getByText('Decision Distribution by Model')).toBeInTheDocument();
++    expect(screen.queryByText('No decision distribution data available')).not.toBeInTheDocument();
++  });
++
++  it('keeps decision coverage details hidden until expanded', () => {
++    const analysis = createMockAnalysis();
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" analysisMode="paired" />
++      </MemoryRouter>
++    );
++
++    expect(screen.queryByText('Decision Coverage')).not.toBeInTheDocument();
++    expect(screen.getByRole('button', { name: /^details$/i })).toHaveAttribute('aria-expanded', 'false');
++  });
++
++  it('shows decision coverage and evidence details when expanded', async () => {
++    const analysis = createMockAnalysis({
++      visualizationData: {
++        decisionDistribution: {},
++        scenarioDimensions: {},
++        modelScenarioMatrix: {
++          'gpt-4': { 'scenario-1': 2, 'scenario-2': 4 },
++          'claude-3': { 'scenario-1': 2, 'scenario-2': 3 },
++        },
++      },
++    });
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness
++          runId="run-1"
++          analysisMode="paired"
++          transcripts={[
++            {
++              id: 't1',
++              runId: 'run-1',
++              scenarioId: 'scenario-1',
++              modelId: 'gpt-4',
++              modelVersion: null,
++              content: null,
++              decisionCode: '4',
++              decisionMetadata: { parseClass: 'exact' },
++              turnCount: 1,
++              tokenCount: 10,
++              durationMs: 100,
++              estimatedCost: null,
++              createdAt: '2024-01-01T00:00:00Z',
++              lastAccessedAt: null,
++            },
++            {
++              id: 't2',
++              runId: 'run-1',
++              scenarioId: 'scenario-2',
++              modelId: 'claude-3',
++              modelVersion: null,
++              content: null,
++              decisionCode: null,
++              decisionMetadata: null,
++              turnCount: 1,
++              tokenCount: 10,
++              durationMs: 100,
++              estimatedCost: null,
++              createdAt: '2024-01-01T00:00:00Z',
++              lastAccessedAt: null,
++            },
++          ]}
++        />
++      </MemoryRouter>
++    );
++
++    await userEvent.click(screen.getByRole('button', { name: /^details$/i }));
++
++    expect(screen.getByRole('button', { name: /hide details/i })).toHaveAttribute('aria-expanded', 'true');
++    expect(screen.getByText('Decision Coverage')).toBeInTheDocument();
++    expect(screen.getByText(/Paired vignette summaries include 1 of 2 transcripts/i)).toBeInTheDocument();
++    expect(screen.getByText(/1 unresolved transcript is currently excluded until manually adjudicated/i)).toBeInTheDocument();
++    expect(screen.getByText(/Parser-scored: 1 \(1 exact, 0 fallback\) • Manually adjudicated: 0 • Legacy numeric: 0/i)).toBeInTheDocument();
++    expect(screen.getByText('Evidence: 25 completed batches • 2 conditions per batch')).toBeInTheDocument();
++  });
++
++  it('renders the conditions tab in paired mode', () => {
++    const analysis = createMockAnalysis({
++      visualizationData: {
++        decisionDistribution: {},
++        scenarioDimensions: {
++          'scenario-1': { 'Dim A': '1', 'Dim B': '1' },
++          'scenario-2': { 'Dim A': '2', 'Dim B': '2' },
++        },
++        modelScenarioMatrix: {
++          'gpt-4': { 'scenario-1': 2, 'scenario-2': 4 },
++        },
++      },
++      mostContestedScenarios: [],
++    });
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" analysisMode="paired" initialTab="scenarios" />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByRole('button', { name: 'Conditions' })).toBeInTheDocument();
++    expect(screen.getByText('Pivot Analysis')).toBeInTheDocument();
++  });
++
++  it('shows aggregate evidence details when expanded', async () => {
++    const analysis = createMockAnalysis({
++      analysisType: 'AGGREGATE',
++      codeVersion: '1.2.0',
++      aggregateMetadata: {
++        aggregateEligibility: 'eligible_same_signature_baseline',
++        aggregateIneligibilityReason: null,
++        sourceRunCount: 4,
++        sourceRunIds: ['run-a', 'run-b', 'run-c', 'run-d'],
++        conditionCoverage: {
++          plannedConditionCount: 2,
++          observedConditionCount: 2,
++          complete: true,
++        },
++        perModelRepeatCoverage: {},
++        perModelDrift: {},
++      },
++    });
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" isAggregate />
++      </MemoryRouter>
++    );
++
++    await userEvent.click(screen.getByRole('button', { name: /^details$/i }));
++
++    expect(screen.getByText('Decision Coverage')).toBeInTheDocument();
++    expect(screen.getByText('Evidence: 4 contributing source runs pooled')).toBeInTheDocument();
++  });
++
++  it('shows the coverage cell batch count when provided', async () => {
++    const analysis = createMockAnalysis({
++      analysisType: 'AGGREGATE',
++      codeVersion: '1.2.0',
++      aggregateMetadata: {
++        aggregateEligibility: 'eligible_same_signature_baseline',
++        aggregateIneligibilityReason: null,
++        sourceRunCount: 4,
++        sourceRunIds: ['run-a', 'run-b', 'run-c', 'run-d'],
++        conditionCoverage: {
++          plannedConditionCount: 2,
++          observedConditionCount: 2,
++          complete: true,
++        },
++        perModelRepeatCoverage: {},
++        perModelDrift: {},
++      },
++    });
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" isAggregate coverageBatchCount={5} />
++      </MemoryRouter>
++    );
++
++    await userEvent.click(screen.getByRole('button', { name: /^details$/i }));
++
++    expect(screen.getByText('Evidence: 5 batches from coverage cell')).toBeInTheDocument();
++  });
++
++  it('shows paired coverage counts when provided', async () => {
++    const analysis = createMockAnalysis({
++      analysisType: 'AGGREGATE',
++      codeVersion: '1.2.0',
++      aggregateMetadata: {
++        aggregateEligibility: 'eligible_same_signature_baseline',
++        aggregateIneligibilityReason: null,
++        sourceRunCount: 4,
++        sourceRunIds: ['run-a', 'run-b', 'run-c', 'run-d'],
++        conditionCoverage: {
++          plannedConditionCount: 2,
++          observedConditionCount: 2,
++          complete: true,
++        },
++        perModelRepeatCoverage: {},
++        perModelDrift: {},
++      },
++    });
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness
++          runId="run-1"
++          isAggregate
++          coverageBatchCount={5}
++          coveragePairedBatchCount={2}
++        />
++      </MemoryRouter>
++    );
++
++    await userEvent.click(screen.getByRole('button', { name: /^details$/i }));
++
++    expect(screen.getByText('Evidence: 5 batches from coverage cell • 2 paired batches')).toBeInTheDocument();
++  });
++});
+diff --git a/cloud/apps/web/tests/components/analysis/AnalysisPanel.states.test.tsx b/cloud/apps/web/tests/components/analysis/AnalysisPanel.states.test.tsx
+new file mode 100644
+index 00000000..337c4cc9
+--- /dev/null
++++ b/cloud/apps/web/tests/components/analysis/AnalysisPanel.states.test.tsx
+@@ -0,0 +1,230 @@
++import { beforeEach, describe, expect, it, vi } from 'vitest';
++import { render, screen } from '@testing-library/react';
++import userEvent from '@testing-library/user-event';
++import { fireEvent } from '@testing-library/react';
++import { MemoryRouter } from 'react-router-dom';
++import { AnalysisPanelHarness, createMockAnalysis } from './analysisPanel.fixtures';
++import { useAnalysis } from '../../../src/hooks/useAnalysis';
++
++vi.mock('../../../src/hooks/useAnalysis', () => ({
++  useAnalysis: vi.fn(),
++}));
++
++const mockUseAnalysis = vi.mocked(useAnalysis);
++
++describe('AnalysisPanel', () => {
++  beforeEach(() => {
++    vi.clearAllMocks();
++  });
++
++  it('renders loading state', () => {
++    mockUseAnalysis.mockReturnValue({
++      analysis: null,
++      loading: true,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByText('Loading analysis...')).toBeInTheDocument();
++  });
++
++  it('renders error state', () => {
++    mockUseAnalysis.mockReturnValue({
++      analysis: null,
++      loading: false,
++      error: new Error('Failed to load'),
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByText(/Failed to load analysis/)).toBeInTheDocument();
++  });
++
++  it('renders pending state when analysis is pending', () => {
++    mockUseAnalysis.mockReturnValue({
++      analysis: null,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" analysisStatus="pending" />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByText('Analysis Pending')).toBeInTheDocument();
++  });
++
++  it('renders computing state when analysis is computing', () => {
++    mockUseAnalysis.mockReturnValue({
++      analysis: null,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" analysisStatus="computing" />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByText('Computing Analysis...')).toBeInTheDocument();
++  });
++
++  it('renders empty state when no analysis available', () => {
++    mockUseAnalysis.mockReturnValue({
++      analysis: null,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByText('Analysis Not Available')).toBeInTheDocument();
++    expect(screen.getByRole('button', { name: /Analyze Trial/i })).toBeInTheDocument();
++  });
++
++  it('calls recompute when Run Analysis button is clicked', () => {
++    const recompute = vi.fn().mockResolvedValue(undefined);
++    mockUseAnalysis.mockReturnValue({
++      analysis: null,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute,
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" />
++      </MemoryRouter>
++    );
++
++    fireEvent.click(screen.getByRole('button', { name: /Analyze Trial/i }));
++    expect(recompute).toHaveBeenCalled();
++  });
++
++  it('shows computed time in details instead of the header', async () => {
++    const analysis = createMockAnalysis();
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness runId="run-1" />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByText('Analysis')).toBeInTheDocument();
++    expect(screen.queryByText(/Computed/)).not.toBeInTheDocument();
++
++    await userEvent.click(screen.getByRole('button', { name: /^details$/i }));
++    expect(screen.getByText(/Computed/)).toBeInTheDocument();
++  });
++
++  it('renders the mode toggle in the header and hides removed export actions', async () => {
++    const analysis = createMockAnalysis();
++    const onModeChange = vi.fn();
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness
++          runId="run-1"
++          analysisMode="single"
++          onAnalysisModeChange={onModeChange}
++        />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByRole('button', { name: /single vignette/i })).toHaveAttribute('aria-pressed', 'true');
++    expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'false');
++    expect(screen.queryByRole('button', { name: /csv feed/i })).not.toBeInTheDocument();
++
++    await userEvent.click(screen.getByRole('button', { name: /paired vignettes/i }));
++    expect(onModeChange).toHaveBeenCalledWith('paired');
++
++    await userEvent.click(screen.getByRole('button', { name: /single vignette/i }));
++    expect(onModeChange).toHaveBeenNthCalledWith(2, 'single');
++  });
++
++  it('shows a single-vignette selector when a paired companion run is available', async () => {
++    const analysis = createMockAnalysis();
++    const onSingleVignetteChange = vi.fn();
++    mockUseAnalysis.mockReturnValue({
++      analysis,
++      loading: false,
++      error: null,
++      refetch: vi.fn(),
++      recompute: vi.fn(),
++      recomputing: false,
++    });
++
++    render(
++      <MemoryRouter>
++        <AnalysisPanelHarness
++          runId="run-1"
++          analysisMode="single"
++          onAnalysisModeChange={vi.fn()}
++          onSingleVignetteChange={onSingleVignetteChange}
++          currentRun={{
++            id: 'run-1',
++            definition: { name: 'Achievement -> Benevolence' },
++          } as any}
++          companionRun={{
++            id: 'run-2',
++            definition: { name: 'Benevolence -> Achievement' },
++          } as any}
++        />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByLabelText('Vignette')).toBeInTheDocument();
++
++    await userEvent.selectOptions(screen.getByLabelText('Vignette'), 'run-2');
++    expect(onSingleVignetteChange).toHaveBeenCalledWith('run-2');
++  });
++});
+diff --git a/cloud/apps/web/tests/components/analysis/AnalysisPanel.test.tsx b/cloud/apps/web/tests/components/analysis/AnalysisPanel.test.tsx
+deleted file mode 100644
+index 7a6e8f6e..00000000
+--- a/cloud/apps/web/tests/components/analysis/AnalysisPanel.test.tsx
++++ /dev/null
+@@ -1,1233 +0,0 @@
+-/**
+- * AnalysisPanel Component Tests
+- *
+- * Tests for the analysis panel display component.
+- */
+-
+-import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { useState } from 'react';
+-import { render, screen, fireEvent, within } from '@testing-library/react';
+-import userEvent from '@testing-library/user-event';
+-import { MemoryRouter } from 'react-router-dom';
+-import { AnalysisPanel } from '../../../src/components/analysis/AnalysisPanel';
+-import type { AnalysisTab } from '../../../src/components/analysis/tabs';
+-import type { ComponentProps } from 'react';
+-import type { AnalysisResult } from '../../../src/api/operations/analysis';
+-import type { Transcript } from '../../../src/api/operations/runs';
+-
+-// Mock the useAnalysis hook
+-vi.mock('../../../src/hooks/useAnalysis', () => ({
+-  useAnalysis: vi.fn(),
+-}));
+-
+-import { useAnalysis } from '../../../src/hooks/useAnalysis';
+-const mockUseAnalysis = vi.mocked(useAnalysis);
+-
+-function AnalysisPanelHarness({
+-  initialTab = 'overview',
+-  ...props
+-}: {
+-  initialTab?: AnalysisTab;
+-} & Omit<ComponentProps<typeof AnalysisPanel>, 'activeTab' | 'onTabChange'>) {
+-  const [activeTab, setActiveTab] = useState<AnalysisTab>(initialTab);
+-
+-  return (
+-    <AnalysisPanel
+-      {...props}
+-      activeTab={activeTab}
+-      onTabChange={setActiveTab}
+-    />
+-  );
+-}
+-
+-function createMockAnalysis(overrides: Partial<AnalysisResult> = {}): AnalysisResult {
+-  return {
+-    id: 'analysis-1',
+-    runId: 'run-1',
+-    analysisType: 'basic',
+-    status: 'CURRENT',
+-    codeVersion: '1.0.0',
+-    inputHash: 'abc123',
+-    createdAt: '2024-01-15T10:00:00Z',
+-    computedAt: '2024-01-15T10:00:05Z',
+-    durationMs: 5000,
+-    perModel: {
+-      'gpt-4': {
+-        sampleSize: 50,
+-        values: {
+-          'Physical_Safety': {
+-            winRate: 0.8,
+-            count: { prioritized: 40, deprioritized: 10, neutral: 0 },
+-          },
+-          'Compassion': {
+-            winRate: 0.6,
+-            count: { prioritized: 30, deprioritized: 20, neutral: 0 },
+-          },
+-        },
+-        overall: { mean: 0.7, stdDev: 0.15, min: 0.4, max: 0.9 },
+-      },
+-      'claude-3': {
+-        sampleSize: 50,
+-        values: {
+-          'Physical_Safety': {
+-            winRate: 0.75,
+-            count: { prioritized: 38, deprioritized: 12, neutral: 0 },
+-          },
+-        },
+-        overall: { mean: 0.65, stdDev: 0.12, min: 0.45, max: 0.85 },
+-      },
+-    },
+-    modelAgreement: {
+-      pairwise: {},
+-      outlierModels: [],
+-      overallAgreement: 0.85,
+-    },
+-
+-    visualizationData: null,
+-    varianceAnalysis: null,
+-    dimensionAnalysis: null,
+-    mostContestedScenarios: [],
+-    methodsUsed: {
+-      modelComparison: 'spearman_rho',
+-      pValueCorrection: 'holm_bonferroni',
+-      effectSize: 'cohens_d',
+-      dimensionTest: 'kruskal_wallis',
+-      alpha: 0.05,
+-      codeVersion: '1.0.0',
+-    },
+-    warnings: [],
+-    ...overrides,
+-  };
+-}
+-
+-function createCanonicalTranscript({
+-  id,
+-  scenarioId,
+-  direction,
+-  strength,
+-}: {
+-  id: string;
+-  scenarioId: string;
+-  direction: 'favor_first' | 'favor_second' | 'neutral' | 'unknown';
+-  strength: 'strong' | 'lean' | 'neutral' | 'unknown';
+-}): Transcript {
+-  return {
+-    id,
+-    runId: 'run-1',
+-    scenarioId,
+-    modelId: 'gpt-4',
+-    modelVersion: null,
+-    content: {},
+-    decisionCode: direction === 'favor_second' ? '1' : direction === 'neutral' ? '3' : '5',
+-    decisionCodeSource: 'deterministic',
+-    decisionMetadata: null,
+-    turnCount: 4,
+-    tokenCount: 100,
+-    durationMs: 800,
+-    estimatedCost: null,
+-    createdAt: '2024-01-01T00:00:00Z',
+-    lastAccessedAt: null,
+-    dimensionValues: null,
+-    decisionModelV2: direction === 'unknown'
+-      ? null
+-      : {
+-          raw: {
+-            matchedText: 'test',
+-            matchedLabel: 'test',
+-            parseClass: 'exact',
+-            parsePath: 'exact',
+-            parserVersion: 'job-choice-v2',
+-            responseExcerpt: null,
+-            manualOverride: null,
+-          },
+-          canonical: {
+-            favoredValueKey: direction === 'neutral' ? null : 'value-a',
+-            opposedValueKey: direction === 'neutral' ? null : 'value-b',
+-            direction,
+-            strength,
+-            normalizationApplied: false,
+-            normalizationReason: null,
+-            source: 'deterministic',
+-          },
+-          legacy: {
+-            },
+-        },
+-  } as Transcript;
+-}
+-
+-describe('AnalysisPanel', () => {
+-  beforeEach(() => {
+-    vi.clearAllMocks();
+-  });
+-
+-  it('renders loading state', () => {
+-    mockUseAnalysis.mockReturnValue({
+-      analysis: null,
+-      loading: true,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByText('Loading analysis...')).toBeInTheDocument();
+-  });
+-
+-  it('renders error state', () => {
+-    mockUseAnalysis.mockReturnValue({
+-      analysis: null,
+-      loading: false,
+-      error: new Error('Failed to load'),
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByText(/Failed to load analysis/)).toBeInTheDocument();
+-  });
+-
+-  it('renders pending state when analysis is pending', () => {
+-    mockUseAnalysis.mockReturnValue({
+-      analysis: null,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" analysisStatus="pending" />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByText('Analysis Pending')).toBeInTheDocument();
+-  });
+-
+-  it('renders computing state when analysis is computing', () => {
+-    mockUseAnalysis.mockReturnValue({
+-      analysis: null,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" analysisStatus="computing" />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByText('Computing Analysis...')).toBeInTheDocument();
+-  });
+-
+-  it('renders empty state when no analysis available', () => {
+-    mockUseAnalysis.mockReturnValue({
+-      analysis: null,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByText('Analysis Not Available')).toBeInTheDocument();
+-    expect(screen.getByRole('button', { name: /Analyze Trial/i })).toBeInTheDocument();
+-  });
+-
+-  it('calls recompute when Run Analysis button is clicked', () => {
+-    const recompute = vi.fn().mockResolvedValue(undefined);
+-    mockUseAnalysis.mockReturnValue({
+-      analysis: null,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute,
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" />
+-      </MemoryRouter>
+-    );
+-
+-    fireEvent.click(screen.getByRole('button', { name: /Analyze Trial/i }));
+-    expect(recompute).toHaveBeenCalled();
+-  });
+-
+-  it('shows computed time in details instead of the header', async () => {
+-    const analysis = createMockAnalysis();
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByText('Analysis')).toBeInTheDocument();
+-    expect(screen.queryByText(/Computed/)).not.toBeInTheDocument();
+-
+-    await userEvent.click(screen.getByRole('button', { name: /^details$/i }));
+-    expect(screen.getByText(/Computed/)).toBeInTheDocument();
+-  });
+-
+-  it('renders the mode toggle in the header and hides removed export actions', async () => {
+-    const analysis = createMockAnalysis();
+-    const onModeChange = vi.fn();
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness
+-          runId="run-1"
+-          analysisMode="single"
+-          onAnalysisModeChange={onModeChange}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByRole('button', { name: /single vignette/i })).toHaveAttribute('aria-pressed', 'true');
+-    expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'false');
+-    expect(screen.queryByRole('button', { name: /csv feed/i })).not.toBeInTheDocument();
+-
+-    await userEvent.click(screen.getByRole('button', { name: /paired vignettes/i }));
+-    expect(onModeChange).toHaveBeenCalledWith('paired');
+-
+-    await userEvent.click(screen.getByRole('button', { name: /single vignette/i }));
+-    expect(onModeChange).toHaveBeenNthCalledWith(2, 'single');
+-  });
+-
+-  it('shows a single-vignette selector when a paired companion run is available', async () => {
+-    const analysis = createMockAnalysis();
+-    const onSingleVignetteChange = vi.fn();
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness
+-          runId="run-1"
+-          analysisMode="single"
+-          onAnalysisModeChange={vi.fn()}
+-          onSingleVignetteChange={onSingleVignetteChange}
+-          currentRun={{
+-            id: 'run-1',
+-            definition: { name: 'Achievement -> Benevolence' },
+-          } as any}
+-          companionRun={{
+-            id: 'run-2',
+-            definition: { name: 'Benevolence -> Achievement' },
+-          } as any}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByLabelText('Vignette')).toBeInTheDocument();
+-
+-    await userEvent.selectOptions(screen.getByLabelText('Vignette'), 'run-2');
+-    expect(onSingleVignetteChange).toHaveBeenCalledWith('run-2');
+-  });
+-
+-  it('threads transcripts into the scenarios tab and renders canonical scores there', async () => {
+-    const analysis = createMockAnalysis({
+-      perModel: {
+-        'gpt-4': {
+-          sampleSize: 2,
+-          values: {},
+-          overall: { mean: 3, stdDev: 0, min: 3, max: 3 },
+-        },
+-      },
+-      visualizationData: {
+-        decisionDistribution: {},
+-        scenarioDimensions: {
+-          'scenario-1': { Achievement: 'high', Care: 'high' },
+-          'scenario-2': { Achievement: 'high', Care: 'high' },
+-        },
+-        modelScenarioMatrix: {
+-          'gpt-4': {
+-            'scenario-1': 3,
+-            'scenario-2': 3,
+-          },
+-        },
+-      } as any,
+-    });
+-
+-    const transcripts: Transcript[] = [
+-      createCanonicalTranscript({ id: 't1', scenarioId: 'scenario-1', direction: 'favor_first', strength: 'strong' }),
+-      createCanonicalTranscript({ id: 't2', scenarioId: 'scenario-2', direction: 'favor_first', strength: 'lean' }),
+-    ];
+-
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" transcripts={transcripts} />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByText('Analysis')).toBeInTheDocument();
+-
+-    await userEvent.click(screen.getByRole('button', { name: /^Conditions$/i }));
+-
+-    // PivotAnalysisTable and ConditionDecisionsTable now show winner's weighted score (0–2).
+-    // t1=strongly(1) + t2=somewhat(1), totalTrials=2 → winnerScore=(2×1+1×1)/2=1.5
+-    const winnerScoreElement = screen
+-      .getAllByText('1.5')
+-      .find((element) => element.className.includes('text-blue-700'));
+-    expect(winnerScoreElement).toBeDefined();
+-    expect(winnerScoreElement).toHaveClass('text-blue-700');
+-    expect(screen.getByText('Unknown canonical trials are excluded from condition scores.')).toBeInTheDocument();
+-  });
+-
+-  it('pools overview summary semantics across the companion run in paired mode', () => {
+-    const analysis = createMockAnalysis({
+-      codeVersion: '1.1.1',
+-      preferenceSummary: {
+-        perModel: {
+-          'claude-3': {
+-            preferenceDirection: {
+-              byValue: {
+-                Achievement: {
+-                  winRate: 0.9,
+-                  count: { prioritized: 9, deprioritized: 1, neutral: 0 },
+-                },
+-                Care: {
+-                  winRate: 0.2,
+-                  count: { prioritized: 2, deprioritized: 8, neutral: 0 },
+-                },
+-              },
+-              overallLean: 'A',
+-              overallSignedCenter: 0.6,
+-            },
+-            preferenceStrength: 0.9,
+-          },
+-          'gpt-4': {
+-            preferenceDirection: {
+-              byValue: {
+-                Achievement: {
+-                  winRate: 0.8,
+-                  count: { prioritized: 8, deprioritized: 2, neutral: 0 },
+-                },
+-                Care: {
+-                  winRate: 0.3,
+-                  count: { prioritized: 3, deprioritized: 7, neutral: 0 },
+-                },
+-              },
+-              overallLean: 'A',
+-              overallSignedCenter: 0.4,
+-            },
+-            preferenceStrength: 0.8,
+-          },
+-        },
+-      },
+-      reliabilitySummary: {
+-        perModel: {
+-          'claude-3': {
+-            baselineNoise: 0.2,
+-            baselineReliability: 0.8,
+-            directionalAgreement: 0.8,
+-            neutralShare: 0.1,
+-            coverageCount: 4,
+-            uniqueScenarios: 4,
+-          },
+-          'gpt-4': {
+-            baselineNoise: 0.2,
+-            baselineReliability: 0.8,
+-            directionalAgreement: 0.75,
+-            neutralShare: 0.1,
+-            coverageCount: 4,
+-            uniqueScenarios: 4,
+-          },
+-        },
+-      },
+-      visualizationData: {
+-        decisionDistribution: {},
+-        scenarioDimensions: {
+-          s1: { Achievement: 'low', Care: 'high' },
+-        },
+-        modelScenarioMatrix: {
+-          'claude-3': { s1: 5 },
+-          'gpt-4': { s1: 4 },
+-        },
+-      },
+-      varianceAnalysis: {
+-        isMultiSample: true,
+-        samplesPerScenario: 4,
+-        orientationCorrectedCount: 1,
+-        perModel: {
+-          'claude-3': {
+-            totalSamples: 4,
+-            uniqueScenarios: 1,
+-            samplesPerScenario: 4,
+-            avgWithinScenarioVariance: 0.1,
+-            maxWithinScenarioVariance: 0.1,
+-            consistencyScore: 0.9,
+-            perScenario: {
+-              s1: {
+-                sampleCount: 4,
+-                mean: 4.5,
+-                stdDev: 0.2,
+-                variance: 0.04,
+-                min: 4,
+-                max: 5,
+-                range: 1,
+-                directionalAgreement: 0.8,
+-                medianSignedDistance: 0.9,
+-                neutralShare: 0,
+-              },
+-            },
+-          },
+-          'gpt-4': {
+-            totalSamples: 4,
+-            uniqueScenarios: 1,
+-            samplesPerScenario: 4,
+-            avgWithinScenarioVariance: 0.1,
+-            maxWithinScenarioVariance: 0.1,
+-            consistencyScore: 0.9,
+-            perScenario: {
+-              s1: {
+-                sampleCount: 4,
+-                mean: 4.2,
+-                stdDev: 0.2,
+-                variance: 0.04,
+-                min: 4,
+-                max: 5,
+-                range: 1,
+-                directionalAgreement: 0.75,
+-                medianSignedDistance: 0.7,
+-                neutralShare: 0,
+-              },
+-            },
+-          },
+-        },
+-        mostVariableScenarios: [],
+-        leastVariableScenarios: [],
+-      },
+-    });
+-    const companionAnalysis = createMockAnalysis({
+-      runId: 'run-2',
+-      codeVersion: '1.1.1',
+-      preferenceSummary: {
+-        perModel: {
+-          'claude-3': {
+-            preferenceDirection: {
+-              byValue: {
+-                Achievement: {
+-                  winRate: 0.1,
+-                  count: { prioritized: 1, deprioritized: 9, neutral: 0 },
+-                },
+-                Care: {
+-                  winRate: 0.8,
+-                  count: { prioritized: 8, deprioritized: 2, neutral: 0 },
+-                },
+-              },
+-              overallLean: 'B',
+-              overallSignedCenter: -0.5,
+-            },
+-            preferenceStrength: 1.0,
+-          },
+-          'gpt-4': {
+-            preferenceDirection: {
+-              byValue: {
+-                Achievement: {
+-                  winRate: 0.2,
+-                  count: { prioritized: 2, deprioritized: 8, neutral: 0 },
+-                },
+-                Care: {
+-                  winRate: 0.9,
+-                  count: { prioritized: 9, deprioritized: 1, neutral: 0 },
+-                },
+-              },
+-              overallLean: 'B',
+-              overallSignedCenter: -0.6,
+-            },
+-            preferenceStrength: 1.0,
+-          },
+-        },
+-      },
+-      reliabilitySummary: {
+-        perModel: {
+-          'claude-3': {
+-            baselineNoise: 0.2,
+-            baselineReliability: 0.9,
+-            directionalAgreement: 0.9,
+-            neutralShare: 0.1,
+-            coverageCount: 4,
+-            uniqueScenarios: 4,
+-          },
+-          'gpt-4': {
+-            baselineNoise: 0.2,
+-            baselineReliability: 0.85,
+-            directionalAgreement: 0.85,
+-            neutralShare: 0.1,
+-            coverageCount: 4,
+-            uniqueScenarios: 4,
+-          },
+-        },
+-      },
+-    });
+-
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness
+-          runId="run-1"
+-          analysisMode="paired"
+-          companionAnalysis={companionAnalysis}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    const claudeRow = screen.getAllByText('claude-3')[0]?.closest('tr');
+-    const gptRow = screen.getAllByText('gpt-4')[0]?.closest('tr');
+-
+-    expect(claudeRow).not.toBeNull();
+-    expect(gptRow).not.toBeNull();
+-    expect(within(claudeRow as HTMLTableRowElement).getByText('Achievement')).toBeInTheDocument();
+-    expect(within(claudeRow as HTMLTableRowElement).getByText('50%')).toBeInTheDocument();
+-    expect(within(gptRow as HTMLTableRowElement).getByText('Care')).toBeInTheDocument();
+-    expect(within(gptRow as HTMLTableRowElement).getByText('60%')).toBeInTheDocument();
+-    expect(screen.getByText('Run-level evidence: pooled across 2 companion runs')).toBeInTheDocument();
+-  });
+-
+-  it('pools Decisions tab distribution data across the companion run in paired mode', async () => {
+-    const analysis = createMockAnalysis({
+-      visualizationData: {
+-        decisionDistribution: {},
+-        scenarioDimensions: {
+-          s1: { Freedom: 'high', Harmony: 'low' },
+-        },
+-        modelScenarioMatrix: {
+-          'gpt-4': { s1: 5 },
+-        },
+-      },
+-    });
+-
+-    const companionAnalysis = createMockAnalysis({
+-      id: 'analysis-2',
+-      runId: 'run-2',
+-      visualizationData: {
+-        decisionDistribution: {
+-          'gpt-4': { '1': 3, '5': 1 },
+-        },
+-        scenarioDimensions: {
+-          s2: { Freedom: 'high', Harmony: 'low' },
+-        },
+-        modelScenarioMatrix: {
+-          'gpt-4': { s2: 1 },
+-        },
+-      },
+-    });
+-
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness
+-          runId="run-1"
+-          analysisMode="paired"
+-          companionAnalysis={companionAnalysis}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    await userEvent.click(screen.getByRole('button', { name: 'Decisions' }));
+-
+-    expect(screen.queryByText(/uses pooled companion data for decision mix and baseline reliability when that data is available/i)).not.toBeInTheDocument();
+-    expect(screen.getByText('Decision Distribution by Model')).toBeInTheDocument();
+-    expect(screen.queryByText('No decision distribution data available')).not.toBeInTheDocument();
+-  });
+-
+-  it('keeps decision coverage details hidden until expanded', () => {
+-    const analysis = createMockAnalysis();
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" analysisMode="paired" />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.queryByText('Decision Coverage')).not.toBeInTheDocument();
+-    expect(screen.getByRole('button', { name: /^details$/i })).toHaveAttribute('aria-expanded', 'false');
+-  });
+-
+-  it('shows decision coverage and evidence details when expanded', async () => {
+-    const analysis = createMockAnalysis({
+-      visualizationData: {
+-        decisionDistribution: {},
+-        scenarioDimensions: {},
+-        modelScenarioMatrix: {
+-          'gpt-4': { 'scenario-1': 2, 'scenario-2': 4 },
+-          'claude-3': { 'scenario-1': 2, 'scenario-2': 3 },
+-        },
+-      },
+-    });
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness
+-          runId="run-1"
+-          analysisMode="paired"
+-          transcripts={[
+-            {
+-              id: 't1',
+-              runId: 'run-1',
+-              scenarioId: 'scenario-1',
+-              modelId: 'gpt-4',
+-              modelVersion: null,
+-              content: null,
+-              decisionCode: '4',
+-              decisionMetadata: { parseClass: 'exact' },
+-              turnCount: 1,
+-              tokenCount: 10,
+-              durationMs: 100,
+-              estimatedCost: null,
+-              createdAt: '2024-01-01T00:00:00Z',
+-              lastAccessedAt: null,
+-            },
+-            {
+-              id: 't2',
+-              runId: 'run-1',
+-              scenarioId: 'scenario-2',
+-              modelId: 'claude-3',
+-              modelVersion: null,
+-              content: null,
+-              decisionCode: null,
+-              decisionMetadata: null,
+-              turnCount: 1,
+-              tokenCount: 10,
+-              durationMs: 100,
+-              estimatedCost: null,
+-              createdAt: '2024-01-01T00:00:00Z',
+-              lastAccessedAt: null,
+-            },
+-          ]}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    await userEvent.click(screen.getByRole('button', { name: /^details$/i }));
+-
+-    expect(screen.getByRole('button', { name: /hide details/i })).toHaveAttribute('aria-expanded', 'true');
+-    expect(screen.getByText('Decision Coverage')).toBeInTheDocument();
+-    expect(screen.getByText(/Paired vignette summaries include 1 of 2 transcripts/i)).toBeInTheDocument();
+-    expect(screen.getByText(/1 unresolved transcript is currently excluded until manually adjudicated/i)).toBeInTheDocument();
+-    expect(screen.getByText(/Parser-scored: 1 \(1 exact, 0 fallback\) • Manually adjudicated: 0 • Legacy numeric: 0/i)).toBeInTheDocument();
+-    expect(screen.getByText('Evidence: 25 completed batches • 2 conditions per batch')).toBeInTheDocument();
+-  });
+-
+-  it('renders the conditions tab in paired mode', () => {
+-    const analysis = createMockAnalysis({
+-      visualizationData: {
+-        decisionDistribution: {},
+-        scenarioDimensions: {
+-          'scenario-1': { 'Dim A': '1', 'Dim B': '1' },
+-          'scenario-2': { 'Dim A': '2', 'Dim B': '2' },
+-        },
+-        modelScenarioMatrix: {
+-          'gpt-4': { 'scenario-1': 2, 'scenario-2': 4 },
+-        },
+-      },
+-      mostContestedScenarios: [],
+-    });
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" analysisMode="paired" initialTab="scenarios" />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByRole('button', { name: 'Conditions' })).toBeInTheDocument();
+-    expect(screen.getByText('Pivot Analysis')).toBeInTheDocument();
+-  });
+-
+-  it('shows aggregate evidence details when expanded', async () => {
+-    const analysis = createMockAnalysis({
+-      analysisType: 'AGGREGATE',
+-      codeVersion: '1.2.0',
+-      aggregateMetadata: {
+-        aggregateEligibility: 'eligible_same_signature_baseline',
+-        aggregateIneligibilityReason: null,
+-        sourceRunCount: 4,
+-        sourceRunIds: ['run-a', 'run-b', 'run-c', 'run-d'],
+-        conditionCoverage: {
+-          plannedConditionCount: 2,
+-          observedConditionCount: 2,
+-          complete: true,
+-        },
+-        perModelRepeatCoverage: {},
+-        perModelDrift: {},
+-      },
+-    });
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" isAggregate />
+-      </MemoryRouter>
+-    );
+-
+-    await userEvent.click(screen.getByRole('button', { name: /^details$/i }));
+-
+-    expect(screen.getByText('Decision Coverage')).toBeInTheDocument();
+-    expect(screen.getByText('Evidence: 4 contributing source runs pooled')).toBeInTheDocument();
+-  });
+-
+-  it('shows the coverage cell batch count when provided', async () => {
+-    const analysis = createMockAnalysis({
+-      analysisType: 'AGGREGATE',
+-      codeVersion: '1.2.0',
+-      aggregateMetadata: {
+-        aggregateEligibility: 'eligible_same_signature_baseline',
+-        aggregateIneligibilityReason: null,
+-        sourceRunCount: 4,
+-        sourceRunIds: ['run-a', 'run-b', 'run-c', 'run-d'],
+-        conditionCoverage: {
+-          plannedConditionCount: 2,
+-          observedConditionCount: 2,
+-          complete: true,
+-        },
+-        perModelRepeatCoverage: {},
+-        perModelDrift: {},
+-      },
+-    });
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" isAggregate coverageBatchCount={5} />
+-      </MemoryRouter>
+-    );
+-
+-    await userEvent.click(screen.getByRole('button', { name: /^details$/i }));
+-
+-    expect(screen.getByText('Evidence: 5 batches from coverage cell')).toBeInTheDocument();
+-  });
+-
+-  it('shows paired coverage counts when provided', async () => {
+-    const analysis = createMockAnalysis({
+-      analysisType: 'AGGREGATE',
+-      codeVersion: '1.2.0',
+-      aggregateMetadata: {
+-        aggregateEligibility: 'eligible_same_signature_baseline',
+-        aggregateIneligibilityReason: null,
+-        sourceRunCount: 4,
+-        sourceRunIds: ['run-a', 'run-b', 'run-c', 'run-d'],
+-        conditionCoverage: {
+-          plannedConditionCount: 2,
+-          observedConditionCount: 2,
+-          complete: true,
+-        },
+-        perModelRepeatCoverage: {},
+-        perModelDrift: {},
+-      },
+-    });
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness
+-          runId="run-1"
+-          isAggregate
+-          coverageBatchCount={5}
+-          coveragePairedBatchCount={2}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    await userEvent.click(screen.getByRole('button', { name: /^details$/i }));
+-
+-    expect(screen.getByText('Evidence: 5 batches from coverage cell • 2 paired batches')).toBeInTheDocument();
+-  });
+-
+-  it('removes the old summary cards and paired scope copy from the top of the page', () => {
+-    const analysis = createMockAnalysis({
+-      varianceAnalysis: {
+-        isMultiSample: true,
+-        samplesPerScenario: 2,
+-        perModel: {},
+-        mostVariableScenarios: [],
+-        leastVariableScenarios: [],
+-        orientationCorrectedCount: 4,
+-      },
+-    } as any);
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" analysisMode="paired" />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.queryByText('Models')).not.toBeInTheDocument();
+-    expect(screen.queryByText('Total Trials')).not.toBeInTheDocument();
+-    expect(screen.queryByText('Status')).not.toBeInTheDocument();
+-    expect(screen.queryByText('Orientation Pairs')).not.toBeInTheDocument();
+-    expect(screen.queryByText(/Paired vignette scope/i)).not.toBeInTheDocument();
+-  });
+-
+-  it('keeps non-semantic tabs visible for ineligible aggregates', async () => {
+-    const user = userEvent.setup();
+-    const analysis = createMockAnalysis({
+-      analysisType: 'AGGREGATE',
+-      codeVersion: '1.2.0',
+-      aggregateMetadata: {
+-        aggregateEligibility: 'ineligible_run_type',
+-        aggregateIneligibilityReason: 'This aggregate mixes in assumption or manipulated runs.',
+-        sourceRunCount: 4,
+-        sourceRunIds: ['run-a', 'run-b', 'run-c', 'run-d'],
+-        conditionCoverage: {
+-          plannedConditionCount: 2,
+-          observedConditionCount: 2,
+-          complete: true,
+-        },
+-        perModelRepeatCoverage: {},
+-        perModelDrift: {},
+-      },
+-      visualizationData: {
+-        decisionDistribution: {},
+-        scenarioDimensions: {
+-          'scenario-1': { 'Dim A': '1', 'Dim B': '1' },
+-          'scenario-2': { 'Dim A': '2', 'Dim B': '2' },
+-        },
+-        modelScenarioMatrix: {
+-          'gpt-4': { 'scenario-1': 2, 'scenario-2': 4 },
+-          'claude-3': { 'scenario-1': 2, 'scenario-2': 3 },
+-        },
+-      },
+-      varianceAnalysis: {
+-        isMultiSample: true,
+-        samplesPerScenario: 2,
+-        perModel: {},
+-        mostVariableScenarios: [],
+-        leastVariableScenarios: [],
+-      },
+-    });
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" isAggregate />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByText('This aggregate mixes in assumption or manipulated runs.')).toBeInTheDocument();
+-    expect(screen.getByRole('button', { name: 'Conditions' })).toBeInTheDocument();
+-    await user.click(screen.getByRole('button', { name: 'Conditions' }));
+-    expect(screen.queryByText('Overview Summary')).not.toBeInTheDocument();
+-  });
+-
+-  it('renders overview table titles', () => {
+-    const analysis = createMockAnalysis({
+-      visualizationData: {
+-        decisionDistribution: {},
+-        scenarioDimensions: {
+-          'scenario-1': { 'Dim A': '1', 'Dim B': '1' },
+-          'scenario-2': { 'Dim A': '2', 'Dim B': '2' },
+-        },
+-        modelScenarioMatrix: {
+-          'gpt-4': { 'scenario-1': 2, 'scenario-2': 4 },
+-          'claude-3': { 'scenario-1': 2, 'scenario-2': 3 },
+-        },
+-      },
+-    });
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
+-  });
+-
+-  it('uses Condition Decisions on the Conditions tab', async () => {
+-    const user = userEvent.setup();
+-    const analysis = createMockAnalysis({
+-      visualizationData: {
+-        decisionDistribution: {},
+-        scenarioDimensions: {
+-          'scenario-1': { 'Dim A': '1', 'Dim B': '1' },
+-          'scenario-2': { 'Dim A': '2', 'Dim B': '2' },
+-        },
+-        modelScenarioMatrix: {
+-          'gpt-4': { 'scenario-1': 2, 'scenario-2': 4 },
+-          'claude-3': { 'scenario-1': 2, 'scenario-2': 3 },
+-        },
+-      },
+-      mostContestedScenarios: [],
+-    });
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" />
+-      </MemoryRouter>
+-    );
+-
+-    await user.click(screen.getByRole('button', { name: 'Conditions' }));
+-
+-    expect(screen.getAllByText('Condition Decisions').length).toBeGreaterThan(0);
+-    expect(screen.queryByText('Condition Analysis')).not.toBeInTheDocument();
+-  });
+-
+-  it('does not render removed tabs', () => {
+-    const analysis = createMockAnalysis();
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.queryByRole('button', { name: /^Agreement$/i })).not.toBeInTheDocument();
+-    expect(screen.queryByRole('button', { name: /^Methods$/i })).not.toBeInTheDocument();
+-    expect(screen.queryByRole('button', { name: /^Stability$/i })).not.toBeInTheDocument();
+-  });
+-
+-  it('renders warnings when present', () => {
+-    const analysis = createMockAnalysis({
+-      warnings: [
+-        {
+-          code: 'NO_DIMENSIONS',
+-          message: 'No scenario dimensions found in transcripts',
+-          recommendation: 'Variable impact analysis will be empty',
+-        },
+-      ],
+-    });
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByText('No scenario dimensions found in transcripts')).toBeInTheDocument();
+-    expect(screen.getByText('Variable impact analysis will be empty')).toBeInTheDocument();
+-  });
+-
+-  it('does not render low-sample warnings', () => {
+-    const analysis = createMockAnalysis({
+-      warnings: [
+-        { code: 'SMALL_SAMPLE', message: 'Model a has only 9 samples', recommendation: 'Results may have wide confidence intervals' },
+-        { code: 'MODERATE_SAMPLE', message: 'Model b has 20 samples', recommendation: 'Consider using bootstrap confidence intervals' },
+-      ],
+-    });
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.queryByText(/Model a has only 9 samples/)).not.toBeInTheDocument();
+-    expect(screen.queryByText(/Model b has 20 samples/)).not.toBeInTheDocument();
+-  });
+-
+-  it('keeps recompute hidden until details are expanded', () => {
+-    const analysis = createMockAnalysis();
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: false,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.queryByRole('button', { name: /^Recompute$/ })).not.toBeInTheDocument();
+-  });
+-
+-  it('shows recompute inside details and disables it while recomputing', async () => {
+-    const analysis = createMockAnalysis();
+-    mockUseAnalysis.mockReturnValue({
+-      analysis,
+-      loading: false,
+-      error: null,
+-      refetch: vi.fn(),
+-      recompute: vi.fn(),
+-      recomputing: true,
+-    });
+-
+-    render(
+-      <MemoryRouter>
+-        <AnalysisPanelHarness runId="run-1" />
+-      </MemoryRouter>
+-    );
+-
+-    await userEvent.click(screen.getByRole('button', { name: /^details$/i }));
+-
+-    const button = screen.getByRole('button', { name: /^Recompute$/ });
+-    expect(button).toBeDisabled();
+-  });
+-
+-});
+diff --git a/cloud/apps/web/tests/components/analysis/OverviewTab.layout.test.tsx b/cloud/apps/web/tests/components/analysis/OverviewTab.layout.test.tsx
+new file mode 100644
+index 00000000..65cf1602
+--- /dev/null
++++ b/cloud/apps/web/tests/components/analysis/OverviewTab.layout.test.tsx
+@@ -0,0 +1,88 @@
++import { describe, expect, it } from 'vitest';
++import { render, screen } from '@testing-library/react';
++import { MemoryRouter } from 'react-router-dom';
++import { OverviewTab } from '../../../src/components/analysis/tabs/OverviewTab';
++import { createSemantics, createVarianceAnalysis, pairedDefinitionContent } from './overviewTab.fixtures';
++
++describe('OverviewTab', () => {
++  it('does not surface companion-only condition rows on overview', () => {
++    render(
++      <MemoryRouter>
++        <OverviewTab
++          runId="run-1"
++          analysisBasePath="/analysis"
++          analysisSearchParams={new URLSearchParams({ mode: 'paired' })}
++          definitionContent={pairedDefinitionContent}
++          semantics={createSemantics()}
++          completedBatches={3}
++          aggregateSourceRunCount={null}
++          isAggregate={false}
++          analysisMode="paired"
++          perModel={{
++            model1: {
++              sampleSize: 1,
++              values: {},
++              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
++            },
++          }}
++          visualizationData={{
++            decisionDistribution: {},
++            scenarioDimensions: {
++              s1: { Freedom: 'a1', Harmony: 'b1' },
++            },
++            modelScenarioMatrix: {
++              model1: { s1: 5 },
++            },
++          }}
++          varianceAnalysis={createVarianceAnalysis()}
++        />
++      </MemoryRouter>
++    );
++
++    expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
++    expect(screen.queryByText('model2')).not.toBeInTheDocument();
++  });
++
++  it('does not render split inspection controls on overview', () => {
++    render(
++      <MemoryRouter>
++        <OverviewTab
++          runId="run-1"
++          analysisBasePath="/analysis"
++          analysisSearchParams={new URLSearchParams({ mode: 'paired' })}
++          definitionContent={pairedDefinitionContent}
++          semantics={createSemantics()}
++          completedBatches={3}
++          aggregateSourceRunCount={null}
++          isAggregate={false}
++          analysisMode="paired"
++          perModel={{
++            model1: {
++              sampleSize: 3,
++              values: {},
++              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
++            },
++          }}
++          visualizationData={{
++            decisionDistribution: {},
++            scenarioDimensions: {
++              s1: { Freedom: 'a1', Harmony: 'b1' },
++              s2: { Freedom: 'a1', Harmony: 'b2' },
++              s3: { Freedom: 'a2', Harmony: 'b2' },
++              s4: { Freedom: 'a2', Harmony: 'b1' },
++              s5: { Freedom: 'a1', Harmony: 'b1' },
++            },
++            modelScenarioMatrix: {
++              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
++            },
++          }}
++          varianceAnalysis={createVarianceAnalysis()}
++        />
++      </MemoryRouter>
++    );
++
++    expect(screen.queryByRole('button', { name: 'Split by order' })).not.toBeInTheDocument();
++    expect(screen.queryByText(/Split inspection keeps the pooled paired summary above/i)).not.toBeInTheDocument();
++    expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
++  });
++});
+diff --git a/cloud/apps/web/tests/components/analysis/OverviewTab.overview.test.tsx b/cloud/apps/web/tests/components/analysis/OverviewTab.overview.test.tsx
+new file mode 100644
+index 00000000..5555fe1c
+--- /dev/null
++++ b/cloud/apps/web/tests/components/analysis/OverviewTab.overview.test.tsx
+@@ -0,0 +1,343 @@
++import { describe, expect, it } from 'vitest';
++import { fireEvent, render, screen, waitFor } from '@testing-library/react';
++import userEvent from '@testing-library/user-event';
++import { MemoryRouter } from 'react-router-dom';
++import { OverviewTab } from '../../../src/components/analysis/tabs/OverviewTab';
++import { createCompanionAnalysis, createSemantics, createVarianceAnalysis } from './overviewTab.fixtures';
++
++describe('OverviewTab', () => {
++  it('renders the overview summary without duplicating Condition Decisions', () => {
++    render(
++      <MemoryRouter>
++        <OverviewTab
++          runId="run-1"
++          semantics={createSemantics()}
++          completedBatches={3}
++          aggregateSourceRunCount={null}
++          isAggregate={false}
++          perModel={{
++            model1: {
++              sampleSize: 3,
++              values: {},
++              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
++            },
++          }}
++          visualizationData={{
++            decisionDistribution: {},
++            scenarioDimensions: {
++              s1: { Freedom: 'a1', Harmony: 'b1' },
++              s2: { Freedom: 'a1', Harmony: 'b2' },
++              s3: { Freedom: 'a2', Harmony: 'b2' },
++              s4: { Freedom: 'a2', Harmony: 'b1' },
++              s5: { Freedom: 'a1', Harmony: 'b1' },
++            },
++            modelScenarioMatrix: {
++              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
++            },
++          }}
++          varianceAnalysis={createVarianceAnalysis()}
++        />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByText('Overview Summary')).toBeInTheDocument();
++    expect(screen.getByText('Run-level evidence: 3 completed batches')).toBeInTheDocument();
++    expect(screen.getByText('Preferred Value')).toBeInTheDocument();
++    expect(screen.getByText('Win Rate')).toBeInTheDocument();
++    expect(screen.getByText('Fairness')).toBeInTheDocument();
++    expect(screen.getByText('100%')).toBeInTheDocument();
++    expect(screen.getByText('Value Agreement')).toBeInTheDocument();
++    expect(screen.getByText('Soft Lean %')).toBeInTheDocument();
++    expect(screen.queryByText('Decision Consistency')).not.toBeInTheDocument();
++    expect(screen.getByText('88%')).toBeInTheDocument();
++    expect(screen.getByRole('button', { name: /copy overview summary as image/i })).toBeInTheDocument();
++
++    expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
++  });
++
++  it('shows the coverage cell batch count when the overview was launched from a coverage cell', () => {
++    render(
++      <MemoryRouter>
++        <OverviewTab
++          runId="run-1"
++          semantics={createSemantics()}
++          completedBatches={3}
++          aggregateSourceRunCount={4}
++          coverageBatchCount={5}
++          isAggregate
++          perModel={{
++            model1: {
++              sampleSize: 3,
++              values: {},
++              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
++            },
++          }}
++          visualizationData={{
++            decisionDistribution: {},
++            scenarioDimensions: {
++              s1: { Freedom: 'a1', Harmony: 'b1' },
++              s2: { Freedom: 'a1', Harmony: 'b2' },
++              s3: { Freedom: 'a2', Harmony: 'b2' },
++              s4: { Freedom: 'a2', Harmony: 'b1' },
++              s5: { Freedom: 'a1', Harmony: 'b1' },
++            },
++            modelScenarioMatrix: {
++              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
++            },
++          }}
++          varianceAnalysis={createVarianceAnalysis()}
++        />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByText('Run-level evidence: 5 batches from coverage cell')).toBeInTheDocument();
++  });
++
++  it('shows paired coverage counts when the overview is launched from a coverage cell', () => {
++    render(
++      <MemoryRouter>
++        <OverviewTab
++          runId="run-1"
++          semantics={createSemantics()}
++          completedBatches={3}
++          aggregateSourceRunCount={4}
++          coverageBatchCount={5}
++          coveragePairedBatchCount={2}
++          isAggregate
++          perModel={{
++            model1: {
++              sampleSize: 3,
++              values: {},
++              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
++            },
++          }}
++          visualizationData={{
++            decisionDistribution: {},
++            scenarioDimensions: {
++              s1: { Freedom: 'a1', Harmony: 'b1' },
++              s2: { Freedom: 'a1', Harmony: 'b2' },
++              s3: { Freedom: 'a2', Harmony: 'b2' },
++              s4: { Freedom: 'a2', Harmony: 'b1' },
++              s5: { Freedom: 'a1', Harmony: 'b1' },
++            },
++            modelScenarioMatrix: {
++              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
++            },
++          }}
++          varianceAnalysis={createVarianceAnalysis()}
++        />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByText('Run-level evidence: 5 batches from coverage cell • 2 paired batches')).toBeInTheDocument();
++  });
++
++  it('renders an em dash when the preferred value win rate is missing', () => {
++    const semantics = createSemantics();
++    semantics.preference.byModel.model1.topPrioritizedValues = [{ name: 'Fairness', winRate: null }];
++
++    render(
++      <MemoryRouter>
++        <OverviewTab
++          runId="run-1"
++          semantics={semantics}
++          completedBatches={3}
++          aggregateSourceRunCount={null}
++          isAggregate={false}
++          analysisMode="single"
++          perModel={{
++            model1: {
++              sampleSize: 3,
++              values: {},
++              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
++            },
++          }}
++          visualizationData={{
++            decisionDistribution: {},
++            scenarioDimensions: {
++              s1: { Freedom: 'a1', Harmony: 'b1' },
++            },
++            modelScenarioMatrix: {
++              model1: { s1: 5 },
++            },
++          }}
++          varianceAnalysis={createVarianceAnalysis()}
++        />
++      </MemoryRouter>
++    );
++
++    const winRateCells = screen.getAllByText('—');
++    expect(winRateCells.length).toBeGreaterThan(0);
++  });
++
++  it('keeps the paired comparison section visible with a single-mode note', () => {
++    render(
++      <MemoryRouter>
++        <OverviewTab
++          runId="run-1"
++          semantics={createSemantics()}
++          completedBatches={3}
++          aggregateSourceRunCount={null}
++          isAggregate={false}
++          analysisMode="single"
++          perModel={{
++            model1: {
++              sampleSize: 3,
++              values: {},
++              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
++            },
++          }}
++          visualizationData={{
++            decisionDistribution: {},
++            scenarioDimensions: {
++              s1: { Freedom: 'a1', Harmony: 'b1' },
++            },
++            modelScenarioMatrix: {
++              model1: { s1: 5 },
++            },
++          }}
++          varianceAnalysis={createVarianceAnalysis()}
++        />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByText('Paired Run Comparison')).toBeInTheDocument();
++    expect(screen.getByText(/only available in Paired vignettes mode/i)).toBeInTheDocument();
++  });
++
++  it('keeps one decimal for non-integer summary percentages', () => {
++    const semantics = createSemantics();
++    semantics.reliability.byModel.model1.directionalAgreement = 0.983333;
++
++    render(
++      <MemoryRouter>
++        <OverviewTab
++          runId="run-1"
++          semantics={semantics}
++          completedBatches={3}
++          aggregateSourceRunCount={null}
++          isAggregate={false}
++          perModel={{
++            model1: {
++              sampleSize: 3,
++              values: {},
++              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
++            },
++          }}
++          visualizationData={{
++            decisionDistribution: {},
++            scenarioDimensions: {
++              s1: { Freedom: 'a1', Harmony: 'b1' },
++            },
++            modelScenarioMatrix: {
++              model1: { s1: 5 },
++            },
++          }}
++          varianceAnalysis={createVarianceAnalysis()}
++        />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByText('98.3%')).toBeInTheDocument();
++  });
++
++  it('uses paired-specific no-repeat wording in overview summary', () => {
++    const semantics = createSemantics();
++    semantics.reliability.rowAvailability = {
++      status: 'unavailable',
++      reason: 'no-repeat-coverage',
++      message:
++        'This model has one sample per condition, so baseline reliability is unavailable. Recomputing the same run without repeated samples will not populate this section.',
++    };
++    semantics.reliability.byModel.model1 = {
++      ...semantics.reliability.byModel.model1,
++      availability: semantics.reliability.rowAvailability,
++      baselineReliability: null,
++      baselineNoise: null,
++      directionalAgreement: null,
++      neutralShare: null,
++      coverageCount: 0,
++      uniqueScenarios: 0,
++      repeatCoverageShare: null,
++      contributingRunCount: null,
++      weightedOverallSignedCenterSd: null,
++    };
++
++    render(
++      <MemoryRouter>
++        <OverviewTab
++          runId="run-1"
++          semantics={semantics}
++          completedBatches={3}
++          aggregateSourceRunCount={null}
++          isAggregate={false}
++          analysisMode="paired"
++          companionAnalysis={createCompanionAnalysis()}
++          perModel={{
++            model1: {
++              sampleSize: 3,
++              values: {},
++              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
++            },
++          }}
++          visualizationData={{
++            decisionDistribution: {},
++            scenarioDimensions: {
++              s1: { Freedom: 'a1', Harmony: 'b1' },
++            },
++            modelScenarioMatrix: {
++              model1: { s1: 5 },
++            },
++          }}
++          varianceAnalysis={createVarianceAnalysis()}
++        />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByText(/pooling both vignette orders does not add repeat coverage/i)).toBeInTheDocument();
++  });
++
++  it('shows the custom header tooltip on focus', async () => {
++    render(
++      <MemoryRouter>
++        <OverviewTab
++          runId="run-1"
++          semantics={createSemantics()}
++          completedBatches={3}
++          aggregateSourceRunCount={null}
++          isAggregate={false}
++          perModel={{
++            model1: {
++              sampleSize: 3,
++              values: {},
++              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
++            },
++          }}
++          visualizationData={{
++            decisionDistribution: {},
++            scenarioDimensions: {
++              s1: { Freedom: 'a1', Harmony: 'b1' },
++              s2: { Freedom: 'a1', Harmony: 'b2' },
++              s3: { Freedom: 'a2', Harmony: 'b2' },
++              s4: { Freedom: 'a2', Harmony: 'b1' },
++              s5: { Freedom: 'a1', Harmony: 'b1' },
++            },
++            modelScenarioMatrix: {
++              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
++            },
++          }}
++          varianceAnalysis={createVarianceAnalysis()}
++        />
++      </MemoryRouter>
++    );
++
++    fireEvent.focus(screen.getByRole('button', { name: /Value Agreement:/i }));
++
++    // waitFor: interaction triggers async state update before DOM settles
++    await waitFor(() => {
++      expect(screen.getByRole('tooltip')).toHaveTextContent(
++        /How often repeated judgments stay on the same value side/i
++      );
++    });
++  });
++});
+diff --git a/cloud/apps/web/tests/components/analysis/OverviewTab.repeatPattern.test.tsx b/cloud/apps/web/tests/components/analysis/OverviewTab.repeatPattern.test.tsx
+new file mode 100644
+index 00000000..0cb01913
+--- /dev/null
++++ b/cloud/apps/web/tests/components/analysis/OverviewTab.repeatPattern.test.tsx
+@@ -0,0 +1,458 @@
++import { beforeEach, describe, expect, it, vi } from 'vitest';
++import { fireEvent, render, screen } from '@testing-library/react';
++import { MemoryRouter } from 'react-router-dom';
++import { OverviewTab } from '../../../src/components/analysis/tabs/OverviewTab';
++import {
++  createCompanionAnalysis,
++  createSemantics,
++  createVarianceAnalysis,
++  mockNavigate as sharedMockNavigate,
++  pairedDefinitionContent,
++} from './overviewTab.fixtures';
++import type { AnalysisResult } from '../../../src/api/operations/analysis';
++
++const mockNavigate = sharedMockNavigate;
++
++vi.mock('react-router-dom', async () => {
++  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
++  return {
++    ...actual,
++    useNavigate: () => mockNavigate,
++  };
++});
++
++describe('OverviewTab', () => {
++  beforeEach(() => {
++    mockNavigate.mockReset();
++  });
++
++  it('navigates repeat-pattern cells with condition-level ids in paired mode', () => {
++    render(
++      <MemoryRouter>
++        <OverviewTab
++          runId="run-1"
++          analysisBasePath="/analysis"
++          analysisSearchParams={new URLSearchParams({ mode: 'paired' })}
++          definitionContent={pairedDefinitionContent}
++          semantics={createSemantics()}
++          completedBatches={3}
++          aggregateSourceRunCount={null}
++          isAggregate={false}
++          perModel={{
++            model1: {
++              sampleSize: 3,
++              values: {},
++              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
++            },
++          }}
++          visualizationData={{
++            decisionDistribution: {},
++            scenarioDimensions: {
++              s1: { Freedom: 'a1', Harmony: 'b1' },
++              s2: { Freedom: 'a1', Harmony: 'b2' },
++              s3: { Freedom: 'a2', Harmony: 'b2' },
++              s4: { Freedom: 'a2', Harmony: 'b1' },
++              s5: { Freedom: 'a1', Harmony: 'b1' },
++            },
++            modelScenarioMatrix: {
++              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
++            },
++          }}
++          varianceAnalysis={createVarianceAnalysis()}
++        />
++      </MemoryRouter>
++    );
++
++    fireEvent.click(screen.getByRole('button', { name: /^Stable: 1 of 4 repeated conditions/i }));
++
++    expect(mockNavigate).toHaveBeenCalledWith(
++      '/analysis/run-1/transcripts?modelId=model1&repeatPattern=stable&rowDim=Freedom&colDim=Harmony&conditionIds=a1%7C%7Cb1&mode=paired'
++    );
++  });
++
++  it('classifies aggregate repeat-pattern columns from pooled variance data', () => {
++    render(
++      <MemoryRouter>
++        <OverviewTab
++          runId="run-1"
++          analysisBasePath="/analysis"
++          semantics={createSemantics()}
++          completedBatches="-"
++          aggregateSourceRunCount={4}
++          isAggregate
++          perModel={{
++            model1: {
++              sampleSize: 3,
++              values: {},
++              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
++            },
++          }}
++          visualizationData={{
++            decisionDistribution: {},
++            scenarioDimensions: {
++              s1: { Freedom: 'a1', Harmony: 'b1' },
++              s2: { Freedom: 'a1', Harmony: 'b2' },
++              s3: { Freedom: 'a2', Harmony: 'b2' },
++              s4: { Freedom: 'a2', Harmony: 'b1' },
++              s5: { Freedom: 'a1', Harmony: 'b1' },
++            },
++            modelScenarioMatrix: {
++              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
++            },
++          }}
++          varianceAnalysis={createVarianceAnalysis()}
++        />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByText('Run-level evidence: 4 contributing source runs')).toBeInTheDocument();
++    expect(screen.getAllByText('25%')).toHaveLength(4);
++    expect(screen.getByRole('button', { name: /^Soft Lean: 1 of 4 repeated conditions/i })).toBeInTheDocument();
++    expect(screen.getByRole('button', { name: /^Unstable: 1 of 4 repeated conditions/i })).toBeInTheDocument();
++    expect(screen.getByRole('button', { name: /^Torn: 1 of 4 repeated conditions/i })).toBeInTheDocument();
++
++    fireEvent.click(screen.getByRole('button', { name: /^Unstable: 1 of 4 repeated conditions/i }));
++
++    expect(mockNavigate).toHaveBeenCalledWith(
++      '/analysis/run-1/transcripts?modelId=model1&repeatPattern=noisy&rowDim=Freedom&colDim=Harmony&conditionIds=a2%7C%7Cb2'
++    );
++  });
++
++  it('renders zero-count repeat-pattern cells as non-clickable text', () => {
++    const varianceAnalysis = createVarianceAnalysis();
++    varianceAnalysis.perModel.model1.perScenario = {
++      s1: varianceAnalysis.perModel.model1.perScenario.s1,
++      s5: varianceAnalysis.perModel.model1.perScenario.s5,
++    };
++
++    render(
++      <MemoryRouter>
++        <OverviewTab
++          runId="run-1"
++          analysisBasePath="/analysis"
++          semantics={createSemantics()}
++          completedBatches={3}
++          aggregateSourceRunCount={null}
++          isAggregate={false}
++          perModel={{
++            model1: {
++              sampleSize: 3,
++              values: {},
++              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
++            },
++          }}
++          visualizationData={{
++            decisionDistribution: {},
++            scenarioDimensions: {
++              s1: { Freedom: 'a1', Harmony: 'b1' },
++              s5: { Freedom: 'a1', Harmony: 'b1' },
++            },
++            modelScenarioMatrix: {
++              model1: { s1: 5, s5: 4 },
++            },
++          }}
++          varianceAnalysis={varianceAnalysis}
++        />
++      </MemoryRouter>
++    );
++
++    expect(screen.queryByRole('button', { name: /Torn:/i })).not.toBeInTheDocument();
++    expect(screen.queryByRole('button', { name: /Unstable:/i })).not.toBeInTheDocument();
++    expect(screen.getAllByText('0%')).toHaveLength(3);
++  });
++
++  it('shows unavailable aggregate summaries without blocking the rest of the page', () => {
++    const semantics = createSemantics();
++    semantics.preference.rowAvailability = {
++      status: 'unavailable',
++      reason: 'aggregate-analysis',
++      message: 'Aggregate summary unavailable for this run.',
++    };
++
++    render(
++      <MemoryRouter>
++        <OverviewTab
++          runId="run-1"
++          semantics={semantics}
++          completedBatches="-"
++          aggregateSourceRunCount={4}
++          isAggregate
++          perModel={{
++            model1: {
++              sampleSize: 3,
++              values: {},
++              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
++            },
++          }}
++          visualizationData={{
++            decisionDistribution: {},
++            scenarioDimensions: {
++              s1: { Freedom: 'a1', Harmony: 'b1' },
++              s2: { Freedom: 'a1', Harmony: 'b2' },
++              s3: { Freedom: 'a2', Harmony: 'b2' },
++              s4: { Freedom: 'a2', Harmony: 'b1' },
++              s5: { Freedom: 'a1', Harmony: 'b1' },
++            },
++            modelScenarioMatrix: {
++              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
++            },
++          }}
++          varianceAnalysis={createVarianceAnalysis()}
++        />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByText('Aggregate summary unavailable for this run.')).toBeInTheDocument();
++    expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
++    expect(screen.getByRole('button', { name: /^Stable: 1 of 4 repeated conditions/i })).toBeInTheDocument();
++  });
++
++  it('does not treat a mostly-neutral condition as stable', () => {
++    render(
++      <MemoryRouter>
++        <OverviewTab
++          runId="run-1"
++          definitionContent={pairedDefinitionContent}
++          semantics={createSemantics()}
++          completedBatches={3}
++          aggregateSourceRunCount={null}
++          isAggregate={false}
++          perModel={{
++            model1: {
++              sampleSize: 3,
++              values: {},
++              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
++            },
++          }}
++          visualizationData={{
++            decisionDistribution: {},
++            scenarioDimensions: {
++              s1: { Freedom: 'a1', Harmony: 'b1' },
++              s2: { Freedom: 'a1', Harmony: 'b2' },
++              s3: { Freedom: 'a2', Harmony: 'b2' },
++              s4: { Freedom: 'a2', Harmony: 'b1' },
++              s5: { Freedom: 'a1', Harmony: 'b1' },
++            },
++            modelScenarioMatrix: {
++              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
++            },
++          }}
++          varianceAnalysis={createVarianceAnalysis()}
++        />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByRole('button', { name: /^Torn: 1 of 4 repeated conditions/i })).toBeInTheDocument();
++    expect(screen.queryByRole('button', { name: /^Stable: 2 of 4 repeated conditions/i })).not.toBeInTheDocument();
++  });
++
++  it('pools repeat-pattern percentages across both companion runs in paired mode', () => {
++    render(
++      <MemoryRouter>
++        <OverviewTab
++          runId="run-1"
++          analysisSearchParams={new URLSearchParams({ mode: 'paired' })}
++          definitionContent={pairedDefinitionContent}
++          semantics={createSemantics()}
++          completedBatches={3}
++          aggregateSourceRunCount={null}
++          isAggregate={false}
++          perModel={{
++            model1: {
++              sampleSize: 3,
++              values: {},
++              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
++            },
++          }}
++          visualizationData={{
++            decisionDistribution: {},
++            scenarioDimensions: {
++              s1: { Freedom: 'a1', Harmony: 'b1' },
++              s2: { Freedom: 'a1', Harmony: 'b2' },
++              s3: { Freedom: 'a2', Harmony: 'b2' },
++              s4: { Freedom: 'a2', Harmony: 'b1' },
++              s5: { Freedom: 'a1', Harmony: 'b1' },
++            },
++            modelScenarioMatrix: {
++              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
++            },
++          }}
++          varianceAnalysis={createVarianceAnalysis()}
++          analysisMode="paired"
++          companionAnalysis={createCompanionAnalysis()}
++        />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByText('Run-level evidence: pooled across 2 companion runs')).toBeInTheDocument();
++    expect(screen.getByText('62.5%')).toBeInTheDocument();
++    // Paired mode now enables drilldown — the stable cell should be a clickable button
++    expect(screen.getByRole('button', { name: /stable: 5 of 8 repeated conditions/i })).toBeInTheDocument();
++  });
++
++  it('does not show the old paired scope note in overview', () => {
++    render(
++      <MemoryRouter>
++        <OverviewTab
++          runId="run-1"
++          semantics={createSemantics()}
++          completedBatches={2}
++          aggregateSourceRunCount={null}
++          isAggregate={false}
++          analysisMode="single"
++          perModel={{
++            model1: {
++              sampleSize: 3,
++              values: {},
++              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
++            },
++          }}
++          visualizationData={null}
++        />
++      </MemoryRouter>
++    );
++
++    expect(screen.queryByText(/Paired vignette scope/i)).not.toBeInTheDocument();
++  });
++
++  it('shows pooled paired summary context without duplicating the condition table', () => {
++    const currentAnalysis: AnalysisResult = {
++      ...createCompanionAnalysis(),
++      runId: 'run-b',
++      visualizationData: {
++        decisionDistribution: {},
++        scenarioDimensions: {
++          s1: { Freedom: 'a1', Harmony: 'b1' },
++        },
++        modelScenarioMatrix: {
++          model1: { s1: 5 },
++        },
++      },
++      varianceAnalysis: {
++        isMultiSample: true,
++        samplesPerScenario: 1,
++        orientationCorrectedCount: 1,
++        perModel: {
++          model1: {
++            totalSamples: 1,
++            uniqueScenarios: 1,
++            samplesPerScenario: 1,
++            avgWithinScenarioVariance: 0,
++            maxWithinScenarioVariance: 0,
++            consistencyScore: 1,
++            perScenario: {
++              s1: {
++                sampleCount: 1,
++                mean: 5,
++                stdDev: 0,
++                variance: 0,
++                min: 5,
++                max: 5,
++                range: 0,
++                orientationCorrected: true,
++              },
++            },
++          },
++        },
++        mostVariableScenarios: [],
++        leastVariableScenarios: [],
++      },
++    };
++
++    const companionAnalysis: AnalysisResult = {
++      ...createCompanionAnalysis(),
++      runId: 'run-a',
++      visualizationData: {
++        decisionDistribution: {},
++        scenarioDimensions: {
++          s2: { Freedom: 'a1', Harmony: 'b1' },
++        },
++        modelScenarioMatrix: {
++          model1: { s2: 1 },
++        },
++      },
++      varianceAnalysis: {
++        isMultiSample: true,
++        samplesPerScenario: 1,
++        orientationCorrectedCount: 0,
++        perModel: {
++          model1: {
++            totalSamples: 1,
++            uniqueScenarios: 1,
++            samplesPerScenario: 1,
++            avgWithinScenarioVariance: 0,
++            maxWithinScenarioVariance: 0,
++            consistencyScore: 1,
++            perScenario: {
++              s2: {
++                sampleCount: 1,
++                mean: 1,
++                stdDev: 0,
++                variance: 0,
++                min: 1,
++                max: 1,
++                range: 0,
++              },
++            },
++          },
++        },
++        mostVariableScenarios: [],
++        leastVariableScenarios: [],
++      },
++    };
++
++    render(
++      <MemoryRouter>
++        <OverviewTab
++          runId="run-b"
++          analysisBasePath="/analysis"
++          analysisSearchParams={new URLSearchParams({ mode: 'paired' })}
++          definitionContent={pairedDefinitionContent}
++          semantics={createSemantics()}
++          completedBatches={3}
++          aggregateSourceRunCount={null}
++          isAggregate={false}
++          analysisMode="paired"
++          perModel={{
++            model1: {
++              sampleSize: 2,
++              values: {},
++              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
++            },
++          }}
++          visualizationData={currentAnalysis.visualizationData}
++          varianceAnalysis={currentAnalysis.varianceAnalysis}
++          currentAnalysis={currentAnalysis}
++          companionAnalysis={companionAnalysis}
++          currentRun={{
++            id: 'run-b',
++            config: { jobChoicePresentationOrder: 'B_first' },
++            definition: {
++              name: 'Harmony -> Freedom',
++              content: {
++                ...pairedDefinitionContent,
++                methodology: {
++                  ...pairedDefinitionContent.methodology,
++                  presentation_order: 'B_first',
++                },
++              },
++            },
++          } as any}
++          companionRun={{
++            id: 'run-a',
++            config: { jobChoicePresentationOrder: 'A_first' },
++            definition: {
++              name: 'Freedom -> Harmony',
++              content: pairedDefinitionContent,
++            },
++          } as any}
++        />
++      </MemoryRouter>
++    );
++
++    expect(screen.getByText('Run-level evidence: pooled across 2 companion runs')).toBeInTheDocument();
++    expect(screen.getByText('Paired Run Comparison')).toBeInTheDocument();
++    expect(screen.getByRole('button', { name: /copy paired run comparison as image/i })).toBeInTheDocument();
++    expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
++  });
++});
+diff --git a/cloud/apps/web/tests/components/analysis/OverviewTab.test.tsx b/cloud/apps/web/tests/components/analysis/OverviewTab.test.tsx
+deleted file mode 100644
+index f47923b0..00000000
+--- a/cloud/apps/web/tests/components/analysis/OverviewTab.test.tsx
++++ /dev/null
+@@ -1,1228 +0,0 @@
+-import { beforeEach, describe, expect, it, vi } from 'vitest';
+-import { fireEvent, render, screen } from '@testing-library/react';
+-import { MemoryRouter } from 'react-router-dom';
+-import { OverviewTab } from '../../../src/components/analysis/tabs/OverviewTab';
+-import type { AnalysisResult, VarianceAnalysis } from '../../../src/api/operations/analysis';
+-import type { AnalysisSemanticsView } from '../../../src/components/analysis-v2/analysisSemantics';
+-
+-const mockNavigate = vi.fn();
+-
+-vi.mock('react-router-dom', async () => {
+-  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+-  return {
+-    ...actual,
+-    useNavigate: () => mockNavigate,
+-  };
+-});
+-
+-function createSemantics(): AnalysisSemanticsView {
+-  return {
+-    preference: {
+-      rowAvailability: { status: 'available' },
+-      byModel: {
+-        model1: {
+-          modelId: 'model1',
+-          overallLean: 'A',
+-          topPrioritizedValues: [{ name: 'Fairness', winRate: 1 }],
+-          topDeprioritizedValues: [{ name: 'Loyalty', winRate: 0 }],
+-          neutralValues: [],
+-          availability: { status: 'available' },
+-        },
+-      },
+-    },
+-    reliability: {
+-      rowAvailability: { status: 'available' },
+-      byModel: {
+-        model1: {
+-          modelId: 'model1',
+-          baselineReliability: 0.92,
+-          baselineNoise: 0.18,
+-          directionalAgreement: 0.88,
+-          neutralShare: 0.1,
+-          coverageCount: 3,
+-          uniqueScenarios: 3,
+-          repeatCoverageShare: null,
+-          contributingRunCount: null,
+-          weightedOverallSignedCenterSd: null,
+-          hasLowCoverageWarning: false,
+-          hasHighDriftWarning: false,
+-          availability: { status: 'available' },
+-        },
+-      },
+-      hasAnyAvailableModel: true,
+-      hasMixedAvailability: false,
+-      aggregateWarnings: {
+-        isEligibleAggregate: false,
+-        lowCoverageModels: [],
+-        highDriftModels: [],
+-      },
+-    },
+-  };
+-}
+-
+-function createVarianceAnalysis(): VarianceAnalysis {
+-  return {
+-    isMultiSample: true,
+-    samplesPerScenario: 12,
+-    orientationCorrectedCount: 1,
+-    perModel: {
+-      model1: {
+-        totalSamples: 60,
+-        uniqueScenarios: 5,
+-        samplesPerScenario: 12,
+-        avgWithinScenarioVariance: 0.2,
+-        maxWithinScenarioVariance: 0.3,
+-        consistencyScore: 0.85,
+-        perScenario: {
+-          s1: {
+-            sampleCount: 12,
+-            mean: 4.6,
+-            stdDev: 0.1,
+-            variance: 0.01,
+-            min: 4,
+-            max: 5,
+-            range: 1,
+-            directionalAgreement: 0.9,
+-            medianSignedDistance: 1.1,
+-            neutralShare: 0,
+-          },
+-          s2: {
+-            sampleCount: 12,
+-            mean: 3.2,
+-            stdDev: 0.4,
+-            variance: 0.16,
+-            min: 3,
+-            max: 4,
+-            range: 1,
+-            directionalAgreement: 0.6,
+-            medianSignedDistance: 0.1,
+-            neutralShare: 0.7,
+-          },
+-          s3: {
+-            sampleCount: 12,
+-            mean: 1.9,
+-            stdDev: 0.8,
+-            variance: 0.64,
+-            min: 2,
+-            max: 5,
+-            range: 3,
+-            directionalAgreement: 0.5,
+-            medianSignedDistance: 0.5,
+-            neutralShare: 0.1,
+-          },
+-          s4: {
+-            sampleCount: 12,
+-            mean: 2.4,
+-            stdDev: 0.4,
+-            variance: 0.16,
+-            min: 2,
+-            max: 3,
+-            range: 1,
+-            directionalAgreement: 0.583333,
+-            medianSignedDistance: -1,
+-            neutralShare: 0.416667,
+-          },
+-          s5: {
+-            sampleCount: 12,
+-            mean: 4.4,
+-            stdDev: 0.2,
+-            variance: 0.04,
+-            min: 4,
+-            max: 5,
+-            range: 1,
+-            directionalAgreement: 0.85,
+-            medianSignedDistance: 1,
+-            neutralShare: 0,
+-            orientationCorrected: true,
+-          },
+-        },
+-      },
+-    },
+-    mostVariableScenarios: [],
+-    leastVariableScenarios: [],
+-  };
+-}
+-
+-function createCompanionAnalysis(): AnalysisResult {
+-  return {
+-    id: 'analysis-2',
+-    runId: 'run-2',
+-    analysisType: 'basic',
+-    status: 'CURRENT',
+-    codeVersion: '1.1.1',
+-    inputHash: 'hash-2',
+-    createdAt: '2026-03-10T10:00:00Z',
+-    computedAt: '2026-03-10T10:01:00Z',
+-    durationMs: 1000,
+-    perModel: {
+-      model1: {
+-        sampleSize: 4,
+-        values: {},
+-        overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+-      },
+-    },
+-    preferenceSummary: null,
+-    reliabilitySummary: null,
+-    aggregateMetadata: null,
+-    modelAgreement: {
+-      pairwise: {},
+-      outlierModels: [],
+-      overallAgreement: 0.8,
+-    },
+-    visualizationData: {
+-      decisionDistribution: {},
+-      scenarioDimensions: {
+-        c1: { Freedom: 'a1', Harmony: 'b1' },
+-        c2: { Freedom: 'a1', Harmony: 'b2' },
+-        c3: { Freedom: 'a2', Harmony: 'b2' },
+-        c4: { Freedom: 'a2', Harmony: 'b1' },
+-      },
+-      modelScenarioMatrix: {
+-        model1: { c1: 5, c2: 4, c3: 5, c4: 4 },
+-      },
+-    },
+-    varianceAnalysis: {
+-      isMultiSample: true,
+-      samplesPerScenario: 12,
+-      orientationCorrectedCount: 4,
+-      perModel: {
+-        model1: {
+-          totalSamples: 48,
+-          uniqueScenarios: 4,
+-          samplesPerScenario: 12,
+-          avgWithinScenarioVariance: 0.1,
+-          maxWithinScenarioVariance: 0.2,
+-          consistencyScore: 0.9,
+-          perScenario: {
+-            c1: {
+-              sampleCount: 12,
+-              mean: 4.6,
+-              stdDev: 0.1,
+-              variance: 0.01,
+-              min: 4,
+-              max: 5,
+-              range: 1,
+-              directionalAgreement: 0.9,
+-              medianSignedDistance: 1.0,
+-              neutralShare: 0,
+-              orientationCorrected: true,
+-            },
+-            c2: {
+-              sampleCount: 12,
+-              mean: 4.5,
+-              stdDev: 0.2,
+-              variance: 0.04,
+-              min: 4,
+-              max: 5,
+-              range: 1,
+-              directionalAgreement: 0.82,
+-              medianSignedDistance: 0.9,
+-              neutralShare: 0,
+-              orientationCorrected: true,
+-            },
+-            c3: {
+-              sampleCount: 12,
+-              mean: 4.4,
+-              stdDev: 0.2,
+-              variance: 0.04,
+-              min: 4,
+-              max: 5,
+-              range: 1,
+-              directionalAgreement: 0.85,
+-              medianSignedDistance: 0.8,
+-              neutralShare: 0,
+-              orientationCorrected: true,
+-            },
+-            c4: {
+-              sampleCount: 12,
+-              mean: 4.3,
+-              stdDev: 0.2,
+-              variance: 0.04,
+-              min: 4,
+-              max: 5,
+-              range: 1,
+-              directionalAgreement: 0.88,
+-              medianSignedDistance: 0.8,
+-              neutralShare: 0,
+-              orientationCorrected: true,
+-            },
+-          },
+-        },
+-      },
+-      mostVariableScenarios: [],
+-      leastVariableScenarios: [],
+-    },
+-    mostContestedScenarios: [],
+-    methodsUsed: {
+-      modelComparison: 'spearman',
+-      pValueCorrection: 'holm',
+-      effectSize: 'cohens_d',
+-      dimensionTest: 'kruskal',
+-      alpha: 0.05,
+-      codeVersion: '1.1.1',
+-    },
+-    warnings: [],
+-  };
+-}
+-
+-const pairedDefinitionContent = {
+-  methodology: {
+-    family: 'job-choice',
+-    presentation_order: 'A_first' as const,
+-  },
+-  components: {
+-    value_first: { token: 'freedom' },
+-    value_second: { token: 'harmony' },
+-  },
+-  dimensions: [
+-    { name: 'Freedom' },
+-    { name: 'Harmony' },
+-  ],
+-};
+-
+-describe('OverviewTab', () => {
+-  beforeEach(() => {
+-    mockNavigate.mockReset();
+-  });
+-
+-  it('renders the overview summary without duplicating Condition Decisions', () => {
+-    render(
+-      <MemoryRouter>
+-        <OverviewTab
+-          runId="run-1"
+-          semantics={createSemantics()}
+-          completedBatches={3}
+-          aggregateSourceRunCount={null}
+-          isAggregate={false}
+-          perModel={{
+-            model1: {
+-              sampleSize: 3,
+-              values: {},
+-              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+-            },
+-          }}
+-          visualizationData={{
+-            decisionDistribution: {},
+-            scenarioDimensions: {
+-              s1: { Freedom: 'a1', Harmony: 'b1' },
+-              s2: { Freedom: 'a1', Harmony: 'b2' },
+-              s3: { Freedom: 'a2', Harmony: 'b2' },
+-              s4: { Freedom: 'a2', Harmony: 'b1' },
+-              s5: { Freedom: 'a1', Harmony: 'b1' },
+-            },
+-            modelScenarioMatrix: {
+-              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
+-            },
+-          }}
+-          varianceAnalysis={createVarianceAnalysis()}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByText('Overview Summary')).toBeInTheDocument();
+-    expect(screen.getByText('Run-level evidence: 3 completed batches')).toBeInTheDocument();
+-    expect(screen.getByText('Preferred Value')).toBeInTheDocument();
+-    expect(screen.getByText('Win Rate')).toBeInTheDocument();
+-    expect(screen.getByText('Fairness')).toBeInTheDocument();
+-    expect(screen.getByText('100%')).toBeInTheDocument();
+-    expect(screen.getByText('Value Agreement')).toBeInTheDocument();
+-    expect(screen.getByText('Soft Lean %')).toBeInTheDocument();
+-    expect(screen.queryByText('Decision Consistency')).not.toBeInTheDocument();
+-    expect(screen.getByText('88%')).toBeInTheDocument();
+-    expect(screen.getByRole('button', { name: /copy overview summary as image/i })).toBeInTheDocument();
+-
+-    expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
+-  });
+-
+-  it('shows the coverage cell batch count when the overview was launched from a coverage cell', () => {
+-    render(
+-      <MemoryRouter>
+-        <OverviewTab
+-          runId="run-1"
+-          semantics={createSemantics()}
+-          completedBatches={3}
+-          aggregateSourceRunCount={4}
+-          coverageBatchCount={5}
+-          isAggregate
+-          perModel={{
+-            model1: {
+-              sampleSize: 3,
+-              values: {},
+-              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+-            },
+-          }}
+-          visualizationData={{
+-            decisionDistribution: {},
+-            scenarioDimensions: {
+-              s1: { Freedom: 'a1', Harmony: 'b1' },
+-              s2: { Freedom: 'a1', Harmony: 'b2' },
+-              s3: { Freedom: 'a2', Harmony: 'b2' },
+-              s4: { Freedom: 'a2', Harmony: 'b1' },
+-              s5: { Freedom: 'a1', Harmony: 'b1' },
+-            },
+-            modelScenarioMatrix: {
+-              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
+-            },
+-          }}
+-          varianceAnalysis={createVarianceAnalysis()}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByText('Run-level evidence: 5 batches from coverage cell')).toBeInTheDocument();
+-  });
+-
+-  it('shows paired coverage counts when the overview is launched from a coverage cell', () => {
+-    render(
+-      <MemoryRouter>
+-        <OverviewTab
+-          runId="run-1"
+-          semantics={createSemantics()}
+-          completedBatches={3}
+-          aggregateSourceRunCount={4}
+-          coverageBatchCount={5}
+-          coveragePairedBatchCount={2}
+-          isAggregate
+-          perModel={{
+-            model1: {
+-              sampleSize: 3,
+-              values: {},
+-              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+-            },
+-          }}
+-          visualizationData={{
+-            decisionDistribution: {},
+-            scenarioDimensions: {
+-              s1: { Freedom: 'a1', Harmony: 'b1' },
+-              s2: { Freedom: 'a1', Harmony: 'b2' },
+-              s3: { Freedom: 'a2', Harmony: 'b2' },
+-              s4: { Freedom: 'a2', Harmony: 'b1' },
+-              s5: { Freedom: 'a1', Harmony: 'b1' },
+-            },
+-            modelScenarioMatrix: {
+-              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
+-            },
+-          }}
+-          varianceAnalysis={createVarianceAnalysis()}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByText('Run-level evidence: 5 batches from coverage cell • 2 paired batches')).toBeInTheDocument();
+-  });
+-
+-  it('renders an em dash when the preferred value win rate is missing', () => {
+-    const semantics = createSemantics();
+-    semantics.preference.byModel.model1.topPrioritizedValues = [{ name: 'Fairness', winRate: null }];
+-
+-    render(
+-      <MemoryRouter>
+-        <OverviewTab
+-          runId="run-1"
+-          semantics={semantics}
+-          completedBatches={3}
+-          aggregateSourceRunCount={null}
+-          isAggregate={false}
+-          analysisMode="single"
+-          perModel={{
+-            model1: {
+-              sampleSize: 3,
+-              values: {},
+-              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+-            },
+-          }}
+-          visualizationData={{
+-            decisionDistribution: {},
+-            scenarioDimensions: {
+-              s1: { Freedom: 'a1', Harmony: 'b1' },
+-            },
+-            modelScenarioMatrix: {
+-              model1: { s1: 5 },
+-            },
+-          }}
+-          varianceAnalysis={createVarianceAnalysis()}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    const winRateCells = screen.getAllByText('—');
+-    expect(winRateCells.length).toBeGreaterThan(0);
+-  });
+-
+-  it('keeps the paired comparison section visible with a single-mode note', () => {
+-    render(
+-      <MemoryRouter>
+-        <OverviewTab
+-          runId="run-1"
+-          semantics={createSemantics()}
+-          completedBatches={3}
+-          aggregateSourceRunCount={null}
+-          isAggregate={false}
+-          analysisMode="single"
+-          perModel={{
+-            model1: {
+-              sampleSize: 3,
+-              values: {},
+-              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+-            },
+-          }}
+-          visualizationData={{
+-            decisionDistribution: {},
+-            scenarioDimensions: {
+-              s1: { Freedom: 'a1', Harmony: 'b1' },
+-            },
+-            modelScenarioMatrix: {
+-              model1: { s1: 5 },
+-            },
+-          }}
+-          varianceAnalysis={createVarianceAnalysis()}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByText('Paired Run Comparison')).toBeInTheDocument();
+-    expect(screen.getByText(/only available in Paired vignettes mode/i)).toBeInTheDocument();
+-  });
+-
+-  it('keeps one decimal for non-integer summary percentages', () => {
+-    const semantics = createSemantics();
+-    semantics.reliability.byModel.model1.directionalAgreement = 0.983333;
+-
+-    render(
+-      <MemoryRouter>
+-        <OverviewTab
+-          runId="run-1"
+-          semantics={semantics}
+-          completedBatches={3}
+-          aggregateSourceRunCount={null}
+-          isAggregate={false}
+-          perModel={{
+-            model1: {
+-              sampleSize: 3,
+-              values: {},
+-              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+-            },
+-          }}
+-          visualizationData={{
+-            decisionDistribution: {},
+-            scenarioDimensions: {
+-              s1: { Freedom: 'a1', Harmony: 'b1' },
+-            },
+-            modelScenarioMatrix: {
+-              model1: { s1: 5 },
+-            },
+-          }}
+-          varianceAnalysis={createVarianceAnalysis()}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByText('98.3%')).toBeInTheDocument();
+-  });
+-
+-  it('uses paired-specific no-repeat wording in overview summary', () => {
+-    const semantics = createSemantics();
+-    semantics.reliability.rowAvailability = {
+-      status: 'unavailable',
+-      reason: 'no-repeat-coverage',
+-      message: 'This model has one sample per condition, so baseline reliability is unavailable. Recomputing the same run without repeated samples will not populate this section.',
+-    };
+-    semantics.reliability.byModel.model1 = {
+-      ...semantics.reliability.byModel.model1,
+-      availability: semantics.reliability.rowAvailability,
+-      baselineReliability: null,
+-      baselineNoise: null,
+-      directionalAgreement: null,
+-      neutralShare: null,
+-      coverageCount: 0,
+-      uniqueScenarios: 0,
+-      repeatCoverageShare: null,
+-      contributingRunCount: null,
+-      weightedOverallSignedCenterSd: null,
+-    };
+-
+-    render(
+-      <MemoryRouter>
+-        <OverviewTab
+-          runId="run-1"
+-          semantics={semantics}
+-          completedBatches={3}
+-          aggregateSourceRunCount={null}
+-          isAggregate={false}
+-          analysisMode="paired"
+-          companionAnalysis={createCompanionAnalysis()}
+-          perModel={{
+-            model1: {
+-              sampleSize: 3,
+-              values: {},
+-              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+-            },
+-          }}
+-          visualizationData={{
+-            decisionDistribution: {},
+-            scenarioDimensions: {
+-              s1: { Freedom: 'a1', Harmony: 'b1' },
+-            },
+-            modelScenarioMatrix: {
+-              model1: { s1: 5 },
+-            },
+-          }}
+-          varianceAnalysis={createVarianceAnalysis()}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByText(/pooling both vignette orders does not add repeat coverage/i)).toBeInTheDocument();
+-  });
+-
+-  it('shows the custom header tooltip on focus', async () => {
+-    render(
+-      <MemoryRouter>
+-        <OverviewTab
+-          runId="run-1"
+-          semantics={createSemantics()}
+-          completedBatches={3}
+-          aggregateSourceRunCount={null}
+-          isAggregate={false}
+-          perModel={{
+-            model1: {
+-              sampleSize: 3,
+-              values: {},
+-              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+-            },
+-          }}
+-          visualizationData={{
+-            decisionDistribution: {},
+-            scenarioDimensions: {
+-              s1: { Freedom: 'a1', Harmony: 'b1' },
+-              s2: { Freedom: 'a1', Harmony: 'b2' },
+-              s3: { Freedom: 'a2', Harmony: 'b2' },
+-              s4: { Freedom: 'a2', Harmony: 'b1' },
+-              s5: { Freedom: 'a1', Harmony: 'b1' },
+-            },
+-            modelScenarioMatrix: {
+-              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
+-            },
+-          }}
+-          varianceAnalysis={createVarianceAnalysis()}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    fireEvent.focus(screen.getByRole('button', { name: /Value Agreement:/i }));
+-
+-    expect(screen.getByRole('tooltip')).toHaveTextContent(/How often repeated judgments stay on the same value side/i);
+-  });
+-
+-  it('navigates repeat-pattern cells with condition-level ids in paired mode', () => {
+-    render(
+-      <MemoryRouter>
+-        <OverviewTab
+-          runId="run-1"
+-          analysisBasePath="/analysis"
+-          analysisSearchParams={new URLSearchParams({ mode: 'paired' })}
+-          definitionContent={pairedDefinitionContent}
+-          semantics={createSemantics()}
+-          completedBatches={3}
+-          aggregateSourceRunCount={null}
+-          isAggregate={false}
+-          perModel={{
+-            model1: {
+-              sampleSize: 3,
+-              values: {},
+-              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+-            },
+-          }}
+-          visualizationData={{
+-            decisionDistribution: {},
+-            scenarioDimensions: {
+-              s1: { Freedom: 'a1', Harmony: 'b1' },
+-              s2: { Freedom: 'a1', Harmony: 'b2' },
+-              s3: { Freedom: 'a2', Harmony: 'b2' },
+-              s4: { Freedom: 'a2', Harmony: 'b1' },
+-              s5: { Freedom: 'a1', Harmony: 'b1' },
+-            },
+-            modelScenarioMatrix: {
+-              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
+-            },
+-          }}
+-          varianceAnalysis={createVarianceAnalysis()}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    fireEvent.click(screen.getByRole('button', { name: /^Stable: 1 of 4 repeated conditions/i }));
+-
+-    expect(mockNavigate).toHaveBeenCalledWith(
+-      '/analysis/run-1/transcripts?modelId=model1&repeatPattern=stable&rowDim=Freedom&colDim=Harmony&conditionIds=a1%7C%7Cb1&mode=paired'
+-    );
+-  });
+-
+-  it('classifies aggregate repeat-pattern columns from pooled variance data', () => {
+-    render(
+-      <MemoryRouter>
+-        <OverviewTab
+-          runId="run-1"
+-          analysisBasePath="/analysis"
+-          semantics={createSemantics()}
+-          completedBatches="-"
+-          aggregateSourceRunCount={4}
+-          isAggregate
+-          perModel={{
+-            model1: {
+-              sampleSize: 3,
+-              values: {},
+-              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+-            },
+-          }}
+-          visualizationData={{
+-            decisionDistribution: {},
+-            scenarioDimensions: {
+-              s1: { Freedom: 'a1', Harmony: 'b1' },
+-              s2: { Freedom: 'a1', Harmony: 'b2' },
+-              s3: { Freedom: 'a2', Harmony: 'b2' },
+-              s4: { Freedom: 'a2', Harmony: 'b1' },
+-              s5: { Freedom: 'a1', Harmony: 'b1' },
+-            },
+-            modelScenarioMatrix: {
+-              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
+-            },
+-          }}
+-          varianceAnalysis={createVarianceAnalysis()}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByText('Run-level evidence: 4 contributing source runs')).toBeInTheDocument();
+-    expect(screen.getAllByText('25%')).toHaveLength(4);
+-    expect(screen.getByRole('button', { name: /^Soft Lean: 1 of 4 repeated conditions/i })).toBeInTheDocument();
+-    expect(screen.getByRole('button', { name: /^Unstable: 1 of 4 repeated conditions/i })).toBeInTheDocument();
+-    expect(screen.getByRole('button', { name: /^Torn: 1 of 4 repeated conditions/i })).toBeInTheDocument();
+-
+-    fireEvent.click(screen.getByRole('button', { name: /^Unstable: 1 of 4 repeated conditions/i }));
+-
+-    expect(mockNavigate).toHaveBeenCalledWith(
+-      '/analysis/run-1/transcripts?modelId=model1&repeatPattern=noisy&rowDim=Freedom&colDim=Harmony&conditionIds=a2%7C%7Cb2'
+-    );
+-  });
+-
+-  it('renders zero-count repeat-pattern cells as non-clickable text', () => {
+-    const varianceAnalysis = createVarianceAnalysis();
+-    varianceAnalysis.perModel.model1.perScenario = {
+-      s1: varianceAnalysis.perModel.model1.perScenario.s1,
+-      s5: varianceAnalysis.perModel.model1.perScenario.s5,
+-    };
+-
+-    render(
+-      <MemoryRouter>
+-        <OverviewTab
+-          runId="run-1"
+-          analysisBasePath="/analysis"
+-          semantics={createSemantics()}
+-          completedBatches={3}
+-          aggregateSourceRunCount={null}
+-          isAggregate={false}
+-          perModel={{
+-            model1: {
+-              sampleSize: 3,
+-              values: {},
+-              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+-            },
+-          }}
+-          visualizationData={{
+-            decisionDistribution: {},
+-            scenarioDimensions: {
+-              s1: { Freedom: 'a1', Harmony: 'b1' },
+-              s5: { Freedom: 'a1', Harmony: 'b1' },
+-            },
+-            modelScenarioMatrix: {
+-              model1: { s1: 5, s5: 4 },
+-            },
+-          }}
+-          varianceAnalysis={varianceAnalysis}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.queryByRole('button', { name: /Torn:/i })).not.toBeInTheDocument();
+-    expect(screen.queryByRole('button', { name: /Unstable:/i })).not.toBeInTheDocument();
+-    expect(screen.getAllByText('0%')).toHaveLength(3);
+-  });
+-
+-  it('shows unavailable aggregate summaries without blocking the rest of the page', () => {
+-    const semantics = createSemantics();
+-    semantics.preference.rowAvailability = {
+-      status: 'unavailable',
+-      reason: 'aggregate-analysis',
+-      message: 'Aggregate summary unavailable for this run.',
+-    };
+-
+-    render(
+-      <MemoryRouter>
+-        <OverviewTab
+-          runId="run-1"
+-          semantics={semantics}
+-          completedBatches="-"
+-          aggregateSourceRunCount={4}
+-          isAggregate
+-          perModel={{
+-            model1: {
+-              sampleSize: 3,
+-              values: {},
+-              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+-            },
+-          }}
+-          visualizationData={{
+-            decisionDistribution: {},
+-            scenarioDimensions: {
+-              s1: { Freedom: 'a1', Harmony: 'b1' },
+-              s2: { Freedom: 'a1', Harmony: 'b2' },
+-              s3: { Freedom: 'a2', Harmony: 'b2' },
+-              s4: { Freedom: 'a2', Harmony: 'b1' },
+-              s5: { Freedom: 'a1', Harmony: 'b1' },
+-            },
+-            modelScenarioMatrix: {
+-              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
+-            },
+-          }}
+-          varianceAnalysis={createVarianceAnalysis()}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByText('Aggregate summary unavailable for this run.')).toBeInTheDocument();
+-    expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
+-    expect(screen.getByRole('button', { name: /^Stable: 1 of 4 repeated conditions/i })).toBeInTheDocument();
+-  });
+-
+-  it('does not treat a mostly-neutral condition as stable', () => {
+-    render(
+-      <MemoryRouter>
+-        <OverviewTab
+-          runId="run-1"
+-          definitionContent={pairedDefinitionContent}
+-          semantics={createSemantics()}
+-          completedBatches={3}
+-          aggregateSourceRunCount={null}
+-          isAggregate={false}
+-          perModel={{
+-            model1: {
+-              sampleSize: 3,
+-              values: {},
+-              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+-            },
+-          }}
+-          visualizationData={{
+-            decisionDistribution: {},
+-            scenarioDimensions: {
+-              s1: { Freedom: 'a1', Harmony: 'b1' },
+-              s2: { Freedom: 'a1', Harmony: 'b2' },
+-              s3: { Freedom: 'a2', Harmony: 'b2' },
+-              s4: { Freedom: 'a2', Harmony: 'b1' },
+-              s5: { Freedom: 'a1', Harmony: 'b1' },
+-            },
+-            modelScenarioMatrix: {
+-              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
+-            },
+-          }}
+-          varianceAnalysis={createVarianceAnalysis()}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByRole('button', { name: /^Torn: 1 of 4 repeated conditions/i })).toBeInTheDocument();
+-    expect(screen.queryByRole('button', { name: /^Stable: 2 of 4 repeated conditions/i })).not.toBeInTheDocument();
+-  });
+-
+-  it('pools repeat-pattern percentages across both companion runs in paired mode', () => {
+-    render(
+-      <MemoryRouter>
+-        <OverviewTab
+-          runId="run-1"
+-          analysisSearchParams={new URLSearchParams({ mode: 'paired' })}
+-          definitionContent={pairedDefinitionContent}
+-          semantics={createSemantics()}
+-          completedBatches={3}
+-          aggregateSourceRunCount={null}
+-          isAggregate={false}
+-          perModel={{
+-            model1: {
+-              sampleSize: 3,
+-              values: {},
+-              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+-            },
+-          }}
+-          visualizationData={{
+-            decisionDistribution: {},
+-            scenarioDimensions: {
+-              s1: { Freedom: 'a1', Harmony: 'b1' },
+-              s2: { Freedom: 'a1', Harmony: 'b2' },
+-              s3: { Freedom: 'a2', Harmony: 'b2' },
+-              s4: { Freedom: 'a2', Harmony: 'b1' },
+-              s5: { Freedom: 'a1', Harmony: 'b1' },
+-            },
+-            modelScenarioMatrix: {
+-              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
+-            },
+-          }}
+-          varianceAnalysis={createVarianceAnalysis()}
+-          analysisMode="paired"
+-          companionAnalysis={createCompanionAnalysis()}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByText('Run-level evidence: pooled across 2 companion runs')).toBeInTheDocument();
+-    expect(screen.getByText('62.5%')).toBeInTheDocument();
+-    // Paired mode now enables drilldown — the stable cell should be a clickable button
+-    expect(screen.getByRole('button', { name: /stable: 5 of 8 repeated conditions/i })).toBeInTheDocument();
+-  });
+-
+-  it('does not show the old paired scope note in overview', () => {
+-    render(
+-      <MemoryRouter>
+-        <OverviewTab
+-          runId="run-1"
+-          semantics={createSemantics()}
+-          completedBatches={2}
+-          aggregateSourceRunCount={null}
+-          isAggregate={false}
+-          analysisMode="single"
+-          perModel={{
+-            model1: {
+-              sampleSize: 3,
+-              values: {},
+-              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+-            },
+-          }}
+-          visualizationData={null}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.queryByText(/Paired vignette scope/i)).not.toBeInTheDocument();
+-  });
+-
+-  it('shows pooled paired summary context without duplicating the condition table', () => {
+-    const currentAnalysis: AnalysisResult = {
+-      ...createCompanionAnalysis(),
+-      runId: 'run-b',
+-      visualizationData: {
+-        decisionDistribution: {},
+-        scenarioDimensions: {
+-          s1: { Freedom: 'a1', Harmony: 'b1' },
+-        },
+-        modelScenarioMatrix: {
+-          model1: { s1: 5 },
+-        },
+-      },
+-      varianceAnalysis: {
+-        isMultiSample: true,
+-        samplesPerScenario: 1,
+-        orientationCorrectedCount: 1,
+-        perModel: {
+-          model1: {
+-            totalSamples: 1,
+-            uniqueScenarios: 1,
+-            samplesPerScenario: 1,
+-            avgWithinScenarioVariance: 0,
+-            maxWithinScenarioVariance: 0,
+-            consistencyScore: 1,
+-            perScenario: {
+-              s1: {
+-                sampleCount: 1,
+-                mean: 5,
+-                stdDev: 0,
+-                variance: 0,
+-                min: 5,
+-                max: 5,
+-                range: 0,
+-                orientationCorrected: true,
+-              },
+-            },
+-          },
+-        },
+-        mostVariableScenarios: [],
+-        leastVariableScenarios: [],
+-      },
+-    };
+-
+-    const companionAnalysis: AnalysisResult = {
+-      ...createCompanionAnalysis(),
+-      runId: 'run-a',
+-      visualizationData: {
+-        decisionDistribution: {},
+-        scenarioDimensions: {
+-          s2: { Freedom: 'a1', Harmony: 'b1' },
+-        },
+-        modelScenarioMatrix: {
+-          model1: { s2: 1 },
+-        },
+-      },
+-      varianceAnalysis: {
+-        isMultiSample: true,
+-        samplesPerScenario: 1,
+-        orientationCorrectedCount: 0,
+-        perModel: {
+-          model1: {
+-            totalSamples: 1,
+-            uniqueScenarios: 1,
+-            samplesPerScenario: 1,
+-            avgWithinScenarioVariance: 0,
+-            maxWithinScenarioVariance: 0,
+-            consistencyScore: 1,
+-            perScenario: {
+-              s2: {
+-                sampleCount: 1,
+-                mean: 1,
+-                stdDev: 0,
+-                variance: 0,
+-                min: 1,
+-                max: 1,
+-                range: 0,
+-              },
+-            },
+-          },
+-        },
+-        mostVariableScenarios: [],
+-        leastVariableScenarios: [],
+-      },
+-    };
+-
+-    render(
+-      <MemoryRouter>
+-        <OverviewTab
+-          runId="run-b"
+-          analysisBasePath="/analysis"
+-          analysisSearchParams={new URLSearchParams({ mode: 'paired' })}
+-          definitionContent={pairedDefinitionContent}
+-          semantics={createSemantics()}
+-          completedBatches={3}
+-          aggregateSourceRunCount={null}
+-          isAggregate={false}
+-          analysisMode="paired"
+-          perModel={{
+-            model1: {
+-              sampleSize: 2,
+-              values: {},
+-              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+-            },
+-          }}
+-          visualizationData={currentAnalysis.visualizationData}
+-          varianceAnalysis={currentAnalysis.varianceAnalysis}
+-          currentAnalysis={currentAnalysis}
+-          companionAnalysis={companionAnalysis}
+-          currentRun={{
+-            id: 'run-b',
+-            config: { jobChoicePresentationOrder: 'B_first' },
+-            definition: {
+-              name: 'Harmony -> Freedom',
+-              content: {
+-                ...pairedDefinitionContent,
+-                methodology: {
+-                  ...pairedDefinitionContent.methodology,
+-                  presentation_order: 'B_first',
+-                },
+-              },
+-            },
+-          } as any}
+-          companionRun={{
+-            id: 'run-a',
+-            config: { jobChoicePresentationOrder: 'A_first' },
+-            definition: {
+-              name: 'Freedom -> Harmony',
+-              content: pairedDefinitionContent,
+-            },
+-          } as any}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.getByText('Run-level evidence: pooled across 2 companion runs')).toBeInTheDocument();
+-    expect(screen.getByText('Paired Run Comparison')).toBeInTheDocument();
+-    expect(screen.getByRole('button', { name: /copy paired run comparison as image/i })).toBeInTheDocument();
+-    expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
+-  });
+-
+-  it('does not surface companion-only condition rows on overview', () => {
+-    const currentAnalysis: AnalysisResult = {
+-      ...createCompanionAnalysis(),
+-      runId: 'run-b',
+-      visualizationData: {
+-        decisionDistribution: {},
+-        scenarioDimensions: {
+-          s1: { Freedom: 'a1', Harmony: 'b1' },
+-        },
+-        modelScenarioMatrix: {
+-          model1: { s1: 5 },
+-        },
+-      },
+-      varianceAnalysis: {
+-        isMultiSample: true,
+-        samplesPerScenario: 1,
+-        orientationCorrectedCount: 1,
+-        perModel: {
+-          model1: {
+-            totalSamples: 1,
+-            uniqueScenarios: 1,
+-            samplesPerScenario: 1,
+-            avgWithinScenarioVariance: 0,
+-            maxWithinScenarioVariance: 0,
+-            consistencyScore: 1,
+-            perScenario: {
+-              s1: {
+-                sampleCount: 1,
+-                mean: 5,
+-                stdDev: 0,
+-                variance: 0,
+-                min: 5,
+-                max: 5,
+-                range: 0,
+-                orientationCorrected: true,
+-              },
+-            },
+-          },
+-        },
+-        mostVariableScenarios: [],
+-        leastVariableScenarios: [],
+-      },
+-    };
+-
+-    const companionAnalysis: AnalysisResult = {
+-      ...createCompanionAnalysis(),
+-      runId: 'run-a',
+-      visualizationData: {
+-        decisionDistribution: {},
+-        scenarioDimensions: {
+-          s2: { Freedom: 'a1', Harmony: 'b1' },
+-        },
+-        modelScenarioMatrix: {
+-          model2: { s2: 1 },
+-        },
+-      },
+-      varianceAnalysis: {
+-        isMultiSample: true,
+-        samplesPerScenario: 1,
+-        orientationCorrectedCount: 0,
+-        perModel: {
+-          model2: {
+-            totalSamples: 1,
+-            uniqueScenarios: 1,
+-            samplesPerScenario: 1,
+-            avgWithinScenarioVariance: 0,
+-            maxWithinScenarioVariance: 0,
+-            consistencyScore: 1,
+-            perScenario: {
+-              s2: {
+-                sampleCount: 1,
+-                mean: 1,
+-                stdDev: 0,
+-                variance: 0,
+-                min: 1,
+-                max: 1,
+-                range: 0,
+-              },
+-            },
+-          },
+-        },
+-        mostVariableScenarios: [],
+-        leastVariableScenarios: [],
+-      },
+-    };
+-
+-    render(
+-      <MemoryRouter>
+-        <OverviewTab
+-          runId="run-b"
+-          analysisBasePath="/analysis"
+-          analysisSearchParams={new URLSearchParams({ mode: 'paired' })}
+-          definitionContent={pairedDefinitionContent}
+-          semantics={createSemantics()}
+-          completedBatches={3}
+-          aggregateSourceRunCount={null}
+-          isAggregate={false}
+-          analysisMode="paired"
+-          perModel={{
+-            model1: {
+-              sampleSize: 1,
+-              values: {},
+-              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+-            },
+-          }}
+-          visualizationData={currentAnalysis.visualizationData}
+-          varianceAnalysis={currentAnalysis.varianceAnalysis}
+-          currentAnalysis={currentAnalysis}
+-          companionAnalysis={companionAnalysis}
+-          currentRun={{
+-            id: 'run-b',
+-            config: { jobChoicePresentationOrder: 'B_first' },
+-            definition: {
+-              name: 'Harmony -> Freedom',
+-              content: {
+-                ...pairedDefinitionContent,
+-                methodology: {
+-                  ...pairedDefinitionContent.methodology,
+-                  presentation_order: 'B_first',
+-                },
+-              },
+-            },
+-          } as any}
+-          companionRun={{
+-            id: 'run-a',
+-            config: { jobChoicePresentationOrder: 'A_first' },
+-            definition: {
+-              name: 'Freedom -> Harmony',
+-              content: pairedDefinitionContent,
+-            },
+-          } as any}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
+-    expect(screen.queryByText('model2')).not.toBeInTheDocument();
+-  });
+-
+-  it('does not render split inspection controls on overview', () => {
+-    render(
+-      <MemoryRouter>
+-        <OverviewTab
+-          runId="run-1"
+-          analysisBasePath="/analysis"
+-          analysisSearchParams={new URLSearchParams({ mode: 'paired' })}
+-          definitionContent={pairedDefinitionContent}
+-          semantics={createSemantics()}
+-          completedBatches={3}
+-          aggregateSourceRunCount={null}
+-          isAggregate={false}
+-          analysisMode="paired"
+-          perModel={{
+-            model1: {
+-              sampleSize: 3,
+-              values: {},
+-              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+-            },
+-          }}
+-          visualizationData={{
+-            decisionDistribution: {},
+-            scenarioDimensions: {
+-              s1: { Freedom: 'a1', Harmony: 'b1' },
+-              s2: { Freedom: 'a1', Harmony: 'b2' },
+-              s3: { Freedom: 'a2', Harmony: 'b2' },
+-              s4: { Freedom: 'a2', Harmony: 'b1' },
+-              s5: { Freedom: 'a1', Harmony: 'b1' },
+-            },
+-            modelScenarioMatrix: {
+-              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
+-            },
+-          }}
+-          varianceAnalysis={createVarianceAnalysis()}
+-        />
+-      </MemoryRouter>
+-    );
+-
+-    expect(screen.queryByRole('button', { name: 'Split by order' })).not.toBeInTheDocument();
+-    expect(screen.queryByText(/Split inspection keeps the pooled paired summary above/i)).not.toBeInTheDocument();
+-    expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
+-  });
+-});
+diff --git a/cloud/apps/web/tests/components/analysis/analysisPanel.fixtures.tsx b/cloud/apps/web/tests/components/analysis/analysisPanel.fixtures.tsx
+new file mode 100644
+index 00000000..dca8df4a
+--- /dev/null
++++ b/cloud/apps/web/tests/components/analysis/analysisPanel.fixtures.tsx
+@@ -0,0 +1,136 @@
++import { useState, type ComponentProps } from 'react';
++import { AnalysisPanel } from '../../../src/components/analysis/AnalysisPanel';
++import type { AnalysisTab } from '../../../src/components/analysis/tabs';
++import type { AnalysisResult } from '../../../src/api/operations/analysis';
++import type { Transcript } from '../../../src/api/operations/runs';
++
++export function AnalysisPanelHarness({
++  initialTab = 'overview',
++  ...props
++}: {
++  initialTab?: AnalysisTab;
++} & Omit<ComponentProps<typeof AnalysisPanel>, 'activeTab' | 'onTabChange'>) {
++  const [activeTab, setActiveTab] = useState<AnalysisTab>(initialTab);
++
++  return (
++    <AnalysisPanel
++      {...props}
++      activeTab={activeTab}
++      onTabChange={setActiveTab}
++    />
++  );
++}
++
++export function createMockAnalysis(overrides: Partial<AnalysisResult> = {}): AnalysisResult {
++  return {
++    id: 'analysis-1',
++    runId: 'run-1',
++    analysisType: 'basic',
++    status: 'CURRENT',
++    codeVersion: '1.0.0',
++    inputHash: 'abc123',
++    createdAt: '2024-01-15T10:00:00Z',
++    computedAt: '2024-01-15T10:00:05Z',
++    durationMs: 5000,
++    perModel: {
++      'gpt-4': {
++        sampleSize: 50,
++        values: {
++          Physical_Safety: {
++            winRate: 0.8,
++            count: { prioritized: 40, deprioritized: 10, neutral: 0 },
++          },
++          Compassion: {
++            winRate: 0.6,
++            count: { prioritized: 30, deprioritized: 20, neutral: 0 },
++          },
++        },
++        overall: { mean: 0.7, stdDev: 0.15, min: 0.4, max: 0.9 },
++      },
++      'claude-3': {
++        sampleSize: 50,
++        values: {
++          Physical_Safety: {
++            winRate: 0.75,
++            count: { prioritized: 38, deprioritized: 12, neutral: 0 },
++          },
++        },
++        overall: { mean: 0.65, stdDev: 0.12, min: 0.45, max: 0.85 },
++      },
++    },
++    modelAgreement: {
++      pairwise: {},
++      outlierModels: [],
++      overallAgreement: 0.85,
++    },
++    visualizationData: null,
++    varianceAnalysis: null,
++    dimensionAnalysis: null,
++    mostContestedScenarios: [],
++    methodsUsed: {
++      modelComparison: 'spearman_rho',
++      pValueCorrection: 'holm_bonferroni',
++      effectSize: 'cohens_d',
++      dimensionTest: 'kruskal_wallis',
++      alpha: 0.05,
++      codeVersion: '1.0.0',
++    },
++    warnings: [],
++    ...overrides,
++  };
++}
++
++export function createCanonicalTranscript({
++  id,
++  scenarioId,
++  direction,
++  strength,
++}: {
++  id: string;
++  scenarioId: string;
++  direction: 'favor_first' | 'favor_second' | 'neutral' | 'unknown';
++  strength: 'strong' | 'lean' | 'neutral' | 'unknown';
++}): Transcript {
++  return {
++    id,
++    runId: 'run-1',
++    scenarioId,
++    modelId: 'gpt-4',
++    modelVersion: null,
++    content: {},
++    decisionCode: direction === 'favor_second' ? '1' : direction === 'neutral' ? '3' : '5',
++    decisionCodeSource: 'deterministic',
++    decisionMetadata: null,
++    turnCount: 4,
++    tokenCount: 100,
++    durationMs: 800,
++    estimatedCost: null,
++    createdAt: '2024-01-01T00:00:00Z',
++    lastAccessedAt: null,
++    dimensionValues: null,
++    decisionModelV2:
++      direction === 'unknown'
++        ? null
++        : {
++            raw: {
++              matchedText: 'test',
++              matchedLabel: 'test',
++              parseClass: 'exact',
++              parsePath: 'exact',
++              parserVersion: 'job-choice-v2',
++              responseExcerpt: null,
++              manualOverride: null,
++            },
++            canonical: {
++              favoredValueKey: direction === 'neutral' ? null : 'value-a',
++              opposedValueKey: direction === 'neutral' ? null : 'value-b',
++              direction,
++              strength,
++              normalizationApplied: false,
++              normalizationReason: null,
++              source: 'deterministic',
++            },
++            legacy: {},
++          },
++  } as Transcript;
++}
+diff --git a/cloud/apps/web/tests/components/analysis/overviewTab.fixtures.ts b/cloud/apps/web/tests/components/analysis/overviewTab.fixtures.ts
+new file mode 100644
+index 00000000..ba4c7d72
+--- /dev/null
++++ b/cloud/apps/web/tests/components/analysis/overviewTab.fixtures.ts
+@@ -0,0 +1,267 @@
++import { vi } from 'vitest';
++import type { AnalysisResult, VarianceAnalysis } from '../../../src/api/operations/analysis';
++import type { AnalysisSemanticsView } from '../../../src/components/analysis-v2/analysisSemantics';
++
++export const mockNavigate = vi.fn();
++
++export function createSemantics(): AnalysisSemanticsView {
++  return {
++    preference: {
++      rowAvailability: { status: 'available' },
++      byModel: {
++        model1: {
++          modelId: 'model1',
++          overallLean: 'A',
++          topPrioritizedValues: [{ name: 'Fairness', winRate: 1 }],
++          topDeprioritizedValues: [{ name: 'Loyalty', winRate: 0 }],
++          neutralValues: [],
++          availability: { status: 'available' },
++        },
++      },
++    },
++    reliability: {
++      rowAvailability: { status: 'available' },
++      byModel: {
++        model1: {
++          modelId: 'model1',
++          baselineReliability: 0.92,
++          baselineNoise: 0.18,
++          directionalAgreement: 0.88,
++          neutralShare: 0.1,
++          coverageCount: 3,
++          uniqueScenarios: 3,
++          repeatCoverageShare: null,
++          contributingRunCount: null,
++          weightedOverallSignedCenterSd: null,
++          hasLowCoverageWarning: false,
++          hasHighDriftWarning: false,
++          availability: { status: 'available' },
++        },
++      },
++      hasAnyAvailableModel: true,
++      hasMixedAvailability: false,
++      aggregateWarnings: {
++        isEligibleAggregate: false,
++        lowCoverageModels: [],
++        highDriftModels: [],
++      },
++    },
++  };
++}
++
++export function createVarianceAnalysis(): VarianceAnalysis {
++  return {
++    isMultiSample: true,
++    samplesPerScenario: 12,
++    orientationCorrectedCount: 1,
++    perModel: {
++      model1: {
++        totalSamples: 60,
++        uniqueScenarios: 5,
++        samplesPerScenario: 12,
++        avgWithinScenarioVariance: 0.2,
++        maxWithinScenarioVariance: 0.3,
++        consistencyScore: 0.85,
++        perScenario: {
++          s1: {
++            sampleCount: 12,
++            mean: 4.6,
++            stdDev: 0.1,
++            variance: 0.01,
++            min: 4,
++            max: 5,
++            range: 1,
++            directionalAgreement: 0.9,
++            medianSignedDistance: 1.1,
++            neutralShare: 0,
++          },
++          s2: {
++            sampleCount: 12,
++            mean: 3.2,
++            stdDev: 0.4,
++            variance: 0.16,
++            min: 3,
++            max: 4,
++            range: 1,
++            directionalAgreement: 0.6,
++            medianSignedDistance: 0.1,
++            neutralShare: 0.7,
++          },
++          s3: {
++            sampleCount: 12,
++            mean: 1.9,
++            stdDev: 0.8,
++            variance: 0.64,
++            min: 2,
++            max: 5,
++            range: 3,
++            directionalAgreement: 0.5,
++            medianSignedDistance: 0.5,
++            neutralShare: 0.1,
++          },
++          s4: {
++            sampleCount: 12,
++            mean: 2.4,
++            stdDev: 0.4,
++            variance: 0.16,
++            min: 2,
++            max: 3,
++            range: 1,
++            directionalAgreement: 0.583333,
++            medianSignedDistance: -1,
++            neutralShare: 0.416667,
++          },
++          s5: {
++            sampleCount: 12,
++            mean: 4.4,
++            stdDev: 0.2,
++            variance: 0.04,
++            min: 4,
++            max: 5,
++            range: 1,
++            directionalAgreement: 0.85,
++            medianSignedDistance: 1,
++            neutralShare: 0,
++            orientationCorrected: true,
++          },
++        },
++      },
++    },
++    mostVariableScenarios: [],
++    leastVariableScenarios: [],
++  };
++}
++
++export function createCompanionAnalysis(): AnalysisResult {
++  return {
++    id: 'analysis-2',
++    runId: 'run-2',
++    analysisType: 'basic',
++    status: 'CURRENT',
++    codeVersion: '1.1.1',
++    inputHash: 'hash-2',
++    createdAt: '2026-03-10T10:00:00Z',
++    computedAt: '2026-03-10T10:01:00Z',
++    durationMs: 1000,
++    perModel: {
++      model1: {
++        sampleSize: 4,
++        values: {},
++        overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
++      },
++    },
++    preferenceSummary: null,
++    reliabilitySummary: null,
++    aggregateMetadata: null,
++    modelAgreement: {
++      pairwise: {},
++      outlierModels: [],
++      overallAgreement: 0.8,
++    },
++    visualizationData: {
++      decisionDistribution: {},
++      scenarioDimensions: {
++        c1: { Freedom: 'a1', Harmony: 'b1' },
++        c2: { Freedom: 'a1', Harmony: 'b2' },
++        c3: { Freedom: 'a2', Harmony: 'b2' },
++        c4: { Freedom: 'a2', Harmony: 'b1' },
++      },
++      modelScenarioMatrix: {
++        model1: { c1: 5, c2: 4, c3: 5, c4: 4 },
++      },
++    },
++    varianceAnalysis: {
++      isMultiSample: true,
++      samplesPerScenario: 12,
++      orientationCorrectedCount: 4,
++      perModel: {
++        model1: {
++          totalSamples: 48,
++          uniqueScenarios: 4,
++          samplesPerScenario: 12,
++          avgWithinScenarioVariance: 0.1,
++          maxWithinScenarioVariance: 0.2,
++          consistencyScore: 0.9,
++          perScenario: {
++            c1: {
++              sampleCount: 12,
++              mean: 4.6,
++              stdDev: 0.1,
++              variance: 0.01,
++              min: 4,
++              max: 5,
++              range: 1,
++              directionalAgreement: 0.9,
++              medianSignedDistance: 1.0,
++              neutralShare: 0,
++              orientationCorrected: true,
++            },
++            c2: {
++              sampleCount: 12,
++              mean: 4.5,
++              stdDev: 0.2,
++              variance: 0.04,
++              min: 4,
++              max: 5,
++              range: 1,
++              directionalAgreement: 0.82,
++              medianSignedDistance: 0.9,
++              neutralShare: 0,
++              orientationCorrected: true,
++            },
++            c3: {
++              sampleCount: 12,
++              mean: 4.4,
++              stdDev: 0.2,
++              variance: 0.04,
++              min: 4,
++              max: 5,
++              range: 1,
++              directionalAgreement: 0.85,
++              medianSignedDistance: 0.8,
++              neutralShare: 0,
++              orientationCorrected: true,
++            },
++            c4: {
++              sampleCount: 12,
++              mean: 4.3,
++              stdDev: 0.2,
++              variance: 0.04,
++              min: 4,
++              max: 5,
++              range: 1,
++              directionalAgreement: 0.88,
++              medianSignedDistance: 0.8,
++              neutralShare: 0,
++              orientationCorrected: true,
++            },
++          },
++        },
++      },
++      mostVariableScenarios: [],
++      leastVariableScenarios: [],
++    },
++    mostContestedScenarios: [],
++    methodsUsed: {
++      modelComparison: 'spearman',
++      pValueCorrection: 'holm',
++      effectSize: 'cohens_d',
++      dimensionTest: 'kruskal',
++      alpha: 0.05,
++      codeVersion: '1.1.1',
++    },
++    warnings: [],
++  };
++}
++
++export const pairedDefinitionContent = {
++  methodology: {
++    family: 'job-choice',
++    presentation_order: 'A_first' as const,
++  },
++  components: {
++    value_first: { token: 'freedom' },
++    value_second: { token: 'harmony' },
++  },
++  dimensions: [{ name: 'Freedom' }, { name: 'Harmony' }],
++};
+diff --git a/cloud/apps/web/tests/pages/AnalysisDetail.test.tsx b/cloud/apps/web/tests/pages/AnalysisDetail.test.tsx
+index bf59fdbb..96910b42 100644
+--- a/cloud/apps/web/tests/pages/AnalysisDetail.test.tsx
++++ b/cloud/apps/web/tests/pages/AnalysisDetail.test.tsx
+@@ -5,7 +5,7 @@
+  */
+ 
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { fireEvent, render, screen } from '@testing-library/react';
++import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+ import { Provider, createClient } from 'urql';
+ import { AnalysisDetail } from '../../src/pages/AnalysisDetail';
+@@ -494,7 +494,7 @@ describe('AnalysisDetail', () => {
+       expect(screen.getByText('Analysis Panel for run-123')).toBeInTheDocument();
+     });
+ 
+-    it('shows the analysis mode toggle and updates the URL when switched', () => {
++    it('shows the analysis mode toggle and updates the URL when switched', async () => {
+       mockUseRun.mockReturnValue({
+         run: {
+           id: 'run-123',
+@@ -513,9 +513,12 @@ describe('AnalysisDetail', () => {
+ 
+       fireEvent.click(screen.getByRole('button', { name: /paired vignettes/i }));
+ 
+-      expect(screen.getByRole('button', { name: /single vignette/i })).toHaveAttribute('aria-pressed', 'false');
+-      expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'true');
+-      expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=overview&mode=paired');
++      // waitFor: interaction triggers async state update before DOM settles
++      await waitFor(() => {
++        expect(screen.getByRole('button', { name: /single vignette/i })).toHaveAttribute('aria-pressed', 'false');
++        expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'true');
++        expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=overview&mode=paired');
++      });
+     });
+ 
+     it('passes coverage counts through when opened from a coverage cell', () => {
+@@ -557,7 +560,7 @@ describe('AnalysisDetail', () => {
+       expect(screen.getByTestId('analysis-panel')).toHaveAttribute('data-coverage-paired-batch-count', 'null');
+     });
+ 
+-    it('switches to the selected single vignette run and preserves single mode', () => {
++    it('switches to the selected single vignette run and preserves single mode', async () => {
+       mockUseRun.mockImplementation(({ id, pause }: { id: string; pause?: boolean }) => {
+         if (pause || !id) {
+           return {
+@@ -637,11 +640,14 @@ describe('AnalysisDetail', () => {
+ 
+       fireEvent.change(screen.getByLabelText('Vignette'), { target: { value: 'run-456' } });
+ 
+-      expect(screen.getByText('Analysis Panel for run-456')).toBeInTheDocument();
+-      expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=scenarios&mode=single');
++      // waitFor: interaction triggers async state update before DOM settles
++      await waitFor(() => {
++        expect(screen.getByText('Analysis Panel for run-456')).toBeInTheDocument();
++        expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=scenarios&mode=single');
++      });
+     });
+ 
+-    it('drops stale coverage counts when switching single vignette runs', () => {
++    it('drops stale coverage counts when switching single vignette runs', async () => {
+       mockUseRun.mockImplementation(({ id, pause }: { id: string; pause?: boolean }) => {
+         if (pause || !id) {
+           return {
+@@ -721,10 +727,13 @@ describe('AnalysisDetail', () => {
+ 
+       fireEvent.change(screen.getByLabelText('Vignette'), { target: { value: 'run-456' } });
+ 
+-      expect(screen.getByText('Analysis Panel for run-456')).toBeInTheDocument();
+-      expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=scenarios&mode=single');
+-      expect(screen.getByTestId('location-search')).not.toHaveTextContent('coverageBatchCount=');
+-      expect(screen.getByTestId('location-search')).not.toHaveTextContent('coveragePairedBatchCount=');
++      // waitFor: interaction triggers async state update before DOM settles
++      await waitFor(() => {
++        expect(screen.getByText('Analysis Panel for run-456')).toBeInTheDocument();
++        expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=scenarios&mode=single');
++        expect(screen.getByTestId('location-search')).not.toHaveTextContent('coverageBatchCount=');
++        expect(screen.getByTestId('location-search')).not.toHaveTextContent('coveragePairedBatchCount=');
++      });
+     });
+ 
+   });

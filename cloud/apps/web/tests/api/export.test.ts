@@ -29,31 +29,17 @@ const mockAppendChild = vi.fn();
 const mockRemoveChild = vi.fn();
 
 describe('exportRunAsCSV', () => {
-  let originalLocalStorage: Storage;
-  let originalFetch: typeof fetch;
-  let originalURL: typeof URL;
   let exportRunAsCSV: (runId: string) => Promise<void>;
   let exportRunAdjudicationCSV: (runId: string) => Promise<void>;
 
   beforeEach(async () => {
-    // Save originals
-    originalLocalStorage = global.localStorage;
-    originalFetch = global.fetch;
-    originalURL = global.URL;
-
-    // Mock localStorage
-    Object.defineProperty(global, 'localStorage', {
-      value: mockLocalStorage,
-      writable: true,
-    });
-
-    // Mock fetch
-    global.fetch = mockFetch;
-
-    // Mock URL
     mockCreateObjectURL.mockReturnValue('blob:test-url');
-    global.URL.createObjectURL = mockCreateObjectURL;
-    global.URL.revokeObjectURL = mockRevokeObjectURL;
+    vi.stubGlobal('localStorage', mockLocalStorage);
+    vi.stubGlobal('fetch', mockFetch);
+    vi.stubGlobal('URL', {
+      createObjectURL: mockCreateObjectURL,
+      revokeObjectURL: mockRevokeObjectURL,
+    });
 
     // Mock document.createElement
     const mockLink = {
@@ -75,13 +61,7 @@ describe('exportRunAsCSV', () => {
   });
 
   afterEach(() => {
-    // Restore originals
-    Object.defineProperty(global, 'localStorage', {
-      value: originalLocalStorage,
-      writable: true,
-    });
-    global.fetch = originalFetch;
-    global.URL = originalURL;
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -193,30 +173,16 @@ describe('exportRunAsCSV', () => {
 });
 
 describe('exportDefinitionAsMd', () => {
-  let originalLocalStorage: Storage;
-  let originalFetch: typeof fetch;
-  let originalURL: typeof URL;
   let exportDefinitionAsMd: (definitionId: string) => Promise<void>;
 
   beforeEach(async () => {
-    // Save originals
-    originalLocalStorage = global.localStorage;
-    originalFetch = global.fetch;
-    originalURL = global.URL;
-
-    // Mock localStorage
-    Object.defineProperty(global, 'localStorage', {
-      value: mockLocalStorage,
-      writable: true,
-    });
-
-    // Mock fetch
-    global.fetch = mockFetch;
-
-    // Mock URL
     mockCreateObjectURL.mockReturnValue('blob:test-url');
-    global.URL.createObjectURL = mockCreateObjectURL;
-    global.URL.revokeObjectURL = mockRevokeObjectURL;
+    vi.stubGlobal('localStorage', mockLocalStorage);
+    vi.stubGlobal('fetch', mockFetch);
+    vi.stubGlobal('URL', {
+      createObjectURL: mockCreateObjectURL,
+      revokeObjectURL: mockRevokeObjectURL,
+    });
 
     // Mock document.createElement
     const mockLink = {
@@ -237,13 +203,7 @@ describe('exportDefinitionAsMd', () => {
   });
 
   afterEach(() => {
-    // Restore originals
-    Object.defineProperty(global, 'localStorage', {
-      value: originalLocalStorage,
-      writable: true,
-    });
-    global.fetch = originalFetch;
-    global.URL = originalURL;
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -331,30 +291,16 @@ describe('exportDefinitionAsMd', () => {
 });
 
 describe('exportScenariosAsYaml', () => {
-  let originalLocalStorage: Storage;
-  let originalFetch: typeof fetch;
-  let originalURL: typeof URL;
   let exportScenariosAsYaml: (definitionId: string) => Promise<void>;
 
   beforeEach(async () => {
-    // Save originals
-    originalLocalStorage = global.localStorage;
-    originalFetch = global.fetch;
-    originalURL = global.URL;
-
-    // Mock localStorage
-    Object.defineProperty(global, 'localStorage', {
-      value: mockLocalStorage,
-      writable: true,
-    });
-
-    // Mock fetch
-    global.fetch = mockFetch;
-
-    // Mock URL
     mockCreateObjectURL.mockReturnValue('blob:test-url');
-    global.URL.createObjectURL = mockCreateObjectURL;
-    global.URL.revokeObjectURL = mockRevokeObjectURL;
+    vi.stubGlobal('localStorage', mockLocalStorage);
+    vi.stubGlobal('fetch', mockFetch);
+    vi.stubGlobal('URL', {
+      createObjectURL: mockCreateObjectURL,
+      revokeObjectURL: mockRevokeObjectURL,
+    });
 
     // Mock document.createElement
     const mockLink = {
@@ -375,13 +321,7 @@ describe('exportScenariosAsYaml', () => {
   });
 
   afterEach(() => {
-    // Restore originals
-    Object.defineProperty(global, 'localStorage', {
-      value: originalLocalStorage,
-      writable: true,
-    });
-    global.fetch = originalFetch;
-    global.URL = originalURL;
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -469,24 +409,16 @@ describe('exportScenariosAsYaml', () => {
 });
 
 describe('exportDomainTranscriptsAsCSV', () => {
-  let originalLocalStorage: Storage;
-  let originalFetch: typeof fetch;
   let exportDomainTranscriptsAsCSV: (domainId: string, signature?: string) => Promise<void>;
 
   beforeEach(async () => {
-    originalLocalStorage = global.localStorage;
-    originalFetch = global.fetch;
-
-    Object.defineProperty(global, 'localStorage', {
-      value: mockLocalStorage,
-      writable: true,
-    });
-
-    global.fetch = mockFetch;
-
     mockCreateObjectURL.mockReturnValue('blob:test-url');
-    global.URL.createObjectURL = mockCreateObjectURL;
-    global.URL.revokeObjectURL = mockRevokeObjectURL;
+    vi.stubGlobal('localStorage', mockLocalStorage);
+    vi.stubGlobal('fetch', mockFetch);
+    vi.stubGlobal('URL', {
+      createObjectURL: mockCreateObjectURL,
+      revokeObjectURL: mockRevokeObjectURL,
+    });
 
     const mockLink = { href: '', download: '', click: mockClick };
     vi.spyOn(document, 'createElement').mockReturnValue(mockLink as unknown as HTMLElement);
@@ -500,11 +432,7 @@ describe('exportDomainTranscriptsAsCSV', () => {
   });
 
   afterEach(() => {
-    Object.defineProperty(global, 'localStorage', {
-      value: originalLocalStorage,
-      writable: true,
-    });
-    global.fetch = originalFetch;
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 

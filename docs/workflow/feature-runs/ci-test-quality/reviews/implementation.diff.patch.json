@@ -1,0 +1,15 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "f6eb4500906a5db0846841b1d52bdd53bab988a0",
+  "git_base_ref": "origin/main",
+  "git_base_sha": "6396d4f22128d811613f066211f9318ead37f425",
+  "paths": [
+    ".github/workflows/ci.yml",
+    "cloud/apps/api",
+    "cloud/apps/web"
+  ],
+  "allowed_dirty_paths": [],
+  "untracked_files_included": [],
+  "artifact_path": "docs/workflow/feature-runs/ci-test-quality/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

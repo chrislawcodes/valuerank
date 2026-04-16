@@ -34,6 +34,8 @@ jobs:
         with:
           path: cloud/node_modules
           key: ${{ runner.os }}-node-modules-${{ hashFiles('cloud/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
 
       - name: Install Node dependencies
         if: steps.node-cache.outputs.cache-hit != 'true'
@@ -75,6 +77,8 @@ jobs:
         with:
           path: cloud/node_modules
           key: ${{ runner.os }}-node-modules-${{ hashFiles('cloud/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
 
       - name: Install Node dependencies
         if: steps.node-cache.outputs.cache-hit != 'true'
@@ -86,7 +90,7 @@ jobs:
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-        run: npx turbo build --filter=@valuerank/shared
+        run: npx turbo build --filter=@valuerank/shared --force
 
       - name: Run web tests (shard ${{ matrix.shard }}/${{ matrix.total }})
         working-directory: cloud/apps/web
@@ -96,6 +100,7 @@ jobs:
     name: API & DB Tests
     runs-on: ubuntu-latest
     needs: lint-build
+    timeout-minutes: 20
 
     services:
       postgres:
@@ -131,6 +136,8 @@ jobs:
         with:
           path: cloud/node_modules
           key: ${{ runner.os }}-node-modules-${{ hashFiles('cloud/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
 
       - name: Install Node dependencies
         if: steps.node-cache.outputs.cache-hit != 'true'

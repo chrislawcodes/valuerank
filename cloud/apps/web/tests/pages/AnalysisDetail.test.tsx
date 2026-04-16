@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { Provider, createClient } from 'urql';
 import { AnalysisDetail } from '../../src/pages/AnalysisDetail';
@@ -494,7 +494,7 @@ describe('AnalysisDetail', () => {
       expect(screen.getByText('Analysis Panel for run-123')).toBeInTheDocument();
     });
 
-    it('shows the analysis mode toggle and updates the URL when switched', () => {
+    it('shows the analysis mode toggle and updates the URL when switched', async () => {
       mockUseRun.mockReturnValue({
         run: {
           id: 'run-123',
@@ -513,9 +513,12 @@ describe('AnalysisDetail', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /paired vignettes/i }));
 
-      expect(screen.getByRole('button', { name: /single vignette/i })).toHaveAttribute('aria-pressed', 'false');
-      expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=overview&mode=paired');
+      // waitFor: interaction triggers async state update before DOM settles
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /single vignette/i })).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=overview&mode=paired');
+      });
     });
 
     it('passes coverage counts through when opened from a coverage cell', () => {
@@ -557,7 +560,7 @@ describe('AnalysisDetail', () => {
       expect(screen.getByTestId('analysis-panel')).toHaveAttribute('data-coverage-paired-batch-count', 'null');
     });
 
-    it('switches to the selected single vignette run and preserves single mode', () => {
+    it('switches to the selected single vignette run and preserves single mode', async () => {
       mockUseRun.mockImplementation(({ id, pause }: { id: string; pause?: boolean }) => {
         if (pause || !id) {
           return {
@@ -637,11 +640,14 @@ describe('AnalysisDetail', () => {
 
       fireEvent.change(screen.getByLabelText('Vignette'), { target: { value: 'run-456' } });
 
-      expect(screen.getByText('Analysis Panel for run-456')).toBeInTheDocument();
-      expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=scenarios&mode=single');
+      // waitFor: interaction triggers async state update before DOM settles
+      await waitFor(() => {
+        expect(screen.getByText('Analysis Panel for run-456')).toBeInTheDocument();
+        expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=scenarios&mode=single');
+      });
     });
 
-    it('drops stale coverage counts when switching single vignette runs', () => {
+    it('drops stale coverage counts when switching single vignette runs', async () => {
       mockUseRun.mockImplementation(({ id, pause }: { id: string; pause?: boolean }) => {
         if (pause || !id) {
           return {
@@ -721,10 +727,13 @@ describe('AnalysisDetail', () => {
 
       fireEvent.change(screen.getByLabelText('Vignette'), { target: { value: 'run-456' } });
 
-      expect(screen.getByText('Analysis Panel for run-456')).toBeInTheDocument();
-      expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=scenarios&mode=single');
-      expect(screen.getByTestId('location-search')).not.toHaveTextContent('coverageBatchCount=');
-      expect(screen.getByTestId('location-search')).not.toHaveTextContent('coveragePairedBatchCount=');
+      // waitFor: interaction triggers async state update before DOM settles
+      await waitFor(() => {
+        expect(screen.getByText('Analysis Panel for run-456')).toBeInTheDocument();
+        expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=scenarios&mode=single');
+        expect(screen.getByTestId('location-search')).not.toHaveTextContent('coverageBatchCount=');
+        expect(screen.getByTestId('location-search')).not.toHaveTextContent('coveragePairedBatchCount=');
+      });
     });
 
   });
