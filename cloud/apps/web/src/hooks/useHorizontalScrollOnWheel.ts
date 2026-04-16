@@ -2,43 +2,52 @@ import { useEffect } from 'react';
 
 /**
  * Attaches a global wheel listener that redirects vertical scroll to horizontal
- * when the nearest scrollable ancestor is a horizontal-only overflow container.
+ * when the scroll target is inside a Tailwind `overflow-x-auto` / `overflow-x-scroll`
+ * container.
  *
- * This fixes the UX issue where hovering over the left-side labels of a wide
- * table and scrolling moves the page instead of the table.
+ * Why class-based (not computed style):
+ *   - The CSS spec forces overflow-y to `auto` whenever overflow-x is set to `auto`,
+ *     so getComputedStyle can't distinguish "horizontal-only" from "both-axis" containers.
+ *   - The <main> layout container uses class `overflow-auto` (both axes); it must never
+ *     be treated as a horizontal-redirect target even when wide content makes its
+ *     scrollWidth > clientWidth.
+ *   - Tailwind class names are the reliable signal for intent.
  *
- * Logic:
- * - Walk up from the event target to find the first element that can actually scroll.
- * - If that element can only scroll horizontally (not vertically), redirect deltaY
- *   to scrollLeft so the table moves instead of the page.
- * - If the first scrollable ancestor is vertical (or both), let the browser handle
- *   the event normally — we never interfere with intentional page/modal scroll.
+ * Behaviour:
+ *   Walk up from the event target.
+ *   • First hit with `overflow-x-auto` / `overflow-x-scroll` class:
+ *       - If the element actually overflows horizontally → redirect deltaY to scrollLeft.
+ *       - Either way, stop — this is the relevant container.
+ *   • First hit with `overflow-auto` / `overflow-scroll` / `overflow-y-auto` / `overflow-y-scroll`:
+ *       - Stop and do nothing — let the browser scroll it vertically.
+ *   • No match found → do nothing, browser handles normally.
  */
 export function useHorizontalScrollOnWheel(): void {
   useEffect(() => {
+    const HORIZONTAL = ['overflow-x-auto', 'overflow-x-scroll'] as const;
+    const VERTICAL = ['overflow-auto', 'overflow-scroll', 'overflow-y-auto', 'overflow-y-scroll'] as const;
+
     const handleWheel = (e: WheelEvent): void => {
-      // Only intercept pure vertical scroll input
+      // Only intercept pure vertical scroll input (scroll wheel or vertical trackpad swipe)
       if (e.deltaX !== 0 || e.deltaY === 0) return;
 
       let el: HTMLElement | null =
         e.target instanceof HTMLElement ? e.target : null;
 
       while (el !== null && el !== document.documentElement) {
-        const style = window.getComputedStyle(el);
-        const ox = style.overflowX;
-        const oy = style.overflowY;
-        const canScrollX =
-          (ox === 'auto' || ox === 'scroll') && el.scrollWidth > el.clientWidth;
-        const canScrollY =
-          (oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight;
+        const cls = el.classList;
 
-        if (canScrollX || canScrollY) {
-          if (canScrollX && !canScrollY) {
-            // Horizontal-only container: redirect wheel to horizontal scroll
+        // Explicit horizontal-scroll container
+        if (HORIZONTAL.some((c) => cls.contains(c))) {
+          if (el.scrollWidth > el.clientWidth) {
             e.preventDefault();
             el.scrollLeft += e.deltaY;
           }
-          // If vertical (or both), fall through — browser handles normally
+          return; // Stop regardless — this is the container in scope
+        }
+
+        // Explicit vertical (or both-axis) scroll container — don't intercept
+        if (VERTICAL.some((c) => cls.contains(c))) {
           return;
         }
 
