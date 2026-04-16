@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, Info } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { Transcript } from '../../api/operations/runs';
 import type { VisualizationData } from '../../api/operations/analysis';
 import {
@@ -13,13 +13,20 @@ import {
   getScenarioDimensionsForId,
 } from '../../utils/scenarioUtils';
 import { formatDisplayLabel } from '../../utils/displayLabels';
-import {
-  hasRenderableTranscriptDecisionModelV2,
-  getTranscriptDecisionSortValue,
-  type TranscriptDecisionDisplayMode,
-} from '../../utils/transcriptDecisionModel';
-import { Tooltip } from '../ui/Tooltip';
+import type { TranscriptDecisionDisplayMode } from '../../utils/transcriptDecisionModel';
+import { SortHeaderButton } from './SortHeaderButton';
 import { TranscriptRow } from './TranscriptRow';
+import {
+  groupTranscriptsByModel,
+  resolveSortDimensionKeys,
+  getDefaultSortState,
+  isSameSortColumn,
+  buildColumnComparator,
+  buildTranscriptSorter,
+  type GroupedTranscripts,
+  type SortColumn,
+  type SortState,
+} from './transcriptListSort';
 
 type TranscriptListProps = {
   transcripts: Transcript[];
@@ -34,212 +41,6 @@ type TranscriptListProps = {
   normalizedDecisionTranscriptIds?: Set<string>;
   decisionDisplayMode?: TranscriptDecisionDisplayMode;
 };
-
-type GroupedTranscripts = Record<string, Transcript[]>;
-type SortDirection = 'asc' | 'desc';
-type SortColumn =
-  | { type: 'model' }
-  | { type: 'dimension'; key: string }
-  | { type: 'decision' }
-  | { type: 'created' };
-type SortState = {
-  column: SortColumn;
-  direction: SortDirection;
-};
-
-const LEVEL_WORD_TO_NUMBER: Record<string, number> = {
-  full: 5,
-  substantial: 4,
-  moderate: 3,
-  minimal: 2,
-  negligible: 1,
-};
-
-function groupTranscriptsByModel(transcripts: Transcript[]): GroupedTranscripts {
-  const groups: GroupedTranscripts = {};
-  for (const transcript of transcripts) {
-    const key = transcript.modelId;
-    if (!groups[key]) {
-      groups[key] = [];
-    }
-    groups[key].push(transcript);
-  }
-  return groups;
-}
-
-function normalizeDimensionName(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-function resolveSortDimensionKeys(
-  dimensionKeys: string[],
-  dimensionLabels?: Record<string, string>
-): { primary: string | null; secondary: string | null } {
-  if (dimensionKeys.length === 0) {
-    return { primary: null, secondary: null };
-  }
-
-  const findByName = (target: 'attributea' | 'attributeb'): string | null => {
-    for (const key of dimensionKeys) {
-      const keyNormalized = normalizeDimensionName(key);
-      const label = dimensionLabels?.[key];
-      const labelNormalized = label ? normalizeDimensionName(label) : '';
-      if (
-        keyNormalized.includes(target)
-        || labelNormalized.includes(target)
-      ) {
-        return key;
-      }
-    }
-    return null;
-  };
-
-  const primary = findByName('attributea') ?? dimensionKeys[0] ?? null;
-  const secondary = findByName('attributeb') ?? dimensionKeys.find((k) => k !== primary) ?? null;
-  return { primary, secondary };
-}
-
-function compareDimensionValues(a: string | number | undefined, b: string | number | undefined): number {
-  if (a === undefined && b === undefined) return 0;
-  if (a === undefined) return 1;
-  if (b === undefined) return -1;
-
-  const toComparableNumber = (value: string | number): number => {
-    if (typeof value === 'number') {
-      return value;
-    }
-
-    const trimmed = value.trim();
-    const mappedLevel = LEVEL_WORD_TO_NUMBER[trimmed.toLowerCase()];
-    if (mappedLevel !== undefined) {
-      return mappedLevel;
-    }
-
-    return Number(trimmed);
-  };
-
-  const aNum = toComparableNumber(a);
-  const bNum = toComparableNumber(b);
-  const aNumValid = Number.isFinite(aNum);
-  const bNumValid = Number.isFinite(bNum);
-
-  if (aNumValid && bNumValid) {
-    return aNum - bNum;
-  }
-
-  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
-}
-
-function getDefaultSortState(
-  sortKeys: { primary: string | null; secondary: string | null },
-  dimensionKeys: string[],
-): SortState {
-  const defaultDimension = sortKeys.primary ?? dimensionKeys[0] ?? null;
-
-  if (defaultDimension) {
-    return {
-      column: { type: 'dimension', key: defaultDimension },
-      direction: 'asc',
-    };
-  }
-
-  return {
-    column: { type: 'model' },
-    direction: 'asc',
-  };
-}
-
-function isSameSortColumn(a: SortColumn, b: SortColumn): boolean {
-  if (a.type !== b.type) {
-    return false;
-  }
-
-  if (a.type === 'dimension' && b.type === 'dimension') {
-    return a.key === b.key;
-  }
-
-  return true;
-}
-
-function getTranscriptDecisionValue(
-  transcript: Transcript,
-  displayMode: TranscriptDecisionDisplayMode,
-): string | number {
-  if (displayMode === 'audit') {
-    if (!hasRenderableTranscriptDecisionModelV2(transcript)) {
-      return getTranscriptDecisionSortValue(transcript, 'legacy');
-    }
-    return getTranscriptDecisionSortValue(transcript, displayMode);
-  }
-
-  return getTranscriptDecisionSortValue(transcript, displayMode);
-}
-
-function SortHeaderButton({
-  label,
-  ariaLabel,
-  tooltip,
-  onClick,
-  active,
-  direction,
-}: {
-  label: string;
-  ariaLabel: string;
-  tooltip?: string;
-  onClick: () => void;
-  active: boolean;
-  direction: SortDirection;
-}) {
-  return (
-    <div className="inline-flex items-center gap-1">
-      {/* eslint-disable-next-line react/forbid-elements -- Sortable table headers need a semantic inline button control */}
-      <button
-        type="button"
-        onClick={onClick}
-        className={`inline-flex items-center gap-1 text-left transition-colors ${
-          active ? 'text-gray-700' : 'text-gray-400 hover:text-gray-600'
-        }`}
-        aria-label={`Sort by ${ariaLabel}${active ? ` (${direction === 'asc' ? 'ascending' : 'descending'})` : ''}`}
-      >
-        <span>{label}</span>
-        <span aria-hidden="true" className={`text-[11px] leading-none ${active ? 'text-gray-700' : 'text-gray-300'}`}>
-          {active ? (direction === 'asc' ? '↑' : '↓') : '↕'}
-        </span>
-      </button>
-      {tooltip ? <HeaderTooltipTrigger label={label} tooltip={tooltip} /> : null}
-    </div>
-  );
-}
-
-function HeaderTooltipTrigger({
-  label,
-  tooltip,
-}: {
-  label: string;
-  tooltip?: string;
-}) {
-  if (!tooltip) {
-    return null;
-  }
-
-  return (
-    <Tooltip
-      content={<div className="max-w-xs whitespace-normal text-xs leading-5">{tooltip}</div>}
-      position="top"
-      variant="light"
-      className="max-w-xs whitespace-normal"
-    >
-      {/* eslint-disable-next-line react/forbid-elements -- Lightweight tooltip trigger requires a custom inline button */}
-      <button
-        type="button"
-        className="inline-flex cursor-help text-gray-400 transition-colors hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded-sm"
-        aria-label={`${label}: ${tooltip}`}
-      >
-        <Info className="h-3.5 w-3.5" />
-      </button>
-    </Tooltip>
-  );
-}
 
 export function TranscriptList({
   transcripts,
@@ -314,70 +115,15 @@ export function TranscriptList({
 
   const hasDimensionKeys = dimensionKeys.length > 0;
 
-  const compareByColumn = useCallback((a: Transcript, b: Transcript, column: SortColumn): number => {
-    switch (column.type) {
-      case 'model':
-        return compareDimensionValues(a.modelId, b.modelId);
-      case 'dimension': {
-        const aDimensions = getScenarioDimensions(a.scenarioId);
-        const bDimensions = getScenarioDimensions(b.scenarioId);
-        return compareDimensionValues(aDimensions?.[column.key], bDimensions?.[column.key]);
-      }
-      case 'decision':
-        return compareDimensionValues(
-          getTranscriptDecisionValue(a, decisionDisplayMode),
-          getTranscriptDecisionValue(b, decisionDisplayMode),
-        );
-      case 'created':
-        return a.createdAt.localeCompare(b.createdAt);
-      default:
-        return 0;
-    }
-  }, [decisionDisplayMode, getScenarioDimensions, normalizedDecisionTranscriptIds]);
+  const compareByColumn = useCallback(
+    buildColumnComparator(decisionDisplayMode, getScenarioDimensions),
+    [decisionDisplayMode, getScenarioDimensions, normalizedDecisionTranscriptIds],
+  );
 
-  const sortTranscripts = useCallback((items: Transcript[]): Transcript[] => {
-    const fallbackColumns: SortColumn[] = [];
-
-    if (sortKeys.primary) {
-      fallbackColumns.push({ type: 'dimension', key: sortKeys.primary });
-    }
-    if (sortKeys.secondary && sortKeys.secondary !== sortKeys.primary) {
-      fallbackColumns.push({ type: 'dimension', key: sortKeys.secondary });
-    }
-
-    fallbackColumns.push(
-      { type: 'model' },
-      { type: 'created' },
-    );
-
-    const applyDirection = (value: number): number => (sortState.direction === 'asc' ? value : -value);
-
-    return [...items].sort((a, b) => {
-      const primaryResult = compareByColumn(a, b, sortState.column);
-      if (primaryResult !== 0) {
-        return applyDirection(primaryResult);
-      }
-
-      for (const fallback of fallbackColumns) {
-        if (isSameSortColumn(fallback, sortState.column)) {
-          continue;
-        }
-
-        const fallbackResult = compareByColumn(a, b, fallback);
-        if (fallbackResult !== 0) {
-          return applyDirection(fallbackResult);
-        }
-      }
-
-      if (a.createdAt !== b.createdAt) {
-        const createdResult = a.createdAt.localeCompare(b.createdAt);
-        return applyDirection(createdResult);
-      }
-
-      const idResult = a.id.localeCompare(b.id, undefined, { sensitivity: 'base' });
-      return applyDirection(idResult);
-    });
-  }, [compareByColumn, sortKeys.primary, sortKeys.secondary, sortState.column, sortState.direction]);
+  const sortTranscripts = useCallback(
+    buildTranscriptSorter(sortState, sortKeys, compareByColumn),
+    [compareByColumn, sortKeys.primary, sortKeys.secondary, sortState.column, sortState.direction],
+  );
 
   const handleSortChange = useCallback((column: SortColumn) => {
     setHasUserChosenSort(true);
@@ -550,7 +296,6 @@ export function TranscriptList({
 
         return (
           <div key={modelId} className="border border-gray-200 rounded-lg overflow-hidden">
-            {/* Model header */}
             {/* eslint-disable-next-line react/forbid-elements -- Accordion button requires custom full-width layout */}
             <button
               type="button"
@@ -570,7 +315,6 @@ export function TranscriptList({
               )}
             </button>
 
-            {/* Transcripts */}
             {isExpanded && (
               <div className="divide-y divide-gray-100">
                 <div

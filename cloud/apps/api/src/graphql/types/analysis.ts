@@ -3,137 +3,16 @@ import { builder } from '../builder.js';
 import { ActualCostRef } from './cost-estimate.js';
 import { computeActualCost } from '../../services/cost/estimate.js';
 import { normalizeAnalysisArtifacts } from '../../services/analysis/normalize-analysis-output.js';
-
-// Shape definitions for internal types
-type ContestedScenarioShape = {
-  scenarioId: string;
-  scenarioName: string;
-  variance: number;
-  modelScores: Record<string, number>;
-};
-
-type AnalysisWarningShape = {
-  code: string;
-  message: string;
-  recommendation: string;
-};
-
-type AnalysisResultShape = {
-  id: string;
-  runId: string;
-  analysisType: string;
-  status: string;
-  inputHash: string;
-  codeVersion: string;
-  output: unknown;
-  createdAt: Date;
-};
-
-// Type for visualization data
-type VisualizationDataShape = {
-  decisionDistribution: Record<string, Record<string, number>>;
-  modelScenarioMatrix: Record<string, Record<string, number>>;
-};
-
-// Types for variance analysis from multi-sample runs
-type PerScenarioVarianceStats = {
-  sampleCount: number;
-  mean: number;
-  stdDev: number;
-  variance: number;
-  min: number;
-  max: number;
-  range: number;
-  // Directional stability fields (optional - populated by Waves 2 and 3)
-  directionCounts?: Record<string, number>;
-  direction?: 'A' | 'B' | 'NEUTRAL' | null;
-  directionalAgreement?: number | null;
-  medianSignedDistance?: number | null;
-  iqr?: number | null;
-  neutralShare?: number | null;
-  orientationCorrected?: boolean;
-};
-
-type ModelVarianceStatsShape = {
-  totalSamples: number;
-  uniqueScenarios: number;
-  samplesPerScenario: number;
-  avgWithinScenarioVariance: number;
-  maxWithinScenarioVariance: number;
-  consistencyScore: number;
-  perScenario: Record<string, PerScenarioVarianceStats>;
-};
-
-type ScenarioVarianceEntry = {
-  scenarioId: string;
-  scenarioName: string;
-  modelId?: string;
-  variance: number;
-  stdDev: number;
-  range: number;
-  sampleCount: number;
-  mean: number;
-  directionCounts?: Record<string, number>;
-  direction?: 'A' | 'B' | 'NEUTRAL' | null;
-  directionalAgreement?: number | null;
-  medianSignedDistance?: number | null;
-  iqr?: number | null;
-  neutralShare?: number | null;
-  orientationCorrected?: boolean;
-};
-
-type VarianceAnalysisShape = {
-  isMultiSample: boolean;
-  samplesPerScenario: number;
-  orientationCorrectedCount?: number;
-  perModel: Record<string, ModelVarianceStatsShape>;
-  mostVariableScenarios: ScenarioVarianceEntry[];
-  leastVariableScenarios: ScenarioVarianceEntry[];
-};
-
-type PreferenceSummaryShape = {
-  perModel: Record<string, unknown>;
-};
-
-type ReliabilitySummaryShape = {
-  perModel: Record<string, unknown>;
-};
-
-type AggregateMetadataShape = {
-  aggregateEligibility: string;
-  aggregateIneligibilityReason: string | null;
-  sourceRunCount: number;
-  sourceRunIds: string[];
-  conditionCoverage: {
-    plannedConditionCount: number;
-    observedConditionCount: number;
-    complete: boolean;
-  };
-  perModelRepeatCoverage: Record<string, unknown>;
-  perModelDrift: Record<string, unknown>;
-};
-
-// Type for output data stored in JSONB
-type AnalysisOutput = {
-  perModel: Record<string, unknown>;
-  preferenceSummary?: PreferenceSummaryShape | null;
-  reliabilitySummary?: ReliabilitySummaryShape | null;
-  aggregateMetadata?: AggregateMetadataShape | null;
-  modelAgreement: Record<string, unknown>;
-  dimensionAnalysis?: Record<string, unknown>;
-  varianceAnalysis?: VarianceAnalysisShape;
-  visualizationData?: VisualizationDataShape;
-  mostContestedScenarios: ContestedScenarioShape[];
-  methodsUsed: Record<string, unknown>;
-  warnings: AnalysisWarningShape[];
-  computedAt: string;
-  durationMs: number;
-};
-
-type NormalizedArtifacts = {
-  visualizationData: Record<string, unknown> | null;
-  varianceAnalysis: Record<string, unknown> | null;
-};
+import type {
+  AnalysisResultShape,
+  AnalysisOutput,
+  NormalizedArtifacts,
+  ContestedScenarioShape,
+  AnalysisWarningShape,
+  PreferenceSummaryShape,
+  ReliabilitySummaryShape,
+  AggregateMetadataShape,
+} from './analysis-types.js';
 
 async function getNormalizedArtifacts(
   analysis: AnalysisResultShape,
@@ -179,8 +58,6 @@ const AnalysisWarningRef = builder.objectRef<AnalysisWarningShape>('AnalysisWarn
 const PreferenceSummaryRef = builder.objectRef<PreferenceSummaryShape>('PreferenceSummary');
 const ReliabilitySummaryRef = builder.objectRef<ReliabilitySummaryShape>('ReliabilitySummary');
 const AggregateMetadataRef = builder.objectRef<AggregateMetadataShape>('AggregateMetadata');
-
-// AnalysisStatus enum is defined in enums.ts - reference by string name
 
 // Contested Scenario type implementation
 builder.objectType(ContestedScenarioRef, {
