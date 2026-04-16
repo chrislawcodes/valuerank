@@ -18,30 +18,40 @@ type ModelValueDetailDrawerProps = {
 
 function formatPercent(value: number | null): string {
   if (value == null || Number.isNaN(value)) return 'n/a';
-  const rounded = value.toFixed(1);
-  return rounded.endsWith('.0') ? `${rounded.slice(0, -2)}%` : `${rounded}%`;
-}
-
-function renderDots(score: number | null): string {
-  return computeDots(score)
-    .map((state) => {
-      switch (state) {
-        case 'full':
-          return '●';
-        case 'half':
-          return '◐';
-        case 'empty':
-        case 'muted':
-          return '○';
-        default:
-          return '○';
-      }
-    })
-    .join('');
+  return `${Math.round(value)}%`;
 }
 
 function InfoIcon() {
   return <Info className="h-3.5 w-3.5" />;
+}
+
+function Dots({ score }: { score: number | null }) {
+  const states = computeDots(score);
+  return (
+    <span className="inline-flex items-center gap-0.5" aria-hidden="true">
+      {states.map((state, i) => {
+        if (state === 'full') {
+          return <span key={i} className="inline-block w-3 h-3 rounded-full flex-shrink-0 bg-current" />;
+        }
+        if (state === 'half') {
+          return (
+            <span
+              key={i}
+              className="inline-block w-3 h-3 rounded-full flex-shrink-0"
+              style={{
+                background: 'linear-gradient(to right, currentColor 50%, transparent 50%)',
+                boxShadow: '0 0 0 1px currentColor',
+              }}
+            />
+          );
+        }
+        if (state === 'muted') {
+          return <span key={i} className="inline-block w-3 h-3 rounded-full flex-shrink-0 border border-current opacity-30" />;
+        }
+        return <span key={i} className="inline-block w-3 h-3 rounded-full flex-shrink-0 border border-current" />;
+      })}
+    </span>
+  );
 }
 
 export function ModelValueDetailDrawer({
@@ -81,7 +91,6 @@ export function ModelValueDetailDrawer({
   const valueLabel = VALUE_LABELS[valueKey] ?? value.valueKey;
   const mad = computeWeightedMad(value.domains);
   const stabilityCardText = formatStabilityTooltip(value.stabilityScore, value.eligibleDomainCount, mad, singleDomainActive);
-  const dots = renderDots(value.stabilityScore);
   const domains = [...value.domains].sort((left, right) => {
     const diff = right.evidenceWeight - left.evidenceWeight;
     return diff !== 0 ? diff : left.domainName.localeCompare(right.domainName);
@@ -120,14 +129,14 @@ export function ModelValueDetailDrawer({
                   <td className="py-0.5 pr-3">{d.domainName}</td>
                   <td className="text-right py-0.5 px-2">{d.evidenceWeight}</td>
                   <td className="text-right py-0.5 px-2">{formatPercent(d.winRate)}</td>
-                  <td className="text-right py-0.5 pl-2">{(d.evidenceWeight * d.winRate).toFixed(1)}</td>
+                  <td className="text-right py-0.5 pl-2">{Math.round(d.evidenceWeight * d.winRate)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t border-gray-300 font-semibold">
                 <td className="pt-1 pr-3 text-gray-500 font-normal" colSpan={3}>
-                  {weightedSum.toFixed(1)} ÷ {totalWeight} =
+                  {Math.round(weightedSum)} ÷ {totalWeight} =
                 </td>
                 <td className="text-right pt-1 pl-2">{formatPercent(value.pooledWinRate)}</td>
               </tr>
@@ -154,8 +163,12 @@ export function ModelValueDetailDrawer({
       <ol className="list-decimal pl-4 space-y-0.5">
         <li>Find each domain&apos;s win rate (table below).</li>
         <li>Measure how far each domain&apos;s win rate is from the pooled mean — the &quot;spread.&quot;</li>
-        <li>Take a weighted average of those distances (bigger domains count more).</li>
-        <li>Convert that average spread into a 0–100 score: less spread = higher score.</li>
+        <li>Take a weighted average of those distances (bigger domains count more). This is the <strong>weighted spread</strong>.</li>
+        <li>
+          Convert to a score: <strong>score = 100 × (1 − spread ÷ 50)</strong>.
+          A spread of 0 → score 100 (all domains identical).
+          A spread of 50 → score 0 (maximum disagreement possible).
+        </li>
       </ol>
       {!singleDomainActive && value.eligibleDomainCount >= 2 && pooledMean != null && domains.length > 0 && (
         <div className="border-t border-gray-200 pt-2">
@@ -175,17 +188,19 @@ export function ModelValueDetailDrawer({
                 <tr key={d.domainId} className="border-b border-gray-100">
                   <td className="py-0.5 pr-3">{d.domainName}</td>
                   <td className="text-right py-0.5 px-2">{formatPercent(d.winRate)}</td>
-                  <td className="text-right py-0.5 pl-2">{Math.abs(d.winRate - pooledMean).toFixed(1)} pts</td>
+                  <td className="text-right py-0.5 pl-2">{Math.round(Math.abs(d.winRate - pooledMean))} pts</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t border-gray-300 font-semibold">
                 <td className="pt-1 pr-3" colSpan={2}>Weighted avg spread</td>
-                <td className="text-right pt-1 pl-2">{mad != null ? `${mad.toFixed(1)} pts` : 'n/a'}</td>
+                <td className="text-right pt-1 pl-2">{mad != null ? `${Math.round(mad)} pts` : 'n/a'}</td>
               </tr>
               <tr className="font-semibold">
-                <td className="pt-0.5 pr-3" colSpan={2}>Score</td>
+                <td className="pt-0.5 pr-3 font-normal text-gray-500" colSpan={2}>
+                  {mad != null ? `100 × (1 − ${Math.round(mad)} ÷ 50) =` : 'Score'}
+                </td>
                 <td className="text-right pt-0.5 pl-2">
                   {value.stabilityScore != null ? `${Math.round(value.stabilityScore)}/100` : 'n/a'}
                 </td>
@@ -278,9 +293,9 @@ export function ModelValueDetailDrawer({
                   </Button>
                 </Tooltip>
               </div>
-              <div className="mt-2 flex items-center gap-2 font-mono text-lg text-gray-900">
-                <span aria-hidden="true">{dots}</span>
-                <span>{value.stabilityScore == null ? 'n/a' : `${Math.round(value.stabilityScore)}/100`}</span>
+              <div className="mt-2 flex items-center gap-2 text-lg text-gray-900">
+                <Dots score={value.stabilityScore} />
+                <span className="font-mono">{value.stabilityScore == null ? 'n/a' : `${Math.round(value.stabilityScore)}/100`}</span>
               </div>
               <p className="mt-2 text-sm text-gray-600">{stabilityCardText}</p>
             </div>

@@ -17,28 +17,38 @@ type ModelsMatrixCellProps = {
 };
 
 function formatPercent(value: number): string {
-  const rounded = value.toFixed(1);
-  return rounded.endsWith('.0') ? `${rounded.slice(0, -2)}%` : `${rounded}%`;
+  return `${Math.round(value)}%`;
 }
 
-function renderDots(score: number | null, muted: boolean): string {
+type DotsProps = { score: number | null; muted: boolean; className?: string };
+
+function Dots({ score, muted, className }: DotsProps) {
   const states = computeDots(muted ? null : score);
-  return states
-    .map((state) => {
-      switch (state) {
-        case 'full':
-          return '●';
-        case 'half':
-          return '◐';
-        case 'empty':
-          return '○';
-        case 'muted':
-          return '○';
-        default:
-          return '○';
-      }
-    })
-    .join('');
+  return (
+    <span className={`inline-flex items-center gap-0.5 ${className ?? ''}`} aria-hidden="true">
+      {states.map((state, i) => {
+        if (state === 'full') {
+          return <span key={i} className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 bg-current" />;
+        }
+        if (state === 'half') {
+          return (
+            <span
+              key={i}
+              className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0"
+              style={{
+                background: 'linear-gradient(to right, currentColor 50%, transparent 50%)',
+                boxShadow: '0 0 0 1px currentColor',
+              }}
+            />
+          );
+        }
+        if (state === 'muted') {
+          return <span key={i} className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 border border-current opacity-30" />;
+        }
+        return <span key={i} className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 border border-current" />;
+      })}
+    </span>
+  );
 }
 
 export function ModelsMatrixCell({
@@ -59,7 +69,6 @@ export function ModelsMatrixCell({
     ? 'Filtered out by the current stability visibility setting.'
     : formatStabilityTooltip(stabilityScore, eligibleDomainCount, mad, singleDomainActive);
   const primaryLabel = hiddenByFilter || pooledWinRate == null ? 'n/a' : formatPercent(pooledWinRate);
-  const dots = renderDots(stabilityScore, mutedDots);
   const isClickable = !hiddenByFilter;
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
@@ -90,9 +99,7 @@ export function ModelsMatrixCell({
       <span className={`text-sm font-semibold ${hiddenByFilter || pooledWinRate == null ? 'text-gray-400' : 'text-gray-900'}`}>
         {primaryLabel}
       </span>
-      <span className={`mt-1 font-mono text-[11px] ${mutedDots ? 'text-gray-400' : 'text-gray-700'}`}>
-        <span aria-hidden="true">{dots}</span>
-      </span>
+      <Dots score={stabilityScore} muted={mutedDots} className={`mt-1 ${mutedDots ? 'text-gray-400' : 'text-gray-700'}`} />
       <span className="sr-only">{tooltip}</span>
     </Button>
   );
