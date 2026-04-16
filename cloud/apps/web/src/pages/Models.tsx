@@ -13,12 +13,7 @@ import {
 } from '../api/operations/modelsAnalysis';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import { ModelValueDetailDrawer } from '../components/models/ModelValueDetailDrawer';
-import {
-  ModelsMatrix,
-  VALUE_SHORT_LABELS,
-  type ModelsMatrixSortKey,
-  type StabilityVisibility,
-} from '../components/models/ModelsMatrix';
+import { ModelsMatrix } from '../components/models/ModelsMatrix';
 
 export function Models() {
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
@@ -42,8 +37,6 @@ export function Models() {
     requestPolicy: 'cache-and-network',
   });
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
-  const [sortBy, setSortBy] = useState<ModelsMatrixSortKey>('model');
-  const [stabilityVisibility, setStabilityVisibility] = useState<StabilityVisibility>('all');
   const [selectedCell, setSelectedCell] = useState<{ modelId: string; valueKey: string } | null>(null);
   const initializedModelSelection = useRef(false);
 
@@ -95,14 +88,6 @@ export function Models() {
     label: model.label,
   })), [models]);
 
-  const sortOptions = useMemo(() => [
-    { value: 'model', label: 'Model name' },
-    ...Object.entries(VALUE_SHORT_LABELS).map(([valueKey, label]) => ({
-      value: valueKey as ModelsMatrixSortKey,
-      label,
-    })),
-  ], []);
-
   const domainOptions = useMemo(() => [
     { value: 'all', label: 'All domains' },
     ...domains.map((domain) => ({
@@ -142,7 +127,13 @@ export function Models() {
     setSelectedCell({ modelId, valueKey });
   };
 
-  const stabilityDisabled = singleDomainActive;
+  const modelSetSummary = loading
+    ? 'Loading...'
+    : modelOptions.length === 0
+      ? 'No models available'
+      : selectedModelCount === modelOptions.length
+        ? 'All selected'
+        : `${selectedModelCount} of ${modelOptions.length} selected`;
 
   return (
     <div className="space-y-6">
@@ -157,92 +148,78 @@ export function Models() {
         <ErrorMessage message={`Failed to load models analysis: ${(domainsError ?? error)?.message ?? 'Unknown error'}`} />
       )}
 
-      <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5 space-y-4">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <Select
-            label="Domain scope"
-            options={domainOptions}
-            value={selectedDomainId ?? 'all'}
-            onChange={(value) => setSelectedDomainId(value === 'all' ? null : value)}
-            placeholder="All domains"
-          />
-          <Select
-            label="Sort rows by"
-            options={sortOptions}
-            value={sortBy}
-            onChange={(value) => setSortBy(value as ModelsMatrixSortKey)}
-          />
-          <Select
-            label="Stability visibility"
-            options={[
-              { value: 'all', label: 'All' },
-              { value: 'stable', label: 'Stable only' },
-              { value: 'low', label: 'Low stability only' },
-            ]}
-            value={stabilityVisibility}
-            onChange={(value) => setStabilityVisibility(value as StabilityVisibility)}
-            disabled={stabilityDisabled}
-            placeholder="All"
-          />
-          <div className="flex items-end">
-            <div className="text-xs text-gray-500">
-              {singleDomainActive ? 'Stability visibility is disabled while a single domain is selected.' : 'Stability is a cross-domain scan signal.'}
+      <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
+        <div className="flex flex-wrap items-start gap-4">
+          <div className="w-48 flex-shrink-0">
+            <Select
+              label="Domain scope"
+              options={domainOptions}
+              value={selectedDomainId ?? 'all'}
+              onChange={(value) => setSelectedDomainId(value === 'all' ? null : value)}
+              placeholder="All domains"
+            />
+          </div>
+          <details className="flex-1 min-w-[220px]">
+            <summary className="cursor-pointer list-none">
+              <p className="text-sm font-medium text-gray-700 mb-1">Model set</p>
+              <div className="inline-flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm hover:border-gray-400 min-h-[44px] sm:min-h-0">
+                <span className={modelOptions.length === 0 && !loading ? 'text-gray-400' : ''}>
+                  {modelSetSummary}
+                </span>
+                <span className="ml-2 text-gray-400">▾</span>
+              </div>
+            </summary>
+            <div className="mt-2 space-y-3 rounded-lg border border-gray-200 bg-white p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-gray-600">All visible models are selected by default.</p>
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="secondary" size="sm" onClick={selectAllModels} disabled={loading}>
+                    Select all
+                  </Button>
+                  <Button type="button" variant="secondary" size="sm" onClick={clearModels} disabled={loading}>
+                    Clear
+                  </Button>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {modelOptions.map((model) => {
+                  const isSelected = selectedModelIds.includes(model.value);
+                  return (
+                    <Button
+                      key={model.value}
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toggleModelId(model.value)}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors min-h-0 ${
+                        isSelected
+                          ? 'border-teal-600 bg-teal-600 text-white hover:bg-teal-700'
+                          : 'border-gray-300 bg-white text-gray-700 hover:border-teal-400 hover:text-teal-700 hover:bg-white'
+                      }`}
+                      title={model.label}
+                    >
+                      {model.label}
+                    </Button>
+                  );
+                })}
+                {modelOptions.length === 0 && !loading && (
+                  <span className="text-sm text-gray-500">No active models are available.</span>
+                )}
+              </div>
+              <div className="text-xs text-gray-500">
+                {loading
+                  ? 'Loading models and domains...'
+                  : modelOptions.length === 0
+                    ? 'No active models are available.'
+                    : selectedModelCount === modelOptions.length
+                      ? 'All visible models selected.'
+                      : `${selectedModelCount} of ${modelOptions.length} visible models selected.`}
+                {singleDomainActive && selectedDomain != null && (
+                  <span className="ml-2">Viewing {selectedDomain.name} only.</span>
+                )}
+              </div>
             </div>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-semibold text-gray-900">Model set</h2>
-              <p className="text-xs text-gray-600">All visible models are selected by default.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="secondary" size="sm" onClick={selectAllModels} disabled={loading}>
-                Select all
-              </Button>
-              <Button type="button" variant="secondary" size="sm" onClick={clearModels} disabled={loading}>
-                Clear
-              </Button>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {modelOptions.map((model) => {
-              const isSelected = selectedModelIds.includes(model.value);
-              return (
-                <Button
-                  key={model.value}
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => toggleModelId(model.value)}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors min-h-0 ${
-                    isSelected
-                      ? 'border-teal-600 bg-teal-600 text-white hover:bg-teal-700'
-                      : 'border-gray-300 bg-white text-gray-700 hover:border-teal-400 hover:text-teal-700 hover:bg-white'
-                  }`}
-                  title={model.label}
-                >
-                  {model.label}
-                </Button>
-              );
-            })}
-            {modelOptions.length === 0 && !loading && (
-              <span className="text-sm text-gray-500">No active models are available.</span>
-            )}
-          </div>
-          <div className="text-xs text-gray-500">
-            {loading
-              ? 'Loading models and domains...'
-              : modelOptions.length === 0
-                ? 'No active models are available.'
-                : selectedModelCount === modelOptions.length
-                  ? 'All visible models selected.'
-                  : `${selectedModelCount} of ${modelOptions.length} visible models selected.`}
-            {singleDomainActive && selectedDomain != null && (
-              <span className="ml-2">Viewing {selectedDomain.name} only, so stability uses one domain at most.</span>
-            )}
-          </div>
+          </details>
         </div>
       </section>
 
@@ -252,8 +229,6 @@ export function Models() {
         <ModelsMatrix
           models={models}
           selectedModelIds={selectedModelIds}
-          sortBy={sortBy}
-          stabilityVisibility={stabilityVisibility}
           singleDomainActive={singleDomainActive}
           selectedCellKey={selectedCell == null ? null : `${selectedCell.modelId}:${selectedCell.valueKey}`}
           onCellClick={handleCellClick}
