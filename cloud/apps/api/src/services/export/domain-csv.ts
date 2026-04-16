@@ -7,7 +7,6 @@ import {
   getProbePrompt,
   getTargetResponse,
   extractTrialSignature,
-  type TranscriptWithScenario,
 } from './csv.js';
 import {
   formatDecisionDisplay,
@@ -136,8 +135,8 @@ function domainTranscriptToRow(transcript: DomainTranscriptWithScenario): string
   const strengthScore = getDecisionPreferenceScore(decisionDisplay);
   const decisionStrength = strengthScore != null ? String(strengthScore) : '';
 
-  const probePrompt = getProbePrompt(transcript as TranscriptWithScenario);
-  const targetResponse = getTargetResponse(transcript as TranscriptWithScenario);
+  const probePrompt = getProbePrompt(transcript);
+  const targetResponse = getTargetResponse(transcript);
 
   return [
     modelName,
