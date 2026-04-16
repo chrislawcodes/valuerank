@@ -299,7 +299,7 @@ describe('TranscriptList', () => {
 
     await user.click(screen.getByText('gpt-4'));
 
-    expect(screen.getByText(/\d{2}:\d{2}:\d{2} [AP]M/)).toBeInTheDocument();
+    expect(screen.getByText(/\d{2}\/\d{2}\/\d{4} \d{2}:\d{2} [AP]M Pacific/)).toBeInTheDocument();
   });
 
   it('shows table headers in flat list even without dimensions', () => {
