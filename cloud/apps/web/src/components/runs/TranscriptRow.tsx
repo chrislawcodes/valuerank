@@ -28,11 +28,18 @@ type TranscriptRowProps = {
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
-  return date.toLocaleTimeString('en-US', {
+  const datePart = date.toLocaleDateString('en-US', {
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+    timeZone: 'America/Los_Angeles',
+  });
+  const timePart = date.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit',
+    timeZone: 'America/Los_Angeles',
   });
+  return `${datePart} ${timePart} Pacific`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
