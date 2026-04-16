@@ -13,8 +13,11 @@ import {
 
 type DomainContribution = ModelsAnalysisDomainBreakdownShape;
 
-function computeDomainWinRate(prioritized: number, deprioritized: number): number | null {
-  const evidenceWeight = prioritized + deprioritized;
+// Honest denominator: includes neutral outcomes so win rate is consistent with
+// the rest of the product (matches aggregate-logic.ts). Excluding neutrals would
+// inflate win rates and make evidence weights inconsistent with scenario counts.
+function computeDomainWinRate(prioritized: number, deprioritized: number, neutral: number): number | null {
+  const evidenceWeight = prioritized + deprioritized + neutral;
   if (evidenceWeight <= 0) return null;
   return (prioritized / evidenceWeight) * 100;
 }
@@ -147,9 +150,9 @@ builder.queryField('modelsAnalysis', (t) =>
 
           for (const valueKey of DOMAIN_ANALYSIS_VALUE_KEYS) {
             const counts = model.counts[valueKey] ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
-            const evidenceWeight = counts.prioritized + counts.deprioritized;
+            const evidenceWeight = counts.prioritized + counts.deprioritized + counts.neutral;
             if (evidenceWeight <= 0) continue;
-            const winRate = computeDomainWinRate(counts.prioritized, counts.deprioritized);
+            const winRate = computeDomainWinRate(counts.prioritized, counts.deprioritized, counts.neutral);
             if (winRate == null) continue;
 
             const contributions = valueMap.get(valueKey);

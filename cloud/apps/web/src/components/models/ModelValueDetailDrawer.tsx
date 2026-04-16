@@ -104,9 +104,9 @@ export function ModelValueDetailDrawer({
     <div className="space-y-2">
       <p>
         <strong>What it means:</strong> A weighted average of win rates across each eligible domain.
-        Head-to-head comparisons were run where judges picked which model response better showed this value.
-        Win rate = % of those comparisons this model won.
-        Domains with more comparisons (higher evidence weight) count more in the average.
+        Each scenario pitted two values head-to-head and was scored as prioritized, deprioritized, or neutral.
+        Win rate = prioritized ÷ (prioritized + deprioritized + neutral) — all outcomes count in the denominator.
+        Domains with more scenarios (higher evidence weight) count more in the average.
       </p>
       <p>
         <strong>Formula:</strong> add up (weight × win rate) for every domain, then divide by the total weight.
@@ -232,11 +232,17 @@ export function ModelValueDetailDrawer({
   const evidenceWeightTooltip = (
     <div className="space-y-2">
       <p>
-        <strong>What it means:</strong> The number of head-to-head comparisons run in this domain for this model and value.
+        <strong>What it means:</strong> The total number of scenario-level decisions recorded
+        for this model and value in this domain — prioritized, deprioritized, and neutral outcomes
+        all count. One scenario = one decision = one unit of evidence.
       </p>
       <p>
-        Domains with more comparisons get more weight when calculating the pooled win rate —
-        a domain with 50 comparisons has twice the pull of a domain with 25.
+        Each vignette runs 25 scenarios, so the count tends to land near multiples of 25.
+        Multiple runs of the same vignette add to the total.
+      </p>
+      <p>
+        Domains with more evidence get more weight when calculating the pooled win rate —
+        a domain with 2000 decisions pulls the average twice as hard as one with 1000.
       </p>
     </div>
   );
