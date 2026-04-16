@@ -1,7 +1,7 @@
 export type DotState = 'full' | 'half' | 'empty' | 'muted';
 
 export type StabilityDomainContribution = {
-  evidenceWeight: number;
+  evidenceWeight: number | null;
   winRate: number;
 };
 

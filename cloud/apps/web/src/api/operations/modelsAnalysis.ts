@@ -3,7 +3,8 @@ import { gql } from 'urql';
 export type ModelsAnalysisDomainBreakdown = {
   domainId: string;
   domainName: string;
-  evidenceWeight: number;
+  /** Vignette count. Null for snapshots built before v1.2.0 (rebuilds on next domain page load). */
+  evidenceWeight: number | null;
   winRate: number;
 };
 

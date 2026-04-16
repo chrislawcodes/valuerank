@@ -49,7 +49,9 @@ function buildEmptyValueResult(valueKey: DomainAnalysisValueKey): ModelsAnalysis
 }
 
 function buildValueResult(valueKey: DomainAnalysisValueKey, domains: DomainContribution[]): ModelsAnalysisValueResultShape {
-  const eligibleDomains = domains.filter((domain) => domain.evidenceWeight > 0);
+  // Null evidenceWeight means the snapshot predates the vignetteCount field (pre-v1.2.0) but the
+  // win rate is still valid — include those domains in the pool. Exclude only genuine zero-evidence entries.
+  const eligibleDomains = domains.filter((domain) => domain.evidenceWeight == null || domain.evidenceWeight > 0);
   return {
     valueKey,
     pooledWinRate: computePooledWinRate(eligibleDomains),
@@ -148,16 +150,19 @@ builder.queryField('modelsAnalysis', (t) =>
                 winRate: precomputedWinRate,
               });
             } else {
-              // Fallback: compute win rate directly from accumulated counts
+              // Fallback: snapshot predates vignetteCount (pre-v1.2.0). Compute win rate from
+              // accumulated counts but do NOT use the raw count total as evidenceWeight — that
+              // number is total scenario outcomes (not vignette count) and would be misleading.
+              // Set evidenceWeight to null so the UI can show "—" until the snapshot rebuilds.
               const counts = model.counts[valueKey] ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
-              const evidenceWeight = counts.prioritized + counts.deprioritized + counts.neutral;
-              if (evidenceWeight <= 0) continue;
+              const rawTotal = counts.prioritized + counts.deprioritized + counts.neutral;
+              if (rawTotal <= 0) continue;
               const winRate = computeDomainWinRate(counts.prioritized, counts.deprioritized, counts.neutral);
               if (winRate == null) continue;
               contributions.push({
                 domainId: domainMatch ?? parsed.domainId,
                 domainName: parsed.domainName,
-                evidenceWeight,
+                evidenceWeight: null,
                 winRate,
               });
             }

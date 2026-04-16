@@ -1321,7 +1321,7 @@ export type ModelsAnalysisDomainBreakdown = {
   __typename?: 'ModelsAnalysisDomainBreakdown';
   domainId: Scalars['String']['output'];
   domainName: Scalars['String']['output'];
-  evidenceWeight: Scalars['Int']['output'];
+  evidenceWeight?: Scalars['Int']['output'] | null;
   winRate: Scalars['Float']['output'];
 };
 
@@ -4329,7 +4329,7 @@ export type ModelsAnalysisQueryVariables = Exact<{
 }>;
 
 
-export type ModelsAnalysisQuery = { __typename?: 'Query', modelsAnalysis: { __typename?: 'ModelsAnalysisResult', models: Array<{ __typename?: 'ModelsAnalysisModelResult', modelId: string, label: string, values: Array<{ __typename?: 'ModelsAnalysisValueResult', valueKey: string, pooledWinRate?: number | null, stabilityScore?: number | null, eligibleDomainCount: number, domains: Array<{ __typename?: 'ModelsAnalysisDomainBreakdown', domainId: string, domainName: string, winRate: number, evidenceWeight: number }> }> }> } };
+export type ModelsAnalysisQuery = { __typename?: 'Query', modelsAnalysis: { __typename?: 'ModelsAnalysisResult', models: Array<{ __typename?: 'ModelsAnalysisModelResult', modelId: string, label: string, values: Array<{ __typename?: 'ModelsAnalysisValueResult', valueKey: string, pooledWinRate?: number | null, stabilityScore?: number | null, eligibleDomainCount: number, domains: Array<{ __typename?: 'ModelsAnalysisDomainBreakdown', domainId: string, domainName: string, winRate: number, evidenceWeight?: number | null }> }> }> } };
 
 export type CreatePairedVignetteMutationVariables = Exact<{
   input: CreatePairedVignetteInput;
