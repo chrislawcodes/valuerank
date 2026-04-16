@@ -3,11 +3,11 @@ reviewer: "codex"
 lens: "dependency-order-adversarial"
 stage: "tasks"
 artifact_path: "docs/workflow/feature-runs/030-remove-legacy-decision-code/tasks.md"
-artifact_sha256: "4a1db078166b7144f0c2dbca35554e46c9e35d0871cf8b5b5a2cca232bc65b2a"
+artifact_sha256: "f22f225e41b0c7b454aee9ba24e8535c6193cb2d53256bfed0d4d447ced73092"
 repo_root: "."
-git_head_sha: "adee0cd336e4555f34e0ea676185dff6636e93ac"
-git_base_ref: "origin/fix/audit-mode-no-legacy-fallback"
-git_base_sha: "adee0cd336e4555f34e0ea676185dff6636e93ac"
+git_head_sha: "488f0830e54423e5743ee1c0a6b72556df7d7288"
+git_base_ref: "origin/main"
+git_base_sha: "47a1b4fade719759029b4462a8a52200b1ee0f83"
 generation_method: "codex-runner"
 resolution_status: "accepted"
 resolution_note: "No actionable findings detected — auto-accepted"
@@ -22,18 +22,15 @@ coverage_note: ""
 
 ## Findings
 
-1. [UNVERIFIED] MEDIUM: Slice 1.2 deletes shared legacy compat exports, but the build checkpoint for that wave runs before Slice 1.3 updates the remaining consumers in `variance.ts` and `aggregate-logic.ts`. That makes the wave order dependency-unsafe. The API workspace can fail halfway through the plan even if the later cleanup is correct.
-
-2. [UNVERIFIED] MEDIUM: The plan removes legacy readers and response fields without any explicit backfill or dual-read phase for persisted data. If stored transcripts, aggregates, exports, or worker payloads still carry `scoreCounts`, `rawScore`, `canonicalScore`, or `decisionCode`, the later canonical-only code paths can break on historical records.
-
-3. MEDIUM: The final grep gate is too narrow to prove the migration is complete. It only scans a small set of extensions under `cloud/`, so it can miss legacy references in generated GraphQL output, fixtures, JSON, docs, SQL, or shell scripts and still report success.
-
-4. [UNVERIFIED] MEDIUM: Slice 1.1 allows an approximate ConditionMatrix strength when the parent cannot supply the 5-bucket breakdown. Later tasks and tests assume exact canonical buckets, so this fallback can hide a data-contract problem instead of forcing it to be fixed first.
+- **Medium [UNVERIFIED]** Slice 2.1 removes `legacy` from the GraphQL contract before the artifact proves every downstream reader is migrated. Build success only covers the repo in its current state; it does not protect external clients or generated consumers that may still request the field.
+- **Medium [UNVERIFIED]** Slice 1.1 introduces `winnerScore = (...) / totalTrials` but does not add an explicit zero-trial guard or a regression case for partially populated rows. If a condition can surface with `totalTrials = 0`, the new display math can produce invalid output.
+- **Medium** The final verification grep in Slice 5.1 is too narrow to certify cleanup. It omits the most important residual contract names, especially `legacy` and `decisionCode`, so a leftover compatibility path could still be present while the artifact reports “zero hits.”
 
 ## Residual Risks
 
-- I could not verify from the artifact alone whether the shared exports, persisted legacy shapes, or 5-bucket inputs actually exist in the current codebase, so the dependency-order risks should be checked against real imports and stored data formats.
-- The plan still needs a clear rule for external consumers of legacy GraphQL and MCP fields. Without that, the migration can be internally consistent but still break downstream integrations.
+- The plan assumes repo builds and tests are enough to prove the migration is safe. That will not catch external callers, cached client code, or runtime data already stored in older shapes.
+- The artifact relies on prior cleanup claims for order-effect files and legacy adapters, but it does not restate a rollback or staged-deploy strategy. If that earlier cleanup was incomplete, this task is harder to unwind safely.
+- No explicit check is described for historical records or queued work items that may still serialize legacy decision shapes. If those exist, the migration may still need a backfill or read-time adapter.
 
 ## Runner Stats
 - total_input=0

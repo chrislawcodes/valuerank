@@ -10,7 +10,8 @@
     ".railwayignore",
     "cloud/apps/api/specs",
     "cloud/scripts",
-    "cloud/workers"
+    "cloud/workers",
+    "docs/workflow/operations"
   ],
   "required_reviews": [
     {
