@@ -79,8 +79,8 @@ builder.queryField('run', (t) =>
         return null;
       }
 
-      // Track access (non-blocking)
-      trackRunAccess(run.id);
+      // Track access (non-blocking, fire-and-forget)
+      void trackRunAccess(run.id);
 
       return run;
     },
@@ -221,7 +221,7 @@ builder.queryField('runsWithAnalysis', (t) =>
 
       // Track access for each run (non-blocking)
       for (const run of runs) {
-        trackRunAccess(run.id);
+        void trackRunAccess(run.id);
       }
 
       ctx.log.debug(
