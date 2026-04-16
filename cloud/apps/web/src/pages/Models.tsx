@@ -104,6 +104,18 @@ export function Models() {
     return selectedModel.values.find((value) => value.valueKey === selectedCell.valueKey) ?? null;
   }, [selectedCell, selectedModel]);
 
+  const defaultSelection = useMemo(() => {
+    const availableIds = models.map((model) => model.modelId);
+    const defaults = availableIds.filter((id) => defaultModelIds.has(id));
+    return defaults.length > 0 ? defaults : availableIds;
+  }, [models, defaultModelIds]);
+
+  const isDefaultSelection = useMemo(() => {
+    if (selectedModelIds.length !== defaultSelection.length) return false;
+    const defaultSet = new Set(defaultSelection);
+    return selectedModelIds.every((id) => defaultSet.has(id));
+  }, [selectedModelIds, defaultSelection]);
+
   const loading = (domainsLoading && domains.length === 0) || (fetching && data == null);
   const selectedModelCount = selectedModelIds.length;
 
@@ -131,9 +143,11 @@ export function Models() {
     ? 'Loading...'
     : modelOptions.length === 0
       ? 'No models available'
-      : selectedModelCount === modelOptions.length
-        ? 'All selected'
-        : `${selectedModelCount} of ${modelOptions.length} selected`;
+      : isDefaultSelection
+        ? `Default — ${selectedModelCount} models selected`
+        : selectedModelCount === modelOptions.length
+          ? 'All selected'
+          : `${selectedModelCount} of ${modelOptions.length} selected`;
 
   return (
     <div className="space-y-6">
