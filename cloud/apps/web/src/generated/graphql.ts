@@ -15,8 +15,8 @@ export type Scalars = {
   Boolean: { input: boolean; output: boolean; }
   Int: { input: number; output: number; }
   Float: { input: number; output: number; }
-  DateTime: { input: string; output: string; }
-  JSON: { input: unknown; output: unknown; }
+  DateTime: { input: any; output: any; }
+  JSON: { input: any; output: any; }
 };
 
 /** Actual cost summary for a completed run */
@@ -114,9 +114,10 @@ export type AnalysisResult = {
 };
 
 /** Status of an analysis result */
-export type AnalysisStatus =
-  | 'CURRENT'
-  | 'SUPERSEDED';
+export enum AnalysisStatus {
+  Current = 'CURRENT',
+  Superseded = 'SUPERSEDED'
+}
 
 /** Warning about statistical assumptions or data quality */
 export type AnalysisWarning = {
@@ -154,11 +155,12 @@ export type AssumptionsTempZeroResult = {
 };
 
 /** Type of action that was audited */
-export type AuditAction =
-  | 'ACTION'
-  | 'CREATE'
-  | 'DELETE'
-  | 'UPDATE';
+export enum AuditAction {
+  Action = 'ACTION',
+  Create = 'CREATE',
+  Delete = 'DELETE',
+  Update = 'UPDATE'
+}
 
 /** An audit log entry recording a mutation */
 export type AuditLog = {
@@ -926,8 +928,10 @@ export type DomainSettings = {
   __typename?: 'DomainSettings';
   contextId?: Maybe<Scalars['String']['output']>;
   domainId: Scalars['ID']['output'];
+  labelPrefix?: Maybe<Scalars['String']['output']>;
   levelPresetVersionId?: Maybe<Scalars['String']['output']>;
   preambleVersionId?: Maybe<Scalars['String']['output']>;
+  sentencePrefix?: Maybe<Scalars['String']['output']>;
   valueStatements: Array<ValueStatementWithVersions>;
 };
 
@@ -1053,17 +1057,18 @@ export type ExecutionMetrics = {
 };
 
 /** Status of a scenario expansion job */
-export type ExpansionJobStatus =
+export enum ExpansionJobStatus {
   /** Job is currently running */
-  | 'ACTIVE'
+  Active = 'ACTIVE',
   /** Job completed successfully */
-  | 'COMPLETED'
+  Completed = 'COMPLETED',
   /** Job failed */
-  | 'FAILED'
+  Failed = 'FAILED',
   /** No expansion job exists */
-  | 'NONE'
+  None = 'NONE',
   /** Job is queued and waiting to run */
-  | 'PENDING';
+  Pending = 'PENDING'
+}
 
 /** Real-time progress during scenario expansion */
 export type ExpansionProgress = {
@@ -1234,9 +1239,10 @@ export type LlmModel = {
 };
 
 /** Lifecycle status of an LLM model */
-export type LlmModelStatus =
-  | 'ACTIVE'
-  | 'DEPRECATED';
+export enum LlmModelStatus {
+  Active = 'ACTIVE',
+  Deprecated = 'DEPRECATED'
+}
 
 /** An LLM API provider with rate limiting and parallelism settings */
 export type LlmProvider = {
@@ -1321,7 +1327,7 @@ export type ModelsAnalysisDomainBreakdown = {
   __typename?: 'ModelsAnalysisDomainBreakdown';
   domainId: Scalars['String']['output'];
   domainName: Scalars['String']['output'];
-  evidenceWeight?: Scalars['Int']['output'] | null;
+  evidenceWeight: Scalars['Int']['output'];
   winRate: Scalars['Float']['output'];
 };
 
@@ -1915,8 +1921,10 @@ export type MutationSetDomainDefaultsArgs = {
 export type MutationSetDomainSettingsArgs = {
   contextId?: InputMaybe<Scalars['ID']['input']>;
   domainId: Scalars['ID']['input'];
+  labelPrefix?: InputMaybe<Scalars['String']['input']>;
   levelPresetVersionId?: InputMaybe<Scalars['ID']['input']>;
   preambleVersionId?: InputMaybe<Scalars['ID']['input']>;
+  sentencePrefix?: InputMaybe<Scalars['String']['input']>;
   valueStatements: Array<ValueStatementInput>;
 };
 
@@ -3268,10 +3276,11 @@ export type RunConditionGridCell = {
 };
 
 /** Priority level for run execution (affects job queue ordering) */
-export type RunPriority =
-  | 'HIGH'
-  | 'LOW'
-  | 'NORMAL';
+export enum RunPriority {
+  High = 'HIGH',
+  Low = 'LOW',
+  Normal = 'NORMAL'
+}
 
 /** Progress information for a run */
 export type RunProgress = {
@@ -3289,12 +3298,13 @@ export type RunProgress = {
 };
 
 /** Status of a run execution */
-export type RunStatus =
-  | 'CANCELLED'
-  | 'COMPLETED'
-  | 'FAILED'
-  | 'PENDING'
-  | 'RUNNING';
+export enum RunStatus {
+  Cancelled = 'CANCELLED',
+  Completed = 'COMPLETED',
+  Failed = 'FAILED',
+  Pending = 'PENDING',
+  Running = 'RUNNING'
+}
 
 /** A generated scenario from a definition */
 export type Scenario = {
@@ -3414,11 +3424,12 @@ export type TaskResult = {
 };
 
 /** Status of an individual task/job */
-export type TaskStatus =
-  | 'COMPLETED'
-  | 'FAILED'
-  | 'PENDING'
-  | 'RUNNING';
+export enum TaskStatus {
+  Completed = 'COMPLETED',
+  Failed = 'FAILED',
+  Pending = 'PENDING',
+  Running = 'RUNNING'
+}
 
 export type TempZeroDecision = {
   __typename?: 'TempZeroDecision';
@@ -3750,33 +3761,33 @@ export type WorkerHealth = {
   warnings: Array<Scalars['String']['output']>;
 };
 
-export type AnalysisResultFieldsFragment = { __typename?: 'AnalysisResult', id: string, runId: string, analysisType: string, status: string, codeVersion: string, inputHash: string, createdAt: string, computedAt?: string | null, durationMs?: number | null, perModel: unknown, modelAgreement: unknown, dimensionAnalysis?: unknown | null, visualizationData?: unknown | null, varianceAnalysis?: unknown | null, methodsUsed: unknown, preferenceSummary?: { __typename?: 'PreferenceSummary', perModel: unknown } | null, reliabilitySummary?: { __typename?: 'ReliabilitySummary', perModel: unknown } | null, aggregateMetadata?: { __typename?: 'AggregateMetadata', aggregateEligibility: string, aggregateIneligibilityReason?: string | null, sourceRunCount: number, sourceRunIds: Array<string>, conditionCoverage: unknown, perModelRepeatCoverage: unknown, perModelDrift: unknown } | null, mostContestedScenarios: Array<{ __typename?: 'ContestedScenario', scenarioId: string, scenarioName: string, variance: number, modelScores: unknown }>, warnings: Array<{ __typename?: 'AnalysisWarning', code: string, message: string, recommendation: string }> };
+export type AnalysisResultFieldsFragment = { __typename?: 'AnalysisResult', id: string, runId: string, analysisType: string, status: string, codeVersion: string, inputHash: string, createdAt: any, computedAt?: any | null, durationMs?: number | null, perModel: any, modelAgreement: any, dimensionAnalysis?: any | null, visualizationData?: any | null, varianceAnalysis?: any | null, methodsUsed: any, preferenceSummary?: { __typename?: 'PreferenceSummary', perModel: any } | null, reliabilitySummary?: { __typename?: 'ReliabilitySummary', perModel: any } | null, aggregateMetadata?: { __typename?: 'AggregateMetadata', aggregateEligibility: string, aggregateIneligibilityReason?: string | null, sourceRunCount: number, sourceRunIds: Array<string>, conditionCoverage: any, perModelRepeatCoverage: any, perModelDrift: any } | null, mostContestedScenarios: Array<{ __typename?: 'ContestedScenario', scenarioId: string, scenarioName: string, variance: number, modelScores: any }>, warnings: Array<{ __typename?: 'AnalysisWarning', code: string, message: string, recommendation: string }> };
 
 export type AnalysisQueryVariables = Exact<{
   runId: Scalars['ID']['input'];
 }>;
 
 
-export type AnalysisQuery = { __typename?: 'Query', analysis?: { __typename?: 'AnalysisResult', id: string, runId: string, analysisType: string, status: string, codeVersion: string, inputHash: string, createdAt: string, computedAt?: string | null, durationMs?: number | null, perModel: unknown, modelAgreement: unknown, dimensionAnalysis?: unknown | null, visualizationData?: unknown | null, varianceAnalysis?: unknown | null, methodsUsed: unknown, preferenceSummary?: { __typename?: 'PreferenceSummary', perModel: unknown } | null, reliabilitySummary?: { __typename?: 'ReliabilitySummary', perModel: unknown } | null, aggregateMetadata?: { __typename?: 'AggregateMetadata', aggregateEligibility: string, aggregateIneligibilityReason?: string | null, sourceRunCount: number, sourceRunIds: Array<string>, conditionCoverage: unknown, perModelRepeatCoverage: unknown, perModelDrift: unknown } | null, mostContestedScenarios: Array<{ __typename?: 'ContestedScenario', scenarioId: string, scenarioName: string, variance: number, modelScores: unknown }>, warnings: Array<{ __typename?: 'AnalysisWarning', code: string, message: string, recommendation: string }> } | null };
+export type AnalysisQuery = { __typename?: 'Query', analysis?: { __typename?: 'AnalysisResult', id: string, runId: string, analysisType: string, status: string, codeVersion: string, inputHash: string, createdAt: any, computedAt?: any | null, durationMs?: number | null, perModel: any, modelAgreement: any, dimensionAnalysis?: any | null, visualizationData?: any | null, varianceAnalysis?: any | null, methodsUsed: any, preferenceSummary?: { __typename?: 'PreferenceSummary', perModel: any } | null, reliabilitySummary?: { __typename?: 'ReliabilitySummary', perModel: any } | null, aggregateMetadata?: { __typename?: 'AggregateMetadata', aggregateEligibility: string, aggregateIneligibilityReason?: string | null, sourceRunCount: number, sourceRunIds: Array<string>, conditionCoverage: any, perModelRepeatCoverage: any, perModelDrift: any } | null, mostContestedScenarios: Array<{ __typename?: 'ContestedScenario', scenarioId: string, scenarioName: string, variance: number, modelScores: any }>, warnings: Array<{ __typename?: 'AnalysisWarning', code: string, message: string, recommendation: string }> } | null };
 
 export type RecomputeAnalysisMutationVariables = Exact<{
   runId: Scalars['ID']['input'];
 }>;
 
 
-export type RecomputeAnalysisMutation = { __typename?: 'Mutation', recomputeAnalysis?: { __typename?: 'AnalysisResult', id: string, runId: string, analysisType: string, status: string, codeVersion: string, inputHash: string, createdAt: string, computedAt?: string | null, durationMs?: number | null, perModel: unknown, modelAgreement: unknown, dimensionAnalysis?: unknown | null, visualizationData?: unknown | null, varianceAnalysis?: unknown | null, methodsUsed: unknown, preferenceSummary?: { __typename?: 'PreferenceSummary', perModel: unknown } | null, reliabilitySummary?: { __typename?: 'ReliabilitySummary', perModel: unknown } | null, aggregateMetadata?: { __typename?: 'AggregateMetadata', aggregateEligibility: string, aggregateIneligibilityReason?: string | null, sourceRunCount: number, sourceRunIds: Array<string>, conditionCoverage: unknown, perModelRepeatCoverage: unknown, perModelDrift: unknown } | null, mostContestedScenarios: Array<{ __typename?: 'ContestedScenario', scenarioId: string, scenarioName: string, variance: number, modelScores: unknown }>, warnings: Array<{ __typename?: 'AnalysisWarning', code: string, message: string, recommendation: string }> } | null };
+export type RecomputeAnalysisMutation = { __typename?: 'Mutation', recomputeAnalysis?: { __typename?: 'AnalysisResult', id: string, runId: string, analysisType: string, status: string, codeVersion: string, inputHash: string, createdAt: any, computedAt?: any | null, durationMs?: number | null, perModel: any, modelAgreement: any, dimensionAnalysis?: any | null, visualizationData?: any | null, varianceAnalysis?: any | null, methodsUsed: any, preferenceSummary?: { __typename?: 'PreferenceSummary', perModel: any } | null, reliabilitySummary?: { __typename?: 'ReliabilitySummary', perModel: any } | null, aggregateMetadata?: { __typename?: 'AggregateMetadata', aggregateEligibility: string, aggregateIneligibilityReason?: string | null, sourceRunCount: number, sourceRunIds: Array<string>, conditionCoverage: any, perModelRepeatCoverage: any, perModelDrift: any } | null, mostContestedScenarios: Array<{ __typename?: 'ContestedScenario', scenarioId: string, scenarioName: string, variance: number, modelScores: any }>, warnings: Array<{ __typename?: 'AnalysisWarning', code: string, message: string, recommendation: string }> } | null };
 
 export type ApiKeysQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type ApiKeysQuery = { __typename?: 'Query', apiKeys: Array<{ __typename?: 'ApiKey', id: string, name: string, keyPrefix: string, lastUsedAt?: string | null, expiresAt?: string | null, createdAt: string }> };
+export type ApiKeysQuery = { __typename?: 'Query', apiKeys: Array<{ __typename?: 'ApiKey', id: string, name: string, keyPrefix: string, lastUsedAt?: any | null, expiresAt?: any | null, createdAt: any }> };
 
 export type CreateApiKeyMutationVariables = Exact<{
   input: CreateApiKeyInput;
 }>;
 
 
-export type CreateApiKeyMutation = { __typename?: 'Mutation', createApiKey: { __typename?: 'CreateApiKeyResult', key: string, apiKey: { __typename?: 'ApiKey', id: string, name: string, keyPrefix: string, lastUsedAt?: string | null, expiresAt?: string | null, createdAt: string } } };
+export type CreateApiKeyMutation = { __typename?: 'Mutation', createApiKey: { __typename?: 'CreateApiKeyResult', key: string, apiKey: { __typename?: 'ApiKey', id: string, name: string, keyPrefix: string, lastUsedAt?: any | null, expiresAt?: any | null, createdAt: any } } };
 
 export type RevokeApiKeyMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -3788,18 +3799,18 @@ export type RevokeApiKeyMutation = { __typename?: 'Mutation', revokeApiKey: bool
 export type MeQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type MeQuery = { __typename?: 'Query', me?: { __typename?: 'User', id: string, email: string, name?: string | null, lastLoginAt?: string | null, createdAt: string } | null };
+export type MeQuery = { __typename?: 'Query', me?: { __typename?: 'User', id: string, email: string, name?: string | null, lastLoginAt?: any | null, createdAt: any } | null };
 
-export type ComparisonRunListFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, status: string, config: unknown, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, transcriptCount: number, analysisStatus?: string | null, definition?: { __typename?: 'Definition', id: string, name: string, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null };
+export type ComparisonRunListFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, status: string, config: any, progress?: any | null, startedAt?: any | null, completedAt?: any | null, createdAt: any, transcriptCount: number, analysisStatus?: string | null, definition?: { __typename?: 'Definition', id: string, name: string, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null };
 
-export type ComparisonRunFullFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, status: string, config: unknown, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, transcriptCount: number, analysisStatus?: string | null, definition?: { __typename?: 'Definition', id: string, name: string, parentId?: string | null, resolvedContent: unknown, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null };
+export type ComparisonRunFullFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, status: string, config: any, progress?: any | null, startedAt?: any | null, completedAt?: any | null, createdAt: any, transcriptCount: number, analysisStatus?: string | null, definition?: { __typename?: 'Definition', id: string, name: string, parentId?: string | null, resolvedContent: any, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null };
 
 export type RunsWithAnalysisQueryVariables = Exact<{
   ids: Array<Scalars['ID']['input']> | Scalars['ID']['input'];
 }>;
 
 
-export type RunsWithAnalysisQuery = { __typename?: 'Query', runsWithAnalysis: Array<{ __typename?: 'Run', id: string, name?: string | null, definitionId: string, status: string, config: unknown, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, transcriptCount: number, analysisStatus?: string | null, analysis?: { __typename?: 'AnalysisResult', id: string, runId: string, analysisType: string, status: string, codeVersion: string, inputHash: string, createdAt: string, computedAt?: string | null, durationMs?: number | null, perModel: unknown, modelAgreement: unknown, dimensionAnalysis?: unknown | null, visualizationData?: unknown | null, varianceAnalysis?: unknown | null, methodsUsed: unknown, preferenceSummary?: { __typename?: 'PreferenceSummary', perModel: unknown } | null, reliabilitySummary?: { __typename?: 'ReliabilitySummary', perModel: unknown } | null, aggregateMetadata?: { __typename?: 'AggregateMetadata', aggregateEligibility: string, aggregateIneligibilityReason?: string | null, sourceRunCount: number, sourceRunIds: Array<string>, conditionCoverage: unknown, perModelRepeatCoverage: unknown, perModelDrift: unknown } | null, mostContestedScenarios: Array<{ __typename?: 'ContestedScenario', scenarioId: string, scenarioName: string, variance: number, modelScores: unknown }>, warnings: Array<{ __typename?: 'AnalysisWarning', code: string, message: string, recommendation: string }> } | null, definition?: { __typename?: 'Definition', id: string, name: string, parentId?: string | null, resolvedContent: unknown, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null }> };
+export type RunsWithAnalysisQuery = { __typename?: 'Query', runsWithAnalysis: Array<{ __typename?: 'Run', id: string, name?: string | null, definitionId: string, status: string, config: any, progress?: any | null, startedAt?: any | null, completedAt?: any | null, createdAt: any, transcriptCount: number, analysisStatus?: string | null, analysis?: { __typename?: 'AnalysisResult', id: string, runId: string, analysisType: string, status: string, codeVersion: string, inputHash: string, createdAt: any, computedAt?: any | null, durationMs?: number | null, perModel: any, modelAgreement: any, dimensionAnalysis?: any | null, visualizationData?: any | null, varianceAnalysis?: any | null, methodsUsed: any, preferenceSummary?: { __typename?: 'PreferenceSummary', perModel: any } | null, reliabilitySummary?: { __typename?: 'ReliabilitySummary', perModel: any } | null, aggregateMetadata?: { __typename?: 'AggregateMetadata', aggregateEligibility: string, aggregateIneligibilityReason?: string | null, sourceRunCount: number, sourceRunIds: Array<string>, conditionCoverage: any, perModelRepeatCoverage: any, perModelDrift: any } | null, mostContestedScenarios: Array<{ __typename?: 'ContestedScenario', scenarioId: string, scenarioName: string, variance: number, modelScores: any }>, warnings: Array<{ __typename?: 'AnalysisWarning', code: string, message: string, recommendation: string }> } | null, definition?: { __typename?: 'Definition', id: string, name: string, parentId?: string | null, resolvedContent: any, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null }> };
 
 export type ComparisonRunsListQueryVariables = Exact<{
   definitionId?: InputMaybe<Scalars['String']['input']>;
@@ -3809,7 +3820,7 @@ export type ComparisonRunsListQueryVariables = Exact<{
 }>;
 
 
-export type ComparisonRunsListQuery = { __typename?: 'Query', runs: Array<{ __typename?: 'Run', id: string, name?: string | null, definitionId: string, status: string, config: unknown, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, transcriptCount: number, analysisStatus?: string | null, definition?: { __typename?: 'Definition', id: string, name: string, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null }> };
+export type ComparisonRunsListQuery = { __typename?: 'Query', runs: Array<{ __typename?: 'Run', id: string, name?: string | null, definitionId: string, status: string, config: any, progress?: any | null, startedAt?: any | null, completedAt?: any | null, createdAt: any, transcriptCount: number, analysisStatus?: string | null, definition?: { __typename?: 'Definition', id: string, name: string, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null }> };
 
 export type EstimateCostQueryVariables = Exact<{
   definitionId: Scalars['ID']['input'];
@@ -3833,14 +3844,14 @@ export type DefinitionsQueryVariables = Exact<{
 }>;
 
 
-export type DefinitionsQuery = { __typename?: 'Query', definitions: Array<{ __typename?: 'Definition', id: string, name: string, domainId?: string | null, parentId?: string | null, content: unknown, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, version: number, runCount: number, trialCount: number, domain?: { __typename?: 'Domain', id: string, name: string } | null, trialConfig: { __typename?: 'TrialConfigSummary', definitionVersion?: number | null, temperature?: number | null, signature?: string | null, isConsistent: boolean, message?: string | null, signatureBreakdown: Array<{ __typename?: 'TrialSignatureBreakdown', signature: string, definitionVersion?: number | null, temperature?: number | null, trialCount: number }> }, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, allTags: Array<{ __typename?: 'Tag', id: string, name: string }> }> };
+export type DefinitionsQuery = { __typename?: 'Query', definitions: Array<{ __typename?: 'Definition', id: string, name: string, domainId?: string | null, parentId?: string | null, content: any, createdAt: any, updatedAt: any, lastAccessedAt?: any | null, version: number, runCount: number, trialCount: number, domain?: { __typename?: 'Domain', id: string, name: string } | null, trialConfig: { __typename?: 'TrialConfigSummary', definitionVersion?: number | null, temperature?: number | null, signature?: string | null, isConsistent: boolean, message?: string | null, signatureBreakdown: Array<{ __typename?: 'TrialSignatureBreakdown', signature: string, definitionVersion?: number | null, temperature?: number | null, trialCount: number }> }, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, allTags: Array<{ __typename?: 'Tag', id: string, name: string }> }> };
 
 export type DefinitionQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
 
 
-export type DefinitionQuery = { __typename?: 'Query', definition?: { __typename?: 'Definition', id: string, name: string, domainId?: string | null, domainContextId?: string | null, parentId?: string | null, content: unknown, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, version: number, runCount: number, trialCount: number, scenarioCount: number, preambleVersionId?: string | null, levelPresetVersionId?: string | null, isForked: boolean, resolvedContent: unknown, localContent: unknown, domain?: { __typename?: 'Domain', id: string, name: string } | null, trialConfig: { __typename?: 'TrialConfigSummary', definitionVersion?: number | null, temperature?: number | null, signature?: string | null, isConsistent: boolean, message?: string | null, signatureBreakdown: Array<{ __typename?: 'TrialSignatureBreakdown', signature: string, definitionVersion?: number | null, temperature?: number | null, trialCount: number }> }, preambleVersion?: { __typename?: 'PreambleVersion', id: string, version: string, content: string, preamble?: { __typename?: 'Preamble', name: string } | null } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string, createdAt: string }>, parent?: { __typename?: 'Definition', id: string, name: string } | null, children: Array<{ __typename?: 'Definition', id: string, name: string, createdAt: string }>, overrides: { __typename?: 'DefinitionOverrides', template: boolean, dimensions: boolean, matchingRules: boolean }, inheritedTags: Array<{ __typename?: 'Tag', id: string, name: string, createdAt: string }>, allTags: Array<{ __typename?: 'Tag', id: string, name: string, createdAt: string }>, expansionStatus: { __typename?: 'ExpansionStatus', status: ExpansionJobStatus, jobId?: string | null, triggeredBy?: string | null, createdAt?: string | null, completedAt?: string | null, error?: string | null, scenarioCount: number, progress?: { __typename?: 'ExpansionProgress', phase: string, expectedScenarios: number, generatedScenarios: number, inputTokens: number, outputTokens: number, message: string, updatedAt: string } | null } } | null };
+export type DefinitionQuery = { __typename?: 'Query', definition?: { __typename?: 'Definition', id: string, name: string, domainId?: string | null, domainContextId?: string | null, parentId?: string | null, content: any, createdAt: any, updatedAt: any, lastAccessedAt?: any | null, version: number, runCount: number, trialCount: number, scenarioCount: number, preambleVersionId?: string | null, levelPresetVersionId?: string | null, isForked: boolean, resolvedContent: any, localContent: any, domain?: { __typename?: 'Domain', id: string, name: string } | null, trialConfig: { __typename?: 'TrialConfigSummary', definitionVersion?: number | null, temperature?: number | null, signature?: string | null, isConsistent: boolean, message?: string | null, signatureBreakdown: Array<{ __typename?: 'TrialSignatureBreakdown', signature: string, definitionVersion?: number | null, temperature?: number | null, trialCount: number }> }, preambleVersion?: { __typename?: 'PreambleVersion', id: string, version: string, content: string, preamble?: { __typename?: 'Preamble', name: string } | null } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string, createdAt: any }>, parent?: { __typename?: 'Definition', id: string, name: string } | null, children: Array<{ __typename?: 'Definition', id: string, name: string, createdAt: any }>, overrides: { __typename?: 'DefinitionOverrides', template: boolean, dimensions: boolean, matchingRules: boolean }, inheritedTags: Array<{ __typename?: 'Tag', id: string, name: string, createdAt: any }>, allTags: Array<{ __typename?: 'Tag', id: string, name: string, createdAt: any }>, expansionStatus: { __typename?: 'ExpansionStatus', status: ExpansionJobStatus, jobId?: string | null, triggeredBy?: string | null, createdAt?: any | null, completedAt?: any | null, error?: string | null, scenarioCount: number, progress?: { __typename?: 'ExpansionProgress', phase: string, expectedScenarios: number, generatedScenarios: number, inputTokens: number, outputTokens: number, message: string, updatedAt: string } | null } } | null };
 
 export type DefinitionAncestorsQueryVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -3848,7 +3859,7 @@ export type DefinitionAncestorsQueryVariables = Exact<{
 }>;
 
 
-export type DefinitionAncestorsQuery = { __typename?: 'Query', definitionAncestors: Array<{ __typename?: 'Definition', id: string, name: string, parentId?: string | null, createdAt: string }> };
+export type DefinitionAncestorsQuery = { __typename?: 'Query', definitionAncestors: Array<{ __typename?: 'Definition', id: string, name: string, parentId?: string | null, createdAt: any }> };
 
 export type DefinitionDescendantsQueryVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -3856,7 +3867,7 @@ export type DefinitionDescendantsQueryVariables = Exact<{
 }>;
 
 
-export type DefinitionDescendantsQuery = { __typename?: 'Query', definitionDescendants: Array<{ __typename?: 'Definition', id: string, name: string, parentId?: string | null, createdAt: string }> };
+export type DefinitionDescendantsQuery = { __typename?: 'Query', definitionDescendants: Array<{ __typename?: 'Definition', id: string, name: string, parentId?: string | null, createdAt: any }> };
 
 export type DefinitionCountQueryVariables = Exact<{
   rootOnly?: InputMaybe<Scalars['Boolean']['input']>;
@@ -3875,7 +3886,7 @@ export type CreateDefinitionMutationVariables = Exact<{
 }>;
 
 
-export type CreateDefinitionMutation = { __typename?: 'Mutation', createDefinition: { __typename?: 'Definition', id: string, name: string, parentId?: string | null, content: unknown, createdAt: string, updatedAt: string } };
+export type CreateDefinitionMutation = { __typename?: 'Mutation', createDefinition: { __typename?: 'Definition', id: string, name: string, parentId?: string | null, content: any, createdAt: any, updatedAt: any } };
 
 export type UpdateDefinitionMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -3883,21 +3894,21 @@ export type UpdateDefinitionMutationVariables = Exact<{
 }>;
 
 
-export type UpdateDefinitionMutation = { __typename?: 'Mutation', updateDefinition: { __typename?: 'Definition', id: string, name: string, content: unknown, updatedAt: string } };
+export type UpdateDefinitionMutation = { __typename?: 'Mutation', updateDefinition: { __typename?: 'Definition', id: string, name: string, content: any, updatedAt: any } };
 
 export type ForkDefinitionMutationVariables = Exact<{
   input: ForkDefinitionInput;
 }>;
 
 
-export type ForkDefinitionMutation = { __typename?: 'Mutation', forkDefinition: { __typename?: 'Definition', id: string, name: string, parentId?: string | null, content: unknown, createdAt: string, isForked: boolean, resolvedContent: unknown, localContent: unknown, overrides: { __typename?: 'DefinitionOverrides', template: boolean, dimensions: boolean, matchingRules: boolean } } };
+export type ForkDefinitionMutation = { __typename?: 'Mutation', forkDefinition: { __typename?: 'Definition', id: string, name: string, parentId?: string | null, content: any, createdAt: any, isForked: boolean, resolvedContent: any, localContent: any, overrides: { __typename?: 'DefinitionOverrides', template: boolean, dimensions: boolean, matchingRules: boolean } } };
 
 export type UnforkDefinitionMutationVariables = Exact<{
   id: Scalars['String']['input'];
 }>;
 
 
-export type UnforkDefinitionMutation = { __typename?: 'Mutation', unforkDefinition: { __typename?: 'Definition', id: string, name: string, parentId?: string | null, content: unknown, updatedAt: string, version: number, isForked: boolean, resolvedContent: unknown, localContent: unknown, overrides: { __typename?: 'DefinitionOverrides', template: boolean, dimensions: boolean, matchingRules: boolean } } };
+export type UnforkDefinitionMutation = { __typename?: 'Mutation', unforkDefinition: { __typename?: 'Definition', id: string, name: string, parentId?: string | null, content: any, updatedAt: any, version: number, isForked: boolean, resolvedContent: any, localContent: any, overrides: { __typename?: 'DefinitionOverrides', template: boolean, dimensions: boolean, matchingRules: boolean } } };
 
 export type DeleteDefinitionMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -3925,14 +3936,14 @@ export type DomainContextsQueryVariables = Exact<{
 }>;
 
 
-export type DomainContextsQuery = { __typename?: 'Query', domainContexts: Array<{ __typename?: 'DomainContext', id: string, domainId: string, text: string, version: number, updatedAt: string, domain?: { __typename?: 'Domain', id: string, name: string } | null }> };
+export type DomainContextsQuery = { __typename?: 'Query', domainContexts: Array<{ __typename?: 'DomainContext', id: string, domainId: string, text: string, version: number, updatedAt: any, domain?: { __typename?: 'Domain', id: string, name: string } | null }> };
 
 export type CreateDomainContextMutationVariables = Exact<{
   input: CreateDomainContextInput;
 }>;
 
 
-export type CreateDomainContextMutation = { __typename?: 'Mutation', createDomainContext: { __typename?: 'DomainContext', id: string, domainId: string, text: string, version: number, updatedAt: string } };
+export type CreateDomainContextMutation = { __typename?: 'Mutation', createDomainContext: { __typename?: 'DomainContext', id: string, domainId: string, text: string, version: number, updatedAt: any } };
 
 export type UpdateDomainContextMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -3940,7 +3951,7 @@ export type UpdateDomainContextMutationVariables = Exact<{
 }>;
 
 
-export type UpdateDomainContextMutation = { __typename?: 'Mutation', updateDomainContext: { __typename?: 'DomainContext', id: string, domainId: string, text: string, version: number, updatedAt: string } };
+export type UpdateDomainContextMutation = { __typename?: 'Mutation', updateDomainContext: { __typename?: 'DomainContext', id: string, domainId: string, text: string, version: number, updatedAt: any } };
 
 export type DeleteDomainContextMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -3956,7 +3967,7 @@ export type DomainAnalysisQueryVariables = Exact<{
 }>;
 
 
-export type DomainAnalysisQuery = { __typename?: 'Query', domainAnalysis: { __typename?: 'DomainAnalysisResult', domainId: string, domainName: string, totalDefinitions: number, targetedDefinitions: number, coveredDefinitions: number, missingDefinitionIds: Array<string>, definitionsWithAnalysis: number, cacheStatus: string, generatedAt: string, missingDefinitions: Array<{ __typename?: 'DomainAnalysisMissingDefinition', definitionId: string, definitionName: string, reasonCode: string, reasonLabel: string, missingAllModels: boolean, missingModelIds: Array<string>, missingModelLabels: Array<string> }>, models: Array<{ __typename?: 'DomainAnalysisModel', model: string, label: string, values: Array<{ __typename?: 'DomainAnalysisValueScore', valueKey: string, score: number, prioritized: number, deprioritized: number, neutral: number, totalComparisons: number }>, rankingShape: { __typename?: 'RankingShape', topStructure: string, bottomStructure: string, topGap: number, bottomGap: number, spread: number, steepness: number, dominanceZScore?: number | null } }>, unavailableModels: Array<{ __typename?: 'DomainAnalysisUnavailableModel', model: string, label: string, reason: string }>, rankingShapeBenchmarks: { __typename?: 'RankingShapeBenchmarks', domainMeanTopGap: number, domainStdTopGap?: number | null, medianSpread: number }, clusterAnalysis: { __typename?: 'ClusterAnalysis', skipped: boolean, skipReason?: string | null, defaultPair?: Array<string> | null, faultLinesByPair: unknown, clusters: Array<{ __typename?: 'DomainCluster', id: string, name: string, definingValues: Array<string>, centroid: unknown, members: Array<{ __typename?: 'ClusterMember', model: string, label: string, silhouetteScore: number, isOutlier: boolean, nearestClusterIds?: Array<string> | null, distancesToNearestClusters?: Array<number> | null }> }> } } };
+export type DomainAnalysisQuery = { __typename?: 'Query', domainAnalysis: { __typename?: 'DomainAnalysisResult', domainId: string, domainName: string, totalDefinitions: number, targetedDefinitions: number, coveredDefinitions: number, missingDefinitionIds: Array<string>, definitionsWithAnalysis: number, cacheStatus: string, generatedAt: any, missingDefinitions: Array<{ __typename?: 'DomainAnalysisMissingDefinition', definitionId: string, definitionName: string, reasonCode: string, reasonLabel: string, missingAllModels: boolean, missingModelIds: Array<string>, missingModelLabels: Array<string> }>, models: Array<{ __typename?: 'DomainAnalysisModel', model: string, label: string, values: Array<{ __typename?: 'DomainAnalysisValueScore', valueKey: string, score: number, prioritized: number, deprioritized: number, neutral: number, totalComparisons: number }>, rankingShape: { __typename?: 'RankingShape', topStructure: string, bottomStructure: string, topGap: number, bottomGap: number, spread: number, steepness: number, dominanceZScore?: number | null } }>, unavailableModels: Array<{ __typename?: 'DomainAnalysisUnavailableModel', model: string, label: string, reason: string }>, rankingShapeBenchmarks: { __typename?: 'RankingShapeBenchmarks', domainMeanTopGap: number, domainStdTopGap?: number | null, medianSpread: number }, clusterAnalysis: { __typename?: 'ClusterAnalysis', skipped: boolean, skipReason?: string | null, defaultPair?: Array<string> | null, faultLinesByPair: any, clusters: Array<{ __typename?: 'DomainCluster', id: string, name: string, definingValues: Array<string>, centroid: any, members: Array<{ __typename?: 'ClusterMember', model: string, label: string, silhouetteScore: number, isOutlier: boolean, nearestClusterIds?: Array<string> | null, distancesToNearestClusters?: Array<number> | null }> }> } } };
 
 export type RefreshDomainAnalysisMutationVariables = Exact<{
   domainId: Scalars['ID']['input'];
@@ -3971,7 +3982,7 @@ export type DomainAnalysisLegacyQueryVariables = Exact<{
 }>;
 
 
-export type DomainAnalysisLegacyQuery = { __typename?: 'Query', domainAnalysis: { __typename?: 'DomainAnalysisResult', domainId: string, domainName: string, totalDefinitions: number, targetedDefinitions: number, definitionsWithAnalysis: number, generatedAt: string, models: Array<{ __typename?: 'DomainAnalysisModel', model: string, label: string, values: Array<{ __typename?: 'DomainAnalysisValueScore', valueKey: string, score: number, prioritized: number, deprioritized: number, neutral: number, totalComparisons: number }> }>, unavailableModels: Array<{ __typename?: 'DomainAnalysisUnavailableModel', model: string, label: string, reason: string }> } };
+export type DomainAnalysisLegacyQuery = { __typename?: 'Query', domainAnalysis: { __typename?: 'DomainAnalysisResult', domainId: string, domainName: string, totalDefinitions: number, targetedDefinitions: number, definitionsWithAnalysis: number, generatedAt: any, models: Array<{ __typename?: 'DomainAnalysisModel', model: string, label: string, values: Array<{ __typename?: 'DomainAnalysisValueScore', valueKey: string, score: number, prioritized: number, deprioritized: number, neutral: number, totalComparisons: number }> }>, unavailableModels: Array<{ __typename?: 'DomainAnalysisUnavailableModel', model: string, label: string, reason: string }> } };
 
 export type DomainAnalysisValueDetailQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
@@ -3982,7 +3993,7 @@ export type DomainAnalysisValueDetailQueryVariables = Exact<{
 }>;
 
 
-export type DomainAnalysisValueDetailQuery = { __typename?: 'Query', domainAnalysisValueDetail: { __typename?: 'DomainAnalysisValueDetailResult', domainId: string, domainName: string, modelId: string, modelLabel: string, valueKey: string, score: number, prioritized: number, deprioritized: number, neutral: number, totalTrials: number, targetedDefinitions: number, coveredDefinitions: number, missingDefinitionIds: Array<string>, generatedAt: string, vignettes: Array<{ __typename?: 'DomainAnalysisVignetteDetail', definitionId: string, definitionName: string, definitionVersion: number, aggregateRunId?: string | null, otherValueKey: string, prioritized: number, deprioritized: number, neutral: number, totalTrials: number, selectedValueWinRate?: number | null, conditions: Array<{ __typename?: 'DomainAnalysisConditionDetail', scenarioId?: string | null, conditionName: string, dimensions?: unknown | null, prioritized: number, deprioritized: number, neutral: number, totalTrials: number, selectedValueWinRate?: number | null, strongly: number, somewhat: number, opponentSomewhat: number, opponentStrongly: number, unknownCount: number }> }> } };
+export type DomainAnalysisValueDetailQuery = { __typename?: 'Query', domainAnalysisValueDetail: { __typename?: 'DomainAnalysisValueDetailResult', domainId: string, domainName: string, modelId: string, modelLabel: string, valueKey: string, score: number, prioritized: number, deprioritized: number, neutral: number, totalTrials: number, targetedDefinitions: number, coveredDefinitions: number, missingDefinitionIds: Array<string>, generatedAt: any, vignettes: Array<{ __typename?: 'DomainAnalysisVignetteDetail', definitionId: string, definitionName: string, definitionVersion: number, aggregateRunId?: string | null, otherValueKey: string, prioritized: number, deprioritized: number, neutral: number, totalTrials: number, selectedValueWinRate?: number | null, conditions: Array<{ __typename?: 'DomainAnalysisConditionDetail', scenarioId?: string | null, conditionName: string, dimensions?: any | null, prioritized: number, deprioritized: number, neutral: number, totalTrials: number, selectedValueWinRate?: number | null, strongly: number, somewhat: number, opponentSomewhat: number, opponentStrongly: number, unknownCount: number }> }> } };
 
 export type DomainAnalysisConditionTranscriptsQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
@@ -3995,7 +4006,7 @@ export type DomainAnalysisConditionTranscriptsQueryVariables = Exact<{
 }>;
 
 
-export type DomainAnalysisConditionTranscriptsQuery = { __typename?: 'Query', domainAnalysisConditionTranscripts: Array<{ __typename?: 'DomainAnalysisConditionTranscript', id: string, runId: string, scenarioId?: string | null, modelId: string, decisionCode?: string | null, decisionModelV2?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, createdAt: string, content: unknown }> };
+export type DomainAnalysisConditionTranscriptsQuery = { __typename?: 'Query', domainAnalysisConditionTranscripts: Array<{ __typename?: 'DomainAnalysisConditionTranscript', id: string, runId: string, scenarioId?: string | null, modelId: string, decisionCode?: string | null, decisionModelV2?: any | null, turnCount: number, tokenCount: number, durationMs: number, createdAt: any, content: any }> };
 
 export type DomainAvailableSignaturesQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
@@ -4009,7 +4020,7 @@ export type DomainFindingsEligibilityQueryVariables = Exact<{
 }>;
 
 
-export type DomainFindingsEligibilityQuery = { __typename?: 'Query', domainFindingsEligibility: { __typename?: 'DomainFindingsEligibility', domainId: string, eligible: boolean, status: string, summary: string, reasons: Array<string>, recommendedActions: Array<string>, consideredScopeCategories: Array<string>, completedEligibleEvaluationCount: number, latestEligibleEvaluationId?: string | null, latestEligibleScopeCategory?: string | null, latestEligibleCompletedAt?: string | null } };
+export type DomainFindingsEligibilityQuery = { __typename?: 'Query', domainFindingsEligibility: { __typename?: 'DomainFindingsEligibility', domainId: string, eligible: boolean, status: string, summary: string, reasons: Array<string>, recommendedActions: Array<string>, consideredScopeCategories: Array<string>, completedEligibleEvaluationCount: number, latestEligibleEvaluationId?: string | null, latestEligibleScopeCategory?: string | null, latestEligibleCompletedAt?: any | null } };
 
 export type DomainValueCoverageQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
@@ -4035,14 +4046,14 @@ export type DomainsQueryVariables = Exact<{
 }>;
 
 
-export type DomainsQuery = { __typename?: 'Query', domains: Array<{ __typename?: 'Domain', id: string, name: string, createdAt: string, updatedAt: string, definitionCount: number, defaultLevelPresetVersionId?: string | null, defaultPreambleVersionId?: string | null, defaultContextId?: string | null }> };
+export type DomainsQuery = { __typename?: 'Query', domains: Array<{ __typename?: 'Domain', id: string, name: string, createdAt: any, updatedAt: any, definitionCount: number, defaultLevelPresetVersionId?: string | null, defaultPreambleVersionId?: string | null, defaultContextId?: string | null }> };
 
 export type CreateDomainMutationVariables = Exact<{
   name: Scalars['String']['input'];
 }>;
 
 
-export type CreateDomainMutation = { __typename?: 'Mutation', createDomain: { __typename?: 'Domain', id: string, name: string, createdAt: string, updatedAt: string, definitionCount: number } };
+export type CreateDomainMutation = { __typename?: 'Mutation', createDomain: { __typename?: 'Domain', id: string, name: string, createdAt: any, updatedAt: any, definitionCount: number } };
 
 export type RenameDomainMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -4050,7 +4061,7 @@ export type RenameDomainMutationVariables = Exact<{
 }>;
 
 
-export type RenameDomainMutation = { __typename?: 'Mutation', renameDomain: { __typename?: 'Domain', id: string, name: string, createdAt: string, updatedAt: string, definitionCount: number } };
+export type RenameDomainMutation = { __typename?: 'Mutation', renameDomain: { __typename?: 'Domain', id: string, name: string, createdAt: any, updatedAt: any, definitionCount: number } };
 
 export type DeleteDomainMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -4114,14 +4125,14 @@ export type DomainEvaluationsQueryVariables = Exact<{
 }>;
 
 
-export type DomainEvaluationsQuery = { __typename?: 'Query', domainEvaluations: Array<{ __typename?: 'DomainEvaluation', id: string, domainId: string, domainNameAtLaunch: string, scopeCategory: string, status: string, createdAt: string, startedAt?: string | null, completedAt?: string | null, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, models: Array<string>, temperature?: number | null, maxBudgetUsd?: number | null, memberCount: number }> };
+export type DomainEvaluationsQuery = { __typename?: 'Query', domainEvaluations: Array<{ __typename?: 'DomainEvaluation', id: string, domainId: string, domainNameAtLaunch: string, scopeCategory: string, status: string, createdAt: any, startedAt?: any | null, completedAt?: any | null, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, models: Array<string>, temperature?: number | null, maxBudgetUsd?: number | null, memberCount: number }> };
 
 export type DomainEvaluationQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
 
 
-export type DomainEvaluationQuery = { __typename?: 'Query', domainEvaluation?: { __typename?: 'DomainEvaluation', id: string, domainId: string, domainNameAtLaunch: string, scopeCategory: string, status: string, createdAt: string, startedAt?: string | null, completedAt?: string | null, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, models: Array<string>, temperature?: number | null, maxBudgetUsd?: number | null, memberCount: number, members: Array<{ __typename?: 'DomainEvaluationMember', runId: string, definitionIdAtLaunch: string, definitionNameAtLaunch: string, domainIdAtLaunch: string, createdAt: string, runStatus: string, runCategory: string, runStartedAt?: string | null, runCompletedAt?: string | null }> } | null };
+export type DomainEvaluationQuery = { __typename?: 'Query', domainEvaluation?: { __typename?: 'DomainEvaluation', id: string, domainId: string, domainNameAtLaunch: string, scopeCategory: string, status: string, createdAt: any, startedAt?: any | null, completedAt?: any | null, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, models: Array<string>, temperature?: number | null, maxBudgetUsd?: number | null, memberCount: number, members: Array<{ __typename?: 'DomainEvaluationMember', runId: string, definitionIdAtLaunch: string, definitionNameAtLaunch: string, domainIdAtLaunch: string, createdAt: any, runStatus: string, runCategory: string, runStartedAt?: any | null, runCompletedAt?: any | null }> } | null };
 
 export type DomainEvaluationStatusQueryVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -4158,14 +4169,14 @@ export type DomainTrialRunsStatusQueryVariables = Exact<{
 }>;
 
 
-export type DomainTrialRunsStatusQuery = { __typename?: 'Query', domainTrialRunsStatus: Array<{ __typename?: 'DomainTrialRunStatus', runId: string, definitionId: string, status: string, updatedAt: string, stalledModels: Array<string>, analysisStatus?: string | null, modelStatuses: Array<{ __typename?: 'DomainTrialModelStatus', modelId: string, generationCompleted: number, generationFailed: number, generationTotal: number, summarizationCompleted: number, summarizationFailed: number, summarizationTotal: number, latestErrorMessage?: string | null }> }> };
+export type DomainTrialRunsStatusQuery = { __typename?: 'Query', domainTrialRunsStatus: Array<{ __typename?: 'DomainTrialRunStatus', runId: string, definitionId: string, status: string, updatedAt: any, stalledModels: Array<string>, analysisStatus?: string | null, modelStatuses: Array<{ __typename?: 'DomainTrialModelStatus', modelId: string, generationCompleted: number, generationFailed: number, generationTotal: number, summarizationCompleted: number, summarizationFailed: number, summarizationTotal: number, latestErrorMessage?: string | null }> }> };
 
 export type DomainSettingsQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
 }>;
 
 
-export type DomainSettingsQuery = { __typename?: 'Query', domainSettings?: { __typename?: 'DomainSettings', domainId: string, preambleVersionId?: string | null, levelPresetVersionId?: string | null, contextId?: string | null, valueStatements: Array<{ __typename?: 'ValueStatementWithVersions', id: string, token: string, currentContent: string, previousContent?: string | null }> } | null };
+export type DomainSettingsQuery = { __typename?: 'Query', domainSettings?: { __typename?: 'DomainSettings', domainId: string, preambleVersionId?: string | null, levelPresetVersionId?: string | null, contextId?: string | null, sentencePrefix?: string | null, labelPrefix?: string | null, valueStatements: Array<{ __typename?: 'ValueStatementWithVersions', id: string, token: string, currentContent: string, previousContent?: string | null }> } | null };
 
 export type DomainConfigSnapshotsQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
@@ -4173,13 +4184,15 @@ export type DomainConfigSnapshotsQueryVariables = Exact<{
 }>;
 
 
-export type DomainConfigSnapshotsQuery = { __typename?: 'Query', domainConfigSnapshots: Array<{ __typename?: 'DomainConfigSnapshotSummary', id: string, createdAt: string, preambleLabel?: string | null, levelPresetLabel?: string | null, contextLabel?: string | null, valueStatementCount: number }> };
+export type DomainConfigSnapshotsQuery = { __typename?: 'Query', domainConfigSnapshots: Array<{ __typename?: 'DomainConfigSnapshotSummary', id: string, createdAt: any, preambleLabel?: string | null, levelPresetLabel?: string | null, contextLabel?: string | null, valueStatementCount: number }> };
 
 export type SetDomainSettingsMutationVariables = Exact<{
   domainId: Scalars['ID']['input'];
   preambleVersionId?: InputMaybe<Scalars['ID']['input']>;
   levelPresetVersionId?: InputMaybe<Scalars['ID']['input']>;
   contextId?: InputMaybe<Scalars['ID']['input']>;
+  sentencePrefix?: InputMaybe<Scalars['String']['input']>;
+  labelPrefix?: InputMaybe<Scalars['String']['input']>;
   valueStatements: Array<ValueStatementInput> | ValueStatementInput;
 }>;
 
@@ -4191,12 +4204,12 @@ export type SystemHealthQueryVariables = Exact<{
 }>;
 
 
-export type SystemHealthQuery = { __typename?: 'Query', systemHealth: { __typename?: 'SystemHealth', providers: { __typename?: 'ProviderHealth', checkedAt: string, providers: Array<{ __typename?: 'ProviderHealthStatus', id: string, name: string, configured: boolean, connected: boolean, error?: string | null, remainingBudgetUsd?: number | null, lastChecked?: string | null }> }, queue: { __typename?: 'QueueHealth', isHealthy: boolean, isRunning: boolean, isPaused: boolean, activeJobs: number, pendingJobs: number, completedLast24h: number, failedLast24h: number, successRate?: number | null, error?: string | null, checkedAt: string, jobTypes?: Array<{ __typename?: 'JobTypeStatus', type: string, pending: number, active: number, completed: number, failed: number }> | null }, worker: { __typename?: 'WorkerHealth', isHealthy: boolean, pythonVersion?: string | null, packages: unknown, apiKeys: unknown, warnings: Array<string>, error?: string | null, checkedAt: string } } };
+export type SystemHealthQuery = { __typename?: 'Query', systemHealth: { __typename?: 'SystemHealth', providers: { __typename?: 'ProviderHealth', checkedAt: any, providers: Array<{ __typename?: 'ProviderHealthStatus', id: string, name: string, configured: boolean, connected: boolean, error?: string | null, remainingBudgetUsd?: number | null, lastChecked?: any | null }> }, queue: { __typename?: 'QueueHealth', isHealthy: boolean, isRunning: boolean, isPaused: boolean, activeJobs: number, pendingJobs: number, completedLast24h: number, failedLast24h: number, successRate?: number | null, error?: string | null, checkedAt: any, jobTypes?: Array<{ __typename?: 'JobTypeStatus', type: string, pending: number, active: number, completed: number, failed: number }> | null }, worker: { __typename?: 'WorkerHealth', isHealthy: boolean, pythonVersion?: string | null, packages: any, apiKeys: any, warnings: Array<string>, error?: string | null, checkedAt: any } } };
 
 export type GetLevelPresetsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type GetLevelPresetsQuery = { __typename?: 'Query', levelPresets: Array<{ __typename?: 'LevelPreset', id: string, name: string, updatedAt: string, latestVersion?: { __typename?: 'LevelPresetVersion', id: string, version: string, l1: string, l2: string, l3: string, l4: string, l5: string, createdAt: string } | null }> };
+export type GetLevelPresetsQuery = { __typename?: 'Query', levelPresets: Array<{ __typename?: 'LevelPreset', id: string, name: string, updatedAt: any, latestVersion?: { __typename?: 'LevelPresetVersion', id: string, version: string, l1: string, l2: string, l3: string, l4: string, l5: string, createdAt: any } | null }> };
 
 export type CreateLevelPresetMutationVariables = Exact<{
   name: Scalars['String']['input'];
@@ -4220,7 +4233,7 @@ export type UpdateLevelPresetMutationVariables = Exact<{
 }>;
 
 
-export type UpdateLevelPresetMutation = { __typename?: 'Mutation', updateLevelPreset: { __typename?: 'LevelPreset', id: string, name: string, updatedAt: string, latestVersion?: { __typename?: 'LevelPresetVersion', id: string, version: string, l1: string, l2: string, l3: string, l4: string, l5: string } | null } };
+export type UpdateLevelPresetMutation = { __typename?: 'Mutation', updateLevelPreset: { __typename?: 'LevelPreset', id: string, name: string, updatedAt: any, latestVersion?: { __typename?: 'LevelPresetVersion', id: string, version: string, l1: string, l2: string, l3: string, l4: string, l5: string } | null } };
 
 export type DeleteLevelPresetMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -4229,14 +4242,14 @@ export type DeleteLevelPresetMutationVariables = Exact<{
 
 export type DeleteLevelPresetMutation = { __typename?: 'Mutation', deleteLevelPreset: { __typename?: 'DeleteLevelPresetResult', id: string } };
 
-export type LlmModelFieldsFragment = { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string };
+export type LlmModelFieldsFragment = { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: any | null, createdAt: any, updatedAt: any };
 
-export type LlmProviderFieldsFragment = { __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: string, updatedAt: string };
+export type LlmProviderFieldsFragment = { __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: any, updatedAt: any };
 
 export type LlmProvidersQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type LlmProvidersQuery = { __typename?: 'Query', llmProviders: Array<{ __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: string, updatedAt: string, models: Array<{ __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string }> }> };
+export type LlmProvidersQuery = { __typename?: 'Query', llmProviders: Array<{ __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: any, updatedAt: any, models: Array<{ __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: any | null, createdAt: any, updatedAt: any }> }> };
 
 export type LlmModelsQueryVariables = Exact<{
   providerId?: InputMaybe<Scalars['String']['input']>;
@@ -4244,21 +4257,21 @@ export type LlmModelsQueryVariables = Exact<{
 }>;
 
 
-export type LlmModelsQuery = { __typename?: 'Query', llmModels: Array<{ __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string, provider: { __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: string, updatedAt: string } }> };
+export type LlmModelsQuery = { __typename?: 'Query', llmModels: Array<{ __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: any | null, createdAt: any, updatedAt: any, provider: { __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: any, updatedAt: any } }> };
 
 export type InfraModelQueryVariables = Exact<{
   purpose: Scalars['String']['input'];
 }>;
 
 
-export type InfraModelQuery = { __typename?: 'Query', infraModel?: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string, provider: { __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: string, updatedAt: string } } | null };
+export type InfraModelQuery = { __typename?: 'Query', infraModel?: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: any | null, createdAt: any, updatedAt: any, provider: { __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: any, updatedAt: any } } | null };
 
 export type CreateLlmModelMutationVariables = Exact<{
   input: CreateLlmModelInput;
 }>;
 
 
-export type CreateLlmModelMutation = { __typename?: 'Mutation', createLlmModel: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string } };
+export type CreateLlmModelMutation = { __typename?: 'Mutation', createLlmModel: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: any | null, createdAt: any, updatedAt: any } };
 
 export type UpdateLlmModelMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -4266,35 +4279,35 @@ export type UpdateLlmModelMutationVariables = Exact<{
 }>;
 
 
-export type UpdateLlmModelMutation = { __typename?: 'Mutation', updateLlmModel: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string } };
+export type UpdateLlmModelMutation = { __typename?: 'Mutation', updateLlmModel: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: any | null, createdAt: any, updatedAt: any } };
 
 export type DeprecateLlmModelMutationVariables = Exact<{
   id: Scalars['String']['input'];
 }>;
 
 
-export type DeprecateLlmModelMutation = { __typename?: 'Mutation', deprecateLlmModel: { __typename?: 'DeprecateModelResult', model: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string }, newDefault?: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string } | null } };
+export type DeprecateLlmModelMutation = { __typename?: 'Mutation', deprecateLlmModel: { __typename?: 'DeprecateModelResult', model: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: any | null, createdAt: any, updatedAt: any }, newDefault?: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: any | null, createdAt: any, updatedAt: any } | null } };
 
 export type ReactivateLlmModelMutationVariables = Exact<{
   id: Scalars['String']['input'];
 }>;
 
 
-export type ReactivateLlmModelMutation = { __typename?: 'Mutation', reactivateLlmModel: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string } };
+export type ReactivateLlmModelMutation = { __typename?: 'Mutation', reactivateLlmModel: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: any | null, createdAt: any, updatedAt: any } };
 
 export type SetDefaultLlmModelMutationVariables = Exact<{
   id: Scalars['String']['input'];
 }>;
 
 
-export type SetDefaultLlmModelMutation = { __typename?: 'Mutation', setDefaultLlmModel: { __typename?: 'SetDefaultModelResult', model: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string }, previousDefault?: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string } | null } };
+export type SetDefaultLlmModelMutation = { __typename?: 'Mutation', setDefaultLlmModel: { __typename?: 'SetDefaultModelResult', model: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: any | null, createdAt: any, updatedAt: any }, previousDefault?: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: any | null, createdAt: any, updatedAt: any } | null } };
 
 export type UnsetDefaultLlmModelMutationVariables = Exact<{
   id: Scalars['String']['input'];
 }>;
 
 
-export type UnsetDefaultLlmModelMutation = { __typename?: 'Mutation', unsetDefaultLlmModel: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: unknown | null, createdAt: string, updatedAt: string } };
+export type UnsetDefaultLlmModelMutation = { __typename?: 'Mutation', unsetDefaultLlmModel: { __typename?: 'LlmModel', id: string, providerId: string, modelId: string, displayName: string, costInputPerMillion: number, costOutputPerMillion: number, status: string, isDefault: boolean, isAvailable: boolean, apiConfig?: any | null, createdAt: any, updatedAt: any } };
 
 export type UpdateLlmProviderMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -4302,14 +4315,14 @@ export type UpdateLlmProviderMutationVariables = Exact<{
 }>;
 
 
-export type UpdateLlmProviderMutation = { __typename?: 'Mutation', updateLlmProvider: { __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: string, updatedAt: string } };
+export type UpdateLlmProviderMutation = { __typename?: 'Mutation', updateLlmProvider: { __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: any, updatedAt: any } };
 
 export type UpdateSystemSettingMutationVariables = Exact<{
   input: UpdateSystemSettingInput;
 }>;
 
 
-export type UpdateSystemSettingMutation = { __typename?: 'Mutation', updateSystemSetting: { __typename?: 'SystemSetting', id: string, key: string, value: unknown, updatedAt: string } };
+export type UpdateSystemSettingMutation = { __typename?: 'Mutation', updateSystemSetting: { __typename?: 'SystemSetting', id: string, key: string, value: any, updatedAt: any } };
 
 export type SetProviderBalanceMutationVariables = Exact<{
   providerId: Scalars['String']['input'];
@@ -4317,7 +4330,7 @@ export type SetProviderBalanceMutationVariables = Exact<{
 }>;
 
 
-export type SetProviderBalanceMutation = { __typename?: 'Mutation', setProviderBalance: { __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: string, updatedAt: string } };
+export type SetProviderBalanceMutation = { __typename?: 'Mutation', setProviderBalance: { __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: any, updatedAt: any } };
 
 export type AvailableModelsQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -4329,7 +4342,7 @@ export type ModelsAnalysisQueryVariables = Exact<{
 }>;
 
 
-export type ModelsAnalysisQuery = { __typename?: 'Query', modelsAnalysis: { __typename?: 'ModelsAnalysisResult', models: Array<{ __typename?: 'ModelsAnalysisModelResult', modelId: string, label: string, values: Array<{ __typename?: 'ModelsAnalysisValueResult', valueKey: string, pooledWinRate?: number | null, stabilityScore?: number | null, eligibleDomainCount: number, domains: Array<{ __typename?: 'ModelsAnalysisDomainBreakdown', domainId: string, domainName: string, winRate: number, evidenceWeight?: number | null }> }> }> } };
+export type ModelsAnalysisQuery = { __typename?: 'Query', modelsAnalysis: { __typename?: 'ModelsAnalysisResult', models: Array<{ __typename?: 'ModelsAnalysisModelResult', modelId: string, label: string, values: Array<{ __typename?: 'ModelsAnalysisValueResult', valueKey: string, pooledWinRate?: number | null, stabilityScore?: number | null, eligibleDomainCount: number, domains: Array<{ __typename?: 'ModelsAnalysisDomainBreakdown', domainId: string, domainName: string, winRate: number, evidenceWeight: number }> }> }> } };
 
 export type CreatePairedVignetteMutationVariables = Exact<{
   input: CreatePairedVignetteInput;
@@ -4345,9 +4358,9 @@ export type UpdatePairedVignetteMutationVariables = Exact<{
 
 export type UpdatePairedVignetteMutation = { __typename?: 'Mutation', updatePairedVignette: { __typename?: 'CreatePairedVignetteResult', definitionA: { __typename?: 'Definition', id: string, name: string }, definitionB: { __typename?: 'Definition', id: string, name: string } } };
 
-export type RunFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null };
+export type RunFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: any, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: any | null, startedAt?: any | null, completedAt?: any | null, createdAt: any, updatedAt: any, lastAccessedAt?: any | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: any | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: any, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null };
 
-export type RunWithTranscriptsFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, failedProbes: Array<{ __typename?: 'ProbeResult', modelId: string, errorCode?: string | null, errorMessage?: string | null }>, transcripts: Array<{ __typename?: 'Transcript', id: string, runId: string, scenarioId?: string | null, modelId: string, modelVersion?: string | null, content: unknown, decisionMetadata?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, estimatedCost?: number | null, createdAt: string, lastAccessedAt?: string | null, dimensionValues?: unknown | null, decisionModelV2?: unknown | null }>, analysis?: { __typename?: 'AnalysisResult', actualCost?: { __typename?: 'ActualCost', total: number, perModel: Array<{ __typename?: 'ActualModelCost', modelId: string, inputTokens: number, outputTokens: number, cost: number, probeCount: number }> } | null } | null, recentTasks: Array<{ __typename?: 'TaskResult', scenarioId: string, modelId: string, status: string, error?: string | null, completedAt?: string | null }>, executionMetrics?: { __typename?: 'ExecutionMetrics', totalActive: number, totalQueued: number, estimatedSecondsRemaining?: number | null, totalRetries: number, providers: Array<{ __typename?: 'ProviderExecutionMetrics', provider: string, activeJobs: number, queuedJobs: number, maxParallel: number, requestsPerMinute: number, activeModelIds: Array<string>, recentCompletions: Array<{ __typename?: 'CompletionEvent', modelId: string, scenarioId: string, success: boolean, completedAt: string, durationMs: number }> }> } | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null };
+export type RunWithTranscriptsFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: any, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: any | null, startedAt?: any | null, completedAt?: any | null, createdAt: any, updatedAt: any, lastAccessedAt?: any | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: any | null, failedProbes: Array<{ __typename?: 'ProbeResult', modelId: string, errorCode?: string | null, errorMessage?: string | null }>, transcripts: Array<{ __typename?: 'Transcript', id: string, runId: string, scenarioId?: string | null, modelId: string, modelVersion?: string | null, content: any, decisionMetadata?: any | null, turnCount: number, tokenCount: number, durationMs: number, estimatedCost?: number | null, createdAt: any, lastAccessedAt?: any | null, dimensionValues?: any | null, decisionModelV2?: any | null }>, analysis?: { __typename?: 'AnalysisResult', actualCost?: { __typename?: 'ActualCost', total: number, perModel: Array<{ __typename?: 'ActualModelCost', modelId: string, inputTokens: number, outputTokens: number, cost: number, probeCount: number }> } | null } | null, recentTasks: Array<{ __typename?: 'TaskResult', scenarioId: string, modelId: string, status: string, error?: string | null, completedAt?: any | null }>, executionMetrics?: { __typename?: 'ExecutionMetrics', totalActive: number, totalQueued: number, estimatedSecondsRemaining?: number | null, totalRetries: number, providers: Array<{ __typename?: 'ProviderExecutionMetrics', provider: string, activeJobs: number, queuedJobs: number, maxParallel: number, requestsPerMinute: number, activeModelIds: Array<string>, recentCompletions: Array<{ __typename?: 'CompletionEvent', modelId: string, scenarioId: string, success: boolean, completedAt: any, durationMs: number }> }> } | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: any, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null };
 
 export type RunsQueryVariables = Exact<{
   definitionId?: InputMaybe<Scalars['String']['input']>;
@@ -4362,7 +4375,7 @@ export type RunsQueryVariables = Exact<{
 }>;
 
 
-export type RunsQuery = { __typename?: 'Query', runs: Array<{ __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null }> };
+export type RunsQuery = { __typename?: 'Query', runs: Array<{ __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: any, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: any | null, startedAt?: any | null, completedAt?: any | null, createdAt: any, updatedAt: any, lastAccessedAt?: any | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: any | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: any, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null }> };
 
 export type RunCountQueryVariables = Exact<{
   definitionId?: InputMaybe<Scalars['String']['input']>;
@@ -4395,35 +4408,35 @@ export type RunQueryVariables = Exact<{
 }>;
 
 
-export type RunQuery = { __typename?: 'Query', run?: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, failedProbes: Array<{ __typename?: 'ProbeResult', modelId: string, errorCode?: string | null, errorMessage?: string | null }>, transcripts: Array<{ __typename?: 'Transcript', id: string, runId: string, scenarioId?: string | null, modelId: string, modelVersion?: string | null, content: unknown, decisionMetadata?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, estimatedCost?: number | null, createdAt: string, lastAccessedAt?: string | null, dimensionValues?: unknown | null, decisionModelV2?: unknown | null }>, analysis?: { __typename?: 'AnalysisResult', actualCost?: { __typename?: 'ActualCost', total: number, perModel: Array<{ __typename?: 'ActualModelCost', modelId: string, inputTokens: number, outputTokens: number, cost: number, probeCount: number }> } | null } | null, recentTasks: Array<{ __typename?: 'TaskResult', scenarioId: string, modelId: string, status: string, error?: string | null, completedAt?: string | null }>, executionMetrics?: { __typename?: 'ExecutionMetrics', totalActive: number, totalQueued: number, estimatedSecondsRemaining?: number | null, totalRetries: number, providers: Array<{ __typename?: 'ProviderExecutionMetrics', provider: string, activeJobs: number, queuedJobs: number, maxParallel: number, requestsPerMinute: number, activeModelIds: Array<string>, recentCompletions: Array<{ __typename?: 'CompletionEvent', modelId: string, scenarioId: string, success: boolean, completedAt: string, durationMs: number }> }> } | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } | null };
+export type RunQuery = { __typename?: 'Query', run?: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: any, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: any | null, startedAt?: any | null, completedAt?: any | null, createdAt: any, updatedAt: any, lastAccessedAt?: any | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: any | null, failedProbes: Array<{ __typename?: 'ProbeResult', modelId: string, errorCode?: string | null, errorMessage?: string | null }>, transcripts: Array<{ __typename?: 'Transcript', id: string, runId: string, scenarioId?: string | null, modelId: string, modelVersion?: string | null, content: any, decisionMetadata?: any | null, turnCount: number, tokenCount: number, durationMs: number, estimatedCost?: number | null, createdAt: any, lastAccessedAt?: any | null, dimensionValues?: any | null, decisionModelV2?: any | null }>, analysis?: { __typename?: 'AnalysisResult', actualCost?: { __typename?: 'ActualCost', total: number, perModel: Array<{ __typename?: 'ActualModelCost', modelId: string, inputTokens: number, outputTokens: number, cost: number, probeCount: number }> } | null } | null, recentTasks: Array<{ __typename?: 'TaskResult', scenarioId: string, modelId: string, status: string, error?: string | null, completedAt?: any | null }>, executionMetrics?: { __typename?: 'ExecutionMetrics', totalActive: number, totalQueued: number, estimatedSecondsRemaining?: number | null, totalRetries: number, providers: Array<{ __typename?: 'ProviderExecutionMetrics', provider: string, activeJobs: number, queuedJobs: number, maxParallel: number, requestsPerMinute: number, activeModelIds: Array<string>, recentCompletions: Array<{ __typename?: 'CompletionEvent', modelId: string, scenarioId: string, success: boolean, completedAt: any, durationMs: number }> }> } | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: any, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } | null };
 
 export type StartRunMutationVariables = Exact<{
   input: StartRunInput;
 }>;
 
 
-export type StartRunMutation = { __typename?: 'Mutation', startRun: { __typename?: 'StartRunPayload', jobCount: number, pairedRunIds?: Array<string> | null, run: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } } };
+export type StartRunMutation = { __typename?: 'Mutation', startRun: { __typename?: 'StartRunPayload', jobCount: number, pairedRunIds?: Array<string> | null, run: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: any, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: any | null, startedAt?: any | null, completedAt?: any | null, createdAt: any, updatedAt: any, lastAccessedAt?: any | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: any | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: any, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } } };
 
 export type PauseRunMutationVariables = Exact<{
   runId: Scalars['ID']['input'];
 }>;
 
 
-export type PauseRunMutation = { __typename?: 'Mutation', pauseRun: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } };
+export type PauseRunMutation = { __typename?: 'Mutation', pauseRun: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: any, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: any | null, startedAt?: any | null, completedAt?: any | null, createdAt: any, updatedAt: any, lastAccessedAt?: any | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: any | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: any, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } };
 
 export type ResumeRunMutationVariables = Exact<{
   runId: Scalars['ID']['input'];
 }>;
 
 
-export type ResumeRunMutation = { __typename?: 'Mutation', resumeRun: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } };
+export type ResumeRunMutation = { __typename?: 'Mutation', resumeRun: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: any, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: any | null, startedAt?: any | null, completedAt?: any | null, createdAt: any, updatedAt: any, lastAccessedAt?: any | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: any | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: any, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } };
 
 export type CancelRunMutationVariables = Exact<{
   runId: Scalars['ID']['input'];
 }>;
 
 
-export type CancelRunMutation = { __typename?: 'Mutation', cancelRun: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } };
+export type CancelRunMutation = { __typename?: 'Mutation', cancelRun: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: any, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: any | null, startedAt?: any | null, completedAt?: any | null, createdAt: any, updatedAt: any, lastAccessedAt?: any | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: any | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: any, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } };
 
 export type DeleteRunMutationVariables = Exact<{
   runId: Scalars['ID']['input'];
@@ -4438,14 +4451,14 @@ export type UpdateRunMutationVariables = Exact<{
 }>;
 
 
-export type UpdateRunMutation = { __typename?: 'Mutation', updateRun: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } };
+export type UpdateRunMutation = { __typename?: 'Mutation', updateRun: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: any, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: any | null, startedAt?: any | null, completedAt?: any | null, createdAt: any, updatedAt: any, lastAccessedAt?: any | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: any | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: any, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } };
 
 export type CancelSummarizationMutationVariables = Exact<{
   runId: Scalars['ID']['input'];
 }>;
 
 
-export type CancelSummarizationMutation = { __typename?: 'Mutation', cancelSummarization: { __typename?: 'CancelSummarizationPayload', cancelledCount: number, run: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } } };
+export type CancelSummarizationMutation = { __typename?: 'Mutation', cancelSummarization: { __typename?: 'CancelSummarizationPayload', cancelledCount: number, run: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: any, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: any | null, startedAt?: any | null, completedAt?: any | null, createdAt: any, updatedAt: any, lastAccessedAt?: any | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: any | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: any, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } } };
 
 export type RestartSummarizationMutationVariables = Exact<{
   runId: Scalars['ID']['input'];
@@ -4453,7 +4466,7 @@ export type RestartSummarizationMutationVariables = Exact<{
 }>;
 
 
-export type RestartSummarizationMutation = { __typename?: 'Mutation', restartSummarization: { __typename?: 'RestartSummarizationPayload', queuedCount: number, run: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } } };
+export type RestartSummarizationMutation = { __typename?: 'Mutation', restartSummarization: { __typename?: 'RestartSummarizationPayload', queuedCount: number, run: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: any, stalledModels: Array<string>, companionRunId?: string | null, batchCount: number, pairedBatchGroupId?: string | null, progress?: any | null, startedAt?: any | null, completedAt?: any | null, createdAt: any, updatedAt: any, lastAccessedAt?: any | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: any | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: any, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null } } };
 
 export type UpdateTranscriptDecisionMutationVariables = Exact<{
   transcriptId: Scalars['ID']['input'];
@@ -4461,7 +4474,7 @@ export type UpdateTranscriptDecisionMutationVariables = Exact<{
 }>;
 
 
-export type UpdateTranscriptDecisionMutation = { __typename?: 'Mutation', updateTranscriptDecision: { __typename?: 'Transcript', id: string, runId: string, scenarioId?: string | null, modelId: string, modelVersion?: string | null, content: unknown, decisionMetadata?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, estimatedCost?: number | null, createdAt: string, lastAccessedAt?: string | null } };
+export type UpdateTranscriptDecisionMutation = { __typename?: 'Mutation', updateTranscriptDecision: { __typename?: 'Transcript', id: string, runId: string, scenarioId?: string | null, modelId: string, modelVersion?: string | null, content: any, decisionMetadata?: any | null, turnCount: number, tokenCount: number, durationMs: number, estimatedCost?: number | null, createdAt: any, lastAccessedAt?: any | null } };
 
 export type ScenariosQueryVariables = Exact<{
   definitionId: Scalars['ID']['input'];
@@ -4470,7 +4483,7 @@ export type ScenariosQueryVariables = Exact<{
 }>;
 
 
-export type ScenariosQuery = { __typename?: 'Query', scenarios: Array<{ __typename?: 'Scenario', id: string, definitionId: string, name: string, content: unknown, createdAt: string }> };
+export type ScenariosQuery = { __typename?: 'Query', scenarios: Array<{ __typename?: 'Scenario', id: string, definitionId: string, name: string, content: any, createdAt: any }> };
 
 export type ScenarioCountQueryVariables = Exact<{
   definitionId: Scalars['ID']['input'];
@@ -4491,14 +4504,14 @@ export type SurveysQueryVariables = Exact<{
 }>;
 
 
-export type SurveysQuery = { __typename?: 'Query', surveys: Array<{ __typename?: 'Experiment', id: string, name: string, hypothesis?: string | null, analysisPlan?: unknown | null, createdAt: string, updatedAt: string, runCount: number }> };
+export type SurveysQuery = { __typename?: 'Query', surveys: Array<{ __typename?: 'Experiment', id: string, name: string, hypothesis?: string | null, analysisPlan?: any | null, createdAt: any, updatedAt: any, runCount: number }> };
 
 export type CreateSurveyMutationVariables = Exact<{
   input: CreateSurveyInput;
 }>;
 
 
-export type CreateSurveyMutation = { __typename?: 'Mutation', createSurvey: { __typename?: 'Experiment', id: string, name: string, hypothesis?: string | null, analysisPlan?: unknown | null, createdAt: string, updatedAt: string, runCount: number } };
+export type CreateSurveyMutation = { __typename?: 'Mutation', createSurvey: { __typename?: 'Experiment', id: string, name: string, hypothesis?: string | null, analysisPlan?: any | null, createdAt: any, updatedAt: any, runCount: number } };
 
 export type UpdateSurveyMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -4506,7 +4519,7 @@ export type UpdateSurveyMutationVariables = Exact<{
 }>;
 
 
-export type UpdateSurveyMutation = { __typename?: 'Mutation', updateSurvey: { __typename?: 'Experiment', id: string, name: string, hypothesis?: string | null, analysisPlan?: unknown | null, createdAt: string, updatedAt: string, runCount: number } };
+export type UpdateSurveyMutation = { __typename?: 'Mutation', updateSurvey: { __typename?: 'Experiment', id: string, name: string, hypothesis?: string | null, analysisPlan?: any | null, createdAt: any, updatedAt: any, runCount: number } };
 
 export type DeleteSurveyMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -4521,7 +4534,7 @@ export type DuplicateSurveyMutationVariables = Exact<{
 }>;
 
 
-export type DuplicateSurveyMutation = { __typename?: 'Mutation', duplicateSurvey: { __typename?: 'Experiment', id: string, name: string, hypothesis?: string | null, analysisPlan?: unknown | null, createdAt: string, updatedAt: string, runCount: number } };
+export type DuplicateSurveyMutation = { __typename?: 'Mutation', duplicateSurvey: { __typename?: 'Experiment', id: string, name: string, hypothesis?: string | null, analysisPlan?: any | null, createdAt: any, updatedAt: any, runCount: number } };
 
 export type TagsQueryVariables = Exact<{
   search?: InputMaybe<Scalars['String']['input']>;
@@ -4529,14 +4542,14 @@ export type TagsQueryVariables = Exact<{
 }>;
 
 
-export type TagsQuery = { __typename?: 'Query', tags: Array<{ __typename?: 'Tag', id: string, name: string, createdAt: string, definitionCount: number }> };
+export type TagsQuery = { __typename?: 'Query', tags: Array<{ __typename?: 'Tag', id: string, name: string, createdAt: any, definitionCount: number }> };
 
 export type CreateTagMutationVariables = Exact<{
   name: Scalars['String']['input'];
 }>;
 
 
-export type CreateTagMutation = { __typename?: 'Mutation', createTag: { __typename?: 'Tag', id: string, name: string, createdAt: string } };
+export type CreateTagMutation = { __typename?: 'Mutation', createTag: { __typename?: 'Tag', id: string, name: string, createdAt: any } };
 
 export type DeleteTagMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -4569,19 +4582,24 @@ export type CreateAndAssignTagMutationVariables = Exact<{
 
 export type CreateAndAssignTagMutation = { __typename?: 'Mutation', createAndAssignTag: { __typename?: 'Definition', id: string, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } };
 
+export type TempZeroVerificationReportQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type TempZeroVerificationReportQuery = { __typename?: 'Query', tempZeroVerificationReport?: { __typename?: 'TempZeroVerificationReport', generatedAt: any, transcriptCount: number, batchTimestamp?: any | null, models: Array<{ __typename?: 'TempZeroModelVerification', modelId: string, transcriptCount: number, adapterModes: Array<string>, promptHashStabilityPct?: number | null, fingerprintDriftPct?: number | null, decisionMatchRatePct?: number | null }> } | null };
+
 export type ValueStatementsQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
 }>;
 
 
-export type ValueStatementsQuery = { __typename?: 'Query', valueStatements: Array<{ __typename?: 'ValueStatement', id: string, domainId: string, token: string, body: string, updatedAt: string }> };
+export type ValueStatementsQuery = { __typename?: 'Query', valueStatements: Array<{ __typename?: 'ValueStatement', id: string, domainId: string, token: string, body: string, updatedAt: any }> };
 
 export type CreateValueStatementMutationVariables = Exact<{
   input: CreateValueStatementInput;
 }>;
 
 
-export type CreateValueStatementMutation = { __typename?: 'Mutation', createValueStatement: { __typename?: 'ValueStatement', id: string, domainId: string, token: string, body: string, updatedAt: string } };
+export type CreateValueStatementMutation = { __typename?: 'Mutation', createValueStatement: { __typename?: 'ValueStatement', id: string, domainId: string, token: string, body: string, updatedAt: any } };
 
 export type UpdateValueStatementMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -4589,7 +4607,7 @@ export type UpdateValueStatementMutationVariables = Exact<{
 }>;
 
 
-export type UpdateValueStatementMutation = { __typename?: 'Mutation', updateValueStatement: { __typename?: 'ValueStatement', id: string, domainId: string, token: string, body: string, updatedAt: string } };
+export type UpdateValueStatementMutation = { __typename?: 'Mutation', updateValueStatement: { __typename?: 'ValueStatement', id: string, domainId: string, token: string, body: string, updatedAt: any } };
 
 export type DeleteValueStatementMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -6045,6 +6063,8 @@ export const DomainSettingsDocument = gql`
     preambleVersionId
     levelPresetVersionId
     contextId
+    sentencePrefix
+    labelPrefix
     valueStatements {
       id
       token
@@ -6075,12 +6095,14 @@ export function useDomainConfigSnapshotsQuery(options: Omit<Urql.UseQueryArgs<Do
   return Urql.useQuery<DomainConfigSnapshotsQuery, DomainConfigSnapshotsQueryVariables>({ query: DomainConfigSnapshotsDocument, ...options });
 };
 export const SetDomainSettingsDocument = gql`
-    mutation SetDomainSettings($domainId: ID!, $preambleVersionId: ID, $levelPresetVersionId: ID, $contextId: ID, $valueStatements: [ValueStatementInput!]!) {
+    mutation SetDomainSettings($domainId: ID!, $preambleVersionId: ID, $levelPresetVersionId: ID, $contextId: ID, $sentencePrefix: String, $labelPrefix: String, $valueStatements: [ValueStatementInput!]!) {
   setDomainSettings(
     domainId: $domainId
     preambleVersionId: $preambleVersionId
     levelPresetVersionId: $levelPresetVersionId
     contextId: $contextId
+    sentencePrefix: $sentencePrefix
+    labelPrefix: $labelPrefix
     valueStatements: $valueStatements
   ) {
     id
@@ -6865,6 +6887,27 @@ export const CreateAndAssignTagDocument = gql`
 
 export function useCreateAndAssignTagMutation() {
   return Urql.useMutation<CreateAndAssignTagMutation, CreateAndAssignTagMutationVariables>(CreateAndAssignTagDocument);
+};
+export const TempZeroVerificationReportDocument = gql`
+    query TempZeroVerificationReport {
+  tempZeroVerificationReport {
+    generatedAt
+    transcriptCount
+    batchTimestamp
+    models {
+      modelId
+      transcriptCount
+      adapterModes
+      promptHashStabilityPct
+      fingerprintDriftPct
+      decisionMatchRatePct
+    }
+  }
+}
+    `;
+
+export function useTempZeroVerificationReportQuery(options?: Omit<Urql.UseQueryArgs<TempZeroVerificationReportQueryVariables>, 'query'>) {
+  return Urql.useQuery<TempZeroVerificationReportQuery, TempZeroVerificationReportQueryVariables>({ query: TempZeroVerificationReportDocument, ...options });
 };
 export const ValueStatementsDocument = gql`
     query ValueStatements($domainId: ID!) {

@@ -977,6 +977,8 @@ type DomainRunSummary {
 
 """Current domain settings: pickers and value statements with versions"""
 type DomainSettings {
+  labelPrefix: String
+  sentencePrefix: String
   contextId: String
   domainId: ID!
   levelPresetVersionId: String
@@ -1633,7 +1635,7 @@ type Mutation {
     id: String!
   ): SetDefaultModelResult!
   setDomainDefaults(defaultContextId: ID, defaultLevelPresetVersionId: ID, defaultPreambleVersionId: ID, id: ID!): Domain!
-  setDomainSettings(contextId: ID, domainId: ID!, levelPresetVersionId: ID, preambleVersionId: ID, valueStatements: [ValueStatementInput!]!): Domain!
+  setDomainSettings(contextId: ID, domainId: ID!, labelPrefix: String, levelPresetVersionId: ID, preambleVersionId: ID, sentencePrefix: String, valueStatements: [ValueStatementInput!]!): Domain!
 
   """Set the budget balance for a provider (null disables budget tracking)"""
   setProviderBalance(

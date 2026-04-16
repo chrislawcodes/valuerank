@@ -305,6 +305,8 @@ query DomainSettings($domainId: ID!) {
     preambleVersionId
     levelPresetVersionId
     contextId
+    sentencePrefix
+    labelPrefix
     valueStatements {
       id
       token
@@ -330,6 +332,8 @@ mutation SetDomainSettings(
   $preambleVersionId: ID
   $levelPresetVersionId: ID
   $contextId: ID
+  $sentencePrefix: String
+  $labelPrefix: String
   $valueStatements: [ValueStatementInput!]!
 ) {
   setDomainSettings(
@@ -337,6 +341,8 @@ mutation SetDomainSettings(
     preambleVersionId: $preambleVersionId
     levelPresetVersionId: $levelPresetVersionId
     contextId: $contextId
+    sentencePrefix: $sentencePrefix
+    labelPrefix: $labelPrefix
     valueStatements: $valueStatements
   ) {
     id
