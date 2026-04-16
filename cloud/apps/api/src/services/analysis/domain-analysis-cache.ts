@@ -79,13 +79,15 @@ function buildDomainAnalysisResultFromSnapshot(params: {
       const score = params.scoreMethod === 'FULL_BT'
         ? (btScores?.get(valueKey) ?? 0)
         : computeSmoothedLogOddsScore(wins, losses);
+      // Counts may be fractional after run-count normalisation (equal-weight per vignette).
+      // Round to the nearest integer so GraphQL Int serialisation succeeds.
       return {
         valueKey,
         score,
-        prioritized: counts.prioritized,
-        deprioritized: counts.deprioritized,
-        neutral: counts.neutral,
-        totalComparisons: wins + losses,
+        prioritized: Math.round(counts.prioritized),
+        deprioritized: Math.round(counts.deprioritized),
+        neutral: Math.round(counts.neutral),
+        totalComparisons: Math.round(wins + losses),
       };
     });
 
