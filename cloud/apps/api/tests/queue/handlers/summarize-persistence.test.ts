@@ -3,31 +3,21 @@ import type { db as DbType } from '@valuerank/db';
 import type { findMissingProbes as FindMissingProbesType } from '../../../src/services/run/coverage-completeness.js';
 import type { checkAllSummarized as CheckAllSummarizedType } from '../../../src/queue/handlers/summarize-persistence.js';
 
-// These vi.mock() calls are hoisted above all imports by Vitest's transform.
-vi.mock('@valuerank/db', () => ({
-  db: {
-    transcript: {
-      count: vi.fn(),
-    },
-  },
-  Prisma: { DbNull: null },
-}));
-
-vi.mock('../../../src/services/run/coverage-completeness.js', () => ({
-  findMissingProbes: vi.fn(),
-}));
-
 /**
- * Why dynamic imports + vi.resetModules()?
+ * Why vi.doMock + vi.resetModules()?
  *
  * This suite runs in a singleFork process alongside integration tests (e.g.
  * summarize-transcript.test.ts) that load summarize-persistence.ts with real
  * @valuerank/db bindings before this file runs. Without a module cache reset,
- * Vitest may return that cached instance, so vi.mock('@valuerank/db') misses
- * the already-bound db reference inside the module under test.
+ * Vitest may return that cached instance, so mocks miss the already-bound db
+ * reference inside the module under test.
  *
- * vi.resetModules() clears the module cache (but NOT the mock factory registry),
- * so the subsequent dynamic imports load fresh instances that bind to our mocks.
+ * vi.resetModules() clears the module cache (but NOT the mock factory registry).
+ * vi.doMock (non-hoisted) is called AFTER vi.resetModules() so that the mock
+ * factories are registered before the subsequent dynamic imports. This is the
+ * canonical pattern when the test file is not co-located with the source (e.g.
+ * tests/ vs src/), where top-level vi.mock path resolution may differ from the
+ * source file's own import resolution after a cache reset.
  */
 
 let checkAllSummarized: typeof CheckAllSummarizedType;
@@ -36,6 +26,19 @@ let mockFindMissingProbes: ReturnType<typeof vi.mocked<typeof FindMissingProbesT
 
 beforeAll(async () => {
   vi.resetModules();
+
+  vi.doMock('@valuerank/db', () => ({
+    db: {
+      transcript: {
+        count: vi.fn(),
+      },
+    },
+    Prisma: { DbNull: null },
+  }));
+
+  vi.doMock('../../../src/services/run/coverage-completeness.js', () => ({
+    findMissingProbes: vi.fn(),
+  }));
 
   const dbModule = await import('@valuerank/db');
   const ccModule = await import('../../../src/services/run/coverage-completeness.js');
