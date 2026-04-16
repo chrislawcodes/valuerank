@@ -131,6 +131,7 @@ export function computeInputHash(params: {
   fingerprints: AnalysisFingerprintRow[];
 }): string {
   return computeAggregateFingerprint({
+    codeVersion: DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION,
     domainId: params.domainId,
     signature: params.signature,
     definitions: params.latestDefinitions.map((definition) => ({
@@ -239,6 +240,17 @@ export async function buildSnapshotOutput(
   const pairwiseWinsByModel = new Map<string, Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>>();
   const analyzedDefinitionIds = new Set<string>();
 
+  // Phase 1: Accumulate raw counts per (definitionId, modelId), tracking how many runs
+  // each model contributed to for that vignette.
+  type DefinitionModelAcc = {
+    valueA: DomainAnalysisValueKey;
+    valueB: DomainAnalysisValueKey;
+    first: DomainAnalysisValueCounts;
+    second: DomainAnalysisValueCounts;
+    runCount: number;
+  };
+  const defModelAcc = new Map<string, Map<string, DefinitionModelAcc>>();
+
   for (const analysisRow of analysisRows) {
     const definitionId = state.resolvedSignatureRuns.filteredSourceRunDefinitionById.get(analysisRow.runId);
     if (definitionId == null || definitionId === '') continue;
@@ -250,7 +262,46 @@ export async function buildSnapshotOutput(
     const perModel = (output as { perModel?: unknown }).perModel;
     if (perModel == null || typeof perModel !== 'object' || Array.isArray(perModel)) continue;
 
+    let modelMap = defModelAcc.get(definitionId);
+    if (!modelMap) {
+      modelMap = new Map<string, DefinitionModelAcc>();
+      defModelAcc.set(definitionId, modelMap);
+    }
+
     for (const modelId of Object.keys(perModel as Record<string, unknown>)) {
+      let acc = modelMap.get(modelId);
+      if (!acc) {
+        acc = {
+          valueA: pair.valueA,
+          valueB: pair.valueB,
+          first: { prioritized: 0, deprioritized: 0, neutral: 0 },
+          second: { prioritized: 0, deprioritized: 0, neutral: 0 },
+          runCount: 0,
+        };
+        modelMap.set(modelId, acc);
+      }
+
+      const firstCounts = getValueCountsFromAnalysis(output, modelId, pair.valueA);
+      const secondCounts = getValueCountsFromAnalysis(output, modelId, pair.valueB);
+
+      acc.first.prioritized += firstCounts.prioritized;
+      acc.first.deprioritized += firstCounts.deprioritized;
+      acc.first.neutral += firstCounts.neutral;
+      acc.second.prioritized += secondCounts.prioritized;
+      acc.second.deprioritized += secondCounts.deprioritized;
+      acc.second.neutral += secondCounts.neutral;
+      acc.runCount += 1;
+    }
+  }
+
+  // Phase 2: Normalize each vignette's contribution by its per-model run count, then merge
+  // into global aggregates. Dividing by runCount gives the average per-run count, so a
+  // vignette run 6 times contributes the same weight as one run once. Models that appear
+  // in fewer runs for a given vignette are normalized by their own run count.
+  for (const [definitionId, modelMap] of defModelAcc) {
+    for (const [modelId, acc] of modelMap) {
+      if (acc.runCount === 0) continue;
+
       let valueMap = aggregatedByModel.get(modelId);
       if (!valueMap) {
         valueMap = new Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>();
@@ -263,23 +314,22 @@ export async function buildSnapshotOutput(
         pairwiseWinsByModel.set(modelId, pairwiseWins);
       }
 
-      const firstCounts = getValueCountsFromAnalysis(output, modelId, pair.valueA);
-      const secondCounts = getValueCountsFromAnalysis(output, modelId, pair.valueB);
+      const n = acc.runCount;
 
-      const existingFirst = valueMap.get(pair.valueA) ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
-      existingFirst.prioritized += firstCounts.prioritized;
-      existingFirst.deprioritized += firstCounts.deprioritized;
-      existingFirst.neutral += firstCounts.neutral;
-      valueMap.set(pair.valueA, existingFirst);
+      const existingFirst = valueMap.get(acc.valueA) ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
+      existingFirst.prioritized += acc.first.prioritized / n;
+      existingFirst.deprioritized += acc.first.deprioritized / n;
+      existingFirst.neutral += acc.first.neutral / n;
+      valueMap.set(acc.valueA, existingFirst);
 
-      const existingSecond = valueMap.get(pair.valueB) ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
-      existingSecond.prioritized += secondCounts.prioritized;
-      existingSecond.deprioritized += secondCounts.deprioritized;
-      existingSecond.neutral += secondCounts.neutral;
-      valueMap.set(pair.valueB, existingSecond);
+      const existingSecond = valueMap.get(acc.valueB) ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
+      existingSecond.prioritized += acc.second.prioritized / n;
+      existingSecond.deprioritized += acc.second.deprioritized / n;
+      existingSecond.neutral += acc.second.neutral / n;
+      valueMap.set(acc.valueB, existingSecond);
 
-      addPairwiseWins(pairwiseWins, pair.valueA, pair.valueB, firstCounts.prioritized);
-      addPairwiseWins(pairwiseWins, pair.valueB, pair.valueA, secondCounts.prioritized);
+      addPairwiseWins(pairwiseWins, acc.valueA, acc.valueB, acc.first.prioritized / n);
+      addPairwiseWins(pairwiseWins, acc.valueB, acc.valueA, acc.second.prioritized / n);
 
       analyzedDefinitionIds.add(definitionId);
     }
