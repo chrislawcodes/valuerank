@@ -50,14 +50,21 @@ domainsExportRouter.get(
 
       const { domain, filteredSourceRunIds, resolvedSignature } = resolved;
 
-      // Format datetime in PT, replacing colons with dashes for filename safety
-      // e.g. "2026-04-13 14-32-05"
-      const ptDateTime = new Date()
-        .toLocaleString('sv-SE', { timeZone: 'America/Los_Angeles' })
-        .replace(/:/g, '-');
-      // Strip characters invalid in filenames (keep spaces, dashes, alphanumeric)
-      const safeDomainName = domain.name.replace(/[/\\:*?"<>|]/g, '_');
-      const filename = `${safeDomainName} domain export - ${ptDateTime}.csv`;
+      // Format datetime as MM-DD-YYYY-HH:MM in PT, e.g. "04-13-2026-14:33"
+      const ptParts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Los_Angeles',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).formatToParts(new Date());
+      const getPart = (type: string) => ptParts.find((p) => p.type === type)?.value ?? '00';
+      const ptDateTime = `${getPart('month')}-${getPart('day')}-${getPart('year')}-${getPart('hour')}:${getPart('minute')}`;
+      // Strip characters invalid in filenames (keep spaces, dashes, alphanumeric, colons)
+      const safeDomainName = domain.name.replace(/[/\\*?"<>|]/g, '_');
+      const filename = `${safeDomainName} - ${ptDateTime} - transcript.csv`;
 
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
