@@ -358,6 +358,12 @@ type CostEstimate {
   total: Float!
 }
 
+type CoverageModelBreakdown {
+  label: String!
+  modelId: String!
+  trialCount: Int!
+}
+
 type CoverageModelOption {
   label: String!
   modelId: String!
@@ -723,7 +729,14 @@ type DomainAnalysisModel {
   values: [DomainAnalysisValueScore!]!
 }
 
+type DomainAnalysisRefreshResult {
+  message: String!
+  mode: String!
+  success: Boolean!
+}
+
 type DomainAnalysisResult {
+  cacheStatus: String!
   clusterAnalysis: ClusterAnalysis!
   coveredDefinitions: Int!
   definitionsWithAnalysis: Int!
@@ -964,12 +977,12 @@ type DomainRunSummary {
 
 """Current domain settings: pickers and value statements with versions"""
 type DomainSettings {
+  labelPrefix: String
+  sentencePrefix: String
   contextId: String
   domainId: ID!
-  labelPrefix: String
   levelPresetVersionId: String
   preambleVersionId: String
-  sentencePrefix: String
   valueStatements: [ValueStatementWithVersions!]!
 }
 
@@ -1053,6 +1066,11 @@ type DomainValueCoverageCell {
   batchCount: Int!
   definitionId: String
   definitionName: String
+  incompleteBatchCount: Int!
+  maxTrialCount: Int
+  minTrialCount: Int
+  modelBreakdown: [CoverageModelBreakdown!]
+  pairedBatchCount: Int!
   valueA: String!
   valueB: String!
 }
@@ -1173,12 +1191,6 @@ type ExportResult {
 
   """MIME type for the content"""
   mimeType: String!
-}
-
-type FinalTrialPlan {
-  definitionId: String!
-  models: [ModelPlan!]!
-  totalJobs: Int!
 }
 
 input ForkDefinitionInput {
@@ -1587,6 +1599,7 @@ type Mutation {
     """Tag to remove"""
     tagId: String!
   ): Definition!
+  refreshDomainAnalysis(domainId: ID!, signature: String): DomainAnalysisRefreshResult!
   renameDomain(id: ID!, name: String!): Domain!
 
   "\n      Restart summarization for a run.\n\n      Only works when run is in a terminal state (COMPLETED/FAILED/CANCELLED).\n      By default, only re-queues transcripts without summaries or with errors.\n      With force=true, re-queues all transcripts.\n\n      Requires authentication.\n    "
@@ -2060,6 +2073,31 @@ type ProviderHealthStatus {
   remainingBudgetUsd: Float
 }
 
+type ModelsAnalysisDomainBreakdown {
+  domainId: String!
+  domainName: String!
+  evidenceWeight: Int!
+  winRate: Float!
+}
+
+type ModelsAnalysisModelResult {
+  label: String!
+  modelId: String!
+  values: [ModelsAnalysisValueResult!]!
+}
+
+type ModelsAnalysisResult {
+  models: [ModelsAnalysisModelResult!]!
+}
+
+type ModelsAnalysisValueResult {
+  domains: [ModelsAnalysisDomainBreakdown!]!
+  eligibleDomainCount: Int!
+  pooledWinRate: Float
+  stabilityScore: Float
+  valueKey: String!
+}
+
 type Query {
   """
   Get the average token statistics across all models. Used as fallback when model-specific stats are unavailable.
@@ -2163,6 +2201,7 @@ type Query {
     """Number of results to skip (default: 0)"""
     offset: Int
   ): [AvailableModel!]!
+  modelsAnalysis(domainId: ID): ModelsAnalysisResult!
   debugAssumptionsMismatches(modelId: String!, scenarioId: String!): DebugMismatchResult!
 
   """Fetch a single definition by ID. Returns null if not found."""
@@ -2316,7 +2355,6 @@ type Query {
     samplesPerScenario: Int = 1
   ): CostEstimate!
   estimateDomainEvaluationCost(definitionIds: [ID!], domainId: ID!, modelIds: [String!], samplePercentage: Int, samplesPerScenario: Int, scopeCategory: String, temperature: Float): DomainEvaluationCostEstimate!
-  finalTrialPlan(definitionId: String!, models: [String!]!): FinalTrialPlan!
 
   """
   Get the configured infrastructure model for a specific purpose (e.g., "scenario_expansion")
@@ -2927,11 +2965,6 @@ input StartRunInput {
 
   """Optional experiment to associate this run with"""
   experimentId: ID
-
-  """
-  If true, runs an adaptive sampling strategy to reach 10 samples per condition
-  """
-  finalTrial: Boolean
 
   """Launch mode hint: STANDARD, PAIRED_BATCH, or AD_HOC_BATCH"""
   launchMode: String
