@@ -108,7 +108,7 @@ export function TranscriptViewer({
   onClose,
   onDecisionChange,
   decisionUpdating = false,
-  normalizeDecision = false,
+  normalizeDecision: _normalizeDecision = false,
   decisionDisplayMode,
 }: TranscriptViewerProps) {
   const content = parseTranscriptContent(transcript.content);

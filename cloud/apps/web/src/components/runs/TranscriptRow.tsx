@@ -187,7 +187,7 @@ export function TranscriptRow({
   showModelColumn = true,
   onDecisionChange,
   decisionUpdating = false,
-  normalizeDecision = false,
+  normalizeDecision: _normalizeDecision = false,
   decisionDisplayMode,
 }: TranscriptRowProps) {
   const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
