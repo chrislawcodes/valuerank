@@ -1,0 +1,196 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/serene-meitner
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019d9511-11fd-7c42-b825-64cf1d591b3b
+--------
+user
+Review this plan artifact using a architecture-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Implementation Plan: 030 — Remove Legacy Decision Code and Unify Scoring Model
+
+**Branch**: `030-remove-legacy-decision-code` | **Date**: 2026-04-02 | **Revised**: 2026-04-15 | **Spec**: [spec.md](spec.md)
+
+## Summary
+
+Fix the `ConditionMatrix.tsx` scoring bug and remove the entire 1-5 numeric encoding from all TypeScript, Python, and frontend consumers. The canonical model uses two separate fields: **strength** (0=neutral, 1=somewhat, 2=strongly) and **winner** (`isOpponent` boolean / `favoredValueKey`). Two reference implementations already use this model correctly (`canonicalConditionSummary.ts` and `decision-display.ts:getDecisionPreferenceScore`). All other code converges to match them.
+
+---
+
+## Technical Context
+
+**Language/Version**: TypeScript 5.x (API + Web), Python 3.11 (workers)
+**Primary Dependencies**: Prisma (DB), Pothos (GraphQL), Vite (Web)
+**Storage**: No schema migrations — `decisionCode`/`decisionCodeSource` columns kept in DB, just not selected in queries
+**Testing**: Vitest (API + Web), pytest (Python workers)
+**Performance Goals**: No performance change — this is deletion + bug fix
+**Constraints**: `resolveTranscriptDecisionModel` in `decision-model.ts` must keep the `decisionCode` fallback for old transcripts
+**Scale/Scope**: ~30 legacy symbols removed; 1 component bug fixed; ~15 test files need fixture updates
+
+---
+
+## Architecture Decisions
+
+### Decision 1: Keep the `decisionCode` fallback in one place only
+
+**Chosen**: `resolveTranscriptDecisionModel` retains the `decisionCode` fallback. All other code reads only `decisionMetadata`/canonical fields.
+
+**Rationale**: Old transcripts that were written before the V2 model have `decisionCode` but no `decisionMetadata`. The resolver remains the single gateway that converts both shapes to canonical.
+
+### Decision 2: Fix ConditionMatrix by computing strength from existing counts
+
+**Chosen**: `getConditionMatrixDisplay` computes a weighted-average strength score from the `MatrixCondition` counts (`prioritized`/`deprioritized`/`neutral`), using the same formula as `winnerScore` in `canonicalConditionSummary.ts`. The cell label shows `0`/`1`/`2` (strength). Color encodes which side won (`isOpponent`).
+
+**Rationale**: The `MatrixCondition` type already carries the right data — `prioritized` (focal-side wins), `deprioritized` (opponent-side wins), `neutral`. We just need to compute strength the right way instead of encoding winner as the number. No data model change needed.
+
+**Formula**: Same as `canonicalConditionSummary.ts`:
+- Determine winner: `isOpponent = deprioritized > prioritized`
+- Get winner's counts: `winnerStrong` and `winnerSomewhat` (from the winning side's trials)
+- Strength score: `(2 * winnerStrong + 1 * winnerSomewhat) / totalTrials`
+- Display: round to nearest integer (0/1/2) for the cell label
+
+**Note**: The current `MatrixCondition` only has aggregate `prioritized`/`deprioritized`/`neutral` counts — it does not break down strong vs. somewhat within each side. The component needs to either:
+- (a) Receive `strongly`/`somewhat`/`opponentStrongly`/`opponentSomewhat`/`neutral` counts (matching the canonical buckets), or
+- (b) Compute a simple win-rate ratio and map to 0/1/2 based on thresholds
+
+Option (a) is better because it matches the canonical model exactly. The parent component or data source must provide the 5-bucket breakdown.
+
+### Decision 3: Replace `scoreCounts` with `directionCounts` in variance analysis
+
+**Chosen**: The 5-bucket direction/strength histogram replaces the 1-5 numeric histogram.
+
+**Canonical stability distance mapping**:
+| direction | strength | distance | signed |
+|---|---|---|---|
+| favor_first | strong | 2 | +2 |
+| favor_first | lean | 1 | +1 |
+| neutral | — | 0 | 0 |
+| favor_second | lean | 1 | -1 |
+| favor_second | strong | 2 | -2 |
+
+### Decision 4: KS-test uses signed strength for ordinal ranking
+
+**Chosen**: `countsToSample()` maps buckets to signed strength: `opponentStrongly → -2, opponentSomewhat → -1, neutral → 0, somewhat → 1, strongly → 2`. This preserves the ordinal ranking that the KS statistic depends on.
+
+**Rationale**: KS-test cares about the cumulative distribution ordering, not the absolute numeric values. The ordinal ranking `opponent strong < opponent somewhat < neutral < somewhat < strongly` is identical in both encodings. The test statistic will be the same.
+
+### Decision 5: Python workers receive direction/strength from TS — no flip needed
+
+**Chosen**: Python workers read `canonical.direction` and `canonical.strength` from transcript JSON. The `6 - score` flip is removed entirely.
+
+---
+
+## Project Structure
+
+### Files to modify
+
+| File | Change | Notes |
+|---|---|---|
+| `cloud/apps/web/src/components/domains/ConditionMatrix.tsx` | modify | Fix `getConditionMatrixDisplay` to show strength (0/1/2) with color for winner |
+| `cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts` | modify | Delete `canonicalDecisionScoreFromDirectionStrength` |
+| `cloud/apps/api/src/graphql/queries/domain/decision-model.ts` | modify | Delete `LegacyDecisionCompat`, `parseLegacyScore`, `canonicalDecisionToLegacyScore`, `resolveLegacyDecisionCompat`; remove `legacy` from `DecisionModelResult` |
+| `cloud/apps/api/src/graphql/queries/domain/shared.ts` | modify | Remove re-exports of deleted types/functions |
+| `cloud/apps/api/src/services/analysis/aggregate/variance.ts` | modify | Replace `canonicalScore`-based math with canonical mapping |
+| `cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts` | modify | Remove `decisionBucketCodeToScore`, `normalizeDecisionBucketCode` numeric paths |
+| `cloud/apps/api/src/services/decision-model.ts` | modify | Remove `resolveAnalysisScore`, `buildValueOutcomesFromScore`, `parseLegacyDecisionCode` |
+| `cloud/apps/api/src/services/export/decision-display.ts` | modify | Remove any `legacy` references |
+| `cloud/apps/api/src/graphql/types/transcript.ts` | modify | Remove `legacy` field from `decisionModelV2` GraphQL type |
+| `cloud/apps/api/src/queue/handlers/analyze-basic.ts` | modify | Remove `summary.score` from `TranscriptData`; use canonical decision |
+| `cloud/apps/api/src/services/assumptions/order-effect-analysis.ts` | modify | Replace `rawScore`/`canonicalScore` with canonical direction/strength |
+| `cloud/apps/api/src/services/assumptions/order-effect-comparison.ts` | modify | Remove `rawScore` from variant cell types |
+| `cloud/apps/api/src/mcp/tools/get-transcript-summary.ts` | modify | Remove `decisionCode` from response, replace with canonical label |
+| `cloud/apps/web/src/utils/decisionDistributionDisplay.ts` | modify | Remove `'1'`-`'5'` code paths from `normalizeBucketCode`, remove `sourceKeyByCode` map from `formatBucketLabel` |
+| `cloud/apps/web/src/lib/statistics/ks-test.ts` | modify | Map bucket names to signed strength (-2 to +2) instead of 1-5 |
+| `cloud/apps/web/src/utils/transcriptDecisionModel.ts` | modify | Remove `normalizeLegacyDecisionCode`; rewrite sort |
+| `cloud/apps/web/src/api/operations/runs.ts` | modify | Remove `TranscriptDecisionModelV2LegacyCompat` type |
+| `cloud/apps/web/src/generated/graphql.ts` | regenerate | After GQL schema change |
+| `cloud/apps/web/src/components/analysis/tabs/OverviewTab.tsx` | modify | Replace `scoreCounts` references with `directionCounts` |
+| `cloud/workers/stats/decision_model.py` | modify | Remove `normalize_resolved_score`; return canonical model |
+| `cloud/workers/stats/variance_analysis.py` | modify | Replace score-based math with canonical mapping |
+| `cloud/workers/analyze_basic.py` | modify | Remove score-based fallback, use canonical model |
+
+### Test files to update
+
+All tests referencing `rawScore`, `canonicalScore`, `decisionCode`, `LegacyDecisionCompat`, `canonicalDecisionScoreFromDirectionStrength`, or 1-5 numeric fixtures need updating.
+
+---
+
+## Wave Breakdown
+
+### Wave 1 — P1: ConditionMatrix bug fix + core TS API cleanup
+
+Fix the user-visible bug first (ConditionMatrix), then remove legacy types and functions from the decision model, aggregate logic, and variance analysis.
+
+Scope: `ConditionMatrix.tsx`, `decision-model-helpers.ts`, `decision-model.ts` (both), `variance.ts`, `aggregate-logic.ts`
+
+### Wave 2 — P1/P2: GraphQL schema + Python workers
+
+Remove `legacy` from GraphQL type, update analyze-basic handler, update Python workers.
+
+Scope: `transcript.ts`, `analyze-basic.ts`, `decision_model.py`, `variance_analysis.py`
+
+### Wave 3 — P2: Frontend statistics and distribution cleanup
+
+Clean frontend sort, KS-test, decision distribution display, remove legacy type from operations.
+
+Scope: `transcriptDecisionModel.ts`, `runs.ts`, `ks-test.ts`, `decisionDistributionDisplay.ts`, `OverviewTab.tsx`
+
+### Wave 4 — P2/P3: Exports + order-effect + MCP
+
+Update exports, order-effect services, and MCP tool responses.
+
+Scope: `decision-display.ts`, `order-effect-*.ts`, `get-transcript-summary.ts`
+
+### Wave 5 — Test cleanup + regression coverage
+
+Update all test fixtures. Add regression test for `decisionCode` fallback. Add parity test for variance analysis. Add ConditionMatrix display test.
+
+---
+
+## Risks
+
+| Risk | Mitigation |
+|---|---|
+| Old `scoreCounts` in stored aggregate JSON | Frontend normalizer handles both shapes |
+| Hidden consumers of `rawScore`/`canonicalScore` | Grep success criterion catches remaining references |
+| KS-test statistical equivalence | Ordinal ranking is identical; add test confirming same KS statistic on fixture data |
+| ConditionMatrix data source doesn't provide 5-bucket breakdown | Check parent component; may need to pass through canonical bucket counts instead of aggregate `prioritized`/`deprioritized` |
+| Python worker tests break on score removal | Run pytest after each Python change |
+| In-flight PgBoss jobs at deploy time | Workers receive TS-resolved canonical decisions via job queue — no compatibility issue |
+| GraphQL clients still requesting `legacy` sub-object | Build breaks catch remaining references |
+| `decisionCode` fallback regression | Wave 5 adds explicit regression test |
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+1. **Medium [UNVERIFIED]** The `ConditionMatrix` fix is underspecified and may be impossible with the data the plan names. The chosen approach needs a 5-bucket strong/somewhat breakdown, but the artifact only lists existing aggregate `prioritized/deprioritized/neutral` counts and does not include any upstream producer or prop-shape update. If that richer data is not already available, the component cannot compute the canonical strength value and will either guess or fall back to a lossy approximation.
+
+2. **Medium [UNVERIFIED]** The worker cleanup assumes every queue payload is already normalized by TypeScript. Removing the numeric-score fallback paths from `analyze-basic`, `decision_model.py`, and the variance code without a compatibility shim leaves retries, replays, or any non-TS producer with no safe path. That is a hidden contract break unless the plan explicitly proves that no legacy-shaped payload can still reach the workers.
+
+3. **Medium [UNVERIFIED]** The GraphQL and transcript-summary removals are treated as safe because in-repo build breaks will expose remaining references, but that does not protect external clients, persisted queries, or downstream tooling. Removing `legacy` and `decisionCode` without a deprecation window or versioned replacement is a breaking API cutover, not just an internal cleanup.
+
+## Residual Risks
+- Legacy numeric shapes may still exist in stored JSON, cached aggregates, or archived transcripts. The plan relies on normalizers catching every entry point, so any missed parser will create inconsistent behavior.
+- The TS and Python analysis paths now depend on the same ordinal mapping. If one code path misses the new signed-strength conversion, the outputs can drift silently.
+- The artifact keeps `decisionCode` in the DB and a fallback in `resolveTranscriptDecisionModel`, so the system will still carry two representations for a while. That is workable, but it means the cleanup is not complete until every read path is audited.
+tokens used
+23,611

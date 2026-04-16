@@ -70,7 +70,6 @@ function makeTranscript(
         normalizationReason: null,
         source: 'deterministic',
       },
-      legacy: { rawScore: null, canonicalScore: null },
     },
   };
 }

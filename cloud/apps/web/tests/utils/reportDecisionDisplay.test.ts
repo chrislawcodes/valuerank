@@ -55,8 +55,6 @@ function createRenderableTranscript(
         ...overrides.canonical,
       },
       legacy: {
-        rawScore: null,
-        canonicalScore: 1,
         ...overrides.legacy,
       },
     },
@@ -118,9 +116,7 @@ describe('reportDecisionDisplay', () => {
           manualOverride: null,
         },
         legacy: {
-          rawScore: null,
-          canonicalScore: 4,
-        },
+          },
       }),
     ]);
 
@@ -156,9 +152,7 @@ describe('reportDecisionDisplay', () => {
           manualOverride: null,
         },
         legacy: {
-          rawScore: null,
-          canonicalScore: 4,
-        },
+          },
       }),
     ]);
 
@@ -209,9 +203,7 @@ describe('reportDecisionDisplay', () => {
             source: 'unknown',
           },
           legacy: {
-            rawScore: null,
-            canonicalScore: null,
-          },
+            },
         },
       }),
       createTranscript({ id: 'malformed-2', decisionModelV2: null }),

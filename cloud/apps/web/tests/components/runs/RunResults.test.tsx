@@ -202,9 +202,7 @@ describe('RunResults', () => {
               source: 'deterministic',
             },
             legacy: {
-              rawScore: null,
-              canonicalScore: null,
-            },
+              },
           },
         }),
       ],

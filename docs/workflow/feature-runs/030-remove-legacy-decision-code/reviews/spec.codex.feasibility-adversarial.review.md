@@ -3,11 +3,11 @@ reviewer: "codex"
 lens: "feasibility-adversarial"
 stage: "spec"
 artifact_path: "docs/workflow/feature-runs/030-remove-legacy-decision-code/spec.md"
-artifact_sha256: "5c1990b277f7a4bcb07127c34a2d7f1c9fc4181434a3ddb169733ae7f645d353"
+artifact_sha256: "3b720b6be5a3b6579283dbc8f00b0f6a4a6ea92bd6e3f65e2cfc273f283467bf"
 repo_root: "."
-git_head_sha: "5d04de64d2bf84e1434fd754cd77b7159a695474"
-git_base_ref: "origin/main"
-git_base_sha: "b60f7e7ff0708de6013e64f4045868895bbbcf6e"
+git_head_sha: "adee0cd336e4555f34e0ea676185dff6636e93ac"
+git_base_ref: "origin/fix/audit-mode-no-legacy-fallback"
+git_base_sha: "adee0cd336e4555f34e0ea676185dff6636e93ac"
 generation_method: "codex-runner"
 resolution_status: "accepted"
 resolution_note: "No actionable findings detected — auto-accepted"
@@ -22,16 +22,15 @@ coverage_note: ""
 
 ## Findings
 
-- **High**: The spec removes the scalar 1-5 score, but it never defines a deterministic replacement order for sorting consumers. `direction` + `strength` is a 2-axis model, so `getTranscriptDecisionSortValue`, transcript lists, GraphQL ordering, and any export sort that used a single score now need an explicit total order. Without that, the “frontend sort uses canonical direction/strength” change is underspecified and likely to produce unstable or inconsistent ordering.
-- **High**: There is no real migration plan for persisted analysis artifacts that still contain `scoreCounts`, `canonicalScore`, `rawScore`, or `legacy` sub-objects. The spec says new code should use canonical fields, but historical aggregate JSON will not rewrite itself. If any view reads old runs before recompute, this cutover will either break those views or force silent shape-guessing with no guarantee of correctness.
-- **Medium [UNVERIFIED]**: The Python worker cutover assumes every job payload already contains canonical `direction`/`strength` data and that no replay, backfill, or direct worker invocation still emits `summary.score` / `rawScore`. If that assumption is wrong, removing `normalize_resolved_score()` and the score fallback chain will turn analyzable transcripts into excluded data instead of merely deprecating an old path.
-- **Medium**: The resolver rule “if `decisionMetadata` is present but invalid, return null” discards potentially recoverable legacy data even when `decisionCode` still exists. That makes the transition brittle against partial or corrupt metadata writes and creates a failure mode where a transcript that could have been scored becomes permanently unscored with no recovery path.
+- **Medium [UNVERIFIED]** The spec breaks the MCP response contract while saying MCP versioning is out of scope. It explicitly puts `cloud/apps/api/src/mcp/tools/get-transcript-summary.ts` in scope to remove `decisionCode` from the response and replace it with a canonical label. That is a wire-format change, not just an internal cleanup. If any MCP client still reads the old field, this cutover is not safe without a compatibility field or a versioned response.
+- **Medium** The new sort contract is underspecified. The spec says `getTranscriptDecisionSortValue` should use canonical direction/strength instead of the numeric score, but it never defines a total order for ties, neutral vs unknown, or equal-strength opposite directions. The old 1-5 score implicitly carried a stable ordering; the canonical model does not. Without an explicit tie-break rule, the same rows can sort differently across implementations.
+- **Medium [UNVERIFIED]** The removal of legacy numeric paths is not paired with a complete transition plan for persisted legacy payloads. The spec removes acceptance of `'1'`-`'5'` codes in `decisionDistributionDisplay.ts`, `ks-test.ts`, `aggregate-logic.ts`, and Python workers, but the only mitigation is a vague note about a normalizer or legacy documentation. There is no explicit migration or compatibility boundary for stored analysis JSON, queued jobs, or cached distributions, so older payloads can become unreadable after deploy.
 
 ## Residual Risks
 
-- Historical transcripts that only have `decisionCode` will remain dependent on the resolver fallback until a cleanup or backfill exists.
-- New export and MCP shapes are hard-breaking for any downstream consumer that has not been updated in lockstep.
-- Any system that reads stored analysis results will need a clear strategy for mixed old/new shapes during the recompute window.
+- Historical analysis artifacts may still need a compatibility reader if they outlive the rollout window.
+- The “semantically equivalent” claims for variance analysis and KS-test need fixture-based verification on real legacy data, not just code review.
+- This spec assumes every decision consumer flows through `resolveTranscriptDecisionModel`; any alternate path will need separate cleanup or it will keep the legacy behavior alive.
 
 ## Runner Stats
 - total_input=0

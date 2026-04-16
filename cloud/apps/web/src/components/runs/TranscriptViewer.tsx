@@ -13,7 +13,6 @@ import {
   formatCanonicalDecisionHeadline,
   getTranscriptDecisionAuditBadge,
   hasRenderableTranscriptDecisionModelV2,
-  normalizeLegacyDecisionCode,
   type TranscriptDecisionDisplayMode,
 } from '../../utils/transcriptDecisionModel';
 
@@ -109,13 +108,13 @@ export function TranscriptViewer({
   onClose,
   onDecisionChange,
   decisionUpdating = false,
-  normalizeDecision = false,
+  normalizeDecision: _normalizeDecision = false,
   decisionDisplayMode,
 }: TranscriptViewerProps) {
   const content = parseTranscriptContent(transcript.content);
   const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
-  const rawDecision = transcript.decisionModelV2?.legacy?.canonicalScore ?? transcript.decisionCode ?? '-';
-  const legacyDecision = normalizeLegacyDecisionCode(String(rawDecision), normalizeDecision);
+  const rawDecision = transcript.decisionCode ?? '-';
+  const legacyDecision = String(rawDecision);
   const viewMode = decisionDisplayMode ?? (
     hasRenderableTranscriptDecisionModelV2(transcript) ? 'audit' : 'legacy'
   );

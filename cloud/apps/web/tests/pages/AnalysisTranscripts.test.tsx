@@ -148,9 +148,7 @@ function createRenderableTranscript(
         source: 'deterministic',
       },
       legacy: {
-        rawScore: null,
-        canonicalScore: 1,
-      },
+        },
     },
   };
 }
@@ -587,9 +585,7 @@ describe('AnalysisTranscripts', () => {
                   source: 'deterministic',
                 },
                 legacy: {
-                  rawScore: null,
-                  canonicalScore: null,
-                },
+                  },
               },
             },
           ],
@@ -792,9 +788,7 @@ describe('AnalysisTranscripts', () => {
                 source: 'deterministic',
               },
               legacy: {
-                rawScore: null,
-                canonicalScore: null,
-              },
+                },
             },
           },
         ],
@@ -852,9 +846,7 @@ describe('AnalysisTranscripts', () => {
                 source: 'deterministic',
               },
               legacy: {
-                rawScore: null,
-                canonicalScore: null,
-              },
+                },
             },
           },
           {

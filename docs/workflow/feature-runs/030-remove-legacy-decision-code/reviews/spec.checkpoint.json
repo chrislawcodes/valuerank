@@ -2,25 +2,17 @@
   "feature_slug": "030-remove-legacy-decision-code",
   "stage": "spec",
   "artifact_path": "docs/workflow/feature-runs/030-remove-legacy-decision-code/spec.md",
-  "git_base_ref": "origin/main",
-  "allowed_dirty_paths": [],
+  "git_base_ref": "",
+  "allowed_dirty_paths": [
+    "docs/feature-runs",
+    "specs",
+    ".claude/worktrees",
+    ".railwayignore",
+    "cloud/apps/api/specs",
+    "cloud/scripts",
+    "cloud/workers"
+  ],
   "required_reviews": [
-    {
-      "reviewer": "gemini",
-      "lens": "requirements-adversarial",
-      "stage": "spec",
-      "path": "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/spec.gemini.requirements-adversarial.review.md",
-      "context_paths": [],
-      "model": "gemini-2.5-pro"
-    },
-    {
-      "reviewer": "gemini",
-      "lens": "edge-cases-adversarial",
-      "stage": "spec",
-      "path": "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/spec.gemini.edge-cases-adversarial.review.md",
-      "context_paths": [],
-      "model": "gemini-2.5-pro"
-    },
     {
       "reviewer": "codex",
       "lens": "feasibility-adversarial",
@@ -28,9 +20,25 @@
       "path": "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/spec.codex.feasibility-adversarial.review.md",
       "context_paths": [],
       "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "edge-cases-adversarial",
+      "stage": "spec",
+      "path": "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/spec.codex.edge-cases-adversarial.review.md",
+      "context_paths": [],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "requirements-adversarial",
+      "stage": "spec",
+      "path": "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/spec.gemini.requirements-adversarial.review.md",
+      "context_paths": [],
+      "model": "gemini-2.5-pro"
     }
   ],
-  "max_artifact_chars": null,
-  "max_context_chars": null,
-  "max_total_chars": null
+  "max_artifact_chars": 30000,
+  "max_context_chars": 5000,
+  "max_total_chars": 40000
 }

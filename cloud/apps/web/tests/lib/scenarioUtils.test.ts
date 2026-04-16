@@ -99,7 +99,6 @@ describe('scenarioUtils', () => {
             normalizationReason: null,
             source: 'deterministic',
           },
-          legacy: { rawScore: 5, canonicalScore: 5 },
         },
       }),
       makeTranscript({
@@ -126,7 +125,6 @@ describe('scenarioUtils', () => {
             normalizationReason: null,
             source: 'deterministic',
           },
-          legacy: { rawScore: 1, canonicalScore: 1 },
         },
       }),
       makeTranscript({
@@ -153,7 +151,6 @@ describe('scenarioUtils', () => {
             normalizationReason: null,
             source: 'deterministic',
           },
-          legacy: { rawScore: 4, canonicalScore: 4 },
         },
       }),
     ];
@@ -199,7 +196,6 @@ describe('scenarioUtils', () => {
             normalizationReason: null,
             source: 'deterministic',
           },
-          legacy: { rawScore: 5, canonicalScore: 5 },
         },
       }),
       makeTranscript({
@@ -233,7 +229,6 @@ describe('scenarioUtils', () => {
             normalizationReason: null,
             source: 'unknown',
           },
-          legacy: { rawScore: null, canonicalScore: null },
         },
       }),
     ];

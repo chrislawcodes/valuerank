@@ -70,7 +70,7 @@ export function requireRenderableTranscriptDecisionModelV2(
 function hasReportRenderableTranscriptDecisionModelV2(
   value: Transcript['decisionModelV2'],
 ): value is NonNullable<Transcript['decisionModelV2']> {
-  if (!value || !isRecord(value) || !isRecord(value.raw) || !isRecord(value.canonical) || !isRecord(value.legacy)) {
+  if (!value || !isRecord(value) || !isRecord(value.raw) || !isRecord(value.canonical)) {
     return false;
   }
 
@@ -197,18 +197,6 @@ export function getTranscriptDecisionAuditBadge(transcript: Transcript): string 
   return 'Fallback';
 }
 
-export function normalizeLegacyDecisionCode(decision: string, normalizeDecision: boolean): string {
-  if (!normalizeDecision) {
-    return decision;
-  }
-
-  if (!['1', '2', '3', '4', '5'].includes(decision)) {
-    return decision;
-  }
-
-  return String(6 - Number(decision));
-}
-
 export function getTranscriptDecisionSortValue(
   transcript: Transcript,
   displayMode: TranscriptDecisionDisplayMode,
@@ -218,7 +206,6 @@ export function getTranscriptDecisionSortValue(
   }
 
   const fallbackCandidates = [
-    transcript.decisionModelV2?.legacy?.canonicalScore,
     transcript.decisionCode,
     (transcript.content as { decisionCode?: unknown } | null)?.decisionCode,
     (transcript.content as { decision?: unknown } | null)?.decision,

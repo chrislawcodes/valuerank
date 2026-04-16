@@ -2155,7 +2155,6 @@ export type OrderInvarianceRow = {
   modelId: Scalars['String']['output'];
   modelLabel: Scalars['String']['output'];
   ordinalDistance?: Maybe<Scalars['Int']['output']>;
-  rawScore?: Maybe<Scalars['Int']['output']>;
   variantType?: Maybe<Scalars['String']['output']>;
   vignetteId: Scalars['ID']['output'];
   vignetteTitle: Scalars['String']['output'];

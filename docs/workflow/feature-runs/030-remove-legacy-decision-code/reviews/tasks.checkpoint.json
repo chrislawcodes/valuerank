@@ -2,16 +2,33 @@
   "feature_slug": "030-remove-legacy-decision-code",
   "stage": "tasks",
   "artifact_path": "docs/workflow/feature-runs/030-remove-legacy-decision-code/tasks.md",
-  "git_base_ref": "origin/main",
-  "allowed_dirty_paths": [],
+  "git_base_ref": "",
+  "allowed_dirty_paths": [
+    "docs/feature-runs",
+    "specs",
+    ".claude/worktrees",
+    ".railwayignore",
+    "cloud/apps/api/specs",
+    "cloud/scripts",
+    "cloud/workers",
+    "docs/workflow/operations"
+  ],
   "required_reviews": [
     {
-      "reviewer": "gemini",
+      "reviewer": "codex",
+      "lens": "execution-adversarial",
+      "stage": "tasks",
+      "path": "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/tasks.codex.execution-adversarial.review.md",
+      "context_paths": [],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "codex",
       "lens": "dependency-order-adversarial",
       "stage": "tasks",
-      "path": "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/tasks.gemini.dependency-order-adversarial.review.md",
+      "path": "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/tasks.codex.dependency-order-adversarial.review.md",
       "context_paths": [],
-      "model": "gemini-2.5-pro"
+      "model": "gpt-5.4-mini"
     },
     {
       "reviewer": "gemini",
@@ -20,17 +37,9 @@
       "path": "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/tasks.gemini.coverage-adversarial.review.md",
       "context_paths": [],
       "model": "gemini-2.5-pro"
-    },
-    {
-      "reviewer": "codex",
-      "lens": "execution-adversarial",
-      "stage": "tasks",
-      "path": "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/tasks.codex.execution-adversarial.review.md",
-      "context_paths": [],
-      "model": "gpt-5.4-mini"
     }
   ],
-  "max_artifact_chars": null,
-  "max_context_chars": null,
-  "max_total_chars": null
+  "max_artifact_chars": 30000,
+  "max_context_chars": 5000,
+  "max_total_chars": 40000
 }

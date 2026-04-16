@@ -53,35 +53,10 @@ def resolve_transcript_score_details(
 def resolve_transcript_signed_distance(transcript: dict[str, Any]) -> float | None:
     """
     Resolve canonical decision as signed distance (−2 to +2), or None if unscored.
-
-    Resolution order:
-    1. decisionModelV2.canonical (direction + strength) — primary path for new transcripts
-    2. decisionModelV2.legacy.canonicalScore (1-5 int, already orientation-corrected) — fallback
-    3. summary.score (1-5 int, already orientation-corrected) — legacy compatibility fallback
-
-    The legacy fallbacks preserve compatibility with transcripts summarized before the
-    winner-first cache was deployed. They use the formula: signed = score - 3.0
-    (e.g. score 5 → +2, score 3 → 0, score 1 → -2).
     """
     resolved = resolve_transcript_score_details(transcript)
     if resolved is not None:
         direction, strength, _ = resolved
         return _DIRECTION_STRENGTH_TO_SIGNED.get((direction, strength))
-
-    # Fallback 1: legacy.canonicalScore (already orientation-corrected)
-    decision_model = transcript.get("decisionModelV2")
-    if isinstance(decision_model, dict):
-        legacy = decision_model.get("legacy")
-        if isinstance(legacy, dict):
-            canonical_score = legacy.get("canonicalScore")
-            if isinstance(canonical_score, (int, float)) and 1 <= canonical_score <= 5:
-                return float(canonical_score) - 3.0
-
-    # Fallback 2: summary.score (orientation-corrected by the summarization handler)
-    summary = transcript.get("summary")
-    if isinstance(summary, dict):
-        score = summary.get("score")
-        if isinstance(score, (int, float)) and 1 <= score <= 5:
-            return float(score) - 3.0
 
     return None

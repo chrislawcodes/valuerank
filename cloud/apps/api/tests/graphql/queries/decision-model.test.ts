@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   DECISION_MODEL_READ_RULES,
   buildRawDecisionEvidence,
-  canonicalDecisionToLegacyScore,
   resolveDecisionModel,
   resolveTranscriptDecisionModel,
   type CanonicalDecision,
@@ -11,7 +10,6 @@ import {
   type RawDecisionEvidence,
 } from '../../../src/graphql/queries/domain/decision-model.js';
 import {
-  canonicalDecisionToLegacyScore as sharedCanonicalDecisionToLegacyScore,
   resolveDecisionModel as sharedResolveDecisionModel,
 } from '../../../src/graphql/queries/domain/shared.js';
 
@@ -99,18 +97,7 @@ function expectCanonical(
 }
 
 describe('decision model', () => {
-  it('maps canonical scores to legacy compatibility scores', () => {
-    expect(canonicalDecisionToLegacyScore({ direction: 'favor_first', strength: 'strong' })).toBe(5);
-    expect(canonicalDecisionToLegacyScore({ direction: 'favor_first', strength: 'lean' })).toBe(4);
-    expect(canonicalDecisionToLegacyScore({ direction: 'neutral', strength: 'neutral' })).toBe(3);
-    expect(canonicalDecisionToLegacyScore({ direction: 'favor_second', strength: 'lean' })).toBe(2);
-    expect(canonicalDecisionToLegacyScore({ direction: 'favor_second', strength: 'strong' })).toBe(1);
-    expect(canonicalDecisionToLegacyScore({ direction: 'unknown', strength: 'unknown' })).toBeNull();
-  });
-
-  it('reaches the adapter through the shared barrel without changing behavior', () => {
-    expect(sharedCanonicalDecisionToLegacyScore).toBe(canonicalDecisionToLegacyScore);
-
+  it('reaches the shared barrel without changing behavior', () => {
     const input = buildInput(buildRaw());
     expect(sharedResolveDecisionModel(input)).toEqual(resolveDecisionModel(input));
   });

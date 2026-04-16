@@ -66,9 +66,7 @@ function createTranscript({
             source: 'deterministic',
           },
           legacy: {
-            rawScore: direction === 'favor_second' ? 1 : direction === 'neutral' ? 3 : 5,
-            canonicalScore: direction === 'favor_second' ? 1 : direction === 'neutral' ? 3 : 5,
-          },
+            },
         },
   } as Transcript;
 }

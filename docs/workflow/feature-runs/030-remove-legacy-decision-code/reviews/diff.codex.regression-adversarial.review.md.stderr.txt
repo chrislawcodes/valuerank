@@ -1,0 +1,623 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/serene-meitner
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019d9738-e220-73c3-8de4-cb47666347a6
+--------
+user
+Review this diff artifact using a regression-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts b/cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts
+index 5c3094b4..acdddb2a 100644
+--- a/cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts
++++ b/cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts
+@@ -204,18 +204,6 @@ export function buildUnknownCanonicalDecision(source: DecisionSource): Canonical
+   };
+ }
+ 
+-export function canonicalDecisionScoreFromDirectionStrength(
+-  direction: DecisionDirection,
+-  strength: DecisionStrength,
+-): 1 | 2 | 3 | 4 | 5 | null {
+-  if (direction === 'favor_first' && strength === 'strong') return 5;
+-  if (direction === 'favor_first' && strength === 'lean') return 4;
+-  if (direction === 'neutral' && strength === 'neutral') return 3;
+-  if (direction === 'favor_second' && strength === 'lean') return 2;
+-  if (direction === 'favor_second' && strength === 'strong') return 1;
+-  return null;
+-}
+-
+ export function buildCanonicalDecisionFromPair(
+   pair: DecisionPair,
+   direction: DecisionDirection,
+diff --git a/cloud/apps/api/src/graphql/queries/domain/decision-model.ts b/cloud/apps/api/src/graphql/queries/domain/decision-model.ts
+index a4adba05..fbbb0faf 100644
+--- a/cloud/apps/api/src/graphql/queries/domain/decision-model.ts
++++ b/cloud/apps/api/src/graphql/queries/domain/decision-model.ts
+@@ -10,7 +10,6 @@ import {
+   resolveValueKeyFromText,
+   buildUnknownCanonicalDecision,
+   buildCanonicalDecisionFromPair,
+-  canonicalDecisionScoreFromDirectionStrength,
+   validateManualAppliedDecision,
+   extractManualOverrideDecision,
+   extractCachedWinnerFirstDecision,
+@@ -93,12 +92,6 @@ export function buildRawDecisionEvidence(
+   };
+ }
+ 
+-export function canonicalDecisionToLegacyScore(
+-  decision: Pick<CanonicalDecision, 'direction' | 'strength'>,
+-): 1 | 2 | 3 | 4 | 5 | null {
+-  return canonicalDecisionScoreFromDirectionStrength(decision.direction, decision.strength);
+-}
+-
+ export function resolveTranscriptDecisionModel(
+   input: TranscriptDecisionModelInput,
+ ): TranscriptDecisionModelResult {
+@@ -274,4 +267,3 @@ export function resolveDecisionModel(input: DecisionModelInput): DecisionModelRe
+     canonical,
+   };
+ }
+-
+diff --git a/cloud/apps/api/src/graphql/queries/domain/shared.ts b/cloud/apps/api/src/graphql/queries/domain/shared.ts
+index b7ce0c26..285b4d9f 100644
+--- a/cloud/apps/api/src/graphql/queries/domain/shared.ts
++++ b/cloud/apps/api/src/graphql/queries/domain/shared.ts
+@@ -8,7 +8,6 @@ export type { LineageDefinitionRow } from '../../../services/definition-lineage.
+ export {
+   buildRawDecisionEvidence,
+   DECISION_MODEL_READ_RULES,
+-  canonicalDecisionToLegacyScore,
+   resolveCanonicalDecision,
+   resolveDecisionModel,
+   resolveTranscriptDecisionModel,
+diff --git a/cloud/apps/api/src/graphql/types/analysis.ts b/cloud/apps/api/src/graphql/types/analysis.ts
+index 654e38e8..4a655cfc 100644
+--- a/cloud/apps/api/src/graphql/types/analysis.ts
++++ b/cloud/apps/api/src/graphql/types/analysis.ts
+@@ -45,7 +45,7 @@ type PerScenarioVarianceStats = {
+   max: number;
+   range: number;
+   // Directional stability fields (optional - populated by Waves 2 and 3)
+-  scoreCounts?: Record<string, number>;
++  directionCounts?: Record<string, number>;
+   direction?: 'A' | 'B' | 'NEUTRAL' | null;
+   directionalAgreement?: number | null;
+   medianSignedDistance?: number | null;
+@@ -73,7 +73,7 @@ type ScenarioVarianceEntry = {
+   range: number;
+   sampleCount: number;
+   mean: number;
+-  scoreCounts?: Record<string, number>;
++  directionCounts?: Record<string, number>;
+   direction?: 'A' | 'B' | 'NEUTRAL' | null;
+   directionalAgreement?: number | null;
+   medianSignedDistance?: number | null;
+diff --git a/cloud/apps/api/src/server.ts b/cloud/apps/api/src/server.ts
+index 28c8836b..2de82571 100644
+--- a/cloud/apps/api/src/server.ts
++++ b/cloud/apps/api/src/server.ts
+@@ -100,8 +100,19 @@ export function createServer() {
+   app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
+     req.log.error({ err }, 'Request failed');
+ 
+-    if (err instanceof AppError) {
+-      res.status(err.statusCode).json({ error: err.code, message: err.message });
++    const appError =
++      err instanceof AppError
++        ? err
++        : typeof err === 'object' && err !== null && 'statusCode' in err && 'code' in err && 'message' in err
++          ? {
++              statusCode: typeof err.statusCode === 'number' ? err.statusCode : 500,
++              code: typeof err.code === 'string' ? err.code : 'INTERNAL_ERROR',
++              message: typeof err.message === 'string' ? err.message : 'Something went wrong',
++            }
++          : null;
++
++    if (appError !== null) {
++      res.status(appError.statusCode).json({ error: appError.code, message: appError.message });
+     } else {
+       res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Something went wrong' });
+     }
+diff --git a/cloud/apps/api/src/services/analysis/aggregate/contracts.ts b/cloud/apps/api/src/services/analysis/aggregate/contracts.ts
+index 05d73fe6..a85aa6c1 100644
+--- a/cloud/apps/api/src/services/analysis/aggregate/contracts.ts
++++ b/cloud/apps/api/src/services/analysis/aggregate/contracts.ts
+@@ -54,7 +54,7 @@ export const zVarianceStats = z.object({
+   min: z.number(),
+   max: z.number(),
+   range: z.number(),
+-  scoreCounts: z.record(z.string(), z.number()).optional(),
++  directionCounts: z.record(z.string(), z.number()).optional(),
+   direction: z.enum(['A', 'B', 'NEUTRAL']).nullable().optional(),
+   directionalAgreement: z.number().nullable().optional(),
+   medianSignedDistance: z.number().nullable().optional(),
+@@ -87,7 +87,7 @@ export const zScenarioVarianceStats = z.object({
+   variance: z.number(),
+   range: z.number(),
+   sampleCount: z.number(),
+-  scoreCounts: z.record(z.string(), z.number()).optional(),
++  directionCounts: z.record(z.string(), z.number()).optional(),
+   direction: z.enum(['A', 'B', 'NEUTRAL']).nullable().optional(),
+   directionalAgreement: z.number().nullable().optional(),
+   medianSignedDistance: z.number().nullable().optional(),
+diff --git a/cloud/apps/web/schema.graphql b/cloud/apps/web/schema.graphql
+index 51cdc966..011f39ff 100644
+--- a/cloud/apps/web/schema.graphql
++++ b/cloud/apps/web/schema.graphql
+@@ -1845,7 +1845,6 @@ type OrderInvarianceRow {
+   modelId: String!
+   modelLabel: String!
+   ordinalDistance: Int
+-  rawScore: Int
+   variantType: String
+   vignetteId: ID!
+   vignetteTitle: String!
+diff --git a/cloud/apps/web/src/api/operations/analysis.ts b/cloud/apps/web/src/api/operations/analysis.ts
+index 3ce05656..2c33fdea 100644
+--- a/cloud/apps/web/src/api/operations/analysis.ts
++++ b/cloud/apps/web/src/api/operations/analysis.ts
+@@ -90,7 +90,7 @@ export type ScenarioVarianceStats = {
+   variance: number;
+   range: number;
+   sampleCount: number;
+-  scoreCounts?: Record<string, number>;
++  directionCounts?: Record<string, number>;
+   direction?: 'A' | 'B' | 'NEUTRAL' | null;
+   directionalAgreement?: number | null;
+   medianSignedDistance?: number | null;
+@@ -107,7 +107,7 @@ export type PerScenarioVarianceStats = {
+   min: number;
+   max: number;
+   range: number;
+-  scoreCounts?: Record<string, number>;
++  directionCounts?: Record<string, number>;
+   direction?: 'A' | 'B' | 'NEUTRAL' | null;
+   directionalAgreement?: number | null;
+   medianSignedDistance?: number | null;
+diff --git a/cloud/apps/web/src/api/operations/runs.ts b/cloud/apps/web/src/api/operations/runs.ts
+index 7cd97389..678caacc 100644
+--- a/cloud/apps/web/src/api/operations/runs.ts
++++ b/cloud/apps/web/src/api/operations/runs.ts
+@@ -87,15 +87,9 @@ export type TranscriptDecisionModelV2Canonical = {
+   source: 'deterministic' | 'manual' | 'error' | 'unknown';
+ };
+ 
+-export type TranscriptDecisionModelV2LegacyCompat = {
+-  rawScore: 1 | 2 | 3 | 4 | 5 | null;
+-  canonicalScore: 1 | 2 | 3 | 4 | 5 | null;
+-};
+-
+ export type TranscriptDecisionModelV2 = {
+   raw: TranscriptDecisionModelV2RawEvidence;
+   canonical: TranscriptDecisionModelV2Canonical;
+-  legacy: TranscriptDecisionModelV2LegacyCompat;
+ };
+ 
+ export type Transcript = {
+diff --git a/cloud/apps/web/src/components/domains/ConditionMatrix.tsx b/cloud/apps/web/src/components/domains/ConditionMatrix.tsx
+index f9c6809d..cabab20e 100644
+--- a/cloud/apps/web/src/components/domains/ConditionMatrix.tsx
++++ b/cloud/apps/web/src/components/domains/ConditionMatrix.tsx
+@@ -9,6 +9,10 @@ export type MatrixCondition = {
+   neutral: number;
+   totalTrials: number;
+   unknownCount: number;
++  strongly: number;
++  somewhat: number;
++  opponentSomewhat: number;
++  opponentStrongly: number;
+ };
+ 
+ function getPreferenceBackground(score: number, isOpponent: boolean): string {
+@@ -34,6 +38,10 @@ function validateMatrixCondition(condition: MatrixCondition): string | null {
+     ['neutral', condition.neutral],
+     ['totalTrials', condition.totalTrials],
+     ['unknownCount', condition.unknownCount],
++    ['strongly', condition.strongly],
++    ['somewhat', condition.somewhat],
++    ['opponentSomewhat', condition.opponentSomewhat],
++    ['opponentStrongly', condition.opponentStrongly],
+   ];
+ 
+   for (const [name, value] of countFields) {
+@@ -51,32 +59,25 @@ function validateMatrixCondition(condition: MatrixCondition): string | null {
+ }
+ 
+ function getConditionMatrixDisplay(condition: MatrixCondition): {
+-  label: '1' | '2' | '-';
++  label: '0' | '1' | '2';
+   isOpponent: boolean;
+   backgroundColor: string | undefined;
+   textColorClass: string;
+ } {
+-  const prioritized = condition.prioritized;
+-  const deprioritized = condition.deprioritized;
+-  const totalDirectionalTrials = prioritized + deprioritized;
+-
+-  if (totalDirectionalTrials === 0 || prioritized === deprioritized) {
+-    return {
+-      label: '-',
+-      isOpponent: false,
+-      backgroundColor: undefined,
+-      textColorClass: 'text-gray-400',
+-    };
+-  }
++  const isOpponent = condition.deprioritized > condition.prioritized;
++  const winnerStrongly = isOpponent ? condition.opponentStrongly : condition.strongly;
++  const winnerSomewhat = isOpponent ? condition.opponentSomewhat : condition.somewhat;
++  const winnerScore = condition.totalTrials === 0
++    ? 0
++    : (2 * winnerStrongly + 1 * winnerSomewhat) / condition.totalTrials;
+ 
+-  const isOpponent = deprioritized > prioritized;
+-  const dominant = isOpponent ? deprioritized : prioritized;
+-  const opacitySeed = (dominant / Math.max(1, prioritized + deprioritized)) * 2;
++  // Round to nearest integer for the cell label: 0 (neutral), 1 (somewhat), 2 (strongly)
++  const strengthLabel = String(Math.round(winnerScore)) as '0' | '1' | '2';
+ 
+   return {
+-    label: isOpponent ? '2' : '1',
++    label: strengthLabel,
+     isOpponent,
+-    backgroundColor: getPreferenceBackground(opacitySeed, isOpponent),
++    backgroundColor: getPreferenceBackground(winnerScore, isOpponent),
+     textColorClass: getPreferenceTextColor(isOpponent),
+   };
+ }
+diff --git a/cloud/apps/web/src/components/runs/TranscriptList.tsx b/cloud/apps/web/src/components/runs/TranscriptList.tsx
+index ddc3d5b4..5ad2923e 100644
+--- a/cloud/apps/web/src/components/runs/TranscriptList.tsx
++++ b/cloud/apps/web/src/components/runs/TranscriptList.tsx
+@@ -16,7 +16,6 @@ import { formatDisplayLabel } from '../../utils/displayLabels';
+ import {
+   hasRenderableTranscriptDecisionModelV2,
+   getTranscriptDecisionSortValue,
+-  normalizeLegacyDecisionCode,
+   type TranscriptDecisionDisplayMode,
+ } from '../../utils/transcriptDecisionModel';
+ import { Tooltip } from '../ui/Tooltip';
+@@ -165,7 +164,6 @@ function isSameSortColumn(a: SortColumn, b: SortColumn): boolean {
+ function getTranscriptDecisionValue(
+   transcript: Transcript,
+   displayMode: TranscriptDecisionDisplayMode,
+-  normalizedDecisionTranscriptIds?: Set<string>,
+ ): string | number {
+   if (displayMode === 'audit') {
+     if (!hasRenderableTranscriptDecisionModelV2(transcript)) {
+@@ -174,14 +172,7 @@ function getTranscriptDecisionValue(
+     return getTranscriptDecisionSortValue(transcript, displayMode);
+   }
+ 
+-  const sortValue = getTranscriptDecisionSortValue(transcript, displayMode);
+-  if (
+-    normalizedDecisionTranscriptIds?.has(transcript.id)
+-    && ['1', '2', '3', '4', '5'].includes(String(sortValue))
+-  ) {
+-    return normalizeLegacyDecisionCode(String(sortValue), true);
+-  }
+-  return sortValue;
++  return getTranscriptDecisionSortValue(transcript, displayMode);
+ }
+ 
+ function SortHeaderButton({
+@@ -334,8 +325,8 @@ export function TranscriptList({
+       }
+       case 'decision':
+         return compareDimensionValues(
+-          getTranscriptDecisionValue(a, decisionDisplayMode, normalizedDecisionTranscriptIds),
+-          getTranscriptDecisionValue(b, decisionDisplayMode, normalizedDecisionTranscriptIds),
++          getTranscriptDecisionValue(a, decisionDisplayMode),
++          getTranscriptDecisionValue(b, decisionDisplayMode),
+         );
+       case 'created':
+         return a.createdAt.localeCompare(b.createdAt);
+diff --git a/cloud/apps/web/src/components/runs/TranscriptRow.tsx b/cloud/apps/web/src/components/runs/TranscriptRow.tsx
+index c68069cc..1f79eb3f 100644
+--- a/cloud/apps/web/src/components/runs/TranscriptRow.tsx
++++ b/cloud/apps/web/src/components/runs/TranscriptRow.tsx
+@@ -7,7 +7,6 @@ import {
+   formatCanonicalDecisionHeadline,
+   getTranscriptDecisionAuditBadge,
+   hasRenderableTranscriptDecisionModelV2,
+-  normalizeLegacyDecisionCode,
+   type TranscriptDecisionDisplayMode,
+ } from '../../utils/transcriptDecisionModel';
+ 
+@@ -156,17 +155,13 @@ function extractDecision(content: unknown): string {
+ function getLegacyDecisionDisplay(
+   transcript: Transcript,
+   decision: string,
+-  normalizeDecision: boolean,
+   dimensions?: Record<string, string | number> | null,
+ ): string {
+   const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
+   const decisionScaleLabels = decisionMetadata?.scaleLabels ?? [];
+-  const normalizedDecision = normalizeLegacyDecisionCode(decision, normalizeDecision);
+-  const decisionScaleEntry = decisionScaleLabels.find((entry) => entry.code === String(normalizedDecision));
++  const decisionScaleEntry = decisionScaleLabels.find((entry) => entry.code === String(decision));
+   const rawMatchedLabel = (decisionMetadata as Record<string, unknown> | null)?.['matchedLabel'] as string | null;
+-  const labelText = normalizeDecision
+-    ? (decisionScaleEntry?.label ?? null)
+-    : (rawMatchedLabel ?? decisionScaleEntry?.label ?? null);
++  const labelText = rawMatchedLabel ?? decisionScaleEntry?.label ?? null;
+   const shortDirection = labelText != null ? extractShortDirection(labelText) : null;
+   const primaryDimKey = dimensions != null ? (Object.keys(dimensions)[0] ?? null) : null;
+   const subject = labelText != null
+@@ -176,9 +171,9 @@ function getLegacyDecisionDisplay(
+ 
+   return shortDirection != null
+     ? (formattedSubject != null
+-        ? `${normalizedDecision} - ${shortDirection} (${formattedSubject})`
+-        : (primaryDimKey != null ? `${normalizedDecision} - ${shortDirection} ${formatDisplayLabel(primaryDimKey)}` : `${normalizedDecision} - ${shortDirection}`))
+-    : String(normalizedDecision);
++        ? `${decision} - ${shortDirection} (${formattedSubject})`
++        : (primaryDimKey != null ? `${decision} - ${shortDirection} ${formatDisplayLabel(primaryDimKey)}` : `${decision} - ${shortDirection}`))
++    : String(decision);
+ }
+ 
+ export function TranscriptRow({
+@@ -197,12 +192,12 @@ export function TranscriptRow({
+ }: TranscriptRowProps) {
+   const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
+   const showGrid = !compact && Boolean(gridTemplateColumns);
+-  const rawDecision = transcript.decisionModelV2?.legacy?.canonicalScore ?? transcript.decisionCode ?? extractDecision(transcript.content);
++  const rawDecision = transcript.decisionCode ?? extractDecision(transcript.content);
+   const decisionScaleLabels = decisionMetadata?.scaleLabels ?? [];
+   const rowDecisionDisplayMode = decisionDisplayMode ?? (
+     hasRenderableTranscriptDecisionModelV2(transcript) ? 'audit' : 'legacy'
+   );
+-  const legacyDecisionDisplay = getLegacyDecisionDisplay(transcript, String(rawDecision), normalizeDecision, dimensions);
++  const legacyDecisionDisplay = getLegacyDecisionDisplay(transcript, String(rawDecision), dimensions);
+   const canonicalDecision = transcript.decisionModelV2?.canonical ?? null;
+   const canonicalDecisionDisplay = formatCanonicalDecisionHeadline(transcript);
+   const auditDecisionBadge = rowDecisionDisplayMode === 'audit'
+@@ -212,7 +207,7 @@ export function TranscriptRow({
+   const decisionDisplay = rowDecisionDisplayMode === 'audit'
+     ? canonicalDecisionDisplay
+     : legacyDecisionDisplay;
+-  const isAnalyzableDecision = ['1', '2', '3', '4', '5'].includes(String(rawDecision));
++  const isAnalyzableDecision = Boolean(rawDecision);
+   const isDecisionOverrideAllowed = rowDecisionDisplayMode === 'legacy' && Boolean(onDecisionChange) && (
+     decisionMetadata?.parseClass === 'ambiguous'
+     || !isAnalyzableDecision
+diff --git a/cloud/apps/web/src/components/runs/TranscriptViewer.tsx b/cloud/apps/web/src/components/runs/TranscriptViewer.tsx
+index c1276a1e..b9986430 100644
+--- a/cloud/apps/web/src/components/runs/TranscriptViewer.tsx
++++ b/cloud/apps/web/src/components/runs/TranscriptViewer.tsx
+@@ -13,7 +13,6 @@ import {
+   formatCanonicalDecisionHeadline,
+   getTranscriptDecisionAuditBadge,
+   hasRenderableTranscriptDecisionModelV2,
+-  normalizeLegacyDecisionCode,
+   type TranscriptDecisionDisplayMode,
+ } from '../../utils/transcriptDecisionModel';
+ 
+@@ -114,8 +113,8 @@ export function TranscriptViewer({
+ }: TranscriptViewerProps) {
+   const content = parseTranscriptContent(transcript.content);
+   const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
+-  const rawDecision = transcript.decisionModelV2?.legacy?.canonicalScore ?? transcript.decisionCode ?? '-';
+-  const legacyDecision = normalizeLegacyDecisionCode(String(rawDecision), normalizeDecision);
++  const rawDecision = transcript.decisionCode ?? '-';
++  const legacyDecision = String(rawDecision);
+   const viewMode = decisionDisplayMode ?? (
+     hasRenderableTranscriptDecisionModelV2(transcript) ? 'audit' : 'legacy'
+   );
+diff --git a/cloud/apps/web/src/generated/graphql.ts b/cloud/apps/web/src/generated/graphql.ts
+index 2e58abba..3f038e1e 100644
+--- a/cloud/apps/web/src/generated/graphql.ts
++++ b/cloud/apps/web/src/generated/graphql.ts
+@@ -2155,7 +2155,6 @@ export type OrderInvarianceRow = {
+   modelId: Scalars['String']['output'];
+   modelLabel: Scalars['String']['output'];
+   ordinalDistance?: Maybe<Scalars['Int']['output']>;
+-  rawScore?: Maybe<Scalars['Int']['output']>;
+   variantType?: Maybe<Scalars['String']['output']>;
+   vignetteId: Scalars['ID']['output'];
+   vignetteTitle: Scalars['String']['output'];
+@@ -6920,4 +6919,4 @@ export const DeleteValueStatementDocument = gql`
+ 
+ export function useDeleteValueStatementMutation() {
+   return Urql.useMutation<DeleteValueStatementMutation, DeleteValueStatementMutationVariables>(DeleteValueStatementDocument);
+-};
+\ No newline at end of file
++};
+diff --git a/cloud/apps/web/src/lib/statistics/ks-test.ts b/cloud/apps/web/src/lib/statistics/ks-test.ts
+index c385b87b..707bc57d 100644
+--- a/cloud/apps/web/src/lib/statistics/ks-test.ts
++++ b/cloud/apps/web/src/lib/statistics/ks-test.ts
+@@ -145,24 +145,19 @@ export function ksFromCounts(
+ function countsToSample(counts: Record<string, number>): number[] {
+   const sample: number[] = [];
+   const bucketScoreByKey: Record<string, number> = {
+-    opponentStrongly: 1,
+-    opponentSomewhat: 2,
+-    neutral: 3,
+-    somewhat: 4,
+-    strongly: 5,
+-    1: 1,
+-    2: 2,
+-    3: 3,
+-    4: 4,
+-    5: 5,
++    opponentStrongly: -2,
++    opponentSomewhat: -1,
++    neutral: 0,
++    somewhat: 1,
++    strongly: 2,
+   };
+   for (const [value, count] of Object.entries(counts)) {
+     if (!Number.isFinite(count) || count <= 0) {
+       continue;
+     }
+ 
+-    const numValue = bucketScoreByKey[value] ?? Number(value);
+-    if (!Number.isFinite(numValue)) {
++    const numValue = bucketScoreByKey[value];
++    if (numValue === undefined || !Number.isFinite(numValue)) {
+       continue;
+     }
+ 
+diff --git a/cloud/apps/web/src/utils/decisionDistributionDisplay.ts b/cloud/apps/web/src/utils/decisionDistributionDisplay.ts
+index 721faf23..e19729a1 100644
+--- a/cloud/apps/web/src/utils/decisionDistributionDisplay.ts
++++ b/cloud/apps/web/src/utils/decisionDistributionDisplay.ts
+@@ -19,19 +19,19 @@ export type DecisionDistributionCounts = Record<DecisionDistributionBucketCode,
+ function normalizeBucketCode(rawCode: string): DecisionDistributionBucketCode | null {
+   const normalized = rawCode.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+ 
+-  if (normalized === '1' || normalized === 'opponentstrongly' || normalized === 'stronglyopponent') {
++  if (normalized === 'opponentstrongly' || normalized === 'stronglyopponent') {
+     return 'opponentStrongly';
+   }
+-  if (normalized === '2' || normalized === 'opponentsomewhat' || normalized === 'somewhatopponent') {
++  if (normalized === 'opponentsomewhat' || normalized === 'somewhatopponent') {
+     return 'opponentSomewhat';
+   }
+-  if (normalized === '3' || normalized === 'neutral' || normalized === 'middle') {
++  if (normalized === 'neutral' || normalized === 'middle') {
+     return 'neutral';
+   }
+-  if (normalized === '4' || normalized === 'somewhat' || normalized === 'somewhatthis') {
++  if (normalized === 'somewhat' || normalized === 'somewhatthis') {
+     return 'somewhat';
+   }
+-  if (normalized === '5' || normalized === 'strongly' || normalized === 'stronglythis') {
++  if (normalized === 'strongly' || normalized === 'stronglythis') {
+     return 'strongly';
+   }
+ 
+@@ -47,14 +47,7 @@ function formatBucketLabel(
+   code: DecisionDistributionBucketCode,
+   dimensionLabels?: Record<string, string>,
+ ): string {
+-  const sourceKeyByCode: Record<DecisionDistributionBucketCode, string> = {
+-    opponentStrongly: '1',
+-    opponentSomewhat: '2',
+-    neutral: '3',
+-    somewhat: '4',
+-    strongly: '5',
+-  };
+-  const label = dimensionLabels?.[sourceKeyByCode[code]]?.trim();
++  const label = dimensionLabels?.[code]?.trim();
+   if (label && label.length > 0) {
+     return label;
+   }
+diff --git a/cloud/apps/web/src/utils/transcriptDecisionModel.ts b/cloud/apps/web/src/utils/transcriptDecisionModel.ts
+index f426ea9c..39f36cc0 100644
+--- a/cloud/apps/web/src/utils/transcriptDecisionModel.ts
++++ b/cloud/apps/web/src/utils/transcriptDecisionModel.ts
+@@ -70,7 +70,7 @@ export function requireRenderableTranscriptDecisionModelV2(
+ function hasReportRenderableTranscriptDecisionModelV2(
+   value: Transcript['decisionModelV2'],
+ ): value is NonNullable<Transcript['decisionModelV2']> {
+-  if (!value || !isRecord(value) || !isRecord(value.raw) || !isRecord(value.canonical) || !isRecord(value.legacy)) {
++  if (!value || !isRecord(value) || !isRecord(value.raw) || !isRecord(value.canonical)) {
+     return false;
+   }
+ 
+@@ -197,18 +197,6 @@ export function getTranscriptDecisionAuditBadge(transcript: Transcript): string
+   return 'Fallback';
+ }
+ 
+-export function normalizeLegacyDecisionCode(decision: string, normalizeDecision: boolean): string {
+-  if (!normalizeDecision) {
+-    return decision;
+-  }
+-
+-  if (!['1', '2', '3', '4', '5'].includes(decision)) {
+-    return decision;
+-  }
+-
+-  return String(6 - Number(decision));
+-}
+-
+ export function getTranscriptDecisionSortValue(
+   transcript: Transcript,
+   displayMode: TranscriptDecisionDisplayMode,
+@@ -218,7 +206,6 @@ export function getTranscriptDecisionSortValue(
+   }
+ 
+   const fallbackCandidates = [
+-    transcript.decisionModelV2?.legacy?.canonicalScore,
+     transcript.decisionCode,
+     (transcript.content as { decisionCode?: unknown } | null)?.decisionCode,
+     (transcript.content as { decision?: unknown } | null)?.decision,
+diff --git a/cloud/workers/stats/decision_model.py b/cloud/workers/stats/decision_model.py
+index 65ebad18..c220c51b 100644
+--- a/cloud/workers/stats/decision_model.py
++++ b/cloud/workers/stats/decision_model.py
+@@ -53,35 +53,10 @@ def resolve_transcript_score_details(
+ def resolve_transcript_signed_distance(transcript: dict[str, Any]) -> float | None:
+     """
+     Resolve canonical decision as signed distance (−2 to +2), or None if unscored.
+-
+-    Resolution order:
+-    1. decisionModelV2.canonical (direction + strength) — primary path for new transcripts
+-    2. decisionModelV2.legacy.canonicalScore (1-5 int, already orientation-corrected) — fallback
+-    3. summary.score (1-5 int, already orientation-corrected) — legacy compatibility fallback
+-
+-    The legacy fallbacks preserve compatibility with transcripts summarized before the
+-    winner-first cache was deployed. They use the formula: signed = score - 3.0
+-    (e.g. score 5 → +2, score 3 → 0, score 1 → -2).
+     """
+     resolved = resolve_transcript_score_details(transcript)
+     if resolved is not None:
+         direction, strength, _ = resolved
+         return _DIRECTION_STRENGTH_TO_SIGNED.get((direction, strength))
+ 
+-    # Fallback 1: legacy.canonicalScore (already orientation-corrected)
+-    decision_model = transcript.get("decisionModelV2")
+-    if isinstance(decision_model, dict):
+-        legacy = decision_model.get("legacy")
+-        if isinstance(legacy, dict):
+-            canonical_score = legacy.get("canonicalScore")
+-            if isinstance(canonical_score, (int, float)) and 1 <= canonical_score <= 5:
+-                return float(canonical_score) - 3.0
+-
+-    # Fallback 2: summary.score (orientation-corrected by the summarization handler)
+-    summary = transcript.get("summary")
+-    if isinstance(summary, dict):
+-        score = summary.get("score")
+-        if isinstance(score, (int, float)) and 1 <= score <= 5:
+-            return float(score) - 3.0
+-
+     return None
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m reading the patch adversarially and checking for regressions caused by deleted compatibility paths, renamed fields, and behavior changes that look broader than the refactor. I’ll keep the review scoped to concrete break risks from the diff itself.
+codex
+## Findings
+1. [UNVERIFIED] Medium - `cloud/workers/stats/decision_model.py` no longer falls back to `decisionModelV2.legacy.canonicalScore` or `summary.score` when resolving signed distance. If older transcripts still rely on those legacy fields, they will now be treated as unscored, which will silently drop them from downstream variance and KS-style analysis instead of preserving historical results.
+
+2. [UNVERIFIED] Medium - `cloud/apps/web/src/components/runs/TranscriptRow.tsx`, `TranscriptViewer.tsx`, and `TranscriptList.tsx` removed the legacy score normalization path and now treat any truthy `rawDecision` as analyzable. That means placeholder values like `'-'` can be treated as real decisions, and historical 1-5 codes that depended on the old inversion logic can display in the wrong orientation or expose edit controls when they should not.
+
+3. [UNVERIFIED] Medium - `cloud/apps/web/src/utils/decisionDistributionDisplay.ts` and `cloud/apps/web/src/lib/statistics/ks-test.ts` dropped support for numeric bucket codes and the numeric label mapping. If existing persisted aggregates or API payloads still emit `1`-`5` keys, those counts will now be ignored or relabeled generically, which will make older charts and statistics look incomplete rather than backward-compatible.
+
+## Residual Risks
+- I could not verify whether every producer and persisted dataset has already been migrated to the new symbolic bucket/decision formats, so backward-compatibility risk remains for historical records.
+- The error-handler and GraphQL schema changes look aligned with the refactor, but without surrounding context I could not confirm that no remaining callers still depend on the removed `legacy`/`rawScore` shapes.
+tokens used
+12,655

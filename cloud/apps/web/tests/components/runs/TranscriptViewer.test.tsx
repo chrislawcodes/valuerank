@@ -44,9 +44,7 @@ function createTranscript(overrides: Partial<Transcript> = {}): Transcript {
         source: 'deterministic',
       },
       legacy: {
-        rawScore: 5,
-        canonicalScore: null,
-      },
+        },
     },
     ...overrides,
   };

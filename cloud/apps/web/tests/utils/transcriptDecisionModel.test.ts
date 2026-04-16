@@ -64,8 +64,6 @@ function createRenderableV2Transcript(
       ...overrides.canonical,
     },
     legacy: {
-      rawScore: null,
-      canonicalScore: 1,
       ...overrides.legacy,
     },
   };
@@ -245,9 +243,7 @@ describe('transcriptDecisionModel', () => {
           source: 'deterministic',
         },
         legacy: {
-          rawScore: 5,
-          canonicalScore: 5,
-        },
+          },
       }),
     });
 

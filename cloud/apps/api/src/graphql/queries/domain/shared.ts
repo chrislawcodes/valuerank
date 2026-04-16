@@ -8,7 +8,6 @@ export type { LineageDefinitionRow } from '../../../services/definition-lineage.
 export {
   buildRawDecisionEvidence,
   DECISION_MODEL_READ_RULES,
-  canonicalDecisionToLegacyScore,
   resolveCanonicalDecision,
   resolveDecisionModel,
   resolveTranscriptDecisionModel,

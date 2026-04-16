@@ -10,7 +10,6 @@ import {
   resolveValueKeyFromText,
   buildUnknownCanonicalDecision,
   buildCanonicalDecisionFromPair,
-  canonicalDecisionScoreFromDirectionStrength,
   validateManualAppliedDecision,
   extractManualOverrideDecision,
   extractCachedWinnerFirstDecision,
@@ -91,12 +90,6 @@ export function buildRawDecisionEvidence(
                 : null,
           },
   };
-}
-
-export function canonicalDecisionToLegacyScore(
-  decision: Pick<CanonicalDecision, 'direction' | 'strength'>,
-): 1 | 2 | 3 | 4 | 5 | null {
-  return canonicalDecisionScoreFromDirectionStrength(decision.direction, decision.strength);
 }
 
 export function resolveTranscriptDecisionModel(

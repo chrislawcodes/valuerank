@@ -1,8 +1,46 @@
-# 030 — Remove Legacy 1-5 Decision Code System
+# 030 — Remove Legacy Decision Code and Unify Scoring Model
 
-**Status**: Draft
+**Status**: Draft (revised)
 **Created**: 2026-04-02
-**Motivation**: The canonical decision model (direction/strength) has fully replaced the 1-5 numeric scale for all decision resolution. The legacy compatibility layer adds complexity, causes bugs (e.g., variance analysis silently skipping transcripts with null `decisionCode`), and confuses new contributors. This spec defines the cutover to remove it.
+**Revised**: 2026-04-15
+**Motivation**: The codebase has two scoring systems running in parallel — the old 1-5 numeric scale and the new direction/strength canonical model. Some components correctly separate strength from winner; others conflate them. This creates user-visible bugs (e.g., a cell showing "2" when the transcript says "somewhat support" — which should be strength 1). This spec defines the single correct scoring model and the cutover to enforce it everywhere.
+
+---
+
+## Core Design Principle
+
+**Strength and winner must ALWAYS be separate fields.**
+
+The number displayed in any cell, score, or export always means *how strongly* the model felt — never *which side* won. Which side won is encoded separately (color, `isOpponent` boolean, `favoredValueKey`).
+
+### Strength score (unsigned, 0-2)
+
+| Transcript language | Strength score | Meaning |
+|---|---|---|
+| "Strongly support" / "Strong" | 2 | Strong conviction |
+| "Somewhat support" / "Lean" | 1 | Moderate conviction |
+| "Neutral" / "Unsure" | 0 | No directional conviction |
+
+### Winner encoding (separate field)
+
+| Field | Purpose | Example |
+|---|---|---|
+| `isOpponent` | Boolean — did the alphabetically-second value win? | `true` = orange, `false` = blue |
+| `favoredValueKey` | Which value key won | `"Achievement"` |
+
+### Canonical reference implementations
+
+Two places in the codebase already implement this correctly. All other code must converge to match them:
+
+1. **`cloud/apps/web/src/utils/canonicalConditionSummary.ts`** — the frontend analysis view
+   - `winnerScore = (2 * winnerStrongly + 1 * winnerSomewhat) / totalTrials` (0-2 range)
+   - `isOpponent` computed separately from `selectedValueWinRate`
+   - `getCanonicalConditionBackground(score, isOpponent)` uses score for opacity, isOpponent for color
+
+2. **`cloud/apps/api/src/services/export/decision-display.ts`** — CSV/XLSX exports
+   - `getDecisionPreferenceScore()` returns unsigned 0/1/2 from direction+strength
+   - `strong → 2, lean → 1, neutral → 0, unknown → null`
+   - Direction encoded separately in `direction` field
 
 ---
 
@@ -15,13 +53,27 @@ The original decision model scored AI responses on a 1-5 scale:
 - 4 = Somewhat favor first value
 - 5 = Strongly favor first value
 
-The canonical model replaced this with `direction` (favor_first / favor_second / neutral) + `strength` (strong / lean). A compatibility shim (`LegacyDecisionCompat`) currently converts canonical decisions back to 1-5 for legacy consumers. This spec removes that shim and all its consumers.
+This scale baked winner and strength into one number. The canonical model replaced it with `direction` (favor_first / favor_second / neutral) + `strength` (strong / lean / neutral). A compatibility shim (`LegacyDecisionCompat`) still converts canonical decisions back to 1-5 for legacy consumers. Meanwhile, some newer components invented their own encodings that also conflate the two concepts. This spec removes all of them.
 
 ---
 
 ## User Stories
 
-### US-1: Clean variance analysis (P1)
+### US-1: Fix ConditionMatrix scoring display (P1)
+
+The `ConditionMatrix.tsx` component on the domain analysis value-detail page shows the wrong number. Its `getConditionMatrixDisplay` function returns `label: isOpponent ? '2' : '1'` — this means the cell number encodes *which side won*, not *how strongly*.
+
+A transcript that says "Somewhat support Achievement" shows "2" in the cell (because it's the opponent side) when it should show "1" (strength = somewhat).
+
+**File**: `cloud/apps/web/src/components/domains/ConditionMatrix.tsx` (lines 53-82)
+
+**Acceptance**:
+- Cell label shows strength score: `0` (neutral/unsure), `1` (somewhat/lean), `2` (strongly/strong)
+- Which side won is encoded in cell background color (blue = first/selected, orange = opponent) and `isOpponent` boolean — NOT in the number
+- Component uses the same `winnerScore` pattern from `canonicalConditionSummary.ts` — or receives pre-computed strength and winner as separate props
+- Existing `MatrixCondition` type already has `prioritized`/`deprioritized`/`neutral` counts — these map directly to the canonical buckets
+
+### US-2: Clean variance analysis (P1)
 
 Variance analysis computes stability metrics from per-scenario repeat data. Today it uses `canonicalScore` (1-5) internally, computing `Math.abs(score - 3)` for distance and `score - 3` for signed distance.
 
@@ -29,30 +81,20 @@ Variance analysis computes stability metrics from per-scenario repeat data. Toda
 
 **Canonical stability distance mapping** (replaces `Math.abs(score - 3)` and `score - 3`):
 | direction | strength | distance | signed |
-|-----------|----------|----------|--------|
+|---|---|---|---|
 | favor_first | strong | 2 | +2 |
 | favor_first | lean | 1 | +1 |
 | neutral | — | 0 | 0 |
-| favor_second | lean | 1 | −1 |
-| favor_second | strong | 2 | −2 |
+| favor_second | lean | 1 | -1 |
+| favor_second | strong | 2 | -2 |
 
-### US-2: Clean aggregate analysis (P1)
+### US-3: Clean aggregate analysis (P1)
 
 Aggregate logic maps decisions to buckets (`strongly`, `somewhat`, `neutral`, `opponentSomewhat`, `opponentStrongly`) and then back to 1-5 via `decisionBucketCodeToScore()`. The bucket names already ARE the canonical model — the 1-5 round-trip is unnecessary.
 
 **Acceptance**: `decisionBucketCodeToScore()` removed. Bucket codes used directly without numeric conversion. `normalizeDecisionBucketCode()` no longer accepts numeric strings.
 
-### US-3: Remove `decisionCode` DB column writes (P1)
-
-The summarize handler stopped writing `decisionCode` to the transcript table but the column still exists. Old transcripts have it populated; new ones don't. Code that reads it must handle both states.
-
-**Acceptance**:
-- `decisionCode` and `decisionCodeSource` columns marked as deprecated in schema comments
-- No production code outside `resolveTranscriptDecisionModel` reads `decisionCode`. The single allowed fallback IS `resolveTranscriptDecisionModel` itself — it reads `decisionMetadata` first and falls back to `decisionCode` only when `decisionMetadata` is absent. This is NOT a contradiction with the goal: all callers go through the resolver, none bypass it.
-- **Null behavior in resolver**: if `decisionMetadata` is present but invalid → log warning, return null. If `decisionCode` fallback is tried but the value is null/0/non-integer → return null. If both are absent → return null. Null means "unscored transcript" — callers must handle it (same as today).
-- Prisma schema retains columns for backward compat (data not deleted) but they are no longer selected in queries outside the resolver
-
-### US-4: Remove `LegacyDecisionCompat` type (P2)
+### US-4: Remove `LegacyDecisionCompat` type (P1)
 
 The `LegacyDecisionCompat` type (`rawScore` / `canonicalScore`) is returned by every call to `resolveTranscriptDecisionModel()` and propagated through GraphQL, exports, frontend sorting, and Python workers.
 
@@ -63,23 +105,65 @@ The `LegacyDecisionCompat` type (`rawScore` / `canonicalScore`) is returned by e
 - GraphQL `decisionModelV2` no longer returns `legacy` sub-object
 - Frontend sort uses canonical direction/strength instead of numeric score
 
-### US-5: Clean Python worker score resolution (P2)
+### US-5: Remove `canonicalDecisionScoreFromDirectionStrength` (P1)
+
+The core 1-5 mapping function in `decision-model-helpers.ts` (lines 207-217) converts direction+strength back to a 1-5 integer. This is the primary source function for the legacy scale. Its wrapper `canonicalDecisionToLegacyScore` in `decision-model.ts` must also be removed.
+
+**Acceptance**:
+- `canonicalDecisionScoreFromDirectionStrength()` deleted from `decision-model-helpers.ts`
+- `canonicalDecisionToLegacyScore()` deleted from `decision-model.ts`
+- All callers migrated to use direction/strength directly or the unsigned 0/1/2 strength score
+
+### US-6: Remove `decisionCode` DB column reads (P2)
+
+The summarize handler stopped writing `decisionCode` to the transcript table but the column still exists. Old transcripts have it populated; new ones don't. Code that reads it must handle both states.
+
+**Acceptance**:
+- `decisionCode` and `decisionCodeSource` columns marked as deprecated in schema comments
+- No production code outside `resolveTranscriptDecisionModel` reads `decisionCode`. The single allowed fallback IS `resolveTranscriptDecisionModel` itself — it reads `decisionMetadata` first and falls back to `decisionCode` only when `decisionMetadata` is absent.
+- Prisma schema retains columns for backward compat (data not deleted) but they are no longer selected in queries outside the resolver
+
+### US-7: Clean frontend distribution display shim (P2)
+
+`decisionDistributionDisplay.ts` contains a `normalizeBucketCode()` function that maps numeric string codes (`'1'`-`'5'`) to canonical bucket names, and `formatBucketLabel()` uses a reverse map (`sourceKeyByCode`) that maps buckets back to `'1'`-`'5'` for label lookup.
+
+**File**: `cloud/apps/web/src/utils/decisionDistributionDisplay.ts`
+
+**Acceptance**:
+- `normalizeBucketCode()` no longer accepts `'1'`-`'5'` string codes
+- `formatBucketLabel()` no longer uses a `'1'`-`'5'` reverse lookup — uses bucket code names directly for label resolution
+- All stored `decisionDistribution` data that uses numeric keys is handled via a one-time migration normalizer or documented as legacy
+
+### US-8: Clean KS-test score mapping (P2)
+
+`ks-test.ts` maps canonical bucket names to 1-5 integers for statistical comparison: `opponentStrongly: 1, opponentSomewhat: 2, neutral: 3, somewhat: 4, strongly: 5`.
+
+**File**: `cloud/apps/web/src/lib/statistics/ks-test.ts` (lines 147-158)
+
+**Acceptance**:
+- `countsToSample()` uses ordinal mapping based on the 0-2 strength model:
+  - `opponentStrongly → -2, opponentSomewhat → -1, neutral → 0, somewhat → 1, strongly → 2`
+  - (Signed values preserve ordering for KS-test; the absolute magnitude encodes strength)
+- Numeric string keys (`'1'`-`'5'`) no longer accepted
+- KS-test results are **semantically equivalent** — the ordinal ranking is preserved, only the numeric encoding changes
+
+### US-9: Clean Python worker score resolution (P2)
 
 Python workers (`decision_model.py`, `variance_analysis.py`, `analyze_basic.py`) resolve 1-5 scores with a multi-fallback chain: `canonicalScore` → `rawScore` → `summary.score`. The orientation flip uses `6 - score`.
 
-**Acceptance**: Python workers use canonical `direction`/`strength` directly. The `6 - score` orientation flip was needed only because Python was interpreting raw 1-5 numeric scores where 1=favor_second and 5=favor_first. After this change, Python reads the canonical model which already encodes direction explicitly — no flip is needed. `normalize_resolved_score()` removed.
+**Acceptance**: Python workers use canonical `direction`/`strength` directly. The `6 - score` orientation flip is removed — direction already encodes which side. `normalize_resolved_score()` removed.
 
-**Data boundary**: Python workers receive transcript decision data exclusively via the job queue payload, where TypeScript has already run `resolveTranscriptDecisionModel` and produced a canonical decision. Workers never query the DB directly for decision data. If a worker receives a payload where `direction`/`strength` is absent (e.g., very old transcript that TypeScript couldn't resolve), the worker treats it as an unscored transcript and excludes it from analysis — same behavior as the existing null handling.
+**Data boundary**: Python workers receive transcript decision data via the job queue payload, where TypeScript has already run `resolveTranscriptDecisionModel`. Workers never query the DB directly for decision data.
 
-### US-6: Clean exports (P3)
+### US-10: Clean exports (P3)
 
-Export services (CSV, XLSX, markdown) use `getDecisionPreferenceScore()` which returns 0/1/2 derived from canonical direction/strength — already not using 1-5. But column headers and field names may still reference "score".
+Export services (CSV, XLSX, markdown) use `getDecisionPreferenceScore()` which returns 0/1/2 — already correct. But column headers and field names may still reference "score" in the old 1-5 sense.
 
-**Acceptance**: Export column headers and field names use "direction" / "strength" terminology in new exports generated by this API. Backward compatibility clarification: **existing stored export files on disk are not changed** (they remain as-is with old column names); **the export API code** generates new files using canonical names. No versioned endpoints, no parallel code paths in the generator. Old stored files become legacy artifacts — the application doesn't need to re-parse them.
+**Acceptance**: Export column headers use "direction" / "strength" terminology. Existing stored export files are not changed. The export API code generates new files using canonical names.
 
-### US-7: Clean order-effect analysis (P3)
+### US-11: Clean order-effect analysis (P3)
 
-Order-effect comparison and analysis services extract `canonicalScore` for score comparison and include `rawScore` in variant cell types.
+Order-effect comparison and analysis services extract `canonicalScore` for comparison and include `rawScore` in variant cell types.
 
 **Acceptance**: Order-effect services use canonical direction/strength. `rawScore` field removed from variant cell types.
 
@@ -88,70 +172,86 @@ Order-effect comparison and analysis services extract `canonicalScore` for score
 ## Scope
 
 ### In scope
+- Fix `ConditionMatrix.tsx` to show strength (0/1/2) with color for winner
 - Remove `LegacyDecisionCompat` type and all producers/consumers
+- Remove `canonicalDecisionScoreFromDirectionStrength()` and `canonicalDecisionToLegacyScore()`
 - Remove `decisionBucketCodeToScore()` and `normalizeDecisionBucketCode()` numeric paths
-- Remove `parseLegacyScore()`, `canonicalDecisionToLegacyScore()`
+- Remove `parseLegacyScore()`
 - Replace `scoreCounts` (1-5 histogram) with direction-based counts in variance analysis
 - Remove Python `normalize_resolved_score()` (the `6 - score` flip)
 - Update Python `resolve_transcript_score_details()` to return canonical model only
 - Remove `decisionCode` from Prisma `select` clauses (keep column in DB)
 - Update frontend `getTranscriptDecisionSortValue` to use canonical model
 - Update GraphQL schema to drop `legacy` from `decisionModelV2`
+- Clean `ks-test.ts` bucket-to-score mapping from 1-5 to signed strength
+- Clean `decisionDistributionDisplay.ts` numeric code paths
+- Clean `ConditionMatrix.tsx` to use strength + winner separation
 
 ### Out of scope
-- Dropping `decisionCode`/`decisionCodeSource` DB columns (requires migration, can be done later)
-- Changing the summarize worker's decision parsing (it already produces canonical decisions)
-- Changing the MCP tool response format for existing tools (separate deprecation cycle). Note: `get-transcript-summary.ts` DOES change — it removes `decisionCode` from its response and replaces it with the canonical label. This is a cleanup within scope. The out-of-scope exclusion applies to wholesale format versioning of existing MCP tools.
+- Dropping `decisionCode`/`decisionCodeSource` DB columns (requires migration, separate task)
+- Changing the summarize worker's decision parsing (already produces canonical decisions)
+- Changing MCP tool response format versioning (separate deprecation cycle)
 - Backfilling old transcripts (they still work via `decisionMetadata`)
 
 ---
 
 ## Files to modify
 
-### TypeScript API (P1-P2)
+### Frontend — ConditionMatrix fix (P1)
 
 | File | What changes |
-|------|-------------|
+|---|---|
+| `cloud/apps/web/src/components/domains/ConditionMatrix.tsx` | `getConditionMatrixDisplay` returns strength score (0/1/2) as label instead of winner-based `'1'`/`'2'`. Background color determined by `isOpponent` (separate from number). Uses canonical strength computation from counts. |
+
+### TypeScript API — Core decision model (P1)
+
+| File | What changes |
+|---|---|
+| `cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts` | Delete `canonicalDecisionScoreFromDirectionStrength()` (lines 207-217) |
 | `cloud/apps/api/src/graphql/queries/domain/decision-model.ts` | Remove `LegacyDecisionCompat`, `parseLegacyScore`, `canonicalDecisionToLegacyScore`, `resolveLegacyDecisionCompat`. `DecisionModelResult` drops `legacy` field. |
 | `cloud/apps/api/src/graphql/queries/domain/shared.ts` | Remove re-exports of deleted types/functions |
 | `cloud/apps/api/src/services/analysis/aggregate/variance.ts` | Replace `canonicalScore`-based math with canonical direction/strength. Replace `scoreCounts` with `directionCounts`. |
 | `cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts` | Remove `decisionBucketCodeToScore()`, `normalizeDecisionBucketCode()` numeric paths |
-| `cloud/apps/api/src/services/decision-model.ts` | Remove `resolveAnalysisScore()`, `buildValueOutcomesFromScore()` numeric paths. Use canonical model. |
-| `cloud/apps/api/src/services/export/decision-display.ts` | Already uses canonical — just remove any `legacy` references |
+| `cloud/apps/api/src/services/decision-model.ts` | Remove `resolveAnalysisScore()`, `buildValueOutcomesFromScore()` numeric paths |
+| `cloud/apps/api/src/services/export/decision-display.ts` | Already uses canonical 0/1/2 — remove any `legacy` references |
 | `cloud/apps/api/src/graphql/types/transcript.ts` | Remove `legacy` from `decisionModelV2` GraphQL type |
 | `cloud/apps/api/src/queue/handlers/analyze-basic.ts` | Remove `summary.score` from `TranscriptData`, use canonical decision |
 | `cloud/apps/api/src/services/assumptions/order-effect-*.ts` | Replace `rawScore` with canonical direction/strength |
-| `cloud/apps/api/src/mcp/tools/get-transcript-summary.ts` | Remove `decisionCode` from response (or replace with canonical label) |
+| `cloud/apps/api/src/mcp/tools/get-transcript-summary.ts` | Remove `decisionCode` from response, replace with canonical label |
 
-### Python workers (P2)
-
-| File | What changes |
-|------|-------------|
-| `cloud/workers/stats/decision_model.py` | Remove `normalize_resolved_score()` (6-score flip). `resolve_transcript_score_details()` returns canonical direction/strength instead of numeric score. |
-| `cloud/workers/stats/variance_analysis.py` | Use canonical buckets instead of 1-5 numeric scores |
-| `cloud/workers/analyze_basic.py` | Remove score-based fallback chain, use canonical model |
-
-### Frontend (P2)
+### Frontend — Distribution and statistics (P2)
 
 | File | What changes |
-|------|-------------|
+|---|---|
+| `cloud/apps/web/src/utils/decisionDistributionDisplay.ts` | `normalizeBucketCode()` drops `'1'`-`'5'` code paths. `formatBucketLabel()` uses bucket names directly instead of `sourceKeyByCode` map. |
+| `cloud/apps/web/src/lib/statistics/ks-test.ts` | `countsToSample()` uses signed strength (-2 to +2) instead of 1-5. Drops numeric string key fallbacks. |
 | `cloud/apps/web/src/utils/transcriptDecisionModel.ts` | `getTranscriptDecisionSortValue` uses canonical direction/strength. Remove `normalizeLegacyDecisionCode`. |
 | `cloud/apps/web/src/api/operations/runs.ts` | Remove `TranscriptDecisionModelV2LegacyCompat` type |
 | `cloud/apps/web/src/generated/graphql.ts` | Regenerated after schema change |
 | `cloud/apps/web/src/components/analysis/tabs/OverviewTab.tsx` | `scoreCounts` references replaced with direction counts |
 
+### Python workers (P2)
+
+| File | What changes |
+|---|---|
+| `cloud/workers/stats/decision_model.py` | Remove `normalize_resolved_score()` (6-score flip). Return canonical direction/strength. |
+| `cloud/workers/stats/variance_analysis.py` | Use canonical buckets instead of 1-5 numeric scores |
+| `cloud/workers/analyze_basic.py` | Remove score-based fallback chain, use canonical model |
+
 ### Tests (all priorities)
 
-All test files referencing `rawScore`, `canonicalScore`, `decisionCode`, `LegacyDecisionCompat`, or 1-5 numeric fixtures need updating to use canonical direction/strength.
+All test files referencing `rawScore`, `canonicalScore`, `decisionCode`, `LegacyDecisionCompat`, `canonicalDecisionScoreFromDirectionStrength`, or 1-5 numeric fixtures need updating to use canonical direction/strength or unsigned 0/1/2 strength scores.
 
 ---
 
 ## Risks
 
 | Risk | Mitigation |
-|------|-----------|
-| Old transcripts with only `decisionCode` (no `decisionMetadata`) | `resolveTranscriptDecisionModel` already falls back to `decisionCode` when metadata is missing. Keep this single fallback path in decision-model.ts but remove it from all other consumers. |
-| Stored analysis outputs reference `scoreCounts` | Frontend reads this from JSON. Add migration to rename field, or handle both shapes in the normalizer. |
+|---|---|
+| Old transcripts with only `decisionCode` (no `decisionMetadata`) | `resolveTranscriptDecisionModel` keeps the `decisionCode` fallback. All other code goes through the resolver. |
+| Stored analysis outputs reference `scoreCounts` | Frontend reads this from JSON. Handle both `scoreCounts` and `directionCounts` shapes in the normalizer during transition. |
+| KS-test results change with new ordinal mapping | The ordinal ranking is preserved (opponent strong < opponent somewhat < neutral < somewhat < strongly). The KS statistic depends on ranking, not absolute values, so results are equivalent. Add a test confirming equivalence. |
+| `ConditionMatrix` change confuses users expecting old display | The old display was wrong (showing winner as number). The new display is correct (showing strength). No backward compat needed for a bug fix. |
 | Python worker changes break summarization | Python workers read from TypeScript-produced data — changes are read-path only, no write-path risk. |
 | Export format changes break downstream consumers | Keep existing export formats, add deprecation notice. New exports use canonical labels. |
 
@@ -159,9 +259,13 @@ All test files referencing `rawScore`, `canonicalScore`, `decisionCode`, `Legacy
 
 ## Success criteria
 
-- `grep -r "LegacyDecisionCompat\|rawScore\|canonicalScore\|parseLegacyScore\|canonicalDecisionToLegacyScore\|decisionBucketCodeToScore\|normalize_resolved_score" --include="*.ts" --include="*.py" cloud/` returns zero hits (outside any file explicitly noted as migration/fallback)
+- `grep -r "LegacyDecisionCompat\|rawScore\|canonicalScore\|parseLegacyScore\|canonicalDecisionToLegacyScore\|canonicalDecisionScoreFromDirectionStrength\|decisionBucketCodeToScore\|normalize_resolved_score" --include="*.ts" --include="*.py" cloud/` returns zero hits (outside `resolveTranscriptDecisionModel` fallback)
 - `grep -r "\.decisionCode\b" --include="*.ts" cloud/` returns zero hits outside `resolveTranscriptDecisionModel`
-- Variance analysis produces **semantically equivalent** stability classifications before/after for existing aggregate runs (per the canonical stability distance mapping table in US-1)
+- `ConditionMatrix` cell labels show 0/1/2 (strength), not 1/2 (winner)
+- `ConditionMatrix` cell colors show blue (selected value winning) / orange (opponent winning) independent of the number
+- `ks-test.ts` uses signed strength (-2 to +2) instead of 1-5
+- `decisionDistributionDisplay.ts` no longer maps to/from `'1'`-`'5'` string codes
+- Variance analysis produces semantically equivalent stability classifications
 - All API TypeScript tests pass: `npm run test --workspace @valuerank/api`
 - API and web builds pass
-- Python worker tests pass: `cd cloud/workers && python3 -m pytest` (or equivalent)
+- Python worker tests pass

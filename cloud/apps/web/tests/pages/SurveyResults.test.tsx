@@ -108,9 +108,7 @@ function createTranscript(overrides: Partial<Transcript> = {}): Transcript {
         source: 'deterministic',
       },
       legacy: {
-        rawScore: null,
-        canonicalScore: 1,
-      },
+        },
     },
     ...overrides,
   };
@@ -147,9 +145,7 @@ function createLeanTranscript(id: string, scenarioId: string): Transcript {
         source: 'deterministic',
       },
       legacy: {
-        rawScore: null,
-        canonicalScore: 4,
-      },
+        },
     },
   });
 }
@@ -185,9 +181,7 @@ function createExplicitUnknownTranscript(id: string, scenarioId: string, decisio
         source: 'unknown',
       },
       legacy: {
-        rawScore: null,
-        canonicalScore: null,
-      },
+        },
     },
     turnCount: 2,
     tokenCount: 100,

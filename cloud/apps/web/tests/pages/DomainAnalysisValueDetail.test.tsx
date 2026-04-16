@@ -114,8 +114,6 @@ function createRenderableTranscript(
         ...overrides.canonical,
       },
       legacy: {
-        rawScore: null,
-        canonicalScore: 1,
         ...overrides.legacy,
       },
     },
@@ -131,6 +129,10 @@ function createCondition(overrides: {
   neutral: number;
   totalTrials: number;
   unknownCount?: number;
+  strongly?: number;
+  somewhat?: number;
+  opponentSomewhat?: number;
+  opponentStrongly?: number;
 }) {
   return {
     scenarioId: overrides.scenarioId,
@@ -143,10 +145,10 @@ function createCondition(overrides: {
     selectedValueWinRate: overrides.prioritized + overrides.deprioritized + overrides.neutral === 0
       ? null
       : overrides.prioritized / (overrides.prioritized + overrides.deprioritized + overrides.neutral),
-    strongly: 0,
-    somewhat: 0,
-    opponentSomewhat: 0,
-    opponentStrongly: 0,
+    strongly: overrides.strongly ?? 0,
+    somewhat: overrides.somewhat ?? 0,
+    opponentSomewhat: overrides.opponentSomewhat ?? 0,
+    opponentStrongly: overrides.opponentStrongly ?? 0,
     unknownCount: overrides.unknownCount ?? 0,
   };
 }
@@ -255,6 +257,12 @@ describe('DomainAnalysisValueDetail', () => {
             deprioritized: 1,
             neutral: 0,
             totalTrials: 3,
+            // Winner: selected value (prioritized > deprioritized)
+            // Strength: (2*1 + 1*1) / 3 = 1.0 → rounds to 1
+            strongly: 1,
+            somewhat: 1,
+            opponentSomewhat: 1,
+            opponentStrongly: 0,
           }),
           createCondition({
             scenarioId: 'scenario-2',
@@ -264,6 +272,12 @@ describe('DomainAnalysisValueDetail', () => {
             deprioritized: 2,
             neutral: 0,
             totalTrials: 3,
+            // Winner: opponent (deprioritized > prioritized)
+            // Strength: (2*1 + 1*1) / 3 = 1.0 → rounds to 1
+            strongly: 0,
+            somewhat: 1,
+            opponentSomewhat: 1,
+            opponentStrongly: 1,
           }),
           createCondition({
             scenarioId: 'scenario-3',
@@ -291,6 +305,12 @@ describe('DomainAnalysisValueDetail', () => {
             deprioritized: 0,
             neutral: 0,
             totalTrials: 3,
+            // Winner: selected value (all prioritized)
+            // Strength: (2*2 + 1*1) / 3 = 5/3 = 1.67 → rounds to 2
+            strongly: 2,
+            somewhat: 1,
+            opponentSomewhat: 0,
+            opponentStrongly: 0,
           }),
         ]),
       ]),
@@ -316,12 +336,14 @@ describe('DomainAnalysisValueDetail', () => {
       'substantial',
       'full',
     ]);
+    // Cell labels show strength score (0/1/2), not which side won.
+    // Color (not captured here) encodes the winner (blue=selected, orange=opponent).
     expect(rows.slice(2).map((row) => within(row).getAllByRole('cell')[1].textContent?.trim())).toEqual([
-      '1',
-      '2',
-      '-',
-      '-',
-      '1',
+      '1',  // Condition 1: strength 1 (selected wins)
+      '1',  // Condition 2: strength 1 (opponent wins — shown in orange)
+      '0',  // Condition 3: tied
+      '0',  // Condition 4: no directional trials
+      '2',  // Condition 5: strength 2 (selected wins)
     ]);
 
     fireEvent.click(screen.getByTitle('Condition 1'));

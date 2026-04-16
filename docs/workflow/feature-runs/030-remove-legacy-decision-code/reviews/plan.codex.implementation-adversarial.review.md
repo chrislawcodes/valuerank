@@ -3,11 +3,11 @@ reviewer: "codex"
 lens: "implementation-adversarial"
 stage: "plan"
 artifact_path: "docs/workflow/feature-runs/030-remove-legacy-decision-code/plan.md"
-artifact_sha256: "587a1726077d6b975f2458031ae03648e78c4f687d96a1d5068066c3041daa55"
+artifact_sha256: "9d15bbe45b6dbd3cd1fdf98579fc211e33f7eb8ee9e7e8777d1ce8ff7035c761"
 repo_root: "."
-git_head_sha: "5d04de64d2bf84e1434fd754cd77b7159a695474"
-git_base_ref: "origin/main"
-git_base_sha: "b60f7e7ff0708de6013e64f4045868895bbbcf6e"
+git_head_sha: "adee0cd336e4555f34e0ea676185dff6636e93ac"
+git_base_ref: "origin/fix/audit-mode-no-legacy-fallback"
+git_base_sha: "adee0cd336e4555f34e0ea676185dff6636e93ac"
 generation_method: "codex-runner"
 resolution_status: "accepted"
 resolution_note: "No actionable findings detected — auto-accepted"
@@ -22,16 +22,18 @@ coverage_note: ""
 
 ## Findings
 
-- **High:** The plan makes the `decisionCode` fallback mandatory in `resolveTranscriptDecisionModel`, but it also says `decisionCode`/`decisionCodeSource` will be “not selected in queries.” Those two statements conflict unless the resolver’s upstream query is explicitly kept on the legacy columns. As written, the only supported path for old transcripts may not receive the field it needs.
-- **Medium [UNVERIFIED]:** The Python rollout assumes every worker payload already contains canonical `direction`/`strength` and that removing `normalize_resolved_score` is safe everywhere. If any queued, retried, or replayed job still carries the legacy numeric shape, the deploy will regress those jobs immediately.
-- **Medium [UNVERIFIED]:** The historical aggregate compatibility story is incomplete. The plan only names a frontend normalizer for old `scoreCounts`, but does not cover any backend reader, API resolver, export path, or analysis job that might consume stored aggregate blobs. Any non-frontend consumer of old runs will still break unless it gets the same dual-shape handling.
-- **Low:** The parity regression test is underspecified. Once the legacy helpers are deleted, “compare `directionCounts` output vs. the old `scoreCounts` mapping” needs a frozen oracle or fixture table. Otherwise the test can end up proving the new code against itself instead of proving equivalence to the removed behavior.
+1. **Medium [UNVERIFIED] ConditionMatrix is under-scoped for the data it now needs.** The plan says `ConditionMatrix.tsx` should show strength while color encodes the winner, but it also admits the component currently only has aggregate `prioritized`/`deprioritized`/`neutral` counts. The new logic needs either per-side strength buckets or a different approximation, yet no upstream file is included to supply that shape. If the data is not already available, this is a dead-end or a silent semantic downgrade.
+
+2. **Medium [UNVERIFIED] Legacy-job compatibility is removed without a cutover path.** The plan deletes score parsing and fallback logic from both TypeScript and Python workers, but it does not define a dual-read, version gate, or requeue strategy for queued payloads already in flight. If any job, export, or stored payload still carries `score` or `decisionCode`, the deploy can break work that was serialized before the change.
+
+3. **Low [UNVERIFIED] The KS-test change is only partly validated.** The plan asserts that mapping to signed strengths preserves the statistic, but it only promises one parity test and does not cover other consumers that may sort, bin, or label by the old 1-5 codes. Ordinal equivalence is not enough if adjacent code assumes non-negative bucket values or uses numeric codes as keys.
 
 ## Residual Risks
 
-- Older transcripts remain dependent on the single resolver fallback, so any regression there selectively breaks pre-V2 data.
-- Stored runs with legacy `scoreCounts` will keep existing in mixed shape until every reader is updated or normalized.
-- The rollout still assumes queue and replay behavior are cleanly separated from removed numeric fields; any straggler job can expose a missed compatibility path.
+- Mixed historical data may still surface in stored aggregates or long-lived API responses, so compatibility issues can remain even after the main code paths are updated.
+- Removing `legacy` from GraphQL and MCP outputs will still break external clients that do not regenerate types from this repo.
+- ConditionMatrix may still be lossy if the only upstream data is aggregate win/loss counts rather than the canonical 5-bucket breakdown.
+- Worker behavior after deploy still depends on whether any queued jobs were serialized under the old schema at cutover time.
 
 ## Runner Stats
 - total_input=0

@@ -3,14 +3,14 @@ reviewer: "codex"
 lens: "correctness-adversarial"
 stage: "diff"
 artifact_path: "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/implementation.diff.patch"
-artifact_sha256: "f324f1e9cd692280cf8d8658d1bf90ae2fe90bdf25837549e380d644406dc336"
+artifact_sha256: "2d6060221efcda0b8a7368f6f62a6d13716e21b91cf01ec000c4cf9a56f5784e"
 repo_root: "."
-git_head_sha: "53f3fa78ee950630e61dd2428aec9ee182ff2ea0"
-git_base_ref: "4dc86542620bc735d52a00ba999649d12471ecb6"
-git_base_sha: "4dc86542620bc735d52a00ba999649d12471ecb6"
+git_head_sha: "0e5ab74009fbc16c351d77668f79cddfc91500d0"
+git_base_ref: "adee0cd3"
+git_base_sha: "adee0cd336e4555f34e0ea676185dff6636e93ac"
 generation_method: "codex-runner"
 resolution_status: "accepted"
-resolution_note: "All findings are [UNVERIFIED]. summary.score removal is intentional per spec US-4; consumers updated in Slice 2.2 (Python), 3.1 (frontend), 4.1 (tests). Empty summary {} for unscored is correct behavior. Integration test for analyze-basic will be updated in Slice 4.1."
+resolution_note: "No actionable findings detected — auto-accepted"
 raw_output_path: "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/diff.codex.correctness-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,13 +22,14 @@ coverage_note: ""
 
 ## Findings
 
-- [UNVERIFIED] Medium: `cloud/apps/api/src/queue/handlers/analyze-basic.ts` stopped emitting `summary.score` and now writes only `summary.values` or `{}`. That breaks the current transcript contract: the existing integration test in `cloud/apps/api/tests/queue/handlers/analyze-basic.integration.test.ts` still expects `summary: { score: null }`, and web readers like `cloud/apps/web/src/components/runs/TranscriptRow.tsx` and `cloud/apps/web/src/utils/transcriptDecisionModel.ts` still fall back to `summary.score`. Any transcript that previously relied on the numeric score will now render/sort as blank or undecided unless every consumer has already been migrated.
-- [UNVERIFIED] Medium: The new `summary: values ? { values } : {}` shape drops the score entirely even when `resolveAnalysisValueOutcomes` cannot recover a value mapping. In the old code, malformed or legacy transcripts still preserved the coarse decision code; now those cases become an empty object, so downstream tooling loses the only usable signal instead of degrading gracefully.
+- **Medium [UNVERIFIED]** `cloud/workers/stats/decision_model.py` removed both legacy fallbacks (`decisionModelV2.legacy.canonicalScore` and `summary.score`) from `resolve_transcript_signed_distance()`. Any historical transcript that has not been reprocessed into the new `raw`/`canonical` shape will now resolve to `None`, which will drop it from downstream signed-distance and directional analysis instead of preserving the previously documented behavior.
+- **Medium [UNVERIFIED]** `cloud/apps/web/src/components/domains/ConditionMatrix.tsx` now computes the cell label and color from `(2 * strongly + somewhat) / totalTrials`. If `totalTrials` includes `unknownCount`, a cell with a clear directional winner but many unknowns will be rendered as `0`/neutral or much weaker than before. That changes the meaning of the matrix, not just the display logic.
+- **Medium [UNVERIFIED]** `cloud/apps/web/src/components/runs/TranscriptRow.tsx` changed `isAnalyzableDecision` from a numeric `1`-`5` check to `Boolean(rawDecision)`. Any non-empty but non-numeric legacy decision code will now be treated as analyzable, which can incorrectly disable manual overrides for rows that still need them.
+- **Medium [UNVERIFIED]** `cloud/apps/web/src/utils/decisionDistributionDisplay.ts` and `cloud/apps/web/src/lib/statistics/ks-test.ts` removed support for numeric bucket codes and the old `scoreCounts` shape. If any cached or persisted analysis payloads still use legacy `1`-`5` keys, those counts will now be ignored or mislabeled instead of being translated, which will skew both display and KS sampling.
 
 ## Residual Risks
 
-- I did not verify every out-of-tree consumer, so anything outside this repo that reads transcript summaries may still depend on `summary.score` or the previous JSON shape.
-- Persisted transcript records may now be mixed across old and new shapes, so any migration or backfill logic still needs an explicit compatibility check.
+- I could not verify whether all historical transcripts, cached analysis payloads, and label maps have already been migrated to the new direction-based formats. If not, the compatibility removals in this diff will cause older data to lose fidelity or disappear from analysis paths.
 
 ## Runner Stats
 - total_input=0
@@ -37,4 +38,4 @@ coverage_note: ""
 
 ## Resolution
 - status: accepted
-- note: All findings are [UNVERIFIED]. summary.score removal is intentional per spec US-4; consumers updated in Slice 2.2 (Python), 3.1 (frontend), 4.1 (tests). Empty summary {} for unscored is correct behavior. Integration test for analyze-basic will be updated in Slice 4.1.
+- note: No actionable findings detected — auto-accepted

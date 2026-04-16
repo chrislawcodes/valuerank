@@ -90,7 +90,7 @@ export type ScenarioVarianceStats = {
   variance: number;
   range: number;
   sampleCount: number;
-  scoreCounts?: Record<string, number>;
+  directionCounts?: Record<string, number>;
   direction?: 'A' | 'B' | 'NEUTRAL' | null;
   directionalAgreement?: number | null;
   medianSignedDistance?: number | null;
@@ -107,7 +107,7 @@ export type PerScenarioVarianceStats = {
   min: number;
   max: number;
   range: number;
-  scoreCounts?: Record<string, number>;
+  directionCounts?: Record<string, number>;
   direction?: 'A' | 'B' | 'NEUTRAL' | null;
   directionalAgreement?: number | null;
   medianSignedDistance?: number | null;

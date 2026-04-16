@@ -9,6 +9,10 @@ export type MatrixCondition = {
   neutral: number;
   totalTrials: number;
   unknownCount: number;
+  strongly: number;
+  somewhat: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
 };
 
 function getPreferenceBackground(score: number, isOpponent: boolean): string {
@@ -34,6 +38,10 @@ function validateMatrixCondition(condition: MatrixCondition): string | null {
     ['neutral', condition.neutral],
     ['totalTrials', condition.totalTrials],
     ['unknownCount', condition.unknownCount],
+    ['strongly', condition.strongly],
+    ['somewhat', condition.somewhat],
+    ['opponentSomewhat', condition.opponentSomewhat],
+    ['opponentStrongly', condition.opponentStrongly],
   ];
 
   for (const [name, value] of countFields) {
@@ -51,32 +59,25 @@ function validateMatrixCondition(condition: MatrixCondition): string | null {
 }
 
 function getConditionMatrixDisplay(condition: MatrixCondition): {
-  label: '1' | '2' | '-';
+  label: '0' | '1' | '2';
   isOpponent: boolean;
   backgroundColor: string | undefined;
   textColorClass: string;
 } {
-  const prioritized = condition.prioritized;
-  const deprioritized = condition.deprioritized;
-  const totalDirectionalTrials = prioritized + deprioritized;
+  const isOpponent = condition.deprioritized > condition.prioritized;
+  const winnerStrongly = isOpponent ? condition.opponentStrongly : condition.strongly;
+  const winnerSomewhat = isOpponent ? condition.opponentSomewhat : condition.somewhat;
+  const winnerScore = condition.totalTrials === 0
+    ? 0
+    : (2 * winnerStrongly + 1 * winnerSomewhat) / condition.totalTrials;
 
-  if (totalDirectionalTrials === 0 || prioritized === deprioritized) {
-    return {
-      label: '-',
-      isOpponent: false,
-      backgroundColor: undefined,
-      textColorClass: 'text-gray-400',
-    };
-  }
-
-  const isOpponent = deprioritized > prioritized;
-  const dominant = isOpponent ? deprioritized : prioritized;
-  const opacitySeed = (dominant / Math.max(1, prioritized + deprioritized)) * 2;
+  // Round to nearest integer for the cell label: 0 (neutral), 1 (somewhat), 2 (strongly)
+  const strengthLabel = String(Math.round(winnerScore)) as '0' | '1' | '2';
 
   return {
-    label: isOpponent ? '2' : '1',
+    label: strengthLabel,
     isOpponent,
-    backgroundColor: getPreferenceBackground(opacitySeed, isOpponent),
+    backgroundColor: getPreferenceBackground(winnerScore, isOpponent),
     textColorClass: getPreferenceTextColor(isOpponent),
   };
 }

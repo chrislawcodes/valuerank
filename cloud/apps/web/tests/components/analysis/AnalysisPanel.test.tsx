@@ -150,9 +150,7 @@ function createCanonicalTranscript({
             source: 'deterministic',
           },
           legacy: {
-            rawScore: direction === 'favor_second' ? 1 : direction === 'neutral' ? 3 : 5,
-            canonicalScore: direction === 'favor_second' ? 1 : direction === 'neutral' ? 3 : 5,
-          },
+            },
         },
   } as Transcript;
 }
@@ -423,11 +421,11 @@ describe('AnalysisPanel', () => {
 
     // PivotAnalysisTable and ConditionDecisionsTable now show winner's weighted score (0–2).
     // t1=strongly(1) + t2=somewhat(1), totalTrials=2 → winnerScore=(2×1+1×1)/2=1.5
-    const canonicalScore = screen
+    const winnerScoreElement = screen
       .getAllByText('1.5')
       .find((element) => element.className.includes('text-blue-700'));
-    expect(canonicalScore).toBeDefined();
-    expect(canonicalScore).toHaveClass('text-blue-700');
+    expect(winnerScoreElement).toBeDefined();
+    expect(winnerScoreElement).toHaveClass('text-blue-700');
     expect(screen.getByText('Unknown canonical trials are excluded from condition scores.')).toBeInTheDocument();
   });
 

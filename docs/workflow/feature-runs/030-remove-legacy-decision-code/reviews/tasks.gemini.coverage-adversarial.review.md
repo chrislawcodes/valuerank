@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "coverage-adversarial"
 stage: "tasks"
 artifact_path: "docs/workflow/feature-runs/030-remove-legacy-decision-code/tasks.md"
-artifact_sha256: "a3a63520b10e340e10f3e060ba77851fafdf2389d4990db207b5ae27b73ebdf9"
+artifact_sha256: "f22f225e41b0c7b454aee9ba24e8535c6193cb2d53256bfed0d4d447ced73092"
 repo_root: "."
-git_head_sha: "5d04de64d2bf84e1434fd754cd77b7159a695474"
+git_head_sha: "488f0830e54423e5743ee1c0a6b72556df7d7288"
 git_base_ref: "origin/main"
-git_base_sha: "b60f7e7ff0708de6013e64f4045868895bbbcf6e"
+git_base_sha: "47a1b4fade719759029b4462a8a52200b1ee0f83"
 generation_method: "gemini-cli"
 resolution_status: "accepted"
-resolution_note: "No actionable findings detected — auto-accepted"
+resolution_note: "HIGH GraphQL breaking change: only consumer is our own web app (verified — no external GraphQL clients exist). HIGH KS-test: ordinal ranking preserved, KS statistic depends on CDF rank not absolute values — mathematically equivalent. HIGH legacy data migration: out of scope per spec, decisionCode fallback kept intentionally. MEDIUM division by zero: guarded by Math.max(1, totalTrials) in implementation. MEDIUM Python callers: all callers verified via grep. MEDIUM external consumers: MCP and exports already use canonical model."
 raw_output_path: "docs/workflow/feature-runs/030-remove-legacy-decision-code/reviews/tasks.gemini.coverage-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,48 +22,31 @@ coverage_note: ""
 
 ## Findings
 
-### HIGH: Missing Database Migration and Data Backfill Strategy
-The plan comprehensively removes TypeScript types, GraphQL fields, and application logic related to the legacy `decisionCode` and score system. However, it completely omits any mention of database-level changes.
-
-- **Hidden Flaw**: The plan implicitly assumes that the backing database fields (`decisionCode`, `rawScore`, etc., if they exist as columns) will either be ignored or are not present. If these columns exist, the plan introduces schema drift by removing the application code that uses them without removing the columns themselves.
-- **Omitted Case**: There is no task to write or run a database migration to drop the legacy columns. More importantly, there is no task to backfill `decisionMetadata` for historical records that only have a `decisionCode`. The plan instead opts to maintain a permanent fallback (`Slice 1.1` and `Slice 4.1`), which institutionalizes the tech debt.
-- **Severity**: High. This oversight guarantees that the database schema will become inconsistent with the application code, and that a legacy code path will need to be maintained indefinitely.
-
-### HIGH: Unspecified Aggregate Data Recomputation
-`Slice 3.1` astutely identifies that previously-calculated aggregate results stored in the database will have the old `scoreCounts` shape. However, it proposes a single, localized fix: "Add a shape normalizer inline" within one specific React component.
-
-- **Weak Assumption**: This assumes that `OverviewTab.tsx` is the *only* place in the entire system that consumes these stored aggregates. The API, other frontend components, or data exports could also access this stale data and would not have the benefit of this inline normalizer.
-- **Hidden Flaw**: This is a reactive patch, not a systemic solution. The correct approach is to proactively recompute all stored aggregates as part of the migration. The plan lacks any task for a backfill script or job to re-run the analysis and update stored results to the new `directionCounts` shape.
-- **Severity**: High. Relying on a single-point-of-use UI fix for a data consistency issue creates a high risk of stale or incorrectly formatted data being presented elsewhere in the system.
-
-### MEDIUM: Cross-Wave Deployment Incompatibility
-The tasks are structured into waves that create breaking changes between the API and the frontend.
-
-- **Hidden Flaw**: If Wave 1 and 2 are deployed, the `decisionModelV2.legacy` field will be removed from the GraphQL API. The frontend, which is not updated until Wave 3, still expects this field to exist. This will cause GraphQL errors and break the UI.
-- **Omitted Case**: The plan does not include any mechanism to manage this breaking change, such as a feature flag, versioning the GraphQL type, or a strict requirement to deploy all waves simultaneously. This lack of a deployment strategy makes the proposed wave structure unsafe.
-- **Severity**: Medium. The issue is severe, but it is a procedural flaw in the rollout plan rather than a flaw in the final state of the code itself.
-
-### MEDIUM: [UNVERIFIED] Permanent Legacy Dependency
-`Slice 1.1` explicitly requires keeping the `decisionCode` fallback in `resolveTranscriptDecisionModel`, and `Slice 4.1` adds a regression test to ensure this fallback continues to work.
-
-- **Weak Assumption**: This assumes that it is acceptable to have a permanent, production-critical dependency on a legacy data field that the rest of the system is being migrated away from. The plan provides no path or future intention to eliminate this fallback.
-- **Hidden Flaw**: By choosing not to backfill the data and instead maintaining a permanent fallback, the project commits to supporting two parallel data models indefinitely. This increases cognitive load for future developers and creates a permanent maintenance burden.
-- **Severity**: Medium. While it doesn't break the system, it's a significant strategic error that fails to complete the stated goal of removing the legacy system. It is marked `[UNVERIFIED]` as the business impact depends on the volume of data that relies on this fallback, which cannot be known without code access.
+| Severity | Finding | Location |
+| :--- | :--- | :--- |
+| **HIGH** | **Breaking API Change with Unverified Client Audit:** The plan removes the `legacy` field from the GraphQL schema. This is a breaking change. The artifact only confirms updating the web frontend client. It does not mention an audit of other potential clients (e.g., BI tools, external scripts, other applications) that may consume this API. Such a change could break un-audited consumers. | Wave 2.1 |
+| **HIGH** | **Potential Invalidation of Statistical Analysis:** The `ks-test` is being updated to use a new signed integer scale (`-2` to `+2`). The Kolmogorov-Smirnov test is sensitive to the underlying distribution and scale of data. The artifact does not mention any validation that this new mapping is a statistically sound transformation for this test. This change risks invalidating the results of the `ks-test`, which could lead to incorrect analytical conclusions. | Wave 3.1 |
+| **HIGH** | **Ambiguous Legacy Data Migration Plan:** The plan explicitly keeps a fallback for the legacy `decisionCode` in `resolveTranscriptDecisionModel`. This implies that data using this legacy field will continue to exist. However, the plan lacks any task for migrating this data or for eventually removing the fallback. This creates technical debt and a permanent seam in the logic, increasing the risk of future bugs and complicating the codebase. The regression coverage for this critical fallback path relies on an "existing test," which is not confirmed to be comprehensive. | Wave 1.2, Wave 5.1 |
+| **MEDIUM** | **[UNVERIFIED] Risk of Division by Zero:** The new strength score formula in `ConditionMatrix.tsx` is `(2 * winnerStrong + 1 * winnerSomewhat) / totalTrials`. If a condition exists with zero trials, this will result in a division-by-zero error, potentially crashing the component. The plan does not mention handling for this edge case. | Wave 1.1 |
+| **MEDIUM** | **[UNVERIFIED] Undefined Scope of Python Worker Impact:** Core data model functions in the Python workers are being rewritten (`decision_model.py`). The plan confirms that tests are being updated, but not that all internal callers of these functions have been audited. A change in the return signature or logic of a shared function could have unintended consequences in other parts of the worker system not covered by the listed tests. | Wave 2.2 |
+| **MEDIUM** | **[UNVERIFIED] Potential Breaking Change to External Consumers:** The plan verifies that data exports and MCP agent tools are being changed or are "already clean." These are external-facing APIs for human users (exports) and other agents (MCP). The artifact does not include tasks for communicating these changes, versioning the outputs, or ensuring the consumers are updated, which could break external workflows. | Wave 4.1 |
 
 ## Residual Risks
 
-- **Data Inconsistency**: Upon completion, the database will likely contain a mix of historical records with a populated `decisionCode` and newer records without it. Stored aggregate results will also be mixed between `scoreCounts` and `directionCounts` shapes, with only a single UI component patched to handle the difference. This creates a high risk of other system components misinterpreting data.
-- **Database Schema Drift**: The database will contain unused `decisionCode` (and potentially `rawScore`/`canonicalScore`) columns, creating a divergence between the application schema and the database schema. This constitutes technical debt and can complicate future data analysis and development.
-- **Incomplete Abstraction**: The core goal of removing the legacy system is not fully achieved. The `decisionCode` logic remains as a permanent fallback in a critical data resolver, meaning developers must still understand this legacy system to work on transcript data modeling.
-- **Brittle Analysis Logic**: The tasks for rewriting variance analysis (`Slice 1.2`) and Python worker logic (`Slice 2.2`) focus on replacing one calculation with another. They do not explicitly require adding defensive logic to handle cases where the new `(direction, strength)` values might be `null` or `undefined`, potentially leading to runtime errors if data is incomplete.
+Even if all tasks are completed as described, the following risks remain:
+
+1.  **Stale Data Risk:** The core residual risk is the un-migrated data that relies on the `decisionCode` fallback. This fallback may have subtle bugs or edge cases not covered by the "existing test." Any future work on the scoring model will have to account for this legacy path until the data is fully migrated, which is not part of this plan.
+2.  **Incorrect Analysis Risk:** The validity of the `ks-test` remains a significant concern. If the new signed distance model is not appropriate for the KS-test, any conclusions drawn from it are suspect. This risk persists unless a statistical validation is performed, which is not included in the tasks.
+3.  **Environmental Gaps:** The plan relies entirely on `npm run build` and `npm run test`. There is no mention of integration testing, end-to-end testing, or QA on a staging environment. It's possible for all tests to pass and builds to be clean, yet have runtime errors when services interact, especially with the mix of TypeScript and Python services and a persistent `decisionCode` fallback.
+4.  **Incomplete Test Fixture Coverage:** While 15+ test files are being updated, the *quality* of those updates is unknown. If the fixtures were updated to simply match new snapshots without adding specific assertions for the new scoring logic (e.g., asserting a score of `2` for a "strongly" item), then the tests may not be meaningfully verifying the new model.
 
 ## Token Stats
 
-- total_input=3198
-- total_output=1142
-- total_tokens=16794
-- `gemini-2.5-pro`: input=3198, output=1142, total=16794
+- total_input=14763
+- total_output=956
+- total_tokens=18255
+- `gemini-2.5-pro`: input=14763, output=956, total=18255
 
 ## Resolution
 - status: accepted
-- note: No actionable findings detected — auto-accepted
+- note: HIGH GraphQL breaking change: only consumer is our own web app (verified — no external GraphQL clients exist). HIGH KS-test: ordinal ranking preserved, KS statistic depends on CDF rank not absolute values — mathematically equivalent. HIGH legacy data migration: out of scope per spec, decisionCode fallback kept intentionally. MEDIUM division by zero: guarded by Math.max(1, totalTrials) in implementation. MEDIUM Python callers: all callers verified via grep. MEDIUM external consumers: MCP and exports already use canonical model.
