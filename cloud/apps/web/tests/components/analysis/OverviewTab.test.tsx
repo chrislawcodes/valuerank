@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { OverviewTab } from '../../../src/components/analysis/tabs/OverviewTab';
 import type { AnalysisResult, VarianceAnalysis } from '../../../src/api/operations/analysis';
@@ -611,7 +611,10 @@ describe('OverviewTab', () => {
 
     fireEvent.focus(screen.getByRole('button', { name: /Value Agreement:/i }));
 
-    expect(screen.getByRole('tooltip')).toHaveTextContent(/How often repeated judgments stay on the same value side/i);
+    // waitFor: interaction triggers async state update before DOM settles
+    await waitFor(() => {
+      expect(screen.getByRole('tooltip')).toHaveTextContent(/How often repeated judgments stay on the same value side/i);
+    });
   });
 
   it('navigates repeat-pattern cells with condition-level ids in paired mode', () => {
