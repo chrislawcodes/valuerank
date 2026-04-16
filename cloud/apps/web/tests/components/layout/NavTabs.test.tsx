@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { NavTabs } from '../../../src/components/layout/NavTabs';
 
+const user = userEvent.setup({ delay: null });
+
 function renderNavTabs(initialRoute = '/') {
   return render(
     <MemoryRouter initialEntries={[initialRoute]}>
@@ -13,7 +15,7 @@ function renderNavTabs(initialRoute = '/') {
 }
 
 async function openMenu(label: string) {
-  await userEvent.click(screen.getByRole('button', { name: `Toggle ${label} menu` }));
+  await user.click(screen.getByRole('button', { name: `Toggle ${label} menu` }));
 }
 
 describe('NavTabs Component', () => {
