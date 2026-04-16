@@ -163,11 +163,16 @@ export function ModelValueDetailDrawer({
       <ol className="list-decimal pl-4 space-y-0.5">
         <li>Find each domain&apos;s win rate (table below).</li>
         <li>Measure how far each domain&apos;s win rate is from the pooled mean — the &quot;spread.&quot;</li>
-        <li>Take a weighted average of those distances (bigger domains count more). This is the <strong>weighted spread</strong>.</li>
         <li>
-          Convert to a score: <strong>score = 100 × (1 − spread ÷ 50)</strong>.
-          A spread of 0 → score 100 (all domains identical).
-          A spread of 50 → score 0 (maximum disagreement possible).
+          Take a weighted average of those distances, where domains with more comparisons count more.
+          This is called the <strong>weighted MAD</strong> (Mean Absolute Deviation) — it&apos;s just
+          the average distance between each domain&apos;s win rate and the overall mean,
+          with bigger domains pulling the average more than smaller ones.
+        </li>
+        <li>
+          Convert to a score: <strong>score = 100 × (1 − MAD ÷ 50)</strong>.
+          A MAD of 0 → score 100 (all domains identical).
+          A MAD of 50 → score 0 (maximum disagreement possible).
         </li>
       </ol>
       {!singleDomainActive && value.eligibleDomainCount >= 2 && pooledMean != null && domains.length > 0 && (
@@ -194,12 +199,12 @@ export function ModelValueDetailDrawer({
             </tbody>
             <tfoot>
               <tr className="border-t border-gray-300 font-semibold">
-                <td className="pt-1 pr-3" colSpan={2}>Weighted avg spread</td>
+                <td className="pt-1 pr-3" colSpan={2}>Weighted MAD</td>
                 <td className="text-right pt-1 pl-2">{mad != null ? `${Math.round(mad)} pts` : 'n/a'}</td>
               </tr>
               <tr className="font-semibold">
                 <td className="pt-0.5 pr-3 font-normal text-gray-500" colSpan={2}>
-                  {mad != null ? `100 × (1 − ${Math.round(mad)} ÷ 50) =` : 'Score'}
+                  {mad != null ? `100 × (1 − MAD ${Math.round(mad)} ÷ 50) =` : 'Score'}
                 </td>
                 <td className="text-right pt-0.5 pl-2">
                   {value.stabilityScore != null ? `${Math.round(value.stabilityScore)}/100` : 'n/a'}
