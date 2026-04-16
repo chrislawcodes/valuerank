@@ -1,6 +1,6 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeAll, beforeEach } from 'vitest';
 
-// Mock @valuerank/db before importing the module under test
+// Register mock factories — these are hoisted by Vitest and persist across resetModules()
 vi.mock('@valuerank/db', () => ({
   db: {
     transcript: {
@@ -10,18 +10,30 @@ vi.mock('@valuerank/db', () => ({
   Prisma: { DbNull: null },
 }));
 
-// Mock findMissingProbes from coverage-completeness
 vi.mock('../../../services/run/coverage-completeness.js', () => ({
   findMissingProbes: vi.fn(),
 }));
 
-import { db } from '@valuerank/db';
-import { findMissingProbes } from '../../../services/run/coverage-completeness.js';
-import { checkAllSummarized } from '../summarize-persistence.js';
+// In single-fork mode, summarize-transcript.test.ts (integration test) may load
+// summarize-persistence.ts before this file runs, giving it a live ESM binding to
+// the REAL findMissingProbes. vi.resetModules() clears the module cache so our
+// subsequent dynamic imports get a fresh summarize-persistence.ts that binds to
+// the mock instead.
+let checkAllSummarized: (runId: string) => Promise<boolean>;
+let mockCount: ReturnType<typeof vi.fn>;
+let mockFindMissingProbes: ReturnType<typeof vi.fn>;
 
-// eslint-disable-next-line @typescript-eslint/unbound-method
-const mockCount = vi.mocked(db.transcript.count);
-const mockFindMissingProbes = vi.mocked(findMissingProbes);
+beforeAll(async () => {
+  vi.resetModules();
+  const dbModule = await import('@valuerank/db');
+  const coverageModule = await import('../../../services/run/coverage-completeness.js');
+  const persistenceModule = await import('../summarize-persistence.js');
+
+  checkAllSummarized = persistenceModule.checkAllSummarized;
+  // eslint-disable-next-line @typescript-eslint/unbound-method
+  mockCount = vi.mocked(dbModule.db.transcript.count);
+  mockFindMissingProbes = vi.mocked(coverageModule.findMissingProbes);
+});
 
 describe('checkAllSummarized', () => {
   beforeEach(() => {
