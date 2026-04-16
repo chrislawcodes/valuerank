@@ -41,6 +41,7 @@ import { StartRedirect } from './pages/StartRedirect';
 import { StatusRedirect } from './pages/StatusRedirect';
 import { NotFound } from './pages/NotFound';
 import { client } from './api/client';
+import { useHorizontalScrollOnWheel } from './hooks/useHorizontalScrollOnWheel';
 
 // Protected layout wrapper
 function ProtectedLayout({ children, fullWidth = false }: { children: React.ReactNode; fullWidth?: boolean }) {
@@ -53,6 +54,8 @@ function ProtectedLayout({ children, fullWidth = false }: { children: React.Reac
 
 
 function App() {
+  useHorizontalScrollOnWheel();
+
   return (
     <BrowserRouter>
       <Provider value={client}>

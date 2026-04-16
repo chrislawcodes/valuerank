@@ -26,3 +26,6 @@ export { useRunsWithAnalysis } from './useRunsWithAnalysis';
 
 // Viewport hooks
 export { useViewport, useMediaQuery } from './useViewport';
+
+// Scroll UX hooks
+export { useHorizontalScrollOnWheel } from './useHorizontalScrollOnWheel';
