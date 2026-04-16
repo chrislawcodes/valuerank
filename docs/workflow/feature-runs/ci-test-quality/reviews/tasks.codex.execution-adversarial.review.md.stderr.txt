@@ -1,0 +1,84 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/cranky-grothendieck
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019d97cf-c3f8-7220-a153-8c58f423cd00
+--------
+user
+Review this tasks artifact using a execution-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: tasks.md
+# Tasks: CI Test Quality Improvements
+
+## Wave 1: CI Config + Vitest Config
+
+- T-01: Remove `src/**/*.test.ts` glob from `cloud/apps/api/vitest.config.ts`
+- T-02: Delete `src/cli/create-user.test.ts`; git mv domain-coverage and summarize-persistence tests to tests/
+- T-03: Add `--force` to shared build in web-tests job in `.github/workflows/ci.yml`
+- T-04: Add `restore-keys` fallback to all three node_modules cache steps
+- T-05: Add `timeout-minutes: 20` to api-tests job
+
+[CHECKPOINT]
+
+## Wave 2: access-tracking Return Type
+
+- T-06: Change all four access-tracking functions to return `Promise<void>`
+- T-07: Replace `setTimeout` waits in access-tracking tests with direct `await`
+
+[CHECKPOINT]
+
+## Wave 3: Global Stub Safety
+
+- T-08: Replace manual global save/restore with `vi.stubGlobal` in export.test.ts
+
+[CHECKPOINT]
+
+## Wave 4: waitFor for Flaky Queries
+
+- T-09: Add `waitFor` to post-interaction `getBy*` queries in OverviewTab.test.tsx
+- T-10: Add `waitFor` to post-interaction `getBy*` queries in AnalysisDetail.test.tsx
+
+[CHECKPOINT]
+
+## Wave 5: Large Test File Splits
+
+- T-13: Split AnalysisPanel.test.tsx into states, pairedContent, layout files + fixtures
+- T-14: Split OverviewTab.test.tsx into overview, repeatPattern, layout files + fixtures
+
+[CHECKPOINT]
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m reviewing the task list itself, not the code. I’m checking for missing steps, unsafe assumptions, and places where the plan could pass CI while still leaving the underlying problem unresolved.
+codex
+## Findings
+- **Medium [UNVERIFIED]** T-01 and T-02 do not fully close the test-discovery loop. The plan removes the `src/**/*.test.ts` glob and moves only two named tests, but it never requires a verification step that all remaining tests are now discovered from `tests/`. If any `src` tests are left behind, CI will silently stop running them.
+- **Medium [UNVERIFIED]** T-03 weakens the CI gate by adding `--force` to the shared web build. That can hide a real build failure instead of fixing it, which makes the job look green while shipping broken output or stale artifacts.
+- **Medium [UNVERIFIED]** T-06 changes return types to `Promise<void>`, but the plan only mentions updating tests in T-07. It does not require auditing call sites for code that may still depend on a return value or synchronous behavior. That makes the change riskier than a simple test cleanup.
+- **Low [UNVERIFIED]** The task list skips `T-11` and `T-12` with no note. That makes it harder to tell whether two tasks were intentionally removed or accidentally omitted, which is a small but real execution risk for a multi-wave plan.
+
+## Residual Risks
+- **[UNVERIFIED]** The plan assumes the moved tests will still be covered by Vitest after the config change. If the new glob is wrong, coverage will drop without an obvious failure.
+- **[UNVERIFIED]** The large-file split tasks may move flakiness around instead of fixing it if shared fixtures or setup logic are not extracted cleanly.
+- **[UNVERIFIED]** The `waitFor` changes in T-09 and T-10 may reduce flakes, but they can also mask real async timing issues if the underlying state transitions are not asserted tightly enough.
+- **[UNVERIFIED]** The global stub change in T-08 only names one file. If the same save/restore pattern exists elsewhere, the broader safety problem will remain.
+tokens used
+3,847

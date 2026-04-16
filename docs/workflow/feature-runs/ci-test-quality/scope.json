@@ -1,0 +1,19 @@
+{
+  "paths": [
+    ".github/workflows/ci.yml",
+    "cloud/apps/api/src/middleware/access-tracking.ts",
+    "cloud/apps/api/vitest.config.ts",
+    "cloud/apps/web/tests/api/export.test.ts",
+    "cloud/apps/web/tests/components/analysis",
+    "cloud/apps/web/tests/pages"
+  ],
+  "allowed_dirty_paths": [
+    ".github/workflows/ci.yml",
+    "cloud/apps/api/src/middleware/access-tracking.ts",
+    "cloud/apps/api/vitest.config.ts",
+    "cloud/apps/web/tests/api/export.test.ts",
+    "cloud/apps/web/tests/components/analysis",
+    "cloud/apps/web/tests/pages",
+    "docs/workflow/feature-runs/ci-test-quality"
+  ]
+}

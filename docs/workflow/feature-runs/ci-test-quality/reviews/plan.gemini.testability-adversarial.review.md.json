@@ -1,0 +1,57 @@
+{
+  "session_id": "fdc949ba-fa39-4608-a6f4-d73f5babc517",
+  "response": "## Findings\n\n| Severity | Finding | Wave |\n| :--- | :--- | :--- |\n| **HIGH** | **CI Build Forced with `--force`** | 1 |\n| | The plan adds `--force` to a `turbo build` command. This is a significant red flag. It indicates an underlying, unsolved problem with caching or dependency invalidation. Forcing the build treats the symptom (stale cache preventing a build) rather than the root cause. This can mask real issues, lead to non-deterministic builds, and hide future dependency graph problems until they cause a more catastrophic failure. | |\n| **HIGH** | **Inconsistent Async Testing in `access-tracking`** | 2 |\n| | The plan correctly identifies that async functions should be awaited in tests, not managed with `setTimeout`. However, it explicitly preserves `setTimeout` waits for the HTTP-triggered path. If the underlying functions are now properly returning promises, there is no valid reason to keep using `setTimeout`. This leaves a known bad practice in the test suite, creates inconsistency, and suggests a weak understanding of the system under test. All `setTimeout` waits should be replaced with `await`. | |\n| **MEDIUM** | **Risk of State Pollution from Shared Fixtures** | 5 |\n| | Splitting large test files by extracting shared fixtures (`.fixtures.ts`) is a good goal, but the plan lacks a critical detail: ensuring test isolation. If these fixtures contain mutable state (e.g., shared objects, mock implementations) that is modified by one test, it can poison the well for subsequent tests running in the same suite, especially if tests run in parallel. The plan must specify that fixtures should be stateless or generated via factory functions (`createMockData()`) to ensure each test gets a clean copy. | |\n| **MEDIUM** | **Incomplete `waitFor` Usage for Absence Assertions** | 4 |\n| | The plan focuses on wrapping `getBy*` queries in `waitFor`, which is correct for asserting the *presence* of an element after an async update. However, it completely omits the case for asserting the *absence* of an element. A test checking `expect(queryByText('...')).toBeNull()` can also be flaky if the DOM hasn't settled. Such assertions must also be wrapped (e.g., `await waitFor(() => expect(queryByText('...')).toBeNull())`) to prevent race conditions where the check runs before a component has finished removing an element. | |\n| **MEDIUM** | **[UNVERIFIED] High Timeout Masks Performance Issues** | 1 |\n| | Increasing the `api-tests` job timeout to 20 minutes is a pragmatic but dangerous fix. It prevents timeouts for now, but it doesn't address the underlying cause of the long test run. It creates a risk of masking future performance regressions, as tests can get progressively slower without triggering a failure until they cross the new, much higher threshold. It also means that a truly hung test will waste 20 minutes of CI resources before failing. | |\n| **MEDIUM** | **[UNVERIFIED] Potential for Error-Swallowing Promises** | 2 |\n| | The plan states that the `.catch()` blocks in `access-tracking.ts` will be kept. If these `catch` blocks do not re-throw the error, a failed Prisma operation will result in a successfully resolved promise. This would cause a test expecting a failure to pass incorrectly. The test plan for Wave 2 should be expanded to include verifying that a database error correctly causes the promise to reject. | |\n| **LOW** | **[UNVERIFIED] Incomplete Test Setup After File Splitting** | 5 |\n| | When splitting large test files like `AnalysisPanel.test.tsx`, there's a high risk of forgetting to apply necessary context providers or mocks to all the new, smaller test files. The plan does not include a verification step to ensure the test setup (wrappers, providers, mocks) remains consistent across all new files, which could lead to a new class of test failures. | |\n| **LOW** | **[UNVERIFIED] Unverified Assumption About Superset Test** | 1 |\n| | The plan justifies deleting `create-user.test.ts` by claiming a \"superset exists in tests/\". This is an unverified assumption. Without seeing the contents of both files, it's impossible to confirm that all scenarios, edge cases, and assertions from the deleted file are truly covered by the other. This action carries a small but real risk of deleting unique test coverage. | |\n\n## Residual Risks\n\n1.  **Systematic Flakiness Unaddressed:** The plan targets specific, known-flaky tests with `waitFor`. This is a tactical fix. It does not introduce a systematic solution or linting rule to prevent developers from introducing new, similar race conditions in the future. Other flaky tests not found in the initial audit will likely remain.\n2.  **CI Cache Unreliability:** Using `restore-keys` for the `node_modules` cache can introduce subtle, hard-to-debug issues. If a dependency is updated in a way that doesn't change the `package-lock.json` hash key, CI might restore a partially stale cache, leading to \"works on my machine\" problems. The root cause of the build failures addressed by `--force` remains unresolved and could resurface.\n3.  **Test Suite Performance Decay:** The 20-minute timeout on API tests is a concession, not a solution. The underlying performance issues are not being addressed, and the test suite's execution time will likely continue to grow, eventually exceeding the new timeout and requiring another intervention.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 33026
+        },
+        "tokens": {
+          "input": 13610,
+          "prompt": 13610,
+          "candidates": 1205,
+          "total": 16483,
+          "cached": 0,
+          "thoughts": 1668,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 33026,
+            "tokens": {
+              "input": 13610,
+              "prompt": 13610,
+              "candidates": 1205,
+              "total": 16483,
+              "cached": 0,
+              "thoughts": 1668,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

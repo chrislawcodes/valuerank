@@ -1,0 +1,122 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/cranky-grothendieck
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019d97ce-3b35-7bb1-bc1d-7fbcb78f3bd1
+--------
+user
+Review this plan artifact using a architecture-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Plan: CI Test Quality Improvements
+
+## Implementation Order
+
+Waves 1–5 run sequentially (each wave's verification depends on previous changes). Within Wave 1, all tasks are independent. Within Wave 4, tasks target different files and are independent.
+
+**Wave 1 — CI config and vitest config (US-1, US-2, US-3, US-4):** Pure config edits.
+
+**Wave 2 — access-tracking return type (US-7):** Application + test change.
+
+**Wave 3 — export.test.ts global stubbing (US-8):** Test-only change.
+
+**Wave 4 — waitFor wrapping in flaky tests (US-6):** Test-only change across 2 files with actual getBy* after interaction patterns.
+
+**Wave 5 — large test file splits (US-5):** Structural change with shared fixture extraction.
+
+---
+
+## Wave 1: CI Config + Vitest Config
+
+**`.github/workflows/ci.yml` changes:**
+- Add `--force` to `npx turbo build --filter=@valuerank/shared` in web-tests job (US-1)
+- Add `restore-keys: ${{ runner.os }}-node-modules-` to all three node_modules cache steps (US-3)
+- Add `timeout-minutes: 20` to api-tests job (US-4)
+
+**`cloud/apps/api/vitest.config.ts` changes (US-2):**
+- Remove `'src/**/*.test.ts'` from include array
+- Delete `src/cli/create-user.test.ts` (21-line stub, superset exists in tests/)
+- `git mv` `src/graphql/queries/__tests__/domain-coverage.test.ts` → `tests/graphql/queries/domain-coverage.test.ts`
+- `git mv` `src/queue/handlers/__tests__/summarize-persistence.test.ts` → `tests/queue/handlers/summarize-persistence.test.ts`
+
+---
+
+## Wave 2: access-tracking Return Type (US-7)
+
+**`cloud/apps/api/src/middleware/access-tracking.ts`:** Change all four functions from `void` to `Promise<void>` by adding `return` before each Prisma chain. Early return becomes `return Promise.resolve()`. Keep `.catch()` intact.
+
+**`cloud/apps/api/tests/middleware/access-tracking.test.ts`:** Replace `await new Promise(resolve => setTimeout(resolve, 100))` after direct function calls with `await trackXxxAccess(...)`. Preserve setTimeout waits in the "Run Access Tracking" describe block (HTTP-triggered path).
+
+---
+
+## Wave 3: export.test.ts Global Stub Safety (US-8)
+
+**`cloud/apps/web/tests/api/export.test.ts`:** Remove manual save/restore variables. Replace direct global assignment with `vi.stubGlobal(...)`. Add `vi.unstubAllGlobals()` to afterEach.
+
+---
+
+## Wave 4: waitFor for Flaky Async Queries (US-6)
+
+Only target `getBy*` queries that appear after `fireEvent.*` or `userEvent.*`. Audit found 4 qualifying blocks:
+- `OverviewTab.test.tsx` ~line 578: tooltip after fireEvent.focus
+- `AnalysisDetail.test.tsx`: ~3 blocks with fireEvent.click/change + immediate getBy*
+
+---
+
+## Wave 5: Split Large Test Files (US-5)
+
+Extract shared fixtures, then create 3 test files per component:
+
+**AnalysisPanel:** `analysisPanel.fixtures.tsx` + states + pairedContent + layout files  
+**OverviewTab:** `overviewTab.fixtures.ts` + overview + repeatPattern + layout files
+
+---
+
+## Files Touched
+
+| File | Wave |
+|------|------|
+| `.github/workflows/ci.yml` | 1 |
+| `cloud/apps/api/vitest.config.ts` | 1 |
+| `cloud/apps/api/src/cli/create-user.test.ts` | 1 (delete) |
+| `cloud/apps/api/src/graphql/queries/__tests__/domain-coverage.test.ts` | 1 (move) |
+| `cloud/apps/api/src/queue/handlers/__tests__/summarize-persistence.test.ts` | 1 (move) |
+| `cloud/apps/api/src/middleware/access-tracking.ts` | 2 |
+| `cloud/apps/api/tests/middleware/access-tracking.test.ts` | 2 |
+| `cloud/apps/web/tests/api/export.test.ts` | 3 |
+| `cloud/apps/web/tests/components/analysis/OverviewTab.test.tsx` | 4+5 |
+| `cloud/apps/web/tests/components/analysis/AnalysisPanel.test.tsx` | 4+5 |
+| `cloud/apps/web/tests/pages/AnalysisDetail.test.tsx` | 4 |
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+- [MEDIUM][UNVERIFIED] Wave 1 removes `src/**/*.test.ts` from Vitest discovery and deletes/moves files based on the assumption that coverage already exists elsewhere. If any `src` test remains relevant, CI will silently stop running it, which is a coverage regression rather than a cleanup.
+- [MEDIUM] Adding `--force` to `turbo build` in CI is a blunt workaround. It guarantees rebuilds but also bypasses cache correctness signals, so the workflow can keep passing while the underlying stale-build or dependency-graph problem remains hidden and every run becomes slower.
+- [MEDIUM][UNVERIFIED] Wave 2 changes `access-tracking` from `void` to `Promise<void>` but only names one test file for updates. That is an API contract change, so any unaccounted caller or middleware wrapper can now observe different async timing or unhandled rejections.
+- [LOW][UNVERIFIED] Wave 5’s split plan is too vague about fixture ownership and shared mocks. Without a defined boundary for what lives in the extracted fixture files, the split can recreate hidden coupling across files or duplicate setup in slightly different ways.
+
+## Residual Risks
+- The plan still relies on the moved tests being behaviorally equivalent after path changes, glob changes, and file deletions.
+- Wave 4 only addresses the currently identified async `getBy*` patterns; similar flake patterns elsewhere in the web suite may remain.
+- The CI changes may reduce visible flakiness in the short term while increasing runtime or hiding the root cause of cache-related failures.
+tokens used
+37,911

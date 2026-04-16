@@ -1,0 +1,124 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/cranky-grothendieck
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019d97cd-a6be-7bd2-9eae-23002b6a62f7
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Plan: CI Test Quality Improvements
+
+## Implementation Order
+
+Waves 1–5 run sequentially (each wave's verification depends on previous changes). Within Wave 1, all tasks are independent. Within Wave 4, tasks target different files and are independent.
+
+**Wave 1 — CI config and vitest config (US-1, US-2, US-3, US-4):** Pure config edits.
+
+**Wave 2 — access-tracking return type (US-7):** Application + test change.
+
+**Wave 3 — export.test.ts global stubbing (US-8):** Test-only change.
+
+**Wave 4 — waitFor wrapping in flaky tests (US-6):** Test-only change across 2 files with actual getBy* after interaction patterns.
+
+**Wave 5 — large test file splits (US-5):** Structural change with shared fixture extraction.
+
+---
+
+## Wave 1: CI Config + Vitest Config
+
+**`.github/workflows/ci.yml` changes:**
+- Add `--force` to `npx turbo build --filter=@valuerank/shared` in web-tests job (US-1)
+- Add `restore-keys: ${{ runner.os }}-node-modules-` to all three node_modules cache steps (US-3)
+- Add `timeout-minutes: 20` to api-tests job (US-4)
+
+**`cloud/apps/api/vitest.config.ts` changes (US-2):**
+- Remove `'src/**/*.test.ts'` from include array
+- Delete `src/cli/create-user.test.ts` (21-line stub, superset exists in tests/)
+- `git mv` `src/graphql/queries/__tests__/domain-coverage.test.ts` → `tests/graphql/queries/domain-coverage.test.ts`
+- `git mv` `src/queue/handlers/__tests__/summarize-persistence.test.ts` → `tests/queue/handlers/summarize-persistence.test.ts`
+
+---
+
+## Wave 2: access-tracking Return Type (US-7)
+
+**`cloud/apps/api/src/middleware/access-tracking.ts`:** Change all four functions from `void` to `Promise<void>` by adding `return` before each Prisma chain. Early return becomes `return Promise.resolve()`. Keep `.catch()` intact.
+
+**`cloud/apps/api/tests/middleware/access-tracking.test.ts`:** Replace `await new Promise(resolve => setTimeout(resolve, 100))` after direct function calls with `await trackXxxAccess(...)`. Preserve setTimeout waits in the "Run Access Tracking" describe block (HTTP-triggered path).
+
+---
+
+## Wave 3: export.test.ts Global Stub Safety (US-8)
+
+**`cloud/apps/web/tests/api/export.test.ts`:** Remove manual save/restore variables. Replace direct global assignment with `vi.stubGlobal(...)`. Add `vi.unstubAllGlobals()` to afterEach.
+
+---
+
+## Wave 4: waitFor for Flaky Async Queries (US-6)
+
+Only target `getBy*` queries that appear after `fireEvent.*` or `userEvent.*`. Audit found 4 qualifying blocks:
+- `OverviewTab.test.tsx` ~line 578: tooltip after fireEvent.focus
+- `AnalysisDetail.test.tsx`: ~3 blocks with fireEvent.click/change + immediate getBy*
+
+---
+
+## Wave 5: Split Large Test Files (US-5)
+
+Extract shared fixtures, then create 3 test files per component:
+
+**AnalysisPanel:** `analysisPanel.fixtures.tsx` + states + pairedContent + layout files  
+**OverviewTab:** `overviewTab.fixtures.ts` + overview + repeatPattern + layout files
+
+---
+
+## Files Touched
+
+| File | Wave |
+|------|------|
+| `.github/workflows/ci.yml` | 1 |
+| `cloud/apps/api/vitest.config.ts` | 1 |
+| `cloud/apps/api/src/cli/create-user.test.ts` | 1 (delete) |
+| `cloud/apps/api/src/graphql/queries/__tests__/domain-coverage.test.ts` | 1 (move) |
+| `cloud/apps/api/src/queue/handlers/__tests__/summarize-persistence.test.ts` | 1 (move) |
+| `cloud/apps/api/src/middleware/access-tracking.ts` | 2 |
+| `cloud/apps/api/tests/middleware/access-tracking.test.ts` | 2 |
+| `cloud/apps/web/tests/api/export.test.ts` | 3 |
+| `cloud/apps/web/tests/components/analysis/OverviewTab.test.tsx` | 4+5 |
+| `cloud/apps/web/tests/components/analysis/AnalysisPanel.test.tsx` | 4+5 |
+| `cloud/apps/web/tests/pages/AnalysisDetail.test.tsx` | 4 |
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m reviewing the plan itself, not the code, and I’m looking for places where the sequence or assumptions can break the work even if each step sounds reasonable.
+codex
+## Findings
+- **Medium [UNVERIFIED]**: Wave 1 deletes `src/cli/create-user.test.ts` on the assumption that a “superset exists in tests/,” but the plan never defines how equivalence will be proven. If the replacement misses even one assertion or mock edge case, CI loses unique coverage with no fallback.
+- **Medium [UNVERIFIED]**: Wave 2 changes `access-tracking` from `void` to `Promise<void>` but only updates the direct test calls. The plan does not require a repo-wide caller/type audit, so any remaining synchronous callers or interface contracts can keep stale assumptions about completion timing and error propagation.
+- **Medium [UNVERIFIED]**: Wave 4 scopes the `waitFor` fix to `getBy*` queries that follow `fireEvent`/`userEvent`. That heuristic misses other async UI patterns, such as effect-driven updates, mocked network responses, or timer-based state changes, so flaky tests can remain unfixed after the wave is marked complete.
+- **Low [UNVERIFIED]**: Wave 5 is too vague about split boundaries and file naming. Without explicit new filenames and fixture ownership, the extracted tests can fall outside Vitest globs or drift into duplicated setup.
+
+## Residual Risks
+- The plan still assumes the moved tests will be discovered by the existing Vitest include patterns.
+- It also assumes no other active tests remain under `src/` after the glob change.
+- CI verification still needs to prove coverage parity after the delete/move steps and after the test-file split.
+tokens used
+37,324
