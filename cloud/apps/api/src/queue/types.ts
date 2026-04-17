@@ -7,6 +7,7 @@
 // Job type union
 export type JobType =
   | 'probe_scenario'
+  | 'top_up_probes'
   | 'summarize_transcript'
   | 'analyze_basic'
   | 'expand_scenarios'
@@ -27,6 +28,10 @@ export type ProbeScenarioJobData = {
     seed?: number;
     maxTurns: number;
   };
+};
+
+export type TopUpProbesJobData = {
+  runId: string;
 };
 
 export type SummarizeTranscriptJobData = {
@@ -72,6 +77,7 @@ export type ProbeDeadLetterJobData = ProbeScenarioJobData;
 // Job data union type (ProbeDeadLetterJobData is same as ProbeScenarioJobData, so not duplicated here)
 export type JobData =
   | ProbeScenarioJobData
+  | TopUpProbesJobData
   | SummarizeTranscriptJobData
   | AnalyzeBasicJobData
   | ExpandScenariosJobData
@@ -96,6 +102,10 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
     retryDelay: 5,
     retryBackoff: true,
     expireInSeconds: 420, // 7 minutes - covers 5m timeout + buffer
+  },
+  'top_up_probes': {
+    retryLimit: 0,
+    expireInSeconds: 60,
   },
   'summarize_transcript': {
     retryLimit: 3,

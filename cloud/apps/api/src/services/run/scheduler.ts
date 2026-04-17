@@ -11,6 +11,7 @@
  * - This prevents wasting resources checking for orphaned runs when no runs are active
  */
 
+import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import {
   recoverOrphanedRuns,
@@ -19,8 +20,15 @@ import {
   runStartupRecovery
 } from './recovery.js';
 import { detectAndUpdateStalledRuns } from './stall-detection.js';
+import { PROBE_QUEUE_DEPTH_PER_PROVIDER } from './start-queue.js';
+import { enqueueTopUpProbesSingleton } from '../../queue/handlers/top-up-probes.js';
+import { getQueueNameForModel } from '../parallelism/index.js';
 
 const log = createLogger('services:run:scheduler');
+
+type RunConfig = {
+  models?: string[];
+};
 
 let recoveryInterval: NodeJS.Timeout | null = null;
 let activityTimeout: NodeJS.Timeout | null = null;
@@ -28,6 +36,45 @@ let isRecovering = false;
 
 // How long to keep recovery running after the last run was started (1 hour)
 export const RECOVERY_ACTIVITY_WINDOW_MS = 60 * 60 * 1000;
+
+function parseRunConfig(config: unknown): RunConfig {
+  return config !== null && typeof config === 'object' ? (config as RunConfig) : {};
+}
+
+async function getPendingJobsForQueue(runId: string, queueName: string): Promise<number> {
+  const rows = await db.$queryRaw<Array<{ count: bigint }>>`
+    SELECT COUNT(*) AS count
+    FROM pgboss.job
+    WHERE name = ${queueName}
+      AND data->>'runId' = ${runId}
+      AND state IN ('created', 'retry', 'active')
+  `;
+
+  return Number(rows[0]?.count ?? 0);
+}
+
+async function sweepRunForTopUp(run: { id: string; config: unknown }): Promise<boolean> {
+  const models = parseRunConfig(run.config).models ?? [];
+  if (models.length === 0) {
+    return false;
+  }
+
+  const queueNames = new Set<string>();
+  for (const modelId of models) {
+    queueNames.add(await getQueueNameForModel(modelId));
+  }
+
+  for (const queueName of queueNames) {
+    const pendingJobs = await getPendingJobsForQueue(run.id, queueName);
+    if (pendingJobs < PROBE_QUEUE_DEPTH_PER_PROVIDER / 2) {
+      await enqueueTopUpProbesSingleton(run.id);
+      log.debug({ runId: run.id, queueName, pendingJobs }, 'Queued recovery top-up sweep');
+      return true;
+    }
+  }
+
+  return false;
+}
 
 /**
  * Runs the recovery job, preventing concurrent executions.
@@ -43,14 +90,31 @@ async function runRecoveryJob(): Promise<void> {
     const result = await recoverOrphanedRuns();
     const zombieResult = await detectAndRecoverStuckJobs();
     const stallResult = await detectAndUpdateStalledRuns();
+    const runningRuns = await db.run.findMany({
+      where: { status: 'RUNNING', deletedAt: null },
+      select: { id: true, config: true },
+    });
 
-    if (result.detected.length > 0 || result.errors.length > 0 || zombieResult.recovered > 0) {
+    let topUpQueued = 0;
+    for (const run of runningRuns) {
+      if (await sweepRunForTopUp(run)) {
+        topUpQueued++;
+      }
+    }
+
+    if (
+      result.detected.length > 0 ||
+      result.errors.length > 0 ||
+      zombieResult.recovered > 0 ||
+      topUpQueued > 0
+    ) {
       log.info(
         {
           detected: result.detected.length,
           recovered: result.recovered.length,
           zombiesKilled: zombieResult.recovered,
           errors: result.errors.length + zombieResult.errors,
+          recoveryTopUps: topUpQueued,
         },
         'Recovery job completed'
       );

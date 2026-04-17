@@ -83,18 +83,23 @@ export async function getJobQueueStatus(
     const jobCounts = await db.$queryRaw<JobCountRow[]>`
       SELECT
         CASE
-          WHEN name LIKE 'probe_scenario%' THEN 'probe_scenario'
+          WHEN name = 'probe_scenario' OR (name LIKE 'probe_%' AND name != 'probe_dead_letter') THEN 'probe_scenario'
           ELSE name
         END as name,
         state,
         COUNT(*) as count
       FROM pgboss.job
-      WHERE (name LIKE 'probe_scenario%' OR name = 'summarize_transcript' OR name = 'analyze_basic')
+      WHERE (
+        name = 'probe_scenario'
+        OR (name LIKE 'probe_%' AND name != 'probe_dead_letter')
+        OR name = 'summarize_transcript'
+        OR name = 'analyze_basic'
+      )
         AND data->>'runId' = ${runId}
         AND state IN ('created', 'retry', 'active', 'completed', 'failed')
       GROUP BY
         CASE
-          WHEN name LIKE 'probe_scenario%' THEN 'probe_scenario'
+          WHEN name = 'probe_scenario' OR (name LIKE 'probe_%' AND name != 'probe_dead_letter') THEN 'probe_scenario'
           ELSE name
         END,
         state
@@ -168,7 +173,12 @@ async function getRecentFailures(runId: string, limit: number): Promise<JobFailu
         output,
         completed_on
       FROM pgboss.job
-      WHERE (name LIKE 'probe_scenario%' OR name = 'summarize_transcript' OR name = 'analyze_basic')
+      WHERE (
+        name = 'probe_scenario'
+        OR (name LIKE 'probe_%' AND name != 'probe_dead_letter')
+        OR name = 'summarize_transcript'
+        OR name = 'analyze_basic'
+      )
         AND data->>'runId' = ${runId}
         AND state = 'failed'
       ORDER BY completed_on DESC NULLS LAST
@@ -180,7 +190,9 @@ async function getRecentFailures(runId: string, limit: number): Promise<JobFailu
       const output = job.output;
 
       // Normalize job type name
-      const jobType = job.name.startsWith('probe_scenario') ? 'probe_scenario' : job.name;
+      const jobType = job.name === 'probe_scenario' || (job.name.startsWith('probe_') && job.name !== 'probe_dead_letter')
+        ? 'probe_scenario'
+        : job.name;
 
       // Extract error from output
       let error = 'Unknown error';

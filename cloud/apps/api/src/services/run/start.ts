@@ -345,7 +345,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
       progress: initialProgress,
       createdAt: run.createdAt,
     },
-    jobCount: jobIds.length,
+    jobCount: totalJobs,
     estimatedCosts: costEstimate,
   };
 }

@@ -132,7 +132,7 @@ export async function cancelRun(runId: string): Promise<{
     const result = await db.$executeRaw`
       UPDATE pgboss.job
       SET state = 'cancelled'
-      WHERE name = 'probe_scenario'
+      WHERE (name = 'probe_scenario' OR (name LIKE 'probe_%' AND name != 'probe_dead_letter'))
         AND state IN ('created', 'retry')
         AND data->>'runId' = ${runId}
     `;

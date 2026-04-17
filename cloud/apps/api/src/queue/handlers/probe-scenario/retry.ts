@@ -6,6 +6,7 @@ import { createLogger } from '@valuerank/shared';
 import { db } from '@valuerank/db';
 import { updateProgress } from '../../../services/run/index.js';
 import { recordProbeFailure } from '../../../services/probe-result/index.js';
+import { enqueueTopUpProbesSingleton } from '../top-up-probes.js';
 
 const log = createLogger('queue:probe-scenario');
 
@@ -215,6 +216,7 @@ export async function handleJobError(
         existingProbeResult?.status ?? null,
         'FAILED'
       );
+      await enqueueTopUpProbesSingleton(runId);
       log.error(
         { jobId, runId, scenarioId, modelId, progress, status, retryCount, err: error },
         'Probe job permanently failed'
@@ -234,4 +236,3 @@ export async function handleJobError(
   );
   return false; // caller should rethrow
 }
-

@@ -9,6 +9,7 @@ import { db } from '@valuerank/db';
 import { startRun } from '../../../src/services/run/start.js';
 import { NotFoundError, ValidationError } from '@valuerank/shared';
 import { TEST_USER } from '../../test-utils.js';
+import { getQueueNameForModel } from '../../../src/services/parallelism/index.js';
 
 // Mock PgBoss
 const mockBoss = {
@@ -78,6 +79,7 @@ describe('startRun service', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getQueueNameForModel).mockResolvedValue('probe_scenario');
     mockBoss.send.mockReset();
     mockBoss.send.mockResolvedValue('mock-job-id');
     mockBoss.insert.mockReset();
@@ -234,6 +236,47 @@ describe('startRun service', () => {
       // 10 scenarios × 1 model = 10 jobs
       expect(result.jobCount).toBe(10);
       expect(result.run.progress.total).toBe(10);
+    });
+
+    it('keeps progress.total as the true total when launch is capped', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Capped Launch Definition',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      const scenarioData = Array.from({ length: 50 }, (_, i) => ({
+        definitionId: definition.id,
+        name: `Scenario ${i + 1}`,
+        content: { test: i + 1 },
+      }));
+
+      await db.scenario.createMany({ data: scenarioData });
+
+      vi.mocked(getQueueNameForModel).mockImplementation(async (modelId: string) => {
+        const queueMap: Record<string, string> = {
+          'gpt-4': 'probe_provider_a',
+          'claude-3': 'probe_provider_b',
+          'gemini-pro': 'probe_provider_c',
+          'judge-model': 'probe_provider_d',
+        };
+        return queueMap[modelId] ?? 'probe_scenario';
+      });
+
+      const result = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4', 'claude-3', 'gemini-pro', 'judge-model'],
+        userId: testUserId,
+      });
+
+      createdRunIds.push(result.run.id);
+
+      expect(result.jobCount).toBe(200);
+      expect(result.run.progress.total).toBe(200);
+      expect(result.run.progress.completed).toBe(0);
+      expect(result.run.progress.failed).toBe(0);
     });
 
     it('defaults new runs to UNKNOWN_LEGACY category', async () => {

@@ -9,7 +9,7 @@ export async function getModelsWithPendingJobs(runId: string): Promise<string[]>
   const result = await db.$queryRaw<Array<{ model_id: string }>>`
     SELECT DISTINCT data->>'modelId' as model_id
     FROM pgboss.job
-    WHERE (name = 'probe_scenario' OR name LIKE 'probe_scenario_%')
+    WHERE (name = 'probe_scenario' OR (name LIKE 'probe_%' AND name != 'probe_dead_letter'))
       AND state IN ('created', 'retry', 'active')
       AND data->>'runId' = ${runId}
   `;
