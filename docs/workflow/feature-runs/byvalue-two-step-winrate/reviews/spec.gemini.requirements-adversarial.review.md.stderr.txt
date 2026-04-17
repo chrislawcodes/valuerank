@@ -1,0 +1,575 @@
+YOLO mode is enabled. All tool calls will be automatically approved.
+Keychain initialization encountered an error: UNIX[Operation not permitted]
+Using FileKeychain fallback for secure storage.
+Loaded cached credentials.
+YOLO mode is enabled. All tool calls will be automatically approved.
+Registering notification handlers for server 'agentchattr'. Capabilities: {
+  experimental: {},
+  prompts: { listChanged: false },
+  resources: { subscribe: false, listChanged: false },
+  tools: { listChanged: false }
+}
+Server 'agentchattr' has tools but did not declare 'listChanged' capability. Listening anyway for robustness...
+Server 'agentchattr' has resources but did not declare 'listChanged' capability. Listening anyway for robustness...
+Server 'agentchattr' has prompts but did not declare 'listChanged' capability. Listening anyway for robustness...
+Scheduling MCP context refresh...
+Executing MCP context refresh...
+MCP context refresh complete.
+Error stating path localhost:5433/valuerank_test"
+```
+
+Setup test DB: `npm run db:test:setup` (from `cloud/`). Reset on data pollution: `npm run db:test:reset`.
+
+---
+
+## Logging Standards
+
+All logging goes through the centralized logger — never use `console.log` directly.
+
+```typescript
+import { createLogger } from '@valuerank/shared';
+const log = createLogger('runs');
+
+log.info({ runId: run.id }, 'Run created');
+log.error({ err, config }, 'Failed to create run');
+```
+
+Always use structured data (object + message), never string interpolation.
+
+### Log Levels
+
+| Level | Use For |
+|-------|---------|
+| `error` | Exceptions, failed operations that need attention |
+| `warn` | Recoverable issues, deprecations, retry attempts |
+| `info` | Key business events (run started, completed, user action) |
+| `debug` | Detailed flow info, useful for local debugging |
+
+---
+
+## Code Organization
+
+### Import Order
+
+1. Node built-ins (`fs`, `path`)
+2. External packages (`express`, `zod`)
+3. Internal packages (`@valuerank/shared`, `@valuerank/db`)
+4. Relative imports (`./validation`, `./types`)
+
+### Folder Structure
+
+```
+apps/api/src/
+├── auth/         # Authentication middleware and JWT handling
+├── cli/          # Admin scripts (create-user, normalize, shadow)
+├── config/       # Server configuration
+├── graphql/      # GraphQL schema, queries, mutations, types
+├── mcp/          # MCP server tools and OAuth
+├── middleware/    # Express middleware
+├── queue/        # PgBoss job handlers and queue orchestration
+├── routes/       # Express route handlers (REST, CSV, OData)
+├── services/     # Business logic
+└── utils/        # Pure utility functions
+
+apps/web/src/
+├── api/          # GraphQL operations and client setup
+├── components/   # React components
+├── hooks/        # Custom hooks
+├── lib/          # Shared libraries (statistics, formatting)
+├── pages/        # Route pages
+└── utils/        # Pure utility functions
+```
+
+---
+
+## Error Handling
+
+Use custom error classes (`AppError`, `NotFoundError`, `ValidationError`) from `packages/shared`. Always catch and forward to error middleware in routes — never swallow errors silently.
+
+---
+
+## Database Access
+
+### Use Prisma with Type Safety
+
+Use typed queries and `$transaction` for multi-step operations.
+
+### Soft Delete Pattern
+
+Entities use soft delete via `deletedAt` timestamp. **Never physically delete** — set `deletedAt` instead.
+
+**Tables with soft delete:** `definitions`, `definition_tags`, `scenarios`
+
+```typescript
+// ALWAYS filter out soft-deleted records
+const definitions = await prisma.definition.findMany({
+  where: { deletedAt: null },  // Required!
+});
+
+// When "deleting", set deletedAt
+await prisma.definition.update({
+  where: { id: definitionId },
+  data: { deletedAt: new Date() },
+});
+```
+
+`deletedAt` is **never exposed** in GraphQL schema. All resolvers must filter `deletedAt: null` automatically.
+
+---
+
+## Database Connections
+
+The project uses PostgreSQL with PgBouncer for connection pooling.
+
+**Application** (via PgBouncer): `DATABASE_URL` — include `?pgbouncer=true` to disable prepared statements.
+
+**Migrations** (direct): `DIRECT_URL` — Prisma Migrate requires a direct connection, not a pooler.
+
+```bash
+# .env
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:6432/valuerank: ENAMETOOLONG: name too long, stat '/Users/chrislaw/valuerank/.claude/worktrees/priceless-pasteur-f814d9/localhost:5433/valuerank_test"
+```
+
+Setup test DB: `npm run db:test:setup` (from `cloud/`). Reset on data pollution: `npm run db:test:reset`.
+
+---
+
+## Logging Standards
+
+All logging goes through the centralized logger — never use `console.log` directly.
+
+```typescript
+import { createLogger } from '@valuerank/shared';
+const log = createLogger('runs');
+
+log.info({ runId: run.id }, 'Run created');
+log.error({ err, config }, 'Failed to create run');
+```
+
+Always use structured data (object + message), never string interpolation.
+
+### Log Levels
+
+| Level | Use For |
+|-------|---------|
+| `error` | Exceptions, failed operations that need attention |
+| `warn` | Recoverable issues, deprecations, retry attempts |
+| `info` | Key business events (run started, completed, user action) |
+| `debug` | Detailed flow info, useful for local debugging |
+
+---
+
+## Code Organization
+
+### Import Order
+
+1. Node built-ins (`fs`, `path`)
+2. External packages (`express`, `zod`)
+3. Internal packages (`@valuerank/shared`, `@valuerank/db`)
+4. Relative imports (`./validation`, `./types`)
+
+### Folder Structure
+
+```
+apps/api/src/
+├── auth/         # Authentication middleware and JWT handling
+├── cli/          # Admin scripts (create-user, normalize, shadow)
+├── config/       # Server configuration
+├── graphql/      # GraphQL schema, queries, mutations, types
+├── mcp/          # MCP server tools and OAuth
+├── middleware/    # Express middleware
+├── queue/        # PgBoss job handlers and queue orchestration
+├── routes/       # Express route handlers (REST, CSV, OData)
+├── services/     # Business logic
+└── utils/        # Pure utility functions
+
+apps/web/src/
+├── api/          # GraphQL operations and client setup
+├── components/   # React components
+├── hooks/        # Custom hooks
+├── lib/          # Shared libraries (statistics, formatting)
+├── pages/        # Route pages
+└── utils/        # Pure utility functions
+```
+
+---
+
+## Error Handling
+
+Use custom error classes (`AppError`, `NotFoundError`, `ValidationError`) from `packages/shared`. Always catch and forward to error middleware in routes — never swallow errors silently.
+
+---
+
+## Database Access
+
+### Use Prisma with Type Safety
+
+Use typed queries and `$transaction` for multi-step operations.
+
+### Soft Delete Pattern
+
+Entities use soft delete via `deletedAt` timestamp. **Never physically delete** — set `deletedAt` instead.
+
+**Tables with soft delete:** `definitions`, `definition_tags`, `scenarios`
+
+```typescript
+/ ALWAYS filter out soft-deleted records
+const definitions = await prisma.definition.findMany({
+  where: { deletedAt: null },  / Required!
+});
+
+/ When "deleting", set deletedAt
+await prisma.definition.update({
+  where: { id: definitionId },
+  data: { deletedAt: new Date() },
+});
+```
+
+`deletedAt` is **never exposed** in GraphQL schema. All resolvers must filter `deletedAt: null` automatically.
+
+---
+
+## Database Connections
+
+The project uses PostgreSQL with PgBouncer for connection pooling.
+
+**Application** (via PgBouncer): `DATABASE_URL` — include `?pgbouncer=true` to disable prepared statements.
+
+**Migrations** (direct): `DIRECT_URL` — Prisma Migrate requires a direct connection, not a pooler.
+
+```bash
+# .env
+DATABASE_URL="postgresql:/valuerank:valuerank@localhost:6432/valuerank'
+Error stating path localhost:5433/valuerank"
+```
+
+Start local DB: `docker-compose up -d` from `cloud/`.
+
+---
+
+## Schema Changes (Migrations)
+
+**Always use Prisma Migrate — never `db push`.**
+
+```bash
+# Create and apply a migration
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+  npx prisma migrate dev --name add_feature_tables --schema packages/db/prisma/schema.prisma
+```
+
+Production deployments run `prisma migrate deploy` automatically on startup.
+
+---
+
+## Quick Reference
+
+```
+File size:      < 400 lines
+any types:      NEVER (use unknown if truly unknown)
+Test coverage:  80% minimum
+Console.log:    NEVER (use logger)
+Error handling: Custom AppError classes
+Imports:        Node → External → Internal → Relative
+```
+
+---
+
+## Terminology
+
+Canonical source: `docs/canonical-glossary.md`
+
+- Follow the terminology policy in repo-root `AGENTS.md`.
+- In cloud code, older names like `definition`, `dimension`, and `scenario` may still appear in code, schema, or APIs. Map them to glossary terms instead of renaming them casually.
+
+
+Artifact: spec.md
+# Spec: byvalue-two-step-winrate
+
+**Author:** Claude (Sonnet, 2026-04-16)
+**Status:** ready for plan stage
+**Delivery path:** Feature Factory
+**Prerequisite:** `winrate-honest-denominator` (PR #632, commit `641e03c7`) merged — neutral denominator fix already shipped.
+
+---
+
+## Problem
+
+`winRate` per value is computed using the **pooled** approach: all transcript responses are summed together, then divided. A vignette evaluated 12 times counts 12× more than a vignette evaluated once.
+
+This is inconsistent with `overall_signed_center` and `preference_strength`, which already use the correct **two-step** approach: compute one mean per vignette, then average those means with equal weight across vignettes. Extra repetitions of a vignette improve the accuracy of that vignette's rate but do not change its weight in the overall average.
+
+Two concrete sites are wrong:
+
+### Site 1 — Backend `build_preference_summary` (`analyze_basic_aggregation.py`)
+
+```python
+# Current: grabs pooled counts from aggregate_transcripts_by_model
+per_model_summary[model_id] = {
+    "preferenceDirection": {
+        "byValue": model_stats.get("values", {}),  # raw pooled counts
+```
+
+`model_stats["values"]` contains counts summed across every transcript response. A vignette run 12 times contributes 12 data points. The same function already computes `scenario_means` (per-vignette scores) for `overall_signed_center` but does not use that grouping for `byValue`.
+
+### Site 2 — Frontend `buildMergedPreferenceModel` (`analysisSemantics.preference.ts`)
+
+```typescript
+// Current: sums raw counts from both paired runs, then divides
+const allHaveCounts = stats.every((entry) => entry.count !== undefined);
+if (allHaveCounts) {
+  const prioritized = stats.reduce((sum, entry) => sum + (entry.count?.prioritized ?? 0), 0);
+  ...
+  winRate: totalResponses > 0 ? prioritized / totalResponses : 0.5,  // pooled
+```
+
+When merging paired runs, this overrides the backend's pre-computed `winRate` by re-deriving it from raw counts. If run A had 12 batches and run B had 6 batches, run A gets 2× the weight.
+
+---
+
+## Goal
+
+`winRate` per value uses the two-step approach everywhere:
+
+1. **Per vignette**: for each unique vignette containing value V, compute `vignette_rate = prioritized_responses / total_responses` (using all repetitions of that vignette to estimate accurately).
+2. **Across vignettes**: `winRate = mean(vignette_rates)` — each unique vignette has equal weight, regardless of how many times it was evaluated.
+
+The backend computes this correctly and emits it. The frontend trusts it instead of re-deriving from raw counts.
+
+For **paired-mode merges** (two analyses, one per vignette order): average the two per-run `winRate` values with equal weight — each run order contributes once.
+
+**`count` fields (`prioritized`, `deprioritized`, `neutral`) stay as raw response counts in each individual analysis output.** No schema change to the backend. They are for reference; `winRate` is the authoritative metric.
+
+**The merged result from `buildMergedPreferenceModel` (paired mode) will only carry `winRate`, not `count`.** This is intentional: `count` is a per-analysis concept (raw responses for one run). Summing counts across run orders is the pooled behaviour we are removing. No downstream code uses `count` after the merge — `deriveValueLists` and all callers only consume `winRate`.
+
+---
+
+## User decisions
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | Two-step formula | `mean(per-vignette rates)` — equal weight per vignette. |
+| 2 | Paired merge weight | Equal weight per run (1 per analysis). Each vignette order contributes equally regardless of batch count difference. |
+| 3 | Aggregate merge weight | Keep existing `sampleSize`-weighted fallback — known simplification, documented. |
+| 4 | `count` field semantics | Unchanged (raw response counts). Only `winRate` changes. |
+
+---
+
+## Affected surfaces
+
+### Python worker
+
+| File | What changes |
+|---|---|
+| `cloud/workers/analyze_basic_aggregation.py` | `build_preference_summary`: instead of passing `model_stats.get("values", {})` directly, compute per-vignette win rates for each value using the transcript data already processed in the function. Data source: `transcript.get("summary", {}).get("values", {})` — this is the same field already read by `aggregate_transcripts_by_model`, returning a `dict[value_id, "prioritized" | "deprioritized" | "neutral"]` per transcript. Group outcomes by `(model_id, scenario_id, value_id)`, compute `vignette_rate = prioritized / total` per vignette (where total = prioritized + deprioritized + neutral for that vignette), then `winRate = mean(vignette_rates)`. A vignette is identified by its `scenarioId` — two transcripts with the same `scenarioId` are repetitions of the same vignette. **Per-vignette zero guard**: if `total == 0` for a specific (vignette, value) pair, skip that vignette for that value — do not include it in the mean. This should not occur in practice (every transcript response will list a status for every value in the vignette), but is required for correctness. **Value-level zero fallback**: if no vignettes contribute a rate for a value (i.e., the mean list is empty after skipping), emit `winRate: 0.5` (same as the existing pooled fallback for zero total responses). The `count` fields in the emitted `byValue` entries stay as raw summed counts from `model_stats` — only `winRate` changes to the two-step value. |
+| `cloud/workers/tests/test_analyze_basic.py` | Update any hand-computed `winRate` assertions that assume pooled counts for multi-batch vignettes. Add a test case: one value in two vignettes where vignette A has 10 responses (9 prioritized) and vignette B has 1 response (0 prioritized) — two-step rate is `(0.9 + 0.0) / 2 = 0.45`, pooled rate would be `9 / 11 ≈ 0.818`. |
+
+### API TypeScript — version bumps
+
+The `winRate` semantic is changing. Both version constants that gate cache hits must bump so existing analyses recompute on next request.
+
+| File | What changes |
+|---|---|
+| `cloud/workers/analyze_basic_metadata.py:7` | Bump `CODE_VERSION = "1.2.0"` → `"1.3.0"`. |
+| `cloud/apps/api/src/queue/handlers/analyze-basic.ts:34` | Bump `const CODE_VERSION = '1.2.0'` → `'1.3.0'`. Must match Python side. |
+| `cloud/apps/api/src/services/analysis/aggregate/constants.ts:1` | Bump `AGGREGATE_ANALYSIS_CODE_VERSION = '1.3.0'` → `'1.4.0'`. |
+| `cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts:19` | Bump `DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.2.0'` → `'1.3.0'`. |
+| `cloud/apps/api/tests/queue/handlers/analyze-basic.integration.test.ts` | Update `codeVersion` assertion to `'1.3.0'`. |
+| `cloud/apps/api/tests/services/analysis/aggregate.test.ts` | Update any `AGGREGATE_ANALYSIS_CODE_VERSION` assertion to `'1.4.0'` if present. |
+
+### Prisma migration — mark stale analyses SUPERSEDED
+
+The read path (`analysis.ts:21`) queries by `status = 'CURRENT'` only — it does not filter by `codeVersion`. A version bump alone does not invalidate existing rows.
+
+| File | What changes |
+|---|---|
+| New: `cloud/packages/db/prisma/migrations/<timestamp>_supersede_pooled_byvalue_analyses/migration.sql` | `UPDATE "AnalysisResult" SET "status" = 'SUPERSEDED' WHERE "status" = 'CURRENT' AND "analysisType" IN ('basic', 'AGGREGATE');` |
+
+### Web TypeScript
+
+| File | What changes |
+|---|---|
+| `cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:207-222` | **Remove the `allHaveCounts` early-return path** in `buildMergedPreferenceModel`. It re-derives `winRate` from raw counts, undoing the backend fix. After removal, all merges flow through the `averageWeighted` fallback below it. |
+| `cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:233` | **Change the weight from `analysis.perModel[modelId]?.sampleSize ?? 0` to `1`** so paired-mode merges give equal weight to each analysis regardless of batch count. |
+| `cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts` | Update paired-merge test to cover the asymmetric case: run A `winRate=0.8` with `sampleSize=120`, run B `winRate=0.4` with `sampleSize=60`. Old sampleSize-weighted result: `(0.8×120 + 0.4×60)/180 = 0.667`. New equal-weight result: `(0.8 + 0.4) / 2 = 0.6`. |
+
+### What does NOT change
+
+- `aggregate_transcripts_by_model` in `basic_stats.py` — stays unchanged.
+- `compute_win_rate`, `compute_value_stats` — stays unchanged.
+- `deriveValueLists` — uses whatever `winRate` it receives; no change needed.
+- `overall_signed_center`, `preference_strength` — already two-step; no change.
+- `DomainAnalysis.tsx`, `canonicalConditionSummary.ts`, `aggregate-logic.ts` — different metrics, not touched.
+
+---
+
+## Verification plan
+
+### Slice 1 — Backend
+
+- `PYTHONPATH="$: ENAMETOOLONG: name too long, stat '/Users/chrislaw/valuerank/.claude/worktrees/priceless-pasteur-f814d9/localhost:5433/valuerank"
+```
+
+Start local DB: `docker-compose up -d` from `cloud/`.
+
+---
+
+## Schema Changes (Migrations)
+
+**Always use Prisma Migrate — never `db push`.**
+
+```bash
+# Create and apply a migration
+DATABASE_URL="postgresql:/valuerank:valuerank@localhost:5433/valuerank" \
+  npx prisma migrate dev --name add_feature_tables --schema packages/db/prisma/schema.prisma
+```
+
+Production deployments run `prisma migrate deploy` automatically on startup.
+
+---
+
+## Quick Reference
+
+```
+File size:      < 400 lines
+any types:      NEVER (use unknown if truly unknown)
+Test coverage:  80% minimum
+Console.log:    NEVER (use logger)
+Error handling: Custom AppError classes
+Imports:        Node → External → Internal → Relative
+```
+
+---
+
+## Terminology
+
+Canonical source: `docs/canonical-glossary.md`
+
+- Follow the terminology policy in repo-root `AGENTS.md`.
+- In cloud code, older names like `definition`, `dimension`, and `scenario` may still appear in code, schema, or APIs. Map them to glossary terms instead of renaming them casually.
+
+
+Artifact: spec.md
+# Spec: byvalue-two-step-winrate
+
+**Author:** Claude (Sonnet, 2026-04-16)
+**Status:** ready for plan stage
+**Delivery path:** Feature Factory
+**Prerequisite:** `winrate-honest-denominator` (PR #632, commit `641e03c7`) merged — neutral denominator fix already shipped.
+
+---
+
+## Problem
+
+`winRate` per value is computed using the **pooled** approach: all transcript responses are summed together, then divided. A vignette evaluated 12 times counts 12× more than a vignette evaluated once.
+
+This is inconsistent with `overall_signed_center` and `preference_strength`, which already use the correct **two-step** approach: compute one mean per vignette, then average those means with equal weight across vignettes. Extra repetitions of a vignette improve the accuracy of that vignette's rate but do not change its weight in the overall average.
+
+Two concrete sites are wrong:
+
+### Site 1 — Backend `build_preference_summary` (`analyze_basic_aggregation.py`)
+
+```python
+# Current: grabs pooled counts from aggregate_transcripts_by_model
+per_model_summary[model_id] = {
+    "preferenceDirection": {
+        "byValue": model_stats.get("values", {}),  # raw pooled counts
+```
+
+`model_stats["values"]` contains counts summed across every transcript response. A vignette run 12 times contributes 12 data points. The same function already computes `scenario_means` (per-vignette scores) for `overall_signed_center` but does not use that grouping for `byValue`.
+
+### Site 2 — Frontend `buildMergedPreferenceModel` (`analysisSemantics.preference.ts`)
+
+```typescript
+/ Current: sums raw counts from both paired runs, then divides
+const allHaveCounts = stats.every((entry) => entry.count !== undefined);
+if (allHaveCounts) {
+  const prioritized = stats.reduce((sum, entry) => sum + (entry.count?.prioritized ?? 0), 0);
+  ...
+  winRate: totalResponses > 0 ? prioritized / totalResponses : 0.5,  / pooled
+```
+
+When merging paired runs, this overrides the backend's pre-computed `winRate` by re-deriving it from raw counts. If run A had 12 batches and run B had 6 batches, run A gets 2× the weight.
+
+---
+
+## Goal
+
+`winRate` per value uses the two-step approach everywhere:
+
+1. **Per vignette**: for each unique vignette containing value V, compute `vignette_rate = prioritized_responses / total_responses` (using all repetitions of that vignette to estimate accurately).
+2. **Across vignettes**: `winRate = mean(vignette_rates)` — each unique vignette has equal weight, regardless of how many times it was evaluated.
+
+The backend computes this correctly and emits it. The frontend trusts it instead of re-deriving from raw counts.
+
+For **paired-mode merges** (two analyses, one per vignette order): average the two per-run `winRate` values with equal weight — each run order contributes once.
+
+**`count` fields (`prioritized`, `deprioritized`, `neutral`) stay as raw response counts in each individual analysis output.** No schema change to the backend. They are for reference; `winRate` is the authoritative metric.
+
+**The merged result from `buildMergedPreferenceModel` (paired mode) will only carry `winRate`, not `count`.** This is intentional: `count` is a per-analysis concept (raw responses for one run). Summing counts across run orders is the pooled behaviour we are removing. No downstream code uses `count` after the merge — `deriveValueLists` and all callers only consume `winRate`.
+
+---
+
+## User decisions
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | Two-step formula | `mean(per-vignette rates)` — equal weight per vignette. |
+| 2 | Paired merge weight | Equal weight per run (1 per analysis). Each vignette order contributes equally regardless of batch count difference. |
+| 3 | Aggregate merge weight | Keep existing `sampleSize`-weighted fallback — known simplification, documented. |
+| 4 | `count` field semantics | Unchanged (raw response counts). Only `winRate` changes. |
+
+---
+
+## Affected surfaces
+
+### Python worker
+
+| File | What changes |
+|---|---|
+| `cloud/workers/analyze_basic_aggregation.py` | `build_preference_summary`: instead of passing `model_stats.get("values", {})` directly, compute per-vignette win rates for each value using the transcript data already processed in the function. Data source: `transcript.get("summary", {}).get("values", {})` — this is the same field already read by `aggregate_transcripts_by_model`, returning a `dict[value_id, "prioritized" | "deprioritized" | "neutral"]` per transcript. Group outcomes by `(model_id, scenario_id, value_id)`, compute `vignette_rate = prioritized / total` per vignette (where total = prioritized + deprioritized + neutral for that vignette), then `winRate = mean(vignette_rates)`. A vignette is identified by its `scenarioId` — two transcripts with the same `scenarioId` are repetitions of the same vignette. **Per-vignette zero guard**: if `total == 0` for a specific (vignette, value) pair, skip that vignette for that value — do not include it in the mean. This should not occur in practice (every transcript response will list a status for every value in the vignette), but is required for correctness. **Value-level zero fallback**: if no vignettes contribute a rate for a value (i.e., the mean list is empty after skipping), emit `winRate: 0.5` (same as the existing pooled fallback for zero total responses). The `count` fields in the emitted `byValue` entries stay as raw summed counts from `model_stats` — only `winRate` changes to the two-step value. |
+| `cloud/workers/tests/test_analyze_basic.py` | Update any hand-computed `winRate` assertions that assume pooled counts for multi-batch vignettes. Add a test case: one value in two vignettes where vignette A has 10 responses (9 prioritized) and vignette B has 1 response (0 prioritized) — two-step rate is `(0.9 + 0.0) / 2 = 0.45`, pooled rate would be `9 / 11 ≈ 0.818`. |
+
+### API TypeScript — version bumps
+
+The `winRate` semantic is changing. Both version constants that gate cache hits must bump so existing analyses recompute on next request.
+
+| File | What changes |
+|---|---|
+| `cloud/workers/analyze_basic_metadata.py:7` | Bump `CODE_VERSION = "1.2.0"` → `"1.3.0"`. |
+| `cloud/apps/api/src/queue/handlers/analyze-basic.ts:34` | Bump `const CODE_VERSION = '1.2.0'` → `'1.3.0'`. Must match Python side. |
+| `cloud/apps/api/src/services/analysis/aggregate/constants.ts:1` | Bump `AGGREGATE_ANALYSIS_CODE_VERSION = '1.3.0'` → `'1.4.0'`. |
+| `cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts:19` | Bump `DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.2.0'` → `'1.3.0'`. |
+| `cloud/apps/api/tests/queue/handlers/analyze-basic.integration.test.ts` | Update `codeVersion` assertion to `'1.3.0'`. |
+| `cloud/apps/api/tests/services/analysis/aggregate.test.ts` | Update any `AGGREGATE_ANALYSIS_CODE_VERSION` assertion to `'1.4.0'` if present. |
+
+### Prisma migration — mark stale analyses SUPERSEDED
+
+The read path (`analysis.ts:21`) queries by `status = 'CURRENT'` only — it does not filter by `codeVersion`. A version bump alone does not invalidate existing rows.
+
+| File | What changes |
+|---|---|
+| New: `cloud/packages/db/prisma/migrations/<timestamp>_supersede_pooled_byvalue_analyses/migration.sql` | `UPDATE "AnalysisResult" SET "status" = 'SUPERSEDED' WHERE "status" = 'CURRENT' AND "analysisType" IN ('basic', 'AGGREGATE');` |
+
+### Web TypeScript
+
+| File | What changes |
+|---|---|
+| `cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:207-222` | **Remove the `allHaveCounts` early-return path** in `buildMergedPreferenceModel`. It re-derives `winRate` from raw counts, undoing the backend fix. After removal, all merges flow through the `averageWeighted` fallback below it. |
+| `cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:233` | **Change the weight from `analysis.perModel[modelId]?.sampleSize ?? 0` to `1`** so paired-mode merges give equal weight to each analysis regardless of batch count. |
+| `cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts` | Update paired-merge test to cover the asymmetric case: run A `winRate=0.8` with `sampleSize=120`, run B `winRate=0.4` with `sampleSize=60`. Old sampleSize-weighted result: `(0.8×120 + 0.4×60)/180 = 0.667`. New equal-weight result: `(0.8 + 0.4) / 2 = 0.6`. |
+
+### What does NOT change
+
+- `aggregate_transcripts_by_model` in `basic_stats.py` — stays unchanged.
+- `compute_win_rate`, `compute_value_stats` — stays unchanged.
+- `deriveValueLists` — uses whatever `winRate` it receives; no change needed.
+- `overall_signed_center`, `preference_strength` — already two-step; no change.
+- `DomainAnalysis.tsx`, `canonicalConditionSummary.ts`, `aggregate-logic.ts` — different metrics, not touched.
+
+---
+
+## Verification plan
+
+### Slice 1 — Backend
+
+- `PYTHONPATH="$'

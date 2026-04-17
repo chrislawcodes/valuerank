@@ -1,0 +1,267 @@
+00001: import { beforeEach, describe, expect, it, vi } from 'vitest';
+00002: import type { AnalysisResult, RawPreferenceSummary, RawReliabilitySummary } from '../../../src/api/operations/analysis';
+00003: 
+00004: const { warn } = vi.hoisted(() => ({
+00005:   warn: vi.fn(),
+00006: }));
+00007: 
+00008: vi.mock('@valuerank/shared', () => ({
+00009:   createLogger: () => ({ warn }),
+00010: }));
+00011: 
+00012: import { buildAnalysisSemanticsView, buildPairedAnalysisSemanticsView } from '../../../src/components/analysis-v2/analysisSemantics';
+00013: 
+00014: function createPreferenceSummary(overrides?: Record<string, unknown>): RawPreferenceSummary {
+00015:   return {
+00016:     perModel: {
+00017:       'claude-3': {
+00018:         preferenceDirection: {
+00019:           byValue: {
+00020:             Compassion: {
+00021:               winRate: 0.7,
+00022:               count: { prioritized: 7, deprioritized: 3, neutral: 0 },
+00023:             },
+00024:             Discipline: {
+00025:               winRate: 0.2,
+00026:               count: { prioritized: 2, deprioritized: 8, neutral: 0 },
+00027:             },
+00028:             Balance: {
+00029:               winRate: 0.5,
+00030:               count: { prioritized: 5, deprioritized: 5, neutral: 0 },
+00031:             },
+00032:           },
+00033:           overallLean: 'A',
+00034:           overallSignedCenter: 0.45,
+00035:         },
+00036:         preferenceStrength: 1.2,
+00037:       },
+00038:       'gpt-4': {
+00039:         preferenceDirection: {
+00040:           byValue: {
+00041:             Compassion: {
+00042:               winRate: 0.8,
+00043:               count: { prioritized: 8, deprioritized: 2, neutral: 0 },
+00044:             },
+00045:             Discipline: {
+00046:               winRate: 0.1,
+00047:               count: { prioritized: 1, deprioritized: 9, neutral: 0 },
+00048:             },
+00049:           },
+00050:           overallLean: 'B',
+00051:           overallSignedCenter: -0.4,
+00052:         },
+00053:         preferenceStrength: 1.4,
+00054:       },
+00055:       ...overrides,
+00056:     },
+00057:   };
+00058: }
+00059: 
+00060: function createReliabilitySummary(overrides?: Record<string, unknown>): RawReliabilitySummary {
+00061:   return {
+00062:     perModel: {
+00063:       'claude-3': {
+00064:         baselineNoise: 0.23,
+00065:         baselineReliability: 0.81,
+00066:         directionalAgreement: 0.9,
+00067:         neutralShare: 0.1,
+00068:         coverageCount: 8,
+00069:         uniqueScenarios: 8,
+00070:       },
+00071:       'gpt-4': {
+00072:         baselineNoise: 0.17,
+00073:         baselineReliability: 0.92,
+00074:         directionalAgreement: 0.95,
+00075:         neutralShare: 0.05,
+00076:         coverageCount: 8,
+00077:         uniqueScenarios: 8,
+00078:       },
+00079:       ...overrides,
+00080:     },
+00081:   };
+00082: }
+00083: 
+00084: function createAnalysis(overrides: Partial<AnalysisResult> = {}): AnalysisResult {
+00085:   return {
+00086:     id: 'analysis-1',
+00087:     runId: 'run-1',
+00088:     analysisType: 'basic',
+00089:     status: 'CURRENT',
+00090:     codeVersion: '1.1.1',
+00091:     inputHash: 'hash',
+00092:     createdAt: '2026-03-10T10:00:00Z',
+00093:     computedAt: '2026-03-10T10:01:00Z',
+00094:     durationMs: 1000,
+00095:     perModel: {
+00096:       'claude-3': {
+00097:         sampleSize: 8,
+00098:         values: {},
+00099:         overall: { mean: 3, stdDev: 0.4, min: 2, max: 4 },
+00100:       },
+00101:       'gpt-4': {
+00102:         sampleSize: 8,
+00103:         values: {},
+00104:         overall: { mean: 3, stdDev: 0.4, min: 2, max: 4 },
+00105:       },
+00106:     },
+00107:     preferenceSummary: createPreferenceSummary(),
+00108:     reliabilitySummary: createReliabilitySummary(),
+00109:     aggregateMetadata: null,
+00110:     modelAgreement: {
+00111:       pairwise: {},
+00112:       outlierModels: [],
+00113:       overallAgreement: 0.8,
+00114:     },
+00115:     dimensionAnalysis: null,
+00116:     visualizationData: null,
+00117:     varianceAnalysis: null,
+00118:     mostContestedScenarios: [],
+00119:     methodsUsed: {
+00120:       modelComparison: 'spearman',
+00121:       pValueCorrection: 'holm',
+00122:       effectSize: 'cohens_d',
+00123:       dimensionTest: 'kruskal',
+00124:       alpha: 0.05,
+00125:       codeVersion: '1.1.1',
+00126:     },
+00127:     warnings: [],
+00128:     ...overrides,
+00129:   };
+00130: }
+00131: 
+00132: describe('buildAnalysisSemanticsView', () => {
+00133:   beforeEach(() => {
+00134:     warn.mockClear();
+00135:   });
+00136: 
+00137:   it('builds available preference and reliability semantics from valid current summaries', () => {
+00138:     const semantics = buildAnalysisSemanticsView(createAnalysis(), false);
+00139: 
+00140:     expect(semantics.preference.rowAvailability).toEqual({ status: 'available' });
+00141:     expect(semantics.reliability.rowAvailability).toEqual({ status: 'available' });
+00142:     expect(Object.keys(semantics.preference.byModel)).toEqual(
+
+... [narrowed review slice: middle omitted] ...
+
+perModel: {
+00487:           'claude-3': {
+00488:             preferenceDirection: {
+00489:               byValue: {
+00490:                 Achievement: {
+00491:                   winRate: 0.2,
+00492:                   count: { prioritized: 2, deprioritized: 8, neutral: 10 },
+00493:                 },
+00494:                 Care: {
+00495:                   winRate: 0.9,
+00496:                   count: { prioritized: 9, deprioritized: 1, neutral: 0 },
+00497:                 },
+00498:               },
+00499:               overallLean: 'B',
+00500:               overallSignedCenter: -0.2,
+00501:             },
+00502:             preferenceStrength: 1.2,
+00503:           },
+00504:         },
+00505:       },
+00506:       reliabilitySummary: {
+00507:         perModel: {
+00508:           'claude-3': {
+00509:             baselineNoise: 0.1,
+00510:             baselineReliability: 0.9,
+00511:             directionalAgreement: 0.9,
+00512:             neutralShare: 0.2,
+00513:             coverageCount: 6,
+00514:             uniqueScenarios: 6,
+00515:           },
+00516:         },
+00517:       },
+00518:       aggregateMetadata: {
+00519:         aggregateEligibility: 'eligible_same_signature_baseline',
+00520:         aggregateIneligibilityReason: null,
+00521:         sourceRunCount: 1,
+00522:         sourceRunIds: ['run-2'],
+00523:         conditionCoverage: {
+00524:           plannedConditionCount: 4,
+00525:           observedConditionCount: 4,
+00526:           complete: true,
+00527:         },
+00528:         perModelRepeatCoverage: {
+00529:           'claude-3': {
+00530:             repeatCoverageCount: 4,
+00531:             repeatCoverageShare: 0.6,
+00532:             contributingRunCount: 1,
+00533:           },
+00534:         },
+00535:         perModelDrift: {
+00536:           'claude-3': {
+00537:             weightedOverallSignedCenterSd: 0.4,
+00538:             exceedsWarningThreshold: true,
+00539:           },
+00540:         },
+00541:       },
+00542:     });
+00543: 
+00544:     const semantics = buildPairedAnalysisSemanticsView(current, companion, false);
+00545: 
+00546:     expect(semantics.preference.rowAvailability).toEqual({ status: 'available' });
+00547:     expect(semantics.reliability.rowAvailability).toEqual({ status: 'available' });
+00548:     expect(semantics.preference.byModel['claude-3']).toMatchObject({
+00549:       topPrioritizedValues: [{ name: 'Care', winRate: 0.6 }],
+00550:       topDeprioritizedValues: [{ name: 'Achievement', winRate: 1 / 3 }],
+00551:       overallLean: 'B',
+00552:     });
+00553:     expect(semantics.reliability.byModel['claude-3']).toMatchObject({
+00554:       coverageCount: 10,
+00555:       uniqueScenarios: 10,
+00556:       contributingRunCount: 2,
+00557:       repeatCoverageShare: 0.7,
+00558:       hasLowCoverageWarning: true,
+00559:       hasHighDriftWarning: true,
+00560:     });
+00561:     expect(semantics.reliability.byModel['claude-3']?.weightedOverallSignedCenterSd).toBeCloseTo(0.3, 6);
+00562:     expect(semantics.reliability.byModel['claude-3']?.directionalAgreement).toBeCloseTo(0.82, 6);
+00563:     expect(semantics.reliability.byModel['claude-3']?.baselineReliability).toBeCloseTo(0.86, 6);
+00564:     expect(semantics.reliability.aggregateWarnings).toEqual({
+00565:       isEligibleAggregate: true,
+00566:       lowCoverageModels: ['claude-3'],
+00567:       highDriftModels: ['claude-3'],
+00568:     });
+00569:   });
+00570: 
+00571:   it('uses model-relative mean for bucket assignment', () => {
+00572:     const semantics = buildAnalysisSemanticsView(
+00573:       createAnalysis({
+00574:         preferenceSummary: {
+00575:           perModel: {
+00576:             'claude-3': {
+00577:               preferenceDirection: {
+00578:                 byValue: {
+00579:                   Alpha: {
+00580:                     winRate: 0.2,
+00581:                     count: { prioritized: 2, deprioritized: 8, neutral: 0 },
+00582:                   },
+00583:                   Beta: {
+00584:                     winRate: 0.3,
+00585:                     count: { prioritized: 3, deprioritized: 7, neutral: 0 },
+00586:                   },
+00587:                   Gamma: {
+00588:                     winRate: 0.4,
+00589:                     count: { prioritized: 4, deprioritized: 6, neutral: 0 },
+00590:                   },
+00591:                 },
+00592:                 overallLean: 'A',
+00593:                 overallSignedCenter: 0.2,
+00594:               },
+00595:               preferenceStrength: 0.5,
+00596:             },
+00597:           },
+00598:         },
+00599:       }),
+00600:       false,
+00601:     );
+00602: 
+00603:     expect(semantics.preference.byModel['claude-3']).toMatchObject({
+00604:       topPrioritizedValues: [{ name: 'Gamma', winRate: 0.4 }],
+00605:       topDeprioritizedValues: [{ name: 'Alpha', winRate: 0.2 }],
+00606:     });
+00607:     expect(semantics.preference.byModel['claude-3']?.neutralValues).toEqual([{ name: 'Beta'

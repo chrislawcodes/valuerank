@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/api/tests/services/analysis/aggregate.test.ts",
+  "source_artifact_sha256": "ca67adb65f2c41c6091a45931dc62e5826e4c4c02a38936eb966eb0f74e1385c",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/byvalue-two-step-winrate/reviews/spec.gemini.requirements-adversarial.review.context3.narrowed.txt",
+  "narrowed_artifact_sha256": "be531292e572474bfae800288cd95ee1596fe8a2c6eecdb4c648cbb7225371a4",
+  "strategy": "head-tail-numbered-lines"
+}

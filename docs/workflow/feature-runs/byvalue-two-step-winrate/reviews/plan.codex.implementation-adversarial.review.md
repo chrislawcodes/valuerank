@@ -1,0 +1,42 @@
+---
+reviewer: "codex"
+lens: "implementation-adversarial"
+stage: "plan"
+artifact_path: "docs/workflow/feature-runs/byvalue-two-step-winrate/plan.md"
+artifact_sha256: "97c9506ef5a76936e9ad25c24531d9e5e3722a4a6ed104662e3731f6914586f0"
+repo_root: "."
+git_head_sha: "cbe42f2cf1d8dd592e767a5c3896669aeda559e6"
+git_base_ref: "origin/main"
+git_base_sha: "cbe42f2cf1d8dd592e767a5c3896669aeda559e6"
+generation_method: "codex-runner"
+resolution_status: "accepted"
+resolution_note: "HIGH (migration SQL): confirmed — fixed in plan to use 'analysis_results' and 'analysis_type' (matches existing winrate-honest-denominator migration). MEDIUM (normalize skip): confirmed — plan clarified that value outcomes block must be inserted BEFORE the 'if normalized_score is None: continue' line. MEDIUM (test_methods_documented): confirmed — plan now calls out updating this assertion in Slice B. MEDIUM (existing paired-merge test): confirmed — plan now explicitly calls out updating the ~line 544 test in Slice C."
+raw_output_path: "docs/workflow/feature-runs/byvalue-two-step-winrate/reviews/plan.codex.implementation-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: plan implementation-adversarial
+
+## Findings
+
+- **HIGH** The migration SQL in slice B is wrong for this schema and will fail at execution time. Prisma maps `AnalysisResult` to the `analysis_results` table and `analysisType` to the `analysis_type` column, but the plan uses `"AnalysisResult"` and `"analysisType"`. That is not just a naming mismatch; PostgreSQL will not find those identifiers. [CODE-CONFIRMED] [cloud/packages/db/prisma/schema.prisma](/Users/chrislaw/valuerank/.claude/worktrees/priceless-pasteur-f814d9/cloud/packages/db/prisma/schema.prisma#L681)
+- **MEDIUM** Slice A still drops transcripts before value aggregation when `resolve_transcript_signed_distance()` returns `None`. The current loop has `if normalized_score is None: continue`, and `buildTranscriptDataForAnalysis()` already shows that `summary.values` can be present independently of `decisionModelV2`. So the plan’s stated intent to count value outcomes even without a canonical score is not actually implemented by the described change. [CODE-CONFIRMED] [cloud/workers/analyze_basic_aggregation.py](/Users/chrislaw/valuerank/.claude/worktrees/priceless-pasteur-f814d9/cloud/workers/analyze_basic_aggregation.py#L201) [cloud/apps/api/src/queue/handlers/analyze-basic-data.ts](/Users/chrislaw/valuerank/.claude/worktrees/priceless-pasteur-f814d9/cloud/apps/api/src/queue/handlers/analyze-basic-data.ts#L151)
+- **MEDIUM** Slice C omits an existing paired-merge test that will change under the new equal-weight rule. `buildPairedAnalysisSemanticsView` currently produces `Achievement: 1/3` and `Care: 0.6` from the sample-size-weighted merge, and the test asserts those exact values. After switching to equal-weight merging, `Achievement` will move to `0.5`, so this test needs to be updated or it will fail. [CODE-CONFIRMED] [cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts](/Users/chrislaw/valuerank/.claude/worktrees/priceless-pasteur-f814d9/cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts#L224) [cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts](/Users/chrislaw/valuerank/.claude/worktrees/priceless-pasteur-f814d9/cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts#L544)
+- **MEDIUM** Slice B’s version-bump test sweep is incomplete. The worker test still hard-codes `methods["codeVersion"] == "1.2.0"` and `summaryContractVersion == "vignette-semantics-v1"`, so bumping `analyze_basic_metadata.py` without updating that test will break the suite. The plan only names the API integration and aggregate tests. [CODE-CONFIRMED] [cloud/workers/tests/test_analyze_basic.py](/Users/chrislaw/valuerank/.claude/worktrees/priceless-pasteur-f814d9/cloud/workers/tests/test_analyze_basic.py#L214)
+
+## Residual Risks
+
+- I did not verify whether any downstream consumer keys on `summaryContractVersion`; the provided code only shows worker tests asserting the current string.
+- I did not exhaustively audit every web fixture that may encode sample-size-weighted merged preference values outside `analysisSemantics.test.ts`.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: accepted
+- note: HIGH (migration SQL): confirmed — fixed in plan to use 'analysis_results' and 'analysis_type' (matches existing winrate-honest-denominator migration). MEDIUM (normalize skip): confirmed — plan clarified that value outcomes block must be inserted BEFORE the 'if normalized_score is None: continue' line. MEDIUM (test_methods_documented): confirmed — plan now calls out updating this assertion in Slice B. MEDIUM (existing paired-merge test): confirmed — plan now explicitly calls out updating the ~line 544 test in Slice C.

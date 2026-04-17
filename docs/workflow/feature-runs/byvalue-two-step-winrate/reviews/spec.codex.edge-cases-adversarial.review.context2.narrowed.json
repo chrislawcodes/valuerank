@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/api/tests/queue/handlers/analyze-basic.integration.test.ts",
+  "source_artifact_sha256": "31093fe1a8742cd3849f2eaa0ab09f101bb0ba1d03bc8f30005d03d209898fad",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/byvalue-two-step-winrate/reviews/spec.codex.edge-cases-adversarial.review.context2.narrowed.txt",
+  "narrowed_artifact_sha256": "f983331701915fe04fa8847d9fb4fe76a22bd29dbd4b2c7fda0940e0b47225df",
+  "strategy": "head-tail-numbered-lines"
+}

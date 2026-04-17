@@ -1,0 +1,288 @@
+00001: /**
+00002:  * Integration tests for analyze-basic handler
+00003:  *
+00004:  * Tests the full flow: job processing -> Python worker -> analysis result creation
+00005:  * Uses mocked Python worker responses.
+00006:  */
+00007: 
+00008: import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+00009: import { db } from '@valuerank/db';
+00010: import { createAnalyzeBasicHandler } from '../../../src/queue/handlers/analyze-basic.js';
+00011: import type { AnalyzeBasicJobData } from '../../../src/queue/types.js';
+00012: import type { Job } from 'pg-boss';
+00013: 
+00014: // Mock the spawn module
+00015: vi.mock('../../../src/queue/spawn.js', () => ({
+00016:   spawnPython: vi.fn(),
+00017: }));
+00018: 
+00019: // Import the mocked function
+00020: import { spawnPython } from '../../../src/queue/spawn.js';
+00021: 
+00022: // Test IDs
+00023: const TEST_IDS = {
+00024:   definition: 'test-def-analyze-' + Date.now(),
+00025:   run: 'test-run-analyze-' + Date.now(),
+00026:   scenario1: 'test-scenario-1-' + Date.now(),
+00027:   scenario2: 'test-scenario-2-' + Date.now(),
+00028:   transcript1: 'test-transcript-1-' + Date.now(),
+00029:   transcript2: 'test-transcript-2-' + Date.now(),
+00030: };
+00031: 
+00032: // Mock analysis response from Python worker (matches real output format)
+00033: const MOCK_ANALYSIS = {
+00034:   success: true,
+00035:   analysis: {
+00036:     perModel: {
+00037:       'gpt-4': {
+00038:         totalResponses: 2,
+00039:         decisionCounts: { A: 1, B: 1 },
+00040:         mean: 0.5,
+00041:         stdDev: 0.5,
+00042:       },
+00043:     },
+00044:     preferenceSummary: {
+00045:       perModel: {
+00046:         'gpt-4': {
+00047:           preferenceDirection: {
+00048:             byValue: {},
+00049:             overallLean: 'A',
+00050:             overallSignedCenter: 1.25,
+00051:           },
+00052:           preferenceStrength: 1.25,
+00053:         },
+00054:       },
+00055:     },
+00056:     reliabilitySummary: {
+00057:       perModel: {
+00058:         'gpt-4': {
+00059:           baselineNoise: null,
+00060:           baselineReliability: null,
+00061:           directionalAgreement: null,
+00062:           neutralShare: null,
+00063:           coverageCount: 0,
+00064:           uniqueScenarios: 2,
+00065:         },
+00066:       },
+00067:     },
+00068:     modelAgreement: {
+00069:       pairwise: {},
+00070:       overallKappa: null,
+00071:     },
+00072:     dimensionAnalysis: {
+00073:       'test-dimension': {
+00074:         effectSize: 0.3,
+00075:         pValue: 0.05,
+00076:         isSignificant: true,
+00077:       },
+00078:     },
+00079:     mostContestedScenarios: [
+00080:       {
+00081:         scenarioId: TEST_IDS.scenario1,
+00082:         scenarioName: 'Test Scenario 1',
+00083:         variance: 0.5,
+00084:         modelScores: { 'gpt-4': 0.5 },
+00085:       },
+00086:     ],
+00087:     methodsUsed: {
+00088:       effectSize: 'eta-squared',
+00089:       multipleComparison: 'Holm-Bonferroni',
+00090:     },
+00091:     warnings: [],
+00092:     computedAt: '2024-01-01T00:00:01.000Z',
+00093:     durationMs: 150,
+00094:   },
+00095: };
+00096: 
+00097: function buildDefinitionSnapshot() {
+00098:   return {
+00099:     dimensions: [
+00100:       { name: 'Achievement' },
+00101:       { name: 'Benevolence_Dependability' },
+00102:     ],
+00103:     methodology: {
+00104:       presentation_order: 'A_first',
+00105:     },
+00106:   };
+00107: }
+00108: 
+00109: function buildDecisionMetadata(decisionCode: string) {
+00110:   if (decisionCode === '5') {
+00111:     return {
+00112:       matchedLabel: 'Achievement',
+00113:       parseClass: 'exact',
+00114:       parsePath: 'exact.favor_first.strong',
+00115:       parserVersion: 'parser-1',
+00116:       responseExcerpt: 'Achievement',
+00117:     };
+00118:   }
+00119: 
+00120:   if (decisionCode === '4') {
+00121:     return {
+00122:       matchedLabel: 'Achievement',
+00123:       parseClass: 'exact',
+00124:       parsePath: 'exact.favor_first.lean',
+00125:       parserVersion: 'parser-1',
+00126:       responseExcerpt: 'Achievement',
+00127:     };
+00128:   }
+00129: 
+00130:   if (decisionCode === '2') {
+00131:     return {
+00132:       matchedLabel: 'Achievement',
+00133:       parseClass: 'exact',
+00134:       parsePath: 'exact.favor_second.lean',
+00135:       parserVersion: 'parser-1',
+00136:       responseExcerpt: 'Achievement',
+00137:     };
+00138:   }
+00139: 
+00140:   if (decisionCode === '1') {
+00141:     return {
+00142:       matchedLabel: 'Achievement',
+00143:       parseClass: 'exact',
+00144:       parsePath: 'exact.favor_second.strong',
+00145:       parserVersion: 'parser-1',
+00146:       responseExcerpt: 'Achievement',
+00147:     };
+00148:   }
+00149: 
+00150:   return {
+00151:     matchedLabel: 'Achievement',
+00152:     parseClass: 'exact',
+00153:     parsePath: 'exact.neutral.neutral',
+00154:     parserVersion: 'parser-1',
+00155:     responseExcerpt: 'Achievement',
+00156:   };
+00157: }
+00158: 
+00159: // Mock job factory
+00160: function createMockJob(da
+
+... [narrowed review slice: middle omitted] ...
+
+Id] })]);
+00673: 
+00674:       const callArgs = vi.mocked(spawnPython).mock.calls[0];
+00675:       const input = callArgs?.[1] as {
+00676:         transcripts: Array<{ id: string; scenario: { dimensions: Record<string, number | string> } }>;
+00677:       };
+00678: 
+00679:       expect(input.transcripts[0]).toMatchObject({
+00680:         id: transcriptId,
+00681:         scenario: {
+00682:           dimensions: {
+00683:             autonomy: 'very high',
+00684:             risk: 'low',
+00685:           },
+00686:         },
+00687:       });
+00688: 
+00689:       const result = await db.analysisResult.findFirstOrThrow({
+00690:         where: { runId: TEST_IDS.run },
+00691:         orderBy: { createdAt: 'desc' },
+00692:       });
+00693:       const output = result.output as {
+00694:         visualizationData?: {
+00695:           scenarioDimensions?: Record<string, Record<string, string | number>>;
+00696:         };
+00697:       };
+00698: 
+00699:       expect(output.visualizationData?.scenarioDimensions?.[scenarioId]).toEqual({
+00700:         autonomy: 'very high',
+00701:         risk: 'low',
+00702:       });
+00703: 
+00704:       await db.analysisResult.deleteMany({ where: { runId: TEST_IDS.run } });
+00705:       await db.transcript.delete({ where: { id: transcriptId } });
+00706:       await db.scenario.delete({ where: { id: scenarioId } });
+00707:     });
+00708: 
+00709:     it('normalizes value outcomes for flipped orientations before sending to the worker', async () => {
+00710:       const flippedScenarioId = 'test-scenario-flipped-' + Date.now();
+00711:       const flippedTranscriptId = 'test-transcript-flipped-' + Date.now();
+00712: 
+00713:       await db.scenario.create({
+00714:         data: {
+00715:           id: flippedScenarioId,
+00716:           definitionId: TEST_IDS.definition,
+00717:           name: 'Flipped Scenario',
+00718:           orientationFlipped: true,
+00719:           content: { dimensions: { 'test-dimension': 3 } },
+00720:         },
+00721:       });
+00722: 
+00723:       await db.transcript.create({
+00724:         data: {
+00725:           id: flippedTranscriptId,
+00726:           runId: TEST_IDS.run,
+00727:           modelId: 'gpt-4',
+00728:           scenarioId: flippedScenarioId,
+00729:           decisionCode: '4',
+00730:           decisionMetadata: buildDecisionMetadata('4'),
+00731:           definitionSnapshot: buildDefinitionSnapshot(),
+00732:           content: { turns: [] },
+00733:           turnCount: 1,
+00734:           tokenCount: 100,
+00735:           durationMs: 1000,
+00736:         },
+00737:       });
+00738: 
+00739:       const handler = createAnalyzeBasicHandler();
+00740:       await handler([createMockJob({ transcriptIds: [flippedTranscriptId] })]);
+00741: 
+00742:       expect(spawnPython).toHaveBeenCalledWith(
+00743:         'workers/analyze_basic.py',
+00744:         expect.objectContaining({
+00745:           transcripts: expect.arrayContaining([
+00746:             expect.objectContaining({
+00747:               id: flippedTranscriptId,
+00748:               orientationFlipped: true,
+00749:               summary: {
+00750:                 values: {
+00751:                   Achievement: 'deprioritized',
+00752:                   Benevolence_Dependability: 'prioritized',
+00753:                 },
+00754:               },
+00755:             }),
+00756:           ]),
+00757:         }),
+00758:         expect.any(Object),
+00759:       );
+00760: 
+00761:       await db.transcript.delete({ where: { id: flippedTranscriptId } });
+00762:       await db.scenario.delete({ where: { id: flippedScenarioId } });
+00763:     });
+00764: 
+00765:     it('handles transcripts without scenarios gracefully', async () => {
+00766:       // Create transcript without scenario
+00767:       const orphanTranscriptId = 'orphan-transcript-' + Date.now();
+00768:       await db.transcript.create({
+00769:         data: {
+00770:           id: orphanTranscriptId,
+00771:           runId: TEST_IDS.run,
+00772:           modelId: 'gpt-4',
+00773:           scenarioId: null,
+00774:           decisionCode: '3',
+00775:           content: { turns: [] },
+00776:           turnCount: 1,
+00777:           tokenCount: 100,
+00778:           durationMs: 1000,
+00779:         },
+00780:       });
+00781: 
+00782:       const handler = createAnalyzeBasicHandler();
+00783: 
+00784:       // Should not throw
+00785:       await handler([
+00786:         createMockJob({ transcriptIds: [TEST_IDS.transcript1, orphanTranscriptId] }),
+00787:       ]);
+00788: 
+00789:       // Verify only transcript with scenario was sent to worker
+00790:       const callArgs = vi.mocked(spawnPython).mock.calls[0];
+00791:       const input = callArgs?.[1] as { transcripts: Array<{ id: string }> };
+00792:       expect(input.transcripts.length).toBe(1);
+00793:       expect(input.transcripts[0]?.id).toBe(TEST_IDS.transcript1);
+00794: 
+00795:       // Clean up
+00796:       await db.transcript.delete({ where: { id: orphanTransc

@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/workers/tests/test_analyze_basic.py",
+  "source_artifact_sha256": "f13858bffd40c46ab039be1d2602267f23e2a7fffec37760091086cf33c457da",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/byvalue-two-step-winrate/reviews/spec.codex.edge-cases-adversarial.review.context1.narrowed.txt",
+  "narrowed_artifact_sha256": "6125e2bd5f20366598427522258e680985a07e20d3458ee10793ea563009c0d0",
+  "strategy": "head-tail-numbered-lines"
+}

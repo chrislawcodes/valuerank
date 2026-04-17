@@ -1,0 +1,1612 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/priceless-pasteur-f814d9
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019d98cb-f1db-7a43-9ef3-da7302bf630e
+--------
+user
+Review this spec artifact using a edge-cases-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: analyze_basic_aggregation.py
+"""Pure helper functions used by analyze_basic.py."""
+
+import math
+from typing import Any
+
+from common.errors import ValidationError
+from stats.decision_model import resolve_transcript_signed_distance
+
+
+def validate_input(data: dict[str, Any]) -> None:
+    """Validate analyze basic input."""
+    if "runId" not in data:
+        raise ValidationError(message="Missing required field: runId")
+
+    if "transcripts" not in data:
+        # Legacy format: transcriptIds only (for backwards compatibility)
+        if "transcriptIds" in data and isinstance(data["transcriptIds"], list):
+            # Legacy mode - return stub response
+            return
+        raise ValidationError(message="Missing required field: transcripts")
+
+    if not isinstance(data["transcripts"], list):
+        raise ValidationError(message="transcripts must be an array")
+
+    if "emitVignetteSemantics" in data and not isinstance(data["emitVignetteSemantics"], bool):
+        raise ValidationError(message="emitVignetteSemantics must be a boolean")
+
+    aggregate_semantics = data.get("aggregateSemantics")
+    if aggregate_semantics is not None:
+        if not isinstance(aggregate_semantics, dict):
+            raise ValidationError(message="aggregateSemantics must be an object")
+        if aggregate_semantics.get("mode") != "same_signature_v1":
+            raise ValidationError(message="aggregateSemantics.mode must be same_signature_v1")
+        planned_scenario_ids = aggregate_semantics.get("plannedScenarioIds")
+        if not isinstance(planned_scenario_ids, list) or not all(isinstance(item, str) for item in planned_scenario_ids):
+            raise ValidationError(message="aggregateSemantics.plannedScenarioIds must be an array of strings")
+        for field in ("minRepeatCoverageCount", "lowCoverageCautionThreshold"):
+            value = aggregate_semantics.get(field)
+            if not isinstance(value, int) or value < 0:
+                raise ValidationError(message=f"aggregateSemantics.{field} must be a non-negative integer")
+        for field in ("minRepeatCoverageShare", "driftWarningThreshold"):
+            value = aggregate_semantics.get(field)
+            if not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+                raise ValidationError(message=f"aggregateSemantics.{field} must be a finite number")
+
+        for transcript in data["transcripts"]:
+            run_id = transcript.get("runId")
+            if not isinstance(run_id, str) or run_id.strip() == "":
+                raise ValidationError(message="aggregateSemantics requires transcript.runId for every transcript")
+
+
+def extract_model_scores(transcripts: list[dict[str, Any]]) -> dict[str, list[float]]:
+    """
+    Extract aligned scores per model for comparison.
+
+    Groups transcripts by scenarioId, then collects scores per model
+    for scenarios that all models answered.
+    """
+    # Group by scenario
+    by_scenario: dict[str, dict[str, float]] = {}
+    for t in transcripts:
+        scenario_id = t.get("scenarioId", "unknown")
+        model_id = t.get("modelId", "unknown")
+        score = resolve_transcript_signed_distance(t)
+
+        if score is None:
+            continue
+
+        if scenario_id not in by_scenario:
+            by_scenario[scenario_id] = {}
+        by_scenario[scenario_id][model_id] = float(score)
+
+    # Find models that answered all scenarios
+    all_models = set()
+    for model_scores in by_scenario.values():
+        all_models.update(model_scores.keys())
+
+    # Collect aligned scores
+    result: dict[str, list[float]] = {m: [] for m in all_models}
+    for scenario_id in sorted(by_scenario.keys()):
+        scenario_scores = by_scenario[scenario_id]
+        # Only include scenarios where all models have scores
+        if set(scenario_scores.keys()) == all_models:
+            for model_id, score in scenario_scores.items():
+                result[model_id].append(score)
+
+    # Filter out models with no aligned scores
+    return {m: scores for m, scores in result.items() if scores}
+
+
+def find_contested_scenarios(
+    transcripts: list[dict[str, Any]],
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    """
+    Find scenarios with highest disagreement across models.
+
+    Disagreement is measured by variance in scores across models.
+    """
+    import numpy as np
+
+    # Group by scenario
+    by_scenario: dict[str, list[tuple[str, float]]] = {}
+    scenario_names: dict[str, str] = {}
+
+    for t in transcripts:
+        scenario_id = t.get("scenarioId", "unknown")
+        model_id = t.get("modelId", "unknown")
+        scenario = t.get("scenario", {})
+        score = resolve_transcript_signed_distance(t)
+
+        if score is None:
+            continue
+
+        if scenario_id not in by_scenario:
+            by_scenario[scenario_id] = []
+            scenario_names[scenario_id] = scenario.get("name", scenario_id)
+
+        by_scenario[scenario_id].append((model_id, float(score)))
+
+    # Calculate variance for each scenario
+    contested: list[dict[str, Any]] = []
+    for scenario_id, model_scores in by_scenario.items():
+        if len(model_scores) < 2:
+            continue
+
+        scores = [s for _, s in model_scores]
+        variance = float(np.var(scores))
+
+        contested.append({
+            "scenarioId": scenario_id,
+            "scenarioName": scenario_names[scenario_id],
+            "variance": round(variance, 6),
+            "modelScores": {m: s for m, s in model_scores},
+        })
+
+    # Sort by variance descending
+    contested.sort(key=lambda x: x["variance"], reverse=True)
+    return contested[:limit]
+
+
+def generate_warnings(
+    transcripts: list[dict[str, Any]],
+    per_model: dict[str, Any],
+) -> list[dict[str, str]]:
+    """Generate warnings for statistical assumption violations."""
+    warnings: list[dict[str, str]] = []
+
+    # Check sample sizes
+    for model_id, stats in per_model.items():
+        sample_size = stats.get("sampleSize", 0)
+        if sample_size < 10:
+            warnings.append({
+                "code": "SMALL_SAMPLE",
+                "message": f"Model {model_id} has only {sample_size} samples",
+                "recommendation": "Results may have wide confidence intervals",
+            })
+        elif sample_size < 30:
+            warnings.append({
+                "code": "MODERATE_SAMPLE",
+                "message": f"Model {model_id} has {sample_size} samples",
+                "recommendation": "Consider using bootstrap confidence intervals",
+            })
+
+    transcripts_with_dimensions = sum(
+        1
+        for t in transcripts
+        if t.get("scenario", {}).get("dimensions")
+    )
+    if transcripts_with_dimensions == 0:
+        warnings.append({
+            "code": "NO_DIMENSIONS",
+            "message": "No scenario dimensions found in transcripts",
+            "recommendation": "Variable impact analysis will be empty",
+        })
+    elif transcripts_with_dimensions < len(transcripts):
+        warnings.append({
+            "code": "PARTIAL_DIMENSIONS",
+            "message": (
+                f"Only {transcripts_with_dimensions} of {len(transcripts)} transcripts "
+                "include scenario dimensions"
+            ),
+            "recommendation": "Condition grouping and variable impact may exclude uncovered scenarios",
+        })
+
+    return warnings
+
+
+def build_preference_summary(
+    transcripts: list[dict[str, Any]],
+    per_model: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Build explicit preference semantics for vignette analysis.
+
+    Preference strength is computed from orientation-corrected per-scenario means
+    so repeated probes do not overweight a single scenario.
+    """
+    scores_by_model_scenario: dict[str, dict[str, list[float]]] = {}
+
+    for transcript in transcripts:
+        model_id = transcript.get("modelId", "unknown")
+        scenario_id = transcript.get("scenarioId", "unknown")
+        normalized_score = resolve_transcript_signed_distance(transcript)
+        if normalized_score is None:
+            continue
+
+        if model_id not in scores_by_model_scenario:
+            scores_by_model_scenario[model_id] = {}
+        if scenario_id not in scores_by_model_scenario[model_id]:
+            scores_by_model_scenario[model_id][scenario_id] = []
+
+        scores_by_model_scenario[model_id][scenario_id].append(normalized_score)
+
+    per_model_summary: dict[str, Any] = {}
+    for model_id, model_stats in per_model.items():
+        scenario_scores = scores_by_model_scenario.get(model_id, {})
+        scenario_means = [
+            sum(scores) / len(scores)
+            for scores in scenario_scores.values()
+            if scores
+        ]
+
+        overall_signed_center: float | None = None
+        overall_lean: str | None = None
+        preference_strength: float | None = None
+
+        if scenario_means:
+            # scenario_means are already signed distances (-2 to +2)
+            signed_center = sum(scenario_means) / len(scenario_means)
+            strength = sum(abs(mean) for mean in scenario_means) / len(scenario_means)
+
+            overall_signed_center = round(float(signed_center), 6)
+            preference_strength = round(float(strength), 6)
+
+            if overall_signed_center > 0:
+                overall_lean = "A"
+            elif overall_signed_center < 0:
+                overall_lean = "B"
+            else:
+                overall_lean = "NEUTRAL"
+
+        per_model_summary[model_id] = {
+            "preferenceDirection": {
+                "byValue": model_stats.get("values", {}),
+                "overallLean": overall_lean,
+                "overallSignedCenter": overall_signed_center,
+            },
+            "preferenceStrength": preference_strength,
+        }
+
+    return {
+        "perModel": per_model_summary,
+    }
+
+
+def build_reliability_summary(variance_analysis: dict[str, Any]) -> dict[str, Any]:
+    """
+    Build baseline reliability semantics from repeated-trial variance analysis.
+
+    Reliability is unavailable without actual repeat coverage and never falls back
+    to cross-scenario spread metrics.
+    """
+    is_multi_sample = bool(variance_analysis.get("isMultiSample", False))
+    per_model_variance = variance_analysis.get("perModel", {})
+
+    per_model_summary: dict[str, Any] = {}
+    for model_id, model_stats in per_model_variance.items():
+        per_scenario = model_stats.get("perScenario", {})
+        repeated_scenarios = [
+            stats
+            for stats in per_scenario.values()
+            if stats.get("sampleCount", 0) > 1
+        ]
+        coverage_count = len(repeated_scenarios)
+
+        baseline_noise: float | None = None
+        baseline_reliability: float | None = None
+        directional_agreement: float | None = None
+        neutral_share: float | None = None
+
+        if coverage_count > 0:
+            avg_within_scenario_variance = float(model_stats.get("avgWithinScenarioVariance", 0.0))
+            baseline_noise = round(math.sqrt(max(avg_within_scenario_variance, 0.0)), 6)
+
+            if is_multi_sample:
+                consistency_score = model_stats.get("consistencyScore")
+                if consistency_score is not None:
+                    baseline_reliability = round(float(consistency_score), 6)
+
+            agreement_weight = sum(
+                int(stats.get("sampleCount", 0))
+                for stats in repeated_scenarios
+                if stats.get("directionalAgreement") is not None
+            )
+            if agreement_weight > 0:
+                directional_agreement = round(
+                    sum(
+                        float(stats["directionalAgreement"]) * int(stats.get("sampleCount", 0))
+                        for stats in repeated_scenarios
+                        if stats.get("directionalAgreement") is not None
+                    ) / agreement_weight,
+                    6,
+                )
+
+            neutral_weight = sum(
+                int(stats.get("sampleCount", 0))
+                for stats in repeated_scenarios
+                if stats.get("neutralShare") is not None
+            )
+            if neutral_weight > 0:
+                neutral_share = round(
+                    sum(
+                        float(stats["neutralShare"]) * int(stats.get("sampleCount", 0))
+                        for stats in repeated_scenarios
+                        if stats.get("neutralShare") is not None
+                    ) / neutral_weight,
+                    6,
+                )
+
+        per_model_summary[model_id] = {
+            "baselineNoise": baseline_noise,
+            "baselineReliability": baseline_reliability,
+            "directionalAgreement": directional_agreement,
+            "neutralShare": neutral_share,
+            "coverageCount": coverage_count,
+            "uniqueScenarios": int(model_stats.get("uniqueScenarios", 0)),
+        }
+
+    return {
+        "perModel": per_model_summary,
+    }
+
+
+def compute_weighted_standard_deviation(samples: list[tuple[int, float]]) -> float | None:
+    """Compute weighted standard deviation for (weight, value) samples."""
+    if not samples:
+        return None
+
+    total_weight = sum(weight for weight, _ in samples if weight > 0)
+    if total_weight <= 0:
+        return None
+
+    weighted_mean = sum(weight * value for weight, value in samples if weight > 0) / total_weight
+    weighted_variance = sum(
+        weight * ((value - weighted_mean) ** 2)
+        for weight, value in samples
+        if weight > 0
+    ) / total_weight
+    return round(math.sqrt(max(weighted_variance, 0.0)), 6)
+
+
+Context: analysisSemantics.preference.ts
+import type { AnalysisResult, RawPreferenceSummary } from '../../api/operations/analysis';
+import type {
+  AnalysisSemanticsView,
+  PreferenceValueSummary,
+  PreferenceViewModel,
+  RawModelPreferenceSummary,
+  RawPreferenceValueStats,
+  SemanticUnavailableReason,
+} from './analysisSemantics.types';
+import {
+  EPSILON,
+  availableState,
+  averageWeighted,
+  isRecord,
+  parseRawPreferenceValueStats,
+  sanitizeLog,
+  unavailableState,
+} from './analysisSemantics.utils';
+
+function combineOverallLean(overallSignedCenter: number | null): 'A' | 'B' | 'NEUTRAL' | null {
+  if (overallSignedCenter === null) {
+    return null;
+  }
+
+  if (overallSignedCenter > EPSILON) {
+    return 'A';
+  }
+  if (overallSignedCenter < -EPSILON) {
+    return 'B';
+  }
+  return 'NEUTRAL';
+}
+
+function parseRawPreferenceSummaryEntry(value: unknown): RawModelPreferenceSummary | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const preferenceDirection = value.preferenceDirection;
+  if (!isRecord(preferenceDirection)) {
+    return null;
+  }
+
+  const byValue = preferenceDirection.byValue;
+  if (!isRecord(byValue)) {
+    return null;
+  }
+
+  const parsedByValue: Record<string, RawPreferenceValueStats> = {};
+  for (const [valueId, stats] of Object.entries(byValue)) {
+    const parsedStats = parseRawPreferenceValueStats(stats);
+    if (!parsedStats) {
+      return null;
+    }
+    parsedByValue[valueId] = parsedStats;
+  }
+
+  const overallLean = preferenceDirection.overallLean;
+  if (overallLean !== null && overallLean !== 'A' && overallLean !== 'B' && overallLean !== 'NEUTRAL') {
+    return null;
+  }
+
+  const overallSignedCenter = preferenceDirection.overallSignedCenter ?? null;
+  if (overallSignedCenter !== null && typeof overallSignedCenter !== 'number') {
+    return null;
+  }
+
+  const preferenceStrength = value.preferenceStrength ?? null;
+  if (preferenceStrength !== null && (typeof preferenceStrength !== 'number' || preferenceStrength < 0)) {
+    return null;
+  }
+
+  return {
+    preferenceDirection: {
+      byValue: parsedByValue,
+      overallLean,
+      overallSignedCenter,
+    },
+    preferenceStrength,
+  };
+}
+
+export function deriveValueLists(byValue: Record<string, RawPreferenceValueStats>): {
+  topPrioritizedValues: PreferenceValueSummary[];
+  topDeprioritizedValues: PreferenceValueSummary[];
+  neutralValues: PreferenceValueSummary[];
+} {
+  const entriesWithWinRate = Object.entries(byValue)
+    .map(([valueId, stats]) => ({
+      name: valueId,
+      winRate: stats.winRate,
+    }))
+    .filter((entry): entry is { name: string; winRate: number } => entry.winRate != null);
+
+  if (entriesWithWinRate.length === 0) {
+    return {
+      topPrioritizedValues: [],
+      topDeprioritizedValues: [],
+      neutralValues: [],
+    };
+  }
+
+  const modelMean = entriesWithWinRate.reduce((sum, entry) => sum + entry.winRate, 0) / entriesWithWinRate.length;
+  const entries = entriesWithWinRate.map((entry) => ({
+    ...entry,
+    distance: entry.winRate - modelMean,
+  }));
+
+  const sortByPositiveDistance = (
+    left: { name: string; distance: number },
+    right: { name: string; distance: number },
+  ) => {
+    if (right.distance !== left.distance) {
+      return right.distance - left.distance;
+    }
+    return left.name.localeCompare(right.name);
+  };
+
+  const sortByNegativeDistance = (
+    left: { name: string; distance: number },
+    right: { name: string; distance: number },
+  ) => {
+    if (left.distance !== right.distance) {
+      return left.distance - right.distance;
+    }
+    return left.name.localeCompare(right.name);
+  };
+
+  const sortByNeutralDistance = (
+    left: { name: string; distance: number },
+    right: { name: string; distance: number },
+  ) => {
+    const leftDistance = Math.abs(left.distance);
+    const rightDistance = Math.abs(right.distance);
+    if (leftDistance !== rightDistance) {
+      return leftDistance - rightDistance;
+    }
+    return left.name.localeCompare(right.name);
+  };
+
+  const prioritized = entries
+    .filter((entry) => entry.distance > EPSILON)
+    .sort(sortByPositiveDistance)
+    .slice(0, 3)
+    .map((entry) => ({ name: entry.name, winRate: entry.winRate }));
+  const deprioritized = entries
+    .filter((entry) => entry.distance < -EPSILON)
+    .sort(sortByNegativeDistance)
+    .slice(0, 3)
+    .map((entry) => ({ name: entry.name, winRate: entry.winRate }));
+  const neutral = entries
+    .filter((entry) => Math.abs(entry.distance) <= EPSILON)
+    .sort(sortByNeutralDistance)
+    .slice(0, 3)
+    .map((entry) => ({ name: entry.name, winRate: entry.winRate }));
+
+  return {
+    topPrioritizedValues: prioritized,
+    topDeprioritizedValues: deprioritized,
+    neutralValues: neutral,
+  };
+}
+
+export function buildPreferenceUnavailableModel(modelId: string, reason: SemanticUnavailableReason): PreferenceViewModel {
+  return {
+    modelId,
+    overallLean: null,
+    topPrioritizedValues: [],
+    topDeprioritizedValues: [],
+    neutralValues: [],
+    availability: unavailableState(reason),
+  };
+}
+
+export function buildMergedPreferenceModel(
+  modelId: string,
+  analyses: AnalysisResult[],
+): PreferenceViewModel {
+  const parsedModels = analyses
+    .map((analysis) => {
+      const perModel = isRecord(analysis.preferenceSummary?.perModel)
+        ? analysis.preferenceSummary.perModel
+        : null;
+      return {
+        analysis,
+        parsed: parseRawPreferenceSummaryEntry(perModel?.[modelId]),
+      };
+    })
+    .filter((entry): entry is { analysis: AnalysisResult; parsed: RawModelPreferenceSummary } => entry.parsed !== null);
+
+  if (parsedModels.length === 0) {
+    return buildPreferenceUnavailableModel(modelId, 'invalid-summary-shape');
+  }
+
+  const mergedByValue: Record<string, RawPreferenceValueStats> = {};
+  const valueIds = new Set(parsedModels.flatMap(({ parsed }) => Object.keys(parsed.preferenceDirection.byValue)));
+
+  valueIds.forEach((valueId) => {
+    const stats = parsedModels
+      .map(({ parsed }) => parsed.preferenceDirection.byValue[valueId])
+      .filter((entry): entry is RawPreferenceValueStats => entry != null);
+
+    if (stats.length === 0) {
+      return;
+    }
+
+    const allHaveCounts = stats.every((entry) => entry.count !== undefined);
+    if (allHaveCounts) {
+      const prioritized = stats.reduce((sum, entry) => sum + (entry.count?.prioritized ?? 0), 0);
+      const deprioritized = stats.reduce((sum, entry) => sum + (entry.count?.deprioritized ?? 0), 0);
+      const neutral = stats.reduce((sum, entry) => sum + (entry.count?.neutral ?? 0), 0);
+      const totalResponses = prioritized + deprioritized + neutral;
+      mergedByValue[valueId] = {
+        winRate: totalResponses > 0 ? prioritized / totalResponses : 0.5,
+        count: {
+          prioritized,
+          deprioritized,
+          neutral,
+        },
+      };
+      return;
+    }
+
+    const averagedWinRate = averageWeighted(
+      parsedModels
+        .map(({ analysis, parsed }) => {
+          const entry = parsed.preferenceDirection.byValue[valueId];
+          if (!entry) {
+            return null;
+          }
+          return {
+            value: entry.winRate,
+            weight: analysis.perModel[modelId]?.sampleSize ?? 0,
+          };
+        })
+        .filter((entry): entry is { value: number; weight: number } => entry !== null),
+    );
+
+    if (averagedWinRate !== null) {
+      mergedByValue[valueId] = { winRate: averagedWinRate };
+    }
+  });
+
+  const overallSignedCenter = averageWeighted(
+    parsedModels
+      .filter(({ parsed }) => parsed.preferenceDirection.overallSignedCenter !== null)
+      .map(({ analysis, parsed }) => ({
+        value: parsed.preferenceDirection.overallSignedCenter ?? 0,
+        weight: analysis.perModel[modelId]?.sampleSize ?? 0,
+      })),
+  );
+  const preferenceStrength = averageWeighted(
+    parsedModels
+      .filter(({ parsed }) => parsed.preferenceStrength !== null)
+      .map(({ analysis, parsed }) => ({
+        value: parsed.preferenceStrength ?? 0,
+        weight: analysis.perModel[modelId]?.sampleSize ?? 0,
+      })),
+  );
+  const valueLists = deriveValueLists(mergedByValue);
+
+  return {
+    modelId,
+    overallLean: combineOverallLean(overallSignedCenter),
+    topPrioritizedValues: valueLists.topPrioritizedValues,
+    topDeprioritizedValues: valueLists.topDeprioritizedValues,
+    neutralValues: valueLists.neutralValues,
+    availability: preferenceStrength === null
+      ? unavailableState('insufficient-preference-data')
+      : availableState(),
+  };
+}
+
+export function buildPreferenceSection(
+  analysis: AnalysisResult,
+  modelIds: string[],
+  rawSummary: RawPreferenceSummary | null | undefined,
+): AnalysisSemanticsView['preference'] {
+  if (rawSummary == null) {
+    sanitizeLog(analysis, { section: 'preference', reason: 'invalid-summary-shape' });
+    return {
+      rowAvailability: unavailableState('invalid-summary-shape'),
+      byModel: Object.fromEntries(modelIds.map((modelId) => [modelId, buildPreferenceUnavailableModel(modelId, 'invalid-summary-shape')])),
+    };
+  }
+
+  if (!isRecord(rawSummary.perModel)) {
+    sanitizeLog(analysis, { section: 'preference', reason: 'invalid-summary-shape' });
+    return {
+      rowAvailability: unavailableState('invalid-summary-shape'),
+      byModel: Object.fromEntries(modelIds.map((modelId) => [modelId, buildPreferenceUnavailableModel(modelId, 'invalid-summary-shape')])),
+    };
+  }
+
+  const byModel: Record<string, PreferenceViewModel> = {};
+  let hasValidModel = false;
+
+  for (const modelId of modelIds) {
+    const rawModel = rawSummary.perModel[modelId];
+    const parsedModel = parseRawPreferenceSummaryEntry(rawModel);
+
+    if (!parsedModel) {
+      byModel[modelId] = buildPreferenceUnavailableModel(modelId, 'invalid-summary-shape');
+      continue;
+    }
+
+    hasValidModel = true;
+    const valueLists = deriveValueLists(parsedModel.preferenceDirection.byValue);
+    byModel[modelId] = {
+      modelId,
+      overallLean: parsedModel.preferenceDirection.overallLean,
+      topPrioritizedValues: valueLists.topPrioritizedValues,
+      topDeprioritizedValues: valueLists.topDeprioritizedValues,
+      neutralValues: valueLists.neutralValues,
+      availability: parsedModel.preferenceStrength === null
+        ? unavailableState('insufficient-preference-data')
+        : availableState(),
+    };
+  }
+
+  if (!hasValidModel) {
+    sanitizeLog(analysis, { section: 'preference', reason: 'invalid-summary-shape' });
+    return {
+      rowAvailability: unavailableState('invalid-summary-shape'),
+      byModel,
+    };
+  }
+
+  return {
+    rowAvailability: availableState(),
+    byModel,
+  };
+}
+
+
+Context: CLAUDE.md
+# Cloud ValueRank - Project Constitution
+
+This document defines the cloud-specific coding standards and push checks for ValueRank.
+
+Repo-wide agent behavior, delivery paths, terminology policy, and memory policy live in the repo-root `AGENTS.md`.
+
+## Push And PR Checks
+
+- Use Pull Requests for changes that will land on `main`.
+- Ask the human before running `git push`.
+- Run the Preflight Gate before any `git push` or PR creation.
+
+## Workflow State
+
+- For Feature Factory, use the repo-owned workflow docs and `docs/workflow/feature-runs/<slug>/state.json` as the source of truth.
+- Repo-root `MEMORY.md` is a persistent reference index. Keep it lean — no shipped feature history or long-term archives.
+
+### Pre-push Hook (Preferred)
+
+The pre-push hook automatically detects which workspaces changed and runs lint, test, and build only for those. Install once:
+
+```bash
+./scripts/hooks/install-hooks.sh
+```
+
+The hook compares your branch to `origin/main` and respects the dependency graph:
+- `shared` changes → checks shared, db, api, web
+- `db` changes → checks db, api
+- `api` changes → checks api only
+- `web` changes → checks web only
+- Root config changes (`turbo.json`, `package.json`, etc.) → checks everything
+
+### Manual Preflight (If Hook Not Installed)
+
+Run from `cloud/` for the workspaces you changed:
+
+```bash
+# Always run for the workspaces you touched:
+npx turbo lint --filter=@valuerank/<workspace>
+npx turbo test --filter=@valuerank/<workspace>
+npx turbo build --filter=@valuerank/<workspace>
+
+# If you touched db or api, also set up the test database first:
+npm run db:test:setup
+```
+
+**Hard rules:**
+- Do not push if any preflight command fails.
+- Do not use `git push --no-verify` except emergency hotfix with explicit human approval.
+- If unrelated local files break checks, validate in a clean worktree from `origin/main` before push.
+- Every PR must include a `Validation` section listing exact commands run and pass/fail results.
+
+---
+
+## Core Principles
+
+1. **Small, focused files** - Easy to read, test, and maintain
+2. **Type safety** - Catch errors at compile time, not runtime
+3. **Test coverage** - Confidence to refactor and deploy
+4. **Observable** - Debug issues in production without guessing
+
+---
+
+## File Size Limits
+
+| File Type | Max Lines | Rationale |
+|-----------|-----------|-----------|
+| Route handlers | 400 | Single responsibility per route file |
+| Services/business logic | 400 | Split into smaller modules if growing |
+| Utilities | 400 | Pure functions, single purpose |
+| React components | 400 | Extract hooks/subcomponents if larger |
+| Test files | 400 | Can be longer due to setup/fixtures |
+| Type definitions | 400 | Split by domain if growing |
+
+**When a file exceeds limits:** extract helpers, split into sub-modules, or create a folder with `index.ts` re-exporting.
+
+**Anti-regrowth rule:** When adding >50 lines to a file already over 400 lines, extract the new logic into its own module with typed input/output. Don't grow the file — decompose it. This applies to feature work, not just refactoring.
+
+---
+
+## TypeScript Standards
+
+### No `any` Types
+
+Never use `any`. Use the actual type, or `unknown` if the type is truly dynamic:
+
+```typescript
+function parseJson(input: string): unknown { ... }
+function handleError(err: unknown): void { ... }
+```
+
+### Strict Mode Required
+
+`tsconfig.json` must have `strict: true`, `noImplicitAny: true`, `strictNullChecks: true`, `noUncheckedIndexedAccess: true`.
+
+### Strict Boolean Checks
+
+Use explicit checks for `null` and `undefined` — do not rely on truthiness for numbers or strings (linting error):
+
+```typescript
+// Bad - fails strict-boolean-expressions
+if (!value) { ... }
+
+// Good
+if (value != null) { ... }
+if (value === 0) { ... }
+```
+
+### Types vs Interfaces
+
+Use `type` for data shapes; use `interface` for service contracts.
+
+---
+
+## Testing Requirements
+
+### Coverage Targets
+
+| Metric | Minimum | Target |
+|--------|---------|--------|
+| Line coverage | 80% | 90% |
+| Branch coverage | 75% | 85% |
+| Function coverage | 80% | 90% |
+
+### What to Test
+
+- **Always test**: Business logic, data transformations, edge cases
+- **Mock**: Database, external APIs, LLM providers
+- **Integration tests**: API routes with test database
+- **Skip**: Simple getters, direct ORM pass-through
+
+### Required Environment Variables for Tests
+
+```bash
+JWT_SECRET="test-secret-that-is-at-least-32-characters-long"
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test"
+```
+
+Setup test DB: `npm run db:test:setup` (from `cloud/`). Reset on data pollution: `npm run db:test:reset`.
+
+---
+
+## Logging Standards
+
+All logging goes through the centralized logger — never use `console.log` directly.
+
+```typescript
+import { createLogger } from '@valuerank/shared';
+const log = createLogger('runs');
+
+log.info({ runId: run.id }, 'Run created');
+log.error({ err, config }, 'Failed to create run');
+```
+
+Always use structured data (object + message), never string interpolation.
+
+### Log Levels
+
+| Level | Use For |
+|-------|---------|
+| `error` | Exceptions, failed operations that need attention |
+| `warn` | Recoverable issues, deprecations, retry attempts |
+| `info` | Key business events (run started, completed, user action) |
+| `debug` | Detailed flow info, useful for local debugging |
+
+---
+
+## Code Organization
+
+### Import Order
+
+1. Node built-ins (`fs`, `path`)
+2. External packages (`express`, `zod`)
+3. Internal packages (`@valuerank/shared`, `@valuerank/db`)
+4. Relative imports (`./validation`, `./types`)
+
+### Folder Structure
+
+```
+apps/api/src/
+├── auth/         # Authentication middleware and JWT handling
+├── cli/          # Admin scripts (create-user, normalize, shadow)
+├── config/       # Server configuration
+├── graphql/      # GraphQL schema, queries, mutations, types
+├── mcp/          # MCP server tools and OAuth
+├── middleware/    # Express middleware
+├── queue/        # PgBoss job handlers and queue orchestration
+├── routes/       # Express route handlers (REST, CSV, OData)
+├── services/     # Business logic
+└── utils/        # Pure utility functions
+
+apps/web/src/
+├── api/          # GraphQL operations and client setup
+├── components/   # React components
+├── hooks/        # Custom hooks
+├── lib/          # Shared libraries (statistics, formatting)
+├── pages/        # Route pages
+└── utils/        # Pure utility functions
+```
+
+---
+
+## Error Handling
+
+Use custom error classes (`AppError`, `NotFoundError`, `ValidationError`) from `packages/shared`. Always catch and forward to error middleware in routes — never swallow errors silently.
+
+---
+
+## Database Access
+
+### Use Prisma with Type Safety
+
+Use typed queries and `$transaction` for multi-step operations.
+
+### Soft Delete Pattern
+
+Entities use soft delete via `deletedAt` timestamp. **Never physically delete** — set `deletedAt` instead.
+
+**Tables with soft delete:** `definitions`, `definition_tags`, `scenarios`
+
+```typescript
+// ALWAYS filter out soft-deleted records
+const definitions = await prisma.definition.findMany({
+  where: { deletedAt: null },  // Required!
+});
+
+// When "deleting", set deletedAt
+await prisma.definition.update({
+  where: { id: definitionId },
+  data: { deletedAt: new Date() },
+});
+```
+
+`deletedAt` is **never exposed** in GraphQL schema. All resolvers must filter `deletedAt: null` automatically.
+
+---
+
+## Database Connections
+
+The project uses PostgreSQL with PgBouncer for connection pooling.
+
+**Application** (via PgBouncer): `DATABASE_URL` — include `?pgbouncer=true` to disable prepared statements.
+
+**Migrations** (direct): `DIRECT_URL` — Prisma Migrate requires a direct connection, not a pooler.
+
+```bash
+# .env
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:6432/valuerank?pgbouncer=true"
+DIRECT_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank"
+```
+
+Start local DB: `docker-compose up -d` from `cloud/`.
+
+---
+
+## Schema Changes (Migrations)
+
+**Always use Prisma Migrate — never `db push`.**
+
+```bash
+# Create and apply a migration
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+  npx prisma migrate dev --name add_feature_tables --schema packages/db/prisma/schema.prisma
+```
+
+Production deployments run `prisma migrate deploy` automatically on startup.
+
+---
+
+## Quick Reference
+
+```
+File size:      < 400 lines
+any types:      NEVER (use unknown if truly unknown)
+Test coverage:  80% minimum
+Console.log:    NEVER (use logger)
+Error handling: Custom AppError classes
+Imports:        Node → External → Internal → Relative
+```
+
+---
+
+## Terminology
+
+Canonical source: `docs/canonical-glossary.md`
+
+- Follow the terminology policy in repo-root `AGENTS.md`.
+- In cloud code, older names like `definition`, `dimension`, and `scenario` may still appear in code, schema, or APIs. Map them to glossary terms instead of renaming them casually.
+
+
+Artifact: spec.md
+# Spec: byvalue-two-step-winrate
+
+**Author:** Claude (Sonnet, 2026-04-16)
+**Status:** ready for plan stage
+**Delivery path:** Feature Factory
+**Prerequisite:** `winrate-honest-denominator` (PR #632, commit `641e03c7`) merged — neutral denominator fix already shipped.
+
+---
+
+## Problem
+
+`winRate` per value is computed using the **pooled** approach: all transcript responses are summed together, then divided. A vignette evaluated 12 times counts 12× more than a vignette evaluated once.
+
+This is inconsistent with `overall_signed_center` and `preference_strength`, which already use the correct **two-step** approach: compute one mean per vignette, then average those means with equal weight across vignettes. Extra repetitions of a vignette improve the accuracy of that vignette's rate but do not change its weight in the overall average.
+
+Two concrete sites are wrong:
+
+### Site 1 — Backend `build_preference_summary` (`analyze_basic_aggregation.py`)
+
+```python
+# Current: grabs pooled counts from aggregate_transcripts_by_model
+per_model_summary[model_id] = {
+    "preferenceDirection": {
+        "byValue": model_stats.get("values", {}),  # raw pooled counts
+```
+
+`model_stats["values"]` contains counts summed across every transcript response. A vignette run 12 times contributes 12 data points. The same function already computes `scenario_means` (per-vignette scores) for `overall_signed_center` but does not use that grouping for `byValue`.
+
+### Site 2 — Frontend `buildMergedPreferenceModel` (`analysisSemantics.preference.ts`)
+
+```typescript
+// Current: sums raw counts from both paired runs, then divides
+const allHaveCounts = stats.every((entry) => entry.count !== undefined);
+if (allHaveCounts) {
+  const prioritized = stats.reduce((sum, entry) => sum + (entry.count?.prioritized ?? 0), 0);
+  ...
+  winRate: totalResponses > 0 ? prioritized / totalResponses : 0.5,  // pooled
+```
+
+When merging paired runs, this overrides the backend's pre-computed `winRate` by re-deriving it from raw counts. If run A had 12 batches and run B had 6 batches, run A gets 2× the weight.
+
+---
+
+## Goal
+
+`winRate` per value uses the two-step approach everywhere:
+
+1. **Per vignette**: for each unique vignette containing value V, compute `vignette_rate = prioritized_responses / total_responses` (using all repetitions of that vignette to estimate accurately).
+2. **Across vignettes**: `winRate = mean(vignette_rates)` — each unique vignette has equal weight, regardless of how many times it was evaluated.
+
+The backend computes this correctly and emits it. The frontend trusts it instead of re-deriving from raw counts.
+
+For **paired-mode merges** (two analyses, one per vignette order): average the two per-run `winRate` values with equal weight — each run order contributes once.
+
+**`count` fields (`prioritized`, `deprioritized`, `neutral`) stay as raw response counts in each individual analysis output.** No schema change to the backend. They are for reference; `winRate` is the authoritative metric.
+
+**The merged result from `buildMergedPreferenceModel` (paired mode) will only carry `winRate`, not `count`.** This is intentional: `count` is a per-analysis concept (raw responses for one run). Summing counts across run orders is the pooled behaviour we are removing. No downstream code uses `count` after the merge — `deriveValueLists` and all callers only consume `winRate`.
+
+---
+
+## User decisions
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | Two-step formula | `mean(per-vignette rates)` — equal weight per vignette. |
+| 2 | Paired merge weight | Equal weight per run (1 per analysis). Each vignette order contributes equally regardless of batch count difference. |
+| 3 | Aggregate merge weight | Keep existing `sampleSize`-weighted fallback — known simplification, documented. |
+| 4 | `count` field semantics | Unchanged (raw response counts). Only `winRate` changes. |
+
+---
+
+## Affected surfaces
+
+### Python worker
+
+| File | What changes |
+|---|---|
+| `cloud/workers/analyze_basic_aggregation.py` | `build_preference_summary`: instead of passing `model_stats.get("values", {})` directly, compute per-vignette win rates for each value using the transcript data already processed in the function. Data source: `transcript.get("summary", {}).get("values", {})` — this is the same field already read by `aggregate_transcripts_by_model`, returning a `dict[value_id, "prioritized" | "deprioritized" | "neutral"]` per transcript. Group outcomes by `(model_id, scenario_id, value_id)`, compute `vignette_rate = prioritized / total` per vignette (where total = prioritized + deprioritized + neutral for that vignette), then `winRate = mean(vignette_rates)`. A vignette is identified by its `scenarioId` — two transcripts with the same `scenarioId` are repetitions of the same vignette. **Per-vignette zero guard**: if `total == 0` for a specific (vignette, value) pair, skip that vignette for that value — do not include it in the mean. This should not occur in practice (every transcript response will list a status for every value in the vignette), but is required for correctness. **Value-level zero fallback**: if no vignettes contribute a rate for a value (i.e., the mean list is empty after skipping), emit `winRate: 0.5` (same as the existing pooled fallback for zero total responses). The `count` fields in the emitted `byValue` entries stay as raw summed counts from `model_stats` — only `winRate` changes to the two-step value. |
+| `cloud/workers/tests/test_analyze_basic.py` | Update any hand-computed `winRate` assertions that assume pooled counts for multi-batch vignettes. Add a test case: one value in two vignettes where vignette A has 10 responses (9 prioritized) and vignette B has 1 response (0 prioritized) — two-step rate is `(0.9 + 0.0) / 2 = 0.45`, pooled rate would be `9 / 11 ≈ 0.818`. |
+
+### API TypeScript — version bumps
+
+The `winRate` semantic is changing. Both version constants that gate cache hits must bump so existing analyses recompute on next request.
+
+| File | What changes |
+|---|---|
+| `cloud/workers/analyze_basic_metadata.py:7` | Bump `CODE_VERSION = "1.2.0"` → `"1.3.0"`. |
+| `cloud/apps/api/src/queue/handlers/analyze-basic.ts:34` | Bump `const CODE_VERSION = '1.2.0'` → `'1.3.0'`. Must match Python side. |
+| `cloud/apps/api/src/services/analysis/aggregate/constants.ts:1` | Bump `AGGREGATE_ANALYSIS_CODE_VERSION = '1.3.0'` → `'1.4.0'`. |
+| `cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts:19` | Bump `DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.2.0'` → `'1.3.0'`. |
+| `cloud/apps/api/tests/queue/handlers/analyze-basic.integration.test.ts` | Update `codeVersion` assertion to `'1.3.0'`. |
+| `cloud/apps/api/tests/services/analysis/aggregate.test.ts` | Update any `AGGREGATE_ANALYSIS_CODE_VERSION` assertion to `'1.4.0'` if present. |
+
+### Prisma migration — mark stale analyses SUPERSEDED
+
+The read path (`analysis.ts:21`) queries by `status = 'CURRENT'` only — it does not filter by `codeVersion`. A version bump alone does not invalidate existing rows.
+
+| File | What changes |
+|---|---|
+| New: `cloud/packages/db/prisma/migrations/<timestamp>_supersede_pooled_byvalue_analyses/migration.sql` | `UPDATE "AnalysisResult" SET "status" = 'SUPERSEDED' WHERE "status" = 'CURRENT' AND "analysisType" IN ('basic', 'AGGREGATE');` |
+
+### Web TypeScript
+
+| File | What changes |
+|---|---|
+| `cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:207-222` | **Remove the `allHaveCounts` early-return path** in `buildMergedPreferenceModel`. It re-derives `winRate` from raw counts, undoing the backend fix. After removal, all merges flow through the `averageWeighted` fallback below it. |
+| `cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:233` | **Change the weight from `analysis.perModel[modelId]?.sampleSize ?? 0` to `1`** so paired-mode merges give equal weight to each analysis regardless of batch count. |
+| `cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts` | Update paired-merge test to cover the asymmetric case: run A `winRate=0.8` with `sampleSize=120`, run B `winRate=0.4` with `sampleSize=60`. Old sampleSize-weighted result: `(0.8×120 + 0.4×60)/180 = 0.667`. New equal-weight result: `(0.8 + 0.4) / 2 = 0.6`. |
+
+### What does NOT change
+
+- `aggregate_transcripts_by_model` in `basic_stats.py` — stays unchanged.
+- `compute_win_rate`, `compute_value_stats` — stays unchanged.
+- `deriveValueLists` — uses whatever `winRate` it receives; no change needed.
+- `overall_signed_center`, `preference_strength` — already two-step; no change.
+- `DomainAnalysis.tsx`, `canonicalConditionSummary.ts`, `aggregate-logic.ts` — different metrics, not touched.
+
+---
+
+## Verification plan
+
+### Slice 1 — Backend
+
+- `PYTHONPATH="$(pwd)/workers:$PYTHONPATH" pytest cloud/workers/tests/` — all pass.
+- Key case: value present in two vignettes, vignette A has 9/10 prioritized, vignette B has 0/1 prioritized. Expected `winRate = (0.9 + 0.0) / 2 = 0.45`. Pooled would give `9/11 ≈ 0.818`.
+- Existing case `compute_win_rate(3,1,0) == 0.75` unchanged.
+
+### Slice 2 — Version bumps + migration
+
+- `npm run test --workspace @valuerank/api` — all pass.
+- Integration test asserts `codeVersion == '1.3.0'`.
+- Migration runs cleanly on test DB. After migration: `SELECT COUNT(*) FROM "AnalysisResult" WHERE status='CURRENT' AND analysisType IN ('basic', 'AGGREGATE')` returns 0.
+
+### Slice 3 — Frontend
+
+- `npm run test --workspace @valuerank/web` — all pass.
+- New test: asymmetric sampleSize case yields equal-weight result `0.6`, not sampleSize-weighted `0.667`.
+- Symmetric case (both runs same size) result is unchanged.
+
+### Full preflight (before PR)
+
+All 8 commands from `cloud/CLAUDE.md` plus Python pytest.
+
+---
+
+## Slice plan
+
+| Slice | Scope | Commit prefix |
+|---|---|---|
+| **A** | Python: `build_preference_summary` two-step `byValue` winRate. Update worker tests. | `byvalue-two-step-winrate: A — two-step byValue winRate in Python worker` |
+| **B** | Version bumps (all four constants) + Prisma migration. Update integration test. | `byvalue-two-step-winrate: B — version bumps and migration` |
+| **C** | Web: remove `allHaveCounts` pooled-sum path, change weight to `1`. Update web tests. | `byvalue-two-step-winrate: C — equal-weight merge in frontend` |
+
+All three land in one PR. Slices A and C can run in parallel — disjoint files. Slice B runs last so the migration timestamp is highest in the deploy batch.
+
+---
+
+## Known simplifications
+
+- **Aggregate mode weight**: The fallback now uses equal weight `1` per analysis. A small 2-vignette run and a large 200-vignette run each contribute one vote. Implementing vignette-count weighting would require a new `uniqueVignetteCount` field from the backend. Deferred.
+- **`canonicalConditionSummary.ts:129`** `isOpponent = selectedValueWinRate < 0.5` — pre-existing semantic issue noted in the prior feature run, explicitly out of scope.
+- **`overallSignedCenter` / `preferenceStrength` merge weight**: still uses `sampleSize` in the frontend paired merge after this fix. `byValue.winRate` will be equal-weighted but these two metrics won't. They are separate from win rate and out of scope here. Noted for a follow-up.
+- **`count` field in merged result**: dropped intentionally (see Goal section). `count` is optional in the `RawPreferenceValueStats` type; all callers handle its absence.
+
+---
+
+## Non-goals
+
+- Changing `count` field semantics to vignette counts.
+- Adding a `uniqueVignetteCount` field.
+- Changing `aggregate_transcripts_by_model`.
+- Any new UI features or columns.
+
+---
+
+## Rollback plan
+
+1. Revert the squash commit on `main`.
+2. Run a rollback migration setting `codeVersion IN ('1.3.0', '1.4.0')` CURRENT rows back to `SUPERSEDED` if post-merge analyses exist.
+3. `DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION` reverts with the code revert — no separate migration needed.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the spec against the provided helpers and frontend merge path, with an adversarial lens on edge cases like missing IDs, empty totals, and merge behavior. Then I’ll only report findings that are actually supported by the code you gave.
+codex
+I found one likely spec-level mismatch already: the frontend merge helper has a single generic path, so the proposed weight change would affect more than paired mode. I’m checking whether there’s any code-level guard that would refute that before I call it a finding.
+web search: 
+web search: site:github.com buildMergedPreferenceModel analysisSemantics.preference paired aggregate mode
+codex
+I’ve confirmed the frontend merge helper is a single generic function, not a paired-mode-only path. I’m doing one more quick pass for any code clue that would limit the blast radius, but so far the spec looks broader than it claims.
+exec
+/bin/zsh -lc "rg -n \"buildMergedPreferenceModel|paired|aggregate\" cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts cloud/apps/web/src/components/analysis-v2 -g '"'!**/dist/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/priceless-pasteur-f814d9
+ succeeded in 0ms:
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:175:export function buildMergedPreferenceModel(
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts:12:  aggregateUnavailableState,
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts:20:import { buildPreferenceSection, buildMergedPreferenceModel, buildPreferenceUnavailableModel } from './analysisSemantics.preference';
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts:43:      aggregateWarnings: {
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts:63:  if (availability.status === 'unavailable' && availability.reason !== 'aggregate-analysis') {
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts:84:      aggregateWarnings: {
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts:97:  const aggregateSource: AggregateSource | null = isAggregate
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts:103:  if (aggregateSource) {
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts:104:    const parsedAggregateMetadata = parseAggregateMetadata(analysis.aggregateMetadata);
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts:105:    const aggregateState = aggregateUnavailableState(analysis, parsedAggregateMetadata, aggregateSource);
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts:106:    if (aggregateState.status === 'available') {
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts:109:    return aggregateState;
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts:142:  const parsedAggregateMetadata = parseAggregateMetadata(analysis.aggregateMetadata);
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts:184:    const mergedPreference = buildMergedPreferenceModel(modelId, analyses);
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts:204:  const aggregateEntries = analyses
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts:205:    .map((analysis) => parseAggregateMetadata(analysis.aggregateMetadata))
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts:222:      aggregateWarnings: {
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts:223:        isEligibleAggregate: aggregateEntries.length > 0
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts:224:          && aggregateEntries.every((entry) => entry.aggregateEligibility === 'eligible_same_signature_baseline'),
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:66:  const aggregateEntries = analyses
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:67:    .map((analysis) => parseAggregateMetadata(analysis.aggregateMetadata))
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:69:  const repeatCoverageEntries = aggregateEntries
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:75:  const driftEntries = aggregateEntries
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:139:  aggregateMetadata: ParsedAggregateMetadata | null,
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:148:      aggregateWarnings: {
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:163:      aggregateWarnings: {
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:182:    const repeatCoverage = aggregateMetadata?.perModelRepeatCoverage[modelId];
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:183:    const drift = aggregateMetadata?.perModelDrift[modelId];
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:252:      aggregateWarnings: {
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:266:      aggregateWarnings: {
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:281:      aggregateWarnings: {
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:294:    aggregateWarnings: {
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:295:      isEligibleAggregate: aggregateMetadata?.aggregateEligibility === 'eligible_same_signature_baseline',
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.types.ts:5:  | 'aggregate-analysis'
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.types.ts:51:    aggregateWarnings: {
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:20:  'aggregate-analysis': 'This aggregate cannot be shown on the new Analysis page because the source runs do not match the pooling rules.',
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:94:    aggregateSource?: AggregateSource;
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:95:    aggregateEligibility?: string;
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:103:    aggregateSource: details.aggregateSource,
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:104:    aggregateEligibility: details.aggregateEligibility,
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:108:export function aggregateUnavailableState(
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:110:  aggregateMetadata: ParsedAggregateMetadata | null,
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:111:  aggregateSource: AggregateSource,
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:113:  if (aggregateMetadata?.aggregateEligibility === 'eligible_same_signature_baseline') {
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:117:  const message = aggregateMetadata?.aggregateIneligibilityReason
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:120:        ? 'This aggregate was made before the new pooled summaries existed. Use the old view for now, or wait until this aggregate is refreshed.'
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:121:        : UNAVAILABLE_MESSAGES['aggregate-analysis']
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:125:    reason: 'aggregate-analysis',
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:126:    aggregateSource,
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:127:    aggregateEligibility: aggregateMetadata?.aggregateEligibility,
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:132:    reason: 'aggregate-analysis',
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:216:  const aggregateEligibility = value.aggregateEligibility;
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:219:  const aggregateIneligibilityReason = value.aggregateIneligibilityReason;
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:225:    typeof aggregateEligibility !== 'string'
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:229:    || (aggregateIneligibilityReason !== null && typeof aggregateIneligibilityReason !== 'string')
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:175:export function buildMergedPreferenceModel(
+
+exec
+/bin/zsh -lc "sed -n '160,220p' cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts" in /Users/chrislaw/valuerank/.claude/worktrees/priceless-pasteur-f814d9
+ succeeded in 0ms:
+  if (!companionAnalysis) {
+    return buildAnalysisSemanticsView(currentAnalysis, isAggregate, filteredModelIds);
+  }
+
+  const analyses = [currentAnalysis, companionAnalysis];
+  const allModelIds = unionModelIds(currentAnalysis, companionAnalysis);
+  const modelIds = filteredModelIds
+    ? filteredModelIds.filter((id) => allModelIds.includes(id)).sort((left, right) => left.localeCompare(right))
+    : allModelIds;
+  if (modelIds.length === 0) {
+    sanitizeLog(currentAnalysis, { section: 'preference', reason: 'invalid-summary-shape' });
+    sanitizeLog(currentAnalysis, { section: 'reliability', reason: 'invalid-summary-shape' });
+    return buildInvalidSummaryView();
+  }
+
+  const preferenceByModel: Record<string, PreferenceViewModel> = {};
+  const reliabilityByModel: Record<string, ReliabilityViewModel> = {};
+  let hasAvailablePreferenceModel = false;
+  let hasAvailableReliabilityModel = false;
+  let hasUnavailableReliabilityModel = false;
+  const lowCoverageModels: string[] = [];
+  const highDriftModels: string[] = [];
+
+  for (const modelId of modelIds) {
+    const mergedPreference = buildMergedPreferenceModel(modelId, analyses);
+    const mergedReliability = buildMergedReliabilityModel(modelId, analyses);
+    preferenceByModel[modelId] = mergedPreference;
+    reliabilityByModel[modelId] = mergedReliability;
+
+    if (mergedPreference.availability.status === 'available') {
+      hasAvailablePreferenceModel = true;
+    }
+    if (mergedReliability.availability.status === 'available') {
+      hasAvailableReliabilityModel = true;
+      if (mergedReliability.hasLowCoverageWarning) {
+        lowCoverageModels.push(modelId);
+      }
+      if (mergedReliability.hasHighDriftWarning) {
+        highDriftModels.push(modelId);
+      }
+    } else {
+      hasUnavailableReliabilityModel = true;
+    }
+  }
+  const aggregateEntries = analyses
+    .map((analysis) => parseAggregateMetadata(analysis.aggregateMetadata))
+    .filter((entry): entry is ParsedAggregateMetadata => entry !== null);
+
+  return {
+    preference: {
+      rowAvailability: hasAvailablePreferenceModel
+        ? availableState()
+        : unavailableState('invalid-summary-shape'),
+      byModel: preferenceByModel,
+    },
+    reliability: {
+      rowAvailability: hasAvailableReliabilityModel
+        ? availableState()
+        : unavailableState('no-repeat-coverage'),
+      byModel: reliabilityByModel,
+      hasAnyAvailableModel: hasAvailableReliabilityModel,
+
+codex
+The first pass was too broad. I checked the caller, and `buildMergedPreferenceModel` is only fed a two-item `analyses` array in this path. I’m verifying whether any aggregate-specific caller reuses it before I call the weight issue a spec defect.
+exec
+/bin/zsh -lc "sed -n '1,170p' cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts" in /Users/chrislaw/valuerank/.claude/worktrees/priceless-pasteur-f814d9
+ succeeded in 0ms:
+import type { AnalysisResult } from '../../api/operations/analysis';
+import type {
+  AnalysisSemanticsView,
+  AggregateSource,
+  AvailabilityState,
+  ParsedAggregateMetadata,
+  PreferenceViewModel,
+  ReliabilityViewModel,
+} from './analysisSemantics.types';
+import {
+  SUMMARY_VERSION_FLOOR,
+  aggregateUnavailableState,
+  availableState,
+  compareSemver,
+  parseAggregateMetadata,
+  parseSemver,
+  sanitizeLog,
+  unavailableState,
+} from './analysisSemantics.utils';
+import { buildPreferenceSection, buildMergedPreferenceModel, buildPreferenceUnavailableModel } from './analysisSemantics.preference';
+import { buildReliabilitySection, buildMergedReliabilityModel, buildReliabilityUnavailableModel } from './analysisSemantics.reliability';
+
+// Re-export all public types so consumers can import from this single file
+export type {
+  AnalysisSemanticsView,
+  AvailabilityState,
+  PreferenceViewModel,
+  ReliabilityViewModel,
+  SemanticUnavailableReason,
+} from './analysisSemantics.types';
+
+function buildInvalidSummaryView(): AnalysisSemanticsView {
+  return {
+    preference: {
+      rowAvailability: unavailableState('invalid-summary-shape'),
+      byModel: {},
+    },
+    reliability: {
+      rowAvailability: unavailableState('invalid-summary-shape'),
+      byModel: {},
+      hasAnyAvailableModel: false,
+      hasMixedAvailability: false,
+      aggregateWarnings: {
+        isEligibleAggregate: false,
+        lowCoverageModels: [],
+        highDriftModels: [],
+      },
+    },
+  };
+}
+
+function unionModelIds(...analyses: Array<AnalysisResult | null | undefined>): string[] {
+  return Array.from(new Set(
+    analyses.flatMap((analysis) => Object.keys(analysis?.perModel ?? {})),
+  )).sort((left, right) => left.localeCompare(right));
+}
+
+function buildRowUnavailableView(
+  analysis: AnalysisResult,
+  modelIds: string[],
+  availability: AvailabilityState,
+): AnalysisSemanticsView {
+  if (availability.status === 'unavailable' && availability.reason !== 'aggregate-analysis') {
+    sanitizeLog(analysis, { section: 'preference', reason: availability.reason });
+    sanitizeLog(analysis, { section: 'reliability', reason: availability.reason });
+  }
+
+  return {
+    preference: {
+      rowAvailability: availability,
+      byModel: Object.fromEntries(modelIds.map((modelId) => [
+        modelId,
+        buildPreferenceUnavailableModel(modelId, availability.status === 'unavailable' ? availability.reason : 'invalid-summary-shape'),
+      ])),
+    },
+    reliability: {
+      rowAvailability: availability,
+      byModel: Object.fromEntries(modelIds.map((modelId) => [
+        modelId,
+        buildReliabilityUnavailableModel(modelId, availability.status === 'unavailable' ? availability.reason : 'invalid-summary-shape'),
+      ])),
+      hasAnyAvailableModel: false,
+      hasMixedAvailability: false,
+      aggregateWarnings: {
+        isEligibleAggregate: false,
+        lowCoverageModels: [],
+        highDriftModels: [],
+      },
+    },
+  };
+}
+
+function resolveRowReason(
+  analysis: AnalysisResult,
+  isAggregate: boolean,
+): AvailabilityState | null {
+  const aggregateSource: AggregateSource | null = isAggregate
+    ? 'prop'
+    : analysis.analysisType === 'AGGREGATE'
+      ? 'analysisType'
+      : null;
+
+  if (aggregateSource) {
+    const parsedAggregateMetadata = parseAggregateMetadata(analysis.aggregateMetadata);
+    const aggregateState = aggregateUnavailableState(analysis, parsedAggregateMetadata, aggregateSource);
+    if (aggregateState.status === 'available') {
+      return null;
+    }
+    return aggregateState;
+  }
+
+  const parsedVersion = parseSemver(analysis.codeVersion);
+  if (!parsedVersion) {
+    return unavailableState('unknown-analysis-version');
+  }
+
+  if (analysis.preferenceSummary == null && analysis.reliabilitySummary == null) {
+    return compareSemver(parsedVersion, SUMMARY_VERSION_FLOOR) < 0
+      ? unavailableState('legacy-analysis')
+      : unavailableState('suppressed-run-type');
+  }
+
+  return null;
+}
+
+export function buildAnalysisSemanticsView(
+  analysis: AnalysisResult,
+  isAggregate: boolean,
+  filteredModelIds?: string[],
+): AnalysisSemanticsView {
+  const allModelIds = Object.keys(analysis.perModel).sort((left, right) => left.localeCompare(right));
+  const modelIds = filteredModelIds
+    ? filteredModelIds.filter((id) => allModelIds.includes(id)).sort((left, right) => left.localeCompare(right))
+    : allModelIds;
+
+  if (modelIds.length === 0) {
+    sanitizeLog(analysis, { section: 'preference', reason: 'invalid-summary-shape' });
+    sanitizeLog(analysis, { section: 'reliability', reason: 'invalid-summary-shape' });
+    return buildInvalidSummaryView();
+  }
+
+  const parsedAggregateMetadata = parseAggregateMetadata(analysis.aggregateMetadata);
+  const rowReason = resolveRowReason(analysis, isAggregate);
+  if (rowReason) {
+    return buildRowUnavailableView(analysis, modelIds, rowReason);
+  }
+
+  return {
+    preference: buildPreferenceSection(analysis, modelIds, analysis.preferenceSummary),
+    reliability: buildReliabilitySection(analysis, modelIds, analysis.reliabilitySummary, parsedAggregateMetadata),
+  };
+}
+
+export function buildPairedAnalysisSemanticsView(
+  currentAnalysis: AnalysisResult,
+  companionAnalysis: AnalysisResult | null | undefined,
+  isAggregate: boolean,
+  filteredModelIds?: string[],
+): AnalysisSemanticsView {
+  if (!companionAnalysis) {
+    return buildAnalysisSemanticsView(currentAnalysis, isAggregate, filteredModelIds);
+  }
+
+  const analyses = [currentAnalysis, companionAnalysis];
+  const allModelIds = unionModelIds(currentAnalysis, companionAnalysis);
+  const modelIds = filteredModelIds
+    ? filteredModelIds.filter((id) => allModelIds.includes(id)).sort((left, right) => left.localeCompare(right))
+    : allModelIds;
+  if (modelIds.length === 0) {
+    sanitizeLog(currentAnalysis, { section: 'preference', reason: 'invalid-summary-shape' });
+
+exec
+/bin/zsh -lc "rg -n \"\\.count\\b|count\\?:|count:\" cloud/apps/web/src/components/analysis-v2 cloud/apps/web/tests/components/analysis-v2" in /Users/chrislaw/valuerank/.claude/worktrees/priceless-pasteur-f814d9
+ succeeded in 0ms:
+cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts:22:              count: { prioritized: 7, deprioritized: 3, neutral: 0 },
+cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts:26:              count: { prioritized: 2, deprioritized: 8, neutral: 0 },
+cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts:30:              count: { prioritized: 5, deprioritized: 5, neutral: 0 },
+cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts:43:              count: { prioritized: 8, deprioritized: 2, neutral: 0 },
+cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts:47:              count: { prioritized: 1, deprioritized: 9, neutral: 0 },
+cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts:425:                  count: { prioritized: 8, deprioritized: 2, neutral: 0 },
+cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts:429:                  count: { prioritized: 3, deprioritized: 7, neutral: 0 },
+cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts:492:                  count: { prioritized: 2, deprioritized: 8, neutral: 10 },
+cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts:496:                  count: { prioritized: 9, deprioritized: 1, neutral: 0 },
+cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts:581:                    count: { prioritized: 2, deprioritized: 8, neutral: 0 },
+cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts:585:                    count: { prioritized: 3, deprioritized: 7, neutral: 0 },
+cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts:589:                    count: { prioritized: 4, deprioritized: 6, neutral: 0 },
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:147:  const count = value.count;
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:163:    count: count === undefined
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:207:    const allHaveCounts = stats.every((entry) => entry.count !== undefined);
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:209:      const prioritized = stats.reduce((sum, entry) => sum + (entry.count?.prioritized ?? 0), 0);
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:210:      const deprioritized = stats.reduce((sum, entry) => sum + (entry.count?.deprioritized ?? 0), 0);
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:211:      const neutral = stats.reduce((sum, entry) => sum + (entry.count?.neutral ?? 0), 0);
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:215:        count: {
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.types.ts:61:  count?: {
+
+exec
+/bin/zsh -lc "sed -n '120,190p' cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts" in /Users/chrislaw/valuerank/.claude/worktrees/priceless-pasteur-f814d9
+ succeeded in 0ms:
+        ? 'This aggregate was made before the new pooled summaries existed. Use the old view for now, or wait until this aggregate is refreshed.'
+        : UNAVAILABLE_MESSAGES['aggregate-analysis']
+    );
+
+  sanitizeLog(analysis, {
+    reason: 'aggregate-analysis',
+    aggregateSource,
+    aggregateEligibility: aggregateMetadata?.aggregateEligibility,
+  });
+
+  return {
+    status: 'unavailable',
+    reason: 'aggregate-analysis',
+    message,
+  };
+}
+
+export function parseRawPreferenceValueStats(value: unknown): RawPreferenceValueStats | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const winRate = value.winRate;
+  if (!isRate(winRate)) {
+    return null;
+  }
+
+  const count = value.count;
+  if (count !== undefined) {
+    if (!isRecord(count)) {
+      return null;
+    }
+    if (
+      !isNonNegativeInteger(count.prioritized)
+      || !isNonNegativeInteger(count.deprioritized)
+      || !isNonNegativeInteger(count.neutral)
+    ) {
+      return null;
+    }
+  }
+
+  return {
+    winRate,
+    count: count === undefined
+      ? undefined
+      : {
+          prioritized: Number(count.prioritized),
+          deprioritized: Number(count.deprioritized),
+          neutral: Number(count.neutral),
+        },
+  };
+}
+
+export function parseRawReliabilitySummaryEntry(value: unknown): RawModelReliabilitySummary | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const baselineNoise = value.baselineNoise;
+  const baselineReliability = value.baselineReliability;
+  const directionalAgreement = value.directionalAgreement;
+  const neutralShare = value.neutralShare;
+  const coverageCount = value.coverageCount;
+  const uniqueScenarios = value.uniqueScenarios;
+
+  if (baselineNoise !== null && !isNonNegativeNumber(baselineNoise)) {
+    return null;
+  }
+  if (baselineReliability !== null && !isRate(baselineReliability)) {
+    return null;
+  }
+
+codex
+## Findings
+- HIGH [CODE-CONFIRMED] The spec leaves malformed transcript identity handling undefined, but `analyze_basic_aggregation.py` already normalizes missing `scenarioId` and `modelId` to `"unknown"` in `extract_model_scores` and `find_contested_scenarios`. If the new `(model_id, scenario_id, value_id)` grouping follows that pattern, unrelated transcripts can be silently collapsed into one bucket and corrupt the new per-value `winRate` instead of failing fast.
+- MEDIUM [CODE-CONFIRMED] The paired-merge change assumes both analyses contain every `valueId`, but `buildMergedPreferenceModel` in `analysisSemantics.preference.ts` unions value IDs and then averages whatever entries exist. If one analysis is partial or missing a value, that value becomes a single-run result rather than a two-run equal-weight merge, and the spec does not define a rejection or neutral fallback for that case.
+
+## Residual Risks
+- The test plan checks the numeric merged `winRate`, but it does not assert the downstream `deriveValueLists` buckets (`topPrioritizedValues`, `topDeprioritizedValues`, `neutralValues`) that users actually see.
+- The backend fix depends on `transcript.summary.values` being present and complete. The provided code does not show a validator for that shape, so any upstream omission will flow into the new edge-case behavior rather than surface a clear error.
+tokens used
+61,214

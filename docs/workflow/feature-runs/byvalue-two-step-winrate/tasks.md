@@ -1,0 +1,361 @@
+# Tasks — byvalue-two-step-winrate
+
+Slug: `byvalue-two-step-winrate`
+Workflow: Feature Factory
+Spec: `spec.md`
+Plan: `plan.md`
+
+Three slices. Slices A and C are disjoint and can run in parallel. Slice B runs after A.
+
+---
+
+## Slice A — Two-step `byValue` winRate in Python worker
+
+[P: cloud/workers/analyze_basic_aggregation.py, cloud/workers/tests/test_analyze_basic.py]
+
+**Commit prefix:** `byvalue-two-step-winrate: A — two-step byValue winRate in Python worker`
+
+### Files to modify
+
+1. `cloud/workers/analyze_basic_aggregation.py`
+2. `cloud/workers/tests/test_analyze_basic.py`
+
+### DO NOT MODIFY
+`CLAUDE.md`, `AGENTS.md`, `cloud/CLAUDE.md`, `cloud/AGENTS.md`, `cloud/agents.md`, `MEMORY.md`, `.gitignore`, or any file not listed in the scope above. If you think another file needs updating, note it in your output but do not write it.
+
+### Change 1: `cloud/workers/analyze_basic_aggregation.py`
+
+**Context:** The function `build_preference_summary` (starts around line 189) currently passes `model_stats.get("values", {})` directly as `byValue`. This is a pooled count — a vignette evaluated 12 times gets 12x more weight. Fix this to compute per-vignette averaged win rates.
+
+**Step 1 — Add the `outcomes_by_model_scenario_value` dict immediately before the transcript loop.** Find the line:
+
+```python
+scores_by_model_scenario: dict[str, dict[str, list[float]]] = {}
+```
+
+Add the following dict declaration directly after it:
+
+```python
+outcomes_by_model_scenario_value: dict[str, dict[str, dict[str, list[str]]]] = {}
+# [model_id][scenario_id][value_id] -> list of "prioritized"|"deprioritized"|"neutral"
+```
+
+**Step 2 — Populate value outcomes inside the transcript loop, BEFORE the `normalized_score is None` guard.** The existing transcript loop looks like this:
+
+```python
+for transcript in transcripts:
+    model_id = transcript.get("modelId", "unknown")
+    scenario_id = transcript.get("scenarioId", "unknown")
+    normalized_score = resolve_transcript_signed_distance(transcript)
+    if normalized_score is None:
+        continue
+    ...
+```
+
+Insert the following block immediately AFTER the `scenario_id = transcript.get(...)` line and BEFORE the `normalized_score = resolve_transcript_signed_distance(transcript)` line:
+
+```python
+    # Collect per-value outcomes for two-step win rate computation.
+    # Runs before the normalized_score guard so every transcript contributes
+    # value outcomes even if it has no canonical signed-distance score.
+    values_data = transcript.get("summary", {}).get("values", {})
+    for value_id, status in values_data.items():
+        if model_id not in outcomes_by_model_scenario_value:
+            outcomes_by_model_scenario_value[model_id] = {}
+        if scenario_id not in outcomes_by_model_scenario_value[model_id]:
+            outcomes_by_model_scenario_value[model_id][scenario_id] = {}
+        if value_id not in outcomes_by_model_scenario_value[model_id][scenario_id]:
+            outcomes_by_model_scenario_value[model_id][scenario_id][value_id] = []
+        outcomes_by_model_scenario_value[model_id][scenario_id][value_id].append(status)
+```
+
+**Step 3 — Add the module-level helper function `_compute_two_step_by_value`.** Place it just before `build_preference_summary` in the file:
+
+```python
+def _compute_two_step_by_value(
+    outcomes_by_scenario_value: dict[str, dict[str, list[str]]],
+    pooled_values: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Compute per-vignette-averaged winRate for each value.
+
+    For each value:
+      1. For each unique vignette containing that value, compute
+         vignette_rate = prioritized / total (all statuses for that vignette).
+         Skip vignettes where total == 0 for this value.
+      2. winRate = mean(vignette_rates).
+         If no vignettes contribute (empty list), fall back to 0.5.
+
+    Returns a dict in the same shape as model_stats["values"] but with
+    winRate replaced by the two-step average. The count fields are
+    preserved from pooled_values (raw response counts) for reference.
+    """
+    # Collect all value IDs seen across all vignettes
+    all_value_ids: set[str] = set()
+    for vignette_values in outcomes_by_scenario_value.values():
+        all_value_ids.update(vignette_values.keys())
+
+    result: dict[str, Any] = {}
+    for value_id in all_value_ids:
+        vignette_rates: list[float] = []
+        for vignette_outcomes in outcomes_by_scenario_value.values():
+            statuses = vignette_outcomes.get(value_id, [])
+            if not statuses:
+                continue
+            p = sum(1 for s in statuses if s == "prioritized")
+            total = len(statuses)
+            if total == 0:
+                continue  # guard, should not occur
+            vignette_rates.append(p / total)
+
+        two_step_win_rate = (
+            sum(vignette_rates) / len(vignette_rates)
+            if vignette_rates
+            else 0.5
+        )
+
+        # Preserve raw count fields from pooled stats if available
+        pooled_entry = pooled_values.get(value_id, {})
+        entry: dict[str, Any] = {
+            "winRate": round(two_step_win_rate, 6),
+        }
+        if "count" in pooled_entry:
+            entry["count"] = pooled_entry["count"]
+
+        result[value_id] = entry
+
+    # Include any values in pooled_values not seen in vignette outcomes
+    # (edge case: transcripts have no summary.values data)
+    for value_id, pooled_entry in pooled_values.items():
+        if value_id not in result:
+            entry = dict(pooled_entry)
+            entry["winRate"] = 0.5
+            result[value_id] = entry
+
+    return result
+```
+
+**Step 4 — Replace the `byValue` line in `per_model_summary`.** Find the line (around line 245):
+
+```python
+                "byValue": model_stats.get("values", {}),
+```
+
+Replace it with:
+
+```python
+                "byValue": _compute_two_step_by_value(
+                    outcomes_by_model_scenario_value.get(model_id, {}),
+                    model_stats.get("values", {}),
+                ),
+```
+
+### Change 2: `cloud/workers/tests/test_analyze_basic.py`
+
+**Verify existing tests still pass.** Most existing tests use single-batch vignettes where `vignette_rate == pooled_rate`, so expected values should not change. Do not change any passing test unless its expected value is demonstrably wrong under the new formula.
+
+**Add a new targeted test** that demonstrates the two-step averaging. The test uses a value called `"target"` appearing in two vignettes:
+- **Vignette 1** (`scenario_id="s1"`): 10 transcripts, `"target"` is `"prioritized"` in 9, `"deprioritized"` in 1. Vignette rate = 9/10 = 0.9.
+- **Vignette 2** (`scenario_id="s2"`): 1 transcript, `"target"` is `"deprioritized"`. Vignette rate = 0/1 = 0.0.
+- Expected two-step win rate: `(0.9 + 0.0) / 2 = 0.45`
+- Old pooled result would be: `9 / 11 ~ 0.818`
+
+Each transcript must include a `"summary": {"values": {"target": "prioritized"}}` (or `"deprioritized"`) field so the new code can read per-vignette outcomes.
+
+The test should call `build_preference_summary(transcripts, per_model)` with appropriate mock data and assert:
+```python
+byvalue = result[model_id]["preferenceDirection"]["byValue"]
+assert abs(byvalue["target"]["winRate"] - 0.45) < 1e-6
+```
+
+Also add a test (or extend the above) verifying the 0.5 fallback: a value present in `per_model` stats but absent from any transcript `summary.values` should produce `winRate: 0.5`.
+
+### Verification
+
+Run from the repo root:
+```bash
+cd cloud
+PYTHONPATH="$(pwd)/workers:$PYTHONPATH" pytest workers/tests/test_analyze_basic.py -v
+```
+All tests must pass. The two-vignette test must yield `winRate = 0.45`.
+
+---
+
+## Slice B — Version bumps and Prisma migration
+
+**Commit prefix:** `byvalue-two-step-winrate: B — version bumps and migration`
+
+Run **after** slice A is committed. Version constants must match the new code behavior.
+
+### Files to modify
+
+1. `cloud/workers/analyze_basic_metadata.py`
+2. `cloud/apps/api/src/queue/handlers/analyze-basic.ts`
+3. `cloud/apps/api/src/services/analysis/aggregate/constants.ts`
+4. `cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts`
+5. `cloud/apps/api/tests/queue/handlers/analyze-basic.integration.test.ts`
+6. `cloud/apps/api/tests/services/analysis/aggregate.test.ts`
+7. `cloud/workers/tests/test_analyze_basic.py`
+8. New file: `cloud/packages/db/prisma/migrations/20260416000000_supersede_pooled_byvalue_analyses/migration.sql`
+
+### DO NOT MODIFY
+`CLAUDE.md`, `AGENTS.md`, `cloud/CLAUDE.md`, `cloud/AGENTS.md`, `cloud/agents.md`, `MEMORY.md`, `.gitignore`, `cloud/packages/db/prisma/schema.prisma`, or any file not listed in the scope above.
+
+### Version constant bumps
+
+| File | Line | Old value | New value |
+|---|---|---|---|
+| `cloud/workers/analyze_basic_metadata.py` | 7 | `"1.2.0"` | `"1.3.0"` |
+| `cloud/apps/api/src/queue/handlers/analyze-basic.ts` | 34 | `'1.2.0'` | `'1.3.0'` |
+| `cloud/apps/api/src/services/analysis/aggregate/constants.ts` | 1 | `'1.3.0'` | `'1.4.0'` |
+| `cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts` | 19 | `'1.2.0'` | `'1.3.0'` |
+
+### Test updates
+
+**`cloud/apps/api/tests/queue/handlers/analyze-basic.integration.test.ts`**
+Grep for `'1.2.0'` or `'1.1.1'` in `codeVersion` assertions. Update each match to `'1.3.0'`.
+
+**`cloud/apps/api/tests/services/analysis/aggregate.test.ts`**
+Grep for `'1.3.0'` in assertions related to `AGGREGATE_ANALYSIS_CODE_VERSION`. Update to `'1.4.0'`.
+
+**`cloud/workers/tests/test_analyze_basic.py`**
+Find `test_methods_documented` (or whichever test asserts `methods["codeVersion"] == "1.2.0"`). Update the assertion to `"1.3.0"`.
+
+### Prisma migration
+
+Create this exact file with this exact content:
+
+**File:** `cloud/packages/db/prisma/migrations/20260416000000_supersede_pooled_byvalue_analyses/migration.sql`
+
+```sql
+-- Invalidate all CURRENT basic and aggregate analyses.
+-- Required because the analysis read path (queries/analysis.ts:21) queries
+-- by status='CURRENT' only and does not filter by codeVersion.
+-- After this migration, existing runs show "no analysis yet" state and
+-- re-analyze on demand under the new two-step winRate formula.
+UPDATE "analysis_results"
+SET "status" = 'SUPERSEDED'
+WHERE "status" = 'CURRENT'
+  AND "analysis_type" IN ('basic', 'AGGREGATE');
+```
+
+CRITICAL: use `"analysis_results"` (lowercase underscore) and `"analysis_type"` (lowercase underscore). The Prisma model is named `AnalysisResult` but the actual PostgreSQL table is `analysis_results` (set by `@@map("analysis_results")`). Do NOT write `"AnalysisResult"` or `"analysisType"`.
+
+### Verification
+
+Run from `cloud/`:
+```bash
+npm run test --workspace @valuerank/api
+```
+All tests must pass. The `codeVersion` integration test must assert `'1.3.0'`. Migration file must be present.
+
+---
+
+## Slice C — Equal-weight merge in frontend
+
+[P: cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts, cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts]
+
+**Commit prefix:** `byvalue-two-step-winrate: C — equal-weight merge in frontend`
+
+Can run **in parallel** with slice A (disjoint files).
+
+### Files to modify
+
+1. `cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts`
+2. `cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts`
+
+### DO NOT MODIFY
+`CLAUDE.md`, `AGENTS.md`, `cloud/CLAUDE.md`, `cloud/AGENTS.md`, `cloud/agents.md`, `MEMORY.md`, `.gitignore`, or any file not listed in the scope above.
+
+### Change 1: Remove `allHaveCounts` pooled-sum block
+
+In `cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts`, find and **delete** this entire block (currently starting at line 207):
+
+```typescript
+const allHaveCounts = stats.every((entry) => entry.count !== undefined);
+if (allHaveCounts) {
+  const prioritized = stats.reduce((sum, entry) => sum + (entry.count?.prioritized ?? 0), 0);
+  const deprioritized = stats.reduce((sum, entry) => sum + (entry.count?.deprioritized ?? 0), 0);
+  const neutral = stats.reduce((sum, entry) => sum + (entry.count?.neutral ?? 0), 0);
+  const totalResponses = prioritized + deprioritized + neutral;
+  mergedByValue[valueId] = {
+    winRate: totalResponses > 0 ? prioritized / totalResponses : 0.5,
+    count: {
+      prioritized,
+      deprioritized,
+      neutral,
+    },
+  };
+  return;
+}
+```
+
+After deletion, the `averageWeighted` fallback immediately below becomes the only path for `byValue` merging.
+
+### Change 2: Change weight to `1` for `byValue` merge (line 233 only)
+
+Find the `averageWeighted` call for `byValue` merging. It maps over `parsedModels` and returns `{ value: entry.winRate, weight: analysis.perModel[modelId]?.sampleSize ?? 0 }`. Change **only** this `byValue` weight from `sampleSize` to `1`:
+
+```typescript
+// Old (line 233):
+weight: analysis.perModel[modelId]?.sampleSize ?? 0,
+
+// New:
+weight: 1,
+```
+
+**IMPORTANT:** There are also `sampleSize` weights at approximately lines 249 and 257 used for `overallSignedCenter` and `preferenceStrength`. Do NOT change those. Only the `byValue` weight changes.
+
+The merged result will now carry only `winRate` (no `count`). This is intentional.
+
+### Change 3: Update tests
+
+**File: `cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts`**
+
+**3a — Update the existing `buildPairedAnalysisSemanticsView` test (~line 404).**
+
+The fixture uses:
+- Run A (`sampleSize=10`): `Achievement: {winRate: 0.8, count: {8,2,0}}`, `Care: {winRate: 0.3, count: {3,7,0}}`
+- Run B (`sampleSize=30`): `Achievement: {winRate: 0.2, count: {2,8,10}}`, `Care: {winRate: 0.9, count: {9,1,0}}`
+
+New equal-weight results:
+- Achievement: `(0.8 + 0.2) / 2 = 0.5` (neutral, not deprioritized)
+- Care: `(0.3 + 0.9) / 2 = 0.6` (stays prioritized)
+
+The assertion at ~line 549 currently asserts `topDeprioritizedValues: [{ name: 'Achievement', winRate: 1 / 3 }]`. Update it to reflect Achievement as neutral at 0.5 (remove from deprioritized). Care stays at winRate 0.6.
+
+**3b — Add asymmetric test.** Two analyses for the same model and value `"TestValue"`:
+- Run A: `winRate=0.8`, `sampleSize=120`, no `count`
+- Run B: `winRate=0.4`, `sampleSize=60`, no `count`
+
+Assert the merged result:
+```typescript
+// Equal-weight: (0.8 + 0.4) / 2 = 0.6
+expect(merged.byValue['TestValue'].winRate).toBeCloseTo(0.6, 6);
+```
+The old sampleSize-weighted result would have been `(0.8*120 + 0.4*60) / 180 = 0.667`.
+
+**3c — Assert `count` is absent** from the merged `byValue` entry:
+```typescript
+expect(merged.byValue['TestValue']).not.toHaveProperty('count');
+```
+
+**3d — Scan for any other tests** that assert pooled-count-derived `winRate` values or rely on `count` being present in merged output. Update them.
+
+### Verification
+
+Run from `cloud/`:
+```bash
+npm run test --workspace @valuerank/web
+```
+All tests must pass. The asymmetric merge test must assert `winRate=0.6`. Count-absence assertion must pass.
+
+---
+
+## Dispatch order
+
+| Slice | Depends on | Can run in parallel with |
+|---|---|---|
+| A | — | C |
+| C | — | A |
+| B | A committed | — |

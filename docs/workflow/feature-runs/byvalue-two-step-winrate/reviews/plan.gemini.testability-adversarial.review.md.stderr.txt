@@ -1,0 +1,479 @@
+YOLO mode is enabled. All tool calls will be automatically approved.
+Keychain initialization encountered an error: UNIX[Operation not permitted]
+Using FileKeychain fallback for secure storage.
+Loaded cached credentials.
+YOLO mode is enabled. All tool calls will be automatically approved.
+Registering notification handlers for server 'agentchattr'. Capabilities: {
+  experimental: {},
+  prompts: { listChanged: false },
+  resources: { subscribe: false, listChanged: false },
+  tools: { listChanged: false }
+}
+Server 'agentchattr' has tools but did not declare 'listChanged' capability. Listening anyway for robustness...
+Server 'agentchattr' has resources but did not declare 'listChanged' capability. Listening anyway for robustness...
+Server 'agentchattr' has prompts but did not declare 'listChanged' capability. Listening anyway for robustness...
+Scheduling MCP context refresh...
+Executing MCP context refresh...
+MCP context refresh complete.
+Error stating path localhost:5433/valuerank_test"
+```
+
+Setup test DB: `npm run db:test:setup` (from `cloud/`). Reset on data pollution: `npm run db:test:reset`.
+
+---
+
+## Logging Standards
+
+All logging goes through the centralized logger — never use `console.log` directly.
+
+```typescript
+import { createLogger } from '@valuerank/shared';
+const log = createLogger('runs');
+
+log.info({ runId: run.id }, 'Run created');
+log.error({ err, config }, 'Failed to create run');
+```
+
+Always use structured data (object + message), never string interpolation.
+
+### Log Levels
+
+| Level | Use For |
+|-------|---------|
+| `error` | Exceptions, failed operations that need attention |
+| `warn` | Recoverable issues, deprecations, retry attempts |
+| `info` | Key business events (run started, completed, user action) |
+| `debug` | Detailed flow info, useful for local debugging |
+
+---
+
+## Code Organization
+
+### Import Order
+
+1. Node built-ins (`fs`, `path`)
+2. External packages (`express`, `zod`)
+3. Internal packages (`@valuerank/shared`, `@valuerank/db`)
+4. Relative imports (`./validation`, `./types`)
+
+### Folder Structure
+
+```
+apps/api/src/
+├── auth/         # Authentication middleware and JWT handling
+├── cli/          # Admin scripts (create-user, normalize, shadow)
+├── config/       # Server configuration
+├── graphql/      # GraphQL schema, queries, mutations, types
+├── mcp/          # MCP server tools and OAuth
+├── middleware/    # Express middleware
+├── queue/        # PgBoss job handlers and queue orchestration
+├── routes/       # Express route handlers (REST, CSV, OData)
+├── services/     # Business logic
+└── utils/        # Pure utility functions
+
+apps/web/src/
+├── api/          # GraphQL operations and client setup
+├── components/   # React components
+├── hooks/        # Custom hooks
+├── lib/          # Shared libraries (statistics, formatting)
+├── pages/        # Route pages
+└── utils/        # Pure utility functions
+```
+
+---
+
+## Error Handling
+
+Use custom error classes (`AppError`, `NotFoundError`, `ValidationError`) from `packages/shared`. Always catch and forward to error middleware in routes — never swallow errors silently.
+
+---
+
+## Database Access
+
+### Use Prisma with Type Safety
+
+Use typed queries and `$transaction` for multi-step operations.
+
+### Soft Delete Pattern
+
+Entities use soft delete via `deletedAt` timestamp. **Never physically delete** — set `deletedAt` instead.
+
+**Tables with soft delete:** `definitions`, `definition_tags`, `scenarios`
+
+```typescript
+// ALWAYS filter out soft-deleted records
+const definitions = await prisma.definition.findMany({
+  where: { deletedAt: null },  // Required!
+});
+
+// When "deleting", set deletedAt
+await prisma.definition.update({
+  where: { id: definitionId },
+  data: { deletedAt: new Date() },
+});
+```
+
+`deletedAt` is **never exposed** in GraphQL schema. All resolvers must filter `deletedAt: null` automatically.
+
+---
+
+## Database Connections
+
+The project uses PostgreSQL with PgBouncer for connection pooling.
+
+**Application** (via PgBouncer): `DATABASE_URL` — include `?pgbouncer=true` to disable prepared statements.
+
+**Migrations** (direct): `DIRECT_URL` — Prisma Migrate requires a direct connection, not a pooler.
+
+```bash
+# .env
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:6432/valuerank: ENAMETOOLONG: name too long, stat '/Users/chrislaw/valuerank/.claude/worktrees/priceless-pasteur-f814d9/localhost:5433/valuerank_test"
+```
+
+Setup test DB: `npm run db:test:setup` (from `cloud/`). Reset on data pollution: `npm run db:test:reset`.
+
+---
+
+## Logging Standards
+
+All logging goes through the centralized logger — never use `console.log` directly.
+
+```typescript
+import { createLogger } from '@valuerank/shared';
+const log = createLogger('runs');
+
+log.info({ runId: run.id }, 'Run created');
+log.error({ err, config }, 'Failed to create run');
+```
+
+Always use structured data (object + message), never string interpolation.
+
+### Log Levels
+
+| Level | Use For |
+|-------|---------|
+| `error` | Exceptions, failed operations that need attention |
+| `warn` | Recoverable issues, deprecations, retry attempts |
+| `info` | Key business events (run started, completed, user action) |
+| `debug` | Detailed flow info, useful for local debugging |
+
+---
+
+## Code Organization
+
+### Import Order
+
+1. Node built-ins (`fs`, `path`)
+2. External packages (`express`, `zod`)
+3. Internal packages (`@valuerank/shared`, `@valuerank/db`)
+4. Relative imports (`./validation`, `./types`)
+
+### Folder Structure
+
+```
+apps/api/src/
+├── auth/         # Authentication middleware and JWT handling
+├── cli/          # Admin scripts (create-user, normalize, shadow)
+├── config/       # Server configuration
+├── graphql/      # GraphQL schema, queries, mutations, types
+├── mcp/          # MCP server tools and OAuth
+├── middleware/    # Express middleware
+├── queue/        # PgBoss job handlers and queue orchestration
+├── routes/       # Express route handlers (REST, CSV, OData)
+├── services/     # Business logic
+└── utils/        # Pure utility functions
+
+apps/web/src/
+├── api/          # GraphQL operations and client setup
+├── components/   # React components
+├── hooks/        # Custom hooks
+├── lib/          # Shared libraries (statistics, formatting)
+├── pages/        # Route pages
+└── utils/        # Pure utility functions
+```
+
+---
+
+## Error Handling
+
+Use custom error classes (`AppError`, `NotFoundError`, `ValidationError`) from `packages/shared`. Always catch and forward to error middleware in routes — never swallow errors silently.
+
+---
+
+## Database Access
+
+### Use Prisma with Type Safety
+
+Use typed queries and `$transaction` for multi-step operations.
+
+### Soft Delete Pattern
+
+Entities use soft delete via `deletedAt` timestamp. **Never physically delete** — set `deletedAt` instead.
+
+**Tables with soft delete:** `definitions`, `definition_tags`, `scenarios`
+
+```typescript
+/ ALWAYS filter out soft-deleted records
+const definitions = await prisma.definition.findMany({
+  where: { deletedAt: null },  / Required!
+});
+
+/ When "deleting", set deletedAt
+await prisma.definition.update({
+  where: { id: definitionId },
+  data: { deletedAt: new Date() },
+});
+```
+
+`deletedAt` is **never exposed** in GraphQL schema. All resolvers must filter `deletedAt: null` automatically.
+
+---
+
+## Database Connections
+
+The project uses PostgreSQL with PgBouncer for connection pooling.
+
+**Application** (via PgBouncer): `DATABASE_URL` — include `?pgbouncer=true` to disable prepared statements.
+
+**Migrations** (direct): `DIRECT_URL` — Prisma Migrate requires a direct connection, not a pooler.
+
+```bash
+# .env
+DATABASE_URL="postgresql:/valuerank:valuerank@localhost:6432/valuerank'
+Error stating path localhost:5433/valuerank"
+```
+
+Start local DB: `docker-compose up -d` from `cloud/`.
+
+---
+
+## Schema Changes (Migrations)
+
+**Always use Prisma Migrate — never `db push`.**
+
+```bash
+# Create and apply a migration
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+  npx prisma migrate dev --name add_feature_tables --schema packages/db/prisma/schema.prisma
+```
+
+Production deployments run `prisma migrate deploy` automatically on startup.
+
+---
+
+## Quick Reference
+
+```
+File size:      < 400 lines
+any types:      NEVER (use unknown if truly unknown)
+Test coverage:  80% minimum
+Console.log:    NEVER (use logger)
+Error handling: Custom AppError classes
+Imports:        Node → External → Internal → Relative
+```
+
+---
+
+## Terminology
+
+Canonical source: `docs/canonical-glossary.md`
+
+- Follow the terminology policy in repo-root `AGENTS.md`.
+- In cloud code, older names like `definition`, `dimension`, and `scenario` may still appear in code, schema, or APIs. Map them to glossary terms instead of renaming them casually.
+
+
+Artifact: plan.md
+# Plan — byvalue-two-step-winrate
+
+Slug: `byvalue-two-step-winrate`
+Workflow: Feature Factory
+Spec: `spec.md`
+
+## 0. Reading order
+
+Read `spec.md` first. This plan adds concrete line numbers and implementation decisions. Where the plan references a spec section, it names it explicitly.
+
+---
+
+## 1. Slice map
+
+Three slices, one PR.
+
+| # | Slice | Files touched | Order |
+|---|---|---|---|
+| **A** | Two-step `byValue` winRate in Python worker | `analyze_basic_aggregation.py`, `tests/test_analyze_basic.py` | First — backend is the source of truth |
+| **B** | Version bumps + Prisma migration | `analyze_basic_metadata.py`, `analyze-basic.ts`, `aggregate/constants.ts`, `domain-analysis-cache-types.ts`, integration test, migration file | After A — bumps reference the new code behavior |
+| **C** | Equal-weight merge in frontend | `analysisSemantics.preference.ts`, `analysisSemantics.test.ts` | Parallel with A/B — disjoint files |
+
+Slices A and C touch disjoint files and can run in parallel. Slice B runs last (migration timestamp ordering).
+
+---
+
+## 2. Slice A — Two-step `byValue` winRate in Python worker
+
+**Goal.** Replace the pooled `byValue` in `build_preference_summary` with a per-vignette-averaged win rate. The function already groups scores by `(model_id, scenario_id)` for `overall_signed_center` — extend that loop to also track per-value outcomes.
+
+**Spec reference.** § Affected surfaces — Python worker.
+
+### 2.1 `cloud/workers/analyze_basic_aggregation.py`
+
+**Current code** (lines 199–213, approximately):
+
+```python
+scores_by_model_scenario: dict[str, dict[str, list[float]]] = {}
+
+for transcript in transcripts:
+    model_id = transcript.get("modelId", "unknown")
+    scenario_id = transcript.get("scenarioId", "unknown")
+    normalized_score = resolve_transcript_signed_distance(transcript)
+    if normalized_score is None:
+        continue
+    ...
+```
+
+**What to add in the same transcript loop** — a parallel grouping for value outcomes:
+
+```python
+# Add alongside scores_by_model_scenario:
+outcomes_by_model_scenario_value: dict[str, dict[str, dict[str, list[str]]]] = {}
+# [model_id][scenario_id][value_id] → list of "prioritized"|"deprioritized"|"neutral"
+
+# Inside the transcript loop, no normalization skip needed — every transcript
+# can contribute value outcomes even if it has no canonical score:
+values_data = transcript.get("summary", {}).get("values", {})
+for value_id, status in values_data.items():
+    if model_id not in outcomes_by_model_scenario_value:
+        outcomes_by_model_scenario_value[model_id] = {}
+    if scenario_id not in outcomes_by_model_scenario_value[model_id]:
+        outcomes_by_model_scenario_value[model_id][scenario_id] = {}
+    if value_id not in outcomes_by_model_scenario_value[model_id][scenario_id]:
+        outcomes_by_model_scenario_value[model_id][scenario_id][value_id] = []
+    outcomes_by_model_scenario_value[model_id][scenario_id][value_id].append(status)
+```
+
+**New helper to compute two-step win rates** (add as a module-level function):
+
+```python
+def _compute_two_step_by_value(
+    outcomes_by_scenario_value: dict[str, dict[str, list[str]]],
+    pooled_values: dict[str, Any],
+) -> dict[str, Any]:
+    """: ENAMETOOLONG: name too long, stat '/Users/chrislaw/valuerank/.claude/worktrees/priceless-pasteur-f814d9/localhost:5433/valuerank"
+```
+
+Start local DB: `docker-compose up -d` from `cloud/`.
+
+---
+
+## Schema Changes (Migrations)
+
+**Always use Prisma Migrate — never `db push`.**
+
+```bash
+# Create and apply a migration
+DATABASE_URL="postgresql:/valuerank:valuerank@localhost:5433/valuerank" \
+  npx prisma migrate dev --name add_feature_tables --schema packages/db/prisma/schema.prisma
+```
+
+Production deployments run `prisma migrate deploy` automatically on startup.
+
+---
+
+## Quick Reference
+
+```
+File size:      < 400 lines
+any types:      NEVER (use unknown if truly unknown)
+Test coverage:  80% minimum
+Console.log:    NEVER (use logger)
+Error handling: Custom AppError classes
+Imports:        Node → External → Internal → Relative
+```
+
+---
+
+## Terminology
+
+Canonical source: `docs/canonical-glossary.md`
+
+- Follow the terminology policy in repo-root `AGENTS.md`.
+- In cloud code, older names like `definition`, `dimension`, and `scenario` may still appear in code, schema, or APIs. Map them to glossary terms instead of renaming them casually.
+
+
+Artifact: plan.md
+# Plan — byvalue-two-step-winrate
+
+Slug: `byvalue-two-step-winrate`
+Workflow: Feature Factory
+Spec: `spec.md`
+
+## 0. Reading order
+
+Read `spec.md` first. This plan adds concrete line numbers and implementation decisions. Where the plan references a spec section, it names it explicitly.
+
+---
+
+## 1. Slice map
+
+Three slices, one PR.
+
+| # | Slice | Files touched | Order |
+|---|---|---|---|
+| **A** | Two-step `byValue` winRate in Python worker | `analyze_basic_aggregation.py`, `tests/test_analyze_basic.py` | First — backend is the source of truth |
+| **B** | Version bumps + Prisma migration | `analyze_basic_metadata.py`, `analyze-basic.ts`, `aggregate/constants.ts`, `domain-analysis-cache-types.ts`, integration test, migration file | After A — bumps reference the new code behavior |
+| **C** | Equal-weight merge in frontend | `analysisSemantics.preference.ts`, `analysisSemantics.test.ts` | Parallel with A/B — disjoint files |
+
+Slices A and C touch disjoint files and can run in parallel. Slice B runs last (migration timestamp ordering).
+
+---
+
+## 2. Slice A — Two-step `byValue` winRate in Python worker
+
+**Goal.** Replace the pooled `byValue` in `build_preference_summary` with a per-vignette-averaged win rate. The function already groups scores by `(model_id, scenario_id)` for `overall_signed_center` — extend that loop to also track per-value outcomes.
+
+**Spec reference.** § Affected surfaces — Python worker.
+
+### 2.1 `cloud/workers/analyze_basic_aggregation.py`
+
+**Current code** (lines 199–213, approximately):
+
+```python
+scores_by_model_scenario: dict[str, dict[str, list[float]]] = {}
+
+for transcript in transcripts:
+    model_id = transcript.get("modelId", "unknown")
+    scenario_id = transcript.get("scenarioId", "unknown")
+    normalized_score = resolve_transcript_signed_distance(transcript)
+    if normalized_score is None:
+        continue
+    ...
+```
+
+**What to add in the same transcript loop** — a parallel grouping for value outcomes:
+
+```python
+# Add alongside scores_by_model_scenario:
+outcomes_by_model_scenario_value: dict[str, dict[str, dict[str, list[str]]]] = {}
+# [model_id][scenario_id][value_id] → list of "prioritized"|"deprioritized"|"neutral"
+
+# Inside the transcript loop, no normalization skip needed — every transcript
+# can contribute value outcomes even if it has no canonical score:
+values_data = transcript.get("summary", {}).get("values", {})
+for value_id, status in values_data.items():
+    if model_id not in outcomes_by_model_scenario_value:
+        outcomes_by_model_scenario_value[model_id] = {}
+    if scenario_id not in outcomes_by_model_scenario_value[model_id]:
+        outcomes_by_model_scenario_value[model_id][scenario_id] = {}
+    if value_id not in outcomes_by_model_scenario_value[model_id][scenario_id]:
+        outcomes_by_model_scenario_value[model_id][scenario_id][value_id] = []
+    outcomes_by_model_scenario_value[model_id][scenario_id][value_id].append(status)
+```
+
+**New helper to compute two-step win rates** (add as a module-level function):
+
+```python
+def _compute_two_step_by_value(
+    outcomes_by_scenario_value: dict[str, dict[str, list[str]]],
+    pooled_values: dict[str, Any],
+) -> dict[str, Any]:
+    """'

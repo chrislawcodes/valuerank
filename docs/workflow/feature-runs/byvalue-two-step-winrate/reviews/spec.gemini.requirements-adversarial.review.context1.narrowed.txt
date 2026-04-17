@@ -1,0 +1,211 @@
+00001: """
+00002: Integration tests for analyze_basic.py worker.
+00003: 
+00004: Tests the full analysis pipeline with realistic transcript data.
+00005: """
+00006: 
+00007: import json
+00008: import subprocess
+00009: import sys
+00010: from pathlib import Path
+00011: 
+00012: import pytest
+00013: 
+00014: 
+00015: def run_analyze_basic(input_data: dict) -> dict:
+00016:     """Run analyze_basic.py with given input and return output."""
+00017:     workers_dir = Path(__file__).parent.parent
+00018:     result = subprocess.run(
+00019:         [sys.executable, "analyze_basic.py"],
+00020:         input=json.dumps(input_data),
+00021:         capture_output=True,
+00022:         text=True,
+00023:         cwd=workers_dir,
+00024:         env={**dict(__import__("os").environ), "PYTHONPATH": str(workers_dir)},
+00025:     )
+00026:     return json.loads(result.stdout)
+00027: 
+00028: 
+00029: class TestAnalyzeBasicIntegration:
+00030:     """Integration tests for analyze_basic worker."""
+00031: 
+00032:     def test_single_transcript(self):
+00033:         """Test analysis with single transcript."""
+00034:         input_data = {
+00035:             "runId": "test-run-1",
+00036:             "transcripts": [
+00037:                 {
+00038:                     "id": "t1",
+00039:                     "modelId": "gpt-4",
+00040:                     "scenarioId": "s1",
+00041:                     "summary": {
+00042:                         "values": {"Physical_Safety": "prioritized"},
+00043:                         "score": 4,
+00044:                     },
+00045:                     "scenario": {"dimensions": {"stakes": "high"}},
+00046:                 }
+00047:             ],
+00048:         }
+00049:         result = run_analyze_basic(input_data)
+00050: 
+00051:         assert result["success"] is True
+00052:         assert "analysis" in result
+00053:         assert "perModel" in result["analysis"]
+00054:         assert "gpt-4" in result["analysis"]["perModel"]
+00055:         assert result["analysis"]["perModel"]["gpt-4"]["sampleSize"] == 1
+00056: 
+00057:     def test_multiple_models(self):
+00058:         """Test analysis with multiple models."""
+00059:         input_data = {
+00060:             "runId": "test-run-2",
+00061:             "transcripts": [
+00062:                 {
+00063:                     "id": "t1",
+00064:                     "modelId": "gpt-4",
+00065:                     "scenarioId": "s1",
+00066:                     "summary": {"values": {"Compassion": "prioritized"}, "score": 4},
+00067:                     "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}},
+00068:                     "scenario": {"dimensions": {"stakes": "low"}},
+00069:                 },
+00070:                 {
+00071:                     "id": "t2",
+00072:                     "modelId": "claude-3",
+00073:                     "scenarioId": "s1",
+00074:                     "summary": {"values": {"Compassion": "deprioritized"}, "score": 2},
+00075:                     "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "lean"}},
+00076:                     "scenario": {"dimensions": {"stakes": "low"}},
+00077:                 },
+00078:                 {
+00079:                     "id": "t3",
+00080:                     "modelId": "gpt-4",
+00081:                     "scenarioId": "s2",
+00082:                     "summary": {"values": {"Compassion": "prioritized"}, "score": 4},
+00083:                     "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}},
+00084:                     "scenario": {"dimensions": {"stakes": "high"}},
+00085:                 },
+00086:                 {
+00087:                     "id": "t4",
+00088:                     "modelId": "claude-3",
+00089:                     "scenarioId": "s2",
+00090:                     "summary": {"values": {"Compassion": "prioritized"}, "score": 5},
+00091:                     "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
+00092:                     "scenario": {"dimensions": {"stakes": "high"}},
+00093:                 },
+00094:             ],
+00095:         }
+00096:         result = run_analyze_basic(input_data)
+00097: 
+00098:         assert result["success"] is True
+00099:         analysis = result["analysis"]
+00100: 
+00101:         # Check per-model stats
+00102:         assert "gpt-4" in analysis["perModel"]
+00103:         assert "claude-3" in analysis["perModel"]
+00104:         assert analysis["perModel"]["gpt-4"]["sampleSize"] == 2
+00105:         assert analysis["perModel"]["claude-3"]["sampleSize"] == 2
+00106: 
+00107:         # Check model agreement
+00108:         assert "pairwise" in analysis["modelAgreement"]
+00109:         # Should have one pairwise comparison
+00110:         assert len(analysis["modelAgreement"]["pairwise"]) == 1
+00111: 
+00112:         # Check dimension analysis
+00113:         assert "dimensions" in analysis["dimensionAnalysis"]
+00114:         assert "stakes" in an
+
+... [narrowed review slice: middle omitted] ...
+
+"transcripts": [
+00956:                 {"id": "t1", "modelId": "m1", "scenarioId": "s1",
+00957:                  "summary": {"values": {"Value_A": "prioritized"}}, "scenario": {}},
+00958:                 {"id": "t2", "modelId": "m1", "scenarioId": "s2",
+00959:                  "summary": {"values": {"Value_A": "prioritized"}}, "scenario": {}},
+00960:                 {"id": "t3", "modelId": "m1", "scenarioId": "s3",
+00961:                  "summary": {"values": {"Value_A": "deprioritized"}}, "scenario": {}},
+00962:                 {"id": "t4", "modelId": "m1", "scenarioId": "s4",
+00963:                  "summary": {"values": {"Value_A": "prioritized"}}, "scenario": {}},
+00964:             ],
+00965:         }
+00966:         result = run_analyze_basic(input_data)
+00967: 
+00968:         assert result["success"] is True
+00969:         value_stats = result["analysis"]["perModel"]["m1"]["values"]["Value_A"]
+00970:         # 3 prioritized, 1 deprioritized, 0 neutral = 75% win rate
+00971:         assert value_stats["winRate"] == pytest.approx(0.75, abs=0.01)
+00972:         assert value_stats["count"]["prioritized"] == 3
+00973:         assert value_stats["count"]["deprioritized"] == 1
+00974: 
+00975:     def test_dimension_impact(self):
+00976:         """Test dimension impact analysis."""
+00977:         input_data = {
+00978:             "runId": "test-run-9",
+00979:             "transcripts": [
+00980:                 {"id": "t1", "modelId": "m1", "scenarioId": "s1",
+00981:                  "summary": {"score": 2}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "lean"}}, "scenario": {"dimensions": {"stakes": "low"}}},
+00982:                 {"id": "t2", "modelId": "m1", "scenarioId": "s2",
+00983:                  "summary": {"score": 2}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "lean"}}, "scenario": {"dimensions": {"stakes": "low"}}},
+00984:                 {"id": "t3", "modelId": "m1", "scenarioId": "s3",
+00985:                  "summary": {"score": 4}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}}, "scenario": {"dimensions": {"stakes": "high"}}},
+00986:                 {"id": "t4", "modelId": "m1", "scenarioId": "s4",
+00987:                  "summary": {"score": 5}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {"dimensions": {"stakes": "high"}}},
+00988:             ],
+00989:         }
+00990:         result = run_analyze_basic(input_data)
+00991: 
+00992:         assert result["success"] is True
+00993:         dim_analysis = result["analysis"]["dimensionAnalysis"]
+00994:         assert "stakes" in dim_analysis["dimensions"]
+00995:         # Stakes should have significant effect
+00996:         assert dim_analysis["dimensions"]["stakes"]["effectSize"] > 0.5
+00997: 
+00998:     def test_output_includes_timestamp(self):
+00999:         """Test that output includes timestamp and duration."""
+01000:         input_data = {
+01001:             "runId": "test-run-10",
+01002:             "transcripts": [],
+01003:         }
+01004:         result = run_analyze_basic(input_data)
+01005: 
+01006:         assert result["success"] is True
+01007:         assert "computedAt" in result["analysis"]
+01008:         assert "durationMs" in result["analysis"]
+01009:         assert result["analysis"]["durationMs"] >= 0
+01010: 
+01011: 
+01012: class TestAnalyzeBasicEdgeCases:
+01013:     """Edge case tests for analyze_basic worker."""
+01014: 
+01015:     def test_missing_score_in_summary(self):
+01016:         """Test handling of transcripts without scores."""
+01017:         input_data = {
+01018:             "runId": "test-edge-1",
+01019:             "transcripts": [
+01020:                 {"id": "t1", "modelId": "m1", "scenarioId": "s1",
+01021:                  "summary": {"values": {"V": "prioritized"}}, "scenario": {}},
+01022:             ],
+01023:         }
+01024:         result = run_analyze_basic(input_data)
+01025:         assert result["success"] is True
+01026: 
+01027:     def test_missing_summary(self):
+01028:         """Test handling of transcripts without summary."""
+01029:         input_data = {
+01030:             "runId": "test-edge-2",
+01031:             "transcripts": [
+01032:                 {"id": "t1", "modelId": "m1", "scenarioId": "s1", "scenario": {}},
+01033:             ],
+01034:         }
+01035:         result = run_analyze_basic(input_data)
+01036:         assert result["success"] is True
+01037: 
+01038:     def test_missing_scenario(self):
+01039:         """Test handling of transcripts without scenario."""
+01040:         input_data = {
+01041:             "runId": "test-edge-3",
+01042:             "transcripts": [
+01043:                 {"id": "t1", "modelId": "m1", "scenarioId": "s1",
+01044:                  "summary": {"values": {}}},
+01045:             ],
+01046:         }
+01047:         result = run_analyze_basic(input_data)
+01048:

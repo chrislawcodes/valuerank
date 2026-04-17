@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts",
+  "source_artifact_sha256": "7d02839508cfe4a02d93fb01c94b23970a5bc607baae06f31a11d7b6519d908f",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/byvalue-two-step-winrate/reviews/plan.codex.architecture-adversarial.review.context5.narrowed.txt",
+  "narrowed_artifact_sha256": "0dcbe9f3c063c00b5e5a5b8978032c85dd0cdc9d2d00ba42a7e63c512c534cab",
+  "strategy": "head-tail-numbered-lines"
+}
