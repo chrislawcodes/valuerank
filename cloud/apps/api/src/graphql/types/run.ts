@@ -9,7 +9,6 @@ import { calculatePercentComplete } from '../../services/run/index.js';
 import { AnalysisResultRef } from './analysis.js';
 import { CostEstimateRef, type CostEstimateShape } from './cost-estimate.js';
 import { getAllMetrics, getTotals } from '../../services/rate-limiter/index.js';
-import { getUnresolvableCount } from '../../services/unresolvable-count.js';
 
 // Re-export for backward compatibility
 export { RunRef, TranscriptRef, ExperimentRef };
@@ -49,27 +48,6 @@ type QueueFailurePayload = {
   error?: unknown;
   value?: unknown;
 };
-
-const UnresolvableByModel = builder
-  .objectRef<{ modelId: string; count: number }>('UnresolvableByModel')
-  .implement({
-    fields: (t) => ({
-      modelId: t.exposeString('modelId'),
-      count: t.exposeInt('count'),
-    }),
-  });
-
-const UnresolvableCount = builder
-  .objectRef<{ total: number; byModel: { modelId: string; count: number }[] }>('UnresolvableCount')
-  .implement({
-    fields: (t) => ({
-      total: t.exposeInt('total'),
-      byModel: t.field({
-        type: [UnresolvableByModel],
-        resolve: (p) => p.byModel,
-      }),
-    }),
-  });
 
 function normalizeTaskError(output: unknown): string | null {
   if (output === null || output === undefined) {
@@ -354,16 +332,6 @@ builder.objectType(RunRef, {
           percentComplete: Math.min(100, Math.round(((dynamicCompleted + dynamicFailed) / progress.total) * 100)),
           byModel: byModel.length > 0 ? byModel : undefined,
         };
-      },
-    }),
-
-    unresolvableTranscriptCount: t.field({
-      type: UnresolvableCount,
-      nullable: true,
-      description: 'Count of summarized transcripts that could not be scored',
-      resolve: async (run) => {
-        const result = await getUnresolvableCount(run.id);
-        return result.total > 0 ? result : null;
       },
     }),
 
