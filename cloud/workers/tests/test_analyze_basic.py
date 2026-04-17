@@ -15,7 +15,7 @@ WORKERS_DIR = Path(__file__).parent.parent
 if str(WORKERS_DIR) not in sys.path:
     sys.path.insert(0, str(WORKERS_DIR))
 
-from analyze_basic_aggregation import _compute_two_step_by_value
+from stats.preference_stats import compute_two_step_by_value as _compute_two_step_by_value
 
 
 def run_analyze_basic(input_data: dict) -> dict:
