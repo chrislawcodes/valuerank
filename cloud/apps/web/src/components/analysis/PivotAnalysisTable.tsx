@@ -19,13 +19,13 @@ import {
 import {
     buildCanonicalTranscriptIndex,
     collectCanonicalConditionTranscripts,
+    getConditionCellDisplay,
     summarizeCanonicalConditionTranscripts,
-    getCanonicalConditionBackground,
-    getCanonicalConditionTextColor,
     type CanonicalConditionSummary,
 } from '../../utils/canonicalConditionSummary';
 import { compareConditionLevels } from '../../utils/conditionOrdering';
 import { resolveConditionDecisionLabelPair } from '../../utils/conditionDecisionSummary';
+import { PivotAnalysisLegend, type LegendCounts } from './PivotAnalysisLegend';
 
 type PivotAnalysisTableProps = {
     runId: string;
@@ -42,31 +42,6 @@ type PivotAnalysisTableProps = {
      */
     selectedModels?: string[];
 };
-
-type LegendCounts = {
-    low: number;
-    neutral: number;
-    high: number;
-};
-
-function Legend({ lowName, highName, counts }: { lowName: string; highName: string; counts: LegendCounts }) {
-    return (
-        <div className="flex items-center gap-4 text-xs text-gray-500">
-            <div className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-blue-100 border border-blue-200"></span>
-                <span className="font-medium text-blue-800">{formatDisplayLabel(lowName)} {counts.low}</span>
-            </div>
-            <div className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-gray-100 border border-gray-200"></span>
-                <span>Neutral {counts.neutral}</span>
-            </div>
-            <div className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-orange-100 border border-orange-200"></span>
-                <span className="font-medium text-orange-800">{formatDisplayLabel(highName)} {counts.high}</span>
-            </div>
-        </div>
-    );
-}
 
 export function PivotAnalysisTable({
     runId,
@@ -222,14 +197,14 @@ export function PivotAnalysisTable({
         for (const scenarioId of Object.keys(scenarioDimensions)) {
             const cellTranscripts = collectCanonicalConditionTranscripts(transcriptIndex, selectedModel, [scenarioId]);
             const summary = summarizeCanonicalConditionTranscripts(cellTranscripts);
-            if (summary.totalTrials === 0) continue;
+            if (!summary.hasData) continue;
 
-            if (summary.isOpponent) {
+            if (summary.direction === 'opponent') {
                 high += 1;
-            } else if (summary.neutral > 0 && summary.strongly === 0 && summary.somewhat === 0) {
-                neutral += 1;
-            } else {
+            } else if (summary.direction === 'self') {
                 low += 1;
+            } else {
+                neutral += 1;
             }
         }
 
@@ -282,7 +257,7 @@ export function PivotAnalysisTable({
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                    <Legend
+                    <PivotAnalysisLegend
                         lowName={sideAttributeMap.lowAttribute}
                         highName={sideAttributeMap.highAttribute}
                         counts={legendCounts}
@@ -293,7 +268,7 @@ export function PivotAnalysisTable({
             {showDetails && (
                 <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
                     <p className="text-sm text-gray-600">
-                        Pick the two condition axes you want to compare. Each box in the table shows the model&apos;s average preference score (0–2) for that pair of condition levels.
+                        Pick the two condition axes you want to compare. Each box shows a net-weighted preference score from 0.0 to 2.0. Color indicates which side the model preferred: blue for the first value, orange for the opposing value. Gray boxes mean the model&apos;s preferences canceled out (a tie). Empty boxes mean no data.
                     </p>
                     <div className="flex flex-wrap gap-4">
                         <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
@@ -371,23 +346,20 @@ export function PivotAnalysisTable({
                                     </td>
                                     {pivotData.cols.map(col => {
                                         const summary = pivotData.grid[row]?.[col];
-                                        const hasScore = summary != null && summary.winnerScore != null && summary.totalTrials > 0;
+                                        const hasSummary = summary != null && summary.totalTrials > 0;
+                                        const display = summary != null ? getConditionCellDisplay(summary) : null;
 
                                         return (
                                             <td
                                                 key={`${row}-${col}`}
                                                 className="p-4 border border-gray-100 text-center text-sm transition-colors cursor-pointer hover:ring-1 hover:ring-teal-300"
                                                 style={{
-                                                    backgroundColor: hasScore && summary != null
-                                                        ? getCanonicalConditionBackground(summary.winnerScore ?? 0, summary.isOpponent)
-                                                        : undefined,
+                                                    backgroundColor: hasSummary && display ? display.backgroundColor : undefined,
                                                 }}
                                                 onClick={() => handleCellClick(row, col)}
                                             >
-                                                {hasScore && summary != null ? (
-                                                    <span className={`font-semibold ${getCanonicalConditionTextColor(summary.isOpponent)}`}>
-                                                        {summary.winnerScore == null ? '—' : summary.winnerScore.toFixed(1)}
-                                                    </span>
+                                                {hasSummary && display ? (
+                                                    <span className={`font-semibold ${display.textColorClass}`}>{display.label}</span>
                                                 ) : <span className="text-gray-500">—</span>}
                                             </td>
                                         );

@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/tests/components/analysis/AnalysisPanel.pairedContent.test.tsx",
+  "source_artifact_sha256": "33e114c05c426a433645e8b01207db79c6c463d2c7a077085e00515ce4313075",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/unified-net-weighted-condition-score/reviews/spec.codex.edge-cases-adversarial.review.context6.narrowed.txt",
+  "narrowed_artifact_sha256": "825d11fb219d8a511a82d82f0a0772d24d20136524b3372eb9f772de06a33c08",
+  "strategy": "head-tail-numbered-lines"
+}

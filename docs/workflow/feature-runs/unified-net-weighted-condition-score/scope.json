@@ -1,0 +1,15 @@
+{
+  "paths": [
+    "cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx",
+    "cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx",
+    "cloud/apps/web/src/components/domains/ConditionMatrix.tsx",
+    "cloud/apps/web/src/utils/canonicalConditionSummary.ts"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx",
+    "cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx",
+    "cloud/apps/web/src/components/domains/ConditionMatrix.tsx",
+    "cloud/apps/web/src/utils/canonicalConditionSummary.ts",
+    "docs/workflow/feature-runs/unified-net-weighted-condition-score"
+  ]
+}

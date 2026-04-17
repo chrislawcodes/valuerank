@@ -306,9 +306,11 @@ describe('ConditionDecisionsTable', () => {
       </MemoryRouter>
     );
 
-    // tie: selectedValueWinRate === 0.5 → isOpponent=false, winnerScore=(2×1+0)/2=1.0
+    // tie under net-weighted: (2×1 - 2×1)/2 = 0 → direction='neutral' → label='0.0', gray
     const tieButton = screen.getByTitle('View transcripts for gpt-5 | Achievement: medium, Care: medium');
-    expect(within(tieButton).getByText('1.0')).toBeInTheDocument();
+    const tieLabel = within(tieButton).getByText('0.0');
+    expect(tieLabel).toBeInTheDocument();
+    expect(tieLabel.parentElement).toHaveClass('text-gray-500');
   });
 
   it('orders condition rows from negligible to full', () => {

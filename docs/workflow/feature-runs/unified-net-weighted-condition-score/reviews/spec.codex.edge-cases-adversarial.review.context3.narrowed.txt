@@ -1,0 +1,179 @@
+00001: 
+00002: import { useState, useMemo, useEffect, useRef } from 'react';
+00003: import { useNavigate } from 'react-router-dom';
+00004: import type { VisualizationData } from '../../api/operations/analysis';
+00005: import type { Transcript } from '../../api/operations/runs';
+00006: import { CopyVisualButton } from '../ui/CopyVisualButton';
+00007: import { Button } from '../ui/Button';
+00008: import {
+00009:     mapDecisionSidesToScenarioAttributes,
+00010:     resolveScenarioAttributes,
+00011: } from '../../utils/decisionLabels';
+00012: import { formatDisplayLabel } from '../../utils/displayLabels';
+00013: import {
+00014:     ANALYSIS_BASE_PATH,
+00015:     type AnalysisBasePath,
+00016:     buildAnalysisConditionDetailPath,
+00017:     buildConditionKey,
+00018: } from '../../utils/analysisRouting';
+00019: import {
+00020:     buildCanonicalTranscriptIndex,
+00021:     collectCanonicalConditionTranscripts,
+00022:     summarizeCanonicalConditionTranscripts,
+00023:     getCanonicalConditionBackground,
+00024:     getCanonicalConditionTextColor,
+00025:     type CanonicalConditionSummary,
+00026: } from '../../utils/canonicalConditionSummary';
+00027: import { compareConditionLevels } from '../../utils/conditionOrdering';
+00028: import { resolveConditionDecisionLabelPair } from '../../utils/conditionDecisionSummary';
+00029: 
+00030: type PivotAnalysisTableProps = {
+00031:     runId: string;
+00032:     analysisBasePath?: AnalysisBasePath;
+00033:     analysisSearchParams?: URLSearchParams | string;
+00034:     analysisMode?: 'single' | 'paired';
+00035:     visualizationData: VisualizationData;
+00036:     transcripts?: Transcript[];
+00037:     expectedAttributes?: string[];
+00038:     companionRunId?: string | null;
+00039:     /**
+00040:      * When provided, restrict the model dropdown to only these model IDs.
+00041:      * Falls back to all models if the filtered list would be empty.
+00042:      */
+00043:     selectedModels?: string[];
+00044: };
+00045: 
+00046: type LegendCounts = {
+00047:     low: number;
+00048:     neutral: number;
+00049:     high: number;
+00050: };
+00051: 
+00052: function Legend({ lowName, highName, counts }: { lowName: string; highName: string; counts: LegendCounts }) {
+00053:     return (
+00054:         <div className="flex items-center gap-4 text-xs text-gray-500">
+00055:             <div className="flex items-center gap-1">
+00056:                 <span className="w-3 h-3 rounded bg-blue-100 border border-blue-200"></span>
+00057:                 <span className="font-medium text-blue-800">{formatDisplayLabel(lowName)} {counts.low}</span>
+00058:             </div>
+00059:             <div className="flex items-center gap-1">
+00060:                 <span className="w-3 h-3 rounded bg-gray-100 border border-gray-200"></span>
+00061:                 <span>Neutral {counts.neutral}</span>
+00062:             </div>
+00063:             <div className="flex items-center gap-1">
+00064:                 <span className="w-3 h-3 rounded bg-orange-100 border border-orange-200"></span>
+00065:                 <span className="font-medium text-orange-800">{formatDisplayLabel(highName)} {counts.high}</span>
+00066:             </div>
+00067:         </div>
+00068:     );
+00069: }
+00070: 
+00071: export function PivotAnalysisTable({
+00072:     runId,
+00073:     analysisBasePath = ANALYSIS_BASE_PATH,
+00074:     analysisSearchParams,
+00075:     visualizationData,
+00076:     transcripts,
+00077:     expectedAttributes = [],
+00078:     companionRunId,
+00079:     selectedModels,
+00080: }: PivotAnalysisTableProps) {
+00081:     const tableRef = useRef<HTMLDivElement>(null);
+00082:     const navigate = useNavigate();
+00083:     const { modelScenarioMatrix, scenarioDimensions } = visualizationData;
+00084: 
+00085:     // 1. Identify available dimensions
+00086:     const availableDimensions = useMemo(() => {
+00087:         return resolveScenarioAttributes(scenarioDimensions, expectedAttributes, modelScenarioMatrix);
+00088:     }, [expectedAttributes, scenarioDimensions, modelScenarioMatrix]);
+00089: 
+00090:     // All models from the matrix
+00091:     const allModels = useMemo(() => Object.keys(modelScenarioMatrix || {}).sort(), [modelScenarioMatrix]);
+00092: 
+00093:     // Filtered models: when selectedModels is provided, restrict to that set (non-empty fallback)
+00094:     const models = useMemo(() => {
+00095:         if (selectedModels == null || selectedModels.length === 0) return allModels;
+00096:         const filtered = allModels.filter((id) => selectedModels.includes(id));
+00097:         return filtered.length > 0 ? filtered : allModels;
+00098:     }, [allModels, selectedModels]);
+00099: 
+00100:     // State for selected dimensions and model
+00101:     const [rowDim, setRowDim] = useState<string>(availableDimensions[0] || '');
+00102:     const [colDim, setColDim] = useState<string>(availableDimensions[1] || availableDimensions[0] || '');
+00103:     // Default to first alphabetical model if available
+00104:     const [selectedMo
+
+... [narrowed review slice: middle omitted] ...
+
+{models.map(m => <option key={m} value={m}>{m}</option>)}
+00335:                     </select>
+00336:                 </label>
+00337:             </div>
+00338:             {/* Grid */}
+00339:             {pivotData && (
+00340:                 <div className="space-y-2">
+00341:                     <div className="overflow-x-auto">
+00342:                         <table className="min-w-full divide-y divide-gray-200 border-collapse">
+00343:                             <thead>
+00344:                             {/* Row 1: Empty + Column Dimension Label */}
+00345:                             <tr>
+00346:                                 <th className="p-2 bg-gray-50 border border-gray-200 border-b-0"></th>
+00347:                                 <th
+00348:                                     colSpan={pivotData.cols.length}
+00349:                                     className="p-2 bg-gray-100 border border-gray-200 text-center text-xs font-bold text-gray-700 uppercase"
+00350:                                 >
+00351:                                     {formatDisplayLabel(colDim)}
+00352:                                 </th>
+00353:                             </tr>
+00354:                             {/* Row 2: Row Dimension Label + Column Values */}
+00355:                             <tr>
+00356:                                 <th className="p-3 bg-gray-100 border border-gray-200 text-left text-xs font-bold text-gray-700 uppercase w-32">
+00357:                                     {formatDisplayLabel(rowDim)}
+00358:                                 </th>
+00359:                                 {pivotData.cols.map(col => (
+00360:                                     <th key={col} className="p-3 bg-gray-50 border border-gray-200 text-center text-xs font-medium text-gray-500 font-mono">
+00361:                                         {formatDisplayLabel(col)}
+00362:                                     </th>
+00363:                                 ))}
+00364:                             </tr>
+00365:                             </thead>
+00366:                             <tbody className="bg-white">
+00367:                             {pivotData.rows.map(row => (
+00368:                                 <tr key={row}>
+00369:                                     <td className="p-3 bg-gray-50 border border-gray-200 text-left text-xs font-medium text-gray-500 font-mono whitespace-nowrap">
+00370:                                         {formatDisplayLabel(row)}
+00371:                                     </td>
+00372:                                     {pivotData.cols.map(col => {
+00373:                                         const summary = pivotData.grid[row]?.[col];
+00374:                                         const hasScore = summary != null && summary.winnerScore != null && summary.totalTrials > 0;
+00375: 
+00376:                                         return (
+00377:                                             <td
+00378:                                                 key={`${row}-${col}`}
+00379:                                                 className="p-4 border border-gray-100 text-center text-sm transition-colors cursor-pointer hover:ring-1 hover:ring-teal-300"
+00380:                                                 style={{
+00381:                                                     backgroundColor: hasScore && summary != null
+00382:                                                         ? getCanonicalConditionBackground(summary.winnerScore ?? 0, summary.isOpponent)
+00383:                                                         : undefined,
+00384:                                                 }}
+00385:                                                 onClick={() => handleCellClick(row, col)}
+00386:                                             >
+00387:                                                 {hasScore && summary != null ? (
+00388:                                                     <span className={`font-semibold ${getCanonicalConditionTextColor(summary.isOpponent)}`}>
+00389:                                                         {summary.winnerScore == null ? '—' : summary.winnerScore.toFixed(1)}
+00390:                                                     </span>
+00391:                                                 ) : <span className="text-gray-500">—</span>}
+00392:                                             </td>
+00393:                                         );
+00394:                                     })}
+00395:                                 </tr>
+00396:                             ))}
+00397:                             </tbody>
+00398:                         </table>
+00399:                         <div className="mt-2 text-xs text-gray-500">
+00400:                             Click a cell to view pooled condition details.
+00401:                         </div>
+00402:                     </div>
+00403:                 </div>
+00404:             )}
+00405:     

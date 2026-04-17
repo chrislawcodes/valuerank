@@ -1,253 +1,341 @@
 import { describe, expect, it } from 'vitest';
-import type { Transcript } from '../../src/api/operations/runs';
-import { summarizeCanonicalConditionTranscripts } from '../../src/utils/canonicalConditionSummary';
+import {
+  getConditionCellDisplay,
+  summarizeCanonicalConditionCounts,
+  type CanonicalConditionCounts,
+} from '../../src/utils/canonicalConditionSummary';
 
-function createTranscript(
-  id: string,
-  direction: 'favor_first' | 'favor_second' | 'neutral' | 'unknown',
-  strength: 'strong' | 'lean' | 'neutral' | 'unknown',
-): Transcript {
-  return {
-    id,
-    runId: 'run-1',
-    scenarioId: 'scenario-1',
-    modelId: 'model-1',
-    modelVersion: null,
-    content: {},
-    decisionCode: null,
-    decisionCodeSource: null,
-    decisionMetadata: null,
-    turnCount: 4,
-    tokenCount: 100,
-    durationMs: 500,
-    estimatedCost: null,
-    createdAt: '2026-01-01T00:00:00Z',
-    lastAccessedAt: null,
-    dimensionValues: null,
-    decisionModelV2: direction === 'unknown'
-      ? null
-      : {
-          raw: {
-            matchedText: 'test',
-            matchedLabel: 'test',
-            parseClass: 'exact',
-            parsePath: 'exact',
-            parserVersion: 'job-choice-v2',
-            responseExcerpt: null,
-            manualOverride: null,
-          },
-          canonical: {
-            favoredValueKey: direction === 'favor_first' ? 'value-a' : direction === 'favor_second' ? 'value-b' : null,
-            opposedValueKey: direction === 'favor_first' ? 'value-b' : direction === 'favor_second' ? 'value-a' : null,
-            direction,
-            strength,
-            normalizationApplied: false,
-            normalizationReason: null,
-            source: 'deterministic',
-          },
-          legacy: {
-            },
-        },
-  } as Transcript;
+function summarizeAndDisplay(counts: CanonicalConditionCounts) {
+  const summary = summarizeCanonicalConditionCounts(counts);
+  const display = getConditionCellDisplay(summary);
+  return { summary, display };
 }
 
-// Creates a transcript where favoredValueKey and direction disagree:
-// direction='favor_first' would have caused old code to bucket as 'strongly',
-// but favoredValueKey='value-b' is alphabetically second → should be opponentStrongly.
-function createTranscriptKeysMismatch(id: string): Transcript {
-  return {
-    id,
-    runId: 'run-1',
-    scenarioId: 'scenario-1',
-    modelId: 'model-1',
-    modelVersion: null,
-    content: {},
-    decisionCode: null,
-    decisionCodeSource: null,
-    decisionMetadata: null,
-    turnCount: 4,
-    tokenCount: 100,
-    durationMs: 500,
-    estimatedCost: null,
-    createdAt: '2026-01-01T00:00:00Z',
-    lastAccessedAt: null,
-    dimensionValues: null,
-    decisionModelV2: {
-      raw: {
-        matchedText: 'test',
-        matchedLabel: 'test',
-        parseClass: 'exact',
-        parsePath: 'exact',
-        parserVersion: 'job-choice-v2',
-        responseExcerpt: null,
-        manualOverride: null,
+describe('summarizeCanonicalConditionCounts', () => {
+  it.each([
+    {
+      name: 'strong self lean',
+      counts: {
+        strongly: 4,
+        somewhat: 0,
+        neutral: 0,
+        opponentSomewhat: 0,
+        opponentStrongly: 1,
       },
-      canonical: {
-        favoredValueKey: 'value-b',
-        opposedValueKey: 'value-a',
-        direction: 'favor_first', // contradicts alphabetical order intentionally
-        strength: 'strong',
-        normalizationApplied: false,
-        normalizationReason: null,
-        source: 'deterministic',
-      },
-      legacy: {
-        },
+      expectedNetScore: 1.2,
+      expectedDirection: 'self' as const,
+      expectedLabel: '1.2',
+      expectedBackgroundColor: 'rgba(59, 130, 246, 0.3)',
+      expectedTextColorClass: 'text-blue-700',
     },
-  } as Transcript;
-}
+    {
+      name: 'strong opponent lean',
+      counts: {
+        strongly: 1,
+        somewhat: 0,
+        neutral: 0,
+        opponentSomewhat: 0,
+        opponentStrongly: 4,
+      },
+      expectedNetScore: -1.2,
+      expectedDirection: 'opponent' as const,
+      expectedLabel: '1.2',
+      expectedBackgroundColor: 'rgba(251, 146, 60, 0.3)',
+      expectedTextColorClass: 'text-orange-700',
+    },
+    {
+      name: 'mild self lean',
+      counts: {
+        strongly: 0,
+        somewhat: 3,
+        neutral: 0,
+        opponentSomewhat: 1,
+        opponentStrongly: 0,
+      },
+      expectedNetScore: 0.5,
+      expectedDirection: 'self' as const,
+      expectedLabel: '0.5',
+      expectedBackgroundColor: 'rgba(59, 130, 246, 0.125)',
+      expectedTextColorClass: 'text-blue-700',
+    },
+    {
+      name: 'mild opponent lean',
+      counts: {
+        strongly: 0,
+        somewhat: 1,
+        neutral: 0,
+        opponentSomewhat: 3,
+        opponentStrongly: 0,
+      },
+      expectedNetScore: -0.5,
+      expectedDirection: 'opponent' as const,
+      expectedLabel: '0.5',
+      expectedBackgroundColor: 'rgba(251, 146, 60, 0.125)',
+      expectedTextColorClass: 'text-orange-700',
+    },
+    {
+      name: 'exact tie',
+      counts: {
+        strongly: 2,
+        somewhat: 0,
+        neutral: 1,
+        opponentSomewhat: 0,
+        opponentStrongly: 2,
+      },
+      expectedNetScore: 0,
+      expectedDirection: 'neutral' as const,
+      expectedLabel: '0.0',
+      expectedBackgroundColor: undefined,
+      expectedTextColorClass: 'text-gray-500',
+    },
+  ])(
+    '$name',
+    ({
+      counts,
+      expectedNetScore,
+      expectedDirection,
+      expectedLabel,
+      expectedBackgroundColor,
+      expectedTextColorClass,
+    }) => {
+      const { summary, display } = summarizeAndDisplay(counts);
+      const summaryNetScore = summary.netScore;
+      const displayNetScore = display.netScore;
 
-function createStrongSelected(id: string) {
-  return createTranscript(id, 'favor_first', 'strong');
-}
+      expect(summaryNetScore ?? NaN).toBeCloseTo(expectedNetScore);
+      expect(summary.direction).toBe(expectedDirection);
+      expect(summary.hasData).toBe(true);
 
-function createSomewhatSelected(id: string) {
-  return createTranscript(id, 'favor_first', 'lean');
-}
+      expect(displayNetScore ?? NaN).toBeCloseTo(expectedNetScore);
+      expect(display.direction).toBe(expectedDirection);
+      expect(display.hasData).toBe(true);
+      expect(display.label).toBe(expectedLabel);
+      expect(display.backgroundColor).toBe(expectedBackgroundColor);
+      expect(display.textColorClass).toBe(expectedTextColorClass);
+    },
+  );
 
-function createStrongOpponent(id: string) {
-  return createTranscript(id, 'favor_second', 'strong');
-}
+  it('zero-trial input returns the no-data placeholder and neutral metadata', () => {
+    const { summary, display } = summarizeAndDisplay({
+      strongly: 0,
+      somewhat: 0,
+      neutral: 0,
+      opponentSomewhat: 0,
+      opponentStrongly: 0,
+    });
 
-function createSomewhatOpponent(id: string) {
-  return createTranscript(id, 'favor_second', 'lean');
-}
-
-describe('summarizeCanonicalConditionTranscripts', () => {
-  it('empty input → all null metrics, isOpponent false', () => {
-    const result = summarizeCanonicalConditionTranscripts([]);
-    expect(result.selectedValueWinRate).toBeNull();
-    expect(result.isOpponent).toBe(false);
-    expect(result.totalTrials).toBe(0);
-    expect(result).not.toHaveProperty('meanPreferenceScore');
-    expect(result).not.toHaveProperty('opponentMeanPreferenceScore');
-    expect(result).not.toHaveProperty('displayScore');
+    expect(summary).toMatchObject({
+      netScore: null,
+      direction: 'neutral',
+      hasData: false,
+      totalTrials: 0,
+    });
+    expect(display).toMatchObject({
+      netScore: null,
+      direction: 'neutral',
+      hasData: false,
+      label: '—',
+      backgroundColor: undefined,
+      textColorClass: 'text-gray-500',
+    });
   });
 
-  it('null selectedValueWinRate falls back to false for isOpponent', () => {
-    const result = summarizeCanonicalConditionTranscripts([
-      createTranscript('t1', 'unknown', 'unknown'),
-    ]);
-    expect(result.selectedValueWinRate).toBeNull();
-    expect(result.isOpponent).toBe(false);
+  it('accepts fractional counts and produces a finite net score', () => {
+    const summary = summarizeCanonicalConditionCounts({
+      strongly: 5.5,
+      somewhat: 2.3,
+      opponentStrongly: 1.2,
+      opponentSomewhat: 0.5,
+      neutral: 0.5,
+    });
+
+    expect(summary.hasData).toBe(true);
+    const netScore = summary.netScore;
+    expect(netScore).not.toBeNull();
+    expect(Number.isFinite(netScore ?? NaN)).toBe(true);
+    expect(summary.direction).toBe('self');
   });
 
-  it('all-unknown input → totalTrials 0, selectedValueWinRate null', () => {
-    const transcripts = [
-      createTranscript('t1', 'unknown', 'unknown'),
-      createTranscript('t2', 'unknown', 'unknown'),
-      createTranscript('t3', 'unknown', 'unknown'),
-    ];
-    const result = summarizeCanonicalConditionTranscripts(transcripts);
-    expect(result.unknownCount).toBe(3);
-    expect(result.totalTrials).toBe(0);
-    expect(result.selectedValueWinRate).toBeNull();
-    expect(result.isOpponent).toBe(false);
+  it('ignores superset fields when tallying canonical counts', () => {
+    const supersetCounts = {
+      strongly: 3,
+      somewhat: 2,
+      opponentStrongly: 1,
+      opponentSomewhat: 0,
+      neutral: 0,
+      prioritized: 5,
+      deprioritized: 1,
+      totalTrials: 6,
+      unknownCount: 0,
+    } as unknown as CanonicalConditionCounts;
+
+    const canonicalCounts = {
+      strongly: 3,
+      somewhat: 2,
+      opponentStrongly: 1,
+      opponentSomewhat: 0,
+      neutral: 0,
+    };
+
+    expect(summarizeCanonicalConditionCounts(supersetCounts)).toEqual(
+      summarizeCanonicalConditionCounts(canonicalCounts),
+    );
   });
 
-  it('all strongly selected → selectedValueWinRate 100%, isOpponent false (blue)', () => {
-    const transcripts = [
-      createStrongSelected('t1'),
-      createStrongSelected('t2'),
-      createStrongSelected('t3'),
-      createStrongSelected('t4'),
-      createStrongSelected('t5'),
-    ];
-    const result = summarizeCanonicalConditionTranscripts(transcripts);
-    expect(result.strongly).toBe(5);
-    expect(result.selectedValueWinRate).toBeCloseTo(1.0);
-    expect(result.isOpponent).toBe(false);
+  it('ignores inconsistent non-canonical extras', () => {
+    const inconsistentCounts = {
+      strongly: 2,
+      somewhat: 3,
+      opponentStrongly: 1,
+      opponentSomewhat: 0,
+      neutral: 0,
+      prioritized: 999,
+      deprioritized: 999,
+      totalTrials: 999,
+    } as unknown as CanonicalConditionCounts;
+
+    const canonicalCounts = {
+      strongly: 2,
+      somewhat: 3,
+      opponentStrongly: 1,
+      opponentSomewhat: 0,
+      neutral: 0,
+    };
+
+    expect(summarizeCanonicalConditionCounts(inconsistentCounts)).toEqual(
+      summarizeCanonicalConditionCounts(canonicalCounts),
+    );
   });
 
-  it('all somewhat selected → selectedValueWinRate 100%, isOpponent false (blue)', () => {
-    const transcripts = [
-      createSomewhatSelected('t1'),
-      createSomewhatSelected('t2'),
-      createSomewhatSelected('t3'),
-      createSomewhatSelected('t4'),
-      createSomewhatSelected('t5'),
-    ];
-    const result = summarizeCanonicalConditionTranscripts(transcripts);
-    expect(result.somewhat).toBe(5);
-    expect(result.selectedValueWinRate).toBeCloseTo(1.0);
-    expect(result.isOpponent).toBe(false);
+  it('coerces missing canonical keys to zero', () => {
+    const summary = summarizeCanonicalConditionCounts({
+      strongly: 2,
+      somewhat: 1,
+      opponentStrongly: 1,
+      opponentSomewhat: 0,
+    } as unknown as CanonicalConditionCounts);
+
+    expect(summary).toMatchObject({
+      hasData: true,
+      totalTrials: 4,
+      direction: 'self',
+    });
+    expect(summary.netScore).toBeCloseTo(0.75);
   });
 
-  it('keeps selected-side win rate at 100% when the chosen side is mixed', () => {
-    const allStrong = summarizeCanonicalConditionTranscripts([
-      createStrongSelected('t1'),
-      createStrongSelected('t2'),
-      createStrongSelected('t3'),
-    ]);
-    const allSomewhat = summarizeCanonicalConditionTranscripts([
-      createSomewhatSelected('t4'),
-      createSomewhatSelected('t5'),
-      createSomewhatSelected('t6'),
-    ]);
-    expect(allStrong.selectedValueWinRate).toBeCloseTo(1.0);
-    expect(allSomewhat.selectedValueWinRate).toBeCloseTo(1.0);
+  it('coerces non-finite canonical values to zero', () => {
+    const summary = summarizeCanonicalConditionCounts({
+      strongly: 5,
+      somewhat: null as unknown as number,
+      opponentStrongly: NaN as unknown as number,
+      opponentSomewhat: 2,
+      neutral: 0,
+    } as CanonicalConditionCounts);
+
+    expect(summary.hasData).toBe(true);
+    expect(summary.totalTrials).toBe(7);
+    expect(summary.netScore).toBeCloseTo(8 / 7);
+    expect(summary.direction).toBe('self');
   });
 
-  it('all strongly opponent → selectedValueWinRate 0%, isOpponent true (orange)', () => {
-    const transcripts = [
-      createStrongOpponent('t1'),
-      createStrongOpponent('t2'),
-      createStrongOpponent('t3'),
-      createStrongOpponent('t4'),
-      createStrongOpponent('t5'),
-    ];
-    const result = summarizeCanonicalConditionTranscripts(transcripts);
-    expect(result.opponentStrongly).toBe(5);
-    expect(result.selectedValueWinRate).toBeCloseTo(0.0);
-    expect(result.isOpponent).toBe(true);
+  it('keeps exact ties neutral and renders them without a fill', () => {
+    const { summary, display } = summarizeAndDisplay({
+      strongly: 2,
+      somewhat: 0,
+      neutral: 0,
+      opponentSomewhat: 0,
+      opponentStrongly: 2,
+    });
+
+    expect(summary).toMatchObject({
+      hasData: true,
+      direction: 'neutral',
+      totalTrials: 4,
+    });
+    expect(summary.netScore ?? NaN).toBe(0);
+    expect(display).toMatchObject({
+      label: '0.0',
+      backgroundColor: undefined,
+      textColorClass: 'text-gray-500',
+    });
   });
 
-  it('all somewhat opponent → selectedValueWinRate 0%, isOpponent true (orange)', () => {
-    const transcripts = [
-      createSomewhatOpponent('t1'),
-      createSomewhatOpponent('t2'),
-      createSomewhatOpponent('t3'),
-      createSomewhatOpponent('t4'),
-      createSomewhatOpponent('t5'),
-    ];
-    const result = summarizeCanonicalConditionTranscripts(transcripts);
-    expect(result.opponentSomewhat).toBe(5);
-    expect(result.selectedValueWinRate).toBeCloseTo(0.0);
-    expect(result.isOpponent).toBe(true);
-  });
+  it.each([
+    {
+      name: 'positive boundary stays neutral at 0.05',
+      counts: {
+        strongly: 0,
+        somewhat: 1,
+        neutral: 19,
+        opponentSomewhat: 0,
+        opponentStrongly: 0,
+      },
+      expectedNetScore: 0.05,
+      expectedDirection: 'neutral' as const,
+    },
+    {
+      name: 'positive values above the boundary are self',
+      counts: {
+        strongly: 0,
+        somewhat: 3,
+        neutral: 47,
+        opponentSomewhat: 0,
+        opponentStrongly: 0,
+      },
+      expectedNetScore: 0.06,
+      expectedDirection: 'self' as const,
+    },
+    {
+      name: 'negative boundary stays neutral at -0.05',
+      counts: {
+        strongly: 0,
+        somewhat: 0,
+        neutral: 19,
+        opponentSomewhat: 1,
+        opponentStrongly: 0,
+      },
+      expectedNetScore: -0.05,
+      expectedDirection: 'neutral' as const,
+    },
+    {
+      name: 'negative values below the boundary are opponent',
+      counts: {
+        strongly: 0,
+        somewhat: 0,
+        neutral: 47,
+        opponentSomewhat: 3,
+        opponentStrongly: 0,
+      },
+      expectedNetScore: -0.06,
+      expectedDirection: 'opponent' as const,
+    },
+  ])(
+    '$name',
+    ({
+      counts,
+      expectedNetScore,
+      expectedDirection,
+    }) => {
+      const summary = summarizeCanonicalConditionCounts(counts);
 
-  it('mixed: 3 opponentStrongly + 1 opponentSomewhat + 1 neutral = selectedValueWinRate 0% (orange)', () => {
-    const transcripts = [
-      createStrongOpponent('t1'),
-      createStrongOpponent('t2'),
-      createStrongOpponent('t3'),
-      createSomewhatOpponent('t4'),
-      createTranscript('t5', 'neutral', 'neutral'),
-    ];
-    const result = summarizeCanonicalConditionTranscripts(transcripts);
-    expect(result.selectedValueWinRate).toBeCloseTo(0.0);
-    expect(result.isOpponent).toBe(true);
-  });
+      expect(summary.netScore ?? NaN).toBeCloseTo(expectedNetScore);
+      expect(summary.direction).toBe(expectedDirection);
+    },
+  );
 
-  it('tie (1 strongly selected + 1 strongly opponent) → selectedValueWinRate 50%, isOpponent false (neutral)', () => {
-    const transcripts = [
-      createStrongSelected('t1'),
-      createStrongOpponent('t2'),
-    ];
-    const result = summarizeCanonicalConditionTranscripts(transcripts);
-    expect(result.selectedValueWinRate).toBeCloseTo(0.5);
-    expect(result.isOpponent).toBe(false);
-  });
+  it('formats negative net scores with magnitude-only labels', () => {
+    const { summary, display } = summarizeAndDisplay({
+      strongly: 0,
+      somewhat: 0,
+      neutral: 1,
+      opponentSomewhat: 0,
+      opponentStrongly: 9,
+    });
 
-  it('favoredValueKey alphabetically second (value-b) buckets as opponentStrongly — direction field ignored', () => {
-    // This transcript has direction='favor_first' but favoredValueKey='value-b' (> 'value-a').
-    // Old direction-based code would have bucketed this as 'strongly' (blue).
-    // New alphabetical code must bucket it as 'opponentStrongly' (orange).
-    const transcripts = [createTranscriptKeysMismatch('t1')];
-    const result = summarizeCanonicalConditionTranscripts(transcripts);
-    expect(result.opponentStrongly).toBe(1);
-    expect(result.strongly).toBe(0);
-    expect(result.selectedValueWinRate).toBeCloseTo(0.0);
-    expect(result.isOpponent).toBe(true);
+    expect(summary.netScore ?? NaN).toBeCloseTo(-1.8);
+    expect(summary.direction).toBe('opponent');
+    expect(display.label).toBe('1.8');
+    expect(display.backgroundColor).toBe('rgba(251, 146, 60, 0.45)');
+    expect(display.textColorClass).toBe('text-orange-700');
   });
 });

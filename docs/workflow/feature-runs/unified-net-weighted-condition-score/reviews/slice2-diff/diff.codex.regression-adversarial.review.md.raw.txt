@@ -1,0 +1,6 @@
+## Findings
+1. Medium: [ConditionMatrix.tsx](/Users/chrislaw/valuerank/.claude/worktrees/tender-cerf/cloud/apps/web/src/components/domains/ConditionMatrix.tsx#L22) no longer enforces whole-number counts. `isValidCount` now accepts any finite non-negative number, so fractional values like `1.5` will pass validation as canonical count data. Because [canonicalConditionSummary.ts](/Users/chrislaw/valuerank/.claude/worktrees/tender-cerf/cloud/apps/web/src/utils/canonicalConditionSummary.ts#L123) also preserves decimals, malformed upstream payloads will now render instead of failing closed. That weakens the validation barrier and can produce misleading matrix cells.
+
+## Residual Risks
+- The new display logic introduces a `±0.05` neutral band in [canonicalConditionSummary.ts](/Users/chrislaw/valuerank/.claude/worktrees/tender-cerf/cloud/apps/web/src/utils/canonicalConditionSummary.ts#L163). I did not verify whether that threshold matches the intended product semantics for weak preferences.
+- There are no tests in the diff for fractional counts, near-tie values, or other edge cases, so the new validation and rendering behavior still has regression risk around malformed or borderline data.

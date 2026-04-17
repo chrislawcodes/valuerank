@@ -8,14 +8,23 @@ export type CanonicalConditionSummary = {
   opponentStrongly: number;
   unknownCount: number;
   totalTrials: number;
-  selectedValueWinRate: number | null;
-  winnerScore: number | null;
-  isOpponent: boolean;
+  netScore: number | null;
+  direction: 'self' | 'opponent' | 'neutral';
+  hasData: boolean;
+};
+
+export type CanonicalConditionCounts = {
+  strongly: number;
+  somewhat: number;
+  neutral: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
 };
 
 export type CanonicalTranscriptIndex = Map<string, Map<string, Transcript[]>>;
 
 type CanonicalBucket = 'strongly' | 'somewhat' | 'neutral' | 'opponentSomewhat' | 'opponentStrongly';
+type CanonicalConditionTally = CanonicalConditionCounts & { unknownCount: number };
 
 function getCanonicalBucket(transcript: Transcript): CanonicalBucket | null {
   const canonical = transcript.decisionModelV2?.canonical;
@@ -89,7 +98,7 @@ export function collectCanonicalConditionTranscripts(
 export function summarizeCanonicalConditionTranscripts(
   transcripts: Transcript[] | null | undefined,
 ): CanonicalConditionSummary {
-  const counts = {
+  const counts: CanonicalConditionTally = {
     strongly: 0,
     somewhat: 0,
     neutral: 0,
@@ -108,6 +117,27 @@ export function summarizeCanonicalConditionTranscripts(
     counts[bucket] += 1;
   }
 
+  return summarizeCanonicalConditionTally(counts);
+}
+
+export function summarizeCanonicalConditionCounts(
+  counts: CanonicalConditionCounts,
+): CanonicalConditionSummary {
+  return summarizeCanonicalConditionTally({
+    strongly: coerceNonNegativeFiniteCount(counts.strongly),
+    somewhat: coerceNonNegativeFiniteCount(counts.somewhat),
+    neutral: coerceNonNegativeFiniteCount(counts.neutral),
+    opponentSomewhat: coerceNonNegativeFiniteCount(counts.opponentSomewhat),
+    opponentStrongly: coerceNonNegativeFiniteCount(counts.opponentStrongly),
+    unknownCount: 0,
+  });
+}
+
+function coerceNonNegativeFiniteCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function summarizeCanonicalConditionTally(counts: CanonicalConditionTally): CanonicalConditionSummary {
   const totalTrials =
     counts.strongly
     + counts.somewhat
@@ -119,38 +149,84 @@ export function summarizeCanonicalConditionTranscripts(
     return {
       ...counts,
       totalTrials,
-      selectedValueWinRate: null,
-      winnerScore: null,
-      isOpponent: false,
+      netScore: null,
+      direction: 'neutral',
+      hasData: false,
     };
   }
 
-  const selectedValueWinRate = (counts.strongly + counts.somewhat) / totalTrials;
-  const isOpponent = (selectedValueWinRate ?? 0.5) < 0.5;
+  const netScore = (
+    (2 * counts.strongly + counts.somewhat)
+    - (2 * counts.opponentStrongly + counts.opponentSomewhat)
+  ) / totalTrials;
 
-  const winnerStrongly = isOpponent ? counts.opponentStrongly : counts.strongly;
-  const winnerSomewhat = isOpponent ? counts.opponentSomewhat : counts.somewhat;
-  const winnerScore = (2 * winnerStrongly + 1 * winnerSomewhat) / totalTrials;
+  let direction: CanonicalConditionSummary['direction'] = 'neutral';
+  if (netScore > 0.05) {
+    direction = 'self';
+  } else if (netScore < -0.05) {
+    direction = 'opponent';
+  }
 
   return {
     ...counts,
     totalTrials,
-    selectedValueWinRate,
-    winnerScore,
-    isOpponent,
+    netScore,
+    direction,
+    hasData: true,
   };
 }
 
-export function getCanonicalConditionBackground(score: number, isOpponent: boolean): string {
-  // score is winnerScore (0–2). Opacity scales linearly from 0 (no conviction) to 1 (max conviction).
-  const clamped = Math.min(2, Math.max(0, score));
-  const opacity = clamped / 2;
-  if (isOpponent) {
-    return `rgba(251, 146, 60, ${opacity * 0.5})`;
-  }
-  return `rgba(59, 130, 246, ${opacity * 0.5})`;
-}
+export type ConditionCellDisplay = {
+  netScore: number | null;
+  direction: 'self' | 'opponent' | 'neutral';
+  hasData: boolean;
+  label: string;
+  backgroundColor: string | undefined;
+  textColorClass: string;
+};
 
-export function getCanonicalConditionTextColor(isOpponent: boolean): string {
-  return isOpponent ? 'text-orange-700' : 'text-blue-700';
+export function getConditionCellDisplay(summary: CanonicalConditionSummary): ConditionCellDisplay {
+  if (!summary.hasData) {
+    return {
+      netScore: null,
+      direction: summary.direction,
+      hasData: false,
+      label: '—',
+      backgroundColor: undefined,
+      textColorClass: 'text-gray-500',
+    };
+  }
+
+  const netScore = summary.netScore ?? 0;
+  const magnitude = Math.abs(netScore);
+  const label = magnitude.toFixed(1);
+
+  if (summary.direction === 'neutral') {
+    return {
+      netScore: summary.netScore,
+      direction: 'neutral',
+      hasData: true,
+      label,
+      backgroundColor: undefined,
+      textColorClass: 'text-gray-500',
+    };
+  }
+
+  // Directional fill: magnitude in [0, 2] maps linearly to opacity [0, 0.5].
+  const clamped = Math.min(2, Math.max(0, magnitude));
+  const opacity = (clamped / 2) * 0.5;
+  const isOpposing = summary.direction === 'opponent';
+  const backgroundColor = isOpposing
+    ? `rgba(251, 146, 60, ${opacity})`
+    : `rgba(59, 130, 246, ${opacity})`;
+  const textColorClass = isOpposing ? 'text-orange-700' : 'text-blue-700';
+
+  return {
+    netScore: summary.netScore,
+    direction: summary.direction,
+    hasData: true,
+    label,
+    backgroundColor,
+    textColorClass,
+  };
 }

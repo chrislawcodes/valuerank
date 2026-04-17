@@ -1,0 +1,195 @@
+00001: import { useEffect, useMemo, useRef, useState } from 'react';
+00002: import { useNavigate } from 'react-router-dom';
+00003: import type { PerModelStats, VarianceAnalysis, VisualizationData } from '../../api/operations/analysis';
+00004: import type { Transcript } from '../../api/operations/runs';
+00005: import { resolveScenarioAttributes } from '../../utils/decisionLabels';
+00006: import {
+00007:   ANALYSIS_BASE_PATH,
+00008:   type AnalysisBasePath,
+00009:   buildAnalysisTranscriptsPath,
+00010: } from '../../utils/analysisRouting';
+00011: import {
+00012:   buildOrientedConditionRows,
+00013: } from '../../utils/pairedScopeAdapter';
+00014: import type { OrientationInspectionMode, OrientedConditionRow } from '../../utils/pairedScopeAdapter';
+00015: import { compareConditionRows } from '../../utils/conditionOrdering';
+00016: import { formatDisplayLabel } from '../../utils/displayLabels';
+00017: import { Button } from '../ui/Button';
+00018: import { CopyVisualButton } from '../ui/CopyVisualButton';
+00019: import {
+00020:   buildCanonicalTranscriptIndex,
+00021:   collectCanonicalConditionTranscripts,
+00022:   getCanonicalConditionBackground,
+00023:   getCanonicalConditionTextColor,
+00024:   summarizeCanonicalConditionTranscripts,
+00025:   type CanonicalConditionSummary,
+00026: } from '../../utils/canonicalConditionSummary';
+00027: 
+00028: type ModelHeader = {
+00029:   familyKey: string;
+00030:   familyLabel: string;
+00031:   modelId: string;
+00032:   variantLabel: string;
+00033: };
+00034: 
+00035: type ConditionDecisionsTableProps = {
+00036:   runId: string;
+00037:   analysisBasePath?: AnalysisBasePath;
+00038:   analysisSearchParams?: URLSearchParams | string;
+00039:   companionRunId?: string | null;
+00040:   analysisMode?: 'single' | 'paired';
+00041:   perModel: Record<string, PerModelStats>;
+00042:   transcripts?: Transcript[];
+00043:   visualizationData: VisualizationData | null | undefined;
+00044:   varianceAnalysis?: VarianceAnalysis | null;
+00045:   expectedAttributes?: string[];
+00046:   title?: string;
+00047:   description?: string | null;
+00048:   currentVignetteName?: string | null;
+00049:   companionVignetteName?: string | null;
+00050:   /**
+00051:    * When provided, the component operates in controlled mode: these model IDs
+00052:    * are used directly as the visible columns and the local "AI Columns" dropdown
+00053:    * is hidden. When omitted, the local selector remains active.
+00054:    */
+00055:   externalSelectedModels?: string[];
+00056: };
+00057: 
+00058: function inferModelFamily(modelId: string): { key: string; label: string } {
+00059:   const normalized = modelId.toLowerCase().replace(/^[^:]+:/, '');
+00060: 
+00061:   if (normalized.includes('deepseek')) {
+00062:     return { key: 'deepseek', label: 'DeepSeek' };
+00063:   }
+00064:   if (normalized.includes('claude')) {
+00065:     if (normalized.includes('sonnet')) {
+00066:       return { key: 'claude-sonnet', label: 'Sonnet' };
+00067:     }
+00068:     if (normalized.includes('haiku')) {
+00069:       return { key: 'claude-haiku', label: 'Haiku' };
+00070:     }
+00071:     if (normalized.includes('opus')) {
+00072:       return { key: 'claude-opus', label: 'Opus' };
+00073:     }
+00074:     return { key: 'claude', label: 'Claude' };
+00075:   }
+00076:   if (normalized.includes('gemini')) {
+00077:     return { key: 'gemini', label: 'Gemini' };
+00078:   }
+00079:   if (normalized.includes('grok')) {
+00080:     return { key: 'grok', label: 'Grok' };
+00081:   }
+00082:   if (normalized.includes('gpt')) {
+00083:     return { key: 'gpt', label: 'GPT' };
+00084:   }
+00085:   if (normalized.startsWith('o1') || normalized.startsWith('o3') || normalized.startsWith('o4')) {
+00086:     const familyToken = normalized.split(/[-_\s.]/, 1)[0] ?? normalized;
+00087:     return { key: familyToken, label: familyToken.toUpperCase() };
+00088:   }
+00089:   if (normalized.includes('mistral')) {
+00090:     return { key: 'mistral', label: 'Mistral' };
+00091:   }
+00092: 
+00093:   return { key: normalized || modelId, label: formatModelDisplayName(normalized || modelId) };
+00094: }
+00095: 
+00096: function formatModelDisplayName(label: string): string {
+00097:   return formatDisplayLabel(label)
+00098:     .split(/([-\s]+)/)
+00099:     .map((part) => {
+00100:       if (/^[-\s]+$/.test(part)) return part;
+00101: 
+00102:       const normalized = part.toLowerCase();
+00103:       if (normalized === 'gpt') return 'GPT';
+00104:       if (normalized === 'xai') return 'xAI';
+00105:       if (normalized === 'openai') return 'OpenAI';
+00106:       if (normalized === 'anthropic') return 'Anthropic';
+00107:       if (normalized === 'google') return 'Google';
+00108:       if (normalized === 'deepseek') return 'DeepSeek';
+00109:       if (normalized === 'mistral') return 'Mistral';
+00110:       if (normalized === 'claude') return 'Claude';
+00111:       if (normalized === 'gemini') return 'Gemini';
+00112:       if (normalized === 'grok') return 'Grok';
+00113:       if (normalized === 'chat'
+
+... [narrowed review slice: middle omitted] ...
+
+<th
+00582:                     key={header.modelId}
+00583:                     className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700 whitespace-pre-line break-words leading-4"
+00584:                     title={header.modelId}
+00585:                   >
+00586:                     {header.variantLabel}
+00587:                   </th>
+00588:                 ))}
+00589:               </tr>
+00590:             )}
+00591:           </thead>
+00592:           <tbody>
+00593:             {sortedConditionRows.map((row) => (
+00594:               <tr key={row.id}>
+00595:                 <td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">
+00596:                   {formatDisplayLabel(row.attributeALevel)}
+00597:                 </td>
+00598:                 <td className="w-36 border border-gray-200 px-3 py-2 text-sm text-gray-700 align-top">
+00599:                   <div className="flex flex-wrap items-start gap-2">
+00600:                     <span className="max-w-[8rem] whitespace-normal break-words leading-5">
+00601:                       {formatDisplayLabel(row.attributeBLevel)}
+00602:                     </span>
+00603:                     {canSplitOrientations && inspectionMode === 'split' && (
+00604:                       <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800">
+00605:                         {row.orientationBucket === 'canonical'
+00606:                           ? splitSourceLabels?.current
+00607:                           : splitSourceLabels?.companion}
+00608:                       </span>
+00609:                     )}
+00610:                   </div>
+00611:                 </td>
+00612:                 {visibleModels.map((modelId) => {
+00613:                   const stats = canonicalCellSummaries.get(row.id)?.get(modelId)
+00614:                     ?? summarizeCanonicalConditionTranscripts([]);
+00615:                   const hasResolvedCanonicalEvidence = stats.totalTrials > 0;
+00616:                   const isOtherCell = !hasResolvedCanonicalEvidence;
+00617:                   const splitSourceLabel = row.orientationBucket === 'canonical'
+00618:                     ? splitSourceLabels?.current
+00619:                     : splitSourceLabels?.companion;
+00620:                   const title = `View transcripts for ${modelId} | ${formatDisplayLabel(attributeA)}: ${formatDisplayLabel(row.attributeALevel)}, ${formatDisplayLabel(attributeB)}: ${formatDisplayLabel(row.attributeBLevel)}${canSplitOrientations && inspectionMode === 'split' ? ` | ${splitSourceLabel}` : ''}${isOtherCell ? ' | Decision: other' : ''}${stats.unknownCount > 0 ? ` | Unknown: ${stats.unknownCount}` : ''}`;
+00621: 
+00622:                   return (
+00623:                     <td
+00624:                       key={`${row.id}-${modelId}`}
+00625:                       className="border border-gray-200 px-3 py-2 text-center text-sm transition-colors"
+00626:                       style={{ backgroundColor: hasResolvedCanonicalEvidence ? getCanonicalConditionBackground(stats.winnerScore ?? 0, stats.isOpponent) : undefined }}
+00627:                     >
+00628:                       <Button
+00629:                         type="button"
+00630:                         variant="ghost"
+00631:                         size="sm"
+00632:                         className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
+00633:                         title={title}
+00634:                         onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionStrength: 'unknown' } : undefined)}
+00635:                       >
+00636:                         {hasResolvedCanonicalEvidence ? (
+00637:                           <span className={`inline-flex flex-col items-center ${getCanonicalConditionTextColor(stats.isOpponent)}`}>
+00638:                             <span className="font-semibold">
+00639:                               {stats.winnerScore == null ? '—' : stats.winnerScore.toFixed(1)}
+00640:                             </span>
+00641:                           </span>
+00642:                         ) : (
+00643:                           <span className="text-gray-500">—</span>
+00644:                         )}
+00645:                       </Button>
+00646:                     </td>
+00647:                   );
+00648:                 })}
+00649:               </tr>
+00650:             ))}
+00651:           </tbody>
+00652:         </table>
+00653:         {visibleModels.length === 0 && (
+00654:           <div className="mt-2 text-xs text-amber-700">Select at least one AI column to display data.</div>
+00655:         )}
+00656:         <div className="mt-2 text-xs text-gray-500">
+00657:           Unknown canonical trials are excluded from condition scores.
+00658:         </div>
+00659:       </d

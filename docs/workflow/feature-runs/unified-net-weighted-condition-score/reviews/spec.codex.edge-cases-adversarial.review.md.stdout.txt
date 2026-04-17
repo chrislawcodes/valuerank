@@ -1,0 +1,9 @@
+## Findings
+1. **Medium [UNVERIFIED]** The spec uses a `1e-9` neutral threshold but still formats visible labels to one decimal place. That means legitimate scores in roughly `(-0.05, 0.05)` can render as `0.0` while still being colored blue/orange, so a cell can look tie-like in text but directional in color. The spec should either align the neutrality cutoff with display rounding or explicitly accept that mismatch.
+
+2. **Low [UNVERIFIED]** US3 says future accessibility-label changes should be editable in one place, but FR-005 does not expose any accessibility text or aria-label field from the shared helper. If score cells later need screen-reader copy, each view will still need its own string logic, so the “single-source” guarantee is incomplete.
+
+## Residual Risks
+- The spec intentionally leaves the host-locale `localeCompare` side-selection behavior unchanged, so the same raw data can still flip blue/orange across browser locales.
+- `validateMatrixCondition` still reports only the first invalid row, so malformed matrices remain a fix-reload-repeat workflow.
+- Zero-trial cells and missing-condition cells can still end up with different placeholders unless the implementation normalizes them.

@@ -1,0 +1,7 @@
+## Findings
+- [MEDIUM] [UNVERIFIED] `ConditionDecisionsTable.tsx` and `PivotAnalysisTable.tsx` now render `display.label` for resolved cells, but that label is derived from the helper’s rounded net score. If the helper treats near-zero values as `direction === 'neutral'`, a gray tie cell can still show a nonzero number like `0.1` at the rounding boundary. That makes the color and the number disagree, which is misleading for users reading the table as a decision summary.
+- [MEDIUM] [UNVERIFIED] The pivot legend logic in `PivotAnalysisTable.tsx` changed from counting only fully neutral mixes to counting anything the helper reports as `direction === 'neutral'`. That broadens the neutral bucket to include near-zero net scores, so the “neutral” total no longer means the same thing as before and can shift cells out of low/high without any visible transcript change.
+
+## Residual Risks
+- I did not verify whether the helper’s neutral threshold and one-decimal display are intended across the rest of the analysis UI.
+- This review is limited to the diff shown here, so any matching helper changes outside the artifact could change the impact of these findings.

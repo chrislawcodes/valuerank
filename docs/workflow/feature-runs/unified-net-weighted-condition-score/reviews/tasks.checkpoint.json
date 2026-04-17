@@ -1,0 +1,45 @@
+{
+  "feature_slug": "unified-net-weighted-condition-score",
+  "stage": "tasks",
+  "artifact_path": "docs/workflow/feature-runs/unified-net-weighted-condition-score/tasks.md",
+  "git_base_ref": "",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "execution-adversarial",
+      "stage": "tasks",
+      "path": "docs/workflow/feature-runs/unified-net-weighted-condition-score/reviews/tasks.codex.execution-adversarial.review.md",
+      "context_paths": [
+        "docs/workflow/feature-runs/unified-net-weighted-condition-score/plan.md",
+        "docs/workflow/feature-runs/unified-net-weighted-condition-score/spec.md"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "dependency-order-adversarial",
+      "stage": "tasks",
+      "path": "docs/workflow/feature-runs/unified-net-weighted-condition-score/reviews/tasks.codex.dependency-order-adversarial.review.md",
+      "context_paths": [
+        "docs/workflow/feature-runs/unified-net-weighted-condition-score/plan.md",
+        "docs/workflow/feature-runs/unified-net-weighted-condition-score/spec.md"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "coverage-adversarial",
+      "stage": "tasks",
+      "path": "docs/workflow/feature-runs/unified-net-weighted-condition-score/reviews/tasks.gemini.coverage-adversarial.review.md",
+      "context_paths": [
+        "docs/workflow/feature-runs/unified-net-weighted-condition-score/plan.md",
+        "docs/workflow/feature-runs/unified-net-weighted-condition-score/spec.md"
+      ],
+      "model": "gemini-2.5-pro"
+    }
+  ],
+  "max_artifact_chars": 60000,
+  "max_context_chars": 120000,
+  "max_total_chars": 200000
+}

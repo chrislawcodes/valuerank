@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx",
+  "source_artifact_sha256": "1e9d3251d687d73f1578dfcc8e510769cd0f48cb0c316eee66eb36b58e2199d6",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/unified-net-weighted-condition-score/reviews/spec.codex.feasibility-adversarial.review.context9.narrowed.txt",
+  "narrowed_artifact_sha256": "c924dfdfb4d67e1c41d9f7e03df27d612c7215323b41f7a43351bd78325f4780",
+  "strategy": "head-tail-numbered-lines"
+}

@@ -1,0 +1,131 @@
+diff --git a/cloud/apps/web/src/components/domains/ConditionMatrix.tsx b/cloud/apps/web/src/components/domains/ConditionMatrix.tsx
+index cabab20e..3dc6291b 100644
+--- a/cloud/apps/web/src/components/domains/ConditionMatrix.tsx
++++ b/cloud/apps/web/src/components/domains/ConditionMatrix.tsx
+@@ -1,4 +1,8 @@
+ import { compareConditionLevels } from '../../utils/conditionOrdering';
++import {
++  summarizeCanonicalConditionCounts,
++  getConditionCellDisplay,
++} from '../../utils/canonicalConditionSummary';
+ 
+ export type MatrixCondition = {
+   scenarioId: string | null;
+@@ -15,20 +19,8 @@ export type MatrixCondition = {
+   opponentStrongly: number;
+ };
+ 
+-function getPreferenceBackground(score: number, isOpponent: boolean): string {
+-  const opacity = Math.min(1, Math.max(0, score / 2));
+-  if (isOpponent) {
+-    return `rgba(251, 146, 60, ${opacity * 0.5})`; // orange-400
+-  }
+-  return `rgba(59, 130, 246, ${opacity * 0.5})`; // blue-500
+-}
+-
+-function getPreferenceTextColor(isOpponent: boolean): string {
+-  return isOpponent ? 'text-orange-700' : 'text-blue-700';
+-}
+-
+ function isValidCount(value: number): boolean {
+-  return Number.isFinite(value) && Number.isInteger(value) && value >= 0;
++  return Number.isFinite(value) && value >= 0;
+ }
+ 
+ function validateMatrixCondition(condition: MatrixCondition): string | null {
+@@ -50,36 +42,25 @@ function validateMatrixCondition(condition: MatrixCondition): string | null {
+     }
+   }
+ 
++  const TOLERANCE = 1e-6;
++
+   const expectedTotal = condition.prioritized + condition.deprioritized + condition.neutral;
+-  if (condition.totalTrials !== expectedTotal) {
++  if (Math.abs(condition.totalTrials - expectedTotal) >= TOLERANCE) {
+     return `ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" reports totalTrials=${condition.totalTrials} and counts sum to ${expectedTotal}.`;
+   }
+ 
+-  return null;
+-}
++  // Cross-field consistency: canonical-bucket pairs must match the summary counts.
++  const selfSum = condition.strongly + condition.somewhat;
++  if (Math.abs(selfSum - condition.prioritized) >= TOLERANCE) {
++    return `ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" has strongly+somewhat=${selfSum} which does not match prioritized=${condition.prioritized}.`;
++  }
+ 
+-function getConditionMatrixDisplay(condition: MatrixCondition): {
+-  label: '0' | '1' | '2';
+-  isOpponent: boolean;
+-  backgroundColor: string | undefined;
+-  textColorClass: string;
+-} {
+-  const isOpponent = condition.deprioritized > condition.prioritized;
+-  const winnerStrongly = isOpponent ? condition.opponentStrongly : condition.strongly;
+-  const winnerSomewhat = isOpponent ? condition.opponentSomewhat : condition.somewhat;
+-  const winnerScore = condition.totalTrials === 0
+-    ? 0
+-    : (2 * winnerStrongly + 1 * winnerSomewhat) / condition.totalTrials;
+-
+-  // Round to nearest integer for the cell label: 0 (neutral), 1 (somewhat), 2 (strongly)
+-  const strengthLabel = String(Math.round(winnerScore)) as '0' | '1' | '2';
+-
+-  return {
+-    label: strengthLabel,
+-    isOpponent,
+-    backgroundColor: getPreferenceBackground(winnerScore, isOpponent),
+-    textColorClass: getPreferenceTextColor(isOpponent),
+-  };
++  const opponentSum = condition.opponentStrongly + condition.opponentSomewhat;
++  if (Math.abs(opponentSum - condition.deprioritized) >= TOLERANCE) {
++    return `ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" has opponentStrongly+opponentSomewhat=${opponentSum} which does not match deprioritized=${condition.deprioritized}.`;
++  }
++
++  return null;
+ }
+ 
+ type ConditionMatrixProps = {
+@@ -168,12 +149,21 @@ export function ConditionMatrix({ vignetteId, conditions, selectedConditionKey,
+               </td>
+               {cols.map((col) => {
+                 const condition = cellByKey.get(`${row}::${col}`);
+-                const hasData = condition !== undefined && condition.totalTrials > 0;
+                 const conditionKey = condition
+                   ? `${vignetteId}:${condition.scenarioId ?? '__unknown__'}`
+                   : '';
+                 const isSelected = condition != null && selectedConditionKey === conditionKey;
+-                const display = condition ? getConditionMatrixDisplay(condition) : null;
++                let display: ReturnType<typeof getConditionCellDisplay> | null = null;
++                if (condition) {
++                  const summary = summarizeCanonicalConditionCounts({
++                    strongly: condition.strongly,
++                    somewhat: condition.somewhat,
++                    neutral: condition.neutral,
++                    opponentSomewhat: condition.opponentSomewhat,
++                    opponentStrongly: condition.opponentStrongly,
++                  });
++                  display = getConditionCellDisplay(summary);
++                }
+ 
+                 return (
+                   <td
+@@ -181,16 +171,16 @@ export function ConditionMatrix({ vignetteId, conditions, selectedConditionKey,
+                     className={`border border-gray-100 p-3 text-center text-sm transition-colors ${
+                       condition ? 'cursor-pointer hover:ring-1 hover:ring-sky-300' : ''
+                     } ${isSelected ? 'ring-1 ring-sky-400' : ''}`}
+-                    style={{ backgroundColor: hasData ? display?.backgroundColor : undefined }}
++                    style={{ backgroundColor: display?.backgroundColor }}
+                     onClick={() => {
+                       if (!condition) return;
+                       onSelect(vignetteId, condition.conditionName, condition.scenarioId);
+                     }}
+                     title={condition?.conditionName ?? 'No condition'}
+                   >
+-                    {hasData ? (
+-                      <span className={`font-semibold ${display?.textColorClass ?? 'text-gray-400'}`}>
+-                        {display?.label ?? '-'}
++                    {display ? (
++                      <span className={`font-semibold ${display.textColorClass}`}>
++                        {display.label}
+                       </span>
+                     ) : (
+                       <span className="text-gray-400">-</span>

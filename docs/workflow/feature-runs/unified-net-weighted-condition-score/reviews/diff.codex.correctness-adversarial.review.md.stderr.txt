@@ -1,0 +1,1789 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019d98fe-6414-73c0-b1e9-126e5d551212
+--------
+user
+Review this diff artifact using a correctness-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx b/cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx
+index ce9821e7..ad1d977b 100644
+--- a/cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx
++++ b/cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx
+@@ -19,8 +19,7 @@ import { CopyVisualButton } from '../ui/CopyVisualButton';
+ import {
+   buildCanonicalTranscriptIndex,
+   collectCanonicalConditionTranscripts,
+-  getCanonicalConditionBackground,
+-  getCanonicalConditionTextColor,
++  getConditionCellDisplay,
+   summarizeCanonicalConditionTranscripts,
+   type CanonicalConditionSummary,
+ } from '../../utils/canonicalConditionSummary';
+@@ -613,6 +612,7 @@ export function ConditionDecisionsTable({
+                   const stats = canonicalCellSummaries.get(row.id)?.get(modelId)
+                     ?? summarizeCanonicalConditionTranscripts([]);
+                   const hasResolvedCanonicalEvidence = stats.totalTrials > 0;
++                  const display = getConditionCellDisplay(stats);
+                   const isOtherCell = !hasResolvedCanonicalEvidence;
+                   const splitSourceLabel = row.orientationBucket === 'canonical'
+                     ? splitSourceLabels?.current
+@@ -623,7 +623,7 @@ export function ConditionDecisionsTable({
+                     <td
+                       key={`${row.id}-${modelId}`}
+                       className="border border-gray-200 px-3 py-2 text-center text-sm transition-colors"
+-                      style={{ backgroundColor: hasResolvedCanonicalEvidence ? getCanonicalConditionBackground(stats.winnerScore ?? 0, stats.isOpponent) : undefined }}
++                      style={{ backgroundColor: hasResolvedCanonicalEvidence ? display.backgroundColor : undefined }}
+                     >
+                       <Button
+                         type="button"
+@@ -634,10 +634,8 @@ export function ConditionDecisionsTable({
+                         onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionStrength: 'unknown' } : undefined)}
+                       >
+                         {hasResolvedCanonicalEvidence ? (
+-                          <span className={`inline-flex flex-col items-center ${getCanonicalConditionTextColor(stats.isOpponent)}`}>
+-                            <span className="font-semibold">
+-                              {stats.winnerScore == null ? '—' : stats.winnerScore.toFixed(1)}
+-                            </span>
++                          <span className={`inline-flex flex-col items-center ${display.textColorClass}`}>
++                            <span className="font-semibold">{display.label}</span>
+                           </span>
+                         ) : (
+                           <span className="text-gray-500">—</span>
+diff --git a/cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx b/cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx
+index 87791eac..7b7ae662 100644
+--- a/cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx
++++ b/cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx
+@@ -19,9 +19,8 @@ import {
+ import {
+     buildCanonicalTranscriptIndex,
+     collectCanonicalConditionTranscripts,
++    getConditionCellDisplay,
+     summarizeCanonicalConditionTranscripts,
+-    getCanonicalConditionBackground,
+-    getCanonicalConditionTextColor,
+     type CanonicalConditionSummary,
+ } from '../../utils/canonicalConditionSummary';
+ import { compareConditionLevels } from '../../utils/conditionOrdering';
+@@ -222,14 +221,14 @@ export function PivotAnalysisTable({
+         for (const scenarioId of Object.keys(scenarioDimensions)) {
+             const cellTranscripts = collectCanonicalConditionTranscripts(transcriptIndex, selectedModel, [scenarioId]);
+             const summary = summarizeCanonicalConditionTranscripts(cellTranscripts);
+-            if (summary.totalTrials === 0) continue;
++            if (!summary.hasData) continue;
+ 
+-            if (summary.isOpponent) {
++            if (summary.direction === 'opponent') {
+                 high += 1;
+-            } else if (summary.neutral > 0 && summary.strongly === 0 && summary.somewhat === 0) {
+-                neutral += 1;
+-            } else {
++            } else if (summary.direction === 'self') {
+                 low += 1;
++            } else {
++                neutral += 1;
+             }
+         }
+ 
+@@ -293,7 +292,7 @@ export function PivotAnalysisTable({
+             {showDetails && (
+                 <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                     <p className="text-sm text-gray-600">
+-                        Pick the two condition axes you want to compare. Each box in the table shows the model&apos;s average preference score (0–2) for that pair of condition levels.
++                        Pick the two condition axes you want to compare. Each box shows a net-weighted preference score from 0.0 to 2.0. Color indicates which side the model preferred: blue for the first value, orange for the opposing value. Gray boxes mean the model&apos;s preferences canceled out (a tie). Empty boxes mean no data.
+                     </p>
+                     <div className="flex flex-wrap gap-4">
+                         <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
+@@ -371,23 +370,20 @@ export function PivotAnalysisTable({
+                                     </td>
+                                     {pivotData.cols.map(col => {
+                                         const summary = pivotData.grid[row]?.[col];
+-                                        const hasScore = summary != null && summary.winnerScore != null && summary.totalTrials > 0;
++                                        const hasSummary = summary != null && summary.totalTrials > 0;
++                                        const display = summary != null ? getConditionCellDisplay(summary) : null;
+ 
+                                         return (
+                                             <td
+                                                 key={`${row}-${col}`}
+                                                 className="p-4 border border-gray-100 text-center text-sm transition-colors cursor-pointer hover:ring-1 hover:ring-teal-300"
+                                                 style={{
+-                                                    backgroundColor: hasScore && summary != null
+-                                                        ? getCanonicalConditionBackground(summary.winnerScore ?? 0, summary.isOpponent)
+-                                                        : undefined,
++                                                    backgroundColor: hasSummary && display ? display.backgroundColor : undefined,
+                                                 }}
+                                                 onClick={() => handleCellClick(row, col)}
+                                             >
+-                                                {hasScore && summary != null ? (
+-                                                    <span className={`font-semibold ${getCanonicalConditionTextColor(summary.isOpponent)}`}>
+-                                                        {summary.winnerScore == null ? '—' : summary.winnerScore.toFixed(1)}
+-                                                    </span>
++                                                {hasSummary && display ? (
++                                                    <span className={`font-semibold ${display.textColorClass}`}>{display.label}</span>
+                                                 ) : <span className="text-gray-500">—</span>}
+                                             </td>
+                                         );
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the surrounding utility and component logic so I can separate actual regressions from changes that just look different in the patch.
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/web/src/utils/canonicalConditionSummary.ts" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+import type { Transcript } from '../api/operations/runs';
+
+export type CanonicalConditionSummary = {
+  strongly: number;
+  somewhat: number;
+  neutral: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+  unknownCount: number;
+  totalTrials: number;
+  netScore: number | null;
+  direction: 'self' | 'opponent' | 'neutral';
+  hasData: boolean;
+};
+
+export type CanonicalConditionCounts = {
+  strongly: number;
+  somewhat: number;
+  neutral: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+};
+
+export type CanonicalTranscriptIndex = Map<string, Map<string, Transcript[]>>;
+
+type CanonicalBucket = 'strongly' | 'somewhat' | 'neutral' | 'opponentSomewhat' | 'opponentStrongly';
+type CanonicalConditionTally = CanonicalConditionCounts & { unknownCount: number };
+
+function getCanonicalBucket(transcript: Transcript): CanonicalBucket | null {
+  const canonical = transcript.decisionModelV2?.canonical;
+  if (!canonical) {
+    return null;
+  }
+
+  if (canonical.strength === 'neutral') {
+    return 'neutral';
+  }
+
+  const { favoredValueKey, opposedValueKey, strength } = canonical;
+  if (favoredValueKey == null || opposedValueKey == null) {
+    return null;
+  }
+
+  // Alphabetically-first value is the canonical "first" (blue) side; second is
+  // the "opponent" (orange) side.  This is stable across both runs in a paired
+  // batch, unlike canonical.direction which is position-based (valueA/valueB)
+  // and flips between companion runs.
+  const isFirst = favoredValueKey.localeCompare(opposedValueKey) < 0;
+
+  if (isFirst && strength === 'strong') return 'strongly';
+  if (isFirst && strength === 'lean') return 'somewhat';
+  if (!isFirst && strength === 'lean') return 'opponentSomewhat';
+  if (!isFirst && strength === 'strong') return 'opponentStrongly';
+
+  return null;
+}
+
+export function buildCanonicalTranscriptIndex(transcripts: Transcript[] | null | undefined): CanonicalTranscriptIndex {
+  const index = new Map<string, Map<string, Transcript[]>>();
+
+  for (const transcript of transcripts ?? []) {
+    if (!transcript.scenarioId) {
+      continue;
+    }
+
+    const modelId = transcript.modelId;
+    const scenarioId = String(transcript.scenarioId);
+    const byScenario = index.get(modelId) ?? new Map<string, Transcript[]>();
+    const current = byScenario.get(scenarioId);
+    if (current) {
+      current.push(transcript);
+    } else {
+      byScenario.set(scenarioId, [transcript]);
+    }
+    index.set(modelId, byScenario);
+  }
+
+  return index;
+}
+
+export function collectCanonicalConditionTranscripts(
+  transcriptIndex: CanonicalTranscriptIndex,
+  modelId: string,
+  scenarioIds: string[],
+): Transcript[] {
+  const byScenario = transcriptIndex.get(modelId);
+  if (!byScenario) {
+    return [];
+  }
+
+  const collected: Transcript[] = [];
+  scenarioIds.forEach((scenarioId) => {
+    collected.push(...(byScenario.get(scenarioId) ?? []));
+  });
+  return collected;
+}
+
+export function summarizeCanonicalConditionTranscripts(
+  transcripts: Transcript[] | null | undefined,
+): CanonicalConditionSummary {
+  const counts: CanonicalConditionTally = {
+    strongly: 0,
+    somewhat: 0,
+    neutral: 0,
+    opponentSomewhat: 0,
+    opponentStrongly: 0,
+    unknownCount: 0,
+  };
+
+  for (const transcript of transcripts ?? []) {
+    const bucket = getCanonicalBucket(transcript);
+    if (!bucket) {
+      counts.unknownCount += 1;
+      continue;
+    }
+
+    counts[bucket] += 1;
+  }
+
+  return summarizeCanonicalConditionTally(counts);
+}
+
+export function summarizeCanonicalConditionCounts(
+  counts: CanonicalConditionCounts,
+): CanonicalConditionSummary {
+  return summarizeCanonicalConditionTally({
+    strongly: coerceNonNegativeFiniteCount(counts.strongly),
+    somewhat: coerceNonNegativeFiniteCount(counts.somewhat),
+    neutral: coerceNonNegativeFiniteCount(counts.neutral),
+    opponentSomewhat: coerceNonNegativeFiniteCount(counts.opponentSomewhat),
+    opponentStrongly: coerceNonNegativeFiniteCount(counts.opponentStrongly),
+    unknownCount: 0,
+  });
+}
+
+function coerceNonNegativeFiniteCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function summarizeCanonicalConditionTally(counts: CanonicalConditionTally): CanonicalConditionSummary {
+  const totalTrials =
+    counts.strongly
+    + counts.somewhat
+    + counts.neutral
+    + counts.opponentSomewhat
+    + counts.opponentStrongly;
+
+  if (totalTrials === 0) {
+    return {
+      ...counts,
+      totalTrials,
+      netScore: null,
+      direction: 'neutral',
+      hasData: false,
+    };
+  }
+
+  const netScore = (
+    (2 * counts.strongly + counts.somewhat)
+    - (2 * counts.opponentStrongly + counts.opponentSomewhat)
+  ) / totalTrials;
+
+  let direction: CanonicalConditionSummary['direction'] = 'neutral';
+  if (netScore > 0.05) {
+    direction = 'self';
+  } else if (netScore < -0.05) {
+    direction = 'opponent';
+  }
+
+  return {
+    ...counts,
+    totalTrials,
+    netScore,
+    direction,
+    hasData: true,
+  };
+}
+
+export type ConditionCellDisplay = {
+  netScore: number | null;
+  direction: 'self' | 'opponent' | 'neutral';
+  hasData: boolean;
+  label: string;
+  backgroundColor: string | undefined;
+  textColorClass: string;
+};
+
+export function getConditionCellDisplay(summary: CanonicalConditionSummary): ConditionCellDisplay {
+  if (!summary.hasData) {
+    return {
+      netScore: null,
+      direction: summary.direction,
+      hasData: false,
+      label: '—',
+      backgroundColor: undefined,
+      textColorClass: 'text-gray-500',
+    };
+  }
+
+  const netScore = summary.netScore ?? 0;
+  const label = Math.abs(netScore).toFixed(1);
+
+  if (summary.direction === 'neutral') {
+    return {
+      netScore: summary.netScore,
+      direction: 'neutral',
+      hasData: true,
+      label,
+      backgroundColor: undefined,
+      textColorClass: 'text-gray-500',
+    };
+  }
+
+  const isOpponent = summary.direction === 'opponent';
+  return {
+    netScore: summary.netScore,
+    direction: summary.direction,
+    hasData: true,
+    label,
+    backgroundColor: getCanonicalConditionBackground(Math.abs(netScore), isOpponent),
+    textColorClass: getCanonicalConditionTextColor(isOpponent),
+  };
+}
+
+export function getCanonicalConditionBackground(score: number, isOpponent: boolean): string {
+  // score is a magnitude in the 0–2 range. Opacity scales linearly from 0 (no conviction) to 1 (max conviction).
+  const clamped = Math.min(2, Math.max(0, score));
+  const opacity = clamped / 2;
+  if (isOpponent) {
+    return `rgba(251, 146, 60, ${opacity * 0.5})`;
+  }
+  return `rgba(59, 130, 246, ${opacity * 0.5})`;
+}
+
+export function getCanonicalConditionTextColor(isOpponent: boolean): string {
+  return isOpponent ? 'text-orange-700' : 'text-blue-700';
+}
+
+exec
+/bin/zsh -lc "sed -n '560,700p' cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx && printf '\\n---\\n' && sed -n '200,430p' cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+                          <th
+                            key={header.modelId}
+                            className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700 whitespace-pre-line break-words leading-4"
+                            title={header.modelId}
+                          >
+                            {header.variantLabel}
+                          </th>
+                        ))
+                  )}
+                </tr>
+              </>
+            ) : (
+              <tr>
+                <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">
+                  {formatDisplayLabel(attributeA)}
+                </th>
+                <th className="w-36 border border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600 whitespace-normal break-words">
+                  {formatDisplayLabel(attributeB)}
+                </th>
+                {modelHeaders.map((header) => (
+                  <th
+                    key={header.modelId}
+                    className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700 whitespace-pre-line break-words leading-4"
+                    title={header.modelId}
+                  >
+                    {header.variantLabel}
+                  </th>
+                ))}
+              </tr>
+            )}
+          </thead>
+          <tbody>
+            {sortedConditionRows.map((row) => (
+              <tr key={row.id}>
+                <td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">
+                  {formatDisplayLabel(row.attributeALevel)}
+                </td>
+                <td className="w-36 border border-gray-200 px-3 py-2 text-sm text-gray-700 align-top">
+                  <div className="flex flex-wrap items-start gap-2">
+                    <span className="max-w-[8rem] whitespace-normal break-words leading-5">
+                      {formatDisplayLabel(row.attributeBLevel)}
+                    </span>
+                    {canSplitOrientations && inspectionMode === 'split' && (
+                      <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800">
+                        {row.orientationBucket === 'canonical'
+                          ? splitSourceLabels?.current
+                          : splitSourceLabels?.companion}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                {visibleModels.map((modelId) => {
+                  const stats = canonicalCellSummaries.get(row.id)?.get(modelId)
+                    ?? summarizeCanonicalConditionTranscripts([]);
+                  const hasResolvedCanonicalEvidence = stats.totalTrials > 0;
+                  const display = getConditionCellDisplay(stats);
+                  const isOtherCell = !hasResolvedCanonicalEvidence;
+                  const splitSourceLabel = row.orientationBucket === 'canonical'
+                    ? splitSourceLabels?.current
+                    : splitSourceLabels?.companion;
+                  const title = `View transcripts for ${modelId} | ${formatDisplayLabel(attributeA)}: ${formatDisplayLabel(row.attributeALevel)}, ${formatDisplayLabel(attributeB)}: ${formatDisplayLabel(row.attributeBLevel)}${canSplitOrientations && inspectionMode === 'split' ? ` | ${splitSourceLabel}` : ''}${isOtherCell ? ' | Decision: other' : ''}${stats.unknownCount > 0 ? ` | Unknown: ${stats.unknownCount}` : ''}`;
+
+                  return (
+                    <td
+                      key={`${row.id}-${modelId}`}
+                      className="border border-gray-200 px-3 py-2 text-center text-sm transition-colors"
+                      style={{ backgroundColor: hasResolvedCanonicalEvidence ? display.backgroundColor : undefined }}
+                    >
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
+                        title={title}
+                        onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionStrength: 'unknown' } : undefined)}
+                      >
+                        {hasResolvedCanonicalEvidence ? (
+                          <span className={`inline-flex flex-col items-center ${display.textColorClass}`}>
+                            <span className="font-semibold">{display.label}</span>
+                          </span>
+                        ) : (
+                          <span className="text-gray-500">—</span>
+                        )}
+                      </Button>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {visibleModels.length === 0 && (
+          <div className="mt-2 text-xs text-amber-700">Select at least one AI column to display data.</div>
+        )}
+        <div className="mt-2 text-xs text-gray-500">
+          Unknown canonical trials are excluded from condition scores.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+---
+                rowGrid[cVal] = summarizeCanonicalConditionTranscripts(cellTranscripts);
+            });
+        });
+
+        return {
+            grid,
+            rows: Array.from(rowValues).sort(compareConditionLevels),
+            cols: Array.from(colValues).sort(compareConditionLevels),
+        };
+
+    }, [scenarioDimensions, modelScenarioMatrix, rowDim, colDim, selectedModel, transcriptIndex]);
+
+    const legendCounts = useMemo<LegendCounts>(() => {
+        if (!scenarioDimensions || !selectedModel) {
+            return { low: 0, neutral: 0, high: 0 };
+        }
+
+        let low = 0;
+        let neutral = 0;
+        let high = 0;
+
+        for (const scenarioId of Object.keys(scenarioDimensions)) {
+            const cellTranscripts = collectCanonicalConditionTranscripts(transcriptIndex, selectedModel, [scenarioId]);
+            const summary = summarizeCanonicalConditionTranscripts(cellTranscripts);
+            if (!summary.hasData) continue;
+
+            if (summary.direction === 'opponent') {
+                high += 1;
+            } else if (summary.direction === 'self') {
+                low += 1;
+            } else {
+                neutral += 1;
+            }
+        }
+
+        return { low, neutral, high };
+    }, [scenarioDimensions, selectedModel, transcriptIndex]);
+
+    const handleCellClick = (row: string, col: string) => {
+        const params = new URLSearchParams({
+            rowDim,
+            colDim,
+            modelId: selectedModel || '',
+        });
+        if (companionRunId != null && companionRunId !== '') {
+            params.set('companionRunId', companionRunId);
+        }
+        navigate(
+            buildAnalysisConditionDetailPath(
+                analysisBasePath,
+                runId,
+                buildConditionKey(row, col),
+                params,
+                analysisSearchParams,
+            )
+        );
+    };
+
+    if (!scenarioDimensions || availableDimensions.length === 0) {
+        return <div className="p-4 text-gray-500 italic">No dimension data available for pivot analysis.</div>;
+    }
+
+    if (models.length === 0) {
+        return <div className="p-4 text-gray-500 italic">No models available for analysis.</div>;
+    }
+
+    return (
+        <div ref={tableRef} className="space-y-4 bg-white p-4 rounded-lg border border-gray-200">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-4">
+                <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-900">Pivot Analysis</h3>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowDetails((current) => !current)}
+                        className="min-h-0 px-2 py-1 text-xs"
+                        aria-expanded={showDetails}
+                    >
+                        {showDetails ? 'Hide Details' : 'Details'}
+                    </Button>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                    <Legend
+                        lowName={sideAttributeMap.lowAttribute}
+                        highName={sideAttributeMap.highAttribute}
+                        counts={legendCounts}
+                    />
+                    <CopyVisualButton targetRef={tableRef} label="pivot analysis table" />
+                </div>
+            </div>
+            {showDetails && (
+                <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                    <p className="text-sm text-gray-600">
+                        Pick the two condition axes you want to compare. Each box shows a net-weighted preference score from 0.0 to 2.0. Color indicates which side the model preferred: blue for the first value, orange for the opposing value. Gray boxes mean the model&apos;s preferences canceled out (a tie). Empty boxes mean no data.
+                    </p>
+                    <div className="flex flex-wrap gap-4">
+                        <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
+                            <span>Row</span>
+                            <select
+                                aria-label="Row Dimension (Y-Axis)"
+                                value={rowDim}
+                                onChange={e => setRowDim(e.target.value)}
+                                className="block w-48 rounded-md border-gray-300 bg-white text-sm font-normal normal-case text-gray-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            >
+                                {availableDimensions.map(d => <option key={d} value={d}>{formatDisplayLabel(d)}</option>)}
+                            </select>
+                        </label>
+
+                        <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
+                            <span>Column</span>
+                            <select
+                                aria-label="Column Dimension (X-Axis)"
+                                value={colDim}
+                                onChange={e => setColDim(e.target.value)}
+                                className="block w-48 rounded-md border-gray-300 bg-white text-sm font-normal normal-case text-gray-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            >
+                                {availableDimensions.map(d => <option key={d} value={d}>{formatDisplayLabel(d)}</option>)}
+                            </select>
+                        </label>
+                    </div>
+                </div>
+            )}
+            <div className="flex flex-wrap items-end gap-4">
+                <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
+                    <span>Model</span>
+                    <select
+                        aria-label="Model"
+                        value={selectedModel}
+                        onChange={e => setSelectedModel(e.target.value)}
+                        className="block w-48 rounded-md border-gray-300 bg-white text-sm font-normal normal-case text-gray-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                    >
+                        {models.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                </label>
+            </div>
+            {/* Grid */}
+            {pivotData && (
+                <div className="space-y-2">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200 border-collapse">
+                            <thead>
+                            {/* Row 1: Empty + Column Dimension Label */}
+                            <tr>
+                                <th className="p-2 bg-gray-50 border border-gray-200 border-b-0"></th>
+                                <th
+                                    colSpan={pivotData.cols.length}
+                                    className="p-2 bg-gray-100 border border-gray-200 text-center text-xs font-bold text-gray-700 uppercase"
+                                >
+                                    {formatDisplayLabel(colDim)}
+                                </th>
+                            </tr>
+                            {/* Row 2: Row Dimension Label + Column Values */}
+                            <tr>
+                                <th className="p-3 bg-gray-100 border border-gray-200 text-left text-xs font-bold text-gray-700 uppercase w-32">
+                                    {formatDisplayLabel(rowDim)}
+                                </th>
+                                {pivotData.cols.map(col => (
+                                    <th key={col} className="p-3 bg-gray-50 border border-gray-200 text-center text-xs font-medium text-gray-500 font-mono">
+                                        {formatDisplayLabel(col)}
+                                    </th>
+                                ))}
+                            </tr>
+                            </thead>
+                            <tbody className="bg-white">
+                            {pivotData.rows.map(row => (
+                                <tr key={row}>
+                                    <td className="p-3 bg-gray-50 border border-gray-200 text-left text-xs font-medium text-gray-500 font-mono whitespace-nowrap">
+                                        {formatDisplayLabel(row)}
+                                    </td>
+                                    {pivotData.cols.map(col => {
+                                        const summary = pivotData.grid[row]?.[col];
+                                        const hasSummary = summary != null && summary.totalTrials > 0;
+                                        const display = summary != null ? getConditionCellDisplay(summary) : null;
+
+                                        return (
+                                            <td
+                                                key={`${row}-${col}`}
+                                                className="p-4 border border-gray-100 text-center text-sm transition-colors cursor-pointer hover:ring-1 hover:ring-teal-300"
+                                                style={{
+                                                    backgroundColor: hasSummary && display ? display.backgroundColor : undefined,
+                                                }}
+                                                onClick={() => handleCellClick(row, col)}
+                                            >
+                                                {hasSummary && display ? (
+                                                    <span className={`font-semibold ${display.textColorClass}`}>{display.label}</span>
+                                                ) : <span className="text-gray-500">—</span>}
+                                            </td>
+                                        );
+                                    })}
+                                </tr>
+                            ))}
+                            </tbody>
+                        </table>
+                        <div className="mt-2 text-xs text-gray-500">
+                            Click a cell to view pooled condition details.
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+exec
+/bin/zsh -lc 'rg -n "function getConditionCellDisplay|const getConditionCellDisplay|export .*getConditionCellDisplay|type CanonicalConditionSummary|summarizeCanonicalConditionTranscripts" cloud/apps/web/src/utils/canonicalConditionSummary.ts cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx' in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:3:export type CanonicalConditionSummary = {
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:98:export function summarizeCanonicalConditionTranscripts(
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:188:export function getConditionCellDisplay(summary: CanonicalConditionSummary): ConditionCellDisplay {
+cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:23:  summarizeCanonicalConditionTranscripts,
+cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:24:  type CanonicalConditionSummary,
+cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:376:        rowSummaries.set(modelId, summarizeCanonicalConditionTranscripts(cellTranscripts));
+cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:613:                    ?? summarizeCanonicalConditionTranscripts([]);
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:23:    summarizeCanonicalConditionTranscripts,
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:24:    type CanonicalConditionSummary,
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:200:                rowGrid[cVal] = summarizeCanonicalConditionTranscripts(cellTranscripts);
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:223:            const summary = summarizeCanonicalConditionTranscripts(cellTranscripts);
+
+codex
+I’ve got the utility now. I’m checking whether the new display label and direction logic line up with the old score semantics, because that’s where a subtle regression would hide.
+exec
+/bin/zsh -lc "rg -n \"winnerScore|netScore|direction: 'self'|direction: 'opponent'|hasData\" cloud/apps/web/src -g '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:11:  netScore: number | null;
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:12:  direction: 'self' | 'opponent' | 'neutral';
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:13:  hasData: boolean;
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:152:      netScore: null,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:154:      hasData: false,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:158:  const netScore = (
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:164:  if (netScore > 0.05) {
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:166:  } else if (netScore < -0.05) {
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:173:    netScore,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:175:    hasData: true,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:180:  netScore: number | null;
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:181:  direction: 'self' | 'opponent' | 'neutral';
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:182:  hasData: boolean;
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:189:  if (!summary.hasData) {
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:191:      netScore: null,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:193:      hasData: false,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:200:  const netScore = summary.netScore ?? 0;
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:201:  const label = Math.abs(netScore).toFixed(1);
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:205:      netScore: summary.netScore,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:207:      hasData: true,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:216:    netScore: summary.netScore,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:218:    hasData: true,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:220:    backgroundColor: getCanonicalConditionBackground(Math.abs(netScore), isOpponent),
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:224:            if (!summary.hasData) continue;
+
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/web/src/utils/canonicalConditionSummary.ts" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+import type { Transcript } from '../api/operations/runs';
+
+export type CanonicalConditionSummary = {
+  strongly: number;
+  somewhat: number;
+  neutral: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+  unknownCount: number;
+  totalTrials: number;
+  netScore: number | null;
+  direction: 'self' | 'opponent' | 'neutral';
+  hasData: boolean;
+};
+
+export type CanonicalConditionCounts = {
+  strongly: number;
+  somewhat: number;
+  neutral: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+};
+
+export type CanonicalTranscriptIndex = Map<string, Map<string, Transcript[]>>;
+
+type CanonicalBucket = 'strongly' | 'somewhat' | 'neutral' | 'opponentSomewhat' | 'opponentStrongly';
+type CanonicalConditionTally = CanonicalConditionCounts & { unknownCount: number };
+
+function getCanonicalBucket(transcript: Transcript): CanonicalBucket | null {
+  const canonical = transcript.decisionModelV2?.canonical;
+  if (!canonical) {
+    return null;
+  }
+
+  if (canonical.strength === 'neutral') {
+    return 'neutral';
+  }
+
+  const { favoredValueKey, opposedValueKey, strength } = canonical;
+  if (favoredValueKey == null || opposedValueKey == null) {
+    return null;
+  }
+
+  // Alphabetically-first value is the canonical "first" (blue) side; second is
+  // the "opponent" (orange) side.  This is stable across both runs in a paired
+  // batch, unlike canonical.direction which is position-based (valueA/valueB)
+  // and flips between companion runs.
+  const isFirst = favoredValueKey.localeCompare(opposedValueKey) < 0;
+
+  if (isFirst && strength === 'strong') return 'strongly';
+  if (isFirst && strength === 'lean') return 'somewhat';
+  if (!isFirst && strength === 'lean') return 'opponentSomewhat';
+  if (!isFirst && strength === 'strong') return 'opponentStrongly';
+
+  return null;
+}
+
+export function buildCanonicalTranscriptIndex(transcripts: Transcript[] | null | undefined): CanonicalTranscriptIndex {
+  const index = new Map<string, Map<string, Transcript[]>>();
+
+  for (const transcript of transcripts ?? []) {
+    if (!transcript.scenarioId) {
+      continue;
+    }
+
+    const modelId = transcript.modelId;
+    const scenarioId = String(transcript.scenarioId);
+    const byScenario = index.get(modelId) ?? new Map<string, Transcript[]>();
+    const current = byScenario.get(scenarioId);
+    if (current) {
+      current.push(transcript);
+    } else {
+      byScenario.set(scenarioId, [transcript]);
+    }
+    index.set(modelId, byScenario);
+  }
+
+  return index;
+}
+
+export function collectCanonicalConditionTranscripts(
+  transcriptIndex: CanonicalTranscriptIndex,
+  modelId: string,
+  scenarioIds: string[],
+): Transcript[] {
+  const byScenario = transcriptIndex.get(modelId);
+  if (!byScenario) {
+    return [];
+  }
+
+  const collected: Transcript[] = [];
+  scenarioIds.forEach((scenarioId) => {
+    collected.push(...(byScenario.get(scenarioId) ?? []));
+  });
+  return collected;
+}
+
+export function summarizeCanonicalConditionTranscripts(
+  transcripts: Transcript[] | null | undefined,
+): CanonicalConditionSummary {
+  const counts: CanonicalConditionTally = {
+    strongly: 0,
+    somewhat: 0,
+    neutral: 0,
+    opponentSomewhat: 0,
+    opponentStrongly: 0,
+    unknownCount: 0,
+  };
+
+  for (const transcript of transcripts ?? []) {
+    const bucket = getCanonicalBucket(transcript);
+    if (!bucket) {
+      counts.unknownCount += 1;
+      continue;
+    }
+
+    counts[bucket] += 1;
+  }
+
+  return summarizeCanonicalConditionTally(counts);
+}
+
+export function summarizeCanonicalConditionCounts(
+  counts: CanonicalConditionCounts,
+): CanonicalConditionSummary {
+  return summarizeCanonicalConditionTally({
+    strongly: coerceNonNegativeFiniteCount(counts.strongly),
+    somewhat: coerceNonNegativeFiniteCount(counts.somewhat),
+    neutral: coerceNonNegativeFiniteCount(counts.neutral),
+    opponentSomewhat: coerceNonNegativeFiniteCount(counts.opponentSomewhat),
+    opponentStrongly: coerceNonNegativeFiniteCount(counts.opponentStrongly),
+    unknownCount: 0,
+  });
+}
+
+function coerceNonNegativeFiniteCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function summarizeCanonicalConditionTally(counts: CanonicalConditionTally): CanonicalConditionSummary {
+  const totalTrials =
+    counts.strongly
+    + counts.somewhat
+    + counts.neutral
+    + counts.opponentSomewhat
+    + counts.opponentStrongly;
+
+  if (totalTrials === 0) {
+    return {
+      ...counts,
+      totalTrials,
+      netScore: null,
+      direction: 'neutral',
+      hasData: false,
+    };
+  }
+
+  const netScore = (
+    (2 * counts.strongly + counts.somewhat)
+    - (2 * counts.opponentStrongly + counts.opponentSomewhat)
+  ) / totalTrials;
+
+  let direction: CanonicalConditionSummary['direction'] = 'neutral';
+  if (netScore > 0.05) {
+    direction = 'self';
+  } else if (netScore < -0.05) {
+    direction = 'opponent';
+  }
+
+  return {
+    ...counts,
+    totalTrials,
+    netScore,
+    direction,
+    hasData: true,
+  };
+}
+
+export type ConditionCellDisplay = {
+  netScore: number | null;
+  direction: 'self' | 'opponent' | 'neutral';
+  hasData: boolean;
+  label: string;
+  backgroundColor: string | undefined;
+  textColorClass: string;
+};
+
+export function getConditionCellDisplay(summary: CanonicalConditionSummary): ConditionCellDisplay {
+  if (!summary.hasData) {
+    return {
+      netScore: null,
+      direction: summary.direction,
+      hasData: false,
+      label: '—',
+      backgroundColor: undefined,
+      textColorClass: 'text-gray-500',
+    };
+  }
+
+  const netScore = summary.netScore ?? 0;
+  const label = Math.abs(netScore).toFixed(1);
+
+  if (summary.direction === 'neutral') {
+    return {
+      netScore: summary.netScore,
+      direction: 'neutral',
+      hasData: true,
+      label,
+      backgroundColor: undefined,
+      textColorClass: 'text-gray-500',
+    };
+  }
+
+  const isOpponent = summary.direction === 'opponent';
+  return {
+    netScore: summary.netScore,
+    direction: summary.direction,
+    hasData: true,
+    label,
+    backgroundColor: getCanonicalConditionBackground(Math.abs(netScore), isOpponent),
+    textColorClass: getCanonicalConditionTextColor(isOpponent),
+  };
+}
+
+export function getCanonicalConditionBackground(score: number, isOpponent: boolean): string {
+  // score is a magnitude in the 0–2 range. Opacity scales linearly from 0 (no conviction) to 1 (max conviction).
+  const clamped = Math.min(2, Math.max(0, score));
+  const opacity = clamped / 2;
+  if (isOpponent) {
+    return `rgba(251, 146, 60, ${opacity * 0.5})`;
+  }
+  return `rgba(59, 130, 246, ${opacity * 0.5})`;
+}
+
+export function getCanonicalConditionTextColor(isOpponent: boolean): string {
+  return isOpponent ? 'text-orange-700' : 'text-blue-700';
+}
+
+exec
+/bin/zsh -lc "rg -n \"lowName|highName|LegendCounts|Legend\" cloud/apps/web/src/components -g '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+cloud/apps/web/src/components/analysis/ContestedScenariosList.tsx:175:      {/* Legend */}
+cloud/apps/web/src/components/analysis/DecisionDistributionChart.tsx:9:  Legend,
+cloud/apps/web/src/components/analysis/DecisionDistributionChart.tsx:121:export function CustomLegend({ buckets }: { buckets: DecisionDistributionBucket[] }) {
+cloud/apps/web/src/components/analysis/DecisionDistributionChart.tsx:184:            <Legend content={<CustomLegend buckets={buckets} />} />
+cloud/apps/web/src/components/analysis/ScenarioVarianceChart.tsx:180:      {/* Legend */}
+cloud/apps/web/src/components/analysis/ModelComparisonMatrix.tsx:207:      {/* Legend */}
+cloud/apps/web/src/components/analysis/VariableImpactChart.tsx:198:      {/* Legend */}
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:45:type LegendCounts = {
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:51:function Legend({ lowName, highName, counts }: { lowName: string; highName: string; counts: LegendCounts }) {
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:56:                <span className="font-medium text-blue-800">{formatDisplayLabel(lowName)} {counts.low}</span>
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:64:                <span className="font-medium text-orange-800">{formatDisplayLabel(highName)} {counts.high}</span>
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:212:    const legendCounts = useMemo<LegendCounts>(() => {
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:284:                    <Legend
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:285:                        lowName={sideAttributeMap.lowAttribute}
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:286:                        highName={sideAttributeMap.highAttribute}
+
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/web/src/components/analysis/Legend.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ exited 1 in 0ms:
+sed: cloud/apps/web/src/components/analysis/Legend.tsx: No such file or directory
+
+codex
+I’m checking the legend wiring too. A direction change can be correct in the cells but still wrong if the legend semantics no longer match the displayed counts.
+exec
+/bin/zsh -lc "sed -n '1,110p' cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import type { VisualizationData } from '../../api/operations/analysis';
+import type { Transcript } from '../../api/operations/runs';
+import { CopyVisualButton } from '../ui/CopyVisualButton';
+import { Button } from '../ui/Button';
+import {
+    mapDecisionSidesToScenarioAttributes,
+    resolveScenarioAttributes,
+} from '../../utils/decisionLabels';
+import { formatDisplayLabel } from '../../utils/displayLabels';
+import {
+    ANALYSIS_BASE_PATH,
+    type AnalysisBasePath,
+    buildAnalysisConditionDetailPath,
+    buildConditionKey,
+} from '../../utils/analysisRouting';
+import {
+    buildCanonicalTranscriptIndex,
+    collectCanonicalConditionTranscripts,
+    getConditionCellDisplay,
+    summarizeCanonicalConditionTranscripts,
+    type CanonicalConditionSummary,
+} from '../../utils/canonicalConditionSummary';
+import { compareConditionLevels } from '../../utils/conditionOrdering';
+import { resolveConditionDecisionLabelPair } from '../../utils/conditionDecisionSummary';
+
+type PivotAnalysisTableProps = {
+    runId: string;
+    analysisBasePath?: AnalysisBasePath;
+    analysisSearchParams?: URLSearchParams | string;
+    analysisMode?: 'single' | 'paired';
+    visualizationData: VisualizationData;
+    transcripts?: Transcript[];
+    expectedAttributes?: string[];
+    companionRunId?: string | null;
+    /**
+     * When provided, restrict the model dropdown to only these model IDs.
+     * Falls back to all models if the filtered list would be empty.
+     */
+    selectedModels?: string[];
+};
+
+type LegendCounts = {
+    low: number;
+    neutral: number;
+    high: number;
+};
+
+function Legend({ lowName, highName, counts }: { lowName: string; highName: string; counts: LegendCounts }) {
+    return (
+        <div className="flex items-center gap-4 text-xs text-gray-500">
+            <div className="flex items-center gap-1">
+                <span className="w-3 h-3 rounded bg-blue-100 border border-blue-200"></span>
+                <span className="font-medium text-blue-800">{formatDisplayLabel(lowName)} {counts.low}</span>
+            </div>
+            <div className="flex items-center gap-1">
+                <span className="w-3 h-3 rounded bg-gray-100 border border-gray-200"></span>
+                <span>Neutral {counts.neutral}</span>
+            </div>
+            <div className="flex items-center gap-1">
+                <span className="w-3 h-3 rounded bg-orange-100 border border-orange-200"></span>
+                <span className="font-medium text-orange-800">{formatDisplayLabel(highName)} {counts.high}</span>
+            </div>
+        </div>
+    );
+}
+
+export function PivotAnalysisTable({
+    runId,
+    analysisBasePath = ANALYSIS_BASE_PATH,
+    analysisSearchParams,
+    visualizationData,
+    transcripts,
+    expectedAttributes = [],
+    companionRunId,
+    selectedModels,
+}: PivotAnalysisTableProps) {
+    const tableRef = useRef<HTMLDivElement>(null);
+    const navigate = useNavigate();
+    const { modelScenarioMatrix, scenarioDimensions } = visualizationData;
+
+    // 1. Identify available dimensions
+    const availableDimensions = useMemo(() => {
+        return resolveScenarioAttributes(scenarioDimensions, expectedAttributes, modelScenarioMatrix);
+    }, [expectedAttributes, scenarioDimensions, modelScenarioMatrix]);
+
+    // All models from the matrix
+    const allModels = useMemo(() => Object.keys(modelScenarioMatrix || {}).sort(), [modelScenarioMatrix]);
+
+    // Filtered models: when selectedModels is provided, restrict to that set (non-empty fallback)
+    const models = useMemo(() => {
+        if (selectedModels == null || selectedModels.length === 0) return allModels;
+        const filtered = allModels.filter((id) => selectedModels.includes(id));
+        return filtered.length > 0 ? filtered : allModels;
+    }, [allModels, selectedModels]);
+
+    // State for selected dimensions and model
+    const [rowDim, setRowDim] = useState<string>(availableDimensions[0] || '');
+    const [colDim, setColDim] = useState<string>(availableDimensions[1] || availableDimensions[0] || '');
+    // Default to first alphabetical model if available
+    const [selectedModel, setSelectedModel] = useState<string>(models[0] || '');
+    const [showDetails, setShowDetails] = useState<boolean>(false);
+    const decisionSideNames = useMemo(() => {
+        const modelTranscripts = (transcripts ?? []).filter((transcript) => transcript.modelId === selectedModel);
+        if (modelTranscripts.length === 0) {
+            return {
+                aName: 'Canonical first value',
+                bName: 'Canonical second value',
+
+exec
+/bin/zsh -lc "sed -n '110,220p' cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx && printf '\\n---\\n' && sed -n '1,220p' cloud/apps/web/src/utils/conditionDecisionSummary.ts" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+                bName: 'Canonical second value',
+            };
+        }
+
+        const labelPair = resolveConditionDecisionLabelPair(modelTranscripts);
+        if (!labelPair) {
+            return {
+                aName: 'Canonical first value',
+                bName: 'Canonical second value',
+            };
+        }
+
+        return {
+            aName: labelPair.firstValueLabel,
+            bName: labelPair.secondValueLabel,
+        };
+    }, [selectedModel, transcripts]);
+    const sideAttributeMap = useMemo(
+        () => mapDecisionSidesToScenarioAttributes(decisionSideNames.aName, decisionSideNames.bName, [rowDim, colDim].filter((d) => d !== '')),
+        [colDim, decisionSideNames.aName, decisionSideNames.bName, rowDim]
+    );
+
+    useEffect(() => {
+        const nextRow = availableDimensions[0] ?? '';
+        const nextCol = availableDimensions[1] ?? availableDimensions[0] ?? '';
+
+        if (availableDimensions.length === 0) {
+            if (rowDim !== '') setRowDim('');
+            if (colDim !== '') setColDim('');
+            return;
+        }
+
+        if (!availableDimensions.includes(rowDim)) {
+            setRowDim(nextRow);
+        }
+
+        if (!availableDimensions.includes(colDim)) {
+            setColDim(nextCol);
+        }
+    }, [availableDimensions, rowDim, colDim]);
+
+    useEffect(() => {
+        const nextModel = models[0] ?? '';
+
+        if (models.length === 0) {
+            if (selectedModel !== '') setSelectedModel('');
+            return;
+        }
+
+        if (!models.includes(selectedModel)) {
+            setSelectedModel(nextModel);
+        }
+    }, [models, selectedModel]);
+
+    // 2. Build canonical transcript index
+    const transcriptIndex = useMemo(
+        () => buildCanonicalTranscriptIndex(transcripts),
+        [transcripts],
+    );
+
+    // 3. Aggregate Data based on selection using canonical scoring
+    const pivotData = useMemo(() => {
+        if (!scenarioDimensions || !modelScenarioMatrix) return null;
+        if (!rowDim || !colDim || !selectedModel) return null;
+
+        // Collect scenario IDs per cell
+        const scenarioIdsByCell: Record<string, Record<string, string[]>> = {};
+        const rowValues = new Set<string>();
+        const colValues = new Set<string>();
+
+        Object.entries(scenarioDimensions).forEach(([scenarioId, dims]) => {
+            const rVal = String(dims[rowDim] ?? 'N/A');
+            const cVal = String(dims[colDim] ?? 'N/A');
+
+            rowValues.add(rVal);
+            colValues.add(cVal);
+
+            if (!scenarioIdsByCell[rVal]) scenarioIdsByCell[rVal] = {};
+            if (!scenarioIdsByCell[rVal][cVal]) scenarioIdsByCell[rVal][cVal] = [];
+            scenarioIdsByCell[rVal][cVal].push(scenarioId);
+        });
+
+        // Compute canonical summary per cell
+        const grid: Record<string, Record<string, CanonicalConditionSummary>> = {};
+
+        Object.entries(scenarioIdsByCell).forEach(([rVal, cols]) => {
+            const rowGrid: Record<string, CanonicalConditionSummary> = {};
+            grid[rVal] = rowGrid;
+            Object.entries(cols).forEach(([cVal, scenarioIds]) => {
+                const cellTranscripts = collectCanonicalConditionTranscripts(transcriptIndex, selectedModel, scenarioIds);
+                rowGrid[cVal] = summarizeCanonicalConditionTranscripts(cellTranscripts);
+            });
+        });
+
+        return {
+            grid,
+            rows: Array.from(rowValues).sort(compareConditionLevels),
+            cols: Array.from(colValues).sort(compareConditionLevels),
+        };
+
+    }, [scenarioDimensions, modelScenarioMatrix, rowDim, colDim, selectedModel, transcriptIndex]);
+
+    const legendCounts = useMemo<LegendCounts>(() => {
+        if (!scenarioDimensions || !selectedModel) {
+            return { low: 0, neutral: 0, high: 0 };
+        }
+
+        let low = 0;
+        let neutral = 0;
+        let high = 0;
+
+
+---
+import type { Transcript } from '../api/operations/runs';
+import { formatDisplayLabel } from './displayLabels';
+import { hasRenderableTranscriptDecisionModelV2 } from './transcriptDecisionModel';
+
+export type ConditionDecisionFilterParams = {
+  decisionStrength: 'strong' | 'lean' | 'neutral' | 'unknown';
+  favoredValueKey?: string;
+};
+
+export type ConditionDecisionLabelPair = {
+  firstValueKey: string;
+  firstValueLabel: string;
+  secondValueKey: string;
+  secondValueLabel: string;
+};
+
+export type ConditionDecisionBucket = {
+  label: string;
+  count: number;
+  filterParams: ConditionDecisionFilterParams | null;
+};
+
+export type ConditionDecisionSummary = {
+  buckets: ConditionDecisionBucket[];
+  labelPair: ConditionDecisionLabelPair | null;
+  knownCount: number;
+  unknownCount: number;
+  totalCount: number;
+};
+
+type PairLabelStats = {
+  count: number;
+  firstValueKey: string;
+  secondValueKey: string;
+  labels: [string, string];
+};
+
+type ConditionDecisionBucketSlot = 0 | 1 | 2 | 3 | 4 | 5;
+
+type ConditionDecisionBucketSpec = {
+  label: string;
+  filterParams: ConditionDecisionFilterParams | null;
+};
+
+function getConditionDecisionBucketSlot(transcript: Transcript): ConditionDecisionBucketSlot {
+  if (!hasRenderableTranscriptDecisionModelV2(transcript)) {
+    return 5;
+  }
+
+  const canonical = transcript.decisionModelV2?.canonical;
+  if (!canonical) {
+    return 5;
+  }
+
+  if (canonical.strength === 'neutral') {
+    return 2;
+  }
+
+  const { favoredValueKey, opposedValueKey, strength } = canonical;
+  if (favoredValueKey == null || opposedValueKey == null) {
+    return 5;
+  }
+
+  // Alphabetically-first value is canonical "first" (blue) side; second is "second" (orange).
+  // This is stable across both runs in a paired batch, unlike canonical.direction which is
+  // position-based (valueA/valueB) and flips between companion runs.
+  const isFirst = favoredValueKey.localeCompare(opposedValueKey) < 0;
+
+  if (isFirst && strength === 'strong') return 0;
+  if (isFirst && strength === 'lean') return 1;
+  if (!isFirst && strength === 'lean') return 3;
+  if (!isFirst && strength === 'strong') return 4;
+
+  return 5;
+}
+
+export function resolveConditionDecisionLabelPair(transcripts: Transcript[]): ConditionDecisionLabelPair | null {
+  const pairCounts = new Map<string, PairLabelStats>();
+
+  for (const transcript of transcripts) {
+    if (!hasRenderableTranscriptDecisionModelV2(transcript)) {
+      continue;
+    }
+
+    const canonical = transcript.decisionModelV2.canonical;
+    if (canonical.favoredValueKey == null || canonical.opposedValueKey == null) {
+      continue;
+    }
+
+    const firstValueKey = canonical.favoredValueKey.localeCompare(canonical.opposedValueKey) < 0
+      ? canonical.favoredValueKey
+      : canonical.opposedValueKey;
+    const secondValueKey = firstValueKey === canonical.favoredValueKey
+      ? canonical.opposedValueKey
+      : canonical.favoredValueKey;
+    const labels = [
+      formatDisplayLabel(firstValueKey),
+      formatDisplayLabel(secondValueKey),
+    ] as [string, string];
+    const key = `${firstValueKey}||${secondValueKey}`;
+    const current = pairCounts.get(key);
+    if (current) {
+      current.count += 1;
+    } else {
+      pairCounts.set(key, {
+        count: 1,
+        firstValueKey,
+        secondValueKey,
+        labels,
+      });
+    }
+  }
+
+  if (pairCounts.size === 0) {
+    return null;
+  }
+
+  const bestPair = Array.from(pairCounts.values())
+    .sort((a, b) => {
+      if (b.count !== a.count) {
+        return b.count - a.count;
+      }
+
+      const firstCompare = a.labels[0].localeCompare(b.labels[0]);
+      if (firstCompare !== 0) {
+        return firstCompare;
+      }
+
+      return a.labels[1].localeCompare(b.labels[1]);
+    })[0] ?? null;
+
+  if (!bestPair) {
+    return null;
+  }
+
+  return {
+    firstValueKey: bestPair.firstValueKey,
+    firstValueLabel: bestPair.labels[0],
+    secondValueKey: bestPair.secondValueKey,
+    secondValueLabel: bestPair.labels[1],
+  };
+}
+
+function buildBucketSpecs(labelPair: ConditionDecisionLabelPair | null): ConditionDecisionBucketSpec[] {
+  const firstValueLabel = labelPair?.firstValueLabel ?? 'canonical first value';
+  const secondValueLabel = labelPair?.secondValueLabel ?? 'canonical second value';
+
+  return [
+    {
+      label: `Strongly favors ${firstValueLabel}`,
+      filterParams: labelPair == null
+        ? null
+        : { decisionStrength: 'strong', favoredValueKey: labelPair.firstValueKey },
+    },
+    {
+      label: `Somewhat favors ${firstValueLabel}`,
+      filterParams: labelPair == null
+        ? null
+        : { decisionStrength: 'lean', favoredValueKey: labelPair.firstValueKey },
+    },
+    {
+      label: 'Neutral',
+      filterParams: { decisionStrength: 'neutral' },
+    },
+    {
+      label: `Somewhat favors ${secondValueLabel}`,
+      filterParams: labelPair == null
+        ? null
+        : { decisionStrength: 'lean', favoredValueKey: labelPair.secondValueKey },
+    },
+    {
+      label: `Strongly favors ${secondValueLabel}`,
+      filterParams: labelPair == null
+        ? null
+        : { decisionStrength: 'strong', favoredValueKey: labelPair.secondValueKey },
+    },
+    {
+      label: 'Unknown',
+      filterParams: { decisionStrength: 'unknown' },
+    },
+  ];
+}
+
+export function summarizeConditionDecisionBuckets(transcripts: Transcript[]): ConditionDecisionSummary {
+  const counts: Record<ConditionDecisionBucketSlot, number> = {
+    0: 0,
+    1: 0,
+    2: 0,
+    3: 0,
+    4: 0,
+    5: 0,
+  };
+
+  for (const transcript of transcripts) {
+    const bucket = getConditionDecisionBucketSlot(transcript);
+    counts[bucket] += 1;
+  }
+
+  const labelPair = resolveConditionDecisionLabelPair(transcripts);
+  const buckets = buildBucketSpecs(labelPair).map((bucket, index) => ({
+    ...bucket,
+    count: counts[index as ConditionDecisionBucketSlot],
+  }));
+
+  return {
+    buckets,
+    labelPair,
+    knownCount:
+      counts[0]
+      + counts[1]
+      + counts[2]
+      + counts[3]
+      + counts[4],
+    unknownCount: counts[5],
+    totalCount: transcripts.length,
+  };
+}
+
+codex
+I’ve narrowed it down to a likely semantic regression around how neutral cells are rendered. I’m doing one more pass for a second issue, but I’m not seeing anything that looks like a compile break.
+exec
+/bin/zsh -lc "rg -n \"summary\\.hasData|direction === 'neutral'|text-gray-500|backgroundColor: hasSummary\" cloud/apps/web/src/components cloud/apps/web/src/utils" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+cloud/apps/web/src/utils/transcriptDecisionModel.ts:31:  if (canonical.direction === 'neutral') {
+cloud/apps/web/src/utils/transcriptDecisionModel.ts:85:  if (value.canonical.direction === 'neutral') {
+cloud/apps/web/src/utils/transcriptDecisionModel.ts:133:  if (canonical.direction === 'neutral') {
+cloud/apps/web/src/utils/transcriptDecisionModel.ts:160:  if (canonical.direction === 'neutral') {
+cloud/apps/web/src/utils/transcriptDecisionModel.ts:185:  if (canonical.direction === 'neutral') {
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:189:  if (!summary.hasData) {
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:196:      textColorClass: 'text-gray-500',
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:203:  if (summary.direction === 'neutral') {
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:210:      textColorClass: 'text-gray-500',
+cloud/apps/web/src/components/ui/Input.tsx:67:          <p id={`${inputId}-helper`} className="text-sm text-gray-500">
+cloud/apps/web/src/components/ui/EmptyState.tsx:31:        <p className="text-sm text-gray-500 mb-4 max-w-sm">{description}</p>
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:108:              <tr className="border-b border-gray-200 text-gray-500">
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:125:                <td className="pt-1 pr-3 text-gray-500 font-normal" colSpan={2}>
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:167:            Calculation for this cell <span className="font-normal text-gray-500">(mean: {formatPercent(simpleMean)})</span>:
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:171:              <tr className="border-b border-gray-200 text-gray-500">
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:192:                <td className="pt-0.5 pr-3 font-normal text-gray-500" colSpan={2}>
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:201:          <p className="mt-1.5 text-gray-500">Score guide: 75–100 very consistent · 50–74 some variation · 0–49 changes a lot by domain.</p>
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:258:              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:279:              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:308:              <div className="px-4 py-4 text-sm text-gray-500">
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:315:                    <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
+cloud/apps/web/src/components/definitions/DefinitionEditor.tsx:229:        <p className="text-sm text-gray-500 mb-2">
+cloud/apps/web/src/components/definitions/DefinitionEditor.tsx:250:            <div className="flex items-center gap-1.5 mb-1 font-medium text-gray-500">
+cloud/apps/web/src/components/definitions/DefinitionEditor.tsx:274:        <p className="text-sm text-gray-500 mb-2">
+cloud/apps/web/src/components/definitions/DefinitionEditor.tsx:291:            <span className="text-sm text-gray-500">Placeholders:</span>
+cloud/apps/web/src/components/definitions/DefinitionEditor.tsx:315:            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+cloud/apps/web/src/components/definitions/DefinitionEditor.tsx:348:            <p className="text-sm text-gray-500 mb-2">No attributes yet</p>
+cloud/apps/web/src/components/domains/ModelGroupsSection.tsx:89:            className="h-8 w-8 text-gray-500 hover:text-gray-700"
+cloud/apps/web/src/components/domains/ModelGroupsSection.tsx:105:          <div className="space-y-1 text-xs text-gray-500 italic">
+cloud/apps/web/src/components/ui/Table.tsx:234:        <div className="text-gray-500 text-sm">Loading...</div>
+cloud/apps/web/src/components/ui/Table.tsx:241:      <div className="flex items-center justify-center py-12 text-gray-500 text-sm">
+cloud/apps/web/src/components/ui/Table.tsx:328:                  <span className="text-xs font-medium text-gray-500 flex-shrink-0">
+cloud/apps/web/src/components/definitions/DefinitionCard.tsx:60:      <div className="flex items-center gap-4 text-sm text-gray-500">
+cloud/apps/web/src/components/models/ModelsMatrix.tsx:154:                  className="h-auto min-h-0 !p-0 text-xs font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-900"
+cloud/apps/web/src/components/models/ModelsMatrix.tsx:170:                    className="h-auto min-h-0 !p-0 text-xs font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-900"
+cloud/apps/web/src/components/models/ModelsMatrix.tsx:192:                    <div className="text-xs text-gray-500">{model.modelId}</div>
+cloud/apps/web/src/components/models/ModelsMatrix.tsx:228:      <div className="mt-3 text-xs text-gray-500">
+cloud/apps/web/src/components/settings/ProviderStatus.tsx:75:          <p className="text-xs text-gray-500">
+cloud/apps/web/src/components/settings/ProviderStatus.tsx:104:          <span className="text-gray-500">Unavailable</span>
+cloud/apps/web/src/components/settings/ProviderStatus.tsx:119:        <span className="text-xs text-gray-500">
+cloud/apps/web/src/components/layout/Header.tsx:64:                <p className="text-xs text-gray-500 truncate">
+cloud/apps/web/src/components/settings/AccountPanel.tsx:133:                    <p className="mt-1 text-sm text-gray-500">Update your personal information.</p>
+cloud/apps/web/src/components/settings/AccountPanel.tsx:176:                    <p className="mt-1 text-sm text-gray-500">Update your password. You will be logged out after changing your password.</p>
+cloud/apps/web/src/components/domains/domainTrials/TrialGridTable.tsx:59:                    <div className="text-xs text-gray-500">{vignette.signature ?? `v${vignette.definitionVersion}`}</div>
+cloud/apps/web/src/components/domains/domainTrials/TrialGridTable.tsx:63:                    <div className="text-xs text-gray-500">Each batch runs all configured conditions for this vignette.</div>
+cloud/apps/web/src/components/domains/domainTrials/TrialGridTable.tsx:76:                            <div className="text-xs text-gray-500">Target: {targetBatchCount} batches</div>
+cloud/apps/web/src/components/settings/models/ProviderSection.tsx:42:            <p className="text-sm text-gray-500">
+cloud/apps/web/src/components/settings/models/ProviderSection.tsx:62:                : 'bg-gray-100 text-gray-500'
+cloud/apps/web/src/components/settings/models/ProviderSection.tsx:80:              className="text-gray-500 hover:text-gray-700 hover:bg-transparent px-0 group"
+cloud/apps/web/src/components/analysis/ContestedScenariosList.tsx:62:          <p className="text-xs text-gray-500 mt-1">
+cloud/apps/web/src/components/analysis/ContestedScenariosList.tsx:79:          <label htmlFor="limit-select" className="text-xs text-gray-500">
+cloud/apps/web/src/components/analysis/ContestedScenariosList.tsx:126:                  <p className="text-xs text-gray-500">
+cloud/apps/web/src/components/analysis/ContestedScenariosList.tsx:161:        <p className="text-xs text-gray-500 text-center">
+cloud/apps/web/src/components/analysis/ContestedScenariosList.tsx:176:      <div className="flex items-center gap-4 text-xs text-gray-500 pt-2 border-t border-gray-100">
+cloud/apps/web/src/components/ui/Tabs.tsx:12:        inactive: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
+cloud/apps/web/src/components/ui/Tabs.tsx:27:        inactive: 'text-gray-400 group-hover:text-gray-500',
+cloud/apps/web/src/components/ui/VirtualizedList.tsx:101:      <div className="text-sm text-gray-500 mb-2">
+cloud/apps/web/src/components/ui/VirtualizedList.tsx:147:            <span className="text-sm text-gray-500">Loading more {itemLabel}...</span>
+cloud/apps/web/src/components/settings/models/ProviderSettingsModal.tsx:107:            <p className="text-xs text-gray-500 mt-1">
+cloud/apps/web/src/components/settings/models/ModelRow.tsx:55:          <p className="text-sm text-gray-500">
+cloud/apps/web/src/components/runs/RunProgress.tsx:250:          <div className="mb-2 px-1 flex items-center gap-3 text-xs text-gray-500 font-medium">
+cloud/apps/web/src/components/runs/RunProgress.tsx:277:                    className="text-xs text-gray-500 w-24 text-right tabular-nums"
+cloud/apps/web/src/components/runs/RunProgress.tsx:288:                  <span className="text-xs text-gray-500 w-16 text-right">
+cloud/apps/web/src/components/domains/DomainSettingsPanel.tsx:136:    return <p className="text-sm text-gray-500 mt-4">Loading settings…</p>;
+cloud/apps/web/src/components/domains/DomainSettingsPanel.tsx:225:        <p className="text-xs text-gray-500 mb-1">
+cloud/apps/web/src/components/domains/DomainSettingsPanel.tsx:249:          <p className="text-sm text-gray-500">No value statements for this domain.</p>
+cloud/apps/web/src/components/domains/DomainSettingsPanel.tsx:276:                          <p className="text-xs text-gray-500 mb-1">Previous version:</p>
+cloud/apps/web/src/components/domains/DomainSettingsPanel.tsx:283:                        <p className="text-xs text-gray-500 mb-1">Edit:</p>
+cloud/apps/web/src/components/domains/DomainSettingsPanel.tsx:345:        <p className="text-xs text-gray-500 mb-1">
+cloud/apps/web/src/components/domains/DomainSettingsPanel.tsx:361:          <p className="text-xs text-gray-500 mb-1">
+cloud/apps/web/src/components/domains/DomainSettingsPanel.tsx:413:              <p className="text-sm text-gray-500">No history yet.</p>
+cloud/apps/web/src/components/domains/DomainSettingsPanel.tsx:429:                    <div className="text-gray-500 space-y-0.5">
+cloud/apps/web/src/components/runs/RunForm.tsx:262:                    <div className="mt-1 text-xs text-gray-500">{option.description}</div>
+cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:429:          {description ? <p className="mt-1 text-xs text-gray-500">{description}</p> : null}
+cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:438:            <label className="mb-1 block text-xs font-medium uppercase text-gray-500">AI Columns</label>
+cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:487:              <label className="mb-1 block text-xs font-medium uppercase text-gray-500">Inspection View</label>
+cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:641:                          <span className="text-gray-500">—</span>
+cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:654:        <div className="mt-2 text-xs text-gray-500">
+cloud/apps/web/src/components/settings/models/ModelForm.tsx:195:              <p className="-mt-3 text-xs text-gray-500">
+cloud/apps/web/src/components/settings/models/ModelForm.tsx:213:                <p className="mt-1 text-xs text-gray-500">
+cloud/apps/web/src/components/settings/infra/ExpansionSettings.tsx:31:            <p className="text-sm text-gray-500">
+cloud/apps/web/src/components/settings/infra/ExpansionSettings.tsx:52:            <p className="text-sm text-gray-500 mt-1">
+cloud/apps/web/src/components/definitions/VersionTree.tsx:131:        <div className="text-sm text-gray-500 flex items-center gap-2">
+cloud/apps/web/src/components/settings/SystemHealth.tsx:26:          <Code2 className="w-4 h-4 text-gray-500" />
+cloud/apps/web/src/components/settings/SystemHealth.tsx:63:              <span className="text-gray-500">Python Version</span>
+cloud/apps/web/src/components/settings/SystemHealth.tsx:70:              <span className="text-gray-500">Configured Providers</span>
+cloud/apps/web/src/components/settings/SystemHealth.tsx:77:              <p className="text-xs text-gray-500 mb-2">Installed Packages</p>
+cloud/apps/web/src/components/settings/SystemHealth.tsx:104:          <p className="text-sm text-gray-500 mt-1">Monitor LLM providers, job queue, and worker status</p>
+cloud/apps/web/src/components/settings/SystemHealth.tsx:118:          <p className="text-sm text-gray-500 mt-1">Monitor LLM providers, job queue, and worker status</p>
+cloud/apps/web/src/components/settings/SystemHealth.tsx:136:          <p className="text-sm text-gray-500 mt-1">Monitor LLM providers, job queue, and worker status</p>
+cloud/apps/web/src/components/ui/CollapsibleFilters.tsx:92:              className="min-h-[44px] px-3 text-gray-500 hover:text-gray-700"
+cloud/apps/web/src/components/settings/infra/ParallelismSettings.tsx:38:            <p className="text-sm text-gray-500">
+cloud/apps/web/src/components/settings/infra/ParallelismSettings.tsx:48:          <p className="text-sm text-gray-500 mb-1">Currently configured:</p>
+cloud/apps/web/src/components/settings/infra/ParallelismSettings.tsx:66:            <span className="text-sm text-gray-500">Range: 1-500 (default: 8)</span>
+cloud/apps/web/src/components/runs/RunConfigPanel.tsx:51:        <p className="mt-2 text-xs text-gray-500">Leave blank to use provider default.</p>
+cloud/apps/web/src/components/runs/RunConfigPanel.tsx:77:            <p className="mt-2 text-sm text-gray-500">
+cloud/apps/web/src/components/analysis/RunSelectionModal.tsx:139:                <p className="text-sm text-gray-500 mb-4">
+cloud/apps/web/src/components/analysis/RunSelectionModal.tsx:147:                    <div className="text-center py-8 text-gray-500">No other compatible runs found.</div>
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:137:                className="border border-gray-200 bg-gray-50 p-2 text-center font-mono text-xs font-medium text-gray-500"
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:195:      <div className="mt-2 text-xs text-gray-500">
+cloud/apps/web/src/components/domains/CoverageCell.tsx:95:            !isDiagonal && !hasVignette && 'text-gray-500 cursor-pointer hover:bg-gray-100',
+cloud/apps/web/src/components/domains/CoverageCell.tsx:156:              <div className="mt-2 text-xs text-gray-500">No batch for this value pair</div>
+cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx:152:              <tr className="text-left text-gray-500 border-b border-gray-200">
+cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx:178:                        className="!min-h-0 h-5 w-5 rounded-full !p-0 text-[11px] font-semibold text-gray-500 hover:text-gray-900"
+cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx:197:                      ? 'text-gray-500'
+cloud/apps/web/src/components/runs/BudgetWarningDialog.tsx:40:            <p className="text-sm text-gray-500 mt-1">
+cloud/apps/web/src/components/runs/BudgetWarningDialog.tsx:75:        <p className="text-sm text-gray-500 mb-4">
+cloud/apps/web/src/components/domains/ValuePrioritiesSection.tsx:168:              className="h-8 w-8 text-gray-500 hover:text-gray-700"
+cloud/apps/web/src/components/domains/ValuePrioritiesSection.tsx:178:          <p className="text-xs text-gray-500">Click a column heading to sort.</p>
+cloud/apps/web/src/components/domains/ValuePrioritiesSection.tsx:209:            <tr className="border-b border-gray-100 text-gray-500">
+cloud/apps/web/src/components/domains/EvidenceScopeDisclosure.tsx:98:      <div className="inline-flex min-h-[40px] items-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-500">
+cloud/apps/web/src/components/domains/EvidenceScopeDisclosure.tsx:133:        <p className="mt-1 text-xs text-gray-500">{state.summary}</p>
+cloud/apps/web/src/components/domains/EvidenceScopeDisclosure.tsx:159:                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Reasons</p>
+cloud/apps/web/src/components/domains/EvidenceScopeDisclosure.tsx:207:                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Raw reason text</p>
+cloud/apps/web/src/components/analysis/AnalysisCard.tsx:118:            <p className="text-sm text-gray-500 mt-0.5 flex flex-wrap items-center gap-1.5 line-clamp-1 break-all">
+cloud/apps/web/src/components/analysis/AnalysisCard.tsx:153:            <div className="text-gray-500 text-xs">Models</div>
+cloud/apps/web/src/components/analysis/AnalysisCard.tsx:161:            <div className="text-gray-500 text-xs">Transcripts</div>
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:176:            <p className="text-sm text-gray-500">
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:207:              <span className="text-gray-500">Decision summary:</span>
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:212:              <span className="text-gray-500">Decision:</span>
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:354:            <div className="text-center text-gray-500 py-8">
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:378:                    <div className="text-xs font-medium text-gray-500 mb-1">
+cloud/apps/web/src/components/runs/DefinitionPicker.tsx:88:            className="h-8 w-8 rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+cloud/apps/web/src/components/runs/DefinitionPicker.tsx:223:          <p className="mt-2 text-sm text-gray-500">
+cloud/apps/web/src/components/runs/DefinitionPicker.tsx:238:              <p className="mt-1 text-xs text-gray-500">
+cloud/apps/web/src/components/runs/DefinitionPicker.tsx:252:              <p className="mt-1 text-xs text-gray-500">
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:312:        <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:319:        <div className="px-1 pt-2 text-xs text-gray-500">
+cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx:103:        <p className="text-xs text-gray-500">
+cloud/apps/web/src/components/settings/infra/ModelSelectorCard.tsx:42:            <p className="text-sm text-gray-500">{description}</p>
+cloud/apps/web/src/components/settings/infra/ModelSelectorCard.tsx:51:            <p className="text-sm text-gray-500 mb-1">Currently configured:</p>
+cloud/apps/web/src/components/domains/SimilaritySection.tsx:115:              className="h-8 w-8 text-gray-500 hover:text-gray-700"
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx:121:        <div className="flex items-center gap-2 text-xs text-gray-500">
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx:139:          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Remaining</div>
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx:144:          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Processing</div>
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx:149:          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Done</div>
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx:154:          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Needs Attention</div>
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx:159:          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Batches complete</div>
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx:167:      <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx:182:          <p className="text-sm text-gray-500">No batches are actively moving right now.</p>
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx:186:              <thead className="bg-gray-50 text-left text-gray-500">
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx:212:                        <div className="text-xs text-gray-500">Batch {row.runId.slice(-8)}</div>
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx:249:          <p className="text-sm text-gray-500">No stalled or failed batches right now.</p>
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx:253:              <thead className="bg-gray-50 text-left text-gray-500">
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx:287:                        <div className="text-xs text-gray-500">Batch {row.runId.slice(-8)}</div>
+cloud/apps/web/src/components/definitions/scenarios/ScenarioCard.tsx:43:            <span className="text-xs text-gray-500 truncate max-w-[300px]">
+cloud/apps/web/src/components/definitions/scenarios/ScenarioCard.tsx:62:              <p className="text-xs text-gray-500 mb-2">Attribute Values</p>
+cloud/apps/web/src/components/definitions/scenarios/ScenarioCard.tsx:79:              <p className="text-xs text-gray-500 mb-2">Preamble</p>
+cloud/apps/web/src/components/definitions/scenarios/ScenarioCard.tsx:90:            <p className="text-xs text-gray-500 mb-2">Prompt</p>
+cloud/apps/web/src/components/definitions/scenarios/ScenarioCard.tsx:101:              <p className="text-xs text-gray-500 mb-2">Followups ({content.followups.length})</p>
+cloud/apps/web/src/components/definitions/scenarios/ScenarioCard.tsx:118:          <div className="pt-3 border-t border-gray-100 text-xs text-gray-500">
+cloud/apps/web/src/components/analysis/ModelComparisonMatrix.tsx:110:          <p className="text-xs text-gray-500 mt-1">
+cloud/apps/web/src/components/analysis/ModelComparisonMatrix.tsx:175:                        : 'bg-gray-300 text-gray-500'
+cloud/apps/web/src/components/analysis/ModelComparisonMatrix.tsx:208:      <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusDrawer.tsx:108:                  <p className="text-sm text-gray-500">No recent task events.</p>
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusDrawer.tsx:117:                          <div className="text-xs text-gray-500">
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusDrawer.tsx:136:                  <p className="text-sm text-gray-500">No transcripts available yet.</p>
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusDrawer.tsx:145:                          <div className="text-xs text-gray-500">{formatTimestamp(transcript.createdAt)}</div>
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusDrawer.tsx:157:            <div className="text-sm text-gray-500">No run details available.</div>
+cloud/apps/web/src/components/runs/RunFolderView.tsx:99:        <div className="flex items-center gap-2 text-xs text-gray-500">
+cloud/apps/web/src/components/runs/RunFolderView.tsx:105:            className="p-0 h-auto text-xs text-gray-500 hover:text-gray-700 hover:underline hover:bg-transparent"
+cloud/apps/web/src/components/runs/RunFolderView.tsx:115:            className="p-0 h-auto text-xs text-gray-500 hover:text-gray-700 hover:underline hover:bg-transparent"
+cloud/apps/web/src/components/runs/RunFolderView.tsx:147:              <span className="text-sm text-gray-500">
+cloud/apps/web/src/components/runs/RunFolderView.tsx:187:            <span className="font-medium text-gray-500">Untagged</span>
+cloud/apps/web/src/components/runs/RunFolderView.tsx:188:            <span className="text-sm text-gray-500">
+cloud/apps/web/src/components/domains/domainTrials/LaunchStatusPanel.tsx:61:      <div className="text-xs text-gray-500">
+cloud/apps/web/src/components/analysis/ModelFilter.tsx:80:        <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
+cloud/apps/web/src/components/analysis/AnalysisPanel.tsx:221:                <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
+cloud/apps/web/src/components/analysis/AnalysisPanel.tsx:306:                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+cloud/apps/web/src/components/definitions/DefinitionFolderView.tsx:94:        <div className="flex items-center gap-2 text-xs text-gray-500">
+cloud/apps/web/src/components/definitions/DefinitionFolderView.tsx:100:            className="p-0 h-auto text-xs text-gray-500 hover:text-gray-700 hover:underline hover:bg-transparent"
+cloud/apps/web/src/components/definitions/DefinitionFolderView.tsx:110:            className="p-0 h-auto text-xs text-gray-500 hover:text-gray-700 hover:underline hover:bg-transparent"
+cloud/apps/web/src/components/definitions/DefinitionFolderView.tsx:142:              <span className="text-sm text-gray-500">
+cloud/apps/web/src/components/definitions/DefinitionFolderView.tsx:182:            <span className="font-medium text-gray-500">Untagged</span>
+cloud/apps/web/src/components/definitions/DefinitionFolderView.tsx:183:            <span className="text-sm text-gray-500">
+cloud/apps/web/src/components/runs/TranscriptList.tsx:196:      <div className="text-center py-8 text-gray-500">
+cloud/apps/web/src/components/runs/TranscriptList.tsx:307:                <span className="text-sm text-gray-500">
+cloud/apps/web/src/components/analysis/ScenarioVarianceChart.tsx:96:      <div className="text-center py-8 text-gray-500">
+cloud/apps/web/src/components/analysis/ScenarioVarianceChart.tsx:136:          <p className="text-xs text-gray-500 mt-1">
+cloud/apps/web/src/components/analysis/ScenarioVarianceChart.tsx:181:      <div className="flex justify-center gap-4 text-xs text-gray-500">
+cloud/apps/web/src/components/runs/RerunDialog.tsx:79:              <p className="text-sm text-gray-500">
+cloud/apps/web/src/components/runs/RerunDialog.tsx:103:                <span className="text-gray-500">Models:</span>{' '}
+cloud/apps/web/src/components/runs/RerunDialog.tsx:107:                <span className="text-gray-500">Sample:</span>{' '}
+cloud/apps/web/src/components/runs/RerunDialog.tsx:111:                <span className="text-gray-500">Status:</span>{' '}
+cloud/apps/web/src/components/runs/RerunDialog.tsx:115:                <span className="text-gray-500">Temperature:</span>{' '}
+cloud/apps/web/src/components/analysis/StatCard.tsx:25:  default: 'text-gray-500',
+cloud/apps/web/src/components/analysis/StatCard.tsx:63:            <p className="text-xs text-gray-500 mt-1 truncate">
+cloud/apps/web/src/components/analysis/ScenarioHeatmap.tsx:70:      <div className="text-center py-8 text-gray-500">
+cloud/apps/web/src/components/analysis/ScenarioHeatmap.tsx:81:          <p className="text-xs text-gray-500 mt-1">
+cloud/apps/web/src/components/analysis/ScenarioHeatmap.tsx:100:                  className="text-[10px] text-gray-500 transform -rotate-45 origin-bottom-left whitespace-nowrap"
+cloud/apps/web/src/components/analysis/ScenarioHeatmap.tsx:140:        <span className="text-xs text-gray-500">Low (1)</span>
+cloud/apps/web/src/components/analysis/ScenarioHeatmap.tsx:150:        <span className="text-xs text-gray-500">High (5)</span>
+cloud/apps/web/src/components/analysis/ScenarioHeatmap.tsx:157:            <p className="text-xs text-gray-500 mb-1">Highest agreement:</p>
+cloud/apps/web/src/components/analysis/ScenarioHeatmap.tsx:163:            <p className="text-xs text-gray-500 mb-1">Highest disagreement:</p>
+cloud/apps/web/src/components/settings/ApiKeysPanel.tsx:54:            <p className="text-sm text-gray-500 mt-1">
+cloud/apps/web/src/components/settings/ApiKeysPanel.tsx:122:              <p className="text-sm text-gray-500">
+cloud/apps/web/src/components/analysis/VariableImpactChart.tsx:128:          <p className="text-xs text-gray-500 mt-1">
+cloud/apps/web/src/components/analysis/VariableImpactChart.tsx:139:      <div className="text-center py-8 text-gray-500">
+cloud/apps/web/src/components/analysis/VariableImpactChart.tsx:193:        <div className="text-gray-500">
+cloud/apps/web/src/components/analysis/VariableImpactChart.tsx:199:      <div className="flex items-center gap-6 text-xs text-gray-500">
+cloud/apps/web/src/components/analysis/DecisionDistributionChart.tsx:114:            <span className="font-medium text-gray-500">({data.rawCounts[bucket.code]})</span>
+cloud/apps/web/src/components/analysis/DecisionDistributionChart.tsx:146:      <div className="text-center py-8 text-gray-500">
+cloud/apps/web/src/components/analysis/DecisionDistributionChart.tsx:159:          <p className="mt-1 text-xs text-gray-500">{getDecisionDistributionHelperText()}</p>
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:53:        <div className="flex items-center gap-4 text-xs text-gray-500">
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:224:            if (!summary.hasData) continue;
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:259:        return <div className="p-4 text-gray-500 italic">No dimension data available for pivot analysis.</div>;
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:263:        return <div className="p-4 text-gray-500 italic">No models available for analysis.</div>;
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:298:                        <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:310:                        <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:325:                <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:359:                                    <th key={col} className="p-3 bg-gray-50 border border-gray-200 text-center text-xs font-medium text-gray-500 font-mono">
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:368:                                    <td className="p-3 bg-gray-50 border border-gray-200 text-left text-xs font-medium text-gray-500 font-mono whitespace-nowrap">
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:381:                                                    backgroundColor: hasSummary && display ? display.backgroundColor : undefined,
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:387:                                                ) : <span className="text-gray-500">—</span>}
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:395:                        <div className="mt-2 text-xs text-gray-500">
+cloud/apps/web/src/components/analysis/ModelConsistencyChart.tsx:220:          <p className="mt-1 text-xs text-gray-500">
+cloud/apps/web/src/components/analysis/ModelConsistencyChart.tsx:305:        <p className="text-xs text-gray-500">
+cloud/apps/web/src/components/runs/ModelSelector.tsx:171:        <p className="text-gray-500 text-sm">Configure API keys in Settings</p>
+cloud/apps/web/src/components/runs/ModelSelector.tsx:186:        <span className="text-sm text-gray-500">
+cloud/apps/web/src/components/runs/ModelSelector.tsx:226:                  <span className="text-sm text-gray-500">
+cloud/apps/web/src/components/runs/ModelSelector.tsx:296:                            <span className={`text-sm flex items-center gap-1 ${isSelected ? 'text-teal-700' : 'text-gray-500'}`}>
+cloud/apps/web/src/components/analysis/VirtualizedAnalysisFolderView.tsx:375:        <div className="text-sm text-gray-500">
+cloud/apps/web/src/components/analysis/VirtualizedAnalysisFolderView.tsx:383:        <div className="flex items-center gap-2 text-xs text-gray-500">
+cloud/apps/web/src/components/analysis/VirtualizedAnalysisFolderView.tsx:389:            className="p-0 h-auto text-xs text-gray-500 hover:text-gray-700 hover:underline hover:bg-transparent"
+cloud/apps/web/src/components/analysis/VirtualizedAnalysisFolderView.tsx:399:            className="p-0 h-auto text-xs text-gray-500 hover:text-gray-700 hover:underline hover:bg-transparent"
+cloud/apps/web/src/components/analysis/VirtualizedAnalysisFolderView.tsx:459:                    <span className={`font-medium ${isUntagged ? 'text-gray-500' : 'text-gray-900'}`}>
+cloud/apps/web/src/components/analysis/VirtualizedAnalysisFolderView.tsx:462:                    <span className="text-sm text-gray-500">
+cloud/apps/web/src/components/analysis/VirtualizedAnalysisFolderView.tsx:503:                    <span className={`font-medium ${isUntagged ? 'text-gray-500' : 'text-gray-900'}`}>
+cloud/apps/web/src/components/analysis/VirtualizedAnalysisFolderView.tsx:506:                    <span className="text-sm text-gray-500">({item.runCount})</span>
+cloud/apps/web/src/components/analysis/VirtualizedAnalysisFolderView.tsx:542:            <span className="text-sm text-gray-500">Loading more results...</span>
+cloud/apps/web/src/components/runs/RunFilters.tsx:160:                  <div className="p-3 text-sm text-gray-500 text-center">
+cloud/apps/web/src/components/runs/RunFilters.tsx:196:            className="hidden sm:flex gap-1 text-gray-500 hover:text-gray-700 px-2 py-1"
+cloud/apps/web/src/components/settings/QueueStatus.tsx:51:      <p className="text-xs text-gray-500">{label}</p>
+cloud/apps/web/src/components/settings/QueueStatus.tsx:63:          <Activity className="w-4 h-4 text-gray-500" />
+cloud/apps/web/src/components/settings/QueueStatus.tsx:102:              <span className="text-gray-500">Success Rate (24h)</span>
+cloud/apps/web/src/components/settings/QueueStatus.tsx:119:            <p className="text-xs text-gray-500 mb-3">Jobs by Type</p>
+cloud/apps/web/src/components/settings/QueueStatus.tsx:134:                      <span className="text-gray-500">{jt.completed} done</span>
+cloud/apps/web/src/components/runs/TranscriptRow.tsx:351:          <div className="text-xs text-gray-500">{formatDate(transcript.createdAt)}</div>
+cloud/apps/web/src/components/runs/TranscriptRow.tsx:358:              <div className={`truncate ${compact ? 'text-sm text-gray-500' : 'font-medium text-gray-900'}`}>
+cloud/apps/web/src/components/runs/TranscriptRow.tsx:364:          <div className="flex items-center gap-4 text-sm text-gray-500 flex-shrink-0">
+cloud/apps/web/src/components/analysis/AnalysisStates.tsx:64:      <p className="text-sm text-gray-500 max-w-md">
+cloud/apps/web/src/components/analysis/AnalysisStates.tsx:70:        <p className="text-xs text-gray-500 mt-2">
+cloud/apps/web/src/components/analysis/AnalysisStates.tsx:107:      <p className="mt-2 text-sm text-gray-500 max-w-sm mx-auto">
+cloud/apps/web/src/components/analysis/AnalysisFilters.tsx:98:          <div className="w-full text-xs text-gray-500 mt-2">
+cloud/apps/web/src/components/definitions/DefinitionFilters.tsx:272:        <p className="text-xs text-gray-500">
+cloud/apps/web/src/components/definitions/DefinitionFilters.tsx:347:                    <div className="p-3 text-sm text-gray-500 text-center">No tags available</div>
+cloud/apps/web/src/components/definitions/DefinitionFilters.tsx:381:              className="hidden sm:flex px-3 py-1.5 text-gray-500 hover:text-gray-700 hover:bg-transparent"
+cloud/apps/web/src/components/analysis/AnalysisListFilters.tsx:138:                  <div className="p-3 text-sm text-gray-500 text-center">
+cloud/apps/web/src/components/analysis/AnalysisListFilters.tsx:174:            className="px-2 py-1 text-gray-500 hover:text-gray-700 hover:bg-transparent"
+cloud/apps/web/src/components/analysis/AnalysisFolderView.tsx:117:        <div className="flex items-center gap-2 text-xs text-gray-500">
+cloud/apps/web/src/components/analysis/AnalysisFolderView.tsx:123:            className="px-0 py-0 h-auto text-xs text-gray-500 hover:text-gray-700 hover:underline hover:bg-transparent"
+cloud/apps/web/src/components/analysis/AnalysisFolderView.tsx:133:            className="px-0 py-0 h-auto text-xs text-gray-500 hover:text-gray-700 hover:underline hover:bg-transparent"
+cloud/apps/web/src/components/analysis/AnalysisFolderView.tsx:160:            <span className="text-sm text-gray-500">
+cloud/apps/web/src/components/analysis/AnalysisFolderView.tsx:203:              <span className="text-sm text-gray-500">
+cloud/apps/web/src/components/analysis/AnalysisFolderView.tsx:242:            <span className="font-medium text-gray-500">Untagged</span>
+cloud/apps/web/src/components/analysis/AnalysisFolderView.tsx:243:            <span className="text-sm text-gray-500">
+cloud/apps/web/src/components/definitions/ForkDialog.tsx:60:              className="text-gray-400 hover:text-gray-500 hover:bg-transparent"
+cloud/apps/web/src/components/import/ImportDialog.tsx:149:              className="text-gray-400 hover:text-gray-500"
+cloud/apps/web/src/components/definitions/TagSelector.tsx:175:              <div className="p-3 text-sm text-gray-500 text-center">Loading tags...</div>
+cloud/apps/web/src/components/definitions/TagSelector.tsx:209:                    <div className="p-3 text-sm text-gray-500 text-center">
+cloud/apps/web/src/components/definitions/ExpandedScenarios.tsx:182:            <p className="text-sm text-gray-500 text-center py-2">
+cloud/apps/web/src/components/definitions/DefinitionList.tsx:328:        <p className="text-sm text-gray-500">
+cloud/apps/web/src/components/definitions/DefinitionList.tsx:337:          <p className="text-gray-500">No vignettes match your filters</p>
+cloud/apps/web/src/components/runs/RunCard.tsx:106:                  <span className="ml-2 text-gray-500 font-normal">v{run.definitionVersion ?? run.definition?.version}</span>
+cloud/apps/web/src/components/runs/RunCard.tsx:123:            <p className="text-sm text-gray-500 mt-0.5">
+cloud/apps/web/src/components/runs/RunCard.tsx:137:            <div className="text-gray-500 text-xs">Models</div>
+cloud/apps/web/src/components/runs/RunCard.tsx:145:            <div className="text-gray-500 text-xs">{batchLabel}</div>
+cloud/apps/web/src/components/runs/RunCard.tsx:155:              <div className="text-gray-500 text-xs">Transcripts</div>
+cloud/apps/web/src/components/runs/RunCard.tsx:162:              <div className="text-gray-500 text-xs">Progress</div>
+cloud/apps/web/src/components/runs/RunCard.tsx:171:            <div className="text-gray-500 text-xs">Duration</div>
+cloud/apps/web/src/components/runs/RunResults.tsx:170:        <p className="text-gray-500">No results available yet</p>
+cloud/apps/web/src/components/runs/RunResults.tsx:200:          <div className="text-sm text-gray-500">Transcripts</div>
+cloud/apps/web/src/components/runs/RunResults.tsx:206:          <div className="text-sm text-gray-500">Total Tokens</div>
+cloud/apps/web/src/components/runs/RunResults.tsx:212:          <div className="text-sm text-gray-500">Avg Turns</div>
+cloud/apps/web/src/components/runs/RunResults.tsx:218:          <div className="text-sm text-gray-500">Avg Duration</div>
+cloud/apps/web/src/components/runs/RunResults.tsx:246:                  <span className="text-gray-500 ml-2">{count}</span>
+cloud/apps/web/src/components/runs/RunResults.tsx:272:                : 'text-gray-500 hover:bg-gray-100'
+cloud/apps/web/src/components/runs/RunResults.tsx:287:                : 'text-gray-500 hover:bg-gray-100'
+cloud/apps/web/src/components/runs/CostBreakdown.tsx:64:        <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-500">
+cloud/apps/web/src/components/runs/CostBreakdown.tsx:110:        <div className="flex items-center gap-2 text-gray-500">
+cloud/apps/web/src/components/runs/CostBreakdown.tsx:132:        <div className="flex items-center gap-2 text-gray-500">
+cloud/apps/web/src/components/definitions/DimensionEditor.tsx:147:        <span className="text-xs text-gray-500">
+cloud/apps/web/src/components/definitions/DimensionEditor.tsx:173:            <span className="text-xs text-gray-500" role="columnheader">Level</span>
+cloud/apps/web/src/components/definitions/DimensionEditor.tsx:174:            <span className="text-xs text-gray-500" role="columnheader">Text</span>
+cloud/apps/web/src/components/analysis/tabs/DecisionsTab.tsx:75:          <p className="text-xs text-gray-500">Repeatability summary lives in Overview.</p>
+cloud/apps/web/src/components/analysis/tabs/DecisionsTab.tsx:85:          <p className="text-xs text-gray-500">
+cloud/apps/web/src/components/analysis/tabs/DecisionsTab.tsx:101:        <p className="mt-3 text-xs text-gray-500">Repeatability summary lives in Overview.</p>
+cloud/apps/web/src/components/definitions/InheritanceIndicator.tsx:62:                className="text-xs text-gray-500 hover:text-gray-700 underline"
+cloud/apps/web/src/components/definitions/InheritanceIndicator.tsx:96:    <span className="text-xs text-gray-500">
+cloud/apps/web/src/components/runs/ExecutionProgress.tsx:164:      <div className="px-3 pb-1.5 flex items-center gap-1.5 text-xs text-gray-500">
+cloud/apps/web/src/components/runs/ExecutionProgress.tsx:180:        <div className="flex items-center gap-2 text-xs text-gray-500">
+cloud/apps/web/src/components/runs/ExecutionProgress.tsx:220:        <span className="text-xs text-gray-500 tabular-nums flex-shrink-0">
+cloud/apps/web/src/components/runs/ExecutionProgress.tsx:311:          <div className="flex items-center gap-3 text-xs text-gray-500">
+cloud/apps/web/src/components/definitions/ScenarioPreview.tsx:33:          <span className="text-xs text-gray-500">
+cloud/apps/web/src/components/definitions/ScenarioPreview.tsx:141:              <p className="text-sm text-gray-500 mb-4">
+cloud/apps/web/src/components/definitions/ScenarioPreview.tsx:172:            <p className="text-sm text-gray-500 text-center py-4">
+cloud/apps/web/src/components/analysis/tabs/ScenariosTab.tsx:104:        <div className="text-center py-8 text-gray-500">
+cloud/apps/web/src/components/analysis/tabs/AgreementTab.tsx:21:        <div className="text-center py-8 text-gray-500">
+cloud/apps/web/src/components/export/ExportButton.tsx:98:              <div className="text-xs text-gray-500">Devtool-compatible format</div>
+cloud/apps/web/src/components/export/ExportButton.tsx:116:              <div className="text-xs text-gray-500">
+cloud/apps/web/src/components/runs/VirtualizedFolderView.tsx:262:        <div className="text-sm text-gray-500">
+cloud/apps/web/src/components/runs/VirtualizedFolderView.tsx:270:        <div className="flex items-center gap-2 text-xs text-gray-500">
+cloud/apps/web/src/components/runs/VirtualizedFolderView.tsx:276:            className="p-0 h-auto text-xs text-gray-500 hover:text-gray-700 hover:underline hover:bg-transparent"
+cloud/apps/web/src/components/runs/VirtualizedFolderView.tsx:286:            className="p-0 h-auto text-xs text-gray-500 hover:text-gray-700 hover:underline hover:bg-transparent"
+cloud/apps/web/src/components/runs/VirtualizedFolderView.tsx:346:                    <span className={`font-medium ${isUntagged ? 'text-gray-500' : 'text-gray-900'}`}>
+cloud/apps/web/src/components/runs/VirtualizedFolderView.tsx:349:                    <span className="text-sm text-gray-500">
+cloud/apps/web/src/components/runs/VirtualizedFolderView.tsx:387:            <span className="text-sm text-gray-500">Loading more runs...</span>
+cloud/apps/web/src/components/analysis/tabs/OverviewSummaryTable.tsx:158:          <p className="mt-1 text-xs text-gray-500">{helperText}</p>
+
+exec
+/bin/zsh -lc 'git diff --unified=80 -- cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx' in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+codex
+## Findings
+- [UNVERIFIED] Medium: `PivotAnalysisTable` now describes tie cells as gray, but the rendered neutral path does not apply any gray fill at all. In `getConditionCellDisplay`, `direction === 'neutral'` returns `backgroundColor: undefined`, and the table only uses that value for cell styling. That makes tie cells look the same as empty cells except for the `0.0` label, which breaks the new “gray boxes mean a tie” contract and weakens the no-data vs tie distinction. Relevant files: [PivotAnalysisTable.tsx](/Users/chrislaw/valuerank/.claude/worktrees/tender-cerf/cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx), [canonicalConditionSummary.ts](/Users/chrislaw/valuerank/.claude/worktrees/tender-cerf/cloud/apps/web/src/utils/canonicalConditionSummary.ts)
+
+- [UNVERIFIED] Low: The new neutral threshold and the one-decimal label can disagree at the boundary. A summary with `netScore === 0.05` is classified as neutral, but the label renders as `0.1` because it is rounded independently. That creates a visible mismatch where a cell is styled as a tie but numerically looks like a weak preference. Relevant file: [canonicalConditionSummary.ts](/Users/chrislaw/valuerank/.claude/worktrees/tender-cerf/cloud/apps/web/src/utils/canonicalConditionSummary.ts)
+
+## Residual Risks
+- I did not run the app, so I could not verify whether any surrounding CSS or later helpers add a neutral fill that would soften the first issue.
+- The review is limited to the diff artifact, so behavior in other consumers of `getConditionCellDisplay` may still have edge cases that are not visible here.
+tokens used
+34,766

@@ -257,8 +257,7 @@ describe('DomainAnalysisValueDetail', () => {
             deprioritized: 1,
             neutral: 0,
             totalTrials: 3,
-            // Winner: selected value (prioritized > deprioritized)
-            // Strength: (2*1 + 1*1) / 3 = 1.0 → rounds to 1
+            // Net score: (2 + 1 - 1) / 3 = 2/3 → 0.7
             strongly: 1,
             somewhat: 1,
             opponentSomewhat: 1,
@@ -272,8 +271,7 @@ describe('DomainAnalysisValueDetail', () => {
             deprioritized: 2,
             neutral: 0,
             totalTrials: 3,
-            // Winner: opponent (deprioritized > prioritized)
-            // Strength: (2*1 + 1*1) / 3 = 1.0 → rounds to 1
+            // Net score: (1 - 2 - 1) / 3 = -2/3 → 0.7
             strongly: 0,
             somewhat: 1,
             opponentSomewhat: 1,
@@ -287,6 +285,11 @@ describe('DomainAnalysisValueDetail', () => {
             deprioritized: 1,
             neutral: 0,
             totalTrials: 2,
+            // Symmetric: one lean each side.
+            strongly: 0,
+            somewhat: 1,
+            opponentSomewhat: 1,
+            opponentStrongly: 0,
           }),
           createCondition({
             scenarioId: 'scenario-4',
@@ -305,8 +308,7 @@ describe('DomainAnalysisValueDetail', () => {
             deprioritized: 0,
             neutral: 0,
             totalTrials: 3,
-            // Winner: selected value (all prioritized)
-            // Strength: (2*2 + 1*1) / 3 = 5/3 = 1.67 → rounds to 2
+            // Net score: (4 + 1) / 3 = 5/3 = 1.67 → 1.7
             strongly: 2,
             somewhat: 1,
             opponentSomewhat: 0,
@@ -336,14 +338,14 @@ describe('DomainAnalysisValueDetail', () => {
       'substantial',
       'full',
     ]);
-    // Cell labels show strength score (0/1/2), not which side won.
-    // Color (not captured here) encodes the winner (blue=selected, orange=opponent).
+    // Cell labels now show net-weighted decimal scores, not winner-only counts.
+    // Color (not captured here) still encodes the winner (blue=selected, orange=opponent).
     expect(rows.slice(2).map((row) => within(row).getAllByRole('cell')[1].textContent?.trim())).toEqual([
-      '1',  // Condition 1: strength 1 (selected wins)
-      '1',  // Condition 2: strength 1 (opponent wins — shown in orange)
-      '0',  // Condition 3: tied
-      '0',  // Condition 4: no directional trials
-      '2',  // Condition 5: strength 2 (selected wins)
+      '0.7',  // Condition 1: selected wins
+      '0.7',  // Condition 2: opponent wins (orange)
+      '0.0',  // Condition 3: tied (gray, neutral direction)
+      '0.0',  // Condition 4: no directional trials (gray, all-neutral)
+      '1.7',  // Condition 5: selected wins strongly
     ]);
 
     fireEvent.click(screen.getByTitle('Condition 1'));
@@ -411,6 +413,10 @@ describe('DomainAnalysisValueDetail', () => {
             deprioritized: 1,
             neutral: 0,
             totalTrials: 3,
+            strongly: 1,
+            somewhat: 1,
+            opponentSomewhat: 1,
+            opponentStrongly: 0,
           }),
         ]),
       ]),
@@ -445,7 +451,6 @@ describe('DomainAnalysisValueDetail', () => {
     ['Infinity', Number.POSITIVE_INFINITY],
     ['-Infinity', Number.NEGATIVE_INFINITY],
     ['negative', -1],
-    ['non-integer', 1.5],
   ] as const)('rejects invalid canonical counts: %s', async (_label, invalidValue) => {
     mockQueries({
       detail: createDetail([
@@ -469,5 +474,184 @@ describe('DomainAnalysisValueDetail', () => {
     await waitFor(() => {
       expect(screen.getByText(/ConditionMatrix requires canonical count data/)).toBeInTheDocument();
     });
+  });
+
+  it('accepts fractional canonical counts', async () => {
+    mockQueries({
+      detail: createDetail([
+        createVignette('def-1', 'One vignette', [
+          createCondition({
+            scenarioId: 'scenario-1',
+            conditionName: 'Condition A',
+            dimensions: { A: 'negligible', B: 'same' },
+            prioritized: 1.5,
+            deprioritized: 0.5,
+            neutral: 0,
+            totalTrials: 2,
+            strongly: 1,
+            somewhat: 0.5,
+            opponentSomewhat: 0.5,
+            opponentStrongly: 0,
+          }),
+        ]),
+      ]),
+      transcripts: [],
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTitle('Condition A')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/ConditionMatrix requires canonical count data/)).not.toBeInTheDocument();
+  });
+
+  it('rejects condition with cross-field inconsistency (self buckets vs prioritized)', async () => {
+    mockQueries({
+      detail: createDetail([
+        createVignette('def-1', 'One vignette', [
+          createCondition({
+            scenarioId: 'scenario-1',
+            conditionName: 'Condition A',
+            dimensions: { A: 'negligible', B: 'same' },
+            prioritized: 10,
+            deprioritized: 0,
+            neutral: 0,
+            totalTrials: 10,
+            // strongly+somewhat = 5, but prioritized = 10 → divergent
+            strongly: 3,
+            somewhat: 2,
+            opponentSomewhat: 0,
+            opponentStrongly: 0,
+          }),
+        ]),
+      ]),
+      transcripts: [],
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText(/strongly\+somewhat.*prioritized/)).toBeInTheDocument();
+    });
+  });
+
+  it('rejects condition with totalTrials mismatch', async () => {
+    mockQueries({
+      detail: createDetail([
+        createVignette('def-1', 'One vignette', [
+          createCondition({
+            scenarioId: 'scenario-1',
+            conditionName: 'Condition A',
+            dimensions: { A: 'negligible', B: 'same' },
+            prioritized: 5,
+            deprioritized: 5,
+            neutral: 0,
+            totalTrials: 11, // off by 1
+            strongly: 3,
+            somewhat: 2,
+            opponentSomewhat: 3,
+            opponentStrongly: 2,
+          }),
+        ]),
+      ]),
+      transcripts: [],
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText(/totalTrials=11 and counts sum to 10/)).toBeInTheDocument();
+    });
+  });
+
+  it('accepts totalTrials within 1e-6 tolerance', async () => {
+    mockQueries({
+      detail: createDetail([
+        createVignette('def-1', 'One vignette', [
+          createCondition({
+            scenarioId: 'scenario-1',
+            conditionName: 'Condition A',
+            dimensions: { A: 'negligible', B: 'same' },
+            prioritized: 5,
+            deprioritized: 5,
+            neutral: 0,
+            totalTrials: 9.9999999, // within 1e-6 of 10
+            strongly: 3,
+            somewhat: 2,
+            opponentSomewhat: 3,
+            opponentStrongly: 2,
+          }),
+        ]),
+      ]),
+      transcripts: [],
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTitle('Condition A')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/ConditionMatrix requires canonical count data/)).not.toBeInTheDocument();
+  });
+
+  it('rejects totalTrials outside 1e-6 tolerance', async () => {
+    mockQueries({
+      detail: createDetail([
+        createVignette('def-1', 'One vignette', [
+          createCondition({
+            scenarioId: 'scenario-1',
+            conditionName: 'Condition A',
+            dimensions: { A: 'negligible', B: 'same' },
+            prioritized: 5,
+            deprioritized: 5,
+            neutral: 0,
+            totalTrials: 9.99999, // outside 1e-6 of 10
+            strongly: 3,
+            somewhat: 2,
+            opponentSomewhat: 3,
+            opponentStrongly: 2,
+          }),
+        ]),
+      ]),
+      transcripts: [],
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText(/totalTrials=9.99999 and counts sum to 10/)).toBeInTheDocument();
+    });
+  });
+
+  it('renders zero-trial condition with unified em-dash placeholder', async () => {
+    mockQueries({
+      detail: createDetail([
+        createVignette('def-1', 'One vignette', [
+          createCondition({
+            scenarioId: 'scenario-1',
+            conditionName: 'Condition A',
+            dimensions: { A: 'negligible', B: 'same' },
+            prioritized: 0,
+            deprioritized: 0,
+            neutral: 0,
+            totalTrials: 0,
+            strongly: 0,
+            somewhat: 0,
+            opponentSomewhat: 0,
+            opponentStrongly: 0,
+          }),
+        ]),
+      ]),
+      transcripts: [],
+    });
+
+    renderPage();
+
+    const cell = await screen.findByTitle('Condition A');
+    const label = cell.querySelector('span');
+    expect(label?.textContent).toBe('—');
+    expect(label?.className).toContain('text-gray-500');
+    expect((cell as HTMLElement).style.backgroundColor).toBe('');
   });
 });

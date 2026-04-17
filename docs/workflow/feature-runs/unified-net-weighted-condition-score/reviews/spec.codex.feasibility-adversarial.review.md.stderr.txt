@@ -1,0 +1,1632 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019d9898-3666-7950-b01d-76a17da180fc
+--------
+user
+Review this spec artifact using a feasibility-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: canonicalConditionSummary.ts
+import type { Transcript } from '../api/operations/runs';
+
+export type CanonicalConditionSummary = {
+  strongly: number;
+  somewhat: number;
+  neutral: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+  unknownCount: number;
+  totalTrials: number;
+  selectedValueWinRate: number | null;
+  winnerScore: number | null;
+  isOpponent: boolean;
+};
+
+export type CanonicalTranscriptIndex = Map<string, Map<string, Transcript[]>>;
+
+type CanonicalBucket = 'strongly' | 'somewhat' | 'neutral' | 'opponentSomewhat' | 'opponentStrongly';
+
+function getCanonicalBucket(transcript: Transcript): CanonicalBucket | null {
+  const canonical = transcript.decisionModelV2?.canonical;
+  if (!canonical) {
+    return null;
+  }
+
+  if (canonical.strength === 'neutral') {
+    return 'neutral';
+  }
+
+  const { favoredValueKey, opposedValueKey, strength } = canonical;
+  if (favoredValueKey == null || opposedValueKey == null) {
+    return null;
+  }
+
+  // Alphabetically-first value is the canonical "first" (blue) side; second is
+  // the "opponent" (orange) side.  This is stable across both runs in a paired
+  // batch, unlike canonical.direction which is position-based (valueA/valueB)
+  // and flips between companion runs.
+  const isFirst = favoredValueKey.localeCompare(opposedValueKey) < 0;
+
+  if (isFirst && strength === 'strong') return 'strongly';
+  if (isFirst && strength === 'lean') return 'somewhat';
+  if (!isFirst && strength === 'lean') return 'opponentSomewhat';
+  if (!isFirst && strength === 'strong') return 'opponentStrongly';
+
+  return null;
+}
+
+export function buildCanonicalTranscriptIndex(transcripts: Transcript[] | null | undefined): CanonicalTranscriptIndex {
+  const index = new Map<string, Map<string, Transcript[]>>();
+
+  for (const transcript of transcripts ?? []) {
+    if (!transcript.scenarioId) {
+      continue;
+    }
+
+    const modelId = transcript.modelId;
+    const scenarioId = String(transcript.scenarioId);
+    const byScenario = index.get(modelId) ?? new Map<string, Transcript[]>();
+    const current = byScenario.get(scenarioId);
+    if (current) {
+      current.push(transcript);
+    } else {
+      byScenario.set(scenarioId, [transcript]);
+    }
+    index.set(modelId, byScenario);
+  }
+
+  return index;
+}
+
+export function collectCanonicalConditionTranscripts(
+  transcriptIndex: CanonicalTranscriptIndex,
+  modelId: string,
+  scenarioIds: string[],
+): Transcript[] {
+  const byScenario = transcriptIndex.get(modelId);
+  if (!byScenario) {
+    return [];
+  }
+
+  const collected: Transcript[] = [];
+  scenarioIds.forEach((scenarioId) => {
+    collected.push(...(byScenario.get(scenarioId) ?? []));
+  });
+  return collected;
+}
+
+export function summarizeCanonicalConditionTranscripts(
+  transcripts: Transcript[] | null | undefined,
+): CanonicalConditionSummary {
+  const counts = {
+    strongly: 0,
+    somewhat: 0,
+    neutral: 0,
+    opponentSomewhat: 0,
+    opponentStrongly: 0,
+    unknownCount: 0,
+  };
+
+  for (const transcript of transcripts ?? []) {
+    const bucket = getCanonicalBucket(transcript);
+    if (!bucket) {
+      counts.unknownCount += 1;
+      continue;
+    }
+
+    counts[bucket] += 1;
+  }
+
+  const totalTrials =
+    counts.strongly
+    + counts.somewhat
+    + counts.neutral
+    + counts.opponentSomewhat
+    + counts.opponentStrongly;
+
+  if (totalTrials === 0) {
+    return {
+      ...counts,
+      totalTrials,
+      selectedValueWinRate: null,
+      winnerScore: null,
+      isOpponent: false,
+    };
+  }
+
+  const selectedValueWinRate = (counts.strongly + counts.somewhat) / totalTrials;
+  const isOpponent = (selectedValueWinRate ?? 0.5) < 0.5;
+
+  const winnerStrongly = isOpponent ? counts.opponentStrongly : counts.strongly;
+  const winnerSomewhat = isOpponent ? counts.opponentSomewhat : counts.somewhat;
+  const winnerScore = (2 * winnerStrongly + 1 * winnerSomewhat) / totalTrials;
+
+  return {
+    ...counts,
+    totalTrials,
+    selectedValueWinRate,
+    winnerScore,
+    isOpponent,
+  };
+}
+
+export function getCanonicalConditionBackground(score: number, isOpponent: boolean): string {
+  // score is winnerScore (0–2). Opacity scales linearly from 0 (no conviction) to 1 (max conviction).
+  const clamped = Math.min(2, Math.max(0, score));
+  const opacity = clamped / 2;
+  if (isOpponent) {
+    return `rgba(251, 146, 60, ${opacity * 0.5})`;
+  }
+  return `rgba(59, 130, 246, ${opacity * 0.5})`;
+}
+
+export function getCanonicalConditionTextColor(isOpponent: boolean): string {
+  return isOpponent ? 'text-orange-700' : 'text-blue-700';
+}
+
+
+Context: ConditionMatrix.tsx
+import { compareConditionLevels } from '../../utils/conditionOrdering';
+
+export type MatrixCondition = {
+  scenarioId: string | null;
+  conditionName: string;
+  dimensions: Record<string, string | number> | null;
+  prioritized: number;
+  deprioritized: number;
+  neutral: number;
+  totalTrials: number;
+  unknownCount: number;
+  strongly: number;
+  somewhat: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+};
+
+function getPreferenceBackground(score: number, isOpponent: boolean): string {
+  const opacity = Math.min(1, Math.max(0, score / 2));
+  if (isOpponent) {
+    return `rgba(251, 146, 60, ${opacity * 0.5})`; // orange-400
+  }
+  return `rgba(59, 130, 246, ${opacity * 0.5})`; // blue-500
+}
+
+function getPreferenceTextColor(isOpponent: boolean): string {
+  return isOpponent ? 'text-orange-700' : 'text-blue-700';
+}
+
+function isValidCount(value: number): boolean {
+  return Number.isFinite(value) && Number.isInteger(value) && value >= 0;
+}
+
+function validateMatrixCondition(condition: MatrixCondition): string | null {
+  const countFields: Array<[string, number]> = [
+    ['prioritized', condition.prioritized],
+    ['deprioritized', condition.deprioritized],
+    ['neutral', condition.neutral],
+    ['totalTrials', condition.totalTrials],
+    ['unknownCount', condition.unknownCount],
+    ['strongly', condition.strongly],
+    ['somewhat', condition.somewhat],
+    ['opponentSomewhat', condition.opponentSomewhat],
+    ['opponentStrongly', condition.opponentStrongly],
+  ];
+
+  for (const [name, value] of countFields) {
+    if (!isValidCount(value)) {
+      return `ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" has an invalid ${name} value of ${String(value)}.`;
+    }
+  }
+
+  const expectedTotal = condition.prioritized + condition.deprioritized + condition.neutral;
+  if (condition.totalTrials !== expectedTotal) {
+    return `ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" reports totalTrials=${condition.totalTrials} and counts sum to ${expectedTotal}.`;
+  }
+
+  return null;
+}
+
+function getConditionMatrixDisplay(condition: MatrixCondition): {
+  label: '0' | '1' | '2';
+  isOpponent: boolean;
+  backgroundColor: string | undefined;
+  textColorClass: string;
+} {
+  const isOpponent = condition.deprioritized > condition.prioritized;
+  const winnerStrongly = isOpponent ? condition.opponentStrongly : condition.strongly;
+  const winnerSomewhat = isOpponent ? condition.opponentSomewhat : condition.somewhat;
+  const winnerScore = condition.totalTrials === 0
+    ? 0
+    : (2 * winnerStrongly + 1 * winnerSomewhat) / condition.totalTrials;
+
+  // Round to nearest integer for the cell label: 0 (neutral), 1 (somewhat), 2 (strongly)
+  const strengthLabel = String(Math.round(winnerScore)) as '0' | '1' | '2';
+
+  return {
+    label: strengthLabel,
+    isOpponent,
+    backgroundColor: getPreferenceBackground(winnerScore, isOpponent),
+    textColorClass: getPreferenceTextColor(isOpponent),
+  };
+}
+
+type ConditionMatrixProps = {
+  vignetteId: string;
+  conditions: MatrixCondition[];
+  selectedConditionKey: string;
+  onSelect: (definitionId: string, conditionName: string, scenarioId: string | null) => void;
+};
+
+export function ConditionMatrix({ vignetteId, conditions, selectedConditionKey, onSelect }: ConditionMatrixProps) {
+  const dimensions = Array.from(
+    new Set(
+      conditions.flatMap((condition) =>
+        Object.keys(condition.dimensions ?? {}),
+      ),
+    ),
+  ).sort();
+
+  if (dimensions.length < 2) {
+    return (
+      <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        Scenario dimensions are missing for this vignette, so pivot matrix rendering is unavailable.
+      </div>
+    );
+  }
+
+  const validationError = conditions
+    .map((condition) => validateMatrixCondition(condition))
+    .find((message): message is string => message !== null);
+  if (validationError !== undefined) {
+    return (
+      <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+        {validationError}
+      </div>
+    );
+  }
+
+  const rowDim = dimensions[0]!;
+  const colDim = dimensions[1]!;
+  const rows = Array.from(
+    new Set(conditions.map((condition) => String(condition.dimensions?.[rowDim] ?? 'N/A'))),
+  ).sort(compareConditionLevels);
+  const cols = Array.from(
+    new Set(conditions.map((condition) => String(condition.dimensions?.[colDim] ?? 'N/A'))),
+  ).sort(compareConditionLevels);
+
+  const cellByKey = new Map<string, MatrixCondition>();
+  for (const condition of conditions) {
+    const rowValue = String(condition.dimensions?.[rowDim] ?? 'N/A');
+    const colValue = String(condition.dimensions?.[colDim] ?? 'N/A');
+    cellByKey.set(`${rowValue}::${colValue}`, condition);
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full border-collapse text-xs">
+        <thead>
+          <tr>
+            <th className="border border-gray-200 border-b-0 bg-gray-50 p-2" />
+            <th
+              colSpan={cols.length}
+              className="border border-gray-200 bg-gray-100 p-2 text-center text-xs font-bold uppercase text-gray-700"
+            >
+              {colDim}
+            </th>
+          </tr>
+          <tr>
+            <th className="w-32 border border-gray-200 bg-gray-100 p-2 text-left text-xs font-bold uppercase text-gray-700">
+              {rowDim}
+            </th>
+            {cols.map((col) => (
+              <th
+                key={col}
+                className="border border-gray-200 bg-gray-50 p-2 text-center font-mono text-xs font-medium text-gray-500"
+              >
+                {col}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row}>
+              <td className="whitespace-nowrap border border-gray-200 bg-gray-50 p-2 font-mono text-sm font-bold text-gray-900">
+                {row}
+              </td>
+              {cols.map((col) => {
+                const condition = cellByKey.get(`${row}::${col}`);
+                const hasData = condition !== undefined && condition.totalTrials > 0;
+                const conditionKey = condition
+                  ? `${vignetteId}:${condition.scenarioId ?? '__unknown__'}`
+                  : '';
+                const isSelected = condition != null && selectedConditionKey === conditionKey;
+                const display = condition ? getConditionMatrixDisplay(condition) : null;
+
+                return (
+                  <td
+                    key={`${row}-${col}`}
+                    className={`border border-gray-100 p-3 text-center text-sm transition-colors ${
+                      condition ? 'cursor-pointer hover:ring-1 hover:ring-sky-300' : ''
+                    } ${isSelected ? 'ring-1 ring-sky-400' : ''}`}
+                    style={{ backgroundColor: hasData ? display?.backgroundColor : undefined }}
+                    onClick={() => {
+                      if (!condition) return;
+                      onSelect(vignetteId, condition.conditionName, condition.scenarioId);
+                    }}
+                    title={condition?.conditionName ?? 'No condition'}
+                  >
+                    {hasData ? (
+                      <span className={`font-semibold ${display?.textColorClass ?? 'text-gray-400'}`}>
+                        {display?.label ?? '-'}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="mt-2 text-xs text-gray-500">
+        Click a cell to load condition transcripts below.
+        {conditions.some((c) => c.unknownCount > 0) && (
+          <span className="ml-2 font-semibold text-gray-600">
+            · Unknown trials are excluded from the canonical condition counts.
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+Artifact: spec.md
+# Feature Spec: Unified Net-Weighted Condition Score
+
+**Slug:** `unified-net-weighted-condition-score`
+**Branch:** `feature/unified-condition-score`
+**Status:** revised after spec checkpoint
+**Discovery:** complete (assumption-driven; no open questions)
+
+## Checkpoint resolution log
+
+Two rounds of adversarial review ran against this spec. All findings are addressed below.
+
+### Round 1 — initial reviews
+
+| # | Severity | Source | Finding | Resolution |
+|---|---|---|---|---|
+| 1 | HIGH | Codex feasibility | `ConditionMatrix` receives `MatrixCondition` (raw counts + dimensions), not `Transcript[]`. It cannot call `summarizeCanonicalConditionTranscripts` directly. | Shared module will expose a second summarizer, `summarizeCanonicalConditionCounts(counts: CanonicalConditionCounts): CanonicalConditionSummary`, that takes pre-tallied counts and returns the same summary shape the transcript summarizer does. (See FR-011.) |
+| 2 | HIGH | Codex feasibility / Gemini | `ConditionMatrix.validateMatrixCondition` rejects non-integer counts via `Number.isInteger`. After PR #667 (`Int → Float` for count fields) fractional counts are legitimate. | The integer check is removed; validator enforces `Number.isFinite` and `>= 0` only. Sum check becomes tolerant equality. (See FR-012.) |
+| 3 | MEDIUM | Codex edge-cases | FR-010 / SC-006 grep rule was too broad — legend classification and tooltip text legitimately read raw count fields for non-score purposes. | FR-010 tightened to forbid only arithmetic that produces the score, label, color, or opacity. Read-only classification and display explicitly permitted. |
+| 4 | MEDIUM | Codex feasibility | Test file list referenced `AnalysisPanel.test.tsx` which does not exist. | Corrected to reference `AnalysisPanel.pairedContent.test.tsx`, `.layout.test.tsx`, `.states.test.tsx`. |
+| 5 | MEDIUM | Gemini | Ties rendered `text-blue-700` — visual bias toward "self" side, re-introducing the exact bias this feature targets. | Tri-state direction (`self` / `opponent` / `neutral`); cell helper returns `text-gray-500` with no fill for ties. (See FR-003, FR-005.) |
+| 6 | LOW | Gemini | Inline opacity math vs shared `opacity * 0.5` are equivalent; spec implied duplication. | Noted — shared form survives. No spec change. |
+| 7 | LOW | Gemini | `toFixed(1)` is non-i18n-aware. | Out of scope. Added to non-goals. |
+
+### Round 2 — reviews after Round 1 revisions
+
+| # | Severity | Source | Finding | Resolution |
+|---|---|---|---|---|
+| 8 | HIGH | Gemini | FR-012 said to move the `prioritized + deprioritized + neutral === totalTrials` sum check **into** the shared module. But that module handles **canonical** counts (`strongly`, `somewhat`, `opponentStrongly`, `opponentSomewhat`, `neutral`) and has no knowledge of `prioritized` / `deprioritized` — those are view-specific `MatrixCondition` fields. Impossible as written. | The shape validation for `MatrixCondition`'s non-canonical fields (`prioritized`, `deprioritized`, `totalTrials`, `unknownCount`, `neutral`) stays **inline** in `ConditionMatrix.tsx` as schema validation, not score arithmetic. Only `Number.isInteger` is removed and strict `===` is replaced with tolerant equality (`|expected − actual| < 1e-6`). Score-related arithmetic on canonical counts moves into the shared module. (See revised FR-012.) |
+| 9 | HIGH | Gemini | `totalTrials` ambiguity: `MatrixCondition.totalTrials = prioritized + deprioritized` (non-canonical). Shared module's `totalTrials` must sum the five canonical counts (`strongly + somewhat + opponentStrongly + opponentSomewhat + neutral`). These can disagree. Spec did not forbid passing the wrong one. | `summarizeCanonicalConditionCounts` MUST compute `totalTrials` internally from its own `CanonicalConditionCounts` input. It MUST NOT accept `totalTrials` as a parameter. The view's `MatrixCondition.totalTrials` is never passed to the summarizer. (See revised FR-011.) |
+| 10 | MEDIUM | Codex feas | Moving sum-check out of view dropped the user-visible red callout safeguard. | Sum-check stays inline as schema validation; the existing red-callout UX is preserved. Spec now explicitly says so. (See Resolution #8 above.) |
+| 11 | MEDIUM | Codex feas | Exact `netScore === 0` tie test is fragile under fractional counts plus floating-point residue (`netScore = 1e-17` instead of `0`). | Tie detection uses tolerant equality: `direction = 'neutral' when Math.abs(netScore) < 1e-9`. (See revised FR-003.) |
+| 12 | MEDIUM | Codex edges | Transcript tables (`ConditionDecisionsTable`, `PivotAnalysisTable`) still call `getCanonicalConditionTextColor(isOpponent)` directly. Neutral tri-state won't reach them unless they switch to the new bundle helper. | FR-004 and FR-013 now require both transcript-based tables to consume `getConditionCellDisplay(summary)` and stop calling `getCanonicalConditionTextColor` / `getCanonicalConditionBackground` directly. |
+| 13 | MEDIUM | Codex edges | `PivotAnalysisTable` legend classifier buckets a cell with `isOpponent === false` and mixed directional counts as "low". Ties currently render as low-confidence self, which is wrong once we have a real neutral state. | FR-014 requires the legend's bucket classifier to key off `summary.direction === 'neutral'` (via the same shared helper), so tied cells count as neutral, not low. Scoped narrowly to the legend classifier. |
+| 14 | MEDIUM | Codex edges | FR-005's `getConditionCellDisplay` return shape omitted `netScore`, which left room for views to re-derive it. | FR-005 return shape now explicitly includes `netScore: number \| null` and `direction: 'self' \| 'opponent' \| 'neutral'`. Views get everything in one call. |
+| 15 | MEDIUM | Gemini | `CanonicalConditionCounts` input type for `summarizeCanonicalConditionCounts` was not defined — implementer might pass full `MatrixCondition`. | FR-011 now explicitly defines `CanonicalConditionCounts` as exactly the five canonical count fields: `{ strongly, somewhat, opponentStrongly, opponentSomewhat, neutral }`. No other fields permitted. |
+| 16 | LOW | Codex feas | SC-006 grep gate was imprecise given allowed read-only count access. | SC-006 narrowed to specific patterns: no `Math.abs(...)` on a derived score outside the shared module, no `(2 * ... + ...) / ...` arithmetic outside, no `.toFixed(1)` on a condition-score outside. Read-only field access is explicitly not caught. |
+
+### Round 3 — reviews after Round 2 revisions
+
+| # | Severity | Source | Finding | Resolution |
+|---|---|---|---|---|
+| 17 | HIGH | Gemini (MED per Codex feas / edges) | Split-validation hole: `validateMatrixCondition` checks `MatrixCondition.totalTrials` against `prioritized + deprioritized + neutral` (non-canonical totals), but the score is computed from `strongly + somewhat + opponentStrongly + opponentSomewhat + neutral` (canonical totals). A malformed row can pass schema validation and still render a score from inconsistent data. | FR-012 now also requires a **cross-field consistency check** inside `validateMatrixCondition`: `Math.abs((strongly + somewhat) − prioritized) < 1e-6` AND `Math.abs((opponentStrongly + opponentSomewhat) − deprioritized) < 1e-6`. If either check fails, the same red-callout error surfaces. Closes the two-path gap. (See revised FR-012.) |
+| 18 | MEDIUM | Codex feas / Codex edges / Gemini | `selectedValueWinRate` is a legacy winner-only metric still exported on `CanonicalConditionSummary`. Today, `isOpponent` is derived from `selectedValueWinRate < 0.5`. Keeping it leaves a drift surface where callers can reintroduce the winner-biased logic. | FR-008 now also requires removing `selectedValueWinRate` from `CanonicalConditionSummary`'s public type. The derivation of `isOpponent` moves to `direction === 'opponent'`. If any internal call site still needs the win rate, it is computed locally in the summarizer and not re-exposed. |
+| 19 | MEDIUM | Codex edges | FR-014's `direction === 'neutral'` bucket would also catch zero-trial cells, because FR-003 puts both ties AND zero-trial into `'neutral'`. Today, `PivotAnalysisTable`'s legend skips zero-trial summaries before bucketing; the spec would break that behavior. | FR-014 now requires the legend classifier to bucket only when `summary.direction === 'neutral' && summary.hasData === true`. Zero-trial cells stay excluded from all buckets, matching today's behavior. |
+| 20 | LOW | Gemini | Assumption #4 says "Opacity = `\|netScore\| / 2`, capped at 1", but today's implementation multiplies the intermediate opacity by `0.5` in the rgba string so the effective maximum alpha is `0.5`, not `1.0`. Spec wording contradicts implementation. | Assumption #4 and FR-007 corrected: effective alpha = `Math.min(1, Math.max(0, \|netScore\| / 2)) * 0.5`, maximum `0.5`. This is the current and intended rendering — a fully saturated fill would be too heavy for matrix cells. No code change from this finding; just spec wording. |
+
+### Round 4 — reviews after Round 3 revisions
+
+| # | Severity | Source | Finding | Resolution |
+|---|---|---|---|---|
+| 21 | HIGH | Codex feas | FR-007 was off by a factor of 2. Today's `getCanonicalConditionBackground(score, isOpponent)` takes `score` in range `[0, 2]`, divides by 2 internally, then applies `* 0.5` — max alpha `0.5`. My wording said to pass `Math.abs(netScore) / 2` (range `[0, 1]`) into the helper; that would cap alpha at `0.25`, making fills too faint. | FR-007 corrected: pass `Math.abs(netScore)` (range `[0, 2]`, no pre-divide). Helper's existing internal `/2` and `* 0.5` produce the intended max alpha `0.5`. Assumption #4 also corrected to describe the two-step math plainly. |
+| 22 | MEDIUM | Codex feas | `tests/components/analysis/PivotAnalysisTable.test.tsx` hard-codes `2.0` labels and clicks in three tests; omitted from the spec's test update list. | Added to the In-scope test list. |
+| 23 | MEDIUM | Gemini | Leaving the legacy `isOpponent` boolean on `CanonicalConditionSummary` is a misuse surface — developers could reach for it and bypass `direction` / the bundle helper, re-creating tie bias. | FR-008 tightened: `isOpponent` is **removed** from the public `CanonicalConditionSummary` type. Callers who need the opponent-only axis derive it locally from `summary.direction === 'opponent'`. The one-liner derivation keeps call sites honest without reintroducing a public field. |
+| 24 | MEDIUM | Codex edges | `canonicalConditionSummary.ts` uses `localeCompare` to decide which counted value is the "first" side; that is host-locale sensitive, so identical raw counts can render with swapped direction under different browser locales. | Added to non-goals and residual risks. Fixing the locale dependency is a separate feature; this feature's existing inputs do not introduce the dependency and calling it out here prevents scope creep. |
+| 25 | LOW | Codex edges | US3's "must not touch raw count fields directly" wording is broader than FR-010 / SC-006, which narrow to score-producing arithmetic. Blanket reading would reject valid reads. | US3 independent test reworded to match FR-010/SC-006 exactly: "search for score-producing arithmetic". |
+| 26 | LOW | Codex edges | `ConditionMatrix` silently flattens 3+ dimension conditions to an arbitrary 2D slice. Pre-existing behavior, unrelated to the score fix. | Added to non-goals. Documenting so future work can pick it up; out of scope here. |
+| 27 | INFO | Gemini | Finding listed as HIGH but was actually a restatement that FR-012's float-tolerant sum check is the right fix. No additional spec action needed. | No change — already handled by FR-012 item 2. |
+| 28 | INFO | Gemini | Finding listed as MEDIUM but was a restatement of the cross-field gap now closed by FR-012 item 3. | No change — already handled. |
+
+### Round 5 — reviews after Round 4 revisions
+
+| # | Severity | Source | Finding | Resolution |
+|---|---|---|---|---|
+| 29 | MEDIUM | Codex feas | FR-014 only rewrote the `neutral` branch of `PivotAnalysisTable`'s legend classifier. The `high` / `self` / `opponent` branches still depend on `summary.isOpponent`, which FR-008 now removes. Legend bucketing is underspecified — not mechanically implementable as written. | FR-014 broadened: every branch of the legend classifier migrates from `summary.isOpponent` to `summary.direction`. `opponent` bucket keys off `direction === 'opponent'`; `self`-aligned (`high`/`low`) buckets key off `direction === 'self'`; `neutral` bucket keys off `direction === 'neutral' && hasData`. Zero-trial cells (`hasData === false`) stay excluded from all buckets. See revised FR-014. |
+| 30 | MEDIUM | Codex edges | `PivotAnalysisTable` contains stale user-facing copy: *"Each box in the table shows the model's average preference score (0–2)"*. Under net-weighted signed magnitudes plus tie-neutral handling, that sentence is factually wrong — the displayed number is no longer a 0–2 average. | Added to In-scope: update the help/legend copy so it accurately describes the new decimal magnitude (range `[0, 2]`) plus directional color coding and the tie-neutral state. The tasks phase will enumerate the exact strings to change. |
+| 31 | LOW | Codex edges | FR-011 says `CanonicalConditionCounts` "MUST NOT accept... any MatrixCondition-shaped object." TypeScript structural typing cannot technically enforce this — a `MatrixCondition` value that happens to have the five required fields will still type-check. | FR-011 wording softened: the invariant is maintained by call-site convention and a test that feeds a raw `MatrixCondition` and asserts the summarizer ignores the non-canonical fields. A branded nominal type is declined as overkill for this scope. |
+
+### Round 6 — reviews after Round 5 revisions
+
+| # | Severity | Source | Finding | Resolution |
+|---|---|---|---|---|
+| 32 | HIGH | Codex feas | SC-006 grep patterns include `Math.abs(` on values derived from the four directional fields. But FR-012 explicitly requires `Math.abs((strongly + somewhat) − prioritized)` inside `validateMatrixCondition`. Direct contradiction — the grep gate would fail a correct implementation. | SC-006 updated to explicitly exempt `validateMatrixCondition`. The grep rule applies only to arithmetic that produces the **score, label, color, or opacity**, not to schema validation. Specific file/symbol exemption added to SC-006 wording. |
+| 33 | MEDIUM | Gemini | `hasData` is defined only on `getConditionCellDisplay`'s return type; `CanonicalConditionSummary` itself lacks it. FR-014's legend classifier needs `hasData` before rendering, so it would have to re-derive from `summary.totalTrials > 0` — duplicating single-source logic. | FR-001 extended: `CanonicalConditionSummary` now includes `hasData: boolean` (= `totalTrials > 0`). The cell-display helper's `hasData` is just a pass-through. Legend classifier reads `summary.hasData` directly. |
+| 34 | MEDIUM | Codex feas | SC-004 requires zero `winnerScore` matches under `cloud/apps/web/src`, but Assumption #6 says the rename only touches the summary type and direct call sites. `ConditionMatrix.tsx` also has a local variable named `winnerScore` inside its now-deleted inline helper — the assumption wording implies that local isn't in scope. | Assumption #6 clarified: "direct call sites" includes the inline variable(s) inside `ConditionMatrix.tsx`'s old `getConditionMatrixDisplay` — those are deleted entirely with the inline formula, so SC-004's grep will pass. No standalone `winnerScore` identifier anywhere under `cloud/apps/web/src` after the change. |
+| 35 | LOW | Gemini | `validateMatrixCondition` surfaces only the first invalid row; multiple bad rows require fix-reload-repeat cycle. | Pre-existing behavior; improving it is out of scope. Added to residual risks. |
+| 36 | N/A | Codex edges | Codex runner timed out — not a finding. | Re-ran in round 7 (see next section if applicable). |
+
+All findings from all six rounds are addressed. When the reconcile pass runs against this spec, the three review files will be auto-marked `accepted`.
+
+## Problem
+
+Three product views each render a per-condition "decision score" for a pair of competing values, using the same five raw count inputs (`strongly`, `somewhat`, `opponentStrongly`, `opponentSomewhat`, `neutral`):
+
+1. **Condition Matrix** on the domain analysis value-detail page — `cloud/apps/web/src/components/domains/ConditionMatrix.tsx`
+2. **Condition Decisions** table on the run analysis Decision tab — `cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx`
+3. **Pivot Analysis** table on the run analysis Scenarios tab — `cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx`
+
+Two issues exist today:
+
+- **The formula only considers the "winning" side.** `winnerScore = (2·winnerStrongly + winnerSomewhat) / totalTrials`, range 0…2. A near-tie like `3 somewhat-Benevolence vs 2 somewhat-Conformity` renders the same as a clean win of `3 somewhat-Benevolence, 0 Conformity` because Conformity's 2 votes are thrown away. True ties break toward the "self" side because of how `isOpponent` is decided (`deprioritized > prioritized`), meaning a genuine tie can render as a decisive opponent win.
+- **The Condition Matrix additionally rounds to 0/1/2.** That erases the decimal detail that signals model inconsistency (e.g. `0.6` collapses to `1`). The `ConditionMatrix.tsx` formula is also an **inline duplicate** — it doesn't use the shared helper the other two views consume.
+
+Users reading any of these views cannot currently distinguish a near-tie from a blowout, and the three views disagree with each other on the same underlying data.
+
+## Goal
+
+Two goals, equal weight:
+
+1. **Fix the math.** Replace winner-only aggregation with a **net-weighted** aggregation, and display the score as a raw decimal magnitude with direction conveyed by color.
+2. **Make it a single-source component.** Consolidate the score calculation, the label formatting, and the color logic into one shared module so that any future change — formula, label format, palette, tie handling — can be made in exactly one place and propagate to every view automatically. No view may inline its own copy.
+
+## Scope
+
+### In scope
+
+- Update the shared helper `cloud/apps/web/src/utils/canonicalConditionSummary.ts`:
+  - Replace `winnerScore` with `netScore: number | null`:
+    `netScore = ((2·strongly + somewhat) − (2·opponentStrongly + opponentSomewhat)) / totalTrials`, range −2…+2, `null` when `totalTrials === 0`.
+  - Add `direction: 'self' | 'opponent' | 'neutral'` derived from `netScore` with a `1e-9` tolerance.
+  - Add new export `summarizeCanonicalConditionCounts(counts: CanonicalConditionCounts): CanonicalConditionSummary` that computes `totalTrials` internally from the five canonical fields — no external `totalTrials` accepted.
+  - Add new export `getConditionCellDisplay(summary)` returning `{ netScore, direction, label, backgroundColor, textColorClass, hasData }` — the single bundle helper every view renders from.
+  - Keep `getCanonicalConditionBackground` and `getCanonicalConditionTextColor` exported; `getConditionCellDisplay` calls them internally. Views must not call them for score cells directly.
+- Update `ConditionDecisionsTable.tsx` and `PivotAnalysisTable.tsx`: switch the per-cell render path from the old `getCanonicalConditionTextColor` / `getCanonicalConditionBackground` pair to a single `getConditionCellDisplay(summary)` call. Display `label` directly (no `toFixed` in the view).
+- Update `PivotAnalysisTable.tsx`'s legend bucket classifier to migrate every branch from `summary.isOpponent` to `summary.direction` (FR-014).
+- Update `PivotAnalysisTable.tsx`'s help/legend copy (today's text: *"Each box in the table shows the model's average preference score (0–2)"*) to describe the new net-weighted decimal magnitude `[0, 2]`, color-coded direction (blue = selected leads, orange = opponent leads, neutral for ties), and the tie-neutral display. The tasks phase will enumerate the exact strings; scope is limited to the descriptive header/legend copy on this component — no other user-facing copy changes in this feature.
+- Update `ConditionMatrix.tsx`: delete the inline formula, `getPreferenceBackground`, `getPreferenceTextColor`, and the rounding step. Call `summarizeCanonicalConditionCounts({ strongly, somewhat, opponentStrongly, opponentSomewhat, neutral })` then `getConditionCellDisplay(summary)`. Remove `Number.isInteger` from `validateMatrixCondition` and make its sum check tolerant (`|a − b| < 1e-6`). Keep the red callout UX for schema-invalid rows.
+- Update impacted unit tests so they assert the new formula:
+  - `cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts`
+  - `cloud/apps/web/tests/components/analysis/ConditionDecisionsTable.test.tsx`
+  - `cloud/apps/web/tests/components/analysis/PivotAnalysisTable.test.tsx` — currently hardcodes `2.0` labels and click-through assertions; must update for the new formula and click-through via `getConditionCellDisplay` output.
+  - `cloud/apps/web/tests/components/analysis/AnalysisPanel.pairedContent.test.tsx`
+  - `cloud/apps/web/tests/components/analysis/AnalysisPanel.layout.test.tsx` (if it asserts score values)
+  - `cloud/apps/web/tests/components/analysis/AnalysisPanel.states.test.tsx` (if it asserts score values)
+  - `cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx`
+  - any other test that asserts `ConditionMatrix` `'0' | '1' | '2'` labels or `winnerScore` values (tasks phase will enumerate)
+
+### Out of scope (non-goals)
+
+- Per-transcript `preferenceScore` computation in `cloud/apps/api/src/services/export/decision-display.ts`. This is the atomic 0/1/2 weight for a single trial and is used by CSV/XLSX exports. The aggregate formula change uses these same weights, so no change is needed here.
+- `meanPreferenceScore` aggregation in `cloud/apps/api/src/services/export/xlsx/worksheets/model-summary.ts`. This is a non-directional magnitude average and is a different metric from the cell score.
+- Rebuilding any domain analysis snapshot. Snapshots store raw counts, not the computed score.
+- GraphQL schema changes. The API exposes raw counts; the fix is purely client-side.
+- Renaming any legacy symbols beyond the `winnerScore` → `netScore` rename inside the shared helper and its direct call sites.
+- Internationalization of the decimal separator. The app renders `.` everywhere today; i18n of numeric formats is a separate effort.
+- Host-locale sensitivity of `canonicalConditionSummary.ts`'s `localeCompare` call that picks the "first" side. This is a pre-existing dependency not introduced by this feature; fixing it (e.g. comparing by value key rather than display string, or passing an explicit locale) is a separate concern. This feature preserves today's behavior and adds no new locale coupling.
+- `ConditionMatrix`'s existing 2D projection of 3+ dimension conditions (silently flattens to the first two dimensions after sorting). Pre-existing display behavior, unchanged by this feature. Users viewing such conditions will continue to see an arbitrary 2D slice. Out of scope for the score fix; logged for future work.
+
+## Assumptions carried in
+
+1. Formula: `netScore = ((2·strongly + somewhat) − (2·opponentStrongly + opponentSomewhat)) / totalTrials`; range −2…+2.
+2. Direction: `isOpponent = netScore < 0`. `netScore === 0` renders with no fill (tie is visually neutral).
+3. Label: magnitude only, `Math.abs(netScore).toFixed(1)`. No sign character.
+4. Color: blue when selected leads, orange when opponent leads, none at tie. Effective alpha is built in two steps by the existing color helper — clamp `|netScore|` to `[0, 2]`, divide by 2 to get `[0, 1]`, then multiply by `0.5` for the rgba alpha. Max effective alpha `0.5`; `netScore === 0` produces no background at all (see FR-007 and FR-005).
+5. All three views use the shared helper after this change.
+6. `winnerScore` rename → `netScore` in the helper return shape AND in every direct call site, including any local variable named `winnerScore` in `ConditionMatrix.tsx`'s inline `getConditionMatrixDisplay` (which is deleted outright as part of this change — the inline formula goes away entirely). After the change, grep for the literal identifier `winnerScore` under `cloud/apps/web/src` returns zero hits (SC-004).
+7. `ConditionMatrix.tsx`'s inline formula is deleted; the component consumes the shared helper.
+8. Existing tests that assert the old winner-only values are updated, not suppressed.
+9. No snapshot rebuild needed.
+10. No GraphQL schema change needed.
+
+## User Stories
+
+### US1 — Consistent decimal score across views (P1)
+
+**As a** user inspecting model decisions
+**I want to** see the same decimal score in the Condition Matrix, Condition Decisions table, and Pivot Analysis table for the same underlying data
+**So that** I can trust the numbers and don't have to reconcile disagreements between views.
+
+**Independent test:** Pick any one condition cell on the domain analysis value-detail page (Condition Matrix), then cross-reference the same condition in the run analysis Decision tab (Condition Decisions) and Scenarios tab (Pivot Analysis). All three must show the same decimal value to one decimal place.
+
+**Acceptance scenarios (all viewed from Conformity):**
+
+| # | Input | Expected label | Expected color | Expected fill |
+|---|---|---|---|---|
+| A | 3 somewhat-Benevolence, 2 somewhat-Conformity | `0.2` | orange | faint |
+| B | 5 strongly-Benevolence | `2.0` | orange | full |
+| C | 4 strongly + 1 somewhat Conformity | `1.8` | blue | near-full |
+| D | 2 strongly each + 1 neutral | `0.0` | none | none |
+| E | 1 strongly + 2 somewhat Conformity vs 1 strongly + 1 somewhat Benevolence | `0.2` | blue | faint |
+
+### US2 — Magnitude-only labels (P1)
+
+**As a** user reading a score cell
+**I want to** see only the magnitude of the score (no `+` or `−` sign)
+**So that** the cell stays compact and the color already tells me direction.
+
+**Independent test:** Render any cell with a negative `netScore`. Verify the label has no sign character and the color is orange.
+
+**Acceptance scenarios:**
+
+1. **Given** `netScore = -0.2`, **when** the cell renders, **then** the label text is `0.2` and the background is faint orange.
+2. **Given** `netScore = +1.8`, **when** the cell renders, **then** the label text is `1.8` and the background is near-full blue.
+
+### US3 — Shared component as single source of truth (P1)
+
+**As a** developer changing any aspect of the condition score in the future (formula, decimal places, palette, tie handling, accessibility labels)
+**I want to** edit one module and have every view pick it up
+**So that** views cannot drift apart, duplicate rules cannot accumulate, and one code review covers all display sites.
+
+**Independent test:** After the change, search `cloud/apps/web/src` for **score-producing arithmetic** on the four directional count fields (`strongly`, `somewhat`, `opponentStrongly`, `opponentSomewhat`) — specifically the patterns listed in SC-006: `(2 *` or `2*` applied to any of those fields, `.toFixed(` on a value derived from them, or `Math.abs(` on such a derived value. The only matches must be inside the shared module (`canonicalConditionSummary.ts`). Read-only reads for non-score purposes (legend bucket checks via `summary.direction`, tooltip text, click-filter routing) remain in the views and are expected.
+
+**Acceptance scenarios:**
+
+1. **Given** I grep the web source for `2 *` applied to `strongly` or `opponentStrongly`, **then** the only hit is inside the shared module (`canonicalConditionSummary.ts`).
+2. **Given** I grep the web source for `toFixed(1)` on a condition-score value, **then** the call site either lives in the shared module or consumes a pre-formatted string produced by the shared module.
+3. **Given** I change the score formula, the decimal precision, or the color palette in the shared module, **when** I reload any of the three views, **then** all three show the change with no per-view edits.
+4. **Given** a new view wants to render this score, **then** it can import the shared module and render a cell without re-deriving any logic.
+
+## Functional Requirements
+
+- **FR-001:** `canonicalConditionSummary.ts` MUST expose on the `CanonicalConditionSummary` type:
+  - `netScore: number | null` — `null` only when `totalTrials === 0`.
+  - `direction: 'self' | 'opponent' | 'neutral'` — per FR-003.
+  - `hasData: boolean` — `true` iff `totalTrials > 0`. Provided on the summary itself so the legend classifier (FR-014) can read it without re-deriving, preserving the single-source goal. The cell-display helper's `hasData` (FR-005) is a pass-through of this field.
+- **FR-002:** `netScore` MUST be computed as `((2·strongly + somewhat) − (2·opponentStrongly + opponentSomewhat)) / totalTrials`.
+- **FR-003:** Direction tri-state derived from `netScore` using a tolerance of `1e-9` to absorb floating-point residue on fractional inputs:
+  - `Math.abs(netScore) < 1e-9` → `direction: 'neutral'`
+  - `netScore >= 1e-9` → `direction: 'self'`
+  - `netScore <= -1e-9` → `direction: 'opponent'`
+  The shared module MUST expose this tri-state explicitly (`direction: 'self' | 'opponent' | 'neutral'`). The legacy `isOpponent` boolean is **not** re-exposed on the public summary (see FR-008). Callers that only care about the opponent-only axis compute `summary.direction === 'opponent'` inline.
+- **FR-004:** `ConditionMatrix`, `ConditionDecisionsTable`, and `PivotAnalysisTable` MUST obtain `netScore`, `direction`, the formatted cell label, the background color, and the text color class from the shared module via **one call** to `getConditionCellDisplay`. No view may recompute any of those five artifacts locally. In particular, the two transcript-based tables MUST stop calling `getCanonicalConditionTextColor` / `getCanonicalConditionBackground` directly at the cell render site; those calls are replaced by the bundle helper.
+- **FR-005:** The shared module MUST expose a single cell-render helper with the exact return shape:
+
+  ```ts
+  getConditionCellDisplay(summary: CanonicalConditionSummary): {
+    netScore: number | null;                           // null when totalTrials === 0
+    direction: 'self' | 'opponent' | 'neutral';         // tri-state from FR-003
+    label: string;                                     // '—' when totalTrials === 0, else Math.abs(netScore).toFixed(1)
+    backgroundColor: string | undefined;               // undefined when direction === 'neutral' OR totalTrials === 0
+    textColorClass: string;                            // 'text-gray-500' for neutral / no-data, 'text-blue-700' for self, 'text-orange-700' for opponent
+    hasData: boolean;                                  // false when totalTrials === 0
+  }
+  ```
+
+  This is the only public surface a view renders from. For `direction === 'neutral'` the helper MUST return `backgroundColor: undefined` and `textColorClass: 'text-gray-500'` — no visual bias toward either side.
+- **FR-006:** The cell label produced by the shared module MUST be `Math.abs(netScore).toFixed(1)` when `totalTrials > 0`, or `—` when `totalTrials === 0`.
+- **FR-007:** The shared module's `getConditionCellDisplay` helper MUST pass `Math.abs(netScore)` (raw magnitude, range `[0, 2]`, **no pre-divide**) into `getCanonicalConditionBackground(score, isOpponent)`. That helper's existing internal math — clamp to `[0, 2]`, divide by `2` to get `[0, 1]`, multiply by `0.5` for the rgba alpha — produces an effective alpha in `[0, 0.5]`. A `netScore` of `±2` produces alpha `0.5`; `netScore` of `0` bypasses the background entirely (see FR-005: `direction === 'neutral'` → `backgroundColor: undefined`).
+- **FR-008:** Three legacy fields MUST be removed from the `CanonicalConditionSummary` public type: `winnerScore`, `selectedValueWinRate`, and `isOpponent`. No TypeScript `any` suppressions MAY be used to hide any removal. Callers that want the opponent-only axis derive it locally as `summary.direction === 'opponent'`. If internal summarizer logic still needs to compute a win rate during aggregation, it stays a local variable inside the summarizer and is not re-exposed on the returned summary.
+- **FR-009:** The old `ConditionMatrix` helpers `getPreferenceBackground` and `getPreferenceTextColor` MUST be deleted; the shared helpers `getCanonicalConditionBackground` and `getCanonicalConditionTextColor` are the only color helpers that remain.
+- **FR-010:** Arithmetic that computes the cell's `netScore`, rendered label, background color, or opacity MUST NOT reference raw count fields (`strongly`, `somewhat`, `opponentStrongly`, `opponentSomewhat`) outside the shared module. Read-only reads of those fields for unrelated UI purposes — legend bucket classification, tooltip text, click-filter decisions — are explicitly permitted.
+- **FR-011:** The shared module MUST expose a counts-based summarizer in addition to the existing transcripts-based one:
+
+  ```ts
+  export type CanonicalConditionCounts = {
+    strongly: number;
+    somewhat: number;
+    opponentStrongly: number;
+    opponentSomewhat: number;
+    neutral: number;
+  };
+
+  export function summarizeCanonicalConditionCounts(
+    counts: CanonicalConditionCounts,
+  ): CanonicalConditionSummary;
+  ```
+
+  The input type `CanonicalConditionCounts` declares **only** these five fields. TypeScript's structural typing means a caller could in principle pass a broader object (e.g. a `MatrixCondition` that happens to include these five fields plus others); the summarizer MUST ignore any unlisted properties and compute `totalTrials` internally as `strongly + somewhat + opponentStrongly + opponentSomewhat + neutral`. It MUST NOT accept or read any external `totalTrials`, `prioritized`, `deprioritized`, or `unknownCount` from its argument, even if those fields are present. Call sites MUST pass a plain object literal constructed from the five canonical fields — a unit test MUST assert that passing a full `MatrixCondition` produces the same summary as passing only the five canonical fields (equivalent to asserting the summarizer truly ignores extras). A branded nominal type was considered and declined as scope creep. Both summarizers (`summarizeCanonicalConditionTranscripts` and `summarizeCanonicalConditionCounts`) MUST return the identical `CanonicalConditionSummary` shape so every downstream helper (`getConditionCellDisplay`, `getCanonicalConditionBackground`, `getCanonicalConditionTextColor`) is view-agnostic.
+
+- **FR-012:** `ConditionMatrix`'s `validateMatrixCondition` MUST continue to validate the full `MatrixCondition` schema inline. This is non-canonical shape validation, not score arithmetic, and the existing user-visible red callout for malformed data MUST be preserved. Four specific changes are required:
+  1. Remove the `Number.isInteger` check. Fractional counts are legitimate after PR #667 (`Int → Float`); the validator accepts any `Number.isFinite(value) && value >= 0`.
+  2. Replace the strict `condition.totalTrials !== expectedTotal` equality with a floating-point tolerant check: `Math.abs(condition.totalTrials − expectedTotal) >= 1e-6`.
+  3. **Cross-field consistency check (closes the two-path validation gap):** additionally require
+     - `Math.abs((strongly + somewhat) − prioritized) < 1e-6`
+     - `Math.abs((opponentStrongly + opponentSomewhat) − deprioritized) < 1e-6`
+
+     If either fails, `validateMatrixCondition` returns a descriptive error naming the divergent field pair, and the red callout fires with that message. This ensures the canonical counts that feed the score agree with the non-canonical counts that feed other UI elements (e.g. the `prioritized`/`deprioritized` totals shown elsewhere in the matrix).
+  4. `validateMatrixCondition` returns an error (not `null`) in any of the above failure modes; the existing consumer of the error message keeps displaying it unchanged.
+
+  No score, label, color, or opacity arithmetic happens in this function — it is schema validation only. All score-producing arithmetic on canonical counts lives in `summarizeCanonicalConditionCounts`.
+
+- **FR-013:** `ConditionDecisionsTable` and `PivotAnalysisTable` MUST route every per-cell style decision (background color, text color class, cell label) through the return value of `getConditionCellDisplay(summary)`. Direct calls to `getCanonicalConditionTextColor(summary.isOpponent)` or `getCanonicalConditionBackground(summary.winnerScore, summary.isOpponent)` at a score-cell render site MUST be deleted. (These helpers may remain exported from the shared module, but only the bundle helper calls them internally.)
+
+- **FR-014:** `PivotAnalysisTable`'s cell-bucket classifier (legend counts of `opponent` / `neutral` / `low` / `high`) MUST migrate every branch from the removed `summary.isOpponent` to `summary.direction`:
+  - `opponent` bucket: `direction === 'opponent' && hasData`
+  - `neutral` bucket: `direction === 'neutral' && hasData`
+  - `self`-aligned buckets (`high` and `low`): `direction === 'self' && hasData`, then split by the existing magnitude threshold on `Math.abs(netScore)` (threshold values unchanged from today's behavior on `winnerScore`)
+  - Zero-trial cells (`hasData === false`) are excluded from **all** buckets — preserving today's pre-classification guard
+
+  Scope is narrow: only the bucket classifier logic changes. Bucket labels and ordering remain as-is.
+
+## Success Criteria
+
+- **SC-001:** All three target views render the same `toFixed(1)` label for the same raw count tuple (verified by unit tests covering at least the five acceptance scenarios in US1).
+- **SC-002:** No test is suppressed or marked `.skip` as part of this change.
+- **SC-003:** Preflight Gate passes for `@valuerank/web` (lint + test + build); no other workspace needs to change.
+- **SC-004:** `grep "winnerScore"` returns zero matches in `cloud/apps/web/src` after the change.
+- **SC-005:** The Condition Matrix on the domain analysis value-detail page visibly displays decimals (e.g. `0.2`) instead of integer labels (`0`, `1`, `2`) for the five acceptance scenarios.
+- **SC-006:** Each of the three view components contains zero **score-producing** arithmetic on canonical count fields after the change. Verified by grep against three narrow patterns inside the three view files, with one explicit exemption:
+
+  **Grep patterns that MUST return zero hits** outside the shared module:
+  1. No `(2 *` or `2*` applied to `strongly`, `somewhat`, `opponentStrongly`, or `opponentSomewhat`.
+  2. No `.toFixed(` called on a value whose source is one of those four fields.
+  3. No `Math.abs(` applied to a value derived from those four fields in the same expression.
+
+  **Exemption:** `validateMatrixCondition` in `ConditionMatrix.tsx` is permitted to contain `Math.abs(...)` expressions on canonical count fields (per FR-012's cross-field consistency checks and the tolerant `totalTrials` equality). These are schema validation, not score arithmetic — they do not compute the label, color, opacity, or `netScore`. The grep gate MUST scope out this function specifically (e.g. `grep -v` the line range of `validateMatrixCondition`, or limit the grep to `getConditionMatrixDisplay` and sibling render-path code).
+
+  Read-only field access for non-score purposes (legend bucket classification via `summary.direction` / `summary.hasData`, tooltip text from `summary.unknownCount`, click-filter routing from `summary.conditionName`) is explicitly permitted and not caught by the above patterns. Future score or color changes can be made by editing only the shared module.
+
+## Edge cases
+
+- **Zero trials:** `totalTrials === 0` → `netScore` is `null`, `direction` is `'neutral'`, label `—`, no background, `text-gray-500`.
+- **True tie with non-zero trials:** `Math.abs(netScore) < 1e-9` → `direction` is `'neutral'`, label `0.0`, no background, `text-gray-500` (no color bias toward either side).
+- **Near-tie from floating-point residue:** fractional inputs can produce `netScore = 1e-17` when the ideal result is `0`. The `1e-9` tolerance in FR-003 absorbs this — the cell renders as `'neutral'`, label `0.0`, not as a vanishingly faint self/opponent tint.
+- **All neutrals, no strong/somewhat:** `strongly = somewhat = opponentStrongly = opponentSomewhat = 0`, `neutral > 0` → `netScore = 0` exactly, same render path as tie.
+- **Fractional counts (run-count normalization):** upstream pipeline can emit fractional counts (e.g. `10.5`) — confirmed legitimate after PR #667 (`Int → Float`). Neither the counts summarizer nor `validateMatrixCondition` may reject them. `toFixed(1)` handles display.
+- **Selected side blowout:** `strongly = totalTrials`, everything else 0 → `netScore = +2`, label `2.0`, full-opacity blue.
+- **Opponent blowout:** `opponentStrongly = totalTrials`, everything else 0 → `netScore = -2`, label `2.0`, full-opacity orange.
+- **MatrixCondition sum inconsistency (defensive, three gates):** `validateMatrixCondition` surfaces the red callout if any of the following diverges by `>= 1e-6`:
+  1. `totalTrials` vs `prioritized + deprioritized + neutral` (non-canonical schema check)
+  2. `prioritized` vs `strongly + somewhat` (cross-field canonical/non-canonical)
+  3. `deprioritized` vs `opponentStrongly + opponentSomewhat` (cross-field canonical/non-canonical)
+
+  This closes the two-path gap where the score denominator (canonical) and the schema validator (non-canonical) could disagree.
+- **Legend bucket for a tie with mixed counts:** e.g. `strongly = opponentStrongly = 1`, `somewhat = opponentSomewhat = 0`, `neutral = 0`. `netScore = 0`, `direction = 'neutral'`, `hasData = true`. The `PivotAnalysisTable` legend classifier (FR-014) counts this in the `neutral` bucket, not `low`.
+- **Legend bucket for a zero-trial cell:** `totalTrials = 0`, `direction = 'neutral'`, `hasData = false`. Legend classifier skips this cell entirely — it does not count in any bucket (matches today's behavior).
+- **Multiple invalid matrix rows:** pre-existing `validateMatrixCondition` surfaces only the first offending row's error message and halts render. If multiple rows are malformed, users see a fix-reload-repeat cycle. This is unchanged by the feature — fixing it (collect-all-errors) is out of scope. Documented so future work can pick it up.
+
+## Constitution check
+
+Relevant rules from `cloud/CLAUDE.md`:
+
+- File size: all touched files remain under 400 lines. `ConditionMatrix.tsx` should shrink.
+- No `any`: shared helper return type already typed; no suppression needed.
+- Strict null checks: `netScore` nullable on zero trials; call sites already guard via `totalTrials > 0`.
+- Logging: no new logs required.
+- Terminology: `winnerScore` is a purely internal name; rename is consistent with glossary.
+
+Verdict: **PASS**.
+
+## Artifacts
+
+- Workflow root: `docs/workflow/feature-runs/unified-net-weighted-condition-score/`
+- This spec: `spec.md`
+- Runtime state: `state.json`
+- Scope paths (registered via `init`):
+  - `cloud/apps/web/src/utils/canonicalConditionSummary.ts`
+  - `cloud/apps/web/src/components/domains/ConditionMatrix.tsx`
+  - `cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx`
+  - `cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx`
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the two provided code files against the spec and looking for places where the spec makes an implementation claim that the code either supports or contradicts. Then I’ll separate actual blockers from lower-confidence risks that depend on files not provided.
+codex
+I’ve got the spec and the two code snippets. I’m doing one pass through the repo to check for any obvious hidden call sites or patterns that would make the spec harder to implement than it claims.
+exec
+/bin/zsh -lc 'rg -n "winnerScore|selectedValueWinRate|isOpponent|getCanonicalConditionBackground|getCanonicalConditionTextColor|ConditionCellDisplay|summarizeCanonicalConditionCounts|MatrixCondition" cloud/apps/web/src cloud/apps/web/tests' in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx:145:    selectedValueWinRate: overrides.prioritized + overrides.deprioritized + overrides.neutral === 0
+cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx:177:    selectedValueWinRate: totalResponses === 0
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:11:  selectedValueWinRate: number | null;
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:12:  winnerScore: number | null;
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:13:  isOpponent: boolean;
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:122:      selectedValueWinRate: null,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:123:      winnerScore: null,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:124:      isOpponent: false,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:128:  const selectedValueWinRate = (counts.strongly + counts.somewhat) / totalTrials;
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:129:  const isOpponent = (selectedValueWinRate ?? 0.5) < 0.5;
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:131:  const winnerStrongly = isOpponent ? counts.opponentStrongly : counts.strongly;
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:132:  const winnerSomewhat = isOpponent ? counts.opponentSomewhat : counts.somewhat;
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:133:  const winnerScore = (2 * winnerStrongly + 1 * winnerSomewhat) / totalTrials;
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:138:    selectedValueWinRate,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:139:    winnerScore,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:140:    isOpponent,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:144:export function getCanonicalConditionBackground(score: number, isOpponent: boolean): string {
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:145:  // score is winnerScore (0–2). Opacity scales linearly from 0 (no conviction) to 1 (max conviction).
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:148:  if (isOpponent) {
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:154:export function getCanonicalConditionTextColor(isOpponent: boolean): string {
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:155:  return isOpponent ? 'text-orange-700' : 'text-blue-700';
+cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:279:                  · Trials: {vignette.totalTrials} · Win rate: {toPercent(vignette.selectedValueWinRate)}
+cloud/apps/web/src/api/operations/domainAnalysis.graphql:137:      selectedValueWinRate
+cloud/apps/web/src/api/operations/domainAnalysis.graphql:146:        selectedValueWinRate
+cloud/apps/web/src/api/operations/domainAnalysis.ts:180:  selectedValueWinRate: number | null;
+cloud/apps/web/src/api/operations/domainAnalysis.ts:198:  selectedValueWinRate: number | null;
+cloud/apps/web/src/generated/graphql.ts:618:  selectedValueWinRate?: Maybe<Scalars['Float']['output']>;
+cloud/apps/web/src/generated/graphql.ts:732:  selectedValueWinRate?: Maybe<Scalars['Float']['output']>;
+cloud/apps/web/src/generated/graphql.ts:3996:export type DomainAnalysisValueDetailQuery = { __typename?: 'Query', domainAnalysisValueDetail: { __typename?: 'DomainAnalysisValueDetailResult', domainId: string, domainName: string, modelId: string, modelLabel: string, valueKey: string, score: number, prioritized: number, deprioritized: number, neutral: number, totalTrials: number, targetedDefinitions: number, coveredDefinitions: number, missingDefinitionIds: Array<string>, generatedAt: any, vignettes: Array<{ __typename?: 'DomainAnalysisVignetteDetail', definitionId: string, definitionName: string, definitionVersion: number, aggregateRunId?: string | null, otherValueKey: string, prioritized: number, deprioritized: number, neutral: number, totalTrials: number, selectedValueWinRate?: number | null, conditions: Array<{ __typename?: 'DomainAnalysisConditionDetail', scenarioId?: string | null, conditionName: string, dimensions?: any | null, prioritized: number, deprioritized: number, neutral: number, totalTrials: number, selectedValueWinRate?: number | null, strongly: number, somewhat: number, opponentSomewhat: number, opponentStrongly: number, unknownCount: number }> }> } };
+cloud/apps/web/src/generated/graphql.ts:5549:      selectedValueWinRate
+cloud/apps/web/src/generated/graphql.ts:5558:        selectedValueWinRate
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:117:  it('empty input → all null metrics, isOpponent false', () => {
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:119:    expect(result.selectedValueWinRate).toBeNull();
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:120:    expect(result.isOpponent).toBe(false);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:127:  it('null selectedValueWinRate falls back to false for isOpponent', () => {
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:131:    expect(result.selectedValueWinRate).toBeNull();
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:132:    expect(result.isOpponent).toBe(false);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:135:  it('all-unknown input → totalTrials 0, selectedValueWinRate null', () => {
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:144:    expect(result.selectedValueWinRate).toBeNull();
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:145:    expect(result.isOpponent).toBe(false);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:148:  it('all strongly selected → selectedValueWinRate 100%, isOpponent false (blue)', () => {
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:158:    expect(result.selectedValueWinRate).toBeCloseTo(1.0);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:159:    expect(result.isOpponent).toBe(false);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:162:  it('all somewhat selected → selectedValueWinRate 100%, isOpponent false (blue)', () => {
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:172:    expect(result.selectedValueWinRate).toBeCloseTo(1.0);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:173:    expect(result.isOpponent).toBe(false);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:187:    expect(allStrong.selectedValueWinRate).toBeCloseTo(1.0);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:188:    expect(allSomewhat.selectedValueWinRate).toBeCloseTo(1.0);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:191:  it('all strongly opponent → selectedValueWinRate 0%, isOpponent true (orange)', () => {
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:201:    expect(result.selectedValueWinRate).toBeCloseTo(0.0);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:202:    expect(result.isOpponent).toBe(true);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:205:  it('all somewhat opponent → selectedValueWinRate 0%, isOpponent true (orange)', () => {
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:215:    expect(result.selectedValueWinRate).toBeCloseTo(0.0);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:216:    expect(result.isOpponent).toBe(true);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:219:  it('mixed: 3 opponentStrongly + 1 opponentSomewhat + 1 neutral = selectedValueWinRate 0% (orange)', () => {
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:228:    expect(result.selectedValueWinRate).toBeCloseTo(0.0);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:229:    expect(result.isOpponent).toBe(true);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:232:  it('tie (1 strongly selected + 1 strongly opponent) → selectedValueWinRate 50%, isOpponent false (neutral)', () => {
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:238:    expect(result.selectedValueWinRate).toBeCloseTo(0.5);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:239:    expect(result.isOpponent).toBe(false);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:250:    expect(result.selectedValueWinRate).toBeCloseTo(0.0);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:251:    expect(result.isOpponent).toBe(true);
+cloud/apps/web/tests/components/analysis/PivotAnalysisTable.test.tsx:90:// s1 = favor_first strong → favoredValueKey='Freedom' (alphabetically first) → selectedValueWinRate 100%, blue
+cloud/apps/web/tests/components/analysis/PivotAnalysisTable.test.tsx:92:// s3 = favor_second strong → favoredValueKey='Harmony' (alphabetically second) → selectedValueWinRate 0%, orange
+cloud/apps/web/tests/components/analysis/ConditionDecisionsTable.test.tsx:284:    const winnerScore = within(winnerButton).getByText('—');
+cloud/apps/web/tests/components/analysis/ConditionDecisionsTable.test.tsx:285:    expect(winnerScore).toHaveClass('text-gray-500');
+cloud/apps/web/tests/components/analysis/ConditionDecisionsTable.test.tsx:309:    // tie: selectedValueWinRate === 0.5 → isOpponent=false, winnerScore=(2×1+0)/2=1.0
+cloud/apps/web/tests/components/analysis/AnalysisPanel.pairedContent.test.tsx:68:    // t1=strongly(1) + t2=somewhat(1), totalTrials=2 → winnerScore=(2×1+1×1)/2=1.5
+cloud/apps/web/tests/components/analysis/AnalysisPanel.pairedContent.test.tsx:69:    const winnerScoreElement = screen
+cloud/apps/web/tests/components/analysis/AnalysisPanel.pairedContent.test.tsx:72:    expect(winnerScoreElement).toBeDefined();
+cloud/apps/web/tests/components/analysis/AnalysisPanel.pairedContent.test.tsx:73:    expect(winnerScoreElement).toHaveClass('text-blue-700');
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:3:export type MatrixCondition = {
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:18:function getPreferenceBackground(score: number, isOpponent: boolean): string {
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:20:  if (isOpponent) {
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:26:function getPreferenceTextColor(isOpponent: boolean): string {
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:27:  return isOpponent ? 'text-orange-700' : 'text-blue-700';
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:34:function validateMatrixCondition(condition: MatrixCondition): string | null {
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:61:function getConditionMatrixDisplay(condition: MatrixCondition): {
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:63:  isOpponent: boolean;
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:67:  const isOpponent = condition.deprioritized > condition.prioritized;
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:68:  const winnerStrongly = isOpponent ? condition.opponentStrongly : condition.strongly;
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:69:  const winnerSomewhat = isOpponent ? condition.opponentSomewhat : condition.somewhat;
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:70:  const winnerScore = condition.totalTrials === 0
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:75:  const strengthLabel = String(Math.round(winnerScore)) as '0' | '1' | '2';
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:79:    isOpponent,
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:80:    backgroundColor: getPreferenceBackground(winnerScore, isOpponent),
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:81:    textColorClass: getPreferenceTextColor(isOpponent),
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:87:  conditions: MatrixCondition[];
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:110:    .map((condition) => validateMatrixCondition(condition))
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:129:  const cellByKey = new Map<string, MatrixCondition>();
+cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:22:  getCanonicalConditionBackground,
+cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:23:  getCanonicalConditionTextColor,
+cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:626:                      style={{ backgroundColor: hasResolvedCanonicalEvidence ? getCanonicalConditionBackground(stats.winnerScore ?? 0, stats.isOpponent) : undefined }}
+cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:637:                          <span className={`inline-flex flex-col items-center ${getCanonicalConditionTextColor(stats.isOpponent)}`}>
+cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:639:                              {stats.winnerScore == null ? '—' : stats.winnerScore.toFixed(1)}
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:23:    getCanonicalConditionBackground,
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:24:    getCanonicalConditionTextColor,
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:227:            if (summary.isOpponent) {
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:374:                                        const hasScore = summary != null && summary.winnerScore != null && summary.totalTrials > 0;
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:382:                                                        ? getCanonicalConditionBackground(summary.winnerScore ?? 0, summary.isOpponent)
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:388:                                                    <span className={`font-semibold ${getCanonicalConditionTextColor(summary.isOpponent)}`}>
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:389:                                                        {summary.winnerScore == null ? '—' : summary.winnerScore.toFixed(1)}
+
+codex
+I found the current live call sites. I’m reading the exact render paths now so I can tell whether the spec is actually implementable as written or whether it leaves gaps.
+exec
+/bin/zsh -lc "sed -n '600,660p' cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+                    <span className="max-w-[8rem] whitespace-normal break-words leading-5">
+                      {formatDisplayLabel(row.attributeBLevel)}
+                    </span>
+                    {canSplitOrientations && inspectionMode === 'split' && (
+                      <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800">
+                        {row.orientationBucket === 'canonical'
+                          ? splitSourceLabels?.current
+                          : splitSourceLabels?.companion}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                {visibleModels.map((modelId) => {
+                  const stats = canonicalCellSummaries.get(row.id)?.get(modelId)
+                    ?? summarizeCanonicalConditionTranscripts([]);
+                  const hasResolvedCanonicalEvidence = stats.totalTrials > 0;
+                  const isOtherCell = !hasResolvedCanonicalEvidence;
+                  const splitSourceLabel = row.orientationBucket === 'canonical'
+                    ? splitSourceLabels?.current
+                    : splitSourceLabels?.companion;
+                  const title = `View transcripts for ${modelId} | ${formatDisplayLabel(attributeA)}: ${formatDisplayLabel(row.attributeALevel)}, ${formatDisplayLabel(attributeB)}: ${formatDisplayLabel(row.attributeBLevel)}${canSplitOrientations && inspectionMode === 'split' ? ` | ${splitSourceLabel}` : ''}${isOtherCell ? ' | Decision: other' : ''}${stats.unknownCount > 0 ? ` | Unknown: ${stats.unknownCount}` : ''}`;
+
+                  return (
+                    <td
+                      key={`${row.id}-${modelId}`}
+                      className="border border-gray-200 px-3 py-2 text-center text-sm transition-colors"
+                      style={{ backgroundColor: hasResolvedCanonicalEvidence ? getCanonicalConditionBackground(stats.winnerScore ?? 0, stats.isOpponent) : undefined }}
+                    >
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
+                        title={title}
+                        onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionStrength: 'unknown' } : undefined)}
+                      >
+                        {hasResolvedCanonicalEvidence ? (
+                          <span className={`inline-flex flex-col items-center ${getCanonicalConditionTextColor(stats.isOpponent)}`}>
+                            <span className="font-semibold">
+                              {stats.winnerScore == null ? '—' : stats.winnerScore.toFixed(1)}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-gray-500">—</span>
+                        )}
+                      </Button>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {visibleModels.length === 0 && (
+          <div className="mt-2 text-xs text-amber-700">Select at least one AI column to display data.</div>
+        )}
+        <div className="mt-2 text-xs text-gray-500">
+          Unknown canonical trials are excluded from condition scores.
+        </div>
+      </div>
+    </div>
+
+exec
+/bin/zsh -lc "sed -n '210,240p' cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+
+    }, [scenarioDimensions, modelScenarioMatrix, rowDim, colDim, selectedModel, transcriptIndex]);
+
+    const legendCounts = useMemo<LegendCounts>(() => {
+        if (!scenarioDimensions || !selectedModel) {
+            return { low: 0, neutral: 0, high: 0 };
+        }
+
+        let low = 0;
+        let neutral = 0;
+        let high = 0;
+
+        for (const scenarioId of Object.keys(scenarioDimensions)) {
+            const cellTranscripts = collectCanonicalConditionTranscripts(transcriptIndex, selectedModel, [scenarioId]);
+            const summary = summarizeCanonicalConditionTranscripts(cellTranscripts);
+            if (summary.totalTrials === 0) continue;
+
+            if (summary.isOpponent) {
+                high += 1;
+            } else if (summary.neutral > 0 && summary.strongly === 0 && summary.somewhat === 0) {
+                neutral += 1;
+            } else {
+                low += 1;
+            }
+        }
+
+        return { low, neutral, high };
+    }, [scenarioDimensions, selectedModel, transcriptIndex]);
+
+    const handleCellClick = (row: string, col: string) => {
+        const params = new URLSearchParams({
+
+exec
+/bin/zsh -lc "sed -n '360,400p' cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+                                    <th key={col} className="p-3 bg-gray-50 border border-gray-200 text-center text-xs font-medium text-gray-500 font-mono">
+                                        {formatDisplayLabel(col)}
+                                    </th>
+                                ))}
+                            </tr>
+                            </thead>
+                            <tbody className="bg-white">
+                            {pivotData.rows.map(row => (
+                                <tr key={row}>
+                                    <td className="p-3 bg-gray-50 border border-gray-200 text-left text-xs font-medium text-gray-500 font-mono whitespace-nowrap">
+                                        {formatDisplayLabel(row)}
+                                    </td>
+                                    {pivotData.cols.map(col => {
+                                        const summary = pivotData.grid[row]?.[col];
+                                        const hasScore = summary != null && summary.winnerScore != null && summary.totalTrials > 0;
+
+                                        return (
+                                            <td
+                                                key={`${row}-${col}`}
+                                                className="p-4 border border-gray-100 text-center text-sm transition-colors cursor-pointer hover:ring-1 hover:ring-teal-300"
+                                                style={{
+                                                    backgroundColor: hasScore && summary != null
+                                                        ? getCanonicalConditionBackground(summary.winnerScore ?? 0, summary.isOpponent)
+                                                        : undefined,
+                                                }}
+                                                onClick={() => handleCellClick(row, col)}
+                                            >
+                                                {hasScore && summary != null ? (
+                                                    <span className={`font-semibold ${getCanonicalConditionTextColor(summary.isOpponent)}`}>
+                                                        {summary.winnerScore == null ? '—' : summary.winnerScore.toFixed(1)}
+                                                    </span>
+                                                ) : <span className="text-gray-500">—</span>}
+                                            </td>
+                                        );
+                                    })}
+                                </tr>
+                            ))}
+                            </tbody>
+                        </table>
+                        <div className="mt-2 text-xs text-gray-500">
+                            Click a cell to view pooled condition details.
+
+exec
+/bin/zsh -lc "sed -n '100,170p' cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+function createStrongSelected(id: string) {
+  return createTranscript(id, 'favor_first', 'strong');
+}
+
+function createSomewhatSelected(id: string) {
+  return createTranscript(id, 'favor_first', 'lean');
+}
+
+function createStrongOpponent(id: string) {
+  return createTranscript(id, 'favor_second', 'strong');
+}
+
+function createSomewhatOpponent(id: string) {
+  return createTranscript(id, 'favor_second', 'lean');
+}
+
+describe('summarizeCanonicalConditionTranscripts', () => {
+  it('empty input → all null metrics, isOpponent false', () => {
+    const result = summarizeCanonicalConditionTranscripts([]);
+    expect(result.selectedValueWinRate).toBeNull();
+    expect(result.isOpponent).toBe(false);
+    expect(result.totalTrials).toBe(0);
+    expect(result).not.toHaveProperty('meanPreferenceScore');
+    expect(result).not.toHaveProperty('opponentMeanPreferenceScore');
+    expect(result).not.toHaveProperty('displayScore');
+  });
+
+  it('null selectedValueWinRate falls back to false for isOpponent', () => {
+    const result = summarizeCanonicalConditionTranscripts([
+      createTranscript('t1', 'unknown', 'unknown'),
+    ]);
+    expect(result.selectedValueWinRate).toBeNull();
+    expect(result.isOpponent).toBe(false);
+  });
+
+  it('all-unknown input → totalTrials 0, selectedValueWinRate null', () => {
+    const transcripts = [
+      createTranscript('t1', 'unknown', 'unknown'),
+      createTranscript('t2', 'unknown', 'unknown'),
+      createTranscript('t3', 'unknown', 'unknown'),
+    ];
+    const result = summarizeCanonicalConditionTranscripts(transcripts);
+    expect(result.unknownCount).toBe(3);
+    expect(result.totalTrials).toBe(0);
+    expect(result.selectedValueWinRate).toBeNull();
+    expect(result.isOpponent).toBe(false);
+  });
+
+  it('all strongly selected → selectedValueWinRate 100%, isOpponent false (blue)', () => {
+    const transcripts = [
+      createStrongSelected('t1'),
+      createStrongSelected('t2'),
+      createStrongSelected('t3'),
+      createStrongSelected('t4'),
+      createStrongSelected('t5'),
+    ];
+    const result = summarizeCanonicalConditionTranscripts(transcripts);
+    expect(result.strongly).toBe(5);
+    expect(result.selectedValueWinRate).toBeCloseTo(1.0);
+    expect(result.isOpponent).toBe(false);
+  });
+
+  it('all somewhat selected → selectedValueWinRate 100%, isOpponent false (blue)', () => {
+    const transcripts = [
+      createSomewhatSelected('t1'),
+      createSomewhatSelected('t2'),
+      createSomewhatSelected('t3'),
+      createSomewhatSelected('t4'),
+      createSomewhatSelected('t5'),
+    ];
+    const result = summarizeCanonicalConditionTranscripts(transcripts);
+
+exec
+/bin/zsh -lc "sed -n '270,330p' cloud/apps/web/tests/components/analysis/ConditionDecisionsTable.test.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+    ];
+
+    render(
+      <MemoryRouter>
+        <ConditionDecisionsTable
+          runId="run-1"
+          perModel={{ 'gpt-4': { sampleSize: 7, values: {}, overall: { mean: 3, stdDev: 0, min: 3, max: 3 } } as any }}
+          transcripts={transcripts}
+          visualizationData={visualizationData as any}
+        />
+      </MemoryRouter>
+    );
+
+    const winnerButton = screen.getByTitle('View transcripts for gpt-4 | Achievement: low, Care: low | Decision: other | Unknown: 2');
+    const winnerScore = within(winnerButton).getByText('—');
+    expect(winnerScore).toHaveClass('text-gray-500');
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+    expect(screen.getByText('Unknown canonical trials are excluded from condition scores.')).toBeInTheDocument();
+    expect(winnerButton).toBeInTheDocument();
+  });
+
+  it('renders ties as 50% neutral (neither side won)', () => {
+    const visualizationData = createVisualizationData();
+    const transcripts = [
+      createTranscript({ id: 't8', scenarioId: 'scenario-8', modelId: 'gpt-5', direction: 'favor_first', strength: 'strong' }),
+      createTranscript({ id: 't9', scenarioId: 'scenario-9', modelId: 'gpt-5', direction: 'favor_second', strength: 'strong' }),
+    ];
+
+    render(
+      <MemoryRouter>
+        <ConditionDecisionsTable
+          runId="run-1"
+          perModel={{ 'gpt-5': { sampleSize: 2, values: {}, overall: { mean: 3, stdDev: 0, min: 3, max: 3 } } as any }}
+          transcripts={transcripts}
+          visualizationData={visualizationData as any}
+        />
+      </MemoryRouter>
+    );
+
+    // tie: selectedValueWinRate === 0.5 → isOpponent=false, winnerScore=(2×1+0)/2=1.0
+    const tieButton = screen.getByTitle('View transcripts for gpt-5 | Achievement: medium, Care: medium');
+    expect(within(tieButton).getByText('1.0')).toBeInTheDocument();
+  });
+
+  it('orders condition rows from negligible to full', () => {
+    render(
+      <MemoryRouter>
+        <ConditionDecisionsTable
+          runId="run-1"
+          expectedAttributes={['Achievement', 'Care']}
+          perModel={{
+            model1: {
+              sampleSize: 5,
+              values: {},
+              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+            },
+          } as any}
+          visualizationData={{
+            decisionDistribution: {},
+            scenarioDimensions: {
+              'scenario-1': { Achievement: 'full', Care: 'same' },
+
+exec
+/bin/zsh -lc "sed -n '60,100p' cloud/apps/web/tests/components/analysis/AnalysisPanel.pairedContent.test.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Analysis')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /^Conditions$/i }));
+
+    // PivotAnalysisTable and ConditionDecisionsTable now show winner's weighted score (0–2).
+    // t1=strongly(1) + t2=somewhat(1), totalTrials=2 → winnerScore=(2×1+1×1)/2=1.5
+    const winnerScoreElement = screen
+      .getAllByText('1.5')
+      .find((element) => element.className.includes('text-blue-700'));
+    expect(winnerScoreElement).toBeDefined();
+    expect(winnerScoreElement).toHaveClass('text-blue-700');
+    expect(screen.getByText('Unknown canonical trials are excluded from condition scores.')).toBeInTheDocument();
+  });
+
+  it('pools overview summary semantics across the companion run in paired mode', async () => {
+    const analysis = createMockAnalysis({
+      codeVersion: '1.1.1',
+      preferenceSummary: {
+        perModel: {
+          'claude-3': {
+            preferenceDirection: {
+              byValue: {
+                Achievement: {
+                  winRate: 0.9,
+                  count: { prioritized: 9, deprioritized: 1, neutral: 0 },
+                },
+                Care: {
+                  winRate: 0.2,
+                  count: { prioritized: 2, deprioritized: 8, neutral: 0 },
+                },
+              },
+              overallLean: 'A',
+              overallSignedCenter: 0.6,
+            },
+            preferenceStrength: 0.9,
+          },
+          'gpt-4': {
+            preferenceDirection: {
+
+codex
+I’ve confirmed the current three live consumers and the current test expectations. Next I’m checking whether the spec misses any code-paths that are already using the old summary shape outside the obvious cell renderer lines.
+exec
+/bin/zsh -lc 'rg -n "summarizeCanonicalConditionTranscripts|canonicalCellSummaries|pivotData.grid|selectedValueWinRate|winnerScore|isOpponent" cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx' in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+24:  summarizeCanonicalConditionTranscripts,
+370:  const canonicalCellSummaries = useMemo(() => {
+377:        rowSummaries.set(modelId, summarizeCanonicalConditionTranscripts(cellTranscripts));
+613:                  const stats = canonicalCellSummaries.get(row.id)?.get(modelId)
+614:                    ?? summarizeCanonicalConditionTranscripts([]);
+626:                      style={{ backgroundColor: hasResolvedCanonicalEvidence ? getCanonicalConditionBackground(stats.winnerScore ?? 0, stats.isOpponent) : undefined }}
+637:                          <span className={`inline-flex flex-col items-center ${getCanonicalConditionTextColor(stats.isOpponent)}`}>
+639:                              {stats.winnerScore == null ? '—' : stats.winnerScore.toFixed(1)}
+
+exec
+/bin/zsh -lc 'rg -n "summarizeCanonicalConditionTranscripts|pivotData.grid|selectedValueWinRate|winnerScore|isOpponent|legendCounts" cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx' in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+22:    summarizeCanonicalConditionTranscripts,
+201:                rowGrid[cVal] = summarizeCanonicalConditionTranscripts(cellTranscripts);
+213:    const legendCounts = useMemo<LegendCounts>(() => {
+224:            const summary = summarizeCanonicalConditionTranscripts(cellTranscripts);
+227:            if (summary.isOpponent) {
+288:                        counts={legendCounts}
+373:                                        const summary = pivotData.grid[row]?.[col];
+374:                                        const hasScore = summary != null && summary.winnerScore != null && summary.totalTrials > 0;
+382:                                                        ? getCanonicalConditionBackground(summary.winnerScore ?? 0, summary.isOpponent)
+388:                                                    <span className={`font-semibold ${getCanonicalConditionTextColor(summary.isOpponent)}`}>
+389:                                                        {summary.winnerScore == null ? '—' : summary.winnerScore.toFixed(1)}
+
+exec
+/bin/zsh -lc 'rg -n "summarizeCanonicalConditionTranscripts|selectedValueWinRate|winnerScore|isOpponent" cloud/apps/web/src/components/domains/ConditionMatrix.tsx cloud/apps/web/tests/components/analysis/AnalysisPanel.pairedContent.test.tsx cloud/apps/web/tests/components/analysis/PivotAnalysisTable.test.tsx cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx' in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+cloud/apps/web/tests/components/analysis/AnalysisPanel.pairedContent.test.tsx:68:    // t1=strongly(1) + t2=somewhat(1), totalTrials=2 → winnerScore=(2×1+1×1)/2=1.5
+cloud/apps/web/tests/components/analysis/AnalysisPanel.pairedContent.test.tsx:69:    const winnerScoreElement = screen
+cloud/apps/web/tests/components/analysis/AnalysisPanel.pairedContent.test.tsx:72:    expect(winnerScoreElement).toBeDefined();
+cloud/apps/web/tests/components/analysis/AnalysisPanel.pairedContent.test.tsx:73:    expect(winnerScoreElement).toHaveClass('text-blue-700');
+cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx:145:    selectedValueWinRate: overrides.prioritized + overrides.deprioritized + overrides.neutral === 0
+cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx:177:    selectedValueWinRate: totalResponses === 0
+cloud/apps/web/tests/components/analysis/PivotAnalysisTable.test.tsx:90:// s1 = favor_first strong → favoredValueKey='Freedom' (alphabetically first) → selectedValueWinRate 100%, blue
+cloud/apps/web/tests/components/analysis/PivotAnalysisTable.test.tsx:92:// s3 = favor_second strong → favoredValueKey='Harmony' (alphabetically second) → selectedValueWinRate 0%, orange
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:18:function getPreferenceBackground(score: number, isOpponent: boolean): string {
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:20:  if (isOpponent) {
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:26:function getPreferenceTextColor(isOpponent: boolean): string {
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:27:  return isOpponent ? 'text-orange-700' : 'text-blue-700';
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:63:  isOpponent: boolean;
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:67:  const isOpponent = condition.deprioritized > condition.prioritized;
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:68:  const winnerStrongly = isOpponent ? condition.opponentStrongly : condition.strongly;
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:69:  const winnerSomewhat = isOpponent ? condition.opponentSomewhat : condition.somewhat;
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:70:  const winnerScore = condition.totalTrials === 0
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:75:  const strengthLabel = String(Math.round(winnerScore)) as '0' | '1' | '2';
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:79:    isOpponent,
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:80:    backgroundColor: getPreferenceBackground(winnerScore, isOpponent),
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:81:    textColorClass: getPreferenceTextColor(isOpponent),
+
+codex
+I’ve confirmed the current components still depend on the old summary fields. I’m doing one last search for `ConditionMatrix` tests and any helper consumers so I can separate a real spec gap from code that is already covered by the update list.
+exec
+/bin/zsh -lc "rg -n \"ConditionMatrix|getConditionMatrixDisplay|text-gray-500|0' \\| '1' \\| '2'|winnerScore|selectedValueWinRate|isOpponent\" cloud/apps/web/tests cloud/apps/web/src/components/domains/ConditionMatrix.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:18:function getPreferenceBackground(score: number, isOpponent: boolean): string {
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:20:  if (isOpponent) {
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:26:function getPreferenceTextColor(isOpponent: boolean): string {
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:27:  return isOpponent ? 'text-orange-700' : 'text-blue-700';
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:49:      return `ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" has an invalid ${name} value of ${String(value)}.`;
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:55:    return `ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" reports totalTrials=${condition.totalTrials} and counts sum to ${expectedTotal}.`;
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:61:function getConditionMatrixDisplay(condition: MatrixCondition): {
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:62:  label: '0' | '1' | '2';
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:63:  isOpponent: boolean;
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:67:  const isOpponent = condition.deprioritized > condition.prioritized;
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:68:  const winnerStrongly = isOpponent ? condition.opponentStrongly : condition.strongly;
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:69:  const winnerSomewhat = isOpponent ? condition.opponentSomewhat : condition.somewhat;
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:70:  const winnerScore = condition.totalTrials === 0
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:75:  const strengthLabel = String(Math.round(winnerScore)) as '0' | '1' | '2';
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:79:    isOpponent,
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:80:    backgroundColor: getPreferenceBackground(winnerScore, isOpponent),
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:81:    textColorClass: getPreferenceTextColor(isOpponent),
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:85:type ConditionMatrixProps = {
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:92:export function ConditionMatrix({ vignetteId, conditions, selectedConditionKey, onSelect }: ConditionMatrixProps) {
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:156:                className="border border-gray-200 bg-gray-50 p-2 text-center font-mono text-xs font-medium text-gray-500"
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:176:                const display = condition ? getConditionMatrixDisplay(condition) : null;
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:205:      <div className="mt-2 text-xs text-gray-500">
+cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx:145:    selectedValueWinRate: overrides.prioritized + overrides.deprioritized + overrides.neutral === 0
+cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx:177:    selectedValueWinRate: totalResponses === 0
+cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx:470:      expect(screen.getByText(/ConditionMatrix requires canonical count data/)).toBeInTheDocument();
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:117:  it('empty input → all null metrics, isOpponent false', () => {
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:119:    expect(result.selectedValueWinRate).toBeNull();
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:120:    expect(result.isOpponent).toBe(false);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:127:  it('null selectedValueWinRate falls back to false for isOpponent', () => {
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:131:    expect(result.selectedValueWinRate).toBeNull();
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:132:    expect(result.isOpponent).toBe(false);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:135:  it('all-unknown input → totalTrials 0, selectedValueWinRate null', () => {
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:144:    expect(result.selectedValueWinRate).toBeNull();
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:145:    expect(result.isOpponent).toBe(false);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:148:  it('all strongly selected → selectedValueWinRate 100%, isOpponent false (blue)', () => {
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:158:    expect(result.selectedValueWinRate).toBeCloseTo(1.0);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:159:    expect(result.isOpponent).toBe(false);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:162:  it('all somewhat selected → selectedValueWinRate 100%, isOpponent false (blue)', () => {
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:172:    expect(result.selectedValueWinRate).toBeCloseTo(1.0);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:173:    expect(result.isOpponent).toBe(false);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:187:    expect(allStrong.selectedValueWinRate).toBeCloseTo(1.0);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:188:    expect(allSomewhat.selectedValueWinRate).toBeCloseTo(1.0);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:191:  it('all strongly opponent → selectedValueWinRate 0%, isOpponent true (orange)', () => {
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:201:    expect(result.selectedValueWinRate).toBeCloseTo(0.0);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:202:    expect(result.isOpponent).toBe(true);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:205:  it('all somewhat opponent → selectedValueWinRate 0%, isOpponent true (orange)', () => {
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:215:    expect(result.selectedValueWinRate).toBeCloseTo(0.0);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:216:    expect(result.isOpponent).toBe(true);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:219:  it('mixed: 3 opponentStrongly + 1 opponentSomewhat + 1 neutral = selectedValueWinRate 0% (orange)', () => {
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:228:    expect(result.selectedValueWinRate).toBeCloseTo(0.0);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:229:    expect(result.isOpponent).toBe(true);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:232:  it('tie (1 strongly selected + 1 strongly opponent) → selectedValueWinRate 50%, isOpponent false (neutral)', () => {
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:238:    expect(result.selectedValueWinRate).toBeCloseTo(0.5);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:239:    expect(result.isOpponent).toBe(false);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:250:    expect(result.selectedValueWinRate).toBeCloseTo(0.0);
+cloud/apps/web/tests/utils/canonicalConditionSummary.test.ts:251:    expect(result.isOpponent).toBe(true);
+cloud/apps/web/tests/components/analysis/PivotAnalysisTable.test.tsx:90:// s1 = favor_first strong → favoredValueKey='Freedom' (alphabetically first) → selectedValueWinRate 100%, blue
+cloud/apps/web/tests/components/analysis/PivotAnalysisTable.test.tsx:92:// s3 = favor_second strong → favoredValueKey='Harmony' (alphabetically second) → selectedValueWinRate 0%, orange
+cloud/apps/web/tests/components/analysis/ConditionDecisionsTable.test.tsx:284:    const winnerScore = within(winnerButton).getByText('—');
+cloud/apps/web/tests/components/analysis/ConditionDecisionsTable.test.tsx:285:    expect(winnerScore).toHaveClass('text-gray-500');
+cloud/apps/web/tests/components/analysis/ConditionDecisionsTable.test.tsx:309:    // tie: selectedValueWinRate === 0.5 → isOpponent=false, winnerScore=(2×1+0)/2=1.0
+cloud/apps/web/tests/components/analysis/AnalysisPanel.pairedContent.test.tsx:68:    // t1=strongly(1) + t2=somewhat(1), totalTrials=2 → winnerScore=(2×1+1×1)/2=1.5
+cloud/apps/web/tests/components/analysis/AnalysisPanel.pairedContent.test.tsx:69:    const winnerScoreElement = screen
+cloud/apps/web/tests/components/analysis/AnalysisPanel.pairedContent.test.tsx:72:    expect(winnerScoreElement).toBeDefined();
+cloud/apps/web/tests/components/analysis/AnalysisPanel.pairedContent.test.tsx:73:    expect(winnerScoreElement).toHaveClass('text-blue-700');
+
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/web/src/utils/canonicalConditionSummary.ts" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+import type { Transcript } from '../api/operations/runs';
+
+export type CanonicalConditionSummary = {
+  strongly: number;
+  somewhat: number;
+  neutral: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+  unknownCount: number;
+  totalTrials: number;
+  selectedValueWinRate: number | null;
+  winnerScore: number | null;
+  isOpponent: boolean;
+};
+
+export type CanonicalTranscriptIndex = Map<string, Map<string, Transcript[]>>;
+
+type CanonicalBucket = 'strongly' | 'somewhat' | 'neutral' | 'opponentSomewhat' | 'opponentStrongly';
+
+function getCanonicalBucket(transcript: Transcript): CanonicalBucket | null {
+  const canonical = transcript.decisionModelV2?.canonical;
+  if (!canonical) {
+    return null;
+  }
+
+  if (canonical.strength === 'neutral') {
+    return 'neutral';
+  }
+
+  const { favoredValueKey, opposedValueKey, strength } = canonical;
+  if (favoredValueKey == null || opposedValueKey == null) {
+    return null;
+  }
+
+  // Alphabetically-first value is the canonical "first" (blue) side; second is
+  // the "opponent" (orange) side.  This is stable across both runs in a paired
+  // batch, unlike canonical.direction which is position-based (valueA/valueB)
+  // and flips between companion runs.
+  const isFirst = favoredValueKey.localeCompare(opposedValueKey) < 0;
+
+  if (isFirst && strength === 'strong') return 'strongly';
+  if (isFirst && strength === 'lean') return 'somewhat';
+  if (!isFirst && strength === 'lean') return 'opponentSomewhat';
+  if (!isFirst && strength === 'strong') return 'opponentStrongly';
+
+  return null;
+}
+
+export function buildCanonicalTranscriptIndex(transcripts: Transcript[] | null | undefined): CanonicalTranscriptIndex {
+  const index = new Map<string, Map<string, Transcript[]>>();
+
+  for (const transcript of transcripts ?? []) {
+    if (!transcript.scenarioId) {
+      continue;
+    }
+
+    const modelId = transcript.modelId;
+    const scenarioId = String(transcript.scenarioId);
+    const byScenario = index.get(modelId) ?? new Map<string, Transcript[]>();
+    const current = byScenario.get(scenarioId);
+    if (current) {
+      current.push(transcript);
+    } else {
+      byScenario.set(scenarioId, [transcript]);
+    }
+    index.set(modelId, byScenario);
+  }
+
+  return index;
+}
+
+export function collectCanonicalConditionTranscripts(
+  transcriptIndex: CanonicalTranscriptIndex,
+  modelId: string,
+  scenarioIds: string[],
+): Transcript[] {
+  const byScenario = transcriptIndex.get(modelId);
+  if (!byScenario) {
+    return [];
+  }
+
+  const collected: Transcript[] = [];
+  scenarioIds.forEach((scenarioId) => {
+    collected.push(...(byScenario.get(scenarioId) ?? []));
+  });
+  return collected;
+}
+
+export function summarizeCanonicalConditionTranscripts(
+  transcripts: Transcript[] | null | undefined,
+): CanonicalConditionSummary {
+  const counts = {
+    strongly: 0,
+    somewhat: 0,
+    neutral: 0,
+    opponentSomewhat: 0,
+    opponentStrongly: 0,
+    unknownCount: 0,
+  };
+
+  for (const transcript of transcripts ?? []) {
+    const bucket = getCanonicalBucket(transcript);
+    if (!bucket) {
+      counts.unknownCount += 1;
+      continue;
+    }
+
+    counts[bucket] += 1;
+  }
+
+  const totalTrials =
+    counts.strongly
+    + counts.somewhat
+    + counts.neutral
+    + counts.opponentSomewhat
+    + counts.opponentStrongly;
+
+  if (totalTrials === 0) {
+    return {
+      ...counts,
+      totalTrials,
+      selectedValueWinRate: null,
+      winnerScore: null,
+      isOpponent: false,
+    };
+  }
+
+  const selectedValueWinRate = (counts.strongly + counts.somewhat) / totalTrials;
+  const isOpponent = (selectedValueWinRate ?? 0.5) < 0.5;
+
+  const winnerStrongly = isOpponent ? counts.opponentStrongly : counts.strongly;
+  const winnerSomewhat = isOpponent ? counts.opponentSomewhat : counts.somewhat;
+  const winnerScore = (2 * winnerStrongly + 1 * winnerSomewhat) / totalTrials;
+
+  return {
+    ...counts,
+    totalTrials,
+    selectedValueWinRate,
+    winnerScore,
+    isOpponent,
+  };
+}
+
+export function getCanonicalConditionBackground(score: number, isOpponent: boolean): string {
+  // score is winnerScore (0–2). Opacity scales linearly from 0 (no conviction) to 1 (max conviction).
+  const clamped = Math.min(2, Math.max(0, score));
+  const opacity = clamped / 2;
+  if (isOpponent) {
+    return `rgba(251, 146, 60, ${opacity * 0.5})`;
+  }
+  return `rgba(59, 130, 246, ${opacity * 0.5})`;
+}
+
+export function getCanonicalConditionTextColor(isOpponent: boolean): string {
+  return isOpponent ? 'text-orange-700' : 'text-blue-700';
+}
+
+codex
+I’ve got enough signal now to distinguish the code-backed gaps from the parts that are just future-work risk. I’m doing one targeted read of the Pivot copy so I can tell whether the spec under-scopes any user-facing text that will still be wrong after the score logic changes.
+exec
+/bin/zsh -lc "rg -n \"average preference score|0–2|0-2|winner's weighted score|legend|high|low|neutral\" cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+47:    low: number;
+48:    neutral: number;
+49:    high: number;
+52:function Legend({ lowName, highName, counts }: { lowName: string; highName: string; counts: LegendCounts }) {
+57:                <span className="font-medium text-blue-800">{formatDisplayLabel(lowName)} {counts.low}</span>
+61:                <span>Neutral {counts.neutral}</span>
+65:                <span className="font-medium text-orange-800">{formatDisplayLabel(highName)} {counts.high}</span>
+213:    const legendCounts = useMemo<LegendCounts>(() => {
+215:            return { low: 0, neutral: 0, high: 0 };
+218:        let low = 0;
+219:        let neutral = 0;
+220:        let high = 0;
+228:                high += 1;
+229:            } else if (summary.neutral > 0 && summary.strongly === 0 && summary.somewhat === 0) {
+230:                neutral += 1;
+232:                low += 1;
+236:        return { low, neutral, high };
+286:                        lowName={sideAttributeMap.lowAttribute}
+287:                        highName={sideAttributeMap.highAttribute}
+288:                        counts={legendCounts}
+296:                        Pick the two condition axes you want to compare. Each box in the table shows the model&apos;s average preference score (0–2) for that pair of condition levels.
+341:                    <div className="overflow-x-auto">
+
+exec
+/bin/zsh -lc "sed -n '1,120p' cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import type { VisualizationData } from '../../api/operations/analysis';
+import type { Transcript } from '../../api/operations/runs';
+import { CopyVisualButton } from '../ui/CopyVisualButton';
+import { Button } from '../ui/Button';
+import {
+    mapDecisionSidesToScenarioAttributes,
+    resolveScenarioAttributes,
+} from '../../utils/decisionLabels';
+import { formatDisplayLabel } from '../../utils/displayLabels';
+import {
+    ANALYSIS_BASE_PATH,
+    type AnalysisBasePath,
+    buildAnalysisConditionDetailPath,
+    buildConditionKey,
+} from '../../utils/analysisRouting';
+import {
+    buildCanonicalTranscriptIndex,
+    collectCanonicalConditionTranscripts,
+    summarizeCanonicalConditionTranscripts,
+    getCanonicalConditionBackground,
+    getCanonicalConditionTextColor,
+    type CanonicalConditionSummary,
+} from '../../utils/canonicalConditionSummary';
+import { compareConditionLevels } from '../../utils/conditionOrdering';
+import { resolveConditionDecisionLabelPair } from '../../utils/conditionDecisionSummary';
+
+type PivotAnalysisTableProps = {
+    runId: string;
+    analysisBasePath?: AnalysisBasePath;
+    analysisSearchParams?: URLSearchParams | string;
+    analysisMode?: 'single' | 'paired';
+    visualizationData: VisualizationData;
+    transcripts?: Transcript[];
+    expectedAttributes?: string[];
+    companionRunId?: string | null;
+    /**
+     * When provided, restrict the model dropdown to only these model IDs.
+     * Falls back to all models if the filtered list would be empty.
+     */
+    selectedModels?: string[];
+};
+
+type LegendCounts = {
+    low: number;
+    neutral: number;
+    high: number;
+};
+
+function Legend({ lowName, highName, counts }: { lowName: string; highName: string; counts: LegendCounts }) {
+    return (
+        <div className="flex items-center gap-4 text-xs text-gray-500">
+            <div className="flex items-center gap-1">
+                <span className="w-3 h-3 rounded bg-blue-100 border border-blue-200"></span>
+                <span className="font-medium text-blue-800">{formatDisplayLabel(lowName)} {counts.low}</span>
+            </div>
+            <div className="flex items-center gap-1">
+                <span className="w-3 h-3 rounded bg-gray-100 border border-gray-200"></span>
+                <span>Neutral {counts.neutral}</span>
+            </div>
+            <div className="flex items-center gap-1">
+                <span className="w-3 h-3 rounded bg-orange-100 border border-orange-200"></span>
+                <span className="font-medium text-orange-800">{formatDisplayLabel(highName)} {counts.high}</span>
+            </div>
+        </div>
+    );
+}
+
+export function PivotAnalysisTable({
+    runId,
+    analysisBasePath = ANALYSIS_BASE_PATH,
+    analysisSearchParams,
+    visualizationData,
+    transcripts,
+    expectedAttributes = [],
+    companionRunId,
+    selectedModels,
+}: PivotAnalysisTableProps) {
+    const tableRef = useRef<HTMLDivElement>(null);
+    const navigate = useNavigate();
+    const { modelScenarioMatrix, scenarioDimensions } = visualizationData;
+
+    // 1. Identify available dimensions
+    const availableDimensions = useMemo(() => {
+        return resolveScenarioAttributes(scenarioDimensions, expectedAttributes, modelScenarioMatrix);
+    }, [expectedAttributes, scenarioDimensions, modelScenarioMatrix]);
+
+    // All models from the matrix
+    const allModels = useMemo(() => Object.keys(modelScenarioMatrix || {}).sort(), [modelScenarioMatrix]);
+
+    // Filtered models: when selectedModels is provided, restrict to that set (non-empty fallback)
+    const models = useMemo(() => {
+        if (selectedModels == null || selectedModels.length === 0) return allModels;
+        const filtered = allModels.filter((id) => selectedModels.includes(id));
+        return filtered.length > 0 ? filtered : allModels;
+    }, [allModels, selectedModels]);
+
+    // State for selected dimensions and model
+    const [rowDim, setRowDim] = useState<string>(availableDimensions[0] || '');
+    const [colDim, setColDim] = useState<string>(availableDimensions[1] || availableDimensions[0] || '');
+    // Default to first alphabetical model if available
+    const [selectedModel, setSelectedModel] = useState<string>(models[0] || '');
+    const [showDetails, setShowDetails] = useState<boolean>(false);
+    const decisionSideNames = useMemo(() => {
+        const modelTranscripts = (transcripts ?? []).filter((transcript) => transcript.modelId === selectedModel);
+        if (modelTranscripts.length === 0) {
+            return {
+                aName: 'Canonical first value',
+                bName: 'Canonical second value',
+            };
+        }
+
+        const labelPair = resolveConditionDecisionLabelPair(modelTranscripts);
+        if (!labelPair) {
+            return {
+                aName: 'Canonical first value',
+                bName: 'Canonical second value',
+            };
+
+codex
+## Findings
+| Severity | Finding | Evidence |
+|---|---|---|
+| Medium | FR-014 is not grounded in the current PivotAnalysisTable classifier. The code path that produces the legend counts has no magnitude threshold at all; it only increments `high` when `summary.isOpponent` is true, `neutral` for pure-neutral cells, and `low` otherwise. The spec’s “split by the existing magnitude threshold on `Math.abs(netScore)`” introduces behavior that does not exist today, so the legend semantics will change rather than be preserved. | [CODE-CONFIRMED] [PivotAnalysisTable.tsx](/Users/chrislaw/valuerank/.claude/worktrees/tender-cerf/cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx) |
+| Medium | The spec does not explicitly retire `getConditionMatrixDisplay`, which is still the current home of the winner-only math in `ConditionMatrix.tsx`. Because the spec only names the inline formula, `getPreferenceBackground`, `getPreferenceTextColor`, and the rounding step for removal, a thin wrapper can survive and keep local score logic alive. That undermines the single-source goal and can slip past the listed grep checks. | [CODE-CONFIRMED] [ConditionMatrix.tsx](/Users/chrislaw/valuerank/.claude/worktrees/tender-cerf/cloud/apps/web/src/components/domains/ConditionMatrix.tsx) |
+
+## Residual Risks
+- The spec intentionally leaves the `localeCompare` side-selection behavior alone. The current helper still depends on host locale, so the same raw counts can flip self/opponent direction in different browser locales.
+- The broader UI still has old terminology outside the three target views. For example, the domain analysis page still renders `Win rate` from `selectedValueWinRate`, so the product will keep mixed vocabulary unless that page is cleaned up separately.
+- The current matrix validator still reports only the first invalid row. If multiple rows are malformed, users will still be stuck in a fix-reload-repeat loop.
+tokens used
+51,961

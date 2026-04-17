@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/tests/components/analysis/ConditionDecisionsTable.test.tsx",
+  "source_artifact_sha256": "159042dbdef8be50bbac35b5bd65e91f04784f53efd9f5a58a3290b85d09dc2b",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/unified-net-weighted-condition-score/reviews/spec.codex.edge-cases-adversarial.review.context5.narrowed.txt",
+  "narrowed_artifact_sha256": "c9888b8d557c2a03c0d829ff644de988cc3a2dd5aaa398a20b835d94ed21acd2",
+  "strategy": "head-tail-numbered-lines"
+}

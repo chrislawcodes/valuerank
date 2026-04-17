@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "docs/workflow/feature-runs/unified-net-weighted-condition-score/spec.md",
+  "source_artifact_sha256": "8710d4725806b4fb9edf0232d9e3e25607178d689235d676582d18a93a1aca90",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/unified-net-weighted-condition-score/reviews/plan.gemini.testability-adversarial.review.context0.narrowed.txt",
+  "narrowed_artifact_sha256": "7932956bb0d287b9e8c6634b20e07fec4818d89c0cc4ec6abd66972b0b2df9aa",
+  "strategy": "head-tail-numbered-lines"
+}
