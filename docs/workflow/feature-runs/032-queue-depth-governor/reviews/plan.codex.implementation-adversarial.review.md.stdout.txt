@@ -1,0 +1,11 @@
+## Findings
+- HIGH [CODE-CONFIRMED] Step 2 in `start-queue.ts` uses `min(PROBE_QUEUE_DEPTH_PER_PROVIDER, jobs.length)` for every provider queue. That uses the total run size, not the current queue size. Because `buildRunJobPlan()` and `getQueueNameForModel()` can produce provider queues with fewer than 15 jobs, this math is invalid for normal uneven runs and can break launch integrity.
+- MEDIUM [CODE-CONFIRMED] Step 6 broadens the recovery/stall SQL filter to `probe_%`, but the codebase has a real `probe_dead_letter` queue that intentionally holds failed probe jobs. That filter will count dead-letter jobs as live probe work, which can keep recovery and stall detection from clearing a run.
+- MEDIUM [CODE-CONFIRMED] The recovery path still bypasses the new cap. `requeueMissingProbes()` in `recovery-jobs.ts` sends probe jobs directly with the standard probe options and no per-provider depth limit, so recovered runs can refill a queue well past the planned 15-job ceiling.
+- MEDIUM [CODE-CONFIRMED] Step 3 does not define how the top-up handler reconstructs `sampleIndex`. The code treats `(runId, scenarioId, modelId, sampleIndex)` as the unique probe key, while `buildRunJobPlan()` only returns `samples` counts. Without explicit expansion to sample indices, top-up can duplicate a sample or leave a hole.
+- MEDIUM [CODE-CONFIRMED] The scheduler backstop is time-limited. `scheduler.ts` only refreshes activity at run start and when stalls persist, and `startRecoveryScheduler()` stops the interval after a 1-hour activity window. Long healthy runs can therefore lose the refill sweep before they finish.
+
+## Residual Risks
+- The plan still does not define a fairness rule for the first capped batch. Because `buildRunJobPlan()` is model-major, the first wave will favor earlier models within each provider queue unless the implementation adds round-robin selection.
+- `top_up_probes` is explicitly non-retrying. A transient DB or PgBoss failure can leave the queue underfilled until another terminal probe or the scheduler sweep retriggers it.
+- The plan does not require regression tests for dead-letter exclusion or `sampleIndex` reconstruction, which are the two most likely silent failure points.
