@@ -225,7 +225,7 @@ class TestAnalyzeBasicIntegration:
         assert methods["pValueCorrection"] == "holm_bonferroni"
         assert methods["effectSize"] == "cohens_d"
         assert methods["alpha"] == 0.05
-        assert methods["codeVersion"] == "1.2.0"
+        assert methods["codeVersion"] == "1.3.0"
         assert methods["summaryContractVersion"] == "vignette-semantics-v1"
 
     def test_v2_decision_model_overrides_legacy_scalar_score(self):
