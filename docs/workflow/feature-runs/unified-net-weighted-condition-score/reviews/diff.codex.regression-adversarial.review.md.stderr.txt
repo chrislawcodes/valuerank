@@ -1,0 +1,1371 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019d98ff-e2fa-71b2-b918-061239f983b0
+--------
+user
+Review this diff artifact using a regression-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx b/cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx
+index ce9821e7..ad1d977b 100644
+--- a/cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx
++++ b/cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx
+@@ -19,8 +19,7 @@ import { CopyVisualButton } from '../ui/CopyVisualButton';
+ import {
+   buildCanonicalTranscriptIndex,
+   collectCanonicalConditionTranscripts,
+-  getCanonicalConditionBackground,
+-  getCanonicalConditionTextColor,
++  getConditionCellDisplay,
+   summarizeCanonicalConditionTranscripts,
+   type CanonicalConditionSummary,
+ } from '../../utils/canonicalConditionSummary';
+@@ -613,6 +612,7 @@ export function ConditionDecisionsTable({
+                   const stats = canonicalCellSummaries.get(row.id)?.get(modelId)
+                     ?? summarizeCanonicalConditionTranscripts([]);
+                   const hasResolvedCanonicalEvidence = stats.totalTrials > 0;
++                  const display = getConditionCellDisplay(stats);
+                   const isOtherCell = !hasResolvedCanonicalEvidence;
+                   const splitSourceLabel = row.orientationBucket === 'canonical'
+                     ? splitSourceLabels?.current
+@@ -623,7 +623,7 @@ export function ConditionDecisionsTable({
+                     <td
+                       key={`${row.id}-${modelId}`}
+                       className="border border-gray-200 px-3 py-2 text-center text-sm transition-colors"
+-                      style={{ backgroundColor: hasResolvedCanonicalEvidence ? getCanonicalConditionBackground(stats.winnerScore ?? 0, stats.isOpponent) : undefined }}
++                      style={{ backgroundColor: hasResolvedCanonicalEvidence ? display.backgroundColor : undefined }}
+                     >
+                       <Button
+                         type="button"
+@@ -634,10 +634,8 @@ export function ConditionDecisionsTable({
+                         onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionStrength: 'unknown' } : undefined)}
+                       >
+                         {hasResolvedCanonicalEvidence ? (
+-                          <span className={`inline-flex flex-col items-center ${getCanonicalConditionTextColor(stats.isOpponent)}`}>
+-                            <span className="font-semibold">
+-                              {stats.winnerScore == null ? '—' : stats.winnerScore.toFixed(1)}
+-                            </span>
++                          <span className={`inline-flex flex-col items-center ${display.textColorClass}`}>
++                            <span className="font-semibold">{display.label}</span>
+                           </span>
+                         ) : (
+                           <span className="text-gray-500">—</span>
+diff --git a/cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx b/cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx
+index 87791eac..7b7ae662 100644
+--- a/cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx
++++ b/cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx
+@@ -19,9 +19,8 @@ import {
+ import {
+     buildCanonicalTranscriptIndex,
+     collectCanonicalConditionTranscripts,
++    getConditionCellDisplay,
+     summarizeCanonicalConditionTranscripts,
+-    getCanonicalConditionBackground,
+-    getCanonicalConditionTextColor,
+     type CanonicalConditionSummary,
+ } from '../../utils/canonicalConditionSummary';
+ import { compareConditionLevels } from '../../utils/conditionOrdering';
+@@ -222,14 +221,14 @@ export function PivotAnalysisTable({
+         for (const scenarioId of Object.keys(scenarioDimensions)) {
+             const cellTranscripts = collectCanonicalConditionTranscripts(transcriptIndex, selectedModel, [scenarioId]);
+             const summary = summarizeCanonicalConditionTranscripts(cellTranscripts);
+-            if (summary.totalTrials === 0) continue;
++            if (!summary.hasData) continue;
+ 
+-            if (summary.isOpponent) {
++            if (summary.direction === 'opponent') {
+                 high += 1;
+-            } else if (summary.neutral > 0 && summary.strongly === 0 && summary.somewhat === 0) {
+-                neutral += 1;
+-            } else {
++            } else if (summary.direction === 'self') {
+                 low += 1;
++            } else {
++                neutral += 1;
+             }
+         }
+ 
+@@ -293,7 +292,7 @@ export function PivotAnalysisTable({
+             {showDetails && (
+                 <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                     <p className="text-sm text-gray-600">
+-                        Pick the two condition axes you want to compare. Each box in the table shows the model&apos;s average preference score (0–2) for that pair of condition levels.
++                        Pick the two condition axes you want to compare. Each box shows a net-weighted preference score from 0.0 to 2.0. Color indicates which side the model preferred: blue for the first value, orange for the opposing value. Gray boxes mean the model&apos;s preferences canceled out (a tie). Empty boxes mean no data.
+                     </p>
+                     <div className="flex flex-wrap gap-4">
+                         <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
+@@ -371,23 +370,20 @@ export function PivotAnalysisTable({
+                                     </td>
+                                     {pivotData.cols.map(col => {
+                                         const summary = pivotData.grid[row]?.[col];
+-                                        const hasScore = summary != null && summary.winnerScore != null && summary.totalTrials > 0;
++                                        const hasSummary = summary != null && summary.totalTrials > 0;
++                                        const display = summary != null ? getConditionCellDisplay(summary) : null;
+ 
+                                         return (
+                                             <td
+                                                 key={`${row}-${col}`}
+                                                 className="p-4 border border-gray-100 text-center text-sm transition-colors cursor-pointer hover:ring-1 hover:ring-teal-300"
+                                                 style={{
+-                                                    backgroundColor: hasScore && summary != null
+-                                                        ? getCanonicalConditionBackground(summary.winnerScore ?? 0, summary.isOpponent)
+-                                                        : undefined,
++                                                    backgroundColor: hasSummary && display ? display.backgroundColor : undefined,
+                                                 }}
+                                                 onClick={() => handleCellClick(row, col)}
+                                             >
+-                                                {hasScore && summary != null ? (
+-                                                    <span className={`font-semibold ${getCanonicalConditionTextColor(summary.isOpponent)}`}>
+-                                                        {summary.winnerScore == null ? '—' : summary.winnerScore.toFixed(1)}
+-                                                    </span>
++                                                {hasSummary && display ? (
++                                                    <span className={`font-semibold ${display.textColorClass}`}>{display.label}</span>
+                                                 ) : <span className="text-gray-500">—</span>}
+                                             </td>
+                                         );
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the diff as if it were hostile input: I’m looking for places where the new display helper could hide edge cases or change behavior in ways the text doesn’t justify.
+codex
+I need one more pass on the helper contract to avoid inventing a bug that isn’t there. I’m checking the summary/display logic the patch now depends on.
+exec
+/bin/zsh -lc 'rg -n "getConditionCellDisplay|summarizeCanonicalConditionTranscripts|hasData|direction" cloud/apps/web/src/utils/canonicalConditionSummary.ts cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx' in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:22:    getConditionCellDisplay,
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:23:    summarizeCanonicalConditionTranscripts,
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:200:                rowGrid[cVal] = summarizeCanonicalConditionTranscripts(cellTranscripts);
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:223:            const summary = summarizeCanonicalConditionTranscripts(cellTranscripts);
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:224:            if (!summary.hasData) continue;
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:226:            if (summary.direction === 'opponent') {
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:228:            } else if (summary.direction === 'self') {
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:374:                                        const display = summary != null ? getConditionCellDisplay(summary) : null;
+cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:22:  getConditionCellDisplay,
+cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:23:  summarizeCanonicalConditionTranscripts,
+cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:376:        rowSummaries.set(modelId, summarizeCanonicalConditionTranscripts(cellTranscripts));
+cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:613:                    ?? summarizeCanonicalConditionTranscripts([]);
+cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:615:                  const display = getConditionCellDisplay(stats);
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:12:  direction: 'self' | 'opponent' | 'neutral';
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:13:  hasData: boolean;
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:46:  // batch, unlike canonical.direction which is position-based (valueA/valueB)
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:98:export function summarizeCanonicalConditionTranscripts(
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:153:      direction: 'neutral',
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:154:      hasData: false,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:163:  let direction: CanonicalConditionSummary['direction'] = 'neutral';
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:165:    direction = 'self';
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:167:    direction = 'opponent';
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:174:    direction,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:175:    hasData: true,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:181:  direction: 'self' | 'opponent' | 'neutral';
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:182:  hasData: boolean;
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:188:export function getConditionCellDisplay(summary: CanonicalConditionSummary): ConditionCellDisplay {
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:189:  if (!summary.hasData) {
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:192:      direction: summary.direction,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:193:      hasData: false,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:203:  if (summary.direction === 'neutral') {
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:206:      direction: 'neutral',
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:207:      hasData: true,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:214:  const isOpponent = summary.direction === 'opponent';
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:217:    direction: summary.direction,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:218:    hasData: true,
+
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/web/src/utils/canonicalConditionSummary.ts" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+import type { Transcript } from '../api/operations/runs';
+
+export type CanonicalConditionSummary = {
+  strongly: number;
+  somewhat: number;
+  neutral: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+  unknownCount: number;
+  totalTrials: number;
+  netScore: number | null;
+  direction: 'self' | 'opponent' | 'neutral';
+  hasData: boolean;
+};
+
+export type CanonicalConditionCounts = {
+  strongly: number;
+  somewhat: number;
+  neutral: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+};
+
+export type CanonicalTranscriptIndex = Map<string, Map<string, Transcript[]>>;
+
+type CanonicalBucket = 'strongly' | 'somewhat' | 'neutral' | 'opponentSomewhat' | 'opponentStrongly';
+type CanonicalConditionTally = CanonicalConditionCounts & { unknownCount: number };
+
+function getCanonicalBucket(transcript: Transcript): CanonicalBucket | null {
+  const canonical = transcript.decisionModelV2?.canonical;
+  if (!canonical) {
+    return null;
+  }
+
+  if (canonical.strength === 'neutral') {
+    return 'neutral';
+  }
+
+  const { favoredValueKey, opposedValueKey, strength } = canonical;
+  if (favoredValueKey == null || opposedValueKey == null) {
+    return null;
+  }
+
+  // Alphabetically-first value is the canonical "first" (blue) side; second is
+  // the "opponent" (orange) side.  This is stable across both runs in a paired
+  // batch, unlike canonical.direction which is position-based (valueA/valueB)
+  // and flips between companion runs.
+  const isFirst = favoredValueKey.localeCompare(opposedValueKey) < 0;
+
+  if (isFirst && strength === 'strong') return 'strongly';
+  if (isFirst && strength === 'lean') return 'somewhat';
+  if (!isFirst && strength === 'lean') return 'opponentSomewhat';
+  if (!isFirst && strength === 'strong') return 'opponentStrongly';
+
+  return null;
+}
+
+export function buildCanonicalTranscriptIndex(transcripts: Transcript[] | null | undefined): CanonicalTranscriptIndex {
+  const index = new Map<string, Map<string, Transcript[]>>();
+
+  for (const transcript of transcripts ?? []) {
+    if (!transcript.scenarioId) {
+      continue;
+    }
+
+    const modelId = transcript.modelId;
+    const scenarioId = String(transcript.scenarioId);
+    const byScenario = index.get(modelId) ?? new Map<string, Transcript[]>();
+    const current = byScenario.get(scenarioId);
+    if (current) {
+      current.push(transcript);
+    } else {
+      byScenario.set(scenarioId, [transcript]);
+    }
+    index.set(modelId, byScenario);
+  }
+
+  return index;
+}
+
+export function collectCanonicalConditionTranscripts(
+  transcriptIndex: CanonicalTranscriptIndex,
+  modelId: string,
+  scenarioIds: string[],
+): Transcript[] {
+  const byScenario = transcriptIndex.get(modelId);
+  if (!byScenario) {
+    return [];
+  }
+
+  const collected: Transcript[] = [];
+  scenarioIds.forEach((scenarioId) => {
+    collected.push(...(byScenario.get(scenarioId) ?? []));
+  });
+  return collected;
+}
+
+export function summarizeCanonicalConditionTranscripts(
+  transcripts: Transcript[] | null | undefined,
+): CanonicalConditionSummary {
+  const counts: CanonicalConditionTally = {
+    strongly: 0,
+    somewhat: 0,
+    neutral: 0,
+    opponentSomewhat: 0,
+    opponentStrongly: 0,
+    unknownCount: 0,
+  };
+
+  for (const transcript of transcripts ?? []) {
+    const bucket = getCanonicalBucket(transcript);
+    if (!bucket) {
+      counts.unknownCount += 1;
+      continue;
+    }
+
+    counts[bucket] += 1;
+  }
+
+  return summarizeCanonicalConditionTally(counts);
+}
+
+export function summarizeCanonicalConditionCounts(
+  counts: CanonicalConditionCounts,
+): CanonicalConditionSummary {
+  return summarizeCanonicalConditionTally({
+    strongly: coerceNonNegativeFiniteCount(counts.strongly),
+    somewhat: coerceNonNegativeFiniteCount(counts.somewhat),
+    neutral: coerceNonNegativeFiniteCount(counts.neutral),
+    opponentSomewhat: coerceNonNegativeFiniteCount(counts.opponentSomewhat),
+    opponentStrongly: coerceNonNegativeFiniteCount(counts.opponentStrongly),
+    unknownCount: 0,
+  });
+}
+
+function coerceNonNegativeFiniteCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function summarizeCanonicalConditionTally(counts: CanonicalConditionTally): CanonicalConditionSummary {
+  const totalTrials =
+    counts.strongly
+    + counts.somewhat
+    + counts.neutral
+    + counts.opponentSomewhat
+    + counts.opponentStrongly;
+
+  if (totalTrials === 0) {
+    return {
+      ...counts,
+      totalTrials,
+      netScore: null,
+      direction: 'neutral',
+      hasData: false,
+    };
+  }
+
+  const netScore = (
+    (2 * counts.strongly + counts.somewhat)
+    - (2 * counts.opponentStrongly + counts.opponentSomewhat)
+  ) / totalTrials;
+
+  let direction: CanonicalConditionSummary['direction'] = 'neutral';
+  if (netScore > 0.05) {
+    direction = 'self';
+  } else if (netScore < -0.05) {
+    direction = 'opponent';
+  }
+
+  return {
+    ...counts,
+    totalTrials,
+    netScore,
+    direction,
+    hasData: true,
+  };
+}
+
+export type ConditionCellDisplay = {
+  netScore: number | null;
+  direction: 'self' | 'opponent' | 'neutral';
+  hasData: boolean;
+  label: string;
+  backgroundColor: string | undefined;
+  textColorClass: string;
+};
+
+export function getConditionCellDisplay(summary: CanonicalConditionSummary): ConditionCellDisplay {
+  if (!summary.hasData) {
+    return {
+      netScore: null,
+      direction: summary.direction,
+      hasData: false,
+      label: '—',
+      backgroundColor: undefined,
+      textColorClass: 'text-gray-500',
+    };
+  }
+
+  const netScore = summary.netScore ?? 0;
+  const label = Math.abs(netScore).toFixed(1);
+
+  if (summary.direction === 'neutral') {
+    return {
+      netScore: summary.netScore,
+      direction: 'neutral',
+      hasData: true,
+      label,
+      backgroundColor: undefined,
+      textColorClass: 'text-gray-500',
+    };
+  }
+
+  const isOpponent = summary.direction === 'opponent';
+  return {
+    netScore: summary.netScore,
+    direction: summary.direction,
+    hasData: true,
+    label,
+    backgroundColor: getCanonicalConditionBackground(Math.abs(netScore), isOpponent),
+    textColorClass: getCanonicalConditionTextColor(isOpponent),
+  };
+}
+
+export function getCanonicalConditionBackground(score: number, isOpponent: boolean): string {
+  // score is a magnitude in the 0–2 range. Opacity scales linearly from 0 (no conviction) to 1 (max conviction).
+  const clamped = Math.min(2, Math.max(0, score));
+  const opacity = clamped / 2;
+  if (isOpponent) {
+    return `rgba(251, 146, 60, ${opacity * 0.5})`;
+  }
+  return `rgba(59, 130, 246, ${opacity * 0.5})`;
+}
+
+export function getCanonicalConditionTextColor(isOpponent: boolean): string {
+  return isOpponent ? 'text-orange-700' : 'text-blue-700';
+}
+
+codex
+I found the helper. The main thing I’m checking now is whether the new display rules line up with how these tables are already using `winnerScore` and `netScore`, or whether they quietly changed a boundary case.
+exec
+/bin/zsh -lc "sed -n '590,680p' cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx && printf '\\n---\\n' && sed -n '200,420p' cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+          </thead>
+          <tbody>
+            {sortedConditionRows.map((row) => (
+              <tr key={row.id}>
+                <td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">
+                  {formatDisplayLabel(row.attributeALevel)}
+                </td>
+                <td className="w-36 border border-gray-200 px-3 py-2 text-sm text-gray-700 align-top">
+                  <div className="flex flex-wrap items-start gap-2">
+                    <span className="max-w-[8rem] whitespace-normal break-words leading-5">
+                      {formatDisplayLabel(row.attributeBLevel)}
+                    </span>
+                    {canSplitOrientations && inspectionMode === 'split' && (
+                      <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800">
+                        {row.orientationBucket === 'canonical'
+                          ? splitSourceLabels?.current
+                          : splitSourceLabels?.companion}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                {visibleModels.map((modelId) => {
+                  const stats = canonicalCellSummaries.get(row.id)?.get(modelId)
+                    ?? summarizeCanonicalConditionTranscripts([]);
+                  const hasResolvedCanonicalEvidence = stats.totalTrials > 0;
+                  const display = getConditionCellDisplay(stats);
+                  const isOtherCell = !hasResolvedCanonicalEvidence;
+                  const splitSourceLabel = row.orientationBucket === 'canonical'
+                    ? splitSourceLabels?.current
+                    : splitSourceLabels?.companion;
+                  const title = `View transcripts for ${modelId} | ${formatDisplayLabel(attributeA)}: ${formatDisplayLabel(row.attributeALevel)}, ${formatDisplayLabel(attributeB)}: ${formatDisplayLabel(row.attributeBLevel)}${canSplitOrientations && inspectionMode === 'split' ? ` | ${splitSourceLabel}` : ''}${isOtherCell ? ' | Decision: other' : ''}${stats.unknownCount > 0 ? ` | Unknown: ${stats.unknownCount}` : ''}`;
+
+                  return (
+                    <td
+                      key={`${row.id}-${modelId}`}
+                      className="border border-gray-200 px-3 py-2 text-center text-sm transition-colors"
+                      style={{ backgroundColor: hasResolvedCanonicalEvidence ? display.backgroundColor : undefined }}
+                    >
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
+                        title={title}
+                        onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionStrength: 'unknown' } : undefined)}
+                      >
+                        {hasResolvedCanonicalEvidence ? (
+                          <span className={`inline-flex flex-col items-center ${display.textColorClass}`}>
+                            <span className="font-semibold">{display.label}</span>
+                          </span>
+                        ) : (
+                          <span className="text-gray-500">—</span>
+                        )}
+                      </Button>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {visibleModels.length === 0 && (
+          <div className="mt-2 text-xs text-amber-700">Select at least one AI column to display data.</div>
+        )}
+        <div className="mt-2 text-xs text-gray-500">
+          Unknown canonical trials are excluded from condition scores.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+---
+                rowGrid[cVal] = summarizeCanonicalConditionTranscripts(cellTranscripts);
+            });
+        });
+
+        return {
+            grid,
+            rows: Array.from(rowValues).sort(compareConditionLevels),
+            cols: Array.from(colValues).sort(compareConditionLevels),
+        };
+
+    }, [scenarioDimensions, modelScenarioMatrix, rowDim, colDim, selectedModel, transcriptIndex]);
+
+    const legendCounts = useMemo<LegendCounts>(() => {
+        if (!scenarioDimensions || !selectedModel) {
+            return { low: 0, neutral: 0, high: 0 };
+        }
+
+        let low = 0;
+        let neutral = 0;
+        let high = 0;
+
+        for (const scenarioId of Object.keys(scenarioDimensions)) {
+            const cellTranscripts = collectCanonicalConditionTranscripts(transcriptIndex, selectedModel, [scenarioId]);
+            const summary = summarizeCanonicalConditionTranscripts(cellTranscripts);
+            if (!summary.hasData) continue;
+
+            if (summary.direction === 'opponent') {
+                high += 1;
+            } else if (summary.direction === 'self') {
+                low += 1;
+            } else {
+                neutral += 1;
+            }
+        }
+
+        return { low, neutral, high };
+    }, [scenarioDimensions, selectedModel, transcriptIndex]);
+
+    const handleCellClick = (row: string, col: string) => {
+        const params = new URLSearchParams({
+            rowDim,
+            colDim,
+            modelId: selectedModel || '',
+        });
+        if (companionRunId != null && companionRunId !== '') {
+            params.set('companionRunId', companionRunId);
+        }
+        navigate(
+            buildAnalysisConditionDetailPath(
+                analysisBasePath,
+                runId,
+                buildConditionKey(row, col),
+                params,
+                analysisSearchParams,
+            )
+        );
+    };
+
+    if (!scenarioDimensions || availableDimensions.length === 0) {
+        return <div className="p-4 text-gray-500 italic">No dimension data available for pivot analysis.</div>;
+    }
+
+    if (models.length === 0) {
+        return <div className="p-4 text-gray-500 italic">No models available for analysis.</div>;
+    }
+
+    return (
+        <div ref={tableRef} className="space-y-4 bg-white p-4 rounded-lg border border-gray-200">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-4">
+                <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-900">Pivot Analysis</h3>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowDetails((current) => !current)}
+                        className="min-h-0 px-2 py-1 text-xs"
+                        aria-expanded={showDetails}
+                    >
+                        {showDetails ? 'Hide Details' : 'Details'}
+                    </Button>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                    <Legend
+                        lowName={sideAttributeMap.lowAttribute}
+                        highName={sideAttributeMap.highAttribute}
+                        counts={legendCounts}
+                    />
+                    <CopyVisualButton targetRef={tableRef} label="pivot analysis table" />
+                </div>
+            </div>
+            {showDetails && (
+                <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                    <p className="text-sm text-gray-600">
+                        Pick the two condition axes you want to compare. Each box shows a net-weighted preference score from 0.0 to 2.0. Color indicates which side the model preferred: blue for the first value, orange for the opposing value. Gray boxes mean the model&apos;s preferences canceled out (a tie). Empty boxes mean no data.
+                    </p>
+                    <div className="flex flex-wrap gap-4">
+                        <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
+                            <span>Row</span>
+                            <select
+                                aria-label="Row Dimension (Y-Axis)"
+                                value={rowDim}
+                                onChange={e => setRowDim(e.target.value)}
+                                className="block w-48 rounded-md border-gray-300 bg-white text-sm font-normal normal-case text-gray-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            >
+                                {availableDimensions.map(d => <option key={d} value={d}>{formatDisplayLabel(d)}</option>)}
+                            </select>
+                        </label>
+
+                        <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
+                            <span>Column</span>
+                            <select
+                                aria-label="Column Dimension (X-Axis)"
+                                value={colDim}
+                                onChange={e => setColDim(e.target.value)}
+                                className="block w-48 rounded-md border-gray-300 bg-white text-sm font-normal normal-case text-gray-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            >
+                                {availableDimensions.map(d => <option key={d} value={d}>{formatDisplayLabel(d)}</option>)}
+                            </select>
+                        </label>
+                    </div>
+                </div>
+            )}
+            <div className="flex flex-wrap items-end gap-4">
+                <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
+                    <span>Model</span>
+                    <select
+                        aria-label="Model"
+                        value={selectedModel}
+                        onChange={e => setSelectedModel(e.target.value)}
+                        className="block w-48 rounded-md border-gray-300 bg-white text-sm font-normal normal-case text-gray-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                    >
+                        {models.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                </label>
+            </div>
+            {/* Grid */}
+            {pivotData && (
+                <div className="space-y-2">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200 border-collapse">
+                            <thead>
+                            {/* Row 1: Empty + Column Dimension Label */}
+                            <tr>
+                                <th className="p-2 bg-gray-50 border border-gray-200 border-b-0"></th>
+                                <th
+                                    colSpan={pivotData.cols.length}
+                                    className="p-2 bg-gray-100 border border-gray-200 text-center text-xs font-bold text-gray-700 uppercase"
+                                >
+                                    {formatDisplayLabel(colDim)}
+                                </th>
+                            </tr>
+                            {/* Row 2: Row Dimension Label + Column Values */}
+                            <tr>
+                                <th className="p-3 bg-gray-100 border border-gray-200 text-left text-xs font-bold text-gray-700 uppercase w-32">
+                                    {formatDisplayLabel(rowDim)}
+                                </th>
+                                {pivotData.cols.map(col => (
+                                    <th key={col} className="p-3 bg-gray-50 border border-gray-200 text-center text-xs font-medium text-gray-500 font-mono">
+                                        {formatDisplayLabel(col)}
+                                    </th>
+                                ))}
+                            </tr>
+                            </thead>
+                            <tbody className="bg-white">
+                            {pivotData.rows.map(row => (
+                                <tr key={row}>
+                                    <td className="p-3 bg-gray-50 border border-gray-200 text-left text-xs font-medium text-gray-500 font-mono whitespace-nowrap">
+                                        {formatDisplayLabel(row)}
+                                    </td>
+                                    {pivotData.cols.map(col => {
+                                        const summary = pivotData.grid[row]?.[col];
+                                        const hasSummary = summary != null && summary.totalTrials > 0;
+                                        const display = summary != null ? getConditionCellDisplay(summary) : null;
+
+                                        return (
+                                            <td
+                                                key={`${row}-${col}`}
+                                                className="p-4 border border-gray-100 text-center text-sm transition-colors cursor-pointer hover:ring-1 hover:ring-teal-300"
+                                                style={{
+                                                    backgroundColor: hasSummary && display ? display.backgroundColor : undefined,
+                                                }}
+                                                onClick={() => handleCellClick(row, col)}
+                                            >
+                                                {hasSummary && display ? (
+                                                    <span className={`font-semibold ${display.textColorClass}`}>{display.label}</span>
+                                                ) : <span className="text-gray-500">—</span>}
+                                            </td>
+                                        );
+                                    })}
+                                </tr>
+                            ))}
+                            </tbody>
+                        </table>
+                        <div className="mt-2 text-xs text-gray-500">
+                            Click a cell to view pooled condition details.
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+codex
+I’ve got one concrete boundary-case concern already. I’m checking whether the new label is just a rename of the old score or whether it changed the underlying meaning, because that would be a real regression.
+exec
+/bin/zsh -lc "rg -n \"winnerScore|netScore\" cloud/apps/web/src -g '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:11:  netScore: number | null;
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:152:      netScore: null,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:158:  const netScore = (
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:164:  if (netScore > 0.05) {
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:166:  } else if (netScore < -0.05) {
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:173:    netScore,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:180:  netScore: number | null;
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:191:      netScore: null,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:200:  const netScore = summary.netScore ?? 0;
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:201:  const label = Math.abs(netScore).toFixed(1);
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:205:      netScore: summary.netScore,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:216:    netScore: summary.netScore,
+cloud/apps/web/src/utils/canonicalConditionSummary.ts:220:    backgroundColor: getCanonicalConditionBackground(Math.abs(netScore), isOpponent),
+
+exec
+/bin/zsh -lc 'git show HEAD''^:cloud/apps/web/src/utils/canonicalConditionSummary.ts | sed -n '"'1,260p'" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+import type { Transcript } from '../api/operations/runs';
+
+export type CanonicalConditionSummary = {
+  strongly: number;
+  somewhat: number;
+  neutral: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+  unknownCount: number;
+  totalTrials: number;
+  netScore: number | null;
+  direction: 'self' | 'opponent' | 'neutral';
+  hasData: boolean;
+};
+
+export type CanonicalConditionCounts = {
+  strongly: number;
+  somewhat: number;
+  neutral: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+};
+
+export type CanonicalTranscriptIndex = Map<string, Map<string, Transcript[]>>;
+
+type CanonicalBucket = 'strongly' | 'somewhat' | 'neutral' | 'opponentSomewhat' | 'opponentStrongly';
+type CanonicalConditionTally = CanonicalConditionCounts & { unknownCount: number };
+
+function getCanonicalBucket(transcript: Transcript): CanonicalBucket | null {
+  const canonical = transcript.decisionModelV2?.canonical;
+  if (!canonical) {
+    return null;
+  }
+
+  if (canonical.strength === 'neutral') {
+    return 'neutral';
+  }
+
+  const { favoredValueKey, opposedValueKey, strength } = canonical;
+  if (favoredValueKey == null || opposedValueKey == null) {
+    return null;
+  }
+
+  // Alphabetically-first value is the canonical "first" (blue) side; second is
+  // the "opponent" (orange) side.  This is stable across both runs in a paired
+  // batch, unlike canonical.direction which is position-based (valueA/valueB)
+  // and flips between companion runs.
+  const isFirst = favoredValueKey.localeCompare(opposedValueKey) < 0;
+
+  if (isFirst && strength === 'strong') return 'strongly';
+  if (isFirst && strength === 'lean') return 'somewhat';
+  if (!isFirst && strength === 'lean') return 'opponentSomewhat';
+  if (!isFirst && strength === 'strong') return 'opponentStrongly';
+
+  return null;
+}
+
+export function buildCanonicalTranscriptIndex(transcripts: Transcript[] | null | undefined): CanonicalTranscriptIndex {
+  const index = new Map<string, Map<string, Transcript[]>>();
+
+  for (const transcript of transcripts ?? []) {
+    if (!transcript.scenarioId) {
+      continue;
+    }
+
+    const modelId = transcript.modelId;
+    const scenarioId = String(transcript.scenarioId);
+    const byScenario = index.get(modelId) ?? new Map<string, Transcript[]>();
+    const current = byScenario.get(scenarioId);
+    if (current) {
+      current.push(transcript);
+    } else {
+      byScenario.set(scenarioId, [transcript]);
+    }
+    index.set(modelId, byScenario);
+  }
+
+  return index;
+}
+
+export function collectCanonicalConditionTranscripts(
+  transcriptIndex: CanonicalTranscriptIndex,
+  modelId: string,
+  scenarioIds: string[],
+): Transcript[] {
+  const byScenario = transcriptIndex.get(modelId);
+  if (!byScenario) {
+    return [];
+  }
+
+  const collected: Transcript[] = [];
+  scenarioIds.forEach((scenarioId) => {
+    collected.push(...(byScenario.get(scenarioId) ?? []));
+  });
+  return collected;
+}
+
+export function summarizeCanonicalConditionTranscripts(
+  transcripts: Transcript[] | null | undefined,
+): CanonicalConditionSummary {
+  const counts: CanonicalConditionTally = {
+    strongly: 0,
+    somewhat: 0,
+    neutral: 0,
+    opponentSomewhat: 0,
+    opponentStrongly: 0,
+    unknownCount: 0,
+  };
+
+  for (const transcript of transcripts ?? []) {
+    const bucket = getCanonicalBucket(transcript);
+    if (!bucket) {
+      counts.unknownCount += 1;
+      continue;
+    }
+
+    counts[bucket] += 1;
+  }
+
+  return summarizeCanonicalConditionTally(counts);
+}
+
+export function summarizeCanonicalConditionCounts(
+  counts: CanonicalConditionCounts,
+): CanonicalConditionSummary {
+  return summarizeCanonicalConditionTally({
+    strongly: coerceNonNegativeFiniteCount(counts.strongly),
+    somewhat: coerceNonNegativeFiniteCount(counts.somewhat),
+    neutral: coerceNonNegativeFiniteCount(counts.neutral),
+    opponentSomewhat: coerceNonNegativeFiniteCount(counts.opponentSomewhat),
+    opponentStrongly: coerceNonNegativeFiniteCount(counts.opponentStrongly),
+    unknownCount: 0,
+  });
+}
+
+function coerceNonNegativeFiniteCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function summarizeCanonicalConditionTally(counts: CanonicalConditionTally): CanonicalConditionSummary {
+  const totalTrials =
+    counts.strongly
+    + counts.somewhat
+    + counts.neutral
+    + counts.opponentSomewhat
+    + counts.opponentStrongly;
+
+  if (totalTrials === 0) {
+    return {
+      ...counts,
+      totalTrials,
+      netScore: null,
+      direction: 'neutral',
+      hasData: false,
+    };
+  }
+
+  const netScore = (
+    (2 * counts.strongly + counts.somewhat)
+    - (2 * counts.opponentStrongly + counts.opponentSomewhat)
+  ) / totalTrials;
+
+  let direction: CanonicalConditionSummary['direction'] = 'neutral';
+  if (netScore > 0.05) {
+    direction = 'self';
+  } else if (netScore < -0.05) {
+    direction = 'opponent';
+  }
+
+  return {
+    ...counts,
+    totalTrials,
+    netScore,
+    direction,
+    hasData: true,
+  };
+}
+
+export type ConditionCellDisplay = {
+  netScore: number | null;
+  direction: 'self' | 'opponent' | 'neutral';
+  hasData: boolean;
+  label: string;
+  backgroundColor: string | undefined;
+  textColorClass: string;
+};
+
+export function getConditionCellDisplay(summary: CanonicalConditionSummary): ConditionCellDisplay {
+  if (!summary.hasData) {
+    return {
+      netScore: null,
+      direction: summary.direction,
+      hasData: false,
+      label: '—',
+      backgroundColor: undefined,
+      textColorClass: 'text-gray-500',
+    };
+  }
+
+  const netScore = summary.netScore ?? 0;
+  const label = Math.abs(netScore).toFixed(1);
+
+  if (summary.direction === 'neutral') {
+    return {
+      netScore: summary.netScore,
+      direction: 'neutral',
+      hasData: true,
+      label,
+      backgroundColor: undefined,
+      textColorClass: 'text-gray-500',
+    };
+  }
+
+  const isOpponent = summary.direction === 'opponent';
+  return {
+    netScore: summary.netScore,
+    direction: summary.direction,
+    hasData: true,
+    label,
+    backgroundColor: getCanonicalConditionBackground(Math.abs(netScore), isOpponent),
+    textColorClass: getCanonicalConditionTextColor(isOpponent),
+  };
+}
+
+export function getCanonicalConditionBackground(score: number, isOpponent: boolean): string {
+  // score is a magnitude in the 0–2 range. Opacity scales linearly from 0 (no conviction) to 1 (max conviction).
+  const clamped = Math.min(2, Math.max(0, score));
+  const opacity = clamped / 2;
+  if (isOpponent) {
+    return `rgba(251, 146, 60, ${opacity * 0.5})`;
+  }
+  return `rgba(59, 130, 246, ${opacity * 0.5})`;
+}
+
+export function getCanonicalConditionTextColor(isOpponent: boolean): string {
+  return isOpponent ? 'text-orange-700' : 'text-blue-700';
+}
+
+exec
+/bin/zsh -lc 'git show HEAD''^:cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx | sed -n '"'210,420p' && printf '\\n---\\n' && git show HEAD"'^:cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx | sed -n '"'600,660p'" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+
+    }, [scenarioDimensions, modelScenarioMatrix, rowDim, colDim, selectedModel, transcriptIndex]);
+
+    const legendCounts = useMemo<LegendCounts>(() => {
+        if (!scenarioDimensions || !selectedModel) {
+            return { low: 0, neutral: 0, high: 0 };
+        }
+
+        let low = 0;
+        let neutral = 0;
+        let high = 0;
+
+        for (const scenarioId of Object.keys(scenarioDimensions)) {
+            const cellTranscripts = collectCanonicalConditionTranscripts(transcriptIndex, selectedModel, [scenarioId]);
+            const summary = summarizeCanonicalConditionTranscripts(cellTranscripts);
+            if (summary.totalTrials === 0) continue;
+
+            if (summary.isOpponent) {
+                high += 1;
+            } else if (summary.neutral > 0 && summary.strongly === 0 && summary.somewhat === 0) {
+                neutral += 1;
+            } else {
+                low += 1;
+            }
+        }
+
+        return { low, neutral, high };
+    }, [scenarioDimensions, selectedModel, transcriptIndex]);
+
+    const handleCellClick = (row: string, col: string) => {
+        const params = new URLSearchParams({
+            rowDim,
+            colDim,
+            modelId: selectedModel || '',
+        });
+        if (companionRunId != null && companionRunId !== '') {
+            params.set('companionRunId', companionRunId);
+        }
+        navigate(
+            buildAnalysisConditionDetailPath(
+                analysisBasePath,
+                runId,
+                buildConditionKey(row, col),
+                params,
+                analysisSearchParams,
+            )
+        );
+    };
+
+    if (!scenarioDimensions || availableDimensions.length === 0) {
+        return <div className="p-4 text-gray-500 italic">No dimension data available for pivot analysis.</div>;
+    }
+
+    if (models.length === 0) {
+        return <div className="p-4 text-gray-500 italic">No models available for analysis.</div>;
+    }
+
+    return (
+        <div ref={tableRef} className="space-y-4 bg-white p-4 rounded-lg border border-gray-200">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-4">
+                <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-900">Pivot Analysis</h3>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowDetails((current) => !current)}
+                        className="min-h-0 px-2 py-1 text-xs"
+                        aria-expanded={showDetails}
+                    >
+                        {showDetails ? 'Hide Details' : 'Details'}
+                    </Button>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                    <Legend
+                        lowName={sideAttributeMap.lowAttribute}
+                        highName={sideAttributeMap.highAttribute}
+                        counts={legendCounts}
+                    />
+                    <CopyVisualButton targetRef={tableRef} label="pivot analysis table" />
+                </div>
+            </div>
+            {showDetails && (
+                <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                    <p className="text-sm text-gray-600">
+                        Pick the two condition axes you want to compare. Each box in the table shows the model&apos;s average preference score (0–2) for that pair of condition levels.
+                    </p>
+                    <div className="flex flex-wrap gap-4">
+                        <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
+                            <span>Row</span>
+                            <select
+                                aria-label="Row Dimension (Y-Axis)"
+                                value={rowDim}
+                                onChange={e => setRowDim(e.target.value)}
+                                className="block w-48 rounded-md border-gray-300 bg-white text-sm font-normal normal-case text-gray-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            >
+                                {availableDimensions.map(d => <option key={d} value={d}>{formatDisplayLabel(d)}</option>)}
+                            </select>
+                        </label>
+
+                        <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
+                            <span>Column</span>
+                            <select
+                                aria-label="Column Dimension (X-Axis)"
+                                value={colDim}
+                                onChange={e => setColDim(e.target.value)}
+                                className="block w-48 rounded-md border-gray-300 bg-white text-sm font-normal normal-case text-gray-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            >
+                                {availableDimensions.map(d => <option key={d} value={d}>{formatDisplayLabel(d)}</option>)}
+                            </select>
+                        </label>
+                    </div>
+                </div>
+            )}
+            <div className="flex flex-wrap items-end gap-4">
+                <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
+                    <span>Model</span>
+                    <select
+                        aria-label="Model"
+                        value={selectedModel}
+                        onChange={e => setSelectedModel(e.target.value)}
+                        className="block w-48 rounded-md border-gray-300 bg-white text-sm font-normal normal-case text-gray-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                    >
+                        {models.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                </label>
+            </div>
+            {/* Grid */}
+            {pivotData && (
+                <div className="space-y-2">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200 border-collapse">
+                            <thead>
+                            {/* Row 1: Empty + Column Dimension Label */}
+                            <tr>
+                                <th className="p-2 bg-gray-50 border border-gray-200 border-b-0"></th>
+                                <th
+                                    colSpan={pivotData.cols.length}
+                                    className="p-2 bg-gray-100 border border-gray-200 text-center text-xs font-bold text-gray-700 uppercase"
+                                >
+                                    {formatDisplayLabel(colDim)}
+                                </th>
+                            </tr>
+                            {/* Row 2: Row Dimension Label + Column Values */}
+                            <tr>
+                                <th className="p-3 bg-gray-100 border border-gray-200 text-left text-xs font-bold text-gray-700 uppercase w-32">
+                                    {formatDisplayLabel(rowDim)}
+                                </th>
+                                {pivotData.cols.map(col => (
+                                    <th key={col} className="p-3 bg-gray-50 border border-gray-200 text-center text-xs font-medium text-gray-500 font-mono">
+                                        {formatDisplayLabel(col)}
+                                    </th>
+                                ))}
+                            </tr>
+                            </thead>
+                            <tbody className="bg-white">
+                            {pivotData.rows.map(row => (
+                                <tr key={row}>
+                                    <td className="p-3 bg-gray-50 border border-gray-200 text-left text-xs font-medium text-gray-500 font-mono whitespace-nowrap">
+                                        {formatDisplayLabel(row)}
+                                    </td>
+                                    {pivotData.cols.map(col => {
+                                        const summary = pivotData.grid[row]?.[col];
+                                        const hasScore = summary != null && summary.winnerScore != null && summary.totalTrials > 0;
+
+                                        return (
+                                            <td
+                                                key={`${row}-${col}`}
+                                                className="p-4 border border-gray-100 text-center text-sm transition-colors cursor-pointer hover:ring-1 hover:ring-teal-300"
+                                                style={{
+                                                    backgroundColor: hasScore && summary != null
+                                                        ? getCanonicalConditionBackground(summary.winnerScore ?? 0, summary.isOpponent)
+                                                        : undefined,
+                                                }}
+                                                onClick={() => handleCellClick(row, col)}
+                                            >
+                                                {hasScore && summary != null ? (
+                                                    <span className={`font-semibold ${getCanonicalConditionTextColor(summary.isOpponent)}`}>
+                                                        {summary.winnerScore == null ? '—' : summary.winnerScore.toFixed(1)}
+                                                    </span>
+                                                ) : <span className="text-gray-500">—</span>}
+                                            </td>
+                                        );
+                                    })}
+                                </tr>
+                            ))}
+                            </tbody>
+                        </table>
+                        <div className="mt-2 text-xs text-gray-500">
+                            Click a cell to view pooled condition details.
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+---
+                    <span className="max-w-[8rem] whitespace-normal break-words leading-5">
+                      {formatDisplayLabel(row.attributeBLevel)}
+                    </span>
+                    {canSplitOrientations && inspectionMode === 'split' && (
+                      <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800">
+                        {row.orientationBucket === 'canonical'
+                          ? splitSourceLabels?.current
+                          : splitSourceLabels?.companion}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                {visibleModels.map((modelId) => {
+                  const stats = canonicalCellSummaries.get(row.id)?.get(modelId)
+                    ?? summarizeCanonicalConditionTranscripts([]);
+                  const hasResolvedCanonicalEvidence = stats.totalTrials > 0;
+                  const isOtherCell = !hasResolvedCanonicalEvidence;
+                  const splitSourceLabel = row.orientationBucket === 'canonical'
+                    ? splitSourceLabels?.current
+                    : splitSourceLabels?.companion;
+                  const title = `View transcripts for ${modelId} | ${formatDisplayLabel(attributeA)}: ${formatDisplayLabel(row.attributeALevel)}, ${formatDisplayLabel(attributeB)}: ${formatDisplayLabel(row.attributeBLevel)}${canSplitOrientations && inspectionMode === 'split' ? ` | ${splitSourceLabel}` : ''}${isOtherCell ? ' | Decision: other' : ''}${stats.unknownCount > 0 ? ` | Unknown: ${stats.unknownCount}` : ''}`;
+
+                  return (
+                    <td
+                      key={`${row.id}-${modelId}`}
+                      className="border border-gray-200 px-3 py-2 text-center text-sm transition-colors"
+                      style={{ backgroundColor: hasResolvedCanonicalEvidence ? getCanonicalConditionBackground(stats.winnerScore ?? 0, stats.isOpponent) : undefined }}
+                    >
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
+                        title={title}
+                        onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionStrength: 'unknown' } : undefined)}
+                      >
+                        {hasResolvedCanonicalEvidence ? (
+                          <span className={`inline-flex flex-col items-center ${getCanonicalConditionTextColor(stats.isOpponent)}`}>
+                            <span className="font-semibold">
+                              {stats.winnerScore == null ? '—' : stats.winnerScore.toFixed(1)}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-gray-500">—</span>
+                        )}
+                      </Button>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {visibleModels.length === 0 && (
+          <div className="mt-2 text-xs text-amber-700">Select at least one AI column to display data.</div>
+        )}
+        <div className="mt-2 text-xs text-gray-500">
+          Unknown canonical trials are excluded from condition scores.
+        </div>
+      </div>
+    </div>
+
+exec
+/bin/zsh -lc "rg -n \"LegendCounts|lowName|highName|neutral\" cloud/apps/web/src/components -g '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:155:      || !isNonNegativeInteger(count.neutral)
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:168:          neutral: Number(count.neutral),
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:181:  const neutralShare = value.neutralShare;
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:194:  if (neutralShare !== null && !isRate(neutralShare)) {
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:205:    neutralShare,
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.types.ts:21:  neutralValues: Array<{ name: string; winRate: number | null }>;
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.types.ts:30:  neutralShare: number | null;
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.types.ts:64:    neutral: number;
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.types.ts:86:  neutralShare: number | null;
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:86:  neutralValues: PreferenceValueSummary[];
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:99:      neutralValues: [],
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:151:  const neutral = entries
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:160:    neutralValues: neutral,
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:170:    neutralValues: [],
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:211:      const neutral = stats.reduce((sum, entry) => sum + (entry.count?.neutral ?? 0), 0);
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:212:      const totalResponses = prioritized + deprioritized + neutral;
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:218:          neutral,
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:267:    neutralValues: valueLists.neutralValues,
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts:314:      neutralValues: valueLists.neutralValues,
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:98:        Win rate per domain = prioritized ÷ (prioritized + deprioritized + neutral) across all its vignettes for this value.
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:28:    neutralShare: null,
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:64:    neutralShare: entry.neutralShare,
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:119:    neutralShare: averageWeighted(
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:121:        .filter((entry) => entry.neutralShare !== null)
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:122:        .map((entry) => ({ value: entry.neutralShare ?? 0, weight: entry.weight })),
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:233:      neutralShare: parsedModel.neutralShare,
+cloud/apps/web/src/components/analysis/ScenarioHeatmap.tsx:5: * Green = low decisions (1-2), Yellow = neutral (3), Red = high (4-5).
+cloud/apps/web/src/components/analysis/ScenarioHeatmap.tsx:83:            Green = lower (1-2), Yellow = neutral (3), Red = higher (4-5).
+cloud/apps/web/src/components/analysis/tabs/OverviewTabTypes.ts:15:  neutralShare: number | null;
+cloud/apps/web/src/components/analysis/tabs/OverviewTabTypes.ts:43:  softLean: 'Share of repeated conditions where the model shows a narrow but only slightly off-neutral lean. These are coherent repeats with a mild lean, but not strong enough to count as fully settled.',
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:33:  neutral: number | null;
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:108:  return typeof count.neutral === 'number' ? count.neutral : null;
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:137:      neutral: matrixCounts.neutral,
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:144:    return { first: null, neutral: null, second: null, total: null };
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:149:  const neutral = getNeutralCount(analysis, modelId, firstValueKey);
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:151:    ? first + second + (neutral ?? 0)
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:154:  return { first, neutral, second, total };
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:218:        neutral:
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:219:          aFirst.neutral != null && bFirst.neutral != null
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:220:            ? aFirst.neutral + bFirst.neutral
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:384:  decisionBucketOverride?: 'a' | 'neutral' | 'b',
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:714:                              pairedDecisionBucket: 'neutral',
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:718:                            'neutral',
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:721:                          {formatPercent(row.blended.neutral, row.blended.total)}
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:724:                        formatPercent(row.blended.neutral, row.blended.total)
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:789:                                'neutral',
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:792:                              {formatCount(row.aFirst.neutral)}
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:795:                            formatCount(row.aFirst.neutral)
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:847:                                'neutral',
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:850:                              {formatCount(row.bFirst.neutral)}
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:853:                            formatCount(row.bFirst.neutral)
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx:882:              Percentages show the share of condition cells that landed on each outcome. Click any value or neutral cell to inspect the matching transcripts.
+cloud/apps/web/src/components/analysis/tabs/OverviewSummaryTable.tsx:204:                ?? preference.neutralValues[0]
+cloud/apps/web/src/components/analysis/DecisionDistributionChart.tsx:37:  neutral: number;
+cloud/apps/web/src/components/analysis/DecisionDistributionChart.tsx:46:  neutral: '#fbbf24', // yellow - neutral
+cloud/apps/web/src/components/analysis/DecisionDistributionChart.tsx:72:      neutral: total > 0 ? (rawCounts.neutral / total) * 100 : 0,
+cloud/apps/web/src/components/analysis/AnalysisCard.tsx:32:  badgeVariant: 'neutral',
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:45:type LegendCounts = {
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:47:    neutral: number;
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:51:function Legend({ lowName, highName, counts }: { lowName: string; highName: string; counts: LegendCounts }) {
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:56:                <span className="font-medium text-blue-800">{formatDisplayLabel(lowName)} {counts.low}</span>
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:60:                <span>Neutral {counts.neutral}</span>
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:64:                <span className="font-medium text-orange-800">{formatDisplayLabel(highName)} {counts.high}</span>
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:212:    const legendCounts = useMemo<LegendCounts>(() => {
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:214:            return { low: 0, neutral: 0, high: 0 };
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:218:        let neutral = 0;
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:231:                neutral += 1;
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:235:        return { low, neutral, high };
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:285:                        lowName={sideAttributeMap.lowAttribute}
+cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:286:                        highName={sideAttributeMap.highAttribute}
+cloud/apps/web/src/components/analysis/tabs/OverviewTabHelpers.ts:63:    ?? model.neutralValues[0]?.name
+cloud/apps/web/src/components/analysis/tabs/OverviewTabHelpers.ts:107:  neutralShare: number | null | undefined,
+cloud/apps/web/src/components/analysis/tabs/OverviewTabHelpers.ts:115:    || neutralShare === null
+cloud/apps/web/src/components/analysis/tabs/OverviewTabHelpers.ts:116:    || neutralShare === undefined
+cloud/apps/web/src/components/analysis/tabs/OverviewTabHelpers.ts:133:  if (neutralShare >= 0.60 || absoluteDistance < 0.35) {
+cloud/apps/web/src/components/analysis/tabs/OverviewTabHelpers.ts:175:    neutralShare: weightedMean('neutralShare'),
+cloud/apps/web/src/components/analysis/tabs/OverviewTabHelpers.ts:235:      conditionStats.neutralShare,
+cloud/apps/web/src/components/analysis/ModelConsistencyChart.tsx:25:  neutralShare: number | null;
+cloud/apps/web/src/components/analysis/ModelConsistencyChart.tsx:130:        <p>Neutral Share: <span className="font-medium">{data.neutralShare === null ? '—' : formatPercent(data.neutralShare)}</span></p>
+cloud/apps/web/src/components/analysis/ModelConsistencyChart.tsx:182:    neutralShare: model.neutralShare,
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:13:  neutral: number;
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:30:    ['neutral', condition.neutral],
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:47:  const expectedTotal = condition.prioritized + condition.deprioritized + condition.neutral;
+cloud/apps/web/src/components/domains/ConditionMatrix.tsx:161:                    neutral: condition.neutral,
+cloud/apps/web/src/components/domains/DominanceSection.tsx:26:  neutralColor: '#94a3b8',
+cloud/apps/web/src/components/domains/ValuePrioritiesHelpPanel.tsx:30:            including neutral responses.
+cloud/apps/web/src/components/domains/ValuePrioritiesHelpPanel.tsx:34:            Win Rate = prioritized / (prioritized + deprioritized + neutral) × 100%
+cloud/apps/web/src/components/domains/DominanceSectionChart.tsx:30:  neutralColor: string;
+cloud/apps/web/src/components/domains/DominanceSectionChart.tsx:111:  neutralColor: string;
+cloud/apps/web/src/components/domains/DominanceSectionChart.tsx:123:    neutralColor,
+cloud/apps/web/src/components/domains/DominanceSectionChart.tsx:130:  if (focusedValue == null) return neutralColor;
+cloud/apps/web/src/components/domains/DominanceSectionChart.tsx:131:  if (!isFocusedEdge) return neutralColor;
+cloud/apps/web/src/components/domains/DominanceSectionChart.tsx:268:            neutralColor: themeColors.neutralColor,
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusPanel.tsx:216:                          <Badge variant={runtime === 'EXCEPTION' ? 'error' : runtime === 'LIVE' ? 'warning' : 'neutral'} size="count">
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusDrawer.tsx:78:                <Badge variant="neutral" size="count">Run: {run.id.slice(-8)}</Badge>
+cloud/apps/web/src/components/domains/domainTrials/DomainEvaluationStatusDrawer.tsx:80:                <Badge variant="neutral" size="count">Updated: {formatTimestamp(run.updatedAt)}</Badge>
+cloud/apps/web/src/components/domains/domainTrials/LaunchStatusPanel.tsx:39:        {evaluationId && <Badge variant="neutral" size="count">Evaluation: {evaluationId.slice(-8)}</Badge>}
+cloud/apps/web/src/components/domains/domainTrials/LaunchStatusPanel.tsx:40:        {scopeCategory && <Badge variant="neutral" size="count">Evaluation scope: {scopeCategory.toLowerCase()}</Badge>}
+cloud/apps/web/src/components/domains/domainTrials/LaunchStatusPanel.tsx:44:        <Badge variant={statusSummary.failed > 0 ? 'error' : 'neutral'} size="count">Member runs failed: {statusSummary.failed}</Badge>
+cloud/apps/web/src/components/runs/RunProgress.tsx:35:      return { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200', badgeVariant: 'neutral' };
+cloud/apps/web/src/components/runs/TranscriptRow.tsx:86:  // Find a non-neutral scale label to detect the label prefix pattern
+cloud/apps/web/src/components/runs/TranscriptRow.tsx:107:  // Find two non-neutral labels to detect the common prefix
+cloud/apps/web/src/components/runs/TranscriptRow.tsx:121:  // Find the common prefix among all non-neutral labels — that's the label prefix
+cloud/apps/web/src/components/runs/RunCard.tsx:32:  CANCELLED: { icon: AlertCircle, color: 'text-gray-600', bg: 'bg-gray-100', label: 'Cancelled', badgeVariant: 'neutral' },
+cloud/apps/web/src/components/ui/Badge.tsx:16:        neutral: 'bg-gray-100 text-gray-700',
+cloud/apps/web/src/components/ui/Badge.tsx:28:      variant: 'neutral',
+cloud/apps/web/src/components/ui/Badge.tsx:83:      return 'neutral';
+cloud/apps/web/src/components/definitions/TagChips.tsx:93:        <Badge variant="neutral" size={badgeSize} className="rounded-full">
+
+exec
+/bin/zsh -lc 'git grep -n "winnerScore" HEAD''^ -- cloud/apps/web/src || true' in /Users/chrislaw/valuerank/.claude/worktrees/tender-cerf
+ succeeded in 0ms:
+HEAD^:cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:626:                      style={{ backgroundColor: hasResolvedCanonicalEvidence ? getCanonicalConditionBackground(stats.winnerScore ?? 0, stats.isOpponent) : undefined }}
+HEAD^:cloud/apps/web/src/components/analysis/ConditionDecisionsTable.tsx:639:                              {stats.winnerScore == null ? '—' : stats.winnerScore.toFixed(1)}
+HEAD^:cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:374:                                        const hasScore = summary != null && summary.winnerScore != null && summary.totalTrials > 0;
+HEAD^:cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:382:                                                        ? getCanonicalConditionBackground(summary.winnerScore ?? 0, summary.isOpponent)
+HEAD^:cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx:389:                                                        {summary.winnerScore == null ? '—' : summary.winnerScore.toFixed(1)}
+
+codex
+## Findings
+- [MEDIUM] [UNVERIFIED] `ConditionDecisionsTable.tsx` and `PivotAnalysisTable.tsx` now render `display.label` for resolved cells, but that label is derived from the helper’s rounded net score. If the helper treats near-zero values as `direction === 'neutral'`, a gray tie cell can still show a nonzero number like `0.1` at the rounding boundary. That makes the color and the number disagree, which is misleading for users reading the table as a decision summary.
+- [MEDIUM] [UNVERIFIED] The pivot legend logic in `PivotAnalysisTable.tsx` changed from counting only fully neutral mixes to counting anything the helper reports as `direction === 'neutral'`. That broadens the neutral bucket to include near-zero net scores, so the “neutral” total no longer means the same thing as before and can shift cells out of low/high without any visible transcript change.
+
+## Residual Risks
+- I did not verify whether the helper’s neutral threshold and one-decimal display are intended across the rest of the analysis UI.
+- This review is limited to the diff shown here, so any matching helper changes outside the artifact could change the impact of these findings.
+tokens used
+33,224

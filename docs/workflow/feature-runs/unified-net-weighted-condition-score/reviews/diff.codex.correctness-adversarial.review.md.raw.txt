@@ -1,0 +1,8 @@
+## Findings
+- [UNVERIFIED] Medium: `PivotAnalysisTable` now describes tie cells as gray, but the rendered neutral path does not apply any gray fill at all. In `getConditionCellDisplay`, `direction === 'neutral'` returns `backgroundColor: undefined`, and the table only uses that value for cell styling. That makes tie cells look the same as empty cells except for the `0.0` label, which breaks the new “gray boxes mean a tie” contract and weakens the no-data vs tie distinction. Relevant files: [PivotAnalysisTable.tsx](/Users/chrislaw/valuerank/.claude/worktrees/tender-cerf/cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx), [canonicalConditionSummary.ts](/Users/chrislaw/valuerank/.claude/worktrees/tender-cerf/cloud/apps/web/src/utils/canonicalConditionSummary.ts)
+
+- [UNVERIFIED] Low: The new neutral threshold and the one-decimal label can disagree at the boundary. A summary with `netScore === 0.05` is classified as neutral, but the label renders as `0.1` because it is rounded independently. That creates a visible mismatch where a cell is styled as a tie but numerically looks like a weak preference. Relevant file: [canonicalConditionSummary.ts](/Users/chrislaw/valuerank/.claude/worktrees/tender-cerf/cloud/apps/web/src/utils/canonicalConditionSummary.ts)
+
+## Residual Risks
+- I did not run the app, so I could not verify whether any surrounding CSS or later helpers add a neutral fill that would soften the first issue.
+- The review is limited to the diff artifact, so behavior in other consumers of `getConditionCellDisplay` may still have edge cases that are not visible here.
