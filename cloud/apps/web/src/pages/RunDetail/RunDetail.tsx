@@ -4,7 +4,7 @@
  * Displays details of a single run including progress and results.
  */
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import type * as React from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Play } from 'lucide-react';
@@ -19,9 +19,6 @@ import { SummarizationControls } from '../../components/runs/SummarizationContro
 import { RerunDialog } from '../../components/runs/RerunDialog';
 import { useRun } from '../../hooks/useRun';
 import { useAnalysis } from '../../hooks/useAnalysis';
-import { useRunMutations } from '../../hooks/useRunMutations';
-import { exportRunAdjudicationCSV, exportRunAsCSV, exportTranscriptsAsJSON } from '../../api/export';
-import type { Run } from '../../api/operations/runs';
 import { RunHeader } from './RunHeader';
 import { RunMetadata } from './RunMetadata';
 import { RunNameEditor } from './RunNameEditor';
@@ -29,80 +26,27 @@ import { AnalysisBanner } from './AnalysisBanner';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { formatTemperatureSetting } from '../../lib/temperature';
 import { getDefinitionMethodology, getDefinitionMethodologyLabel } from '../../utils/methodology';
-
-function formatDate(dateString: string | Date): string {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function getDisplaySignature(signature: string): string {
-  return signature !== 'v?td' ? signature : 'Unknown Signature';
-}
-
-function getStalledModelsBanner(run: Run): React.ReactNode | null {
-  if (run.status !== 'RUNNING') return null;
-  if (run.stalledModels == null || run.stalledModels.length === 0) return null;
-  const count = run.stalledModels.length;
-  const label = count === 1 ? 'model is' : 'models are';
-  return (
-    <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
-      <p className="text-sm font-medium text-amber-800">
-        {`${count} ${label} stalled (no progress for 3+ minutes): ${run.stalledModels.join(', ')}`}
-      </p>
-    </div>
-  );
-}
-
-function getUnresolvableBanner(
-  data: { total: number; byModel: { modelId: string; count: number }[] } | null | undefined
-): React.ReactNode {
-  if (data == null || data.total === 0) return null;
-  return (
-    <div className="border border-amber-400 bg-amber-50 rounded-lg p-4 mb-4">
-      <p className="font-medium text-amber-800">
-        {data.total} transcript{data.total !== 1 ? 's' : ''} could not be scored —
-        manual adjudication required before analysis results are reliable.
-      </p>
-      {data.byModel.length > 0 && (
-        <ul className="mt-2 text-sm text-amber-700 list-disc list-inside">
-          {data.byModel.map((m) => (
-            <li key={m.modelId}>{m.modelId}: {m.count}</li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
+import { StalledModelsBanner, UnresolvableBanner, formatRunDate, getDisplaySignature } from './RunDetailBanners';
+import { useRunDetailHandlers } from './useRunDetailHandlers';
 
 export function RunDetail() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const [isExporting, setIsExporting] = useState(false);
-  const [isExportingAdjudication, setIsExportingAdjudication] = useState(false);
-  const [isExportingTranscripts, setIsExportingTranscripts] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
   const [isRerunDialogOpen, setIsRerunDialogOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   const { run, loading, error, refetch } = useRun({
-    id: id || '',
+    id: id ?? '',
     pause: !id,
     enablePolling: true,
   });
   const { analysis } = useAnalysis({
-    runId: id || '',
+    runId: id ?? '',
     pause: !id,
     enablePolling: false,
     analysisStatus: run?.analysisStatus ?? null,
   });
 
-  // Build scenarioDimensions from transcript dimensionValues as a fallback when analysis is not yet available.
   const scenarioDimensionsFromTranscripts = (() => {
     const transcripts = run?.transcripts;
     if (!transcripts) return undefined;
@@ -117,222 +61,53 @@ export function RunDetail() {
     return hasAny ? result : undefined;
   })();
 
-  const {
-    pauseRun,
-    resumeRun,
-    cancelRun,
-    deleteRun,
-    updateRun,
-    cancelSummarization,
-    restartSummarization,
-    updateTranscriptDecision,
-  } = useRunMutations();
+  const handlers = useRunDetailHandlers(run ?? null, refetch);
 
-  const handleSaveName = useCallback(
-    async (name: string | null) => {
-      if (!run) return;
-      await updateRun(run.id, { name });
-      refetch();
-    },
-    [run, updateRun, refetch]
+  const backButton = (
+    <Button variant="ghost" size="sm" onClick={() => navigate('/runs')}>
+      <ArrowLeft className="w-4 h-4 mr-1" />
+      Back to Trials
+    </Button>
   );
 
-  const handleExport = useCallback(async () => {
-    if (!run) return;
-    setIsExporting(true);
-    setExportError(null);
-    try {
-      await exportRunAsCSV(run.id);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Export failed';
-      setExportError(message);
-    } finally {
-      setIsExporting(false);
-    }
-  }, [run]);
-
-  const handleExportTranscripts = useCallback(async () => {
-    if (!run) return;
-    setIsExportingTranscripts(true);
-    setExportError(null);
-    try {
-      await exportTranscriptsAsJSON(run.id);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Export failed';
-      setExportError(message);
-    } finally {
-      setIsExportingTranscripts(false);
-    }
-  }, [run]);
-
-  const handleExportAdjudication = useCallback(async () => {
-    if (!run) return;
-    setIsExportingAdjudication(true);
-    setExportError(null);
-    try {
-      await exportRunAdjudicationCSV(run.id);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Export failed';
-      setExportError(message);
-    } finally {
-      setIsExportingAdjudication(false);
-    }
-  }, [run]);
-
-  const handlePause = useCallback(
-    async (runId: string) => {
-      await pauseRun(runId);
-      refetch();
-    },
-    [pauseRun, refetch]
-  );
-
-  const handleResume = useCallback(
-    async (runId: string) => {
-      await resumeRun(runId);
-      refetch();
-    },
-    [resumeRun, refetch]
-  );
-
-  const handleCancel = useCallback(
-    async (runId: string) => {
-      await cancelRun(runId);
-      refetch();
-    },
-    [cancelRun, refetch]
-  );
-
-  const handleRerunSuccess = useCallback(
-    (newRunId: string) => {
-      navigate(`/runs/${newRunId}`);
-    },
-    [navigate]
-  );
-
-  const handleDelete = useCallback(async () => {
-    if (!run) return;
-    setIsDeleting(true);
-    try {
-      await deleteRun(run.id);
-      navigate('/runs');
-    } catch {
-      setIsDeleting(false);
-    }
-  }, [run, deleteRun, navigate]);
-
-  const handleCancelSummarization = useCallback(
-    async (runId: string) => {
-      const result = await cancelSummarization(runId);
-      refetch();
-      return { cancelledCount: result.cancelledCount };
-    },
-    [cancelSummarization, refetch]
-  );
-
-  const handleRestartSummarization = useCallback(
-    async (runId: string, force?: boolean) => {
-      const result = await restartSummarization(runId, force);
-      refetch();
-      return { queuedCount: result.queuedCount };
-    },
-    [restartSummarization, refetch]
-  );
-
-  const handleUpdateTranscriptDecision = useCallback(
-    async (transcriptId: string, decisionCode: string) => {
-      await updateTranscriptDecision(transcriptId, decisionCode);
-      refetch();
-    },
-    [updateTranscriptDecision, refetch]
-  );
-
-  // Loading state
   if (loading && !run) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/runs')}>
-            <ArrowLeft className="w-4 h-4 mr-1" />
-            Back
-          </Button>
-        </div>
-        <Loading size="lg" text="Loading run..." />
-      </div>
-    );
+    return <div className="space-y-6"><div className="flex items-center gap-4">{backButton}</div><Loading size="lg" text="Loading run..." /></div>;
   }
-
-  // Error state
   if (error) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/runs')}>
-            <ArrowLeft className="w-4 h-4 mr-1" />
-            Back
-          </Button>
-        </div>
-        <ErrorMessage message={`Failed to load run: ${error.message}`} />
-      </div>
-    );
+    return <div className="space-y-6"><div className="flex items-center gap-4">{backButton}</div><ErrorMessage message={`Failed to load run: ${error.message}`} /></div>;
   }
-
-  // Not found
   if (!run) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/runs')}>
-            <ArrowLeft className="w-4 h-4 mr-1" />
-            Back
-          </Button>
-        </div>
-        <ErrorMessage message="Trial not found" />
-      </div>
-    );
+    return <div className="space-y-6"><div className="flex items-center gap-4">{backButton}</div><ErrorMessage message="Trial not found" /></div>;
   }
 
   const isActive = run.status === 'PENDING' || run.status === 'RUNNING' || run.status === 'SUMMARIZING';
   const isPaused = run.status === 'PAUSED';
   const isTerminal = run.status === 'COMPLETED' || run.status === 'FAILED' || run.status === 'CANCELLED';
-  const stalledModelsBanner = getStalledModelsBanner(run);
-  const unresolvableBanner = getUnresolvableBanner(run.unresolvableTranscriptCount);
-  const trialSignature = formatTrialSignature(
-    run.definitionVersion ?? run.definition?.version ?? null,
-    run.config?.temperature ?? null
-  );
+  const trialSignature = formatTrialSignature(run.definitionVersion ?? run.definition?.version ?? null, run.config?.temperature ?? null);
   const methodology = getDefinitionMethodology(run.definition?.content);
-  const methodologyLabel = getDefinitionMethodologyLabel(
-    run.definition?.content,
-    run.definition?.domain?.name ?? null,
-  );
+  const methodologyLabel = getDefinitionMethodologyLabel(run.definition?.content, run.definition?.domain?.name ?? null);
   const isPairedRun = methodology?.pair_key != null;
   const launchModeLabel = isPairedRun
-    ? run.config?.jobChoiceLaunchMode === 'AD_HOC_BATCH'
-      ? 'Ad Hoc Batch'
-      : run.config?.jobChoiceLaunchMode === 'PAIRED_BATCH'
-        ? 'Paired Batch'
-        : null
+    ? run.config?.jobChoiceLaunchMode === 'AD_HOC_BATCH' ? 'Ad Hoc Batch'
+    : run.config?.jobChoiceLaunchMode === 'PAIRED_BATCH' ? 'Paired Batch' : null
     : null;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <RunHeader
         runId={run.id}
         status={run.status}
         isTerminal={isTerminal}
-        onPause={handlePause}
-        onResume={handleResume}
-        onCancel={handleCancel}
+        onPause={handlers.handlePause}
+        onResume={handlers.handleResume}
+        onCancel={handlers.handleCancel}
         onRerun={() => setIsRerunDialogOpen(true)}
         onDelete={() => setIsDeleteConfirmOpen(true)}
       />
 
-      {stalledModelsBanner}
-      {unresolvableBanner}
+      <StalledModelsBanner run={run} />
+      <UnresolvableBanner data={run.unresolvableTranscriptCount} />
 
-      {/* Summarization controls */}
       {(run.status === 'SUMMARIZING' || isTerminal) && run.transcriptCount > 0 && (
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="flex items-center justify-between">
@@ -352,8 +127,8 @@ export function RunDetail() {
               status={run.status}
               summarizeProgress={run.summarizeProgress}
               transcriptCount={run.transcriptCount}
-              onCancelSummarization={handleCancelSummarization}
-              onRestartSummarization={handleRestartSummarization}
+              onCancelSummarization={handlers.handleCancelSummarization}
+              onRestartSummarization={handlers.handleRestartSummarization}
               onSuccess={() => { }}
               onError={() => { }}
               size="sm"
@@ -362,73 +137,48 @@ export function RunDetail() {
         </div>
       )}
 
-      {/* Main content card */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">
-        {/* Title and definition link */}
         <div className="flex items-start justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center">
               <Play className="w-5 h-5 text-teal-600" />
             </div>
             <div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <Link
-                    to={`/definitions/${run.definitionId}`}
-                    className="text-xl font-medium text-gray-900 hover:text-teal-600 transition-colors flex items-center gap-2"
-                  >
-                    {run.definition?.name || 'Unnamed Vignette'}
-                    {(run.definitionVersion || run.definition?.version) && (
-                      <span className="text-gray-500 font-normal text-base">v{run.definitionVersion ?? run.definition?.version}</span>
-                    )}
-                  </Link>
-                  {methodologyLabel && (
-                    <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
-                      {methodologyLabel}
-                    </span>
+              <div className="flex items-center gap-2">
+                <Link
+                  to={`/definitions/${run.definitionId}`}
+                  className="text-xl font-medium text-gray-900 hover:text-teal-600 transition-colors flex items-center gap-2"
+                >
+                  {run.definition?.name || 'Unnamed Vignette'}
+                  {(run.definitionVersion || run.definition?.version) && (
+                    <span className="text-gray-500 font-normal text-base">v{run.definitionVersion ?? run.definition?.version}</span>
                   )}
-                  {launchModeLabel && (
-                    <span
-                      className={`rounded-full px-2 py-1 text-xs font-medium ${
-                        launchModeLabel === 'Paired Batch'
-                          ? 'bg-teal-100 text-teal-800'
-                          : 'bg-gray-100 text-gray-700'
-                      }`}
-                    >
-                      {launchModeLabel}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <RunNameEditor
-                    name={run.name}
-                    formattedName={formatRunName(run)}
-                    onSave={handleSaveName}
-                    variant="subtitle"
-                  />
-                  <span className="text-sm text-gray-500">
-                    · <span className="font-mono">{getDisplaySignature(trialSignature)}</span> · {run.definition?.name || 'Vignette'} · {formatDate(run.createdAt)}
+                </Link>
+                {methodologyLabel && (
+                  <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">{methodologyLabel}</span>
+                )}
+                {launchModeLabel && (
+                  <span className={`rounded-full px-2 py-1 text-xs font-medium ${launchModeLabel === 'Paired Batch' ? 'bg-teal-100 text-teal-800' : 'bg-gray-100 text-gray-700'}`}>
+                    {launchModeLabel}
                   </span>
-                </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <RunNameEditor name={run.name} formattedName={formatRunName(run)} onSave={handlers.handleSaveName} variant="subtitle" />
+                <span className="text-sm text-gray-500">
+                  · <span className="font-mono">{getDisplaySignature(trialSignature)}</span> · {run.definition?.name || 'Vignette'} · {formatRunDate(run.createdAt)}
+                </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Metadata row */}
-        <RunMetadata
-          createdAt={run.createdAt}
-          startedAt={run.startedAt}
-          completedAt={run.completedAt}
-          temperature={run.config?.temperature}
-        />
+        <RunMetadata createdAt={run.createdAt} startedAt={run.startedAt} completedAt={run.completedAt} temperature={run.config?.temperature} />
 
-        {/* Analysis link banner */}
         <div className="mb-6">
           <AnalysisBanner runId={run.id} analysisStatus={run.analysisStatus} runStatus={run.status} />
         </div>
 
-        {/* Progress */}
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-4">
             <h3 className="text-sm font-medium text-gray-700">Progress</h3>
@@ -439,7 +189,6 @@ export function RunDetail() {
           <RunProgress run={run} showPerModel={true} />
         </div>
 
-        {/* Configuration */}
         <div className="border-t border-gray-200 pt-6">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Start Evaluation Trial</h2>
           <div className="grid grid-cols-2 gap-4 text-sm">
@@ -447,12 +196,7 @@ export function RunDetail() {
               <span className="text-gray-500">Models:</span>
               <div className="mt-1">
                 {run.config?.models?.map((model) => (
-                  <span
-                    key={model}
-                    className="inline-flex items-center px-2 py-1 rounded bg-gray-100 text-gray-700 text-xs mr-2 mb-1"
-                  >
-                    {model}
-                  </span>
+                  <span key={model} className="inline-flex items-center px-2 py-1 rounded bg-gray-100 text-gray-700 text-xs mr-2 mb-1">{model}</span>
                 ))}
               </div>
             </div>
@@ -467,52 +211,46 @@ export function RunDetail() {
           </div>
         </div>
 
-        {/* Results section */}
         {(isTerminal || run.transcriptCount > 0) && (
           <div className="border-t border-gray-200 pt-6 mt-6">
             <h3 className="text-lg font-medium text-gray-900 mb-2">Results</h3>
-            {exportError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                {exportError}
-              </div>
+            {handlers.exportError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{handlers.exportError}</div>
             )}
             <RunResults
               run={run}
-              onExport={() => void handleExport()}
-              isExporting={isExporting}
-              onExportAdjudication={isPairedRun ? () => void handleExportAdjudication() : undefined}
-              isExportingAdjudication={isExportingAdjudication}
-              onExportTranscripts={() => void handleExportTranscripts()}
-              isExportingTranscripts={isExportingTranscripts}
+              onExport={() => void handlers.handleExport()}
+              isExporting={handlers.isExporting}
+              onExportAdjudication={isPairedRun ? () => void handlers.handleExportAdjudication() : undefined}
+              isExportingAdjudication={handlers.isExportingAdjudication}
+              onExportTranscripts={() => void handlers.handleExportTranscripts()}
+              isExportingTranscripts={handlers.isExportingTranscripts}
               scenarioDimensions={analysis?.visualizationData?.scenarioDimensions ?? scenarioDimensionsFromTranscripts}
-              onUpdateTranscriptDecision={handleUpdateTranscriptDecision}
+              onUpdateTranscriptDecision={handlers.handleUpdateTranscriptDecision}
             />
           </div>
         )}
       </div>
 
-      {/* Polling indicator for active runs */}
       {(isActive || isPaused) && (
         <div className="text-center text-sm text-gray-500">
           {isActive ? 'Updating every 5 seconds...' : 'Trial is paused'}
         </div>
       )}
 
-      {/* Re-run Dialog */}
       <RerunDialog
         run={run}
         scenarioCount={run.runProgress?.total}
         isOpen={isRerunDialogOpen}
         onClose={() => setIsRerunDialogOpen(false)}
-        onSuccess={handleRerunSuccess}
+        onSuccess={handlers.handleRerunSuccess}
       />
 
-      {/* Delete Confirmation Dialog */}
       <DeleteConfirmModal
         isOpen={isDeleteConfirmOpen}
-        isDeleting={isDeleting}
+        isDeleting={handlers.isDeleting}
         onClose={() => setIsDeleteConfirmOpen(false)}
-        onConfirm={() => void handleDelete()}
+        onConfirm={() => void handlers.handleDelete()}
       />
     </div>
   );
