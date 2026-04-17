@@ -19,8 +19,7 @@ import { CopyVisualButton } from '../ui/CopyVisualButton';
 import {
   buildCanonicalTranscriptIndex,
   collectCanonicalConditionTranscripts,
-  getCanonicalConditionBackground,
-  getCanonicalConditionTextColor,
+  getConditionCellDisplay,
   summarizeCanonicalConditionTranscripts,
   type CanonicalConditionSummary,
 } from '../../utils/canonicalConditionSummary';
@@ -613,6 +612,7 @@ export function ConditionDecisionsTable({
                   const stats = canonicalCellSummaries.get(row.id)?.get(modelId)
                     ?? summarizeCanonicalConditionTranscripts([]);
                   const hasResolvedCanonicalEvidence = stats.totalTrials > 0;
+                  const display = getConditionCellDisplay(stats);
                   const isOtherCell = !hasResolvedCanonicalEvidence;
                   const splitSourceLabel = row.orientationBucket === 'canonical'
                     ? splitSourceLabels?.current
@@ -623,7 +623,7 @@ export function ConditionDecisionsTable({
                     <td
                       key={`${row.id}-${modelId}`}
                       className="border border-gray-200 px-3 py-2 text-center text-sm transition-colors"
-                      style={{ backgroundColor: hasResolvedCanonicalEvidence ? getCanonicalConditionBackground(stats.winnerScore ?? 0, stats.isOpponent) : undefined }}
+                      style={{ backgroundColor: hasResolvedCanonicalEvidence ? display.backgroundColor : undefined }}
                     >
                       <Button
                         type="button"
@@ -634,10 +634,8 @@ export function ConditionDecisionsTable({
                         onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionStrength: 'unknown' } : undefined)}
                       >
                         {hasResolvedCanonicalEvidence ? (
-                          <span className={`inline-flex flex-col items-center ${getCanonicalConditionTextColor(stats.isOpponent)}`}>
-                            <span className="font-semibold">
-                              {stats.winnerScore == null ? '—' : stats.winnerScore.toFixed(1)}
-                            </span>
+                          <span className={`inline-flex flex-col items-center ${display.textColorClass}`}>
+                            <span className="font-semibold">{display.label}</span>
                           </span>
                         ) : (
                           <span className="text-gray-500">—</span>

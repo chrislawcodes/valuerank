@@ -131,9 +131,9 @@ describe('PivotAnalysisTable', () => {
     );
 
     // s1 → favor_first → low (Freedom side), s2 → neutral, s3 → favor_second → high (Harmony side)
-    expect(screen.getByText('Freedom 1')).toBeInTheDocument();
-    expect(screen.getByText('Neutral 0')).toBeInTheDocument();
-    expect(screen.getByText('Harmony 2')).toBeInTheDocument();
+    expect(screen.getByText(/Freedom\s*1/)).toBeInTheDocument();
+    expect(screen.getByText(/Neutral\s*1/)).toBeInTheDocument();
+    expect(screen.getByText(/Harmony\s*1/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /copy pivot analysis table as image/i })).toBeInTheDocument();
   });
 
@@ -182,9 +182,87 @@ describe('PivotAnalysisTable', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText(/Conformity Interpersonal\s*2/)).toBeInTheDocument();
-    expect(screen.getByText('Neutral 0')).toBeInTheDocument();
-    expect(screen.getByText('Achievement 1')).toBeInTheDocument();
+    expect(screen.getByText(/Conformity Interpersonal\s*1/)).toBeInTheDocument();
+    expect(screen.getByText(/Neutral\s*1/)).toBeInTheDocument();
+    expect(screen.getByText(/Achievement\s*1/)).toBeInTheDocument();
+  });
+
+  it('counts a mixed tie in the neutral legend bucket', () => {
+    render(
+      <MemoryRouter>
+        <PivotAnalysisTable
+          runId="run-1"
+          visualizationData={{
+            decisionDistribution: {},
+            scenarioDimensions: {
+              s1: { Freedom: 'a1', Harmony: 'b1' },
+            },
+            modelScenarioMatrix: {
+              model1: { s1: 1 },
+            },
+          }}
+          transcripts={[
+            makeTranscript('t1', 's1', 'model1', 'favor_first', 'strong'),
+            makeTranscript('t2', 's1', 'model1', 'favor_second', 'strong', {
+              favoredValueKey: 'Harmony',
+              opposedValueKey: 'Freedom',
+            }),
+          ]}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Freedom\s*0/)).toBeInTheDocument();
+    expect(screen.getByText(/Neutral\s*1/)).toBeInTheDocument();
+    expect(screen.getByText(/Harmony\s*0/)).toBeInTheDocument();
+  });
+
+  it('excludes empty cells from every legend bucket', () => {
+    render(
+      <MemoryRouter>
+        <PivotAnalysisTable
+          runId="run-1"
+          visualizationData={{
+            decisionDistribution: {},
+            scenarioDimensions: {
+              s1: { Freedom: 'a1', Harmony: 'b1' },
+            },
+            modelScenarioMatrix: {
+              model1: { s1: 1 },
+            },
+          }}
+          transcripts={[]}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Freedom\s*0/)).toBeInTheDocument();
+    expect(screen.getByText(/Neutral\s*0/)).toBeInTheDocument();
+    expect(screen.getByText(/Harmony\s*0/)).toBeInTheDocument();
+  });
+
+  it('reveals the net-weighted help text after opening details', () => {
+    render(
+      <MemoryRouter>
+        <PivotAnalysisTable
+          runId="run-1"
+          visualizationData={{
+            decisionDistribution: {},
+            scenarioDimensions: {
+              s1: { Freedom: 'a1', Harmony: 'b1' },
+            },
+            modelScenarioMatrix: {
+              model1: { s1: 1 },
+            },
+          }}
+          transcripts={[makeTranscript('t1', 's1', 'model1', 'favor_first', 'strong')]}
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+
+    expect(screen.getByText(/net-weighted preference score/)).toBeInTheDocument();
   });
 
   it('orders pivot rows from negligible to full', () => {
