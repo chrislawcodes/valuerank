@@ -10,6 +10,7 @@ import './refs.js';
 // Entity types - order no longer matters since refs are defined centrally
 import './definition.js';
 import './run.js';
+import './run-unresolvable.js';
 import './scenario.js';
 import './transcript.js';
 import './experiment.js';

@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/workers/tests/test_summarize.py",
+  "source_artifact_sha256": "25567c090bf00c3abe72d9d2a13f99dc2dc01f3036d0d472587db106afdac2e5",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/summarizer-fallback-removal/reviews/plan.codex.implementation-adversarial.review.context6.narrowed.txt",
+  "narrowed_artifact_sha256": "266b63e2d24ac82427657d35ef1d5ff998ffc2795bb015f498b7960413c0aa61",
+  "strategy": "head-tail-numbered-lines"
+}

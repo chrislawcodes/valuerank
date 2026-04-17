@@ -514,7 +514,7 @@ class TestClassifyDecisionWithLlm:
     @patch("summarize.generate")
     def test_successful_numeric_classification(self, mock_generate: MagicMock) -> None:
         """Test successful numeric decision classification."""
-        from summarize import classify_decision_with_llm
+        from summarize_llm import classify_decision_with_llm
 
         mock_generate.return_value = LLMResponse(
             content="4",
@@ -528,7 +528,7 @@ class TestClassifyDecisionWithLlm:
     @patch("summarize.generate")
     def test_parses_refusal(self, mock_generate: MagicMock) -> None:
         """Test explicit refusal parsing."""
-        from summarize import classify_decision_with_llm
+        from summarize_llm import classify_decision_with_llm
 
         mock_generate.return_value = LLMResponse(
             content="refusal",
@@ -541,7 +541,7 @@ class TestClassifyDecisionWithLlm:
     @patch("summarize.generate")
     def test_parses_number_from_verbose_output(self, mock_generate: MagicMock) -> None:
         """Test extraction from verbose LLM output."""
-        from summarize import classify_decision_with_llm
+        from summarize_llm import classify_decision_with_llm
 
         mock_generate.return_value = LLMResponse(
             content="Decision: 6",
@@ -554,7 +554,7 @@ class TestClassifyDecisionWithLlm:
     @patch("summarize.generate")
     def test_handles_llm_error(self, mock_generate: MagicMock) -> None:
         """Test handling of LLM errors."""
-        from summarize import classify_decision_with_llm
+        from summarize_llm import classify_decision_with_llm
 
         mock_generate.side_effect = LLMError(
             message="API error",
@@ -568,7 +568,7 @@ class TestClassifyDecisionWithLlm:
     @patch("summarize.generate")
     def test_handles_unexpected_error(self, mock_generate: MagicMock) -> None:
         """Test handling of unexpected errors."""
-        from summarize import classify_decision_with_llm
+        from summarize_llm import classify_decision_with_llm
 
         mock_generate.side_effect = RuntimeError("Unexpected error")
 
@@ -580,10 +580,9 @@ class TestClassifyDecisionWithLlm:
 class TestRunSummarize:
     """Tests for run_summarize function."""
 
-    @patch("summarize.classify_decision_with_llm")
     @patch("summarize.extract_decision_code")
     def test_successful_summarization_with_structured_rating(
-        self, mock_extract: MagicMock, mock_classify: MagicMock
+        self, mock_extract: MagicMock
     ) -> None:
         """Test successful summarization with rating."""
         from summarize import run_summarize
@@ -603,12 +602,10 @@ class TestRunSummarize:
         assert result["summary"]["decisionSource"] == "deterministic"
         assert result["summary"]["decisionMetadata"]["parseClass"] == "exact"
         assert result["summary"]["decisionText"] is None
-        mock_classify.assert_not_called()
 
-    @patch("summarize.classify_decision_with_llm")
     @patch("summarize.extract_decision_code")
     def test_summarization_result_is_deterministic(
-        self, mock_extract: MagicMock, mock_classify: MagicMock
+        self, mock_extract: MagicMock
     ) -> None:
         """Test that summarization uses deterministic rating."""
         from summarize import run_summarize
@@ -628,18 +625,15 @@ class TestRunSummarize:
         assert result["summary"]["decisionSource"] == "deterministic"
         assert result["summary"]["decisionMetadata"]["parsePath"] == "numeric_deterministic"
         assert result["summary"]["decisionText"] is None
-        mock_classify.assert_not_called()
 
-    @patch("summarize.classify_decision_with_llm")
     @patch("summarize.extract_decision_code")
-    def test_uses_llm_fallback_when_deterministic_is_other(
-        self, mock_extract: MagicMock, mock_classify: MagicMock
+    def test_numeric_ambiguous_when_deterministic_is_other(
+        self, mock_extract: MagicMock
     ) -> None:
-        """Test fallback LLM is used when deterministic extraction fails."""
+        """Test that other decision code produces ambiguous parseClass without LLM call."""
         from summarize import run_summarize
 
         mock_extract.return_value = "other"
-        mock_classify.return_value = "5"
 
         data = {
             "transcriptId": "transcript-123",
@@ -650,21 +644,19 @@ class TestRunSummarize:
         result = run_summarize(data)
 
         assert result["success"] is True
-        assert result["summary"]["decisionCode"] == "5"
-        assert result["summary"]["decisionSource"] == "llm"
-        assert result["summary"]["decisionMetadata"]["parseClass"] == "fallback_resolved"
-        mock_classify.assert_called_once()
+        assert result["summary"]["decisionCode"] == "other"
+        assert result["summary"]["decisionSource"] == "deterministic"
+        assert result["summary"]["decisionMetadata"]["parseClass"] == "ambiguous"
+        assert result["summary"]["decisionMetadata"]["parsePath"] == "numeric_ambiguous"
 
-    @patch("summarize.classify_decision_with_llm")
     @patch("summarize.extract_decision_code")
-    def test_keeps_other_when_llm_fallback_unresolved(
-        self, mock_extract: MagicMock, mock_classify: MagicMock
+    def test_keeps_other_when_all_deterministic_paths_fail(
+        self, mock_extract: MagicMock
     ) -> None:
-        """Test that unresolved fallback keeps deterministic other."""
+        """Test that other decision code keeps ambiguous without LLM fallback."""
         from summarize import run_summarize
 
         mock_extract.return_value = "other"
-        mock_classify.return_value = "other"
 
         data = {
             "transcriptId": "transcript-123",
@@ -852,12 +844,9 @@ class TestRunSummarize:
         assert result["decisionSource"] == "deterministic"
         assert result["decisionMetadata"]["parsePath"] == "numeric_deterministic"
 
-    @patch("summarize.generate")
-    def test_does_not_treat_late_quoted_scale_text_as_exact_match(self, mock_generate: MagicMock) -> None:
-        """Quoted scale language inside the explanation should fall back, not score as exact."""
+    def test_text_label_ambiguous_when_quoted_scale_not_matched(self) -> None:
+        """Quoted scale language inside the explanation produces ambiguous, not a score."""
         from summarize import extract_decision_result
-
-        mock_generate.return_value = LLMResponse(content="3")
 
         transcript_content = {
             "turns": [
@@ -880,18 +869,14 @@ class TestRunSummarize:
 
         result = extract_decision_result(transcript_content)
 
-        assert result["decisionCode"] == "3"
-        assert result["decisionSource"] == "llm"
-        assert result["decisionMetadata"]["parseClass"] == "fallback_resolved"
-        assert result["decisionMetadata"]["parsePath"] == "text_label_llm"
-        assert result["decisionMetadata"]["matchedLabel"] is None
+        assert result["decisionCode"] == "other"
+        assert result["decisionSource"] == "deterministic"
+        assert result["decisionMetadata"]["parseClass"] == "ambiguous"
+        assert result["decisionMetadata"]["parsePath"] == "text_label_ambiguous"
 
-    @patch("summarize.generate")
-    def test_uses_llm_for_unresolved_text_label_scale(self, mock_generate: MagicMock) -> None:
-        """Test text-label fallback classification."""
+    def test_text_label_ambiguous_when_no_matching_scale_label(self) -> None:
+        """Unresolved text-label scale produces ambiguous without LLM call."""
         from summarize import extract_decision_result
-
-        mock_generate.return_value = LLMResponse(content="2")
 
         transcript_content = {
             "turns": [
@@ -911,10 +896,10 @@ class TestRunSummarize:
 
         result = extract_decision_result(transcript_content)
 
-        assert result["decisionCode"] == "2"
-        assert result["decisionSource"] == "llm"
-        assert result["decisionMetadata"]["parseClass"] == "fallback_resolved"
-        assert result["decisionMetadata"]["parsePath"] == "text_label_llm"
+        assert result["decisionCode"] == "other"
+        assert result["decisionSource"] == "deterministic"
+        assert result["decisionMetadata"]["parseClass"] == "ambiguous"
+        assert result["decisionMetadata"]["parsePath"] == "text_label_ambiguous"
 
     def test_grok_level_of_support_prefix_resolved_deterministically(self) -> None:
         """Grok-style 'Level of Support: <label>' responses should be parsed without LLM fallback."""
@@ -1137,10 +1122,9 @@ class TestRunSummarize:
         assert result["decisionSource"] == "deterministic"
         assert "relaxed" not in result["decisionMetadata"]["parsePath"]
 
-    @patch("summarize.classify_decision_with_llm")
     @patch("summarize.extract_decision_code")
     def test_uses_default_model(
-        self, mock_extract: MagicMock, mock_classify: MagicMock
+        self, mock_extract: MagicMock
     ) -> None:
         """Test default model is used when not specified."""
         from summarize import run_summarize
@@ -1154,12 +1138,9 @@ class TestRunSummarize:
 
         run_summarize(data)
 
-        mock_classify.assert_not_called()
-
-    @patch("summarize.classify_decision_with_llm")
     @patch("summarize.extract_decision_code")
     def test_handles_worker_error(
-        self, mock_extract: MagicMock, mock_classify: MagicMock
+        self, mock_extract: MagicMock
     ) -> None:
         """Test handling of WorkerError."""
         from summarize import run_summarize
@@ -1179,10 +1160,9 @@ class TestRunSummarize:
         assert result["success"] is False
         assert "error" in result
 
-    @patch("summarize.classify_decision_with_llm")
     @patch("summarize.extract_decision_code")
     def test_handles_unexpected_error(
-        self, mock_extract: MagicMock, mock_classify: MagicMock
+        self, mock_extract: MagicMock
     ) -> None:
         """Test handling of unexpected errors."""
         from summarize import run_summarize

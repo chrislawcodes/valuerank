@@ -14,6 +14,7 @@ import {
   formatRunSummary,
   type RunSummary,
 } from '../../services/mcp/index.js';
+import { getUnresolvableCount } from '../../services/unresolvable-count.js';
 import { addToolRegistrar } from './registry.js';
 
 const log = createLogger('mcp:tools:get-run-summary');
@@ -96,6 +97,14 @@ Limited to 5KB token budget.`,
 
         // Format the summary
         const summary = formatRunSummary(run, analysis, run._count.transcripts);
+
+        // Populate unresolvable count (truncate to top 10 models to stay within 5KB budget)
+        const unresolvable = await getUnresolvableCount(args.run_id);
+        const byModel =
+          unresolvable.byModel.length > 10
+            ? unresolvable.byModel.sort((a, b) => b.count - a.count).slice(0, 10)
+            : unresolvable.byModel;
+        summary.unresolvable = { total: unresolvable.total, byModel };
 
         // Remove insights if not requested
         if (!args.include_insights) {

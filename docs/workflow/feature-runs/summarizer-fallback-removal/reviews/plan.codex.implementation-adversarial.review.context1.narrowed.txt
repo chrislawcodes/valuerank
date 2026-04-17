@@ -1,0 +1,256 @@
+00001: import { builder } from '../builder.js';
+00002: import { db } from '@valuerank/db';
+00003: import { RunRef, DefinitionRef, TranscriptRef, ExperimentRef, LlmModelRef, TagRef } from './refs.js';
+00004: import { UserRef } from './user.js';
+00005: import { RunProgress, TaskResult } from './run-progress.js';
+00006: import { ExecutionMetrics } from './execution-metrics.js';
+00007: import { ProbeResultRef, ProbeResultModelSummary } from './probe-result.js';
+00008: import { calculatePercentComplete } from '../../services/run/index.js';
+00009: import { AnalysisResultRef } from './analysis.js';
+00010: import { CostEstimateRef, type CostEstimateShape } from './cost-estimate.js';
+00011: import { getAllMetrics, getTotals } from '../../services/rate-limiter/index.js';
+00012: 
+00013: // Re-export for backward compatibility
+00014: export { RunRef, TranscriptRef, ExperimentRef };
+00015: 
+00016: // Type for progress data stored in JSONB
+00017: type ProgressData = {
+00018:   total: number;
+00019:   completed: number;
+00020:   failed: number;
+00021: };
+00022: 
+00023: // Type for run config stored in JSONB
+00024: type RunConfig = {
+00025:   models?: string[];
+00026:   samplePercentage?: number;
+00027:   sampleSeed?: number;
+00028:   samplesPerScenario?: number; // Multi-sample: number of samples per scenario-model pair
+00029:   temperature?: number | null;
+00030:   priority?: string;
+00031:   definitionSnapshot?: unknown;
+00032:   estimatedCosts?: CostEstimateShape;
+00033:   companionRunId?: string | null;
+00034:   jobChoiceBatchGroupId?: string | null;
+00035:   jobChoiceValueFirst?: string | null;
+00036:   isAggregate?: boolean;
+00037:   sourceRunIds?: string[];
+00038: };
+00039: 
+00040: type AggregateRunConfig = RunConfig & {
+00041:   isAggregate?: boolean;
+00042:   sourceRunIds?: string[];
+00043: };
+00044: 
+00045: type QueueFailurePayload = {
+00046:   message?: unknown;
+00047:   details?: unknown;
+00048:   error?: unknown;
+00049:   value?: unknown;
+00050: };
+00051: 
+00052: function normalizeTaskError(output: unknown): string | null {
+00053:   if (output === null || output === undefined) {
+00054:     return null;
+00055:   }
+00056: 
+00057:   if (typeof output === 'string') {
+00058:     return output;
+00059:   }
+00060: 
+00061:   if (typeof output !== 'object') {
+00062:     return String(output);
+00063:   }
+00064: 
+00065:   // PgBoss failure output can be a direct string, an Error-like object,
+00066:   // or nested payloads from worker/orchestrator wrappers.
+00067:   const record = output as QueueFailurePayload;
+00068:   const parts: string[] = [];
+00069: 
+00070:   const pushIfPresent = (value: unknown): void => {
+00071:     if (typeof value !== 'string') return;
+00072:     const trimmed = value.trim();
+00073:     if (trimmed.length === 0) return;
+00074:     if (!parts.includes(trimmed)) {
+00075:       parts.push(trimmed);
+00076:     }
+00077:   };
+00078: 
+00079:   // Common pg-boss/output shapes for thrown errors and worker payloads.
+00080:   pushIfPresent(record.message);
+00081:   pushIfPresent(record.details);
+00082: 
+00083:   const error = record.error;
+00084:   if (error !== null && typeof error === 'object') {
+00085:     const nested = error as QueueFailurePayload;
+00086:     pushIfPresent(nested.message);
+00087:     pushIfPresent(nested.details);
+00088:   } else {
+00089:     pushIfPresent(error);
+00090:   }
+00091: 
+00092:   const value = record.value;
+00093:   if (value !== null && typeof value === 'object') {
+00094:     const nested = value as QueueFailurePayload;
+00095:     pushIfPresent(nested.message);
+00096:     pushIfPresent(nested.details);
+00097:   }
+00098: 
+00099:   if (parts.length > 0) {
+00100:     return parts.join(' | ');
+00101:   }
+00102: 
+00103:   try {
+00104:     return JSON.stringify(output);
+00105:   } catch {
+00106:     return String(output);
+00107:   }
+00108: }
+00109: 
+00110: builder.objectType(RunRef, {
+00111:   description: 'A saved record of a model evaluation or launch',
+00112:   fields: (t) => ({
+00113:     id: t.exposeID('id'),
+00114:     name: t.exposeString('name', {
+00115:       nullable: true,
+00116:       description: 'Optional user-defined name for this run',
+00117:     }),
+00118:     definitionId: t.exposeString('definitionId'),
+00119:     experimentId: t.exposeString('experimentId', { nullable: true }),
+00120: 
+00121:     // Snapshot version used for this run
+00122:     definitionVersion: t.int({
+00123:       nullable: true,
+00124:       description: 'The version of the definition used in this run (from snapshot)',
+00125:       resolve: (run) => {
+00126:         const config = run.config as {
+00127:           definitionSnapshot?: {
+00128:             _meta?: { definitionVersion?: number | string };
+00129:             version?: number | string;
+00130:           };
+00131:         };
+00132:         const versionRaw = config.definitionSnapshot?._meta?.definitionVersion ?? config.definitionSnapshot?.version;
+00133:         if (typeof versionRaw === 'number') return versionRaw;
+00134:
+
+... [narrowed review slice: middle omitted] ...
+
+00554: 
+00555:         const retriesAggregate = await db.probeResult.aggregate({
+00556:           _sum: { retryCount: true },
+00557:           where: { runId: run.id },
+00558:         });
+00559:         const totalRetries = retriesAggregate._sum.retryCount ?? 0;
+00560: 
+00561:         return {
+00562:           providers,
+00563:           totalActive,
+00564:           totalQueued,
+00565:           estimatedSecondsRemaining,
+00566:           totalRetries,
+00567:         };
+00568:       },
+00569:     }),
+00570: 
+00571:     // Probe results - detailed success/failure info for each model/scenario with pagination
+00572:     probeResults: t.field({
+00573:       type: [ProbeResultRef],
+00574:       args: {
+00575:         status: t.arg.string({
+00576:           required: false,
+00577:           description: 'Filter by status (SUCCESS or FAILED)',
+00578:         }),
+00579:         modelId: t.arg.string({
+00580:           required: false,
+00581:           description: 'Filter by model ID',
+00582:         }),
+00583:         limit: t.arg.int({
+00584:           required: false,
+00585:           description: 'Maximum number of results to return (default: all, max: 1000)',
+00586:         }),
+00587:         offset: t.arg.int({
+00588:           required: false,
+00589:           description: 'Number of results to skip for pagination (default: 0)',
+00590:         }),
+00591:       },
+00592:       description: 'Probe results with detailed success/failure information',
+00593:       resolve: async (run, args) => {
+00594:         const where: { runId: string; status?: 'SUCCESS' | 'FAILED'; modelId?: string } = {
+00595:           runId: run.id,
+00596:         };
+00597:         if (args.status === 'SUCCESS' || args.status === 'FAILED') {
+00598:           where.status = args.status;
+00599:         }
+00600:         if (typeof args.modelId === 'string' && args.modelId !== '') {
+00601:           where.modelId = args.modelId;
+00602:         }
+00603: 
+00604:         const limit = args.limit != null ? Math.min(args.limit, 1000) : undefined;
+00605:         const offset = args.offset ?? 0;
+00606: 
+00607:         return db.probeResult.findMany({
+00608:           where,
+00609:           orderBy: [{ status: 'asc' }, { modelId: 'asc' }, { scenarioId: 'asc' }],
+00610:           ...(limit !== undefined ? { take: limit, skip: offset } : {}),
+00611:         });
+00612:       },
+00613:     }),
+00614: 
+00615:     // Probe results summary by model
+00616:     probeResultsByModel: t.field({
+00617:       type: [ProbeResultModelSummary],
+00618:       description: 'Summary of probe results grouped by model, with error codes',
+00619:       resolve: async (run) => {
+00620:         // Get all probe results for this run
+00621:         const results = await db.probeResult.findMany({
+00622:           where: { runId: run.id },
+00623:           select: { modelId: true, status: true, errorCode: true },
+00624:         });
+00625: 
+00626:         // Group by model
+00627:         const byModel: Record<string, { success: number; failed: number; errorCodes: Set<string> }> = {};
+00628:         for (const result of results) {
+00629:           const modelEntry = byModel[result.modelId] ?? { success: 0, failed: 0, errorCodes: new Set<string>() };
+00630:           byModel[result.modelId] = modelEntry;
+00631: 
+00632:           if (result.status === 'SUCCESS') {
+00633:             modelEntry.success++;
+00634:           } else {
+00635:             modelEntry.failed++;
+00636:             if (result.errorCode !== null && result.errorCode !== undefined && result.errorCode !== '') {
+00637:               modelEntry.errorCodes.add(result.errorCode);
+00638:             }
+00639:           }
+00640:         }
+00641: 
+00642:         // Convert to array
+00643:         return Object.entries(byModel).map(([modelId, data]) => ({
+00644:           modelId,
+00645:           success: data.success,
+00646:           failed: data.failed,
+00647:           errorCodes: Array.from(data.errorCodes),
+00648:         }));
+00649:       },
+00650:     }),
+00651: 
+00652:     // Failed probe results only (convenience field)
+00653:     failedProbes: t.field({
+00654:       type: [ProbeResultRef],
+00655:       description: 'Failed probe results with error details',
+00656:       resolve: async (run) => {
+00657:         return db.probeResult.findMany({
+00658:           where: { runId: run.id, status: 'FAILED' },
+00659:           orderBy: [{ modelId: 'asc' }, { errorCode: 'asc' }],
+00660:         });
+00661:       },
+00662:     }),
+00663: 
+00664:     // Estimated costs calculated when run was created
+00665:     estimatedCosts: t.field({
+00666:       type: CostEstimateRef,
+00667:       nullable: true,
+00668:       description: 'Estimated cost calculated when run was created. Stored in run config for historical reference.',
+00669:       resolve: (run) => {
+00670:         const config = run.config as RunConfig | null;
+00671:         return config?.estimatedCosts ?? null;
+00672:   

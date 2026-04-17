@@ -1,0 +1,13 @@
+{
+  "paths": [
+    "cloud/apps/api/src",
+    "cloud/apps/web/src",
+    "cloud/workers/summarize.py"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src",
+    "cloud/apps/web/src",
+    "cloud/workers/summarize.py",
+    "docs/workflow/feature-runs/summarizer-fallback-removal"
+  ]
+}

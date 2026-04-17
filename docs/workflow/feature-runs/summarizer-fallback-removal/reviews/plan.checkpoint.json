@@ -1,0 +1,60 @@
+{
+  "feature_slug": "summarizer-fallback-removal",
+  "stage": "plan",
+  "artifact_path": "docs/workflow/feature-runs/summarizer-fallback-removal/plan.md",
+  "git_base_ref": "",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "implementation-adversarial",
+      "stage": "plan",
+      "path": "docs/workflow/feature-runs/summarizer-fallback-removal/reviews/plan.codex.implementation-adversarial.review.md",
+      "context_paths": [
+        "cloud/workers/summarize.py",
+        "cloud/apps/api/src/graphql/types/run.ts",
+        "cloud/apps/web/src/pages/RunDetail/RunDetail.tsx",
+        "cloud/apps/web/src/api/operations/runs.ts",
+        "cloud/apps/api/src/mcp/tools/get-run-summary.ts",
+        "cloud/workers/summarize_llm.py",
+        "cloud/workers/tests/test_summarize.py"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "architecture-adversarial",
+      "stage": "plan",
+      "path": "docs/workflow/feature-runs/summarizer-fallback-removal/reviews/plan.codex.architecture-adversarial.review.md",
+      "context_paths": [
+        "cloud/workers/summarize.py",
+        "cloud/apps/api/src/graphql/types/run.ts",
+        "cloud/apps/web/src/pages/RunDetail/RunDetail.tsx",
+        "cloud/apps/web/src/api/operations/runs.ts",
+        "cloud/apps/api/src/mcp/tools/get-run-summary.ts",
+        "cloud/workers/summarize_llm.py",
+        "cloud/workers/tests/test_summarize.py"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "testability-adversarial",
+      "stage": "plan",
+      "path": "docs/workflow/feature-runs/summarizer-fallback-removal/reviews/plan.gemini.testability-adversarial.review.md",
+      "context_paths": [
+        "cloud/workers/summarize.py",
+        "cloud/apps/api/src/graphql/types/run.ts",
+        "cloud/apps/web/src/pages/RunDetail/RunDetail.tsx",
+        "cloud/apps/web/src/api/operations/runs.ts",
+        "cloud/apps/api/src/mcp/tools/get-run-summary.ts",
+        "cloud/workers/summarize_llm.py",
+        "cloud/workers/tests/test_summarize.py"
+      ],
+      "model": "gemini-2.5-pro"
+    }
+  ],
+  "max_artifact_chars": null,
+  "max_context_chars": null,
+  "max_total_chars": null
+}

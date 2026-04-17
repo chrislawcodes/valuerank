@@ -1,0 +1,9 @@
+## Findings
+1. Medium: [UNVERIFIED] Change B assumes the legacy transcript columns are the source of truth, but the client types already mark `decisionCode` and `decisionCodeSource` as deprecated and introduce `decisionModelV2` as the canonical transcript shape in [runs.ts](/Users/chrislaw/valuerank/.claude/worktrees/practical-noyce-1db12d/cloud/apps/web/src/api/operations/runs.ts). If any runs are only reliable through `decisionModelV2`, the new `unresolvableTranscriptCount` query will undercount or misclassify them.
+
+2. Low: [CODE-CONFIRMED] The proposed SQL definition includes a `decision_code IS NULL AND decision_metadata->'summaryCache'->'summary'->'canonicalDecision'->>'decisionState' = 'unknown'` branch, but the current summarizer output in [summarize.py](/Users/chrislaw/valuerank/.claude/worktrees/practical-noyce-1db12d/cloud/workers/summarize.py) always returns a string `decisionCode` and a `decisionMetadata` object with `parserVersion`, `parseClass`, `parsePath`, `responseSha256`, `responseExcerpt`, `matchedLabel`, and `scaleLabels`. There is no `summaryCache` field in that emitted shape, so that branch will never match rows produced by this worker.
+
+## Residual Risks
+- The plan does not show the actual GraphQL resolver change for `unresolvableTranscriptCount`, so it is still possible for the schema, the operation document, and the UI prop type to drift apart.
+- The validation plan covers the Python worker and the API/web builds, but it does not explicitly verify that the new count matches existing transcript states in real data.
+- The MCP update is marked P2, so `RunDetail` and `get_run_summary` could diverge temporarily unless the same counting logic is reused or shared exactly.
