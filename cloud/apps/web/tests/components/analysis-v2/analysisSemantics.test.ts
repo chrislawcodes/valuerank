@@ -664,10 +664,12 @@ describe('buildPairedAnalysisSemanticsView', () => {
     const semantics = buildPairedAnalysisSemanticsView(current, companion, false);
 
     expect(semantics.preference.byModel['claude-3']).toMatchObject({
-      topPrioritizedValues: [{ name: 'TestValue', winRate: 0.6 }],
       topDeprioritizedValues: [],
       neutralValues: [],
     });
+    expect(semantics.preference.byModel['claude-3']?.topPrioritizedValues).toHaveLength(1);
+    expect(semantics.preference.byModel['claude-3']?.topPrioritizedValues[0]?.name).toBe('TestValue');
+    expect(semantics.preference.byModel['claude-3']?.topPrioritizedValues[0]?.winRate).toBeCloseTo(0.6, 10);
     expect(semantics.preference.byModel['claude-3']?.topPrioritizedValues[0]).not.toHaveProperty('count');
   });
 });
