@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts",
+  "source_artifact_sha256": "c48b6d5539266d2981dc92c1c76eeee701d9cc9ac4612cb96ee0e620c6eed893",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/byvalue-two-step-winrate/reviews/plan.gemini.testability-adversarial.review.context4.narrowed.txt",
+  "narrowed_artifact_sha256": "bb96e9c73b04d7a1e3f8a55ed0d47e3be4c3b2f4bd47ae8de566f370b56c3a38",
+  "strategy": "head-tail-numbered-lines"
+}

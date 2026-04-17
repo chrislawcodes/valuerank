@@ -5,6 +5,7 @@ from typing import Any
 
 from common.errors import ValidationError
 from stats.decision_model import resolve_transcript_signed_distance
+from stats.preference_stats import compute_two_step_by_value
 
 
 def validate_input(data: dict[str, Any]) -> None:
@@ -197,10 +198,25 @@ def build_preference_summary(
     so repeated probes do not overweight a single scenario.
     """
     scores_by_model_scenario: dict[str, dict[str, list[float]]] = {}
+    outcomes_by_model_scenario_value: dict[str, dict[str, dict[str, list[str]]]] = {}
+    # [model_id][scenario_id][value_id] -> list of "prioritized"|"deprioritized"|"neutral"
 
     for transcript in transcripts:
         model_id = transcript.get("modelId", "unknown")
         scenario_id = transcript.get("scenarioId", "unknown")
+        # Collect per-value outcomes for two-step win rate computation.
+        # Runs before the normalized_score guard so every transcript contributes
+        # value outcomes even if it has no canonical signed-distance score.
+        values_data = transcript.get("summary", {}).get("values", {})
+        for value_id, status in values_data.items():
+            if model_id not in outcomes_by_model_scenario_value:
+                outcomes_by_model_scenario_value[model_id] = {}
+            if scenario_id not in outcomes_by_model_scenario_value[model_id]:
+                outcomes_by_model_scenario_value[model_id][scenario_id] = {}
+            if value_id not in outcomes_by_model_scenario_value[model_id][scenario_id]:
+                outcomes_by_model_scenario_value[model_id][scenario_id][value_id] = []
+            outcomes_by_model_scenario_value[model_id][scenario_id][value_id].append(status)
+
         normalized_score = resolve_transcript_signed_distance(transcript)
         if normalized_score is None:
             continue
@@ -242,7 +258,10 @@ def build_preference_summary(
 
         per_model_summary[model_id] = {
             "preferenceDirection": {
-                "byValue": model_stats.get("values", {}),
+                "byValue": compute_two_step_by_value(
+                    outcomes_by_model_scenario_value.get(model_id, {}),
+                    model_stats.get("values", {}),
+                ),
                 "overallLean": overall_lean,
                 "overallSignedCenter": overall_signed_center,
             },

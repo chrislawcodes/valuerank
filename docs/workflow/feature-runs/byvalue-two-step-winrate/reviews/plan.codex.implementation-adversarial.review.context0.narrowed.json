@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/workers/analyze_basic_aggregation.py",
+  "source_artifact_sha256": "7f921061ef9a1a7dfa20592da5666f8900a76a130f099bfdfcb1545cfc4495f6",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/byvalue-two-step-winrate/reviews/plan.codex.implementation-adversarial.review.context0.narrowed.txt",
+  "narrowed_artifact_sha256": "8a47fd7d7a1690eaa997fa9091dfa98a83502db5ca5706a3fa0cdb9e4561279b",
+  "strategy": "head-tail-numbered-lines"
+}

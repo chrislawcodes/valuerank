@@ -1,0 +1,265 @@
+00001: import type { AnalysisResult, RawPreferenceSummary } from '../../api/operations/analysis';
+00002: import type {
+00003:   AnalysisSemanticsView,
+00004:   PreferenceValueSummary,
+00005:   PreferenceViewModel,
+00006:   RawModelPreferenceSummary,
+00007:   RawPreferenceValueStats,
+00008:   SemanticUnavailableReason,
+00009: } from './analysisSemantics.types';
+00010: import {
+00011:   EPSILON,
+00012:   availableState,
+00013:   averageWeighted,
+00014:   isRecord,
+00015:   parseRawPreferenceValueStats,
+00016:   sanitizeLog,
+00017:   unavailableState,
+00018: } from './analysisSemantics.utils';
+00019: 
+00020: function combineOverallLean(overallSignedCenter: number | null): 'A' | 'B' | 'NEUTRAL' | null {
+00021:   if (overallSignedCenter === null) {
+00022:     return null;
+00023:   }
+00024: 
+00025:   if (overallSignedCenter > EPSILON) {
+00026:     return 'A';
+00027:   }
+00028:   if (overallSignedCenter < -EPSILON) {
+00029:     return 'B';
+00030:   }
+00031:   return 'NEUTRAL';
+00032: }
+00033: 
+00034: function parseRawPreferenceSummaryEntry(value: unknown): RawModelPreferenceSummary | null {
+00035:   if (!isRecord(value)) {
+00036:     return null;
+00037:   }
+00038: 
+00039:   const preferenceDirection = value.preferenceDirection;
+00040:   if (!isRecord(preferenceDirection)) {
+00041:     return null;
+00042:   }
+00043: 
+00044:   const byValue = preferenceDirection.byValue;
+00045:   if (!isRecord(byValue)) {
+00046:     return null;
+00047:   }
+00048: 
+00049:   const parsedByValue: Record<string, RawPreferenceValueStats> = {};
+00050:   for (const [valueId, stats] of Object.entries(byValue)) {
+00051:     const parsedStats = parseRawPreferenceValueStats(stats);
+00052:     if (!parsedStats) {
+00053:       return null;
+00054:     }
+00055:     parsedByValue[valueId] = parsedStats;
+00056:   }
+00057: 
+00058:   const overallLean = preferenceDirection.overallLean;
+00059:   if (overallLean !== null && overallLean !== 'A' && overallLean !== 'B' && overallLean !== 'NEUTRAL') {
+00060:     return null;
+00061:   }
+00062: 
+00063:   const overallSignedCenter = preferenceDirection.overallSignedCenter ?? null;
+00064:   if (overallSignedCenter !== null && typeof overallSignedCenter !== 'number') {
+00065:     return null;
+00066:   }
+00067: 
+00068:   const preferenceStrength = value.preferenceStrength ?? null;
+00069:   if (preferenceStrength !== null && (typeof preferenceStrength !== 'number' || preferenceStrength < 0)) {
+00070:     return null;
+00071:   }
+00072: 
+00073:   return {
+00074:     preferenceDirection: {
+00075:       byValue: parsedByValue,
+00076:       overallLean,
+00077:       overallSignedCenter,
+00078:     },
+00079:     preferenceStrength,
+00080:   };
+00081: }
+00082: 
+00083: export function deriveValueLists(byValue: Record<string, RawPreferenceValueStats>): {
+00084:   topPrioritizedValues: PreferenceValueSummary[];
+00085:   topDeprioritizedValues: PreferenceValueSummary[];
+00086:   neutralValues: PreferenceValueSummary[];
+00087: } {
+00088:   const entriesWithWinRate = Object.entries(byValue)
+00089:     .map(([valueId, stats]) => ({
+00090:       name: valueId,
+00091:       winRate: stats.winRate,
+00092:     }))
+00093:     .filter((entry): entry is { name: string; winRate: number } => entry.winRate != null);
+00094: 
+00095:   if (entriesWithWinRate.length === 0) {
+00096:     return {
+00097:       topPrioritizedValues: [],
+00098:       topDeprioritizedValues: [],
+00099:       neutralValues: [],
+00100:     };
+00101:   }
+00102: 
+00103:   const modelMean = entriesWithWinRate.reduce((sum, entry) => sum + entry.winRate, 0) / entriesWithWinRate.length;
+00104:   const entries = entriesWithWinRate.map((entry) => ({
+00105:     ...entry,
+00106:     distance: entry.winRate - modelMean,
+00107:   }));
+00108: 
+00109:   const sortByPositiveDistance = (
+00110:     left: { name: string; distance: number },
+00111:     right: { name: string; distance: number },
+00112:   ) => {
+00113:     if (right.distance !== left.distance) {
+00114:       return right.distance - left.distance;
+00115:     }
+00116:     return left.name.localeCompare(right.name);
+00117:   };
+00118: 
+00119:   const sortByNegativeDistance = (
+00120:     left: { name: string; distance: number },
+00121:     right: { name: string; distance: number },
+00122:   ) => {
+00123:     if (left.distance !== right.distance) {
+00124:       return left.distance - right.distance;
+00125:     }
+00126:     return left.name.localeCompare(right.name);
+00127:   };
+00128: 
+00129:   const sortByNeutralDistance = (
+00130:     left: { name: string; distance: number },
+00131:     right: { name: string; distance: number },
+00132:   ) => {
+00133:     const leftDistance = Math.abs(left.distance);
+00134:     const rightDistance = Math.abs(right.distance);
+00135:     if (leftDistance !== rightDistance) {
+00136:       return leftDistance - rightDistance;
+00137:     }
+00138:     return left.name.localeCompare(right.name);
+00139:   };
+00140: 
+00141:   const prioritized = entries
+00142:     .filter((entry) => entry.distanc
+
+... [narrowed review slice: middle omitted] ...
+
+const neutral = stats.reduce((sum, entry) => sum + (entry.count?.neutral ?? 0), 0);
+00212:       const totalResponses = prioritized + deprioritized + neutral;
+00213:       mergedByValue[valueId] = {
+00214:         winRate: totalResponses > 0 ? prioritized / totalResponses : 0.5,
+00215:         count: {
+00216:           prioritized,
+00217:           deprioritized,
+00218:           neutral,
+00219:         },
+00220:       };
+00221:       return;
+00222:     }
+00223: 
+00224:     const averagedWinRate = averageWeighted(
+00225:       parsedModels
+00226:         .map(({ analysis, parsed }) => {
+00227:           const entry = parsed.preferenceDirection.byValue[valueId];
+00228:           if (!entry) {
+00229:             return null;
+00230:           }
+00231:           return {
+00232:             value: entry.winRate,
+00233:             weight: analysis.perModel[modelId]?.sampleSize ?? 0,
+00234:           };
+00235:         })
+00236:         .filter((entry): entry is { value: number; weight: number } => entry !== null),
+00237:     );
+00238: 
+00239:     if (averagedWinRate !== null) {
+00240:       mergedByValue[valueId] = { winRate: averagedWinRate };
+00241:     }
+00242:   });
+00243: 
+00244:   const overallSignedCenter = averageWeighted(
+00245:     parsedModels
+00246:       .filter(({ parsed }) => parsed.preferenceDirection.overallSignedCenter !== null)
+00247:       .map(({ analysis, parsed }) => ({
+00248:         value: parsed.preferenceDirection.overallSignedCenter ?? 0,
+00249:         weight: analysis.perModel[modelId]?.sampleSize ?? 0,
+00250:       })),
+00251:   );
+00252:   const preferenceStrength = averageWeighted(
+00253:     parsedModels
+00254:       .filter(({ parsed }) => parsed.preferenceStrength !== null)
+00255:       .map(({ analysis, parsed }) => ({
+00256:         value: parsed.preferenceStrength ?? 0,
+00257:         weight: analysis.perModel[modelId]?.sampleSize ?? 0,
+00258:       })),
+00259:   );
+00260:   const valueLists = deriveValueLists(mergedByValue);
+00261: 
+00262:   return {
+00263:     modelId,
+00264:     overallLean: combineOverallLean(overallSignedCenter),
+00265:     topPrioritizedValues: valueLists.topPrioritizedValues,
+00266:     topDeprioritizedValues: valueLists.topDeprioritizedValues,
+00267:     neutralValues: valueLists.neutralValues,
+00268:     availability: preferenceStrength === null
+00269:       ? unavailableState('insufficient-preference-data')
+00270:       : availableState(),
+00271:   };
+00272: }
+00273: 
+00274: export function buildPreferenceSection(
+00275:   analysis: AnalysisResult,
+00276:   modelIds: string[],
+00277:   rawSummary: RawPreferenceSummary | null | undefined,
+00278: ): AnalysisSemanticsView['preference'] {
+00279:   if (rawSummary == null) {
+00280:     sanitizeLog(analysis, { section: 'preference', reason: 'invalid-summary-shape' });
+00281:     return {
+00282:       rowAvailability: unavailableState('invalid-summary-shape'),
+00283:       byModel: Object.fromEntries(modelIds.map((modelId) => [modelId, buildPreferenceUnavailableModel(modelId, 'invalid-summary-shape')])),
+00284:     };
+00285:   }
+00286: 
+00287:   if (!isRecord(rawSummary.perModel)) {
+00288:     sanitizeLog(analysis, { section: 'preference', reason: 'invalid-summary-shape' });
+00289:     return {
+00290:       rowAvailability: unavailableState('invalid-summary-shape'),
+00291:       byModel: Object.fromEntries(modelIds.map((modelId) => [modelId, buildPreferenceUnavailableModel(modelId, 'invalid-summary-shape')])),
+00292:     };
+00293:   }
+00294: 
+00295:   const byModel: Record<string, PreferenceViewModel> = {};
+00296:   let hasValidModel = false;
+00297: 
+00298:   for (const modelId of modelIds) {
+00299:     const rawModel = rawSummary.perModel[modelId];
+00300:     const parsedModel = parseRawPreferenceSummaryEntry(rawModel);
+00301: 
+00302:     if (!parsedModel) {
+00303:       byModel[modelId] = buildPreferenceUnavailableModel(modelId, 'invalid-summary-shape');
+00304:       continue;
+00305:     }
+00306: 
+00307:     hasValidModel = true;
+00308:     const valueLists = deriveValueLists(parsedModel.preferenceDirection.byValue);
+00309:     byModel[modelId] = {
+00310:       modelId,
+00311:       overallLean: parsedModel.preferenceDirection.overallLean,
+00312:       topPrioritizedValues: valueLists.topPrioritizedValues,
+00313:       topDeprioritizedValues: valueLists.topDeprioritizedValues,
+00314:       neutralValues: valueLists.neutralValues,
+00315:       availability: parsedModel.preferenceStrength === null
+00316:         ? unavailableState('insufficient-preference-data')
+00317:         : availableState(),
+00318:     };
+00319:   }
+00320: 
+00321:   if (!hasValidModel) {
+00322:     sanitizeLog(analysis, { section: 'preference', reason: 'invalid-summary-shape' });
+00323:     return {
+00324:       rowAvailability: unavailableState('invalid-summary-shape'),
+00325:       byModel,
+00326:     };
+00327:   }
+00328: 
+00329:   return {
+00330:     rowAvailability: availableState

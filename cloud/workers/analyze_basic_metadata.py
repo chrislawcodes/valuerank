@@ -4,7 +4,7 @@ Extracted from analyze_basic.py to keep that script under the 400-line
 file-size limit. Pure metadata - no behavior.
 """
 
-CODE_VERSION = "1.2.0"
+CODE_VERSION = "1.3.0"
 SUMMARY_CONTRACT_VERSION = "vignette-semantics-v1"
 
 

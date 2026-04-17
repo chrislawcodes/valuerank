@@ -637,7 +637,7 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
       orderBy: { createdAt: 'desc' },
     });
 
-    expect(aggregateAnalysis.codeVersion).toBe('1.3.0');
+    expect(aggregateAnalysis.codeVersion).toBe('1.4.0');
     expect(aggregateAnalysis.output).toMatchObject({
       preferenceSummary: { perModel: {} },
       reliabilitySummary: { perModel: {} },
@@ -763,7 +763,7 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
     expect(aggregateAnalysis.output).toMatchObject({
       methodsUsed: {
         aggregateSemantics: 'same-signature-v1',
-        codeVersion: '1.3.0',
+        codeVersion: '1.4.0',
       },
       visualizationData: {
         scenarioDimensions: {

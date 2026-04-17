@@ -1,0 +1,60 @@
+{
+  "feature_slug": "byvalue-two-step-winrate",
+  "stage": "plan",
+  "artifact_path": "docs/workflow/feature-runs/byvalue-two-step-winrate/plan.md",
+  "git_base_ref": "",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "implementation-adversarial",
+      "stage": "plan",
+      "path": "docs/workflow/feature-runs/byvalue-two-step-winrate/reviews/plan.codex.implementation-adversarial.review.md",
+      "context_paths": [
+        "cloud/workers/analyze_basic_aggregation.py",
+        "cloud/workers/tests/test_analyze_basic.py",
+        "cloud/apps/api/tests/queue/handlers/analyze-basic.integration.test.ts",
+        "cloud/apps/api/tests/services/analysis/aggregate.test.ts",
+        "cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts",
+        "cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts",
+        "cloud/CLAUDE.md"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "architecture-adversarial",
+      "stage": "plan",
+      "path": "docs/workflow/feature-runs/byvalue-two-step-winrate/reviews/plan.codex.architecture-adversarial.review.md",
+      "context_paths": [
+        "cloud/workers/analyze_basic_aggregation.py",
+        "cloud/workers/tests/test_analyze_basic.py",
+        "cloud/apps/api/tests/queue/handlers/analyze-basic.integration.test.ts",
+        "cloud/apps/api/tests/services/analysis/aggregate.test.ts",
+        "cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts",
+        "cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts",
+        "cloud/CLAUDE.md"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "testability-adversarial",
+      "stage": "plan",
+      "path": "docs/workflow/feature-runs/byvalue-two-step-winrate/reviews/plan.gemini.testability-adversarial.review.md",
+      "context_paths": [
+        "cloud/workers/analyze_basic_aggregation.py",
+        "cloud/workers/tests/test_analyze_basic.py",
+        "cloud/apps/api/tests/queue/handlers/analyze-basic.integration.test.ts",
+        "cloud/apps/api/tests/services/analysis/aggregate.test.ts",
+        "cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts",
+        "cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts",
+        "cloud/CLAUDE.md"
+      ],
+      "model": "gemini-2.5-pro"
+    }
+  ],
+  "max_artifact_chars": 60000,
+  "max_context_chars": 30000,
+  "max_total_chars": null
+}

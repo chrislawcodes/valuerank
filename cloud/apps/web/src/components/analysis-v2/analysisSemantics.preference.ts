@@ -80,7 +80,10 @@ function parseRawPreferenceSummaryEntry(value: unknown): RawModelPreferenceSumma
   };
 }
 
-export function deriveValueLists(byValue: Record<string, RawPreferenceValueStats>): {
+export function deriveValueLists(
+  byValue: Record<string, RawPreferenceValueStats>,
+  centerOverride?: number,
+): {
   topPrioritizedValues: PreferenceValueSummary[];
   topDeprioritizedValues: PreferenceValueSummary[];
   neutralValues: PreferenceValueSummary[];
@@ -101,9 +104,10 @@ export function deriveValueLists(byValue: Record<string, RawPreferenceValueStats
   }
 
   const modelMean = entriesWithWinRate.reduce((sum, entry) => sum + entry.winRate, 0) / entriesWithWinRate.length;
+  const center = centerOverride ?? modelMean;
   const entries = entriesWithWinRate.map((entry) => ({
     ...entry,
-    distance: entry.winRate - modelMean,
+    distance: entry.winRate - center,
   }));
 
   const sortByPositiveDistance = (
@@ -204,33 +208,16 @@ export function buildMergedPreferenceModel(
       return;
     }
 
-    const allHaveCounts = stats.every((entry) => entry.count !== undefined);
-    if (allHaveCounts) {
-      const prioritized = stats.reduce((sum, entry) => sum + (entry.count?.prioritized ?? 0), 0);
-      const deprioritized = stats.reduce((sum, entry) => sum + (entry.count?.deprioritized ?? 0), 0);
-      const neutral = stats.reduce((sum, entry) => sum + (entry.count?.neutral ?? 0), 0);
-      const totalResponses = prioritized + deprioritized + neutral;
-      mergedByValue[valueId] = {
-        winRate: totalResponses > 0 ? prioritized / totalResponses : 0.5,
-        count: {
-          prioritized,
-          deprioritized,
-          neutral,
-        },
-      };
-      return;
-    }
-
     const averagedWinRate = averageWeighted(
       parsedModels
-        .map(({ analysis, parsed }) => {
+        .map(({ parsed }) => {
           const entry = parsed.preferenceDirection.byValue[valueId];
           if (!entry) {
             return null;
           }
           return {
             value: entry.winRate,
-            weight: analysis.perModel[modelId]?.sampleSize ?? 0,
+            weight: 1,
           };
         })
         .filter((entry): entry is { value: number; weight: number } => entry !== null),
@@ -257,7 +244,7 @@ export function buildMergedPreferenceModel(
         weight: analysis.perModel[modelId]?.sampleSize ?? 0,
       })),
   );
-  const valueLists = deriveValueLists(mergedByValue);
+  const valueLists = deriveValueLists(mergedByValue, 0.5);
 
   return {
     modelId,

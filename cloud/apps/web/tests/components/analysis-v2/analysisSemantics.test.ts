@@ -547,7 +547,8 @@ describe('buildPairedAnalysisSemanticsView', () => {
     expect(semantics.reliability.rowAvailability).toEqual({ status: 'available' });
     expect(semantics.preference.byModel['claude-3']).toMatchObject({
       topPrioritizedValues: [{ name: 'Care', winRate: 0.6 }],
-      topDeprioritizedValues: [{ name: 'Achievement', winRate: 1 / 3 }],
+      topDeprioritizedValues: [],
+      neutralValues: [{ name: 'Achievement', winRate: 0.5 }],
       overallLean: 'B',
     });
     expect(semantics.reliability.byModel['claude-3']).toMatchObject({
@@ -605,5 +606,70 @@ describe('buildPairedAnalysisSemanticsView', () => {
       topDeprioritizedValues: [{ name: 'Alpha', winRate: 0.2 }],
     });
     expect(semantics.preference.byModel['claude-3']?.neutralValues).toEqual([{ name: 'Beta', winRate: 0.3 }]);
+  });
+
+  it('merges byValue win rates with equal weights when counts are absent', () => {
+    const current = createAnalysis({
+      perModel: {
+        'claude-3': {
+          sampleSize: 120,
+          values: {},
+          overall: { mean: 3, stdDev: 0.4, min: 2, max: 4 },
+        },
+      },
+      preferenceSummary: {
+        perModel: {
+          'claude-3': {
+            preferenceDirection: {
+              byValue: {
+                TestValue: {
+                  winRate: 0.8,
+                },
+              },
+              overallLean: 'A',
+              overallSignedCenter: 0.2,
+            },
+            preferenceStrength: 0.9,
+          },
+        },
+      },
+    });
+    const companion = createAnalysis({
+      runId: 'run-2',
+      perModel: {
+        'claude-3': {
+          sampleSize: 60,
+          values: {},
+          overall: { mean: 3, stdDev: 0.4, min: 2, max: 4 },
+        },
+      },
+      preferenceSummary: {
+        perModel: {
+          'claude-3': {
+            preferenceDirection: {
+              byValue: {
+                TestValue: {
+                  winRate: 0.4,
+                },
+              },
+              overallLean: 'B',
+              overallSignedCenter: -0.1,
+            },
+            preferenceStrength: 1.1,
+          },
+        },
+      },
+    });
+
+    const semantics = buildPairedAnalysisSemanticsView(current, companion, false);
+
+    expect(semantics.preference.byModel['claude-3']).toMatchObject({
+      topDeprioritizedValues: [],
+      neutralValues: [],
+    });
+    expect(semantics.preference.byModel['claude-3']?.topPrioritizedValues).toHaveLength(1);
+    expect(semantics.preference.byModel['claude-3']?.topPrioritizedValues[0]?.name).toBe('TestValue');
+    expect(semantics.preference.byModel['claude-3']?.topPrioritizedValues[0]?.winRate).toBeCloseTo(0.6, 10);
+    expect(semantics.preference.byModel['claude-3']?.topPrioritizedValues[0]).not.toHaveProperty('count');
   });
 });

@@ -11,6 +11,12 @@ from pathlib import Path
 
 import pytest
 
+WORKERS_DIR = Path(__file__).parent.parent
+if str(WORKERS_DIR) not in sys.path:
+    sys.path.insert(0, str(WORKERS_DIR))
+
+from stats.preference_stats import compute_two_step_by_value as _compute_two_step_by_value
+
 
 def run_analyze_basic(input_data: dict) -> dict:
     """Run analyze_basic.py with given input and return output."""
@@ -219,7 +225,7 @@ class TestAnalyzeBasicIntegration:
         assert methods["pValueCorrection"] == "holm_bonferroni"
         assert methods["effectSize"] == "cohens_d"
         assert methods["alpha"] == 0.05
-        assert methods["codeVersion"] == "1.2.0"
+        assert methods["codeVersion"] == "1.3.0"
         assert methods["summaryContractVersion"] == "vignette-semantics-v1"
 
     def test_v2_decision_model_overrides_legacy_scalar_score(self):
@@ -971,6 +977,116 @@ class TestAnalyzeBasicIntegration:
         assert value_stats["winRate"] == pytest.approx(0.75, abs=0.01)
         assert value_stats["count"]["prioritized"] == 3
         assert value_stats["count"]["deprioritized"] == 1
+
+    def test_preference_summary_uses_two_step_by_value_averaging(self):
+        """Value win rates should average across vignettes, not pooled transcripts."""
+        input_data = {
+            "runId": "test-run-two-step-by-value",
+            "transcripts": [
+                {
+                    "id": "s1-t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "prioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s1-t2",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "prioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s1-t3",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "prioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s1-t4",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "prioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s1-t5",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "prioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s1-t6",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "prioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s1-t7",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "prioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s1-t8",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "prioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s1-t9",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "prioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s1-t10",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "deprioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s2-t1",
+                    "modelId": "m1",
+                    "scenarioId": "s2",
+                    "summary": {"values": {"target": "deprioritized"}},
+                    "scenario": {},
+                },
+            ],
+        }
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        win_rate = result["analysis"]["preferenceSummary"]["perModel"]["m1"]["preferenceDirection"]["byValue"]["target"]["winRate"]
+        assert win_rate == pytest.approx(0.45, abs=0.000001)
+
+    def test_two_step_by_value_falls_back_to_half_without_transcript_outcomes(self):
+        """Values absent from transcript outcomes should default to a neutral win rate."""
+        result = _compute_two_step_by_value(
+            {},
+            {
+                "target": {
+                    "winRate": 0.9,
+                    "count": {
+                        "prioritized": 9,
+                        "deprioritized": 1,
+                        "neutral": 0,
+                    },
+                }
+            },
+        )
+
+        assert result["target"]["winRate"] == 0.5
+        assert result["target"]["count"]["prioritized"] == 9
+        assert result["target"]["count"]["deprioritized"] == 1
 
     def test_dimension_impact(self):
         """Test dimension impact analysis."""

@@ -1,0 +1,61 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 1,
+    "asked_count": 1,
+    "questions": [
+      {
+        "question": "Should paired-mode merge use equal weight per run or weight by unique vignette count?",
+        "recommendation": "Equal weight per run",
+        "rationale": "Each vignette order contributes equally to the combined picture; adding a vignetteCount field is more correct but larger scope",
+        "updated_at": 1776381246
+      }
+    ],
+    "assumptions": [
+      "count fields stay as raw response counts \u2014 only winRate changes to use the two-step approach",
+      "aggregate_transcripts_by_model stays unchanged; only build_preference_summary changes for byValue rates",
+      "Frontend fix removes the allHaveCounts pooled-sum path and trusts the backend per-vignette winRate",
+      "For aggregate multi-run merge, fallback continues to use sampleSize as weight \u2014 documented simplification"
+    ],
+    "summary": "Fixed via conversation context. User confirmed equal-weight-per-run for paired merge.",
+    "updated_at": 1776381246,
+    "answers": {
+      "Should paired-mode merge use equal weight per run or weight by unique vignette count?": "Equal weight per run"
+    },
+    "non_goals": [
+      "Changing aggregate_transcripts_by_model"
+    ],
+    "acceptance_criteria": [
+      "Paired-mode merge averages the two per-run winRates with equal weight"
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "parallel_analysis": {
+    "reviewed": true,
+    "found": false,
+    "note": "Slices A and C touch disjoint files and can run in parallel. A: Python worker (analyze_basic_aggregation.py, test_analyze_basic.py). C: Frontend (analysisSemantics.preference.ts, analysisSemantics.test.ts). Slices are defined as ## sections in tasks.md without checkbox format \u2014 parallelism will be managed manually at dispatch time. Slice B must follow A.",
+    "updated_at": 1776386633
+  },
+  "init_head_sha": "cbe42f2cf1d8dd592e767a5c3896669aeda559e6",
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "checkpoint_fallback": {}
+}

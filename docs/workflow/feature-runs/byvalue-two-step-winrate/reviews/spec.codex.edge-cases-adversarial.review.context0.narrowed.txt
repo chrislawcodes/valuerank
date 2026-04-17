@@ -1,0 +1,215 @@
+00001: """Pure helper functions used by analyze_basic.py."""
+00002: 
+00003: import math
+00004: from typing import Any
+00005: 
+00006: from common.errors import ValidationError
+00007: from stats.decision_model import resolve_transcript_signed_distance
+00008: 
+00009: 
+00010: def validate_input(data: dict[str, Any]) -> None:
+00011:     """Validate analyze basic input."""
+00012:     if "runId" not in data:
+00013:         raise ValidationError(message="Missing required field: runId")
+00014: 
+00015:     if "transcripts" not in data:
+00016:         # Legacy format: transcriptIds only (for backwards compatibility)
+00017:         if "transcriptIds" in data and isinstance(data["transcriptIds"], list):
+00018:             # Legacy mode - return stub response
+00019:             return
+00020:         raise ValidationError(message="Missing required field: transcripts")
+00021: 
+00022:     if not isinstance(data["transcripts"], list):
+00023:         raise ValidationError(message="transcripts must be an array")
+00024: 
+00025:     if "emitVignetteSemantics" in data and not isinstance(data["emitVignetteSemantics"], bool):
+00026:         raise ValidationError(message="emitVignetteSemantics must be a boolean")
+00027: 
+00028:     aggregate_semantics = data.get("aggregateSemantics")
+00029:     if aggregate_semantics is not None:
+00030:         if not isinstance(aggregate_semantics, dict):
+00031:             raise ValidationError(message="aggregateSemantics must be an object")
+00032:         if aggregate_semantics.get("mode") != "same_signature_v1":
+00033:             raise ValidationError(message="aggregateSemantics.mode must be same_signature_v1")
+00034:         planned_scenario_ids = aggregate_semantics.get("plannedScenarioIds")
+00035:         if not isinstance(planned_scenario_ids, list) or not all(isinstance(item, str) for item in planned_scenario_ids):
+00036:             raise ValidationError(message="aggregateSemantics.plannedScenarioIds must be an array of strings")
+00037:         for field in ("minRepeatCoverageCount", "lowCoverageCautionThreshold"):
+00038:             value = aggregate_semantics.get(field)
+00039:             if not isinstance(value, int) or value < 0:
+00040:                 raise ValidationError(message=f"aggregateSemantics.{field} must be a non-negative integer")
+00041:         for field in ("minRepeatCoverageShare", "driftWarningThreshold"):
+00042:             value = aggregate_semantics.get(field)
+00043:             if not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+00044:                 raise ValidationError(message=f"aggregateSemantics.{field} must be a finite number")
+00045: 
+00046:         for transcript in data["transcripts"]:
+00047:             run_id = transcript.get("runId")
+00048:             if not isinstance(run_id, str) or run_id.strip() == "":
+00049:                 raise ValidationError(message="aggregateSemantics requires transcript.runId for every transcript")
+00050: 
+00051: 
+00052: def extract_model_scores(transcripts: list[dict[str, Any]]) -> dict[str, list[float]]:
+00053:     """
+00054:     Extract aligned scores per model for comparison.
+00055: 
+00056:     Groups transcripts by scenarioId, then collects scores per model
+00057:     for scenarios that all models answered.
+00058:     """
+00059:     # Group by scenario
+00060:     by_scenario: dict[str, dict[str, float]] = {}
+00061:     for t in transcripts:
+00062:         scenario_id = t.get("scenarioId", "unknown")
+00063:         model_id = t.get("modelId", "unknown")
+00064:         score = resolve_transcript_signed_distance(t)
+00065: 
+00066:         if score is None:
+00067:             continue
+00068: 
+00069:         if scenario_id not in by_scenario:
+00070:             by_scenario[scenario_id] = {}
+00071:         by_scenario[scenario_id][model_id] = float(score)
+00072: 
+00073:     # Find models that answered all scenarios
+00074:     all_models = set()
+00075:     for model_scores in by_scenario.values():
+00076:         all_models.update(model_scores.keys())
+00077: 
+00078:     # Collect aligned scores
+00079:     result: dict[str, list[float]] = {m: [] for m in all_models}
+00080:     for scenario_id in sorted(by_scenario.keys()):
+00081:         scenario_scores = by_scenario[scenario_id]
+00082:         # Only include scenarios where all models have scores
+00083:         if set(scenario_scores.keys()) == all_models:
+00084:             for model_id, score in scenario_scores.items():
+00085:                 result[model_id].append(score)
+00086: 
+00087:     # Filter out models with no aligned scores
+00088:     return {m: scores for m, scores in result.items() if scores}
+00089: 
+00090: 
+00091: def find_contested_scenarios(
+00092:     transcripts: list[dict[str, Any]],
+00093:     limit: int = 5,
+00094: ) -> list[dict[str, Any]]:
+00095:     """
+00096:     Find scenarios with highest disagreement across models.
+00097: 
+00098:     Disagreement is measured by variance in scores across models.
+00099:     """
+00100:     import
+
+... [narrowed review slice: middle omitted] ...
+
+:                 overall_lean = "B"
+00240:             else:
+00241:                 overall_lean = "NEUTRAL"
+00242: 
+00243:         per_model_summary[model_id] = {
+00244:             "preferenceDirection": {
+00245:                 "byValue": model_stats.get("values", {}),
+00246:                 "overallLean": overall_lean,
+00247:                 "overallSignedCenter": overall_signed_center,
+00248:             },
+00249:             "preferenceStrength": preference_strength,
+00250:         }
+00251: 
+00252:     return {
+00253:         "perModel": per_model_summary,
+00254:     }
+00255: 
+00256: 
+00257: def build_reliability_summary(variance_analysis: dict[str, Any]) -> dict[str, Any]:
+00258:     """
+00259:     Build baseline reliability semantics from repeated-trial variance analysis.
+00260: 
+00261:     Reliability is unavailable without actual repeat coverage and never falls back
+00262:     to cross-scenario spread metrics.
+00263:     """
+00264:     is_multi_sample = bool(variance_analysis.get("isMultiSample", False))
+00265:     per_model_variance = variance_analysis.get("perModel", {})
+00266: 
+00267:     per_model_summary: dict[str, Any] = {}
+00268:     for model_id, model_stats in per_model_variance.items():
+00269:         per_scenario = model_stats.get("perScenario", {})
+00270:         repeated_scenarios = [
+00271:             stats
+00272:             for stats in per_scenario.values()
+00273:             if stats.get("sampleCount", 0) > 1
+00274:         ]
+00275:         coverage_count = len(repeated_scenarios)
+00276: 
+00277:         baseline_noise: float | None = None
+00278:         baseline_reliability: float | None = None
+00279:         directional_agreement: float | None = None
+00280:         neutral_share: float | None = None
+00281: 
+00282:         if coverage_count > 0:
+00283:             avg_within_scenario_variance = float(model_stats.get("avgWithinScenarioVariance", 0.0))
+00284:             baseline_noise = round(math.sqrt(max(avg_within_scenario_variance, 0.0)), 6)
+00285: 
+00286:             if is_multi_sample:
+00287:                 consistency_score = model_stats.get("consistencyScore")
+00288:                 if consistency_score is not None:
+00289:                     baseline_reliability = round(float(consistency_score), 6)
+00290: 
+00291:             agreement_weight = sum(
+00292:                 int(stats.get("sampleCount", 0))
+00293:                 for stats in repeated_scenarios
+00294:                 if stats.get("directionalAgreement") is not None
+00295:             )
+00296:             if agreement_weight > 0:
+00297:                 directional_agreement = round(
+00298:                     sum(
+00299:                         float(stats["directionalAgreement"]) * int(stats.get("sampleCount", 0))
+00300:                         for stats in repeated_scenarios
+00301:                         if stats.get("directionalAgreement") is not None
+00302:                     ) / agreement_weight,
+00303:                     6,
+00304:                 )
+00305: 
+00306:             neutral_weight = sum(
+00307:                 int(stats.get("sampleCount", 0))
+00308:                 for stats in repeated_scenarios
+00309:                 if stats.get("neutralShare") is not None
+00310:             )
+00311:             if neutral_weight > 0:
+00312:                 neutral_share = round(
+00313:                     sum(
+00314:                         float(stats["neutralShare"]) * int(stats.get("sampleCount", 0))
+00315:                         for stats in repeated_scenarios
+00316:                         if stats.get("neutralShare") is not None
+00317:                     ) / neutral_weight,
+00318:                     6,
+00319:                 )
+00320: 
+00321:         per_model_summary[model_id] = {
+00322:             "baselineNoise": baseline_noise,
+00323:             "baselineReliability": baseline_reliability,
+00324:             "directionalAgreement": directional_agreement,
+00325:             "neutralShare": neutral_share,
+00326:             "coverageCount": coverage_count,
+00327:             "uniqueScenarios": int(model_stats.get("uniqueScenarios", 0)),
+00328:         }
+00329: 
+00330:     return {
+00331:         "perModel": per_model_summary,
+00332:     }
+00333: 
+00334: 
+00335: def compute_weighted_standard_deviation(samples: list[tuple[int, float]]) -> float | None:
+00336:     """Compute weighted standard deviation for (weight, value) samples."""
+00337:     if not samples:
+00338:         return None
+00339: 
+00340:     total_weight = sum(weight for weight, _ in samples if weight > 0)
+00341:     if total_weight <= 0:
+00342:         return None
+00343: 
+00344:     weighted_mean = sum(weight * value for weight, value in samples if weight > 0) / total_weight
+00345:     weighted_variance = sum(
+00346:         weight * ((value - weighted_mean) ** 2)
+00347:         for weight, value in samples
+00348:         if weight > 0
+00349:     ) / total_weight
+00350:     retu
