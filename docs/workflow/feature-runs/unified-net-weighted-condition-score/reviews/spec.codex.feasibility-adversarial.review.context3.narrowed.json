@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx",
+  "source_artifact_sha256": "8d088025f0c0950d12d52fbfae773de6eba051e01d7b688c3a5b096e89d9459f",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/unified-net-weighted-condition-score/reviews/spec.codex.feasibility-adversarial.review.context3.narrowed.txt",
+  "narrowed_artifact_sha256": "fd5ba448b739292ace369678492904ae36185dd5a4e21419465d58eb648a72dc",
+  "strategy": "head-tail-numbered-lines"
+}

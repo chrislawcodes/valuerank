@@ -1,0 +1,10 @@
+## Findings
+1. **HIGH** [CODE-CONFIRMED] `cloud/apps/web/src/utils/canonicalConditionSummary.ts#L144` still treats every non-opponent, non-null score as blue, because `getCanonicalConditionBackground()` and `getCanonicalConditionTextColor()` have no neutral-tie branch. The tasks for `getConditionCellDisplay()` only spell out the `hasData: false` case, so if implemented literally, a real tie (`direction === 'neutral'` with `hasData === true`) will still get tinted instead of rendering gray/no fill. That would break the intended tie-neutral behavior.
+
+2. **MEDIUM** [CODE-CONFIRMED] `cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx#L441` still contains the `['non-integer', 1.5]` case under `rejects invalid canonical counts`. The plan says Slice 2 removes the integer-only guard, so this test must flip to acceptance or be deleted. As written, the tasks never call out this existing failing assertion, so the suite will keep expecting old behavior.
+
+3. **MEDIUM** [CODE-CONFIRMED] `cloud/apps/web/src/components/analysis/PivotAnalysisTable.tsx#L293` gates the help copy behind `showDetails && (...)`. The new help-text test in S3-T6 only says to assert the substring `"net-weighted preference score"`, but it does not say to click the `Details` button first. Without that interaction, the test will not find the element.
+
+## Residual Risks
+- The plan intentionally leaves `selectedValueWinRate` and other legacy winner-only terminology in generated GraphQL types and unrelated pages. That is scoped out, but the repo will still contain old naming outside the three target views.
+- `canonicalConditionSummary.ts` still depends on `localeCompare` for the canonical first/opponent split. The tasks correctly defer that, but locale-sensitive behavior can still swap sides in different environments.

@@ -1,0 +1,9 @@
+## Findings
+- Medium [CODE-CONFIRMED]: The plan’s ship checks do not actually prove that the old inline score logic is gone from [ConditionMatrix.tsx](/Users/chrislaw/valuerank/.claude/worktrees/tender-cerf/cloud/apps/web/src/components/domains/ConditionMatrix.tsx). The current file still has `getConditionMatrixDisplay`, `getPreferenceBackground`, and `getPreferenceTextColor`, and those functions own the rounding/color path today. But the listed grep gates only target `winnerScore`, `selectedValueWinRate`, `isOpponent`, and the shared helper names, so a partial refactor could leave the old wrapper in place and still pass the proposed checks.
+
+- Low [CODE-CONFIRMED]: The validator test coverage in the plan only names one side of the new cross-field invariant. [ConditionMatrix.tsx](/Users/chrislaw/valuerank/.claude/worktrees/tender-cerf/cloud/apps/web/src/components/domains/ConditionMatrix.tsx) has two separate pairs that must stay aligned: `prioritized` vs `strongly + somewhat`, and `deprioritized` vs `opponentStrongly + opponentSomewhat`. The plan’s explicit test addition only covers the selected-side mismatch, so the opponent-side mismatch is left unverified.
+
+## Residual Risks
+- The plan still has contradictory threshold wording: the Scope section mentions `1e-9`, while FR-003 uses `0.05`. FR-003 is the only sensible rule for display-aligned tie handling, but the mismatch is easy to misread during implementation.
+
+- `validateMatrixCondition` still reports only the first malformed row. The plan explicitly leaves that behavior in place, so multi-row bad data will still require a fix-reload-repeat cycle.

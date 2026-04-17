@@ -1,0 +1,265 @@
+00001: import { beforeEach, describe, expect, it, vi } from 'vitest';
+00002: import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+00003: import { MemoryRouter } from 'react-router-dom';
+00004: import { DomainAnalysisValueDetail } from '../../src/pages/DomainAnalysisValueDetail';
+00005: import {
+00006:   DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY,
+00007:   DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY,
+00008: } from '../../src/api/operations/domainAnalysis';
+00009: import type { Transcript } from '../../src/api/operations/runs';
+00010: 
+00011: const useQueryMock = vi.fn();
+00012: let lastTranscriptListProps: {
+00013:   transcripts: Transcript[];
+00014:   decisionColumnLabel?: string;
+00015:   decisionDisplayMode?: string;
+00016:   groupByModel?: boolean;
+00017:   scenarioDimensions?: Record<string, Record<string, string | number>>;
+00018:   onSelect: (transcript: Transcript) => void;
+00019: } | null = null;
+00020: 
+00021: vi.mock('urql', async () => {
+00022:   const actual = await vi.importActual<typeof import('urql')>('urql');
+00023:   return {
+00024:     ...actual,
+00025:     useQuery: (args: unknown) => useQueryMock(args),
+00026:   };
+00027: });
+00028: 
+00029: vi.mock('../../src/components/runs/TranscriptViewer', () => ({
+00030:   TranscriptViewer: ({ transcript, decisionDisplayMode }: { transcript: { id: string }; decisionDisplayMode?: string }) => (
+00031:     <div data-testid="transcript-viewer">
+00032:       <span>{transcript.id}</span>
+00033:       <span>{decisionDisplayMode ?? 'unset'}</span>
+00034:     </div>
+00035:   ),
+00036: }));
+00037: 
+00038: vi.mock('../../src/components/runs/TranscriptList', () => ({
+00039:   TranscriptList: (props: {
+00040:     transcripts: Transcript[];
+00041:     decisionColumnLabel?: string;
+00042:     decisionDisplayMode?: string;
+00043:     groupByModel?: boolean;
+00044:     scenarioDimensions?: Record<string, Record<string, string | number>>;
+00045:     onSelect: (transcript: Transcript) => void;
+00046:   }) => {
+00047:     lastTranscriptListProps = props;
+00048:     return (
+00049:       <div data-testid="transcript-list">
+00050:         <span>{props.decisionColumnLabel ?? 'unset'}</span>
+00051:         <span>{props.decisionDisplayMode ?? 'unset'}</span>
+00052:         <span>{props.groupByModel ? 'grouped' : 'flat'}</span>
+00053:         <span>{props.transcripts.length}</span>
+00054:         {props.transcripts.map((transcript) => (
+00055:           <button key={transcript.id} type="button" onClick={() => props.onSelect(transcript)}>
+00056:             {transcript.id}
+00057:           </button>
+00058:         ))}
+00059:       </div>
+00060:     );
+00061:   },
+00062: }));
+00063: 
+00064: function createTranscript(overrides: Partial<Transcript> = {}): Transcript {
+00065:   return {
+00066:     id: 'transcript-1',
+00067:     runId: 'run-1',
+00068:     scenarioId: 'scenario-1',
+00069:     modelId: 'gpt-4',
+00070:     modelVersion: 'gpt-4-0125-preview',
+00071:     content: { turns: [] },
+00072:     decisionCode: '3',
+00073:     decisionCodeSource: 'llm',
+00074:     decisionMetadata: null,
+00075:     turnCount: 2,
+00076:     tokenCount: 100,
+00077:     durationMs: 1500,
+00078:     estimatedCost: null,
+00079:     createdAt: '2024-01-15T10:00:00Z',
+00080:     lastAccessedAt: null,
+00081:     ...overrides,
+00082:   };
+00083: }
+00084: 
+00085: function createRenderableTranscript(
+00086:   id: string,
+00087:   overrides: {
+00088:     raw?: Partial<NonNullable<Transcript['decisionModelV2']>['raw']>;
+00089:     canonical?: Partial<NonNullable<Transcript['decisionModelV2']>['canonical']>;
+00090:     legacy?: Partial<NonNullable<Transcript['decisionModelV2']>['legacy']>;
+00091:   } = {},
+00092: ): Transcript {
+00093:   return createTranscript({
+00094:     id,
+00095:     decisionModelV2: {
+00096:       raw: {
+00097:         matchedText: 'Achievement',
+00098:         matchedLabel: 'Achievement',
+00099:         parseClass: 'exact',
+00100:         parsePath: 'exact.favor_second.strong',
+00101:         parserVersion: 'v1',
+00102:         responseExcerpt: 'Achievement',
+00103:         manualOverride: null,
+00104:         ...overrides.raw,
+00105:       },
+00106:       canonical: {
+00107:         favoredValueKey: 'Benevolence_Dependability',
+00108:         opposedValueKey: 'Achievement',
+00109:         direction: 'favor_second',
+00110:         strength: 'strong',
+00111:         normalizationApplied: true,
+00112:         normalizationReason: 'orientation_flipped',
+00113:         source: 'deterministic',
+00114:         ...overrides.canonical,
+00115:       },
+00116:       legacy: {
+00117:         ...overrides.legacy,
+00118:       },
+00119:     },
+00120:   });
+00121: }
+00122: 
+00123: function createCondition(overrides: {
+00124:   scenarioId: string;
+00125:   conditionName: string;
+00126:   dimensions: Record<string, string | number>;
+00127:   prioritized: number;
+00128:   deprioritized: number;
+00129:   neutral: number;
+00130:   totalTrials: number;
+00131:   unknownCount?: num
+
+... [narrowed review slice: middle omitted] ...
+
+inner (blue=selected, orange=opponent).
+00341:     expect(rows.slice(2).map((row) => within(row).getAllByRole('cell')[1].textContent?.trim())).toEqual([
+00342:       '1',  // Condition 1: strength 1 (selected wins)
+00343:       '1',  // Condition 2: strength 1 (opponent wins — shown in orange)
+00344:       '0',  // Condition 3: tied
+00345:       '0',  // Condition 4: no directional trials
+00346:       '2',  // Condition 5: strength 2 (selected wins)
+00347:     ]);
+00348: 
+00349:     fireEvent.click(screen.getByTitle('Condition 1'));
+00350: 
+00351:     await waitFor(() => {
+00352:       expect(screen.getByTestId('transcript-list')).toBeInTheDocument();
+00353:     });
+00354: 
+00355:     expect(lastTranscriptListProps?.decisionColumnLabel).toBe('Decision summary');
+00356:     expect(lastTranscriptListProps?.decisionDisplayMode).toBe('audit');
+00357:     expect(lastTranscriptListProps?.groupByModel).toBe(false);
+00358:     expect(lastTranscriptListProps?.scenarioDimensions).toEqual({
+00359:       'scenario-1': { A: 'negligible', B: 'same' },
+00360:     });
+00361: 
+00362:     fireEvent.click(screen.getByRole('button', { name: 'transcript-v2' }));
+00363: 
+00364:     const viewer = await screen.findByTestId('transcript-viewer');
+00365:     expect(within(viewer).getByText('transcript-v2')).toBeInTheDocument();
+00366:     expect(within(viewer).getByText('audit')).toBeInTheDocument();
+00367:   });
+00368: 
+00369:   it('shows the loading state', () => {
+00370:     mockQueries({
+00371:       detailFetching: true,
+00372:     });
+00373: 
+00374:     renderPage();
+00375:     expect(screen.getByText('Loading value detail...')).toBeInTheDocument();
+00376:   });
+00377: 
+00378:   it('shows the top-level API error state', async () => {
+00379:     mockQueries({
+00380:       detailError: new Error('boom'),
+00381:     });
+00382: 
+00383:     renderPage();
+00384: 
+00385:     await waitFor(() => {
+00386:       expect(screen.getByText('Failed to load value detail: boom')).toBeInTheDocument();
+00387:     });
+00388:   });
+00389: 
+00390:   it('shows the empty state when no vignettes are available', async () => {
+00391:     mockQueries({
+00392:       detail: createDetail([]),
+00393:     });
+00394: 
+00395:     renderPage();
+00396: 
+00397:     await waitFor(() => {
+00398:       expect(screen.getByText('No transcript data found for this model/value in the selected domain.')).toBeInTheDocument();
+00399:     });
+00400:   });
+00401: 
+00402:   it('renders transcripts and always passes audit mode (TranscriptRow handles per-row fallback)', async () => {
+00403:     mockQueries({
+00404:       detail: createDetail([
+00405:         createVignette('def-1', 'One vignette', [
+00406:           createCondition({
+00407:             scenarioId: 'scenario-1',
+00408:             conditionName: 'Condition A',
+00409:             dimensions: { Row: 'negligible', Col: 'same' },
+00410:             prioritized: 2,
+00411:             deprioritized: 1,
+00412:             neutral: 0,
+00413:             totalTrials: 3,
+00414:           }),
+00415:         ]),
+00416:       ]),
+00417:       transcripts: [
+00418:         createTranscript({
+00419:           id: 'legacy-only',
+00420:           decisionModelV2: null,
+00421:         }),
+00422:       ],
+00423:     });
+00424: 
+00425:     renderPage();
+00426: 
+00427:     await waitFor(() => {
+00428:       expect(screen.getByText('Value Score Detail')).toBeInTheDocument();
+00429:     });
+00430: 
+00431:     fireEvent.click(screen.getByTitle('Condition A'));
+00432: 
+00433:     await waitFor(() => {
+00434:       expect(screen.getByTestId('transcript-list')).toBeInTheDocument();
+00435:     });
+00436: 
+00437:     expect(lastTranscriptListProps?.decisionDisplayMode).toBe('audit');
+00438:     expect(screen.queryByText(/Failed to render transcripts/)).not.toBeInTheDocument();
+00439:   });
+00440: 
+00441:   it.each([
+00442:     ['null', null],
+00443:     ['undefined', undefined],
+00444:     ['NaN', Number.NaN],
+00445:     ['Infinity', Number.POSITIVE_INFINITY],
+00446:     ['-Infinity', Number.NEGATIVE_INFINITY],
+00447:     ['negative', -1],
+00448:     ['non-integer', 1.5],
+00449:   ] as const)('rejects invalid canonical counts: %s', async (_label, invalidValue) => {
+00450:     mockQueries({
+00451:       detail: createDetail([
+00452:         createVignette('def-1', 'One vignette', [
+00453:           createCondition({
+00454:             scenarioId: 'scenario-1',
+00455:             conditionName: 'Condition A',
+00456:             dimensions: { A: 'negligible', B: 'same' },
+00457:             prioritized: invalidValue as number,
+00458:             deprioritized: 1,
+00459:             neutral: 0,
+00460:             totalTrials: 1,
+00461:           }),
+00462:         ]),
+00463:       ]),
+00464:       transcripts: [],
+00465:     });
+00466: 
+00467:     renderPage();
+00468: 
+00469:     await waitFor(() => {
+00470:       expect(screen.getByText(/ConditionMatrix requires canonical count data/)).toBeInTh

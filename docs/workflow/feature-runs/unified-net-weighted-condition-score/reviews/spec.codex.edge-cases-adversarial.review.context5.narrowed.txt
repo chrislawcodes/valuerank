@@ -1,0 +1,255 @@
+00001: import { beforeEach, describe, expect, it, vi } from 'vitest';
+00002: import { fireEvent, render, screen, within } from '@testing-library/react';
+00003: import { MemoryRouter } from 'react-router-dom';
+00004: import { ConditionDecisionsTable } from '../../../src/components/analysis/ConditionDecisionsTable';
+00005: import type { Transcript } from '../../../src/api/operations/runs';
+00006: 
+00007: const mockNavigate = vi.fn();
+00008: 
+00009: vi.mock('react-router-dom', async () => {
+00010:   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+00011:   return {
+00012:     ...actual,
+00013:     useNavigate: () => mockNavigate,
+00014:   };
+00015: });
+00016: 
+00017: function createTranscript({
+00018:   id,
+00019:   scenarioId,
+00020:   modelId,
+00021:   direction,
+00022:   strength,
+00023: }: {
+00024:   id: string;
+00025:   scenarioId: string;
+00026:   modelId: string;
+00027:   direction: 'favor_first' | 'favor_second' | 'neutral' | 'unknown';
+00028:   strength: 'strong' | 'lean' | 'neutral' | 'unknown';
+00029: }): Transcript {
+00030:   return {
+00031:     id,
+00032:     runId: 'run-1',
+00033:     scenarioId,
+00034:     modelId,
+00035:     modelVersion: null,
+00036:     content: {},
+00037:     decisionCode: direction === 'favor_first' ? '5' : direction === 'favor_second' ? '1' : '3',
+00038:     decisionCodeSource: 'deterministic',
+00039:     decisionMetadata: null,
+00040:     turnCount: 4,
+00041:     tokenCount: 120,
+00042:     durationMs: 800,
+00043:     estimatedCost: null,
+00044:     createdAt: '2024-01-01T00:00:00Z',
+00045:     lastAccessedAt: null,
+00046:     dimensionValues: null,
+00047:     decisionModelV2: direction === 'unknown'
+00048:       ? null
+00049:       : {
+00050:           raw: {
+00051:             matchedText: 'test',
+00052:             matchedLabel: 'test',
+00053:             parseClass: 'exact',
+00054:             parsePath: 'exact',
+00055:             parserVersion: 'job-choice-v2',
+00056:             responseExcerpt: null,
+00057:             manualOverride: null,
+00058:           },
+00059:           canonical: {
+00060:             favoredValueKey: direction === 'neutral' ? null : direction === 'favor_second' ? 'value-b' : 'value-a',
+00061:             opposedValueKey: direction === 'neutral' ? null : direction === 'favor_second' ? 'value-a' : 'value-b',
+00062:             direction,
+00063:             strength,
+00064:             normalizationApplied: false,
+00065:             normalizationReason: null,
+00066:             source: 'deterministic',
+00067:           },
+00068:           legacy: {
+00069:             },
+00070:         },
+00071:   } as Transcript;
+00072: }
+00073: 
+00074: function createVisualizationData() {
+00075:   return {
+00076:     decisionDistribution: {},
+00077:     scenarioDimensions: {
+00078:       'scenario-1': { Achievement: 'high', Care: 'high' },
+00079:       'scenario-2': { Achievement: 'high', Care: 'high' },
+00080:       'scenario-3': { Achievement: 'high', Care: 'high' },
+00081:       'scenario-4': { Achievement: 'high', Care: 'high' },
+00082:       'scenario-5': { Achievement: 'high', Care: 'high' },
+00083:       'scenario-6': { Achievement: 'low', Care: 'low' },
+00084:       'scenario-7': { Achievement: 'low', Care: 'low' },
+00085:       'scenario-8': { Achievement: 'medium', Care: 'medium' },
+00086:       'scenario-9': { Achievement: 'medium', Care: 'medium' },
+00087:     },
+00088:     modelScenarioMatrix: {
+00089:       'gpt-4': {
+00090:         'scenario-1': 3,
+00091:         'scenario-2': 3,
+00092:         'scenario-3': 3,
+00093:         'scenario-4': 3,
+00094:         'scenario-5': 3,
+00095:         'scenario-6': 3,
+00096:         'scenario-7': 3,
+00097:       },
+00098:       'gpt-5': {
+00099:         'scenario-8': 3,
+00100:         'scenario-9': 3,
+00101:       },
+00102:     },
+00103:   } as const;
+00104: }
+00105: 
+00106: describe('ConditionDecisionsTable', () => {
+00107:   beforeEach(() => {
+00108:     mockNavigate.mockReset();
+00109:   });
+00110: 
+00111:   it('groups model headers by family when multiple variants share a provider', () => {
+00112:     render(
+00113:       <MemoryRouter>
+00114:         <ConditionDecisionsTable
+00115:           runId="run-1"
+00116:           perModel={{}}
+00117:           visualizationData={{
+00118:             decisionDistribution: {},
+00119:             scenarioDimensions: {
+00120:               'scenario-1': { Achievement: 'full', Benevolence_Dependability: 'full' },
+00121:             },
+00122:             modelScenarioMatrix: {
+00123:               'deepseek-chat': { 'scenario-1': 2 },
+00124:               'deepseek-reasoner': { 'scenario-1': 3 },
+00125:               'gpt-4': { 'scenario-1': 4 },
+00126:               'gpt-5': { 'scenario-1': 5 },
+00127:             },
+00128:           } as any}
+00129:         />
+00130:       </MemoryRouter>
+00131:     );
+00132: 
+00133:     expect(screen.getByRole('columnheader', { name: 'DeepSeek' })).toHaveAttribute('colspan', '2');
+0013
+
+... [narrowed review slice: middle omitted] ...
+
+: 
+00309:     // tie: selectedValueWinRate === 0.5 → isOpponent=false, winnerScore=(2×1+0)/2=1.0
+00310:     const tieButton = screen.getByTitle('View transcripts for gpt-5 | Achievement: medium, Care: medium');
+00311:     expect(within(tieButton).getByText('1.0')).toBeInTheDocument();
+00312:   });
+00313: 
+00314:   it('orders condition rows from negligible to full', () => {
+00315:     render(
+00316:       <MemoryRouter>
+00317:         <ConditionDecisionsTable
+00318:           runId="run-1"
+00319:           expectedAttributes={['Achievement', 'Care']}
+00320:           perModel={{
+00321:             model1: {
+00322:               sampleSize: 5,
+00323:               values: {},
+00324:               overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+00325:             },
+00326:           } as any}
+00327:           visualizationData={{
+00328:             decisionDistribution: {},
+00329:             scenarioDimensions: {
+00330:               'scenario-1': { Achievement: 'full', Care: 'same' },
+00331:               'scenario-2': { Achievement: 'minimal', Care: 'same' },
+00332:               'scenario-3': { Achievement: 'moderate', Care: 'same' },
+00333:               'scenario-4': { Achievement: 'negligible', Care: 'same' },
+00334:               'scenario-5': { Achievement: 'substantial', Care: 'same' },
+00335:             },
+00336:             modelScenarioMatrix: {
+00337:               model1: {
+00338:                 'scenario-1': 3,
+00339:                 'scenario-2': 3,
+00340:                 'scenario-3': 3,
+00341:                 'scenario-4': 3,
+00342:                 'scenario-5': 3,
+00343:               },
+00344:             },
+00345:           } as any}
+00346:         />
+00347:       </MemoryRouter>
+00348:     );
+00349: 
+00350:     const bodyRows = screen.getAllByRole('row').slice(1);
+00351:     expect(bodyRows.map((row) => within(row).getAllByRole('cell')[0].textContent?.trim())).toEqual([
+00352:       'negligible',
+00353:       'minimal',
+00354:       'moderate',
+00355:       'substantial',
+00356:       'full',
+00357:     ]);
+00358:   });
+00359: 
+00360:   it('orders condition rows from negligible to full', () => {
+00361:     render(
+00362:       <MemoryRouter>
+00363:         <ConditionDecisionsTable
+00364:           runId="run-1"
+00365:           expectedAttributes={['Achievement', 'Care']}
+00366:           perModel={{
+00367:             model1: {
+00368:               sampleSize: 5,
+00369:               values: {},
+00370:               overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+00371:             },
+00372:           } as any}
+00373:           visualizationData={{
+00374:             decisionDistribution: {},
+00375:             scenarioDimensions: {
+00376:               'scenario-1': { Achievement: 'full', Care: 'same' },
+00377:               'scenario-2': { Achievement: 'minimal', Care: 'same' },
+00378:               'scenario-3': { Achievement: 'moderate', Care: 'same' },
+00379:               'scenario-4': { Achievement: 'negligible', Care: 'same' },
+00380:               'scenario-5': { Achievement: 'substantial', Care: 'same' },
+00381:             },
+00382:             modelScenarioMatrix: {
+00383:               model1: {
+00384:                 'scenario-1': 3,
+00385:                 'scenario-2': 3,
+00386:                 'scenario-3': 3,
+00387:                 'scenario-4': 3,
+00388:                 'scenario-5': 3,
+00389:               },
+00390:             },
+00391:           } as any}
+00392:         />
+00393:       </MemoryRouter>
+00394:     );
+00395: 
+00396:     const bodyRows = screen.getAllByRole('row').slice(1);
+00397:     expect(bodyRows.map((row) => within(row).getAllByRole('cell')[0].textContent?.trim())).toEqual([
+00398:       'negligible',
+00399:       'minimal',
+00400:       'moderate',
+00401:       'substantial',
+00402:       'full',
+00403:     ]);
+00404:   });
+00405: 
+00406:   it('renders unknown-only cells as dashes without canonical tinting', () => {
+00407:     const visualizationData = createVisualizationData();
+00408:     const transcripts = [
+00409:       createTranscript({ id: 't10', scenarioId: 'scenario-6', modelId: 'gpt-4', direction: 'unknown', strength: 'unknown' }),
+00410:       createTranscript({ id: 't11', scenarioId: 'scenario-7', modelId: 'gpt-4', direction: 'unknown', strength: 'unknown' }),
+00411:     ];
+00412: 
+00413:     render(
+00414:       <MemoryRouter>
+00415:         <ConditionDecisionsTable
+00416:           runId="run-1"
+00417:           perModel={{ 'gpt-4': { sampleSize: 2, values: {}, overall: { mean: 3, stdDev: 0, min: 3, max: 3 } } as any }}
+00418:           transcripts={transcripts}
+00419:           visualizationData={visualizationData as any}
+00420:         />
+00421:       </MemoryRouter>
+00422:     );
+00423: 
+00424:     const unknownButton = screen.getByTitle('View transcripts for gpt-4 | Achievement: low, Care: low | Decision: other | Unknown: 2');
+00425:     expect(within(unknownButton).getByText

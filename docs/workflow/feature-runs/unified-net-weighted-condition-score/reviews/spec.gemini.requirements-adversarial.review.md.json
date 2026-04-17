@@ -1,0 +1,57 @@
+{
+  "session_id": "496c6358-f467-4d6b-b9ea-9a22fd385a38",
+  "response": "## Findings\n\n| Severity | Finding | Evidence |\n| :--- | :--- | :--- |\n| MEDIUM | **Implicit dependency gap for `hasData` field.** The spec requires logic in `PivotAnalysisTable`'s legend classifier (FR-014) to use a `hasData` flag to differentiate between a meaningful tie and a zero-trial cell. However, the `CanonicalConditionSummary` type, which is the input to this logic, is not specified to include a `hasData` field. `hasData` is only defined on the return type of the `getConditionCellDisplay` helper (FR-005), which is intended for cell rendering, not for pre-rendering classification logic. This forces the legend classifier to re-derive `hasData` (e.g., from `summary.totalTrials > 0`), creating redundant logic that violates the feature's single-source-of-truth goal (US3). | [UNVERIFIED] |\n| LOW | **Validation error reporting is not comprehensive.** The `ConditionMatrix` component's existing validation logic, which the spec preserves, finds and displays only the first invalid condition in the dataset before halting the render. If multiple rows contain malformed data, the user will only be notified of the first one, leading to a potentially tedious cycle of fixing one error, reloading, and discovering the next. While this is existing behavior, the spec revision was an opportunity to improve this by collecting all validation errors. | [CODE-CONFIRMED] |\n\n## Residual Risks\n\n| Risk | Mitigation |\n| :--- | :--- |\n| **Host-locale sensitivity in canonical direction.** The logic for determining the canonical \"first\" side (`strongly`/`somewhat`) vs. the \"opponent\" side relies on `favoredValueKey.localeCompare(opposedValueKey)` in the existing `getCanonicalBucket` function. As noted in the spec's non-goals (Finding #24), this means that identical data can render with a different directional interpretation depending on the browser or server's locale settings. | This is a known, pre-existing issue. The spec correctly defers the fix (e.g., switching to a locale-agnostic comparison) as a separate work item to avoid scope creep. The risk is that users in different regions may see confusingly different directional results for the same underlying data until the follow-on work is prioritized. |\n| **Silent flattening of multi-dimensional data.** The `ConditionMatrix` component silently and arbitrarily projects conditions with three or more dimensions onto a 2D grid by sorting the dimensions alphabetically and picking the first two. This is pre-existing behavior, documented as a non-goal (Finding #26). | The risk is that users may draw incorrect conclusions from the matrix, not realizing they are viewing a partial and arbitrarily-chosen slice of their data. This is a known product limitation deferred for future work. |",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 83044
+        },
+        "tokens": {
+          "input": 25976,
+          "prompt": 25976,
+          "candidates": 613,
+          "total": 34621,
+          "cached": 0,
+          "thoughts": 8032,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 83044,
+            "tokens": {
+              "input": 25976,
+              "prompt": 25976,
+              "candidates": 613,
+              "total": 34621,
+              "cached": 0,
+              "thoughts": 8032,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

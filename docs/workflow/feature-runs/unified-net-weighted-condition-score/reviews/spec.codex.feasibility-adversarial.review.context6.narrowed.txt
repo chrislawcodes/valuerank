@@ -1,0 +1,267 @@
+00001: import { beforeEach, describe, expect, it, vi } from 'vitest';
+00002: import { render, screen, waitFor, within } from '@testing-library/react';
+00003: import userEvent from '@testing-library/user-event';
+00004: import { MemoryRouter } from 'react-router-dom';
+00005: import { AnalysisPanelHarness, createCanonicalTranscript, createMockAnalysis } from './analysisPanel.fixtures';
+00006: import { useAnalysis } from '../../../src/hooks/useAnalysis';
+00007: 
+00008: vi.mock('../../../src/hooks/useAnalysis', () => ({
+00009:   useAnalysis: vi.fn(),
+00010: }));
+00011: 
+00012: const mockUseAnalysis = vi.mocked(useAnalysis);
+00013: 
+00014: describe('AnalysisPanel', () => {
+00015:   beforeEach(() => {
+00016:     vi.clearAllMocks();
+00017:   });
+00018: 
+00019:   it('threads transcripts into the scenarios tab and renders canonical scores there', async () => {
+00020:     const analysis = createMockAnalysis({
+00021:       perModel: {
+00022:         'gpt-4': {
+00023:           sampleSize: 2,
+00024:           values: {},
+00025:           overall: { mean: 3, stdDev: 0, min: 3, max: 3 },
+00026:         },
+00027:       },
+00028:       visualizationData: {
+00029:         decisionDistribution: {},
+00030:         scenarioDimensions: {
+00031:           'scenario-1': { Achievement: 'high', Care: 'high' },
+00032:           'scenario-2': { Achievement: 'high', Care: 'high' },
+00033:         },
+00034:         modelScenarioMatrix: {
+00035:           'gpt-4': {
+00036:             'scenario-1': 3,
+00037:             'scenario-2': 3,
+00038:           },
+00039:         },
+00040:       } as any,
+00041:     });
+00042: 
+00043:     const transcripts = [
+00044:       createCanonicalTranscript({ id: 't1', scenarioId: 'scenario-1', direction: 'favor_first', strength: 'strong' }),
+00045:       createCanonicalTranscript({ id: 't2', scenarioId: 'scenario-2', direction: 'favor_first', strength: 'lean' }),
+00046:     ];
+00047: 
+00048:     mockUseAnalysis.mockReturnValue({
+00049:       analysis,
+00050:       loading: false,
+00051:       error: null,
+00052:       refetch: vi.fn(),
+00053:       recompute: vi.fn(),
+00054:       recomputing: false,
+00055:     });
+00056: 
+00057:     render(
+00058:       <MemoryRouter>
+00059:         <AnalysisPanelHarness runId="run-1" transcripts={transcripts} />
+00060:       </MemoryRouter>
+00061:     );
+00062: 
+00063:     expect(screen.getByText('Analysis')).toBeInTheDocument();
+00064: 
+00065:     await userEvent.click(screen.getByRole('button', { name: /^Conditions$/i }));
+00066: 
+00067:     // PivotAnalysisTable and ConditionDecisionsTable now show winner's weighted score (0–2).
+00068:     // t1=strongly(1) + t2=somewhat(1), totalTrials=2 → winnerScore=(2×1+1×1)/2=1.5
+00069:     const winnerScoreElement = screen
+00070:       .getAllByText('1.5')
+00071:       .find((element) => element.className.includes('text-blue-700'));
+00072:     expect(winnerScoreElement).toBeDefined();
+00073:     expect(winnerScoreElement).toHaveClass('text-blue-700');
+00074:     expect(screen.getByText('Unknown canonical trials are excluded from condition scores.')).toBeInTheDocument();
+00075:   });
+00076: 
+00077:   it('pools overview summary semantics across the companion run in paired mode', async () => {
+00078:     const analysis = createMockAnalysis({
+00079:       codeVersion: '1.1.1',
+00080:       preferenceSummary: {
+00081:         perModel: {
+00082:           'claude-3': {
+00083:             preferenceDirection: {
+00084:               byValue: {
+00085:                 Achievement: {
+00086:                   winRate: 0.9,
+00087:                   count: { prioritized: 9, deprioritized: 1, neutral: 0 },
+00088:                 },
+00089:                 Care: {
+00090:                   winRate: 0.2,
+00091:                   count: { prioritized: 2, deprioritized: 8, neutral: 0 },
+00092:                 },
+00093:               },
+00094:               overallLean: 'A',
+00095:               overallSignedCenter: 0.6,
+00096:             },
+00097:             preferenceStrength: 0.9,
+00098:           },
+00099:           'gpt-4': {
+00100:             preferenceDirection: {
+00101:               byValue: {
+00102:                 Achievement: {
+00103:                   winRate: 0.8,
+00104:                   count: { prioritized: 8, deprioritized: 2, neutral: 0 },
+00105:                 },
+00106:                 Care: {
+00107:                   winRate: 0.3,
+00108:                   count: { prioritized: 3, deprioritized: 7, neutral: 0 },
+00109:                 },
+00110:               },
+00111:               overallLean: 'A',
+00112:               overallSignedCenter: 0.4,
+00113:             },
+00114:             preferenceStrength: 0.8,
+00115:           },
+00116:         },
+00117:       },
+00118:       reliabilitySummary: {
+00119:         perModel: {
+00120:           'claude-3': {
+00121:             baselineNoise: 0.2,
+00122:             baselineReliability: 0.8,
+00123:             directionalAgreement: 0.8,
+00124:             neutralShare: 0.1,
+00125
+
+... [narrowed review slice: middle omitted] ...
+
+arios: [],
+00460:     });
+00461:     mockUseAnalysis.mockReturnValue({
+00462:       analysis,
+00463:       loading: false,
+00464:       error: null,
+00465:       refetch: vi.fn(),
+00466:       recompute: vi.fn(),
+00467:       recomputing: false,
+00468:     });
+00469: 
+00470:     render(
+00471:       <MemoryRouter>
+00472:         <AnalysisPanelHarness runId="run-1" analysisMode="paired" initialTab="scenarios" />
+00473:       </MemoryRouter>
+00474:     );
+00475: 
+00476:     expect(screen.getByRole('button', { name: 'Conditions' })).toBeInTheDocument();
+00477:     expect(screen.getByText('Pivot Analysis')).toBeInTheDocument();
+00478:   });
+00479: 
+00480:   it('shows aggregate evidence details when expanded', async () => {
+00481:     const analysis = createMockAnalysis({
+00482:       analysisType: 'AGGREGATE',
+00483:       codeVersion: '1.2.0',
+00484:       aggregateMetadata: {
+00485:         aggregateEligibility: 'eligible_same_signature_baseline',
+00486:         aggregateIneligibilityReason: null,
+00487:         sourceRunCount: 4,
+00488:         sourceRunIds: ['run-a', 'run-b', 'run-c', 'run-d'],
+00489:         conditionCoverage: {
+00490:           plannedConditionCount: 2,
+00491:           observedConditionCount: 2,
+00492:           complete: true,
+00493:         },
+00494:         perModelRepeatCoverage: {},
+00495:         perModelDrift: {},
+00496:       },
+00497:     });
+00498:     mockUseAnalysis.mockReturnValue({
+00499:       analysis,
+00500:       loading: false,
+00501:       error: null,
+00502:       refetch: vi.fn(),
+00503:       recompute: vi.fn(),
+00504:       recomputing: false,
+00505:     });
+00506: 
+00507:     render(
+00508:       <MemoryRouter>
+00509:         <AnalysisPanelHarness runId="run-1" isAggregate />
+00510:       </MemoryRouter>
+00511:     );
+00512: 
+00513:     await userEvent.click(screen.getByRole('button', { name: /^details$/i }));
+00514: 
+00515:     expect(screen.getByText('Decision Coverage')).toBeInTheDocument();
+00516:     expect(screen.getByText('Evidence: 4 contributing source runs pooled')).toBeInTheDocument();
+00517:   });
+00518: 
+00519:   it('shows the coverage cell batch count when provided', async () => {
+00520:     const analysis = createMockAnalysis({
+00521:       analysisType: 'AGGREGATE',
+00522:       codeVersion: '1.2.0',
+00523:       aggregateMetadata: {
+00524:         aggregateEligibility: 'eligible_same_signature_baseline',
+00525:         aggregateIneligibilityReason: null,
+00526:         sourceRunCount: 4,
+00527:         sourceRunIds: ['run-a', 'run-b', 'run-c', 'run-d'],
+00528:         conditionCoverage: {
+00529:           plannedConditionCount: 2,
+00530:           observedConditionCount: 2,
+00531:           complete: true,
+00532:         },
+00533:         perModelRepeatCoverage: {},
+00534:         perModelDrift: {},
+00535:       },
+00536:     });
+00537:     mockUseAnalysis.mockReturnValue({
+00538:       analysis,
+00539:       loading: false,
+00540:       error: null,
+00541:       refetch: vi.fn(),
+00542:       recompute: vi.fn(),
+00543:       recomputing: false,
+00544:     });
+00545: 
+00546:     render(
+00547:       <MemoryRouter>
+00548:         <AnalysisPanelHarness runId="run-1" isAggregate coverageBatchCount={5} />
+00549:       </MemoryRouter>
+00550:     );
+00551: 
+00552:     await userEvent.click(screen.getByRole('button', { name: /^details$/i }));
+00553: 
+00554:     expect(screen.getByText('Evidence: 5 batches from coverage cell')).toBeInTheDocument();
+00555:   });
+00556: 
+00557:   it('shows paired coverage counts when provided', async () => {
+00558:     const analysis = createMockAnalysis({
+00559:       analysisType: 'AGGREGATE',
+00560:       codeVersion: '1.2.0',
+00561:       aggregateMetadata: {
+00562:         aggregateEligibility: 'eligible_same_signature_baseline',
+00563:         aggregateIneligibilityReason: null,
+00564:         sourceRunCount: 4,
+00565:         sourceRunIds: ['run-a', 'run-b', 'run-c', 'run-d'],
+00566:         conditionCoverage: {
+00567:           plannedConditionCount: 2,
+00568:           observedConditionCount: 2,
+00569:           complete: true,
+00570:         },
+00571:         perModelRepeatCoverage: {},
+00572:         perModelDrift: {},
+00573:       },
+00574:     });
+00575:     mockUseAnalysis.mockReturnValue({
+00576:       analysis,
+00577:       loading: false,
+00578:       error: null,
+00579:       refetch: vi.fn(),
+00580:       recompute: vi.fn(),
+00581:       recomputing: false,
+00582:     });
+00583: 
+00584:     render(
+00585:       <MemoryRouter>
+00586:         <AnalysisPanelHarness
+00587:           runId="run-1"
+00588:           isAggregate
+00589:           coverageBatchCount={5}
+00590:           coveragePairedBatchCount={2}
+00591:         />
+00592:       </MemoryRouter>
+00593:     );
+00594: 
+00595:     await userEvent.click(screen.getByRole('button', { name: /^details$/i }));
+00596: 
+00597:     expect(screen.getByText('Evidence: 5 batches from coverage cell • 2 paired batc

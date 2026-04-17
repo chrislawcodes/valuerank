@@ -1,0 +1,67 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "Formula: netScore = ((2*strongly + somewhat) - (2*oppStrongly + oppSomewhat)) / totalTrials; range -2..+2",
+      "Direction: isOpponent = netScore < 0; netScore=0 renders with no fill (tie)",
+      "Label: magnitude only, Math.abs(netScore).toFixed(1); no sign character",
+      "Color: blue when selected leads, orange when opponent leads, none at tie; opacity = |netScore|/2",
+      "Applies to all three views: ConditionMatrix, ConditionDecisionsTable, PivotAnalysisTable",
+      "Shared helper canonicalConditionSummary.ts becomes single source of truth",
+      "Rename winnerScore -> netScore in helper return shape; update all call sites",
+      "ConditionMatrix inline formula deleted; component consumes shared helper",
+      "Test fixtures in canonicalConditionSummary.test.ts, ConditionDecisionsTable.test.tsx, AnalysisPanel.test.tsx, PivotAnalysisTable.test.tsx, DomainAnalysisValueDetail.test.tsx updated to match new formula",
+      "No snapshot rebuild required: snapshots store raw counts, not computed score",
+      "No GraphQL schema change: API exposes raw counts; fix is purely client-side"
+    ],
+    "summary": "All discovery questions pre-resolved during user conversation. See assumptions in state.",
+    "updated_at": 1776378513,
+    "answers": {},
+    "non_goals": [
+      "Changing GraphQL schema or API raw count exposure",
+      "Changing per-transcript preferenceScore in CSV/XLSX exports",
+      "Changing meanPreferenceScore aggregation in XLSX model summary",
+      "Rebuilding domain analysis snapshots"
+    ],
+    "acceptance_criteria": [
+      "Preflight passes: lint + build + tests for shared, db, api, web workspaces",
+      "All three views (ConditionMatrix, ConditionDecisionsTable, PivotAnalysisTable) show identical score for identical raw count inputs",
+      "3-somewhat-opponent vs 2-somewhat-selected scenario displays 0.2 in faint opponent color (not 0.6 or 1)",
+      "2-strongly-each + 1-neutral tie scenario displays 0.0 with no fill",
+      "5-strongly-opponent blowout displays 2.0 in full-opacity opponent color",
+      "No labels show a sign character (all magnitudes)"
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "parallel_analysis": {
+    "reviewed": true,
+    "found": false,
+    "note": "Slices 2 and 3 are independent once Slice 1 lands \u2014 both consume the new shared module surface without touching each other's files. They could run in parallel. Leaving sequential for review simplicity (each slice gets its own diff checkpoint). Within slices, no parallelization opportunities.",
+    "updated_at": 1776385683
+  },
+  "init_head_sha": "4e004170f20c02775df6909445da3f2d9933d2fa",
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "checkpoint_fallback": {}
+}
