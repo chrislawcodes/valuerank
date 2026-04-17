@@ -198,7 +198,8 @@ export function getConditionCellDisplay(summary: CanonicalConditionSummary): Con
   }
 
   const netScore = summary.netScore ?? 0;
-  const label = Math.abs(netScore).toFixed(1);
+  const magnitude = Math.abs(netScore);
+  const label = magnitude.toFixed(1);
 
   if (summary.direction === 'neutral') {
     return {
@@ -211,27 +212,21 @@ export function getConditionCellDisplay(summary: CanonicalConditionSummary): Con
     };
   }
 
-  const isOpponent = summary.direction === 'opponent';
+  // Directional fill: magnitude in [0, 2] maps linearly to opacity [0, 0.5].
+  const clamped = Math.min(2, Math.max(0, magnitude));
+  const opacity = (clamped / 2) * 0.5;
+  const isOpposing = summary.direction === 'opponent';
+  const backgroundColor = isOpposing
+    ? `rgba(251, 146, 60, ${opacity})`
+    : `rgba(59, 130, 246, ${opacity})`;
+  const textColorClass = isOpposing ? 'text-orange-700' : 'text-blue-700';
+
   return {
     netScore: summary.netScore,
     direction: summary.direction,
     hasData: true,
     label,
-    backgroundColor: getCanonicalConditionBackground(Math.abs(netScore), isOpponent),
-    textColorClass: getCanonicalConditionTextColor(isOpponent),
+    backgroundColor,
+    textColorClass,
   };
-}
-
-export function getCanonicalConditionBackground(score: number, isOpponent: boolean): string {
-  // score is a magnitude in the 0–2 range. Opacity scales linearly from 0 (no conviction) to 1 (max conviction).
-  const clamped = Math.min(2, Math.max(0, score));
-  const opacity = clamped / 2;
-  if (isOpponent) {
-    return `rgba(251, 146, 60, ${opacity * 0.5})`;
-  }
-  return `rgba(59, 130, 246, ${opacity * 0.5})`;
-}
-
-export function getCanonicalConditionTextColor(isOpponent: boolean): string {
-  return isOpponent ? 'text-orange-700' : 'text-blue-700';
 }
