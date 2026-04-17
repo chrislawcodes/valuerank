@@ -59,6 +59,7 @@ export type RunSummary = {
   insights?: string[];
   llmSummary?: string;
   analysisStatus: 'pending' | 'completed' | 'failed';
+  unresolvable: { total: number; byModel: { modelId: string; count: number }[] };
 };
 
 /**
@@ -288,6 +289,7 @@ export function formatRunSummary(
     },
     mostContestedScenarios: [],
     analysisStatus: 'pending',
+    unresolvable: { total: 0, byModel: [] },
   };
 
   if (!analysis) {
@@ -358,6 +360,7 @@ export function formatRunSummary(
     ...(insights && { insights }),
     ...(llmSummary !== undefined && { llmSummary }),
     analysisStatus: analysis.status === 'CURRENT' ? 'completed' : 'pending',
+    unresolvable: { total: 0, byModel: [] },
   };
 }
 
