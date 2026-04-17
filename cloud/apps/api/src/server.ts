@@ -32,7 +32,7 @@ export function createServer() {
 
   // Middleware
   app.use(compression());
-  app.use(cors());
+  app.use(cors({ exposedHeaders: ['Content-Disposition'] }));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true })); // For OAuth form submissions
 
