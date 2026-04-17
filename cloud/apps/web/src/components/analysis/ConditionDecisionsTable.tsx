@@ -23,13 +23,12 @@ import {
   summarizeCanonicalConditionTranscripts,
   type CanonicalConditionSummary,
 } from '../../utils/canonicalConditionSummary';
-
-type ModelHeader = {
-  familyKey: string;
-  familyLabel: string;
-  modelId: string;
-  variantLabel: string;
-};
+import {
+  buildModelHeaders,
+  groupModelHeadersByFamily,
+  hasGroupedFamilyVariants,
+} from './modelHeaderLabels';
+import { ConditionDecisionsTableHead } from './ConditionDecisionsTableHead';
 
 type ConditionDecisionsTableProps = {
   runId: string;
@@ -54,188 +53,6 @@ type ConditionDecisionsTableProps = {
   externalSelectedModels?: string[];
 };
 
-function inferModelFamily(modelId: string): { key: string; label: string } {
-  const normalized = modelId.toLowerCase().replace(/^[^:]+:/, '');
-
-  if (normalized.includes('deepseek')) {
-    return { key: 'deepseek', label: 'DeepSeek' };
-  }
-  if (normalized.includes('claude')) {
-    if (normalized.includes('sonnet')) {
-      return { key: 'claude-sonnet', label: 'Sonnet' };
-    }
-    if (normalized.includes('haiku')) {
-      return { key: 'claude-haiku', label: 'Haiku' };
-    }
-    if (normalized.includes('opus')) {
-      return { key: 'claude-opus', label: 'Opus' };
-    }
-    return { key: 'claude', label: 'Claude' };
-  }
-  if (normalized.includes('gemini')) {
-    return { key: 'gemini', label: 'Gemini' };
-  }
-  if (normalized.includes('grok')) {
-    return { key: 'grok', label: 'Grok' };
-  }
-  if (normalized.includes('gpt')) {
-    return { key: 'gpt', label: 'GPT' };
-  }
-  if (normalized.startsWith('o1') || normalized.startsWith('o3') || normalized.startsWith('o4')) {
-    const familyToken = normalized.split(/[-_\s.]/, 1)[0] ?? normalized;
-    return { key: familyToken, label: familyToken.toUpperCase() };
-  }
-  if (normalized.includes('mistral')) {
-    return { key: 'mistral', label: 'Mistral' };
-  }
-
-  return { key: normalized || modelId, label: formatModelDisplayName(normalized || modelId) };
-}
-
-function formatModelDisplayName(label: string): string {
-  return formatDisplayLabel(label)
-    .split(/([-\s]+)/)
-    .map((part) => {
-      if (/^[-\s]+$/.test(part)) return part;
-
-      const normalized = part.toLowerCase();
-      if (normalized === 'gpt') return 'GPT';
-      if (normalized === 'xai') return 'xAI';
-      if (normalized === 'openai') return 'OpenAI';
-      if (normalized === 'anthropic') return 'Anthropic';
-      if (normalized === 'google') return 'Google';
-      if (normalized === 'deepseek') return 'DeepSeek';
-      if (normalized === 'mistral') return 'Mistral';
-      if (normalized === 'claude') return 'Claude';
-      if (normalized === 'gemini') return 'Gemini';
-      if (normalized === 'grok') return 'Grok';
-      if (normalized === 'chat') return 'Chat';
-      if (normalized === 'reasoner') return 'Reasoner';
-      if (normalized === 'flash') return 'Flash';
-      if (normalized === 'pro') return 'Pro';
-      if (normalized === 'mini') return 'Mini';
-      if (normalized === 'fast') return 'Fast';
-      if (normalized === 'sonnet') return 'Sonnet';
-      if (normalized === 'haiku') return 'Haiku';
-      if (normalized === 'opus') return 'Opus';
-
-      if (/^[a-z]/.test(part)) {
-        return part.charAt(0).toUpperCase() + part.slice(1);
-      }
-
-      return part;
-    })
-    .join('');
-}
-
-function formatClaudeVariantLabel(variant: string): string {
-  const tokens = variant
-    .toLowerCase()
-    .split(/[-_\s]+/)
-    .filter(Boolean);
-
-  const style = tokens.find((token) => token === 'sonnet' || token === 'haiku' || token === 'opus');
-  if (!style) {
-    return formatModelDisplayName(variant);
-  }
-
-  const numericTokens = tokens.filter((token) => /^\d+$/.test(token));
-  let version = '';
-  if (numericTokens.length >= 2) {
-    version = `${numericTokens[0]}.${numericTokens[1]}`;
-  } else if (numericTokens.length === 1) {
-    version = numericTokens[0] ?? '';
-  }
-
-  const styleLabel = formatModelDisplayName(style);
-  return version ? `${styleLabel} ${version}` : styleLabel;
-}
-
-function formatClaudeVersionLabel(variant: string): string {
-  const tokens = variant
-    .toLowerCase()
-    .split(/[-_\s]+/)
-    .filter(Boolean);
-
-  const numericTokens = tokens.filter((token) => /^\d+$/.test(token));
-  if (numericTokens.length >= 2) {
-    return `${numericTokens[0]}.${numericTokens[1]}`;
-  }
-  if (numericTokens.length === 1) {
-    return numericTokens[0] ?? '';
-  }
-
-  return formatModelDisplayName(variant);
-}
-
-function formatGrokVariantLabel(variant: string): string {
-  const tokens = variant
-    .toLowerCase()
-    .split(/[-_\s]+/)
-    .filter(Boolean);
-
-  const numericTokens = tokens.filter((token) => /^\d+$/.test(token));
-  let version = '';
-  if (numericTokens.length >= 2) {
-    version = `${numericTokens[0]}.${numericTokens[1]}`;
-  } else if (numericTokens.length === 1) {
-    version = numericTokens[0] ?? '';
-  }
-
-  if (tokens.includes('fast') && tokens.includes('reasoning')) {
-    return `${version ? `${version} ` : ''}Fast\nReasoning`;
-  }
-
-  return formatModelDisplayName(variant);
-}
-
-function formatModelVariantLabel(modelId: string, familyKey: string): string {
-  let variant = modelId.replace(/^[^:]+:/, '');
-
-  if (familyKey === 'deepseek') {
-    variant = variant.replace(/^deepseek[-_ ]*/i, '');
-  } else if (familyKey === 'claude' || familyKey.startsWith('claude-')) {
-    variant = variant.replace(/^(anthropic[-_ ]*)?claude[-_ ]*/i, '');
-  } else if (familyKey === 'gemini') {
-    variant = variant.replace(/^(google[-_ ]*)?gemini[-_ ]*/i, '');
-  } else if (familyKey === 'grok') {
-    variant = variant.replace(/^(xai[-_ ]*)?grok[-_ ]*/i, '');
-  } else if (familyKey === 'gpt') {
-    variant = variant.replace(/^(openai[-_ ]*)?gpt[-_ ]*/i, '');
-  } else if (/^o[134]/.test(familyKey)) {
-    variant = variant.replace(new RegExp(`^${familyKey}[-_ ]*`, 'i'), '');
-  } else if (familyKey === 'mistral') {
-    variant = variant.replace(/^mistral[-_ ]*/i, '');
-  }
-
-  if (!variant.trim()) {
-    variant = modelId;
-  }
-
-  if (familyKey === 'claude') {
-    return formatClaudeVariantLabel(variant);
-  }
-  if (familyKey.startsWith('claude-')) {
-    return formatClaudeVersionLabel(variant);
-  }
-  if (familyKey === 'grok') {
-    return formatGrokVariantLabel(variant);
-  }
-
-  return formatModelDisplayName(variant);
-}
-
-function buildModelHeaders(modelIds: string[]): ModelHeader[] {
-  return modelIds.map((modelId) => {
-    const family = inferModelFamily(modelId);
-    return {
-      familyKey: family.key,
-      familyLabel: family.label,
-      modelId,
-      variantLabel: formatModelVariantLabel(modelId, family.key),
-    };
-  });
-}
 
 export function ConditionDecisionsTable({
   runId,
@@ -307,37 +124,12 @@ export function ConditionDecisionsTable({
     [models, localSelectedModels, externalSelectedModels],
   );
   const modelHeaders = useMemo(() => buildModelHeaders(visibleModels), [visibleModels]);
-  const groupedModelHeaders = useMemo(() => {
-    const groups: Array<{
-      familyKey: string;
-      familyLabel: string;
-      models: ModelHeader[];
-    }> = [];
-    const byFamily = new Map<string, (typeof groups)[number]>();
-
-    modelHeaders.forEach((header) => {
-      const existing = byFamily.get(header.familyKey);
-      if (existing) {
-        existing.models.push(header);
-        return;
-      }
-
-      const nextGroup = {
-        familyKey: header.familyKey,
-        familyLabel: header.familyLabel,
-        models: [header],
-      };
-      groups.push(nextGroup);
-      byFamily.set(header.familyKey, nextGroup);
-    });
-
-    return groups;
-  }, [modelHeaders]);
+  const groupedModelHeaders = useMemo(
+    () => groupModelHeadersByFamily(modelHeaders),
+    [modelHeaders],
+  );
   const hasGroupedFamilies = useMemo(
-    () =>
-      groupedModelHeaders.some((group) =>
-        group.models.some((header) => header.variantLabel !== group.familyLabel)
-      ),
+    () => hasGroupedFamilyVariants(groupedModelHeaders),
     [groupedModelHeaders],
   );
 
@@ -521,73 +313,13 @@ export function ConditionDecisionsTable({
 
       <div ref={meanTableRef} className="overflow-x-auto">
         <table className="min-w-full table-fixed border-collapse">
-          <thead>
-            {hasGroupedFamilies ? (
-              <>
-                <tr>
-                  <th
-                    rowSpan={2}
-                    className="border border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600"
-                  >
-                    {formatDisplayLabel(attributeA)}
-                  </th>
-                  <th
-                    rowSpan={2}
-                    className="w-36 border border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600 whitespace-normal break-words"
-                  >
-                    {formatDisplayLabel(attributeB)}
-                  </th>
-                  {groupedModelHeaders.map((group) => (
-                    <th
-                      key={group.familyKey}
-                      colSpan={group.models.length}
-                      rowSpan={
-                        group.models.length === 1 && group.models[0]?.variantLabel === group.familyLabel
-                          ? 2
-                          : undefined
-                      }
-                      className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-gray-600"
-                    >
-                      {group.familyLabel}
-                    </th>
-                  ))}
-                </tr>
-                <tr>
-                  {groupedModelHeaders.flatMap((group) =>
-                    group.models.length === 1 && group.models[0]?.variantLabel === group.familyLabel
-                      ? []
-                      : group.models.map((header) => (
-                          <th
-                            key={header.modelId}
-                            className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700 whitespace-pre-line break-words leading-4"
-                            title={header.modelId}
-                          >
-                            {header.variantLabel}
-                          </th>
-                        ))
-                  )}
-                </tr>
-              </>
-            ) : (
-              <tr>
-                <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">
-                  {formatDisplayLabel(attributeA)}
-                </th>
-                <th className="w-36 border border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600 whitespace-normal break-words">
-                  {formatDisplayLabel(attributeB)}
-                </th>
-                {modelHeaders.map((header) => (
-                  <th
-                    key={header.modelId}
-                    className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700 whitespace-pre-line break-words leading-4"
-                    title={header.modelId}
-                  >
-                    {header.variantLabel}
-                  </th>
-                ))}
-              </tr>
-            )}
-          </thead>
+          <ConditionDecisionsTableHead
+            attributeA={attributeA}
+            attributeB={attributeB}
+            modelHeaders={modelHeaders}
+            groupedModelHeaders={groupedModelHeaders}
+            hasGroupedFamilies={hasGroupedFamilies}
+          />
           <tbody>
             {sortedConditionRows.map((row) => (
               <tr key={row.id}>

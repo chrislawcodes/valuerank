@@ -25,6 +25,7 @@ import {
 } from '../../utils/canonicalConditionSummary';
 import { compareConditionLevels } from '../../utils/conditionOrdering';
 import { resolveConditionDecisionLabelPair } from '../../utils/conditionDecisionSummary';
+import { PivotAnalysisLegend, type LegendCounts } from './PivotAnalysisLegend';
 
 type PivotAnalysisTableProps = {
     runId: string;
@@ -41,31 +42,6 @@ type PivotAnalysisTableProps = {
      */
     selectedModels?: string[];
 };
-
-type LegendCounts = {
-    low: number;
-    neutral: number;
-    high: number;
-};
-
-function Legend({ lowName, highName, counts }: { lowName: string; highName: string; counts: LegendCounts }) {
-    return (
-        <div className="flex items-center gap-4 text-xs text-gray-500">
-            <div className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-blue-100 border border-blue-200"></span>
-                <span className="font-medium text-blue-800">{formatDisplayLabel(lowName)} {counts.low}</span>
-            </div>
-            <div className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-gray-100 border border-gray-200"></span>
-                <span>Neutral {counts.neutral}</span>
-            </div>
-            <div className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-orange-100 border border-orange-200"></span>
-                <span className="font-medium text-orange-800">{formatDisplayLabel(highName)} {counts.high}</span>
-            </div>
-        </div>
-    );
-}
 
 export function PivotAnalysisTable({
     runId,
@@ -281,7 +257,7 @@ export function PivotAnalysisTable({
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                    <Legend
+                    <PivotAnalysisLegend
                         lowName={sideAttributeMap.lowAttribute}
                         highName={sideAttributeMap.highAttribute}
                         counts={legendCounts}
