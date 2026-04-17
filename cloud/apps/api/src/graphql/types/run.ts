@@ -361,7 +361,7 @@ builder.objectType(RunRef, {
           }>>`
             SELECT id, data, state, completed_on, output
             FROM pgboss.job
-            WHERE (name = 'probe_scenario' OR (name LIKE 'probe_%' AND name != 'probe_dead_letter'))
+            WHERE name = 'probe_scenario'
               AND data->>'runId' = ${run.id}
               AND state IN ('completed', 'failed')
             ORDER BY completed_on DESC NULLS LAST
