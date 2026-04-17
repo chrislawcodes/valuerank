@@ -160,10 +160,12 @@ function summarizeCanonicalConditionTally(counts: CanonicalConditionTally): Cano
     - (2 * counts.opponentStrongly + counts.opponentSomewhat)
   ) / totalTrials;
 
+  // Threshold is inclusive (>= 0.05) so it aligns with the one-decimal label:
+  // |netScore| >= 0.05 rounds to "0.1" and should render directional, not neutral.
   let direction: CanonicalConditionSummary['direction'] = 'neutral';
-  if (netScore > 0.05) {
+  if (netScore >= 0.05) {
     direction = 'self';
-  } else if (netScore < -0.05) {
+  } else if (netScore <= -0.05) {
     direction = 'opponent';
   }
 
