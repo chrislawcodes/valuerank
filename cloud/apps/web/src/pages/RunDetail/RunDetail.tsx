@@ -5,7 +5,6 @@
  */
 
 import { useState } from 'react';
-import type * as React from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Play } from 'lucide-react';
 import { formatTrialSignature } from '@valuerank/shared/trial-signature';

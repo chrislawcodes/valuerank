@@ -1,4 +1,4 @@
-import type * as React from 'react';
+import type { ReactNode } from 'react';
 import type { Run } from '../../api/operations/runs';
 
 export function formatRunDate(dateString: string | Date): string {
@@ -15,7 +15,7 @@ export function getDisplaySignature(signature: string): string {
   return signature !== 'v?td' ? signature : 'Unknown Signature';
 }
 
-export function StalledModelsBanner({ run }: { run: Run }): React.ReactNode {
+export function StalledModelsBanner({ run }: { run: Run }): ReactNode {
   if (run.status !== 'RUNNING') return null;
   if (run.stalledModels == null || run.stalledModels.length === 0) return null;
   const count = run.stalledModels.length;
@@ -33,7 +33,7 @@ export function UnresolvableBanner({
   data,
 }: {
   data: { total: number; byModel: { modelId: string; count: number }[] } | null | undefined;
-}): React.ReactNode {
+}): ReactNode {
   if (data == null || data.total === 0) return null;
   return (
     <div className="border border-amber-400 bg-amber-50 rounded-lg p-4 mb-4">
