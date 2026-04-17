@@ -1,0 +1,221 @@
+00001: /**
+00002:  * RunDetail Page
+00003:  *
+00004:  * Displays details of a single run including progress and results.
+00005:  */
+00006: 
+00007: import { useState, useCallback } from 'react';
+00008: import type * as React from 'react';
+00009: import { useParams, useNavigate, Link } from 'react-router-dom';
+00010: import { ArrowLeft, Play } from 'lucide-react';
+00011: import { formatTrialSignature } from '@valuerank/shared/trial-signature';
+00012: import { formatRunName } from '../../lib/format';
+00013: import { Button } from '../../components/ui/Button';
+00014: import { Loading } from '../../components/ui/Loading';
+00015: import { ErrorMessage } from '../../components/ui/ErrorMessage';
+00016: import { RunProgress } from '../../components/runs/RunProgress';
+00017: import { RunResults } from '../../components/runs/RunResults';
+00018: import { SummarizationControls } from '../../components/runs/SummarizationControls';
+00019: import { RerunDialog } from '../../components/runs/RerunDialog';
+00020: import { useRun } from '../../hooks/useRun';
+00021: import { useAnalysis } from '../../hooks/useAnalysis';
+00022: import { useRunMutations } from '../../hooks/useRunMutations';
+00023: import { exportRunAdjudicationCSV, exportRunAsCSV, exportTranscriptsAsJSON } from '../../api/export';
+00024: import type { Run } from '../../api/operations/runs';
+00025: import { RunHeader } from './RunHeader';
+00026: import { RunMetadata } from './RunMetadata';
+00027: import { RunNameEditor } from './RunNameEditor';
+00028: import { AnalysisBanner } from './AnalysisBanner';
+00029: import { DeleteConfirmModal } from './DeleteConfirmModal';
+00030: import { formatTemperatureSetting } from '../../lib/temperature';
+00031: import { getDefinitionMethodology, getDefinitionMethodologyLabel } from '../../utils/methodology';
+00032: 
+00033: function formatDate(dateString: string | Date): string {
+00034:   const date = new Date(dateString);
+00035:   return date.toLocaleDateString('en-US', {
+00036:     month: 'short',
+00037:     day: 'numeric',
+00038:     hour: '2-digit',
+00039:     minute: '2-digit',
+00040:   });
+00041: }
+00042: 
+00043: function getDisplaySignature(signature: string): string {
+00044:   return signature !== 'v?td' ? signature : 'Unknown Signature';
+00045: }
+00046: 
+00047: function getStalledModelsBanner(run: Run): React.ReactNode | null {
+00048:   if (run.status !== 'RUNNING') return null;
+00049:   if (run.stalledModels == null || run.stalledModels.length === 0) return null;
+00050:   const count = run.stalledModels.length;
+00051:   const label = count === 1 ? 'model is' : 'models are';
+00052:   return (
+00053:     <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+00054:       <p className="text-sm font-medium text-amber-800">
+00055:         {`${count} ${label} stalled (no progress for 3+ minutes): ${run.stalledModels.join(', ')}`}
+00056:       </p>
+00057:     </div>
+00058:   );
+00059: }
+00060: 
+00061: export function RunDetail() {
+00062:   const navigate = useNavigate();
+00063:   const { id } = useParams<{ id: string }>();
+00064:   const [isExporting, setIsExporting] = useState(false);
+00065:   const [isExportingAdjudication, setIsExportingAdjudication] = useState(false);
+00066:   const [isExportingTranscripts, setIsExportingTranscripts] = useState(false);
+00067:   const [exportError, setExportError] = useState<string | null>(null);
+00068:   const [isRerunDialogOpen, setIsRerunDialogOpen] = useState(false);
+00069:   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+00070:   const [isDeleting, setIsDeleting] = useState(false);
+00071: 
+00072:   const { run, loading, error, refetch } = useRun({
+00073:     id: id || '',
+00074:     pause: !id,
+00075:     enablePolling: true,
+00076:   });
+00077:   const { analysis } = useAnalysis({
+00078:     runId: id || '',
+00079:     pause: !id,
+00080:     enablePolling: false,
+00081:     analysisStatus: run?.analysisStatus ?? null,
+00082:   });
+00083: 
+00084:   // Build scenarioDimensions from transcript dimensionValues as a fallback when analysis is not yet available.
+00085:   const scenarioDimensionsFromTranscripts = (() => {
+00086:     const transcripts = run?.transcripts;
+00087:     if (!transcripts) return undefined;
+00088:     const result: Record<string, Record<string, string | number>> = {};
+00089:     let hasAny = false;
+00090:     for (const t of transcripts) {
+00091:       if (t.scenarioId && t.dimensionValues && Object.keys(t.dimensionValues).length > 0) {
+00092:         result[t.scenarioId] = t.dimensionValues;
+00093:         hasAny = true;
+00094:       }
+00095:     }
+00096:     return hasAny ? result : undefined;
+00097:   })();
+00098: 
+00099:   const {
+00100:     pauseRun,
+00101:     resumeRun,
+00102:     cancelRun,
+00103:     deleteRun,
+00104:     updateRun,
+00105:     cancelSummarization,
+00106:     restartSummarization,
+00107:     updateTranscriptDecision,
+00108:   } = useRunMutations();
+00109: 
+00110:   const handleSaveName = useCallback(
+
+... [narrowed review slice: middle omitted] ...
+
+n className="text-sm text-gray-500">
+00387:                     · <span className="font-mono">{getDisplaySignature(trialSignature)}</span> · {run.definition?.name || 'Vignette'} · {formatDate(run.createdAt)}
+00388:                   </span>
+00389:                 </div>
+00390:               </div>
+00391:             </div>
+00392:           </div>
+00393:         </div>
+00394: 
+00395:         {/* Metadata row */}
+00396:         <RunMetadata
+00397:           createdAt={run.createdAt}
+00398:           startedAt={run.startedAt}
+00399:           completedAt={run.completedAt}
+00400:           temperature={run.config?.temperature}
+00401:         />
+00402: 
+00403:         {/* Analysis link banner */}
+00404:         <div className="mb-6">
+00405:           <AnalysisBanner runId={run.id} analysisStatus={run.analysisStatus} runStatus={run.status} />
+00406:         </div>
+00407: 
+00408:         {/* Progress */}
+00409:         <div className="mb-6">
+00410:           <div className="flex items-center gap-2 mb-4">
+00411:             <h3 className="text-sm font-medium text-gray-700">Progress</h3>
+00412:             {isPairedRun && run.config?.jobChoiceLaunchMode === 'PAIRED_BATCH' && (
+00413:               <span className="text-xs font-medium text-teal-600">· 1 of 2 vignettes</span>
+00414:             )}
+00415:           </div>
+00416:           <RunProgress run={run} showPerModel={true} />
+00417:         </div>
+00418: 
+00419:         {/* Configuration */}
+00420:         <div className="border-t border-gray-200 pt-6">
+00421:           <h2 className="text-lg font-medium text-gray-900 mb-4">Start Evaluation Trial</h2>
+00422:           <div className="grid grid-cols-2 gap-4 text-sm">
+00423:             <div>
+00424:               <span className="text-gray-500">Models:</span>
+00425:               <div className="mt-1">
+00426:                 {run.config?.models?.map((model) => (
+00427:                   <span
+00428:                     key={model}
+00429:                     className="inline-flex items-center px-2 py-1 rounded bg-gray-100 text-gray-700 text-xs mr-2 mb-1"
+00430:                   >
+00431:                     {model}
+00432:                   </span>
+00433:                 ))}
+00434:               </div>
+00435:             </div>
+00436:             <div>
+00437:               <span className="text-gray-500">Sample:</span>
+00438:               <span className="ml-2 text-gray-900">{run.config?.samplePercentage ?? 100}%</span>
+00439:             </div>
+00440:             <div>
+00441:               <span className="text-gray-500">Temperature:</span>
+00442:               <span className="ml-2 text-gray-900">{formatTemperatureSetting(run.config?.temperature)}</span>
+00443:             </div>
+00444:           </div>
+00445:         </div>
+00446: 
+00447:         {/* Results section */}
+00448:         {(isTerminal || run.transcriptCount > 0) && (
+00449:           <div className="border-t border-gray-200 pt-6 mt-6">
+00450:             <h3 className="text-lg font-medium text-gray-900 mb-2">Results</h3>
+00451:             {exportError && (
+00452:               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+00453:                 {exportError}
+00454:               </div>
+00455:             )}
+00456:             <RunResults
+00457:               run={run}
+00458:               onExport={() => void handleExport()}
+00459:               isExporting={isExporting}
+00460:               onExportAdjudication={isPairedRun ? () => void handleExportAdjudication() : undefined}
+00461:               isExportingAdjudication={isExportingAdjudication}
+00462:               onExportTranscripts={() => void handleExportTranscripts()}
+00463:               isExportingTranscripts={isExportingTranscripts}
+00464:               scenarioDimensions={analysis?.visualizationData?.scenarioDimensions ?? scenarioDimensionsFromTranscripts}
+00465:               onUpdateTranscriptDecision={handleUpdateTranscriptDecision}
+00466:             />
+00467:           </div>
+00468:         )}
+00469:       </div>
+00470: 
+00471:       {/* Polling indicator for active runs */}
+00472:       {(isActive || isPaused) && (
+00473:         <div className="text-center text-sm text-gray-500">
+00474:           {isActive ? 'Updating every 5 seconds...' : 'Trial is paused'}
+00475:         </div>
+00476:       )}
+00477: 
+00478:       {/* Re-run Dialog */}
+00479:       <RerunDialog
+00480:         run={run}
+00481:         scenarioCount={run.runProgress?.total}
+00482:         isOpen={isRerunDialogOpen}
+00483:         onClose={() => setIsRerunDialogOpen(false)}
+00484:         onSuccess={handleRerunSuccess}
+00485:       />
+00486: 
+00487:       {/* Delete Confirmation Dialog */}
+00488:       <DeleteConfirmModal
+00489:         isOpen={isDeleteConfirmOpen}
+00490:         isDeleting={isDeleting}
+00491:         onClose={() => setIsDeleteConfirmOpen(false)}
+00492:         onConfirm={() => void handleDelete()}
+0049

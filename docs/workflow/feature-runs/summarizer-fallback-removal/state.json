@@ -1,0 +1,51 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "LLM fallback removal: both classify_decision_with_llm call sites in extract_decision_result are replaced with immediate ambiguous classification; the function itself stays in summarize_llm.py for manual use",
+      "Unresolvable = summarized_at IS NOT NULL AND (decision_code=other OR decisionState=unknown OR parseClass=ambiguous). Neutral (decisionState=neutral) is NOT unresolvable.",
+      "Status page warning on run detail page in web UI; shows total count plus per-model breakdown"
+    ],
+    "summary": "",
+    "updated_at": 1776405465,
+    "answers": {},
+    "non_goals": [
+      "Backfill existing ambiguous transcripts"
+    ],
+    "acceptance_criteria": [
+      "Run detail page shows no warning when all transcripts are resolved"
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "parallel_analysis": {
+    "reviewed": true,
+    "found": false,
+    "note": "No parallel opportunities \u2014 waves are sequential. Wave 3 depends on Wave 2 GraphQL field. Python and TypeScript changes are in separate files but must be done in order.",
+    "updated_at": 1776407929
+  },
+  "init_head_sha": "6aa2af3410351431f88a8a4bc12fda6deeef7c8e",
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "checkpoint_fallback": {}
+}

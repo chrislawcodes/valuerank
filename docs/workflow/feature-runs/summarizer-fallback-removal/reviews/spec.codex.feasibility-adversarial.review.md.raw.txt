@@ -1,0 +1,7 @@
+## Findings
+- Medium [CODE-CONFIRMED]: The spec uses `decisionCodeSource` in US-1 scenario 3, but the current summarize worker returns `decisionSource` in the summary payload. If this is implemented literally, the test or API contract will point at a field that does not exist in the worker output.
+- Medium [CODE-CONFIRMED]: The unresolvable definition omits `decisionCode = "refusal"`, even though the summarize path can emit `refusal` through `classify_decision_with_llm`. That means transcripts that still lack a usable score can be excluded from the warning and per-model count.
+
+## Residual Risks
+- The API/web code needed to compute the run-level warning is not provided, so the exact aggregation logic and whether it counts only summarized transcripts remain unverified.
+- The spec does not define the canonical model key for the per-model breakdown, so partial runs or transcripts with missing or normalized model metadata could be grouped inconsistently across layers.

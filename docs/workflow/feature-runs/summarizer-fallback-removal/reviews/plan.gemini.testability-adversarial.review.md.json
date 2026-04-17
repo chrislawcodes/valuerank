@@ -1,0 +1,57 @@
+{
+  "session_id": "cef42a70-9c11-47f4-82ec-93f2ef67c3cb",
+  "response": "## Findings\n\n| Severity | ID | Finding | Evidence |\n| --- | --- | --- | --- |\n| HIGH | TEST-1 | The proposed SQL definition of an \"unresolvable\" transcript relies on a brittle, untyped JSON path (`decision_metadata->'summaryCache'->'summary'->'canonicalDecision'->>'decisionState'`). This logic is difficult to test, impossible to statically type-check, and prone to silent failure if the upstream worker's JSON output changes. | [CODE-CONFIRMED] |\n| HIGH | TEST-2 | The plan implies duplicating the complex database query for `unresolvableTranscriptCount` across two separate locations: the GraphQL resolver (`run.ts`) and the MCP tool (`get-run-summary.ts`). This violates the DRY principle and doubles the maintenance and testing burden for what should be a single, canonical piece of business logic. | [CODE-CONFIRMED] |\n| MEDIUM | TEST-3 | The validation plan for the new GraphQL field (`unresolvableTranscriptCount`) and the new React UI banner lacks a requirement to add *new, specific tests*. It only mentions running the existing test suites. This creates a high risk that the new SQL logic and conditional UI rendering will ship without any targeted test coverage. | [UNVERIFIED] |\n| LOW | TEST-4 | The plan correctly notes that Python tests will need updates. However, it frames this as fixing failures rather than an opportunity to add explicit, positive test cases for the new `parseClass: 'ambiguous'` state. The test suite may lack coverage for inputs that were previously unhandled and will now correctly be flagged as ambiguous. | [UNVERIFIED] |\n\n### Details\n\n#### Finding TEST-1: Brittle JSON Path in SQL (HIGH)\n\nThe plan's SQL definition for \"unresolvable\" includes this condition:\n`decision_code IS NULL AND decision_metadata->'summaryCache'->'summary'->'canonicalDecision'->>'decisionState' = 'unknown'`\n\nThe `cloud/apps/web/src/api/operations/runs.ts` file defines the `Transcript` type, where the `decisionMetadata` field is typed as `unknown`. This confirms there is no static type safety for the shape of this data. Relying on a deep, string-based path into this blob for core business logic is extremely fragile. Any modification to the summarization worker's output or a data migration could break this logic silently, causing the `unresolvableTranscriptCount` to be wrong without throwing any errors. This makes unit testing nearly impossible without a live database containing specific, hard-to-create JSON structures.\n\n#### Finding TEST-2: Duplicated Query Logic (HIGH)\n\nThe plan outlines adding the `unresolvableTranscriptCount` logic in Wave 2 to `cloud/apps/api/src/graphql/types/run.ts` and in Wave 4 to `cloud/apps/api/src/mcp/tools/get-run-summary.ts`. The context files show these are distinct parts of the API that both interact directly with the database. Without a shared data access layer or service function, the only way to implement the plan as written is to copy and paste the raw SQL query. This is a significant testability and maintenance anti-pattern. A future change to the definition of \"unresolvable\" would require finding and updating all copies, and tests would need to be written and maintained for each instance.\n\n#### Finding TEST-3: Missing Requirement for New Tests (MEDIUM)\n\nThe validation plans for Wave 2 and Wave 3 state `npm run test --workspace @valuerank/api` and `npm run test --workspace @valuerank/web`, respectively. An adversarial tester assumes that if a new test is not explicitly required, it will not be written. The complex SQL query (Wave 2) and the conditional warning banner (Wave 3) are new, discrete units of logic that demand their own tests. Without them, there is no guarantee they work as intended or that they won't be broken by future changes. For example, a component test should be added for `RunDetail.tsx` that mocks a GraphQL response with a non-zero `unresolvableTranscriptCount` and asserts the warning banner is rendered correctly.\n\n## Residual Risks\n\n- **Technical Debt Proliferation:** The plan correctly identifies that it's following an existing pattern of using raw SQL in GraphQL resolvers. However, by adding more logic that depends on untyped `jsonb` fields (`decision_metadata`), the plan reinforces and expands this risky pattern instead of containing it. The underlying technical debt of untyped data blobs is the root cause of TEST-1, and this plan deepens the project's dependency on it.\n- **Inconsistent Resolution States:** The plan removes the LLM fallback from the `summarize.py` worker but does not touch `summarize_llm.py`. This leaves a potential for confusion where the LLM classification logic still exists in the codebase but is no longer used in the primary path. While this may be intentional, it creates a risk that a future developer might re-introduce it without understanding the full context, or that other parts of the system might still (erroneously) expect an LLM-based resolution path.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 35906
+        },
+        "tokens": {
+          "input": 2227,
+          "prompt": 33436,
+          "candidates": 1114,
+          "total": 36725,
+          "cached": 31209,
+          "thoughts": 2175,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 35906,
+            "tokens": {
+              "input": 2227,
+              "prompt": 33436,
+              "candidates": 1114,
+              "total": 36725,
+              "cached": 31209,
+              "thoughts": 2175,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

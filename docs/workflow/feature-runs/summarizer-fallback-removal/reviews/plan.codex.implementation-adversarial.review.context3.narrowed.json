@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/src/api/operations/runs.ts",
+  "source_artifact_sha256": "2be8c3e28bc8bcc9c9058e15802c483ab86426bb95c4e7f69c67914c5bb60b5e",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/summarizer-fallback-removal/reviews/plan.codex.implementation-adversarial.review.context3.narrowed.txt",
+  "narrowed_artifact_sha256": "34082a666ec352e39be81e2dfcdad8deaa9322d32e729dd1f844394dd4992d76",
+  "strategy": "head-tail-numbered-lines"
+}

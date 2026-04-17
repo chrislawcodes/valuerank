@@ -1,0 +1,252 @@
+00001: """Tests for summarize worker."""
+00002: 
+00003: import importlib
+00004: import json
+00005: import sys
+00006: from typing import Any
+00007: from unittest.mock import MagicMock, patch
+00008: 
+00009: import pytest
+00010: 
+00011: from common.errors import ErrorCode, LLMError, ValidationError, WorkerError
+00012: from common.llm_adapters import LLMResponse
+00013: 
+00014: 
+00015: class TestValidateInput:
+00016:     """Tests for input validation."""
+00017: 
+00018:     def test_valid_input(self) -> None:
+00019:         """Test validation passes for valid input."""
+00020:         from summarize import validate_input
+00021: 
+00022:         data = {
+00023:             "transcriptId": "transcript-123",
+00024:             "transcriptContent": {
+00025:                 "turns": [
+00026:                     {
+00027:                         "probePrompt": "What do you think?",
+00028:                         "targetResponse": "I choose 4",
+00029:                     }
+00030:                 ]
+00031:             },
+00032:         }
+00033:         # Should not raise
+00034:         validate_input(data)
+00035: 
+00036:     def test_missing_transcript_id(self) -> None:
+00037:         """Test validation fails for missing transcriptId."""
+00038:         from summarize import validate_input
+00039: 
+00040:         data = {
+00041:             "transcriptContent": {"turns": []},
+00042:         }
+00043: 
+00044:         with pytest.raises(ValidationError) as exc_info:
+00045:             validate_input(data)
+00046:         assert "transcriptId" in exc_info.value.message
+00047: 
+00048:     def test_missing_transcript_content(self) -> None:
+00049:         """Test validation fails for missing transcriptContent."""
+00050:         from summarize import validate_input
+00051: 
+00052:         data = {
+00053:             "transcriptId": "transcript-123",
+00054:         }
+00055: 
+00056:         with pytest.raises(ValidationError) as exc_info:
+00057:             validate_input(data)
+00058:         assert "transcriptContent" in exc_info.value.message
+00059: 
+00060:     def test_invalid_transcript_content_type(self) -> None:
+00061:         """Test validation fails for non-object transcriptContent."""
+00062:         from summarize import validate_input
+00063: 
+00064:         data = {
+00065:             "transcriptId": "transcript-123",
+00066:             "transcriptContent": "not an object",
+00067:         }
+00068: 
+00069:         with pytest.raises(ValidationError) as exc_info:
+00070:             validate_input(data)
+00071:         assert "must be an object" in exc_info.value.message
+00072: 
+00073:     def test_missing_turns_field(self) -> None:
+00074:         """Test validation fails for missing turns."""
+00075:         from summarize import validate_input
+00076: 
+00077:         data = {
+00078:             "transcriptId": "transcript-123",
+00079:             "transcriptContent": {},
+00080:         }
+00081: 
+00082:         with pytest.raises(ValidationError) as exc_info:
+00083:             validate_input(data)
+00084:         assert "turns must be an array" in exc_info.value.message
+00085: 
+00086:     def test_invalid_turns_type(self) -> None:
+00087:         """Test validation fails for non-array turns."""
+00088:         from summarize import validate_input
+00089: 
+00090:         data = {
+00091:             "transcriptId": "transcript-123",
+00092:             "transcriptContent": {"turns": "not an array"},
+00093:         }
+00094: 
+00095:         with pytest.raises(ValidationError) as exc_info:
+00096:             validate_input(data)
+00097:         assert "turns must be an array" in exc_info.value.message
+00098: 
+00099: 
+00100: def load_summarize_module(monkeypatch: pytest.MonkeyPatch, parser_version: str | None = None):
+00101:     """Reload summarize.py with controlled environment."""
+00102:     monkeypatch.delenv("SUMMARIZE_PARSER_VERSION", raising=False)
+00103:     if parser_version is not None:
+00104:         monkeypatch.setenv("SUMMARIZE_PARSER_VERSION", parser_version)
+00105:     sys.modules.pop("summarize", None)
+00106:     sys.modules.pop("summarize_batch", None)
+00107:     sys.modules.pop("summarize_extract", None)
+00108:     return importlib.import_module("summarize")
+00109: 
+00110: 
+00111: class TestExtractDecisionCodeFromText:
+00112:     """Tests for extract_decision_code_from_text helper function."""
+00113: 
+00114:     def test_structured_rating_format(self) -> None:
+00115:         """Test extraction of structured 'Rating: X' format."""
+00116:         from summarize import extract_decision_code_from_text
+00117: 
+00118:         result = extract_decision_code_from_text("Rating: 4\n\nThe AI chose 4 because...")
+00119:         assert result == "4"
+00120: 
+00121:     def test_structured_rating_case_insensitive(self) -> None:
+00122:         """Test that structured format is case-insensitive."""
+00123:         from summarize import extract_decision_code_from_text
+00124: 
+00125:         assert extract_decision_code_from_text("rating: 3") == "
+
+... [narrowed review slice: middle omitted] ...
+
+Test handling of invalid JSON."""
+01389:         from summarize_batch import main
+01390: 
+01391:         mock_stdin.read.return_value = "not valid json {"
+01392: 
+01393:         main()
+01394: 
+01395:         captured = capsys.readouterr()
+01396:         result = json.loads(captured.out)
+01397:         assert result["success"] is False
+01398:         assert "Invalid JSON" in result["error"]["message"]
+01399: 
+01400:     @patch("sys.stdin")
+01401:     def test_validation_error(
+01402:         self, mock_stdin: MagicMock, capsys: pytest.CaptureFixture[str]
+01403:     ) -> None:
+01404:         """Test handling of validation error."""
+01405:         from summarize_batch import main
+01406: 
+01407:         mock_stdin.read.return_value = json.dumps({
+01408:             "transcriptId": "t-123",
+01409:             # Missing transcriptContent
+01410:         })
+01411: 
+01412:         main()
+01413: 
+01414:         captured = capsys.readouterr()
+01415:         result = json.loads(captured.out)
+01416:         assert result["success"] is False
+01417:         assert ErrorCode.VALIDATION_ERROR.value == result["error"]["code"]
+01418: 
+01419:     @patch("summarize_batch.run_summarize_batch")
+01420:     @patch("sys.stdin")
+01421:     def test_batch_execution(
+01422:         self, mock_stdin: MagicMock, mock_run_batch: MagicMock, capsys: pytest.CaptureFixture[str]
+01423:     ) -> None:
+01424:         """Test batch execution path."""
+01425:         from summarize_batch import main
+01426: 
+01427:         mock_stdin.read.return_value = json.dumps({
+01428:             "transcripts": [
+01429:                 {
+01430:                     "transcriptId": "transcript-1",
+01431:                     "modelId": "anthropic:claude-3.5-sonnet",
+01432:                     "transcriptContent": {"turns": []},
+01433:                 },
+01434:                 {
+01435:                     "transcriptId": "transcript-2",
+01436:                     "modelId": "anthropic:claude-3.5-sonnet",
+01437:                     "transcriptContent": {"turns": []},
+01438:                 },
+01439:             ]
+01440:         })
+01441:         mock_run_batch.return_value = {
+01442:             "success": True,
+01443:             "summaries": [
+01444:                 {
+01445:                     "transcriptId": "transcript-1",
+01446:                     "success": True,
+01447:                     "summary": {
+01448:                         "decisionCode": "4",
+01449:                         "decisionSource": "deterministic",
+01450:                         "decisionText": None,
+01451:                         "decisionMetadata": {"parseClass": "exact"},
+01452:                     },
+01453:                 },
+01454:                 {
+01455:                     "transcriptId": "transcript-2",
+01456:                     "success": True,
+01457:                     "summary": {
+01458:                         "decisionCode": "2",
+01459:                         "decisionSource": "deterministic",
+01460:                         "decisionText": None,
+01461:                         "decisionMetadata": {"parseClass": "exact"},
+01462:                     },
+01463:                 },
+01464:             ],
+01465:         }
+01466: 
+01467:         main()
+01468: 
+01469:         captured = capsys.readouterr()
+01470:         result = json.loads(captured.out)
+01471:         assert result["success"] is True
+01472:         assert len(result["summaries"]) == 2
+01473:         mock_run_batch.assert_called_once()
+01474: 
+01475:     @patch("sys.stdin")
+01476:     def test_batch_validation_error(
+01477:         self, mock_stdin: MagicMock, capsys: pytest.CaptureFixture[str]
+01478:     ) -> None:
+01479:         """Test malformed batch envelopes stay in batch mode."""
+01480:         from summarize_batch import main
+01481: 
+01482:         mock_stdin.read.return_value = json.dumps({
+01483:             "transcripts": "not-a-list",
+01484:         })
+01485: 
+01486:         main()
+01487: 
+01488:         captured = capsys.readouterr()
+01489:         result = json.loads(captured.out)
+01490:         assert result["success"] is False
+01491:         assert result["error"]["code"] == ErrorCode.VALIDATION_ERROR.value
+01492: 
+01493:     @patch("sys.stdin")
+01494:     def test_mixed_batch_envelope_rejected(
+01495:         self, mock_stdin: MagicMock, capsys: pytest.CaptureFixture[str]
+01496:     ) -> None:
+01497:         """Test that mixed batch and single envelopes fail fast."""
+01498:         from summarize_batch import main
+01499: 
+01500:         mock_stdin.read.return_value = json.dumps({
+01501:             "transcriptId": "transcript-123",
+01502:             "transcriptContent": {"turns": []},
+01503:             "transcripts": [],
+01504:         })
+01505: 
+01506:         main()
+01507: 
+01508:         captured = capsys.readouterr()
+01509:         result = json.loads(captured.out)
+01510:         assert result["success"] is False
+01511:         assert result["

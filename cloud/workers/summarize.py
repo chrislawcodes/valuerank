@@ -24,7 +24,6 @@ from summarize_llm import (
     DEFAULT_SUMMARY_MODEL,
     LLM_FALLBACK_MODEL,
     build_llm_decision_prompt,
-    classify_decision_with_llm,
 )
 from summarize_text import build_response_text, response_excerpt
 
@@ -123,28 +122,11 @@ def extract_decision_result(transcript_content: dict[str, Any]) -> dict[str, Any
                         decision_code = relaxed_code
                         parse_path = "text_label_relaxed"
                     else:
-                        llm_decision_code = classify_decision_with_llm(
-                            transcript_content,
-                            scale_labels,
-                        )
-                        if llm_decision_code != "other":
-                            decision_code = llm_decision_code
-                            decision_source = "llm"
-                            parse_class = "fallback_resolved"
-                            parse_path = "text_label_llm"
-                        else:
-                            parse_class = "ambiguous"
-                            parse_path = "text_label_ambiguous"
+                        parse_class = "ambiguous"
+                        parse_path = "text_label_ambiguous"
     elif decision_code == "other":
-        llm_decision_code = classify_decision_with_llm(transcript_content)
-        if llm_decision_code != "other":
-            decision_code = llm_decision_code
-            decision_source = "llm"
-            parse_class = "fallback_resolved"
-            parse_path = "numeric_llm"
-        else:
-            parse_class = "ambiguous"
-            parse_path = "numeric_ambiguous"
+        parse_class = "ambiguous"
+        parse_path = "numeric_ambiguous"
 
     metadata = {
         "parserVersion": PARSER_VERSION,

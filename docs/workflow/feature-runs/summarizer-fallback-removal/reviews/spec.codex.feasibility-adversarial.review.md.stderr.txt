@@ -1,0 +1,548 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/practical-noyce-1db12d
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019d9a0b-0737-70b0-9b2f-a2aa1a7d71a6
+--------
+user
+Review this spec artifact using a feasibility-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: summarize.py
+#!/usr/bin/env python3
+"""Summarize worker.
+Reads JSON from stdin and writes JSON to stdout.
+"""
+
+import hashlib
+from typing import Any
+
+from common.errors import ErrorCode, LLMError, ValidationError, WorkerError, classify_exception
+from common.logging import get_logger
+from common.llm_adapters import generate as llm_generate
+from summarize_extract import (
+    PARSER_VERSION,
+    collect_scale_labels,
+    extract_decision_code,
+    extract_decision_code_from_text,
+    extract_leading_decision_code,
+    extract_leading_text_label_decision,
+    extract_leading_text_label_decision_relaxed,
+    extract_text_label_decision,
+    extract_text_label_decision_relaxed,
+)
+from summarize_llm import (
+    DEFAULT_SUMMARY_MODEL,
+    LLM_FALLBACK_MODEL,
+    build_llm_decision_prompt,
+    classify_decision_with_llm,
+)
+from summarize_text import build_response_text, response_excerpt
+
+log = get_logger("summarize")
+
+# Compatibility hook for tests that patch `summarize.generate`.
+generate = llm_generate
+
+# Keep batch size aligned with the API-side PgBoss worker batch size ceiling.
+MAX_SUMMARIZE_BATCH_SIZE = 500
+
+
+def _validation_error(message: str, details: str | None = None) -> dict[str, Any]:
+    return {
+        "message": message,
+        "code": ErrorCode.VALIDATION_ERROR.value,
+        "retryable": False,
+        "details": details,
+    }
+
+
+def validate_input(data: dict[str, Any]) -> None:
+    """Validate summarize worker input."""
+    required = ["transcriptId", "transcriptContent"]
+    for field_name in required:
+        if field_name not in data:
+            raise ValidationError(
+                message=f"Missing required field: {field_name}",
+                details=f"Input must include: {', '.join(required)}",
+            )
+
+    content = data["transcriptContent"]
+    if not isinstance(content, dict):
+        raise ValidationError(message="transcriptContent must be an object")
+
+    if "turns" not in content or not isinstance(content["turns"], list):
+        raise ValidationError(message="transcriptContent.turns must be an array")
+
+
+def is_batch_envelope(data: dict[str, Any]) -> bool:
+    """Return True when the input is a batch-only worker envelope."""
+    has_batch_field = "transcripts" in data
+    has_single_fields = "transcriptId" in data or "transcriptContent" in data
+    return has_batch_field and not has_single_fields
+
+
+def extract_decision_result(transcript_content: dict[str, Any]) -> dict[str, Any]:
+    response_text = build_response_text(transcript_content)
+    response_hash = (
+        hashlib.sha256(response_text.encode("utf-8")).hexdigest() if response_text else None
+    )
+    scale_labels = collect_scale_labels(transcript_content)
+
+    leading_decision_code = extract_leading_decision_code(response_text)
+    decision_code = leading_decision_code or extract_decision_code(transcript_content)
+    decision_source = "deterministic"
+    parse_class = "exact"
+    parse_path = "numeric_leading" if leading_decision_code is not None else "numeric_deterministic"
+    matched_label = None
+
+    # If scale labels are present and the numeric result is not a valid scale code,
+    # treat it as unresolved so label matching and LLM fallback can run.
+    # This catches false positives like "(152 words)" appended by some models.
+    if scale_labels and decision_code not in {"other", "refusal"}:
+        valid_codes = {entry["code"] for entry in scale_labels if entry.get("code")}
+        if decision_code not in valid_codes:
+            decision_code = "other"
+
+    if decision_code == "other" and scale_labels:
+        text_label_code, matched_label, leading_text_label_path = (
+            extract_leading_text_label_decision(response_text, scale_labels)
+        )
+        if text_label_code is not None:
+            decision_code = text_label_code
+            parse_path = leading_text_label_path or "text_label_exact"
+        else:
+            text_label_code, matched_label = extract_text_label_decision(response_text, scale_labels)
+            if text_label_code is not None:
+                decision_code = text_label_code
+                parse_path = "text_label_exact"
+            else:
+                # Relaxed matching: strip filler words (their/the/a/an) before comparing.
+                # Catches models that paraphrase slightly (e.g. "recognition of expertise"
+                # instead of "recognition of their expertise").
+                relaxed_code, matched_label, relaxed_path = (
+                    extract_leading_text_label_decision_relaxed(response_text, scale_labels)
+                )
+                if relaxed_code is not None:
+                    decision_code = relaxed_code
+                    parse_path = relaxed_path or "text_label_relaxed"
+                else:
+                    relaxed_code, matched_label = extract_text_label_decision_relaxed(
+                        response_text, scale_labels
+                    )
+                    if relaxed_code is not None:
+                        decision_code = relaxed_code
+                        parse_path = "text_label_relaxed"
+                    else:
+                        llm_decision_code = classify_decision_with_llm(
+                            transcript_content,
+                            scale_labels,
+                        )
+                        if llm_decision_code != "other":
+                            decision_code = llm_decision_code
+                            decision_source = "llm"
+                            parse_class = "fallback_resolved"
+                            parse_path = "text_label_llm"
+                        else:
+                            parse_class = "ambiguous"
+                            parse_path = "text_label_ambiguous"
+    elif decision_code == "other":
+        llm_decision_code = classify_decision_with_llm(transcript_content)
+        if llm_decision_code != "other":
+            decision_code = llm_decision_code
+            decision_source = "llm"
+            parse_class = "fallback_resolved"
+            parse_path = "numeric_llm"
+        else:
+            parse_class = "ambiguous"
+            parse_path = "numeric_ambiguous"
+
+    metadata = {
+        "parserVersion": PARSER_VERSION,
+        "parseClass": parse_class,
+        "parsePath": parse_path,
+        "responseSha256": response_hash,
+        "responseExcerpt": response_excerpt(response_text) if response_text else None,
+        "matchedLabel": matched_label,
+        "scaleLabels": scale_labels,
+    }
+
+    return {
+        "decisionCode": decision_code,
+        "decisionSource": decision_source,
+        "decisionMetadata": metadata,
+    }
+
+
+def run_summarize(data: dict[str, Any]) -> dict[str, Any]:
+    """
+    Execute the summarization.
+
+    Args:
+        data: Validated summarize worker input
+
+    Returns:
+        Success response with summary or error response
+    """
+    transcript_id = data["transcriptId"]
+    model_id = data.get("modelId", DEFAULT_SUMMARY_MODEL)
+    transcript_content = data["transcriptContent"]
+
+    log.info(
+        "Starting summarization",
+        transcriptId=transcript_id,
+        modelId=model_id,
+    )
+
+    try:
+        decision_result = extract_decision_result(transcript_content)
+        decision_code = decision_result["decisionCode"]
+        decision_source = decision_result["decisionSource"]
+        decision_metadata = decision_result["decisionMetadata"]
+
+        # Log appropriate message based on what we found (or didn't find)
+        if decision_metadata["parsePath"] in {"text_label_exact", "text_label_leading"}:
+            log.info(
+                "Resolved decision code from text scale label",
+                transcriptId=transcript_id,
+                rating=decision_code,
+                matchedLabel=decision_metadata["matchedLabel"],
+            )
+        elif decision_source == "llm":
+            log.info(
+                "Resolved decision code with fallback LLM",
+                transcriptId=transcript_id,
+                rating=decision_code,
+                fallbackModel=LLM_FALLBACK_MODEL,
+            )
+        elif decision_metadata["parseClass"] == "ambiguous":
+            log.info(
+                "Could not extract deterministic rating from transcript",
+                transcriptId=transcript_id,
+            )
+        else:
+            log.info(
+                "Extracted deterministic rating",
+                transcriptId=transcript_id,
+                rating=decision_code,
+            )
+
+        # DEPRECATED: We no longer generate decision text
+        decision_text = None
+
+        log.info(
+            "Summarization completed",
+            transcriptId=transcript_id,
+            decisionCode=decision_code,
+            decisionSource=decision_source,
+        )
+
+        return {
+            "success": True,
+            "summary": {
+                "decisionCode": decision_code,
+                "decisionSource": decision_source,
+                "decisionText": decision_text,
+                "decisionMetadata": decision_metadata,
+            },
+        }
+
+    except (WorkerError, LLMError) as err:
+        log.error("Summarization failed", transcriptId=transcript_id, err=err)
+        return {
+            "success": False,
+            "error": err.to_dict(),
+        }
+    except Exception as err:
+        worker_err = classify_exception(err)
+        log.error("Summarization failed with unexpected error", transcriptId=transcript_id, err=err)
+        return {
+            "success": False,
+            "error": worker_err.to_dict(),
+        }
+
+if __name__ == "__main__":
+    import summarize_batch
+
+    summarize_batch.main()
+
+
+Context: summarize_llm.py
+#!/usr/bin/env python3
+"""LLM-backed helpers for the summarize worker."""
+
+import re
+import sys
+from typing import Any, Optional
+
+from common.errors import LLMError, WorkerError
+from common.logging import get_logger
+from summarize_text import build_response_text
+
+log = get_logger("summarize")
+
+# Default summary model if none specified.
+DEFAULT_SUMMARY_MODEL = "anthropic:claude-sonnet-4-20250514"
+
+LLM_FALLBACK_MODEL = "xai:grok-4-1-fast-reasoning"
+
+
+def build_llm_decision_prompt(
+    transcript_content: dict[str, Any], scale_labels: Optional[list[dict[str, str]]] = None
+) -> str:
+    """Build strict prompt for fallback LLM decision classification."""
+    transcript_text = build_response_text(transcript_content)
+    scale_section = ""
+    if scale_labels:
+        formatted_labels = "\n".join(
+            f"- {entry['code']}: {entry['label']}" for entry in scale_labels
+        )
+        scale_section = f"Available scale labels:\n{formatted_labels}\n\n"
+
+    return (
+        "You are extracting a single final decision code from an AI response.\n"
+        "Return exactly one token:\n"
+        "- a positive integer (e.g. 1, 2, 6)\n"
+        "- refusal\n"
+        "- other\n"
+        "No explanation, no punctuation, no extra words.\n\n"
+        f"{scale_section}"
+        "Transcript:\n"
+        f"{transcript_text}\n"
+        "\nAnswer:"
+    )
+
+
+def _resolve_generate():
+    summarize_module = sys.modules.get("summarize")
+    if summarize_module is not None:
+        patched_generate = getattr(summarize_module, "generate", None)
+        if patched_generate is not None:
+            return patched_generate
+
+    from common.llm_adapters import generate  # noqa: PLC0415
+
+    return generate
+
+
+def classify_decision_with_llm(
+    transcript_content: dict[str, Any], scale_labels: Optional[list[dict[str, str]]] = None
+) -> str:
+    """
+    Use fallback LLM to classify an unresolved decision.
+
+    Returns decision code string, "refusal", or "other".
+    """
+    generate = _resolve_generate()
+    prompt = build_llm_decision_prompt(transcript_content, scale_labels)
+    messages = [{"role": "user", "content": prompt}]
+
+    try:
+        response = generate(
+            LLM_FALLBACK_MODEL,
+            messages,
+            temperature=0.0,
+            max_tokens=20,
+        )
+        normalized = response.content.strip().splitlines()[0].strip().lower()
+        if normalized == "":
+            return "other"
+        if normalized == "refusal":
+            return "refusal"
+        if normalized == "other":
+            return "other"
+        numeric_match = re.search(r"\b([1-9]\d*)\b", normalized)
+        if numeric_match:
+            return numeric_match.group(1)
+        return "other"
+    except (WorkerError, LLMError) as err:
+        log.error("Fallback LLM decision classification failed", err=err)
+        return "other"
+    except Exception as err:
+        log.error("Unexpected error in fallback LLM decision classification", err=err)
+        return "other"
+
+
+Artifact: spec.md
+# Spec: Summarizer LLM Fallback Removal + Unresolvable Transcript Status Warning
+
+**Slug:** summarizer-fallback-removal
+**Branch:** claude/practical-noyce-1db12d
+**Status:** draft
+
+---
+
+## Background
+
+The transcript summarizer (`cloud/workers/summarize.py`) automatically calls an LLM when
+deterministic parsing fails. This incurs cost on every ambiguous transcript without user
+awareness or control. Separately, ~2,076 active transcripts across the Software Approach
+Choice, Job Choice, and Neighborhood Choice domains have been summarized but have no
+resolvable decision score — this silent failure is invisible in the UI.
+
+This feature removes the automatic LLM cost and surfaces the silent failures.
+
+---
+
+## Assumptions
+
+1. LLM fallback removal: both `classify_decision_with_llm` call sites in
+   `extract_decision_result` are removed and replaced with immediate `parse_class = "ambiguous"`
+   classification. The function itself stays in `summarize_llm.py` for future manual use.
+2. **Unresolvable** means: `summarized_at IS NOT NULL` AND one of:
+   - `decision_code = 'other'`, OR
+   - `decision_code IS NULL` AND `decisionState = 'unknown'` in the cached decision, OR
+   - `parseClass = 'ambiguous'`
+   Neutral transcripts (`decisionState = 'neutral'`) are **not** unresolvable — they score as 0.
+3. The warning appears on the run detail page in the web UI, with total count and
+   per-model breakdown.
+
+---
+
+## Non-Goals
+
+- Implement a manual LLM fallback trigger in the UI (separate work item)
+- Backfill or re-resolve existing ambiguous transcripts
+
+---
+
+## User Stories
+
+### US-1 — Summarizer never auto-calls LLM (P1)
+
+**As** a system operator,
+**I need** the summarizer to classify ambiguous transcripts as `ambiguous` without calling an LLM,
+**so that** LLM costs are only incurred when I explicitly choose to pay them.
+
+**Acceptance scenarios:**
+
+1. **Given** a transcript whose model response contains no parseable decision code or matching
+   scale label, **when** the summarizer runs, **then** it produces `parseClass = "ambiguous"` and
+   no LLM call is made.
+2. **Given** a transcript where `decision_code = "other"` after numeric extraction and no scale
+   labels are present, **when** the summarizer runs, **then** it produces `parseClass = "ambiguous"` and
+   no LLM call is made.
+3. **Given** a transcript that previously would have triggered LLM fallback, **when** the
+   summarizer runs, **then** `decisionCodeSource` is `"deterministic"` (not `"llm"`).
+4. **Given** the `classify_decision_with_llm` function, **when** reviewing the codebase,
+   **then** it still exists in `summarize_llm.py` and can be called manually.
+
+**Verification:** All existing `summarize.py` tests pass. No test in the suite calls
+`classify_decision_with_llm` via the normal summarize path.
+
+---
+
+### US-2 — Run detail page shows unresolvable transcript warning (P1)
+
+**As** a researcher reviewing a completed run,
+**I need** the run detail page to prominently show a count of transcripts the summarizer
+could not resolve,
+**so that** I know to investigate or manually adjudicate them before trusting the analysis.
+
+**Acceptance scenarios:**
+
+1. **Given** a run with 12 unresolvable transcripts (e.g. 8 from `deepseek-reasoner`,
+   4 from `gpt-5.1`), **when** I open the run detail page, **then** I see a warning with
+   the total count (12) and a per-model breakdown.
+2. **Given** a run where all transcripts resolved successfully, **when** I open the run
+   detail page, **then** no unresolvable warning is shown.
+3. **Given** a run that is still running (not all transcripts summarized), **when** I open
+   the run detail page, **then** the warning reflects only the already-summarized transcripts
+   that are unresolvable (not unsummarized ones).
+4. **Given** the warning is visible, **when** I read it, **then** it tells me these
+   transcripts need manual attention (not just a raw count).
+
+---
+
+### US-3 — MCP / API exposes unresolvable count for tooling (P2)
+
+**As** an operator using the MCP tools or API,
+**I need** the run summary to include the unresolvable transcript count,
+**so that** I can surface this in scripts or dashboards without parsing the UI.
+
+**Acceptance scenarios:**
+
+1. **Given** a run with unresolvable transcripts, **when** I call `get_run_summary` or
+   equivalent, **then** the response includes an `unresolvableCount` field (or equivalent)
+   with the total and per-model breakdown.
+2. **Given** a run with zero unresolvable transcripts, **when** I call the API,
+   **then** `unresolvableCount` is 0 (not null or absent).
+
+---
+
+## Functional Requirements
+
+- **FR-001:** `extract_decision_result` in `summarize.py` MUST NOT call `classify_decision_with_llm` under any code path triggered by the normal summarize job. (Supports US-1)
+- **FR-002:** When text-label matching exhausts all strategies without a match, `extract_decision_result` MUST set `parse_class = "ambiguous"` and `parse_path = "text_label_ambiguous"`. (Supports US-1)
+- **FR-003:** When `decision_code = "other"` after numeric extraction with no scale labels present, `extract_decision_result` MUST set `parse_class = "ambiguous"` and `parse_path = "numeric_ambiguous"`. (Supports US-1)
+- **FR-004:** `classify_decision_with_llm` in `summarize_llm.py` MUST remain present and callable. (Supports US-1)
+- **FR-005:** The run detail page MUST display a warning section when a run has one or more unresolvable transcripts. (Supports US-2)
+- **FR-006:** The warning MUST include the total unresolvable count and a per-model breakdown. (Supports US-2)
+- **FR-007:** The warning MUST include human-readable guidance (e.g. "These transcripts need manual attention before analysis results are reliable"). (Supports US-2)
+- **FR-008:** Transcripts with `decisionState = "neutral"` MUST NOT be counted as unresolvable. (Supports US-2)
+- **FR-009:** The API / MCP run summary SHOULD include an unresolvable count field. (Supports US-3)
+
+---
+
+## Success Criteria
+
+- **SC-001:** Zero LLM calls are made by the summarize worker during a full run of 200 transcripts that all have ambiguous responses.
+- **SC-002:** The run detail page renders the warning within normal page load time when a run has unresolvable transcripts.
+- **SC-003:** A run with zero unresolvable transcripts shows no warning banner on the run detail page.
+- **SC-004:** The summarize test suite passes after the fallback is removed. Any tests that previously verified LLM fallback behavior (decisionCodeSource = "llm", parseClass = "fallback_resolved") are updated to verify the new ambiguous classification instead.
+
+---
+
+## Edge Cases
+
+- **Partial run:** Some transcripts still pending summarization. Warning shows only the already-summarized unresolvable ones; count updates as more transcripts are processed.
+- **All models unresolvable:** Warning should still list per-model breakdown (not collapse to "all models").
+- **Run has no scenarios / zero transcripts:** No warning shown.
+- **Fallback was previously used:** Existing transcripts with `decisionCodeSource = "llm"` and `parseClass = "fallback_resolved"` are not affected by this change. The removal only affects future runs.
+
+---
+
+## Scope
+
+**In scope:**
+- `cloud/workers/summarize.py` — remove two `classify_decision_with_llm` call sites
+- `cloud/apps/api/src/` — add `unresolvable` count to run data (GraphQL or MCP)
+- `cloud/apps/web/src/` — add warning component to run detail page
+
+**Out of scope:**
+- `cloud/workers/summarize_llm.py` — no changes (function stays intact)
+- Any data backfill of existing ambiguous transcripts
+- Manual adjudication UI
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+- Medium [CODE-CONFIRMED]: The spec uses `decisionCodeSource` in US-1 scenario 3, but the current summarize worker returns `decisionSource` in the summary payload. If this is implemented literally, the test or API contract will point at a field that does not exist in the worker output.
+- Medium [CODE-CONFIRMED]: The unresolvable definition omits `decisionCode = "refusal"`, even though the summarize path can emit `refusal` through `classify_decision_with_llm`. That means transcripts that still lack a usable score can be excluded from the warning and per-model count.
+
+## Residual Risks
+- The API/web code needed to compute the run-level warning is not provided, so the exact aggregation logic and whether it counts only summarized transcripts remain unverified.
+- The spec does not define the canonical model key for the per-model breakdown, so partial runs or transcripts with missing or normalized model metadata could be grouped inconsistently across layers.
+tokens used
+30,736
