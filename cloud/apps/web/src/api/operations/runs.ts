@@ -185,6 +185,7 @@ export type Run = {
   progress: { total: number; completed: number; failed: number } | null;
   runProgress: RunProgress | null;
   summarizeProgress: RunProgress | null;
+  unresolvableTranscriptCount?: { total: number; byModel: { modelId: string; count: number }[] } | null;
   startedAt: string | null;
   completedAt: string | null;
   createdAt: string;

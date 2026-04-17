@@ -569,6 +569,63 @@ describe('RunDetail', () => {
     expect(screen.getByRole('button', { name: /back to trials/i })).toBeInTheDocument();
   });
 
+  describe('Unresolvable transcript banner', () => {
+    it('shows banner with count and per-model breakdown when unresolvable transcripts exist', () => {
+      const run = createMockRun({
+        status: 'COMPLETED',
+        unresolvableTranscriptCount: {
+          total: 3,
+          byModel: [{ modelId: 'openai:gpt-4o', count: 3 }],
+        },
+      });
+      vi.mocked(useRun).mockReturnValue({
+        run,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      renderWithRouter();
+
+      expect(screen.getByText(/3 transcripts could not be scored/)).toBeInTheDocument();
+      expect(screen.getByText(/openai:gpt-4o: 3/)).toBeInTheDocument();
+    });
+
+    it('does not show banner when total is 0', () => {
+      const run = createMockRun({
+        status: 'COMPLETED',
+        unresolvableTranscriptCount: { total: 0, byModel: [] },
+      });
+      vi.mocked(useRun).mockReturnValue({
+        run,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      renderWithRouter();
+
+      expect(screen.queryByText(/could not be scored/)).not.toBeInTheDocument();
+    });
+
+    it('does not show banner when unresolvableTranscriptCount is null', () => {
+      const run = createMockRun({
+        status: 'COMPLETED',
+        unresolvableTranscriptCount: null,
+      });
+      vi.mocked(useRun).mockReturnValue({
+        run,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      renderWithRouter();
+
+      expect(screen.queryByText(/could not be scored/)).not.toBeInTheDocument();
+    });
+  });
+
   describe('Analysis Banner', () => {
     it('shows View Analysis link for completed runs with completed analysis', () => {
       const run = createMockRun({

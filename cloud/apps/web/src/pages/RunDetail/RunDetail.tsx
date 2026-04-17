@@ -58,6 +58,27 @@ function getStalledModelsBanner(run: Run): React.ReactNode | null {
   );
 }
 
+function getUnresolvableBanner(
+  data: { total: number; byModel: { modelId: string; count: number }[] } | null | undefined
+): React.ReactNode {
+  if (data == null || data.total === 0) return null;
+  return (
+    <div className="border border-amber-400 bg-amber-50 rounded-lg p-4 mb-4">
+      <p className="font-medium text-amber-800">
+        {data.total} transcript{data.total !== 1 ? 's' : ''} could not be scored —
+        manual adjudication required before analysis results are reliable.
+      </p>
+      {data.byModel.length > 0 && (
+        <ul className="mt-2 text-sm text-amber-700 list-disc list-inside">
+          {data.byModel.map((m) => (
+            <li key={m.modelId}>{m.modelId}: {m.count}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function RunDetail() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -275,6 +296,7 @@ export function RunDetail() {
   const isPaused = run.status === 'PAUSED';
   const isTerminal = run.status === 'COMPLETED' || run.status === 'FAILED' || run.status === 'CANCELLED';
   const stalledModelsBanner = getStalledModelsBanner(run);
+  const unresolvableBanner = getUnresolvableBanner(run.unresolvableTranscriptCount);
   const trialSignature = formatTrialSignature(
     run.definitionVersion ?? run.definition?.version ?? null,
     run.config?.temperature ?? null
@@ -308,6 +330,7 @@ export function RunDetail() {
       />
 
       {stalledModelsBanner}
+      {unresolvableBanner}
 
       {/* Summarization controls */}
       {(run.status === 'SUMMARIZING' || isTerminal) && run.transcriptCount > 0 && (

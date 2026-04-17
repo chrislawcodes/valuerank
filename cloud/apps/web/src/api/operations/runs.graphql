@@ -29,6 +29,13 @@ fragment RunFields on Run {
     failed
     percentComplete
   }
+  unresolvableTranscriptCount {
+    total
+    byModel {
+      modelId
+      count
+    }
+  }
   startedAt
   completedAt
   createdAt
