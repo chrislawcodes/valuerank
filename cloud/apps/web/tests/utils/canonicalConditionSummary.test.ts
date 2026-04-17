@@ -262,7 +262,7 @@ describe('summarizeCanonicalConditionCounts', () => {
 
   it.each([
     {
-      name: 'positive boundary stays neutral at 0.05',
+      name: 'positive boundary tips to self at 0.05 so color matches the "0.1" label',
       counts: {
         strongly: 0,
         somewhat: 1,
@@ -271,7 +271,7 @@ describe('summarizeCanonicalConditionCounts', () => {
         opponentStrongly: 0,
       },
       expectedNetScore: 0.05,
-      expectedDirection: 'neutral' as const,
+      expectedDirection: 'self' as const,
     },
     {
       name: 'positive values above the boundary are self',
@@ -286,7 +286,7 @@ describe('summarizeCanonicalConditionCounts', () => {
       expectedDirection: 'self' as const,
     },
     {
-      name: 'negative boundary stays neutral at -0.05',
+      name: 'negative boundary tips to opponent at -0.05 so color matches the "0.1" label',
       counts: {
         strongly: 0,
         somewhat: 0,
@@ -295,7 +295,7 @@ describe('summarizeCanonicalConditionCounts', () => {
         opponentStrongly: 0,
       },
       expectedNetScore: -0.05,
-      expectedDirection: 'neutral' as const,
+      expectedDirection: 'opponent' as const,
     },
     {
       name: 'negative values below the boundary are opponent',
