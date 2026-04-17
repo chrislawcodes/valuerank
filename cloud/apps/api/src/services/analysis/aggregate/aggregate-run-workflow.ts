@@ -177,6 +177,7 @@ export async function persistAggregateRun(
       data: {
         config: finalConfig as unknown as Prisma.InputJsonValue,
         status: 'COMPLETED',
+        completedAt: new Date(),
       },
     });
 

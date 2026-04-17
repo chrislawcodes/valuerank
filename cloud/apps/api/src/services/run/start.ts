@@ -286,22 +286,22 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
       skipDuplicates: true, // Safety for overlaps if any
     });
 
-    // Capture domain config snapshot at run creation time
-    if (definition.domain?.id) {
-      try {
-        const snapshotId = await ensureDomainConfigSnapshot(definition.domain.id, tx);
-        await tx.run.update({
-          where: { id: newRun.id },
-          data: { domainConfigSnapshotId: snapshotId },
-        });
-      } catch (err) {
-        // Non-fatal: log warning but don't fail run creation
-        log.warn({ err, domainId: definition.domain.id }, 'Failed to capture domain config snapshot');
-      }
-    }
-
     return newRun;
   });
+
+  // Capture domain config snapshot outside the transaction to avoid concurrent
+  // upsert contention aborting the transaction while $transaction still returns the run.
+  if (definition.domain?.id) {
+    try {
+      const snapshotId = await ensureDomainConfigSnapshot(definition.domain.id);
+      await db.run.update({
+        where: { id: run.id },
+        data: { domainConfigSnapshotId: snapshotId },
+      });
+    } catch (err) {
+      log.warn({ err, runId: run.id, domainId: definition.domain.id }, 'Failed to capture domain config snapshot');
+    }
+  }
 
   log.info({ runId: run.id, totalJobs }, 'Run created, queuing jobs');
 
