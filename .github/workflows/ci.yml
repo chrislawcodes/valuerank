@@ -8,6 +8,37 @@ on:
   workflow_dispatch:
 
 jobs:
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'cloud/apps/api/**'
+              - 'cloud/packages/db/**'
+              - 'cloud/packages/shared/**'
+              - 'cloud/workers/**'
+              - 'cloud/package.json'
+              - 'cloud/package-lock.json'
+              - 'cloud/turbo.json'
+              - 'cloud/tsconfig*.json'
+              - '.github/workflows/**'
+            web:
+              - 'cloud/apps/web/**'
+              - 'cloud/packages/shared/**'
+              - 'cloud/package.json'
+              - 'cloud/package-lock.json'
+              - 'cloud/turbo.json'
+              - 'cloud/tsconfig*.json'
+              - '.github/workflows/**'
+
   lint-build:
     name: Lint & Build
     runs-on: ubuntu-latest
@@ -51,6 +82,8 @@ jobs:
 
   web-tests:
     name: Web Tests (${{ matrix.shard }}/${{ matrix.total }})
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -95,8 +128,25 @@ jobs:
         working-directory: cloud/apps/web
         run: npx vitest run --shard=${{ matrix.shard }}/${{ matrix.total }}
 
+  web-tests-skip:
+    # Skeleton job that reports "pass" under the same name as web-tests when
+    # no web-relevant paths changed, so branch protection's required checks
+    # are satisfied without running real tests.
+    name: Web Tests (${{ matrix.shard }}/${{ matrix.total }})
+    needs: changes
+    if: needs.changes.outputs.web == 'false'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        shard: [1, 2, 3]
+        total: [3]
+    steps:
+      - run: echo "No web-relevant changes detected; skipping shard ${{ matrix.shard }}/${{ matrix.total }}."
+
   api-tests:
     name: API & DB Tests
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -175,3 +225,14 @@ jobs:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
         run: npx turbo test --filter=@valuerank/api --filter=@valuerank/db
+
+  api-tests-skip:
+    # Skeleton job that reports "pass" under the same name as api-tests when
+    # no api-relevant paths changed, so branch protection's required checks
+    # are satisfied without running real tests.
+    name: API & DB Tests
+    needs: changes
+    if: needs.changes.outputs.api == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No API-relevant changes detected; skipping."
