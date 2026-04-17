@@ -314,7 +314,7 @@ export async function detectAndRecoverStuckJobs(): Promise<{ recovered: number; 
     FROM pgboss.job
     WHERE state = 'active'
       AND started_on < NOW() - (${ZOMBIE_THRESHOLD_MINUTES} || ' minutes')::interval
-      AND (name = 'probe_scenario' OR name LIKE 'probe_scenario_%')
+      AND (name = 'probe_scenario' OR (name LIKE 'probe_%' AND name != 'probe_dead_letter'))
   `;
 
   if (stuckJobs.length === 0) {

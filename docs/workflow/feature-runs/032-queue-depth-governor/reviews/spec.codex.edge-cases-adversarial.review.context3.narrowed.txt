@@ -1,0 +1,237 @@
+00001: /**
+00002:  * Probe Scenario Handler
+00003:  *
+00004:  * Handles probe_scenario jobs by executing Python probe worker
+00005:  * and saving transcripts to database.
+00006:  *
+00007:  * Jobs are processed in parallel within each batch, with rate limiting
+00008:  * enforced per-provider using Bottleneck.
+00009:  */
+00010: 
+00011: import path from 'path';
+00012: import type * as PgBoss from 'pg-boss';
+00013: import type { Prisma } from '@valuerank/db';
+00014: import { db } from '@valuerank/db';
+00015: import { createLogger } from '@valuerank/shared';
+00016: import type { ProbeScenarioJobData } from '../../types.js';
+00017: import { DEFAULT_JOB_OPTIONS } from '../../types.js';
+00018: import { spawnPython } from '../../spawn.js';
+00019: import { isRunPaused, isRunTerminal } from '../../../services/run/index.js';
+00020: import { createTranscript, validateTranscript } from '../../../services/transcript/index.js';
+00021: import type { CostSnapshot } from '../../../services/transcript/index.js';
+00022: import { recordProbeSuccess, recordProbeFailure } from '../../../services/probe-result/index.js';
+00023: import { schedule as rateLimitSchedule } from '../../../services/rate-limiter/index.js';
+00024: import { getProviderForModel } from '../../../services/parallelism/index.js';
+00025: import { ensureHealthCheck } from './health-check.js';
+00026: import { formatWorkerErrorMessage, extractStoredTranscriptTokenUsage, applyProgressDelta, handleJobError } from './retry.js';
+00027: import { PROBE_WORKER_PATH, fetchScenario, buildWorkerInput } from './worker-input.js';
+00028: import type { ProbeWorkerInput, ProbeWorkerOutput } from './worker-input.js';
+00029: 
+00030: const log = createLogger('queue:probe-scenario');
+00031: 
+00032: // Retry limit from job options (default 3)
+00033: const RETRY_LIMIT = DEFAULT_JOB_OPTIONS['probe_scenario'].retryLimit ?? 3;
+00034: 
+00035: /**
+00036:  * Process a single probe job.
+00037:  * Extracted to allow parallel execution within batches.
+00038:  */
+00039: async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<void> {
+00040:   const { runId, scenarioId, modelId, sampleIndex = 0, config } = job.data;
+00041:   const jobId = job.id;
+00042:   const probeResultKey = {
+00043:     runId_scenarioId_modelId_sampleIndex: {
+00044:       runId,
+00045:       scenarioId,
+00046:       modelId,
+00047:       sampleIndex,
+00048:     },
+00049:   };
+00050: 
+00051:   log.info(
+00052:     { jobId, runId, scenarioId, modelId, sampleIndex, config },
+00053:     'Processing probe_scenario job'
+00054:   );
+00055: 
+00056:   try {
+00057:     // Check if run is in a terminal state (completed/cancelled) - skip processing
+00058:     if (await isRunTerminal(runId)) {
+00059:       log.info({ jobId, runId }, 'Skipping job - run is in terminal state');
+00060:       return;
+00061:     }
+00062: 
+00063:     // Check if run is paused - defer job for later
+00064:     if (await isRunPaused(runId)) {
+00065:       log.info({ jobId, runId }, 'Deferring job - run is paused');
+00066:       throw new Error('RUN_PAUSED: Job deferred because run is paused');
+00067:     }
+00068: 
+00069:     // Idempotency: if this probe combination already succeeded, skip it.
+00070:     const existingProbeResult = await db.probeResult.findUnique({
+00071:       where: probeResultKey,
+00072:       select: {
+00073:         status: true,
+00074:         transcriptId: true,
+00075:       },
+00076:     });
+00077:     const previousProbeStatus = existingProbeResult?.status ?? null;
+00078:     const currentRetryCount = (job as unknown as { retrycount?: number }).retrycount ?? 0;
+00079: 
+00080:     if (
+00081:       existingProbeResult !== null &&
+00082:       existingProbeResult.status === 'SUCCESS' &&
+00083:       typeof existingProbeResult.transcriptId === 'string' &&
+00084:       existingProbeResult.transcriptId !== ''
+00085:     ) {
+00086:       log.info(
+00087:         { jobId, runId, scenarioId, modelId, sampleIndex, transcriptId: existingProbeResult.transcriptId },
+00088:         'Skipping probe job - result already succeeded'
+00089:       );
+00090:       return;
+00091:     }
+00092: 
+00093:     // If this specific key is already terminal-failed and this is only a PgBoss retry,
+00094:     // skip repeating a call that has already been recorded as failed.
+00095:     if (
+00096:       existingProbeResult !== null &&
+00097:       existingProbeResult.status === 'FAILED' &&
+00098:       currentRetryCount > 0
+00099:     ) {
+00100:       log.info(
+00101:         { jobId, runId, scenarioId, modelId, sampleIndex, currentRetryCount },
+00102:         'Skipping probe job - already terminal failed'
+00103:       );
+00104:       return;
+00105:     }
+00106: 
+00107:     // Recovery path: transcript exists but probe_result success row is missing
+00108:     const existingTranscript = await db.transcript.findFirst({
+00109:       where: {
+00110:         runId,
+00111:         scenarioId,
+00112:         modelId,
+00113:         sampleIndex,
+00114:
+
+... [narrowed review slice: middle omitted] ...
+
+cess in results table
+00270:     // Calculate duration from timestamps
+00271:     const startedAt = new Date(output.transcript.startedAt);
+00272:     const completedAt = new Date(output.transcript.completedAt);
+00273:     const durationMs = completedAt.getTime() - startedAt.getTime();
+00274: 
+00275:     await recordProbeSuccess({
+00276:       runId,
+00277:       scenarioId,
+00278:       modelId,
+00279:       sampleIndex,
+00280:       transcriptId: transcriptRecord.id,
+00281:       durationMs,
+00282:       inputTokens: output.transcript.totalInputTokens,
+00283:       outputTokens: output.transcript.totalOutputTokens,
+00284:     });
+00285: 
+00286:     // Update progress based on status transition for this probe key
+00287:     const { progress, status } = await applyProgressDelta(runId, previousProbeStatus, 'SUCCESS');
+00288: 
+00289:     // If run is already in SUMMARIZING state (late-arriving probe job),
+00290:     // queue a summarize job for this transcript immediately
+00291:     if (status === 'SUMMARIZING') {
+00292:       const { getBoss } = await import('../../boss.js');
+00293:       const { DEFAULT_JOB_OPTIONS: jobOptions } = await import('../../types.js');
+00294:       const boss = getBoss();
+00295:       if (boss !== null) {
+00296:         await boss.send('summarize_transcript', {
+00297:           runId,
+00298:           transcriptId: transcriptRecord.id,
+00299:         }, jobOptions['summarize_transcript']);
+00300:         log.info({ runId, transcriptId: transcriptRecord.id }, 'Queued summarize job for late-arriving transcript');
+00301:       }
+00302:     }
+00303: 
+00304:     log.info(
+00305:       { jobId, runId, scenarioId, modelId, progress, status, turns: output.transcript.turns.length },
+00306:       'Probe job completed'
+00307:     );
+00308:   } catch (error) {
+00309:     // Pause deferral is not a real failure — propagate immediately
+00310:     if (error instanceof Error && error.message.startsWith('RUN_PAUSED:')) {
+00311:       throw error;
+00312:     }
+00313: 
+00314:     const retryCount = (job as unknown as { retrycount?: number }).retrycount ?? 0;
+00315:     const terminal = await handleJobError(
+00316:       error, jobId, runId, scenarioId, modelId, sampleIndex, retryCount, RETRY_LIMIT, probeResultKey
+00317:     );
+00318:     if (terminal) {
+00319:       return;
+00320:     }
+00321: 
+00322:     // Re-throw to let PgBoss handle retry logic
+00323:     throw error;
+00324:   }
+00325: }
+00326: 
+00327: /**
+00328:  * Creates a handler for probe_scenario jobs.
+00329:  *
+00330:  * Jobs in each batch are processed in PARALLEL using the rate limiter
+00331:  * to enforce per-provider concurrency and rate limits.
+00332:  */
+00333: export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJobData> {
+00334:   return async (jobs: PgBoss.Job<ProbeScenarioJobData>[]) => {
+00335:     if (jobs.length === 0) {
+00336:       return;
+00337:     }
+00338: 
+00339:     log.info({ jobCount: jobs.length }, 'Processing probe_scenario batch in parallel');
+00340: 
+00341:     // Process all jobs in parallel with rate limiting
+00342:     const results = await Promise.allSettled(
+00343:       jobs.map(async (job) => {
+00344:         const { modelId, scenarioId } = job.data;
+00345:         const jobId = job.id;
+00346: 
+00347:         // Get provider for this model to route to correct rate limiter
+00348:         const provider = await getProviderForModel(modelId);
+00349: 
+00350:         if (provider === null) {
+00351:           // Unknown provider - process without rate limiting (fallback)
+00352:           log.warn({ jobId, modelId }, 'Unknown provider for model, processing without rate limit');
+00353:           return processProbeJob(job);
+00354:         }
+00355: 
+00356:         // Schedule through rate limiter for this provider
+00357:         return rateLimitSchedule(
+00358:           provider,
+00359:           jobId,
+00360:           job.data.runId,
+00361:           modelId,
+00362:           scenarioId,
+00363:           () => processProbeJob(job)
+00364:         );
+00365:       })
+00366:     );
+00367: 
+00368:     // Check for failures - PgBoss needs us to throw to trigger retries
+00369:     const failures = results.filter(
+00370:       (r): r is PromiseRejectedResult => r.status === 'rejected'
+00371:     );
+00372: 
+00373:     if (failures.length > 0) {
+00374:       log.warn(
+00375:         { failureCount: failures.length, totalJobs: jobs.length },
+00376:         'Some jobs in batch failed'
+00377:       );
+00378: 
+00379:       // Throw when any retryable failures occurred so PgBoss requeues them.
+00380:       // Succeeded jobs are idempotent (checked by probe_result/transcript), so retries are safe.
+00381:       if (failures[0] !== undefined) {
+00382:         throw failures[0].reason;
+00383:       }
+00384:     }
+00385: 
+00386:     log.info(
+00387:       { completed: results.length - failures.length, failed: failures.length },
+00388:       'Probe batch processing c

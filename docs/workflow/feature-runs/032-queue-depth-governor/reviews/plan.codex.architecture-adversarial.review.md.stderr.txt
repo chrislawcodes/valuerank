@@ -1,0 +1,5237 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019d9a3a-e478-7eb2-8fa1-6b5ff7a539e4
+--------
+user
+Review this plan artifact using a architecture-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: types.ts
+/**
+ * Queue System Types
+ *
+ * Defines job types, data interfaces, and options for PgBoss queue.
+ */
+
+// Job type union
+export type JobType =
+  | 'probe_scenario'
+  | 'summarize_transcript'
+  | 'analyze_basic'
+  | 'expand_scenarios'
+  | 'compute_token_stats'
+  | 'probe_dead_letter'
+  | 'aggregate_analysis'
+  | 'refresh_domain_analysis_snapshot';
+
+// Job data interfaces
+export type ProbeScenarioJobData = {
+  runId: string;
+  scenarioId: string;
+  modelId: string;
+  modelVersion?: string;
+  sampleIndex: number; // Index within sample set (0 to N-1) for multi-sample runs
+  config: {
+    temperature?: number;
+    seed?: number;
+    maxTurns: number;
+  };
+};
+
+export type SummarizeTranscriptJobData = {
+  runId: string;
+  transcriptId: string;
+  summaryModelId?: string; // Optional: defaults to configured summary model
+  forceSummarize?: boolean; // Optional: bypasses cache and summarization short-circuits
+};
+
+export type AnalyzeBasicJobData = {
+  runId: string;
+  transcriptIds?: string[]; // Optional: will be fetched from DB if not provided
+  force?: boolean; // Force recomputation even if cached
+};
+
+export type ExpandScenariosJobData = {
+  definitionId: string;
+  triggeredBy: 'create' | 'update' | 'fork';
+};
+
+export type ComputeTokenStatsJobData = {
+  runId: string;
+};
+
+export type AggregateAnalysisJobData = {
+  definitionId: string;
+  preambleVersionId: string | null;
+  // Optional for backward compatibility with already-queued legacy jobs.
+  definitionVersion?: number | null;
+  // Optional for backward compatibility with already-queued legacy jobs.
+  temperature?: number | null;
+};
+
+export type RefreshDomainAnalysisSnapshotJobData = {
+  domainId: string;
+  signature: string | null;
+  reason: string;
+};
+
+// Dead letter job data - same as probe scenario but handled separately for failed/expired jobs
+export type ProbeDeadLetterJobData = ProbeScenarioJobData;
+
+// Job data union type (ProbeDeadLetterJobData is same as ProbeScenarioJobData, so not duplicated here)
+export type JobData =
+  | ProbeScenarioJobData
+  | SummarizeTranscriptJobData
+  | AnalyzeBasicJobData
+  | ExpandScenariosJobData
+  | ComputeTokenStatsJobData
+  | AggregateAnalysisJobData
+  | RefreshDomainAnalysisSnapshotJobData;
+
+// Job options interface
+export type JobOptions = {
+  priority?: number;
+  retryLimit?: number;
+  retryDelay?: number;
+  retryBackoff?: boolean;
+  expireInSeconds?: number;
+  singletonKey?: string;
+};
+
+// Default job options per type
+export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
+  'probe_scenario': {
+    retryLimit: 3,
+    retryDelay: 5,
+    retryBackoff: true,
+    expireInSeconds: 420, // 7 minutes - covers 5m timeout + buffer
+  },
+  'summarize_transcript': {
+    retryLimit: 3,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 600, // 10 minutes - covers 5m Python spawn timeout + buffer
+  },
+  'analyze_basic': {
+    retryLimit: 3,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 600, // 10 minutes
+  },
+  'expand_scenarios': {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 900, // 15 minutes
+    singletonKey: 'definition', // Only one expansion per definition at a time
+  },
+  'compute_token_stats': {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 120, // 2 minutes - stats computation is quick
+    singletonKey: 'run', // Only one stats computation per run at a time
+  },
+  'aggregate_analysis': {
+    retryLimit: 3,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 300, // 5 minutes
+    // singletonKey is set dynamically based on definitionId
+  },
+  'refresh_domain_analysis_snapshot': {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 300, // 5 minutes
+  },
+  'probe_dead_letter': {
+    retryLimit: 0, // Don't retry dead letter jobs - just log and record
+    expireInSeconds: 300,
+  },
+};
+
+// Run progress tracking
+export type RunProgress = {
+  total: number;
+  completed: number;
+  failed: number;
+  byModel?: Record<string, { completed: number; failed: number }>;
+};
+
+// Priority values mapping
+export const PRIORITY_VALUES = {
+  LOW: 0,
+  NORMAL: 5,
+  HIGH: 10,
+} as const;
+
+export type PriorityLevel = keyof typeof PRIORITY_VALUES;
+
+// Task result for GraphQL
+export type TaskResult = {
+  scenarioId: string;
+  modelId: string;
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  error?: string;
+  completedAt?: Date;
+};
+
+// Job handler interface
+export type JobHandler<T extends JobData> = {
+  name: JobType;
+  handler: (data: T) => Promise<void>;
+  options: JobOptions;
+};
+
+
+Context: start-queue.ts
+import { AppError, createLogger } from '@valuerank/shared';
+import type { PriorityLevel } from '../../queue/types.js';
+import { DEFAULT_JOB_OPTIONS, PRIORITY_VALUES } from '../../queue/types.js';
+import { getBoss } from '../../queue/boss.js';
+import { getQueueNameForModel } from '../parallelism/index.js';
+import {
+  bulkEnqueueJobs,
+  enqueueJobs,
+  type JobEntry,
+  RETRY_ENQUEUE_CHUNK_SIZE,
+} from './start-helpers.js';
+import type { RunJobPlanItem } from './start-plan.js';
+
+const log = createLogger('services:run:start');
+
+type EnqueueRunJobsInput = {
+  runId: string;
+  jobPlan: RunJobPlanItem[];
+  priority: string;
+  temperature?: number | null;
+  totalJobs: number;
+};
+
+export async function enqueueRunJobs(input: EnqueueRunJobsInput): Promise<string[]> {
+  const { runId, jobPlan, priority, temperature, totalJobs } = input;
+  const boss = getBoss();
+  const priorityValue = PRIORITY_VALUES[priority as PriorityLevel];
+  const baseJobOptions = {
+    ...DEFAULT_JOB_OPTIONS['probe_scenario'],
+    priority: priorityValue,
+  };
+
+  const jobs: JobEntry[] = [];
+  const queueNameCache = new Map<string, string>();
+  const getQueue = async (modelId: string) => {
+    if (queueNameCache.has(modelId)) return queueNameCache.get(modelId)!;
+    const queueName = await getQueueNameForModel(modelId);
+    queueNameCache.set(modelId, queueName);
+    return queueName;
+  };
+
+  for (const item of jobPlan) {
+    const queueName = await getQueue(item.modelId);
+    for (let i = 0; i < item.samples; i++) {
+      jobs.push({
+        queueName,
+        data: {
+          runId,
+          scenarioId: item.scenarioId,
+          modelId: item.modelId,
+          sampleIndex: i,
+          config: {
+            maxTurns: 10,
+            ...(temperature !== undefined && temperature !== null ? { temperature } : {}),
+          },
+        },
+        options: baseJobOptions,
+      });
+    }
+  }
+
+  const queueCounts = new Map<string, number>();
+  for (const job of jobs) {
+    queueCounts.set(job.queueName, (queueCounts.get(job.queueName) ?? 0) + 1);
+  }
+  log.debug({ runId, queueDistribution: Object.fromEntries(queueCounts) }, 'Job queue distribution');
+
+  const firstPass = await bulkEnqueueJobs(jobs);
+  let jobIds = firstPass.jobIds;
+  let remainingFailures = firstPass.failures;
+
+  if (remainingFailures.length > 0) {
+    log.warn(
+      {
+        runId,
+        failedCount: remainingFailures.length,
+        sampleFailures: remainingFailures.slice(0, 5).map((failure) => ({
+          queueName: failure.job.queueName,
+          modelId: failure.job.data.modelId,
+          scenarioId: failure.job.data.scenarioId,
+          sampleIndex: failure.job.data.sampleIndex,
+          error: failure.error,
+        })),
+      },
+      'Initial enqueue had dropped jobs; retrying failed jobs'
+    );
+
+    const retryPass = await enqueueJobs(
+      remainingFailures.map((failure) => failure.job),
+      (queueName, data, options) => boss.send(queueName, data, options),
+      RETRY_ENQUEUE_CHUNK_SIZE
+    );
+
+    jobIds = jobIds.concat(retryPass.jobIds);
+    remainingFailures = retryPass.failures;
+  }
+
+  if (remainingFailures.length > 0 || jobIds.length !== totalJobs) {
+    const failureReason = remainingFailures.length > 0
+      ? `${remainingFailures.length} jobs failed to enqueue after retry`
+      : `Expected ${totalJobs} jobs but only ${jobIds.length} were enqueued`;
+
+    log.error(
+      {
+        runId,
+        totalJobs,
+        enqueuedJobs: jobIds.length,
+        remainingFailures: remainingFailures.slice(0, 10).map((failure) => ({
+          queueName: failure.job.queueName,
+          modelId: failure.job.data.modelId,
+          scenarioId: failure.job.data.scenarioId,
+          sampleIndex: failure.job.data.sampleIndex,
+          error: failure.error,
+        })),
+      },
+      'Run failed during enqueue integrity check'
+    );
+
+    throw new AppError(`Run initialization failed: ${failureReason}`, 'RUN_INIT_FAILED');
+  }
+
+  return jobIds;
+}
+
+
+Context: index.ts
+00001: /**
+00002:  * Queue Handler Registration
+00003:  *
+00004:  * Exports handler registration function for all job types.
+00005:  * Includes provider-specific queues for parallelism enforcement.
+00006:  */
+00007: 
+00008: import type { PgBoss } from 'pg-boss';
+00009: import { createLogger } from '@valuerank/shared';
+00010: import { queueConfig } from '../../config.js';
+00011: import { createProbeScenarioHandler } from './probe-scenario/index.js';
+00012: import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
+00013: import {
+00014:   PROBE_DEAD_LETTER_QUEUE,
+00015:   handlerRegistrations,
+00016: } from './handler-config.js';
+00017: import type { ProbeScenarioJobData, SummarizeTranscriptJobData } from './handler-config.js';
+00018: import {
+00019:   createProviderQueues,
+00020:   getAllProviderQueues,
+00021: } from '../../services/parallelism/index.js';
+00022: 
+00023: export type {
+00024:   ProbeScenarioJobData,
+00025:   SummarizeTranscriptJobData,
+00026: } from './handler-config.js';
+00027: 
+00028: const log = createLogger('queue:handlers');
+00029: /**
+00030:  * Registers provider-specific probe queue handlers.
+00031:  * Each provider queue gets N workers where N = maxParallelRequests.
+00032:  * Each worker fetches one job at a time to preserve per-job retry semantics.
+00033:  */
+00034: async function registerProviderProbeHandlers(boss: PgBoss): Promise<number> {
+00035:   const providerQueues = await getAllProviderQueues();
+00036:   const probeHandler = createProbeScenarioHandler();
+00037: 
+00038:   let registeredCount = 0;
+00039: 
+00040:   for (const [providerName, limits] of providerQueues) {
+00041:     const queueName = limits.queueName;
+00042:     const workerCount = limits.maxParallelRequests;
+00043: 
+00044:     log.info(
+00045:       { provider: providerName, queueName, workerCount, workerBatchSize: 1 },
+00046:       'Registering provider probe handler'
+00047:     );
+00048: 
+00049:     // Register one worker per parallel slot.
+00050:     // Using batchSize > 1 causes pg-boss to mark the whole batch failed when one job throws.
+00051:     // That can retry already-successful jobs and create duplicate transcripts.
+00052:     for (let i = 0; i < workerCount; i++) {
+00053:       await boss.work<ProbeScenarioJobData>(queueName, { batchSize: 1 }, probeHandler);
+00054:       registeredCount++;
+00055:     }
+00056:   }
+00057: 
+00058:   return registeredCount;
+00059: }
+00060: 
+00061: /**
+00062:  * Registers all job handlers with PgBoss.
+00063:  * Creates queues first (required by PgBoss v10+), then registers workers.
+00064:  * Includes provider-specific probe queues for parallelism enforcement.
+00065:  */
+00066: export async function registerHandlers(boss: PgBoss): Promise<void> {
+00067:   // Import summarization parallelism service
+00068:   const { getMaxParallelSummarizations } = await import(
+00069:     '../../services/summarization-parallelism/index.js'
+00070:   );
+00071: 
+00072:   const defaultBatchSize = queueConfig.workerBatchSize;
+00073: 
+00074:   log.info(
+00075:     { defaultBatchSize, jobTypes: handlerRegistrations.map(h => h.name) },
+00076:     'Starting handler registration'
+00077:   );
+00078: 
+00079:   // Create dead letter queue FIRST (required before queues that reference it)
+00080:   log.info({ jobType: PROBE_DEAD_LETTER_QUEUE }, 'Creating dead letter queue');
+00081:   await boss.createQueue(PROBE_DEAD_LETTER_QUEUE);
+00082: 
+00083:   // Create standard queues (required by PgBoss v10+)
+00084:   for (const registration of handlerRegistrations) {
+00085:     // Skip dead letter queue - already created above
+00086:     if (registration.name === 'probe_dead_letter') continue;
+00087: 
+00088:     log.info({ jobType: registration.name }, 'Creating queue');
+00089:     // Add dead letter queue for probe_scenario
+00090:     if (registration.name === 'probe_scenario') {
+00091:       await boss.createQueue(registration.name, { deadLetter: PROBE_DEAD_LETTER_QUEUE });
+00092:     } else {
+00093:       await boss.createQueue(registration.name);
+00094:     }
+00095:   }
+00096: 
+00097:   // Create provider-specific probe queues with dead letter support
+00098:   await createProviderQueues(boss, PROBE_DEAD_LETTER_QUEUE);
+00099: 
+00100:   // Collect handler registration details for summary log
+00101:   const handlerDetails: Array<{ jobType: string; batchSize: number }> = [];
+00102: 
+00103:   // Register standard handlers with appropriate batchSize
+00104:   for (const registration of handlerRegistrations) {
+00105:     // Use dynamic batchSize for summarize_transcript
+00106:     const batchSize = registration.name === 'summarize_transcript'
+00107:       ? await getMaxParallelSummarizations()
+00108:       : defaultBatchSize;
+00109: 
+00110:     log.info(
+00111:       {
+00112:         jobType: registration.name,
+00113:         batchSize,
+00114:         isDynamic: registration.name === 'summarize_transcript',
+00115:       },
+00116:       'Registering handler with batchSize'
+00117:     );
+00118: 
+00119:
+
+... [narrowed review slice: middle omitted] ...
+
+Work(queueName);
+00205:   log.info(
+00206:     { provider: providerName, queueName, activeJobs: activeCount, queuedJobs: queuedCount },
+00207:     'Unregistered existing handler (in-flight jobs will complete)'
+00208:   );
+00209: 
+00210:   // 3. Clear caches to force reload from database
+00211:   clearCache();
+00212: 
+00213:   // 4. Load fresh limits
+00214:   const limits = await loadProviderLimits();
+00215:   const providerLimits = limits.get(providerName);
+00216: 
+00217:   if (!providerLimits) {
+00218:     log.warn({ provider: providerName }, 'Provider not found after cache reload');
+00219:     return;
+00220:   }
+00221: 
+00222:   // 5. Register new handlers with batchSize=1.
+00223:   //    This preserves per-job retry semantics while keeping provider concurrency.
+00224:   const workerCount = providerLimits.maxParallelRequests;
+00225:   const probeHandler = createProbeScenarioHandler();
+00226: 
+00227:   for (let i = 0; i < workerCount; i++) {
+00228:     await boss.work<ProbeScenarioJobData>(queueName, { batchSize: 1 }, probeHandler);
+00229:   }
+00230: 
+00231:   log.info(
+00232:     { provider: providerName, queueName, workerCount, workerBatchSize: 1 },
+00233:     'Provider queue handler re-registered with new settings'
+00234:   );
+00235: 
+00236:   // 6. Reload rate limiters to pick up new settings
+00237:   await reloadLimiters();
+00238:   log.debug({ provider: providerName }, 'Rate limiters reloaded');
+00239: }
+00240: 
+00241: /**
+00242:  * Re-registers the summarize_transcript queue handler with updated batchSize.
+00243:  * Called when summarization parallelism settings are changed via MCP.
+00244:  *
+00245:  * This function:
+00246:  * 1. Unregisters the existing handler (allows in-flight jobs to complete)
+00247:  * 2. Clears the summarization parallelism cache to reload settings from DB
+00248:  * 3. Registers a new handler with the updated batchSize
+00249:  *
+00250:  * Note: Jobs in the queue are NOT affected - they remain queued and will be processed
+00251:  * by the new handler. In-flight jobs complete normally before the handler is replaced.
+00252:  * PgBoss's offWork() is graceful and does not abort running jobs.
+00253:  */
+00254: export async function reregisterSummarizeHandler(boss: PgBoss): Promise<void> {
+00255:   // Import here to avoid circular dependency
+00256:   const { clearSummarizationCache, getMaxParallelSummarizations } = await import(
+00257:     '../../services/summarization-parallelism/index.js'
+00258:   );
+00259: 
+00260:   const queueName = 'summarize_transcript';
+00261:   const reregisterStartTime = Date.now();
+00262: 
+00263:   log.info({ queueName }, 'Starting summarize handler re-registration');
+00264: 
+00265:   // 1. Get queue stats before unregistering (for logging)
+00266:   let activeCount = 0;
+00267:   let queuedCount = 0;
+00268:   try {
+00269:     const queues = await boss.getQueues();
+00270:     const queueInfo = queues.find((q) => q.name === queueName);
+00271:     if (queueInfo) {
+00272:       activeCount = queueInfo.activeCount;
+00273:       queuedCount = queueInfo.queuedCount;
+00274:     }
+00275:   } catch {
+00276:     // Ignore errors getting stats
+00277:   }
+00278: 
+00279:   // Get old batch size for comparison
+00280:   const oldBatchSize = await getMaxParallelSummarizations();
+00281: 
+00282:   // 2. Unregister existing handler - this is GRACEFUL:
+00283:   //    - Stops fetching NEW jobs from the queue
+00284:   //    - In-flight jobs continue to completion
+00285:   //    - Jobs in queue remain untouched
+00286:   await boss.offWork(queueName);
+00287:   log.info(
+00288:     { queueName, activeJobs: activeCount, queuedJobs: queuedCount, oldBatchSize },
+00289:     'Unregistered existing handler (in-flight jobs will complete)'
+00290:   );
+00291: 
+00292:   // 3. Clear cache to force reload from database
+00293:   clearSummarizationCache();
+00294: 
+00295:   // 4. Clear summarize rate limiters so they're recreated with new settings
+00296:   const { clearSummarizeLimiters } = await import('../../services/rate-limiter/index.js');
+00297:   clearSummarizeLimiters();
+00298:   log.debug('Summarize rate limiters cleared');
+00299: 
+00300:   // 5. Load fresh parallelism setting
+00301:   const newBatchSize = await getMaxParallelSummarizations();
+00302: 
+00303:   // 6. Register new handler with updated batchSize
+00304:   //    This immediately starts processing queued jobs with the new concurrency
+00305:   const summarizeHandler = createSummarizeTranscriptHandler();
+00306: 
+00307:   await boss.work<SummarizeTranscriptJobData>(queueName, { batchSize: newBatchSize }, summarizeHandler);
+00308: 
+00309:   const durationMs = Date.now() - reregisterStartTime;
+00310: 
+00311:   log.info(
+00312:     {
+00313:       queueName,
+00314:       oldBatchSize,
+00315:       newBatchSize,
+00316:       batchSizeChanged: oldBatchSize !== newBatchSize,
+00317:       queuedJobsWaiting: queuedCount,
+00318:       durationMs,
+00319:     },
+00320:     'Summarize handler re-
+
+Context: handler.ts
+00001: /**
+00002:  * Probe Scenario Handler
+00003:  *
+00004:  * Handles probe_scenario jobs by executing Python probe worker
+00005:  * and saving transcripts to database.
+00006:  *
+00007:  * Jobs are processed in parallel within each batch, with rate limiting
+00008:  * enforced per-provider using Bottleneck.
+00009:  */
+00010: 
+00011: import path from 'path';
+00012: import type * as PgBoss from 'pg-boss';
+00013: import type { Prisma } from '@valuerank/db';
+00014: import { db } from '@valuerank/db';
+00015: import { createLogger } from '@valuerank/shared';
+00016: import type { ProbeScenarioJobData } from '../../types.js';
+00017: import { DEFAULT_JOB_OPTIONS } from '../../types.js';
+00018: import { spawnPython } from '../../spawn.js';
+00019: import { isRunPaused, isRunTerminal } from '../../../services/run/index.js';
+00020: import { createTranscript, validateTranscript } from '../../../services/transcript/index.js';
+00021: import type { CostSnapshot } from '../../../services/transcript/index.js';
+00022: import { recordProbeSuccess, recordProbeFailure } from '../../../services/probe-result/index.js';
+00023: import { schedule as rateLimitSchedule } from '../../../services/rate-limiter/index.js';
+00024: import { getProviderForModel } from '../../../services/parallelism/index.js';
+00025: import { ensureHealthCheck } from './health-check.js';
+00026: import { formatWorkerErrorMessage, extractStoredTranscriptTokenUsage, applyProgressDelta, handleJobError } from './retry.js';
+00027: import { PROBE_WORKER_PATH, fetchScenario, buildWorkerInput } from './worker-input.js';
+00028: import type { ProbeWorkerInput, ProbeWorkerOutput } from './worker-input.js';
+00029: 
+00030: const log = createLogger('queue:probe-scenario');
+00031: 
+00032: // Retry limit from job options (default 3)
+00033: const RETRY_LIMIT = DEFAULT_JOB_OPTIONS['probe_scenario'].retryLimit ?? 3;
+00034: 
+00035: /**
+00036:  * Process a single probe job.
+00037:  * Extracted to allow parallel execution within batches.
+00038:  */
+00039: async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<void> {
+00040:   const { runId, scenarioId, modelId, sampleIndex = 0, config } = job.data;
+00041:   const jobId = job.id;
+00042:   const probeResultKey = {
+00043:     runId_scenarioId_modelId_sampleIndex: {
+00044:       runId,
+00045:       scenarioId,
+00046:       modelId,
+00047:       sampleIndex,
+00048:     },
+00049:   };
+00050: 
+00051:   log.info(
+00052:     { jobId, runId, scenarioId, modelId, sampleIndex, config },
+00053:     'Processing probe_scenario job'
+00054:   );
+00055: 
+00056:   try {
+00057:     // Check if run is in a terminal state (completed/cancelled) - skip processing
+00058:     if (await isRunTerminal(runId)) {
+00059:       log.info({ jobId, runId }, 'Skipping job - run is in terminal state');
+00060:       return;
+00061:     }
+00062: 
+00063:     // Check if run is paused - defer job for later
+00064:     if (await isRunPaused(runId)) {
+00065:       log.info({ jobId, runId }, 'Deferring job - run is paused');
+00066:       throw new Error('RUN_PAUSED: Job deferred because run is paused');
+00067:     }
+00068: 
+00069:     // Idempotency: if this probe combination already succeeded, skip it.
+00070:     const existingProbeResult = await db.probeResult.findUnique({
+00071:       where: probeResultKey,
+00072:       select: {
+00073:         status: true,
+00074:         transcriptId: true,
+00075:       },
+00076:     });
+00077:     const previousProbeStatus = existingProbeResult?.status ?? null;
+00078:     const currentRetryCount = (job as unknown as { retrycount?: number }).retrycount ?? 0;
+00079: 
+00080:     if (
+00081:       existingProbeResult !== null &&
+00082:       existingProbeResult.status === 'SUCCESS' &&
+00083:       typeof existingProbeResult.transcriptId === 'string' &&
+00084:       existingProbeResult.transcriptId !== ''
+00085:     ) {
+00086:       log.info(
+00087:         { jobId, runId, scenarioId, modelId, sampleIndex, transcriptId: existingProbeResult.transcriptId },
+00088:         'Skipping probe job - result already succeeded'
+00089:       );
+00090:       return;
+00091:     }
+00092: 
+00093:     // If this specific key is already terminal-failed and this is only a PgBoss retry,
+00094:     // skip repeating a call that has already been recorded as failed.
+00095:     if (
+00096:       existingProbeResult !== null &&
+00097:       existingProbeResult.status === 'FAILED' &&
+00098:       currentRetryCount > 0
+00099:     ) {
+00100:       log.info(
+00101:         { jobId, runId, scenarioId, modelId, sampleIndex, currentRetryCount },
+00102:         'Skipping probe job - already terminal failed'
+00103:       );
+00104:       return;
+00105:     }
+00106: 
+00107:     // Recovery path: transcript exists but probe_result success row is missing
+00108:     const existingTranscript = await db.transcript.findFirst({
+00109:       where: {
+00110:         runId,
+00111:         scenarioId,
+00112:         modelId,
+00113:         sampleIndex,
+00114:
+
+... [narrowed review slice: middle omitted] ...
+
+cess in results table
+00270:     // Calculate duration from timestamps
+00271:     const startedAt = new Date(output.transcript.startedAt);
+00272:     const completedAt = new Date(output.transcript.completedAt);
+00273:     const durationMs = completedAt.getTime() - startedAt.getTime();
+00274: 
+00275:     await recordProbeSuccess({
+00276:       runId,
+00277:       scenarioId,
+00278:       modelId,
+00279:       sampleIndex,
+00280:       transcriptId: transcriptRecord.id,
+00281:       durationMs,
+00282:       inputTokens: output.transcript.totalInputTokens,
+00283:       outputTokens: output.transcript.totalOutputTokens,
+00284:     });
+00285: 
+00286:     // Update progress based on status transition for this probe key
+00287:     const { progress, status } = await applyProgressDelta(runId, previousProbeStatus, 'SUCCESS');
+00288: 
+00289:     // If run is already in SUMMARIZING state (late-arriving probe job),
+00290:     // queue a summarize job for this transcript immediately
+00291:     if (status === 'SUMMARIZING') {
+00292:       const { getBoss } = await import('../../boss.js');
+00293:       const { DEFAULT_JOB_OPTIONS: jobOptions } = await import('../../types.js');
+00294:       const boss = getBoss();
+00295:       if (boss !== null) {
+00296:         await boss.send('summarize_transcript', {
+00297:           runId,
+00298:           transcriptId: transcriptRecord.id,
+00299:         }, jobOptions['summarize_transcript']);
+00300:         log.info({ runId, transcriptId: transcriptRecord.id }, 'Queued summarize job for late-arriving transcript');
+00301:       }
+00302:     }
+00303: 
+00304:     log.info(
+00305:       { jobId, runId, scenarioId, modelId, progress, status, turns: output.transcript.turns.length },
+00306:       'Probe job completed'
+00307:     );
+00308:   } catch (error) {
+00309:     // Pause deferral is not a real failure — propagate immediately
+00310:     if (error instanceof Error && error.message.startsWith('RUN_PAUSED:')) {
+00311:       throw error;
+00312:     }
+00313: 
+00314:     const retryCount = (job as unknown as { retrycount?: number }).retrycount ?? 0;
+00315:     const terminal = await handleJobError(
+00316:       error, jobId, runId, scenarioId, modelId, sampleIndex, retryCount, RETRY_LIMIT, probeResultKey
+00317:     );
+00318:     if (terminal) {
+00319:       return;
+00320:     }
+00321: 
+00322:     // Re-throw to let PgBoss handle retry logic
+00323:     throw error;
+00324:   }
+00325: }
+00326: 
+00327: /**
+00328:  * Creates a handler for probe_scenario jobs.
+00329:  *
+00330:  * Jobs in each batch are processed in PARALLEL using the rate limiter
+00331:  * to enforce per-provider concurrency and rate limits.
+00332:  */
+00333: export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJobData> {
+00334:   return async (jobs: PgBoss.Job<ProbeScenarioJobData>[]) => {
+00335:     if (jobs.length === 0) {
+00336:       return;
+00337:     }
+00338: 
+00339:     log.info({ jobCount: jobs.length }, 'Processing probe_scenario batch in parallel');
+00340: 
+00341:     // Process all jobs in parallel with rate limiting
+00342:     const results = await Promise.allSettled(
+00343:       jobs.map(async (job) => {
+00344:         const { modelId, scenarioId } = job.data;
+00345:         const jobId = job.id;
+00346: 
+00347:         // Get provider for this model to route to correct rate limiter
+00348:         const provider = await getProviderForModel(modelId);
+00349: 
+00350:         if (provider === null) {
+00351:           // Unknown provider - process without rate limiting (fallback)
+00352:           log.warn({ jobId, modelId }, 'Unknown provider for model, processing without rate limit');
+00353:           return processProbeJob(job);
+00354:         }
+00355: 
+00356:         // Schedule through rate limiter for this provider
+00357:         return rateLimitSchedule(
+00358:           provider,
+00359:           jobId,
+00360:           job.data.runId,
+00361:           modelId,
+00362:           scenarioId,
+00363:           () => processProbeJob(job)
+00364:         );
+00365:       })
+00366:     );
+00367: 
+00368:     // Check for failures - PgBoss needs us to throw to trigger retries
+00369:     const failures = results.filter(
+00370:       (r): r is PromiseRejectedResult => r.status === 'rejected'
+00371:     );
+00372: 
+00373:     if (failures.length > 0) {
+00374:       log.warn(
+00375:         { failureCount: failures.length, totalJobs: jobs.length },
+00376:         'Some jobs in batch failed'
+00377:       );
+00378: 
+00379:       // Throw when any retryable failures occurred so PgBoss requeues them.
+00380:       // Succeeded jobs are idempotent (checked by probe_result/transcript), so retries are safe.
+00381:       if (failures[0] !== undefined) {
+00382:         throw failures[0].reason;
+00383:       }
+00384:     }
+00385: 
+00386:     log.info(
+00387:       { completed: results.length - failures.length, failed: failures.length },
+00388:       'Probe batch processing c
+
+Context: recovery-jobs.ts
+/**
+ * Low-level job queue operations for run recovery.
+ * Extracted from recovery.ts to keep that file under the 400-line limit.
+ */
+
+import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import { getBoss } from '../../queue/boss.js';
+import { DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
+import { getQueueNameForModel } from '../parallelism/index.js';
+import type { TranscriptKey } from './coverage-completeness.js';
+
+const log = createLogger('services:run:recovery');
+
+/**
+ * Counts pending and active jobs for a specific run across all probe queues.
+ */
+export async function countJobsForRun(runId: string): Promise<{ pending: number; active: number }> {
+  // Query PgBoss job table directly for accurate counts
+  const result = await db.$queryRaw<Array<{ state: string; count: bigint }>>`
+    SELECT state, COUNT(*) as count
+    FROM pgboss.job
+    WHERE (name = 'probe_scenario' OR name LIKE 'probe_scenario_%')
+      AND state IN ('created', 'retry', 'active')
+      AND data->>'runId' = ${runId}
+    GROUP BY state
+  `;
+
+  let pending = 0;
+  let active = 0;
+
+  for (const row of result) {
+    const count = Number(row.count);
+    if (row.state === 'active') {
+      active = count;
+    } else {
+      pending += count; // 'created' and 'retry' are both pending
+    }
+  }
+
+  return { pending, active };
+}
+
+/**
+ * Re-queues missing probe jobs for an orphaned run.
+ * Handles multi-sample runs by including sampleIndex in job data.
+ */
+export async function requeueMissingProbes(
+  runId: string,
+  missingProbes: TranscriptKey[]
+): Promise<number> {
+  const boss = getBoss();
+
+  const jobOptions = DEFAULT_JOB_OPTIONS['probe_scenario'];
+  let queuedCount = 0;
+
+  for (const { scenarioId, modelId, sampleIndex } of missingProbes) {
+    const queueName = await getQueueNameForModel(modelId);
+
+    await boss.send(
+      queueName,
+      {
+        runId,
+        scenarioId,
+        modelId,
+        sampleIndex,
+        config: {
+          maxTurns: 10,
+        },
+      },
+      jobOptions
+    );
+
+    queuedCount++;
+  }
+
+  log.info({ runId, queuedCount }, 'Re-queued missing probe jobs');
+  return queuedCount;
+}
+
+/**
+ * Queues summarize jobs for all unsummarized transcripts in a run.
+ * Duplicated from progress.ts since that function is private.
+ */
+export async function queueSummarizeJobsForRecovery(runId: string): Promise<number> {
+  const boss = getBoss();
+
+  const transcripts = await db.transcript.findMany({
+    where: { runId, summarizedAt: null },
+    select: { id: true },
+  });
+
+  if (transcripts.length === 0) {
+    return 0;
+  }
+
+  const jobOptions = DEFAULT_JOB_OPTIONS['summarize_transcript'];
+
+  for (const transcript of transcripts) {
+    await boss.send('summarize_transcript', {
+      runId,
+      transcriptId: transcript.id,
+    }, jobOptions);
+  }
+
+  log.info({ runId, jobCount: transcripts.length }, 'Queued summarize jobs for recovery');
+  return transcripts.length;
+}
+
+
+Context: stall-detection.ts
+import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+
+const log = createLogger('services:run:stall-detection');
+
+export const STALL_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes
+
+export async function getModelsWithPendingJobs(runId: string): Promise<string[]> {
+  const result = await db.$queryRaw<Array<{ model_id: string }>>`
+    SELECT DISTINCT data->>'modelId' as model_id
+    FROM pgboss.job
+    WHERE (name = 'probe_scenario' OR name LIKE 'probe_scenario_%')
+      AND state IN ('created', 'retry', 'active')
+      AND data->>'runId' = ${runId}
+  `;
+  return result.map(r => r.model_id).filter(Boolean);
+}
+
+export async function getLastSuccessfulCompletionByModel(runId: string): Promise<Map<string, Date>> {
+  const result = await db.$queryRaw<Array<{ model_id: string; last_completion: Date }>>`
+    SELECT model_id, MAX(completed_at) as last_completion
+    FROM probe_results
+    WHERE run_id = ${runId}
+      AND status = 'SUCCESS'
+      AND completed_at IS NOT NULL
+    GROUP BY model_id
+  `;
+  const map = new Map<string, Date>();
+  for (const row of result) {
+    map.set(row.model_id, row.last_completion);
+  }
+  return map;
+}
+
+export async function detectStalledModels(runId: string, runStartedAt: Date): Promise<string[]> {
+  const now = Date.now();
+  const threshold = now - STALL_THRESHOLD_MS;
+  const runIsOldEnough = runStartedAt.getTime() < threshold;
+
+  const pendingModels = await getModelsWithPendingJobs(runId);
+  if (pendingModels.length === 0) return [];
+
+  const lastSuccess = await getLastSuccessfulCompletionByModel(runId);
+  const stalled: string[] = [];
+
+  for (const modelId of pendingModels) {
+    const lastSuccessTime = lastSuccess.get(modelId);
+    if (lastSuccessTime === undefined) {
+      // Never succeeded — stall only if run has been running long enough
+      if (runIsOldEnough) stalled.push(modelId);
+    } else if (lastSuccessTime.getTime() < threshold) {
+      stalled.push(modelId);
+    }
+  }
+
+  return stalled;
+}
+
+export async function detectProgressStalls(
+  runId: string,
+  config: { models?: string[]; samplesPerScenario?: number },
+  scenarioCount: number,
+): Promise<string[]> {
+  const models = config.models ?? [];
+  const samplesPerScenario = config.samplesPerScenario ?? 1;
+  if (models.length === 0 || scenarioCount === 0) return [];
+
+  const expectedPerModel = scenarioCount * samplesPerScenario;
+
+  const transcriptCounts = await db.$queryRaw<Array<{ model_id: string; cnt: bigint }>>`
+    SELECT model_id, COUNT(*) as cnt
+    FROM transcripts
+    WHERE run_id = ${runId}
+    GROUP BY model_id
+  `;
+
+  const countByModel = new Map<string, number>();
+  for (const row of transcriptCounts) {
+    countByModel.set(row.model_id, Number(row.cnt));
+  }
+
+  return models.filter(modelId => (countByModel.get(modelId) ?? 0) < expectedPerModel);
+}
+
+export async function updateRunStalledModels(
+  run: { id: string; stalledModels: string[] },
+  newStalled: string[]
+): Promise<void> {
+  const newlyStalled = newStalled.filter(m => !run.stalledModels.includes(m));
+  if (newlyStalled.length > 0) {
+    log.warn({ runId: run.id, newlyStalled }, 'Stall detected: models not making progress');
+  }
+
+  const changed =
+    newStalled.length !== run.stalledModels.length ||
+    newStalled.some(m => !run.stalledModels.includes(m));
+
+  if (changed) {
+    await db.run.update({
+      where: { id: run.id },
+      data: { stalledModels: newStalled },
+    });
+  }
+}
+
+export async function detectAndUpdateStalledRuns(): Promise<{
+  checked: number;
+  newStalls: number;
+  totalStalled: number;
+}> {
+  const runningRuns = await db.run.findMany({
+    where: { status: 'RUNNING' },
+    select: { id: true, stalledModels: true, startedAt: true, progress: true, config: true },
+  });
+
+  let newStalls = 0;
+  let totalStalled = 0;
+
+  for (const run of runningRuns) {
+    if (run.startedAt == null) {
+      log.error({ runId: run.id }, 'RUNNING run has null startedAt — skipping stall detection');
+      continue;
+    }
+
+    let stalled = await detectStalledModels(run.id, run.startedAt);
+
+    // If no queue-level stalls, check for progress stalls (jobs vanished from queue)
+    if (stalled.length === 0 && run.progress != null) {
+      const progress = run.progress as { total: number; completed: number; failed: number };
+      const done = progress.completed + progress.failed;
+      if (done < progress.total) {
+        // Check that there are truly zero pending/active jobs
+        const pendingModels = await getModelsWithPendingJobs(run.id);
+        if (pendingModels.length === 0) {
+          const config = run.config as { models?: string[]; samplesPerScenario?: number } | null;
+          const scenarioCount = await db.runScenarioSelection.count({ where: { runId: run.id } });
+          stalled = await detectProgressStalls(run.id, config ?? {}, scenarioCount);
+          if (stalled.length > 0) {
+            log.warn(
+              { runId: run.id, stalledModels: stalled, progress },
+              'Progress stall detected: incomplete progress with no pending jobs'
+            );
+          }
+        }
+      }
+    }
+
+    const newlyStalled = stalled.filter(m => !run.stalledModels.includes(m));
+    if (newlyStalled.length > 0) newStalls++;
+    if (stalled.length > 0) totalStalled++;
+    await updateRunStalledModels(run, stalled);
+  }
+
+  return { checked: runningRuns.length, newStalls, totalStalled };
+}
+
+
+Context: scheduler.ts
+/**
+ * Run Recovery Scheduler
+ *
+ * Manages the periodic recovery job that detects and recovers orphaned runs.
+ * Uses setInterval for simplicity - PgBoss schedule() is for distributed cron,
+ * but we only need one instance running recovery.
+ *
+ * Activity-based scheduling:
+ * - Recovery only runs for 1 hour after the last run was started
+ * - When a new run starts, the activity timeout is reset
+ * - This prevents wasting resources checking for orphaned runs when no runs are active
+ */
+
+import { createLogger } from '@valuerank/shared';
+import {
+  recoverOrphanedRuns,
+  detectAndRecoverStuckJobs,
+  RECOVERY_INTERVAL_MS,
+  runStartupRecovery
+} from './recovery.js';
+import { detectAndUpdateStalledRuns } from './stall-detection.js';
+
+const log = createLogger('services:run:scheduler');
+
+let recoveryInterval: NodeJS.Timeout | null = null;
+let activityTimeout: NodeJS.Timeout | null = null;
+let isRecovering = false;
+
+// How long to keep recovery running after the last run was started (1 hour)
+export const RECOVERY_ACTIVITY_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * Runs the recovery job, preventing concurrent executions.
+ */
+async function runRecoveryJob(): Promise<void> {
+  if (isRecovering) {
+    log.debug('Recovery already in progress, skipping');
+    return;
+  }
+
+  isRecovering = true;
+  try {
+    const result = await recoverOrphanedRuns();
+    const zombieResult = await detectAndRecoverStuckJobs();
+    const stallResult = await detectAndUpdateStalledRuns();
+
+    if (result.detected.length > 0 || result.errors.length > 0 || zombieResult.recovered > 0) {
+      log.info(
+        {
+          detected: result.detected.length,
+          recovered: result.recovered.length,
+          zombiesKilled: zombieResult.recovered,
+          errors: result.errors.length + zombieResult.errors,
+        },
+        'Recovery job completed'
+      );
+    }
+
+    if (stallResult.totalStalled > 0) {
+      // Keep scheduler alive while stalls persist (not just when new stalls appear)
+      signalRunActivity();
+    }
+  } catch (error) {
+    log.error({ error }, 'Recovery job failed');
+  } finally {
+    isRecovering = false;
+  }
+}
+
+/**
+ * Clears the activity timeout if set.
+ */
+function clearActivityTimeout(): void {
+  if (activityTimeout !== null) {
+    clearTimeout(activityTimeout);
+    activityTimeout = null;
+  }
+}
+
+/**
+ * Starts the activity timeout that will stop recovery after RECOVERY_ACTIVITY_WINDOW_MS.
+ */
+function startActivityTimeout(): void {
+  clearActivityTimeout();
+
+  activityTimeout = setTimeout(() => {
+    log.info(
+      { windowMs: RECOVERY_ACTIVITY_WINDOW_MS },
+      'Activity window expired, stopping recovery scheduler'
+    );
+    stopRecoveryInterval();
+  }, RECOVERY_ACTIVITY_WINDOW_MS);
+}
+
+/**
+ * Stops only the recovery interval (not the activity tracking).
+ */
+function stopRecoveryInterval(): void {
+  if (recoveryInterval !== null) {
+    clearInterval(recoveryInterval);
+    recoveryInterval = null;
+    log.info('Recovery interval stopped');
+  }
+}
+
+/**
+ * Starts the recovery interval if not already running.
+ */
+function startRecoveryInterval(): void {
+  if (recoveryInterval !== null) {
+    return; // Already running
+  }
+
+  recoveryInterval = setInterval(() => { void runRecoveryJob(); }, RECOVERY_INTERVAL_MS);
+  log.info({ intervalMs: RECOVERY_INTERVAL_MS }, 'Recovery interval started');
+}
+
+/**
+ * Signals that a run has been started.
+ * This resets the activity window and ensures recovery is running.
+ */
+export function signalRunActivity(): void {
+  log.debug('Run activity signaled, resetting activity window');
+
+  // Ensure recovery is running
+  startRecoveryInterval();
+
+  // Reset the activity timeout
+  startActivityTimeout();
+}
+
+/**
+ * Starts the recovery scheduler.
+ * Runs recovery immediately on startup, then schedules periodic recovery
+ * only if there are active runs (detected during startup recovery).
+ */
+export async function startRecoveryScheduler(): Promise<void> {
+  if (recoveryInterval !== null) {
+    log.warn('Recovery scheduler already running');
+    return;
+  }
+
+  log.info(
+    { intervalMs: RECOVERY_INTERVAL_MS, activityWindowMs: RECOVERY_ACTIVITY_WINDOW_MS },
+    'Starting recovery scheduler'
+  );
+
+  // Run startup recovery first
+  let hasActiveRuns = false;
+  try {
+    const startupResult = await runStartupRecovery();
+    if (startupResult.detected.length > 0) {
+      log.info(
+        {
+          detected: startupResult.detected.length,
+          recovered: startupResult.recovered.length,
+          errors: startupResult.errors.length,
+        },
+        'Startup recovery completed'
+      );
+      // If we found orphaned runs, keep recovery running
+      hasActiveRuns = true;
+    }
+  } catch (error) {
+    log.error({ error }, 'Startup recovery failed');
+    // Don't throw - we still want to proceed
+  }
+
+  // Only start the interval if we found active runs during startup
+  if (hasActiveRuns) {
+    startRecoveryInterval();
+    startActivityTimeout();
+    log.info('Recovery scheduler started (active runs detected)');
+  } else {
+    log.info('Recovery scheduler initialized but not running (no active runs)');
+  }
+}
+
+/**
+ * Stops the recovery scheduler completely (interval and activity timeout).
+ */
+export function stopRecoveryScheduler(): void {
+  stopRecoveryInterval();
+  clearActivityTimeout();
+  log.info('Recovery scheduler stopped');
+}
+
+/**
+ * Checks if the recovery scheduler is running.
+ */
+export function isRecoverySchedulerRunning(): boolean {
+  return recoveryInterval !== null;
+}
+
+/**
+ * Manually triggers a recovery run (for debugging/admin).
+ */
+export async function triggerRecovery(): Promise<{
+  detected: number;
+  recovered: number;
+  errors: number;
+}> {
+  const result = await recoverOrphanedRuns();
+  return {
+    detected: result.detected.length,
+    recovered: result.recovered.length,
+    errors: result.errors.length,
+  };
+}
+
+
+Artifact: plan.md
+# Plan
+
+## Implementation Steps
+
+### Step 1 — Add `top_up_probes` job type
+
+**File**: `cloud/apps/api/src/queue/types.ts`
+
+Add `TopUpProbesJobData` interface and register `top_up_probes` job defaults:
+
+```typescript
+export interface TopUpProbesJobData {
+  runId: string;
+}
+```
+
+Job defaults:
+- `expireInSeconds: 60`
+- `retryLimit: 0`
+- `singletonKey`: set at call site (= runId)
+
+### Step 2 — Cap per-provider insertion in `enqueueRunJobs()`
+
+**File**: `cloud/apps/api/src/services/run/start-queue.ts`
+
+1. Export `PROBE_QUEUE_DEPTH_PER_PROVIDER = 15`
+2. After building the full job list, group by `queueName` into a `Map<string, Job[]>`
+3. For each provider queue: take only `min(PROBE_QUEUE_DEPTH_PER_PROVIDER, providerJobs.length)` jobs,
+   where `providerJobs` is the per-provider slice (not the total run size)
+4. Compute `expectedInitialCount` = sum of per-provider capped counts (not `totalJobs`)
+5. Update integrity check: compare `jobIds.length` against `expectedInitialCount`
+6. `run.progress.total` = `totalJobs` (unchanged — true total, not capped count)
+
+### Step 3 — Create `top-up-probes` handler
+
+**File**: `cloud/apps/api/src/queue/handlers/top-up-probes.ts` (new file)
+
+Logic:
+1. Exit early if run status is not RUNNING
+2. Fetch run config: `models`, `scenarioIds`, `samplesPerScenario`, `temperature`
+3. Rebuild full job plan using `buildRunJobPlan(run)` — this produces individual probe job
+   descriptors each with their own `(scenarioId, modelId, sampleIndex)` tuple. The top-up
+   handler works from this full list, not from sample counts; `sampleIndex` values are never
+   reconstructed from counts.
+4. Call queue-aware missing-probe helper (see below)
+5. For each provider queue:
+   - Count current pending + active PgBoss jobs for this run in that queue
+   - Insert `min(missing, max(0, PROBE_QUEUE_DEPTH_PER_PROVIDER - pending))` new jobs
+   - Use correct provider queue name (from `getQueueNameForModel(modelId)`), not default `probe_scenario`
+   - Pass `temperature` through to each job's data
+
+**Queue-aware missing-probe helper** (inline in handler or shared util):
+- Returns probes that have NEITHER a terminal `ProbeResult` (SUCCESS or FAILED) NOR a pending/active PgBoss job in the relevant queue
+- Query: `SELECT * FROM pgboss.job WHERE name = $queueName AND data->>'runId' = $runId AND state IN ('created', 'retry', 'active')`
+- This is NOT `findMissingProbes` — that helper only checks transcript rows
+
+### Step 4 — Register handler
+
+**File**: `cloud/apps/api/src/queue/handlers/index.ts`
+
+Register `top_up_probes` → `topUpProbesHandler`
+
+### Step 5 — Enqueue top-up from probe-scenario handler
+
+**File**: `cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts`
+
+Enqueue `top_up_probes` singleton at ALL terminal paths:
+- SUCCESS path (`applyProgressDelta(..., 'SUCCESS')`)
+- Final FAILED path (`applyProgressDelta(..., 'FAILED')`)
+- Idempotent early-exit paths (lines ~80–105 where handler returns early because ProbeResult already exists)
+
+Use `singletonKey = runId`. Do NOT enqueue for retryable throws.
+
+### Step 6 — Fix queue-name pattern in recovery and stall detection
+
+**File**: `cloud/apps/api/src/services/run/recovery-jobs.ts`
+
+Update `countJobsForRun()` and related helpers to match provider queues:
+- Current pattern: `name = 'probe_scenario' OR name LIKE 'probe_scenario_%'`
+- New pattern: `name = 'probe_scenario' OR (name LIKE 'probe_%' AND name != 'probe_dead_letter')`
+- This covers `probe_anthropic`, `probe_openai`, `probe_google`, etc. while excluding the
+  `probe_dead_letter` queue (a real PgBoss queue in this system — see `handler-config.ts`)
+
+**File**: `cloud/apps/api/src/services/run/stall-detection.ts`
+
+Same pattern update.
+
+### Step 7 — Add backstop sweep to scheduler
+
+**File**: `cloud/apps/api/src/services/run/scheduler.ts`
+
+Inside `runRecoveryJob()`, after existing recovery calls, add:
+- For each RUNNING run: count pending jobs per provider queue
+- If any provider is below `PROBE_QUEUE_DEPTH_PER_PROVIDER / 2`: enqueue `top_up_probes` singleton for that run
+- Use `singletonKey = runId` (deduplication is cheap)
+
+### Step 8 — Unit tests
+
+**File**: `cloud/apps/api/src/queue/handlers/top-up-probes.test.ts` (new file)
+
+Cover:
+- Capped launch: run with 200 jobs across 4 providers inserts ≤ 60 at launch
+- Top-up when below cap: missing probes are enqueued up to cap
+- Top-up no-op when at cap: no jobs inserted when provider is full
+- Early exit on non-RUNNING run
+- Temperature propagated correctly to topped-up jobs
+
+## Key Constraints
+
+- No schema migrations
+- No UI changes
+- No changes to `buildRunJobPlan`
+- `progress.total` always = true total job count
+- All new code: no `any`, strict TypeScript
+- `top-up-probes.ts` target: ~100 lines
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the plan against the queue code paths that already exist, then I’ll call out only the gaps that are actually supported by the code.
+exec
+/bin/zsh -lc "rg -n \"probe_dead_letter|probe_scenario|buildRunJobPlan|getQueueNameForModel|countJobsForRun|detectAndUpdateStalledRuns|top_up_probes|findMissingProbes|PROBE_QUEUE_DEPTH_PER_PROVIDER\" /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src -g '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/queue/status.ts:48:      WHERE name IN ('probe_scenario', 'summarize_transcript', 'analyze_basic', 'expand_scenarios')
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/queue/status.ts:57:    const knownTypes = ['probe_scenario', 'summarize_transcript', 'analyze_basic', 'expand_scenarios'];
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/queue/status.ts:124:        { type: 'probe_scenario', pending: 0, active: 0, completed: 0, failed: 0 },
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/probe-dead-letter.ts:4: * Handles failed/expired probe_scenario jobs that were moved to the dead letter queue.
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/probe-dead-letter.ts:17: * Creates a handler for probe_dead_letter jobs.
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/index.ts:86:    if (registration.name === 'probe_dead_letter') continue;
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/index.ts:89:    // Add dead letter queue for probe_scenario
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/index.ts:90:    if (registration.name === 'probe_scenario') {
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery-jobs.ts:10:import { getQueueNameForModel } from '../parallelism/index.js';
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery-jobs.ts:18:export async function countJobsForRun(runId: string): Promise<{ pending: number; active: number }> {
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery-jobs.ts:23:    WHERE (name = 'probe_scenario' OR name LIKE 'probe_scenario_%')
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery-jobs.ts:54:  const jobOptions = DEFAULT_JOB_OPTIONS['probe_scenario'];
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery-jobs.ts:58:    const queueName = await getQueueNameForModel(modelId);
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts:4: * Handles probe_scenario jobs by executing Python probe worker
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts:33:const RETRY_LIMIT = DEFAULT_JOB_OPTIONS['probe_scenario'].retryLimit ?? 3;
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts:53:    'Processing probe_scenario job'
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts:328: * Creates a handler for probe_scenario jobs.
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts:339:    log.info({ jobCount: jobs.length }, 'Processing probe_scenario batch in parallel');
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery.ts:15:import { findMissingProbes } from './coverage-completeness.js';
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery.ts:17:  countJobsForRun,
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery.ts:86:    const jobCounts = await countJobsForRun(run.id);
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery.ts:91:      const missingProbes = await findMissingProbes(run.id);
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery.ts:138:  const missingProbes = await findMissingProbes(runId);
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery.ts:317:      AND (name = 'probe_scenario' OR name LIKE 'probe_scenario_%')
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/start-plan.ts:22:export async function buildRunJobPlan(input: BuildRunJobPlanInput): Promise<{
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/start-queue.ts:5:import { getQueueNameForModel } from '../parallelism/index.js';
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/start-queue.ts:29:    ...DEFAULT_JOB_OPTIONS['probe_scenario'],
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/start-queue.ts:37:    const queueName = await getQueueNameForModel(modelId);
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/summarize-persistence.ts:2:import { findMissingProbes } from '../../services/run/coverage-completeness.js';
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/summarize-persistence.ts:107:  const missing = await findMissingProbes(runId);
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/types.ts:40:    probe_scenario?: JobTypeCounts;
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/coverage-completeness.ts:57:export async function findMissingProbes(runId: string): Promise<TranscriptKey[]> {
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/job-queue.ts:21:const JOB_TYPES = ['probe_scenario', 'summarize_transcript', 'analyze_basic'] as const;
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/job-queue.ts:82:    // Note: probe_scenario jobs may have model-specific queue names like probe_scenario_openai
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/job-queue.ts:86:          WHEN name LIKE 'probe_scenario%' THEN 'probe_scenario'
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/job-queue.ts:92:      WHERE (name LIKE 'probe_scenario%' OR name = 'summarize_transcript' OR name = 'analyze_basic')
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/job-queue.ts:97:          WHEN name LIKE 'probe_scenario%' THEN 'probe_scenario'
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/job-queue.ts:171:      WHERE (name LIKE 'probe_scenario%' OR name = 'summarize_transcript' OR name = 'analyze_basic')
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/job-queue.ts:183:      const jobType = job.name.startsWith('probe_scenario') ? 'probe_scenario' : job.name;
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/handler-config.ts:40:export const PROBE_DEAD_LETTER_QUEUE = 'probe_dead_letter';
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/handler-config.ts:50:    name: 'probe_scenario',
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/handler-config.ts:52:      // Register for the default probe_scenario queue (fallback)
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/handler-config.ts:54:        'probe_scenario',
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/handler-config.ts:101:    name: 'probe_dead_letter',
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/start.ts:4: * Creates a new run and queues probe_scenario jobs for each model-scenario pair.
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/start.ts:21:import { buildRunJobPlan } from './start-plan.js';
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/start.ts:153:  const { selectedScenarioIds, jobPlan } = await buildRunJobPlan({
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/stall-detection.ts:12:    WHERE (name = 'probe_scenario' OR name LIKE 'probe_scenario_%')
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/stall-detection.ts:106:export async function detectAndUpdateStalledRuns(): Promise<{
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/types.ts:9:  | 'probe_scenario'
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/types.ts:14:  | 'probe_dead_letter'
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/types.ts:94:  'probe_scenario': {
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/types.ts:139:  'probe_dead_letter': {
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/control.ts:135:      WHERE name = 'probe_scenario'
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/cli/reopen-premature-runs.ts:25:import { findMissingProbes } from '../services/run/coverage-completeness.js';
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/cli/reopen-premature-runs.ts:91:    const missing = await findMissingProbes(run.id);
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/scheduler.ts:21:import { detectAndUpdateStalledRuns } from './stall-detection.js';
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/scheduler.ts:45:    const stallResult = await detectAndUpdateStalledRuns();
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/parallelism/index.ts:129:export async function getQueueNameForModel(modelId: string): Promise<string> {
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/parallelism/index.ts:134:    return 'probe_scenario'; // Fall back to default queue
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/graphql/types/run.ts:364:            WHERE name = 'probe_scenario'
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/graphql/mutations/run/lifecycle.ts:48:      Creates a run record and queues probe_scenario jobs for each model-scenario combination.
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/graphql/types/queue-status.ts:20:      description: 'Job type name (e.g., probe_scenario)',
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/mcp/tools/delete-run.ts:65:    // Cancel pending probe_scenario jobs for this run
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/mcp/tools/delete-run.ts:70:      WHERE name = 'probe_scenario'
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/mcp/tools/start-run.ts:103:Queues probe_scenario jobs for each model-scenario combination.
+/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/mcp/tools/get-job-queue-status.ts:43:- Counts by job type (probe_scenario, summarize_transcript, analyze_basic)
+
+codex
+I found the existing recovery and queue registration paths. I’m reading the concrete code around them now to separate real breakage from things the plan already covers.
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/start-plan.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+import { createLogger, ValidationError } from '@valuerank/shared';
+import { sampleScenarios } from './start-helpers.js';
+
+const log = createLogger('services:run:start');
+
+export type RunJobPlanItem = {
+  modelId: string;
+  scenarioId: string;
+  samples: number;
+};
+
+type BuildRunJobPlanInput = {
+  definitionId: string;
+  models: string[];
+  definitionScenarioIds: string[];
+  scenarioIds?: string[];
+  samplePercentage: number;
+  sampleSeed?: number;
+  samplesPerScenario: number;
+};
+
+export async function buildRunJobPlan(input: BuildRunJobPlanInput): Promise<{
+  selectedScenarioIds: string[];
+  jobPlan: RunJobPlanItem[];
+}> {
+  const {
+    definitionId,
+    models,
+    definitionScenarioIds,
+    scenarioIds,
+    samplePercentage,
+    sampleSeed,
+    samplesPerScenario,
+  } = input;
+
+  let selectedScenarioIds: string[] = [];
+  const jobPlan: RunJobPlanItem[] = [];
+
+  if (Array.isArray(scenarioIds) && scenarioIds.length > 0) {
+    const allScenarioIdSet = new Set(definitionScenarioIds);
+    selectedScenarioIds = Array.from(new Set(scenarioIds));
+
+    const invalidScenarioIds = selectedScenarioIds.filter((scenarioId) => !allScenarioIdSet.has(scenarioId));
+    if (invalidScenarioIds.length > 0) {
+      throw new ValidationError(
+        `Invalid scenarioIds for definition ${definitionId}: ${invalidScenarioIds.join(', ')}`
+      );
+    }
+
+    for (const modelId of models) {
+      for (const scenarioId of selectedScenarioIds) {
+        jobPlan.push({
+          modelId,
+          scenarioId,
+          samples: samplesPerScenario,
+        });
+      }
+    }
+
+    log.debug(
+      { definitionId, selectedScenarios: selectedScenarioIds.length },
+      'Using explicit scenario selection'
+    );
+    return { selectedScenarioIds, jobPlan };
+  }
+
+  selectedScenarioIds = sampleScenarios(definitionScenarioIds, samplePercentage, definitionId, sampleSeed);
+
+  for (const modelId of models) {
+    for (const scenarioId of selectedScenarioIds) {
+      jobPlan.push({
+        modelId,
+        scenarioId,
+        samples: samplesPerScenario,
+      });
+    }
+  }
+
+  log.debug(
+    { definitionId, totalScenarios: definitionScenarioIds.length, sampledScenarios: selectedScenarioIds.length },
+    'Scenarios sampled'
+  );
+
+  return { selectedScenarioIds, jobPlan };
+}
+
+exec
+/bin/zsh -lc "sed -n '1,240p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/coverage-completeness.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/handler-config.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+/**
+ * Handler configuration — queue names, types, and registration table.
+ * Extracted from index.ts to keep it under the 400-line file size limit.
+ */
+
+import type { PgBoss } from 'pg-boss';
+import type {
+  JobType,
+  ProbeScenarioJobData,
+  SummarizeTranscriptJobData,
+  AnalyzeBasicJobData,
+  ExpandScenariosJobData,
+  ComputeTokenStatsJobData,
+  ProbeDeadLetterJobData,
+  AggregateAnalysisJobData,
+  RefreshDomainAnalysisSnapshotJobData,
+} from '../types.js';
+import { createProbeScenarioHandler } from './probe-scenario/index.js';
+import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
+import { createAnalyzeBasicHandler } from './analyze-basic.js';
+import { createExpandScenariosHandler } from './expand-scenarios.js';
+import { createComputeTokenStatsHandler } from './compute-token-stats.js';
+import { createProbeDeadLetterHandler } from './probe-dead-letter.js';
+import { createAggregateAnalysisHandler } from './aggregate-analysis.js';
+import { createRefreshDomainAnalysisSnapshotHandler } from './refresh-domain-analysis-snapshot.js';
+
+// Re-export job data types for handlers
+export type {
+  ProbeScenarioJobData,
+  SummarizeTranscriptJobData,
+  AnalyzeBasicJobData,
+  ExpandScenariosJobData,
+  ComputeTokenStatsJobData,
+  ProbeDeadLetterJobData,
+  AggregateAnalysisJobData,
+  RefreshDomainAnalysisSnapshotJobData,
+};
+
+// Dead letter queue name for probe jobs
+export const PROBE_DEAD_LETTER_QUEUE = 'probe_dead_letter';
+
+// Handler registration info
+export type HandlerRegistration = {
+  name: JobType;
+  register: (boss: PgBoss, batchSize: number) => Promise<void>;
+};
+
+export const handlerRegistrations: HandlerRegistration[] = [
+  {
+    name: 'probe_scenario',
+    register: async (boss, batchSize) => {
+      // Register for the default probe_scenario queue (fallback)
+      await boss.work<ProbeScenarioJobData>(
+        'probe_scenario',
+        { batchSize },
+        createProbeScenarioHandler()
+      );
+    },
+  },
+  {
+    name: 'summarize_transcript',
+    register: async (boss, batchSize) => {
+      await boss.work<SummarizeTranscriptJobData>(
+        'summarize_transcript',
+        { batchSize },
+        createSummarizeTranscriptHandler()
+      );
+    },
+  },
+  {
+    name: 'analyze_basic',
+    register: async (boss, batchSize) => {
+      await boss.work<AnalyzeBasicJobData>(
+        'analyze_basic',
+        { batchSize },
+        createAnalyzeBasicHandler()
+      );
+    },
+  },
+  {
+    name: 'expand_scenarios',
+    register: async (boss, batchSize) => {
+      await boss.work<ExpandScenariosJobData>(
+        'expand_scenarios',
+        { batchSize },
+        createExpandScenariosHandler()
+      );
+    },
+  },
+  {
+    name: 'compute_token_stats',
+    register: async (boss, batchSize) => {
+      await boss.work<ComputeTokenStatsJobData>(
+        'compute_token_stats',
+        { batchSize },
+        createComputeTokenStatsHandler()
+      );
+    },
+  },
+  {
+    name: 'probe_dead_letter',
+    register: async (boss, batchSize) => {
+      await boss.work<ProbeDeadLetterJobData>(
+        PROBE_DEAD_LETTER_QUEUE,
+        { batchSize },
+        createProbeDeadLetterHandler()
+      );
+    },
+  },
+  {
+    name: 'aggregate_analysis',
+    register: async (boss, batchSize) => {
+      await boss.work<AggregateAnalysisJobData>(
+        'aggregate_analysis',
+        { batchSize }, // Usually batchSize=1 effectively for aggregation if we want strict serial per worker
+        createAggregateAnalysisHandler()
+      );
+    },
+  },
+  {
+    name: 'refresh_domain_analysis_snapshot',
+    register: async (boss, batchSize) => {
+      await boss.work<RefreshDomainAnalysisSnapshotJobData>(
+        'refresh_domain_analysis_snapshot',
+        { batchSize },
+        createRefreshDomainAnalysisSnapshotHandler()
+      );
+    },
+  },
+];
+
+ succeeded in 0ms:
+import { db } from '@valuerank/db';
+
+export type TranscriptKey = {
+  scenarioId: string;
+  modelId: string;
+  sampleIndex: number;
+};
+
+export type TranscriptExpectation = {
+  scenarioIds: string[];
+  models: string[];
+  samplesPerScenario?: number | null;
+};
+
+function transcriptKeyToString({ scenarioId, modelId, sampleIndex }: TranscriptKey): string {
+  return JSON.stringify({ scenarioId, modelId, sampleIndex });
+}
+
+export function normalizeSamplesPerScenario(samplesPerScenario: unknown): number {
+  return Number.isInteger(samplesPerScenario) && (samplesPerScenario as number) >= 1
+    ? (samplesPerScenario as number)
+    : 1;
+}
+
+export function findMissingTranscriptKeys({
+  scenarioIds,
+  models,
+  samplesPerScenario,
+  existingTranscripts,
+}: TranscriptExpectation & {
+  existingTranscripts: TranscriptKey[];
+}): TranscriptKey[] {
+  const normalizedSamplesPerScenario = normalizeSamplesPerScenario(samplesPerScenario);
+  const existingKeys = new Set(existingTranscripts.map(transcriptKeyToString));
+  const missing: TranscriptKey[] = [];
+
+  for (const modelId of models) {
+    for (const scenarioId of scenarioIds) {
+      for (let sampleIndex = 0; sampleIndex < normalizedSamplesPerScenario; sampleIndex++) {
+        const key: TranscriptKey = { scenarioId, modelId, sampleIndex };
+        if (!existingKeys.has(transcriptKeyToString(key))) {
+          missing.push(key);
+        }
+      }
+    }
+  }
+
+  return missing;
+}
+
+/**
+ * Finds which (scenarioId × modelId × sampleIndex) tuples are missing transcripts
+ * for a given run, by reading the run's config and scenario selections from the DB.
+ *
+ * Returns [] if the run does not exist or has no expected probes.
+ */
+export async function findMissingProbes(runId: string): Promise<TranscriptKey[]> {
+  const run = await db.run.findUnique({
+    where: { id: runId },
+    select: {
+      config: true,
+      scenarioSelections: {
+        select: { scenarioId: true },
+      },
+    },
+  });
+
+  if (run === null) {
+    return [];
+  }
+
+  const config =
+    run.config != null && typeof run.config === 'object'
+      ? (run.config as { models?: string[]; samplesPerScenario?: number })
+      : {};
+  const models = config.models ?? [];
+  const samplesPerScenario = normalizeSamplesPerScenario(config.samplesPerScenario);
+  const scenarioIds = run.scenarioSelections.map((s) => s.scenarioId);
+
+  const existingTranscripts = await db.transcript.findMany({
+    where: { runId },
+    select: { scenarioId: true, modelId: true, sampleIndex: true },
+  });
+
+  const existing = existingTranscripts
+    .filter((t): t is TranscriptKey => t.scenarioId !== null)
+    .map(({ scenarioId, modelId, sampleIndex }) => ({ scenarioId, modelId, sampleIndex }));
+
+  return findMissingTranscriptKeys({
+    scenarioIds,
+    models,
+    samplesPerScenario,
+    existingTranscripts: existing,
+  });
+}
+
+ succeeded in 0ms:
+/**
+ * Run Recovery Service
+ *
+ * Detects and recovers orphaned runs - runs stuck in RUNNING/SUMMARIZING state
+ * with no active/pending jobs in the queue.
+ *
+ * This handles scenarios like:
+ * - API restart during job processing (jobs orphaned)
+ * - Power outage / pod eviction
+ * - Jobs that expired and exhausted retries without updating run progress
+ */
+
+import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import { findMissingProbes } from './coverage-completeness.js';
+import {
+  countJobsForRun,
+  requeueMissingProbes,
+  queueSummarizeJobsForRecovery,
+} from './recovery-jobs.js';
+
+const log = createLogger('services:run:recovery');
+
+// How long a run must be stuck before we consider it orphaned (5 minutes)
+const STUCK_THRESHOLD_MINUTES = 5;
+
+// How often to run recovery (set by scheduled job)
+export const RECOVERY_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+export type OrphanedRunInfo = {
+  runId: string;
+  status: string;
+  progress: { total: number; completed: number; failed: number };
+  pendingJobs: number;
+  activeJobs: number;
+  missingProbes: number;
+  stuckMinutes: number;
+};
+
+export type RecoveryResult = {
+  detected: OrphanedRunInfo[];
+  recovered: Array<{ runId: string; action: string; requeuedCount?: number }>;
+  errors: Array<{ runId: string; error: string }>;
+};
+
+/**
+ * Detects orphaned runs by comparing run progress with actual queue state.
+ *
+ * A run is considered orphaned if:
+ * 1. Status is RUNNING or SUMMARIZING
+ * 2. No pending or active jobs exist for this run
+ * 3. Progress shows incomplete (completed + failed < total)
+ * 4. Last update was > STUCK_THRESHOLD_MINUTES ago
+ */
+export async function detectOrphanedRuns(): Promise<OrphanedRunInfo[]> {
+  const orphaned: OrphanedRunInfo[] = [];
+
+  // Find runs that might be stuck
+  const stuckRuns = await db.run.findMany({
+    where: {
+      status: { in: ['RUNNING', 'SUMMARIZING'] },
+      updatedAt: {
+        lt: new Date(Date.now() - STUCK_THRESHOLD_MINUTES * 60 * 1000),
+      },
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      status: true,
+      progress: true,
+      updatedAt: true,
+      config: true,
+    },
+  });
+
+  if (stuckRuns.length === 0) {
+    return [];
+  }
+
+  log.debug({ stuckRunCount: stuckRuns.length }, 'Checking potentially stuck runs');
+
+  for (const run of stuckRuns) {
+    const progress = run.progress as { total: number; completed: number; failed: number };
+
+    // Count pending/active jobs for this run in PgBoss
+    const jobCounts = await countJobsForRun(run.id);
+
+    if (jobCounts.pending === 0 && jobCounts.active === 0) {
+      // Coverage check is based on expected scenario/model/sample keys, not progress counters.
+      // This catches runs where progress counters are inaccurate due retries/duplicates.
+      const missingProbes = await findMissingProbes(run.id);
+      const stuckMinutes = Math.floor(
+        (Date.now() - run.updatedAt.getTime()) / (60 * 1000)
+      );
+
+      orphaned.push({
+        runId: run.id,
+        status: run.status,
+        progress,
+        pendingJobs: jobCounts.pending,
+        activeJobs: jobCounts.active,
+        missingProbes: missingProbes.length,
+        stuckMinutes,
+      });
+
+      log.info(
+        {
+          runId: run.id,
+          status: run.status,
+          progress,
+          missingProbes: missingProbes.length,
+          stuckMinutes,
+        },
+        'Detected orphaned run'
+      );
+    }
+  }
+
+  return orphaned;
+}
+
+/**
+ * Recovers a single orphaned run by re-queuing missing probes.
+ */
+export async function recoverOrphanedRun(
+  runId: string
+): Promise<{ action: string; requeuedCount?: number }> {
+  const run = await db.run.findUnique({
+    where: { id: runId },
+    select: { status: true, startedAt: true },
+  });
+
+  if (run?.status === 'CANCELLED') {
+    log.info({ runId }, 'Skipping recovery for cancelled run');
+    return { action: 'run_cancelled' };
+  }
+
+  const missingProbes = await findMissingProbes(runId);
+
+  if (missingProbes.length === 0) {
+    // No missing probes - check if we need to trigger summarization
+    const currentRun = await db.run.findUnique({
+      where: { id: runId },
+      select: { status: true, progress: true },
+    });
+
+    if (currentRun?.status === 'RUNNING') {
+      const progress = currentRun.progress as { total: number; completed: number; failed: number };
+      if (progress.completed + progress.failed >= progress.total) {
+        // Progress complete, trigger summarization
+        log.info({ runId }, 'Triggering summarization for completed run');
+        await db.run.update({
+          where: { id: runId },
+          data: { status: 'SUMMARIZING', stalledModels: [] },
+        });
+
+        // Queue summarize jobs for unsummarized transcripts
+        const queuedCount = await queueSummarizeJobsForRecovery(runId);
+        return { action: 'triggered_summarization', requeuedCount: queuedCount };
+      }
+    }
+
+    // Check if run is in SUMMARIZING but has no pending summarize jobs
+    if (currentRun?.status === 'SUMMARIZING') {
+      const pendingSummarizeJobs = await db.$queryRaw<Array<{ count: bigint }>>`
+        SELECT COUNT(*) as count
+        FROM pgboss.job
+        WHERE name = 'summarize_transcript'
+          AND state IN ('created', 'retry', 'active')
+          AND data->>'runId' = ${runId}
+      `;
+
+      const pendingCount = Number(pendingSummarizeJobs[0]?.count ?? 0);
+
+      if (pendingCount === 0) {
+        // Check if there are unsummarized transcripts
+        const unsummarizedCount = await db.transcript.count({
+          where: { runId, summarizedAt: null },
+        });
+
+        if (unsummarizedCount > 0) {
+          // Re-queue summarize jobs
+          const queuedCount = await queueSummarizeJobsForRecovery(runId);
+          log.info({ runId, queuedCount }, 'Re-queued orphaned summarize jobs');
+          return { action: 'requeued_summarize_jobs', requeuedCount: queuedCount };
+        } else {
+          // All transcripts summarized, mark as complete
+          log.info({ runId }, 'All transcripts summarized, completing run');
+          await db.run.update({
+            where: { id: runId },
+            data: { status: 'COMPLETED', completedAt: new Date(), stalledModels: [] },
+          });
+          return { action: 'completed_run' };
+        }
+      }
+    }
+
+    return { action: 'no_missing_probes' };
+  }
+
+  // Ensure run is set to RUNNING so re-queued probe jobs are not skipped as terminal.
+  // (COMPLETED/FAILED runs can be manually recovered if missing probes are detected.)
+  const shouldResume = run !== null && run.status !== 'RUNNING';
+  await db.run.update({
+    where: { id: runId },
+    data: {
+      status: shouldResume ? 'RUNNING' : undefined,
+      completedAt: shouldResume ? null : undefined,
+      startedAt: shouldResume && run.startedAt === null ? new Date() : undefined,
+      updatedAt: new Date(),
+    },
+  });
+
+  // Re-queue missing probes after status update.
+  // This avoids workers skipping jobs when a run was previously terminal.
+  const requeuedCount = await requeueMissingProbes(runId, missingProbes);
+
+  // Log details about missing probes (include full details if small number)
+  const logDetails = missingProbes.length <= 10
+    ? { runId, requeuedCount, missingProbes }
+
+exec
+/bin/zsh -lc "sed -n '220,420p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+    ? { runId, requeuedCount, missingProbes }
+    : { runId, requeuedCount, missingCount: missingProbes.length, sample: missingProbes.slice(0, 5) };
+  log.info(logDetails, 'Recovered orphaned run');
+
+  return { action: 'requeued_probes', requeuedCount };
+}
+
+/**
+ * Detects and recovers all orphaned runs.
+ * This is the main entry point for scheduled recovery.
+ */
+export async function recoverOrphanedRuns(): Promise<RecoveryResult> {
+  const result: RecoveryResult = {
+    detected: [],
+    recovered: [],
+    errors: [],
+  };
+
+  try {
+    // Detect orphaned runs
+    result.detected = await detectOrphanedRuns();
+
+    if (result.detected.length === 0) {
+      log.debug('No orphaned runs detected');
+      return result;
+    }
+
+    log.info(
+      { orphanedCount: result.detected.length },
+      'Recovering orphaned runs'
+    );
+
+    // Recover each orphaned run
+    for (const orphaned of result.detected) {
+      try {
+        const recovery = await recoverOrphanedRun(orphaned.runId);
+        result.recovered.push({
+          runId: orphaned.runId,
+          ...recovery,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        log.error({ runId: orphaned.runId, error: errorMessage }, 'Failed to recover run');
+        result.errors.push({
+          runId: orphaned.runId,
+          error: errorMessage,
+        });
+      }
+    }
+
+    log.info(
+      {
+        detected: result.detected.length,
+        recovered: result.recovered.length,
+        errors: result.errors.length,
+      },
+      'Orphaned run recovery complete'
+    );
+  } catch (error) {
+    log.error({ error }, 'Failed to run orphaned run recovery');
+    throw error;
+  }
+
+  return result;
+}
+
+/**
+ * Runs recovery immediately on startup.
+ * Called once when the API server starts to recover any runs
+ * that were orphaned during the previous shutdown.
+ */
+export async function runStartupRecovery(): Promise<RecoveryResult> {
+  log.info('Running startup recovery for orphaned runs');
+  // Run both standard recovery and zombie detection
+  const result = await recoverOrphanedRuns();
+  const zombieResult = await detectAndRecoverStuckJobs();
+
+  if (zombieResult.recovered > 0) {
+    log.info({ count: zombieResult.recovered }, 'Startup recovery killed zombie jobs');
+  }
+
+  return result;
+}
+
+/**
+ * Detects and recovers stuck jobs (zombies) that have been active for too long.
+ * This is a failsafe for when PgBoss expiration mechanisms fail or job handlers crash silently.
+ */
+export async function detectAndRecoverStuckJobs(): Promise<{ recovered: number; errors: number }> {
+  // Find jobs active for > 5 minutes (user requested tight watchdog)
+  const ZOMBIE_THRESHOLD_MINUTES = 5;
+
+  const stuckJobs = await db.$queryRaw<Array<{ id: string; name: string; run_id: string }>>`
+    SELECT id, name, data->>'runId' as run_id
+    FROM pgboss.job
+    WHERE state = 'active'
+      AND started_on < NOW() - (${ZOMBIE_THRESHOLD_MINUTES} || ' minutes')::interval
+      AND (name = 'probe_scenario' OR name LIKE 'probe_scenario_%')
+  `;
+
+  if (stuckJobs.length === 0) {
+    return { recovered: 0, errors: 0 };
+  }
+
+  log.warn({ count: stuckJobs.length }, 'Detected zombie jobs (active > 5m)');
+
+  let recovered = 0;
+  let errors = 0;
+
+  for (const job of stuckJobs) {
+    try {
+      // Force fail the job
+      await db.$executeRaw`
+        UPDATE pgboss.job 
+        SET state = 'failed', 
+            output = '{"error": "Zombie job detected and killed by watchdog (active > 15m)"}',
+            completed_on = NOW()
+        WHERE id = ${job.id}::uuid
+      `;
+
+      log.info({ jobId: job.id, runId: job.run_id }, 'Killed zombie job');
+      recovered++;
+    } catch (err) {
+      log.error({ jobId: job.id, err }, 'Failed to kill zombie job');
+      errors++;
+    }
+  }
+
+  return { recovered, errors };
+}
+
+exec
+/bin/zsh -lc "sed -n '1,180p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/parallelism/index.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+/**
+ * Provider Parallelism Service
+ *
+ * Enforces per-provider parallelism limits for probe jobs.
+ * Uses provider-specific queues with PgBoss batchSize for concurrency control.
+ *
+ * Architecture:
+ * - Each provider gets its own queue: `probe:openai`, `probe:anthropic`, etc.
+ * - Queue batchSize is set from provider's `maxParallelRequests` setting
+ * - Jobs are routed to provider queues based on modelId
+ * - Workers process jobs in batches limited by maxParallelRequests
+ */
+
+import { createLogger } from '@valuerank/shared';
+import { db, getAllProvidersWithModels } from '@valuerank/db';
+import type { PgBoss, QueueResult } from 'pg-boss';
+
+const log = createLogger('services:parallelism');
+
+// Cache provider limits with TTL for performance
+export type ProviderLimits = {
+  maxParallelRequests: number;
+  requestsPerMinute: number;
+  queueName: string;
+};
+
+let providerLimitsCache: Map<string, ProviderLimits> = new Map();
+let modelToProviderCache: Map<string, string> = new Map();
+let cacheLoadedAt = 0;
+const CACHE_TTL_MS = 60000; // 1 minute
+
+/**
+ * Generate the queue name for a provider's probe jobs.
+ * Uses underscores as PgBoss only allows alphanumeric, underscores, hyphens, or periods.
+ */
+export function getProviderQueueName(providerName: string): string {
+  return `probe_${providerName}`;
+}
+
+/**
+ * Check if cache needs refresh.
+ */
+function isCacheStale(): boolean {
+  return Date.now() - cacheLoadedAt > CACHE_TTL_MS;
+}
+
+/**
+ * Load provider limits from database and populate cache.
+ */
+export async function loadProviderLimits(): Promise<Map<string, ProviderLimits>> {
+  if (!isCacheStale() && providerLimitsCache.size > 0) {
+    return providerLimitsCache;
+  }
+
+  log.debug('Loading provider limits from database');
+
+  const providers = await getAllProvidersWithModels();
+
+  // Clear and rebuild caches
+  providerLimitsCache = new Map();
+  modelToProviderCache = new Map();
+
+  for (const provider of providers) {
+    if (!provider.isEnabled) {
+      continue;
+    }
+
+    const queueName = getProviderQueueName(provider.name);
+
+    // Store provider limits
+    providerLimitsCache.set(provider.name, {
+      maxParallelRequests: provider.maxParallelRequests,
+      requestsPerMinute: provider.requestsPerMinute,
+      queueName,
+    });
+
+    // Map model IDs to provider names
+    for (const model of provider.models) {
+      modelToProviderCache.set(model.modelId, provider.name);
+    }
+  }
+
+  cacheLoadedAt = Date.now();
+  log.info(
+    { providerCount: providerLimitsCache.size, modelCount: modelToProviderCache.size },
+    'Provider limits loaded'
+  );
+
+  return providerLimitsCache;
+}
+
+/**
+ * Get provider name for a model ID.
+ * Falls back to database lookup if not in cache.
+ */
+export async function getProviderForModel(modelId: string): Promise<string | null> {
+  // Check cache first
+  if (!isCacheStale() && modelToProviderCache.has(modelId)) {
+    return modelToProviderCache.get(modelId) ?? null;
+  }
+
+  // Reload cache
+  await loadProviderLimits();
+
+  // Check cache again
+  if (modelToProviderCache.has(modelId)) {
+    return modelToProviderCache.get(modelId) ?? null;
+  }
+
+  // Direct database lookup for uncached models
+  log.debug({ modelId }, 'Model not in cache, looking up in database');
+  const model = await db.llmModel.findFirst({
+    where: { modelId, status: 'ACTIVE' },
+    include: { provider: true },
+  });
+
+  if (model) {
+    modelToProviderCache.set(modelId, model.provider.name);
+    return model.provider.name;
+  }
+
+  return null;
+}
+
+/**
+ * Get the queue name for a model ID.
+ * Returns the provider-specific queue name.
+ */
+export async function getQueueNameForModel(modelId: string): Promise<string> {
+  const providerName = await getProviderForModel(modelId);
+
+  if (providerName === null) {
+    log.warn({ modelId }, 'Unknown model, using default queue');
+    return 'probe_scenario'; // Fall back to default queue
+  }
+
+  return getProviderQueueName(providerName);
+}
+
+/**
+ * Get parallelism limits for a provider.
+ */
+export async function getProviderLimits(providerName: string): Promise<ProviderLimits | null> {
+  await loadProviderLimits();
+  return providerLimitsCache.get(providerName) ?? null;
+}
+
+/**
+ * Get all provider queue names and their limits.
+ */
+export async function getAllProviderQueues(): Promise<Map<string, ProviderLimits>> {
+  await loadProviderLimits();
+  return new Map(providerLimitsCache);
+}
+
+/**
+ * Create provider-specific queues in PgBoss.
+ * Should be called during orchestrator startup.
+ *
+ * @param boss - PgBoss instance
+ * @param deadLetterQueue - Optional dead letter queue name for failed/expired jobs
+ */
+export async function createProviderQueues(boss: PgBoss, deadLetterQueue?: string): Promise<void> {
+  const limits = await loadProviderLimits();
+
+  log.info({ providerCount: limits.size, deadLetterQueue }, 'Creating provider-specific probe queues');
+
+  for (const [providerName, providerLimits] of limits) {
+    const queueName = providerLimits.queueName;
+
+    log.info(
+      { provider: providerName, queueName, maxParallel: providerLimits.maxParallelRequests },
+      'Creating provider queue'
+    );
+
+    // Create queue with dead letter option if specified (idempotent in PgBoss v10+)
+    if (deadLetterQueue !== undefined) {
+      await boss.createQueue(queueName, { deadLetter: deadLetterQueue });
+    } else {
+      await boss.createQueue(queueName);
+
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/control.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+exec
+/bin/zsh -lc "sed -n '1,260p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/start.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+/**
+ * Run Control Service
+ *
+ * Handles run state transitions: pause, resume, cancel.
+ */
+
+import { db } from '@valuerank/db';
+import { createLogger, NotFoundError, RunStateError } from '@valuerank/shared';
+
+const log = createLogger('services:run:control');
+
+// Valid states for pause operation
+const PAUSEABLE_STATES = ['PENDING', 'RUNNING'];
+
+// Valid states for resume operation
+const RESUMEABLE_STATES = ['PAUSED'];
+
+// Valid states for cancel operation
+const CANCELLABLE_STATES = ['PENDING', 'RUNNING', 'PAUSED'];
+
+/**
+ * Pauses a run, stopping new job dispatch.
+ *
+ * Jobs currently being processed will complete, but no new jobs
+ * will be started until the run is resumed.
+ */
+export async function pauseRun(runId: string): Promise<{
+  id: string;
+  status: string;
+  progress: { total: number; completed: number; failed: number } | null;
+}> {
+  log.info({ runId }, 'Attempting to pause run');
+
+  const run = await db.run.findUnique({
+    where: { id: runId },
+    select: { id: true, status: true, progress: true },
+  });
+
+  if (!run) {
+    throw new NotFoundError('Run', runId);
+  }
+
+  if (!PAUSEABLE_STATES.includes(run.status)) {
+    throw new RunStateError(runId, run.status, 'pause');
+  }
+
+  const updatedRun = await db.run.update({
+    where: { id: runId },
+    data: { status: 'PAUSED', stalledModels: [] },
+    select: { id: true, status: true, progress: true },
+  });
+
+  log.info({ runId, previousStatus: run.status }, 'Run paused');
+
+  return {
+    id: updatedRun.id,
+    status: updatedRun.status,
+    progress: updatedRun.progress as { total: number; completed: number; failed: number } | null,
+  };
+}
+
+/**
+ * Resumes a paused run.
+ *
+ * Jobs will begin processing again from where they left off.
+ */
+export async function resumeRun(runId: string): Promise<{
+  id: string;
+  status: string;
+  progress: { total: number; completed: number; failed: number } | null;
+}> {
+  log.info({ runId }, 'Attempting to resume run');
+
+  const run = await db.run.findUnique({
+    where: { id: runId },
+    select: { id: true, status: true, progress: true },
+  });
+
+  if (!run) {
+    throw new NotFoundError('Run', runId);
+  }
+
+  if (!RESUMEABLE_STATES.includes(run.status)) {
+    throw new RunStateError(runId, run.status, 'resume');
+  }
+
+  const updatedRun = await db.run.update({
+    where: { id: runId },
+    data: { status: 'RUNNING' },
+    select: { id: true, status: true, progress: true },
+  });
+
+  log.info({ runId }, 'Run resumed');
+
+  return {
+    id: updatedRun.id,
+    status: updatedRun.status,
+    progress: updatedRun.progress as { total: number; completed: number; failed: number } | null,
+  };
+}
+
+/**
+ * Cancels a run, removing pending jobs while preserving completed results.
+ *
+ * Jobs currently being processed will complete, but all pending jobs
+ * will be removed from the queue.
+ */
+export async function cancelRun(runId: string): Promise<{
+  id: string;
+  status: string;
+  progress: { total: number; completed: number; failed: number } | null;
+}> {
+  log.info({ runId }, 'Attempting to cancel run');
+
+  const run = await db.run.findUnique({
+    where: { id: runId },
+    select: { id: true, status: true, progress: true },
+  });
+
+  if (!run) {
+    throw new NotFoundError('Run', runId);
+  }
+
+  if (!CANCELLABLE_STATES.includes(run.status)) {
+    throw new RunStateError(runId, run.status, 'cancel');
+  }
+
+  // Cancel pending jobs in PgBoss
+  try {
+    // Query pending jobs for this run and cancel them
+    // PgBoss stores jobs with data.runId, we need to cancel those
+    const result = await db.$executeRaw`
+      UPDATE pgboss.job
+      SET state = 'cancelled'
+      WHERE name = 'probe_scenario'
+        AND state IN ('created', 'retry')
+        AND data->>'runId' = ${runId}
+    `;
+
+    log.info({ runId, cancelledJobs: result }, 'Cancelled pending jobs');
+  } catch (error) {
+    // If PgBoss tables don't exist, that's fine - no jobs to cancel
+    log.warn({ runId, error }, 'Failed to cancel jobs in queue (may not exist)');
+  }
+
+  const updatedRun = await db.run.update({
+    where: { id: runId },
+    data: {
+      status: 'CANCELLED',
+      completedAt: new Date(),
+      stalledModels: [],
+    },
+    select: { id: true, status: true, progress: true },
+  });
+
+  log.info({ runId, previousStatus: run.status }, 'Run cancelled');
+
+  return {
+    id: updatedRun.id,
+    status: updatedRun.status,
+    progress: updatedRun.progress as { total: number; completed: number; failed: number } | null,
+  };
+}
+
+/**
+ * Checks if a run is in a paused state.
+ * Used by job handlers to skip processing when paused.
+ */
+export async function isRunPaused(runId: string): Promise<boolean> {
+  const run = await db.run.findUnique({
+    where: { id: runId },
+    select: { status: true },
+  });
+
+  return run?.status === 'PAUSED';
+}
+
+/**
+ * Checks if a run is in a terminal state (completed, failed, cancelled).
+ * Used by job handlers to skip processing.
+ */
+export async function isRunTerminal(runId: string): Promise<boolean> {
+  const run = await db.run.findUnique({
+    where: { id: runId },
+    select: { status: true },
+  });
+
+  return run?.status ? ['COMPLETED', 'FAILED', 'CANCELLED'].includes(run.status) : true;
+}
+
+ succeeded in 0ms:
+/**
+ * Start Run Service
+ *
+ * Creates a new run and queues probe_scenario jobs for each model-scenario pair.
+ * Jobs are routed to provider-specific queues for parallelism enforcement.
+ */
+
+import { db, resolveDefinitionContent } from '@valuerank/db';
+import { ensureDomainConfigSnapshot } from '../domain-config/snapshot.js';
+import { AppError, createLogger, NotFoundError, ValidationError } from '@valuerank/shared';
+import { estimateCost, type CostEstimate } from '../cost/index.js';
+import { signalRunActivity } from './scheduler.js';
+import { validateStartRunInput, type StartRunInput } from './start-validation.js';
+import {
+  asRecord,
+  buildFindingsSnapshot,
+  convertToAlpha,
+  syncSurveyScenariosFromPlan,
+  type SurveyPlan,
+} from './start-helpers.js';
+import { buildRunJobPlan } from './start-plan.js';
+import { enqueueRunJobs } from './start-queue.js';
+
+const log = createLogger('services:run:start');
+
+export type StartRunResult = {
+  run: {
+    id: string;
+    status: string;
+    definitionId: string;
+    experimentId: string | null;
+    config: unknown;
+    progress: {
+      total: number;
+      completed: number;
+      failed: number;
+    };
+    createdAt: Date;
+  };
+  jobCount: number;
+  estimatedCosts: CostEstimate;
+};
+
+export type { StartRunInput } from './start-validation.js';
+
+export async function startRun(input: StartRunInput): Promise<StartRunResult> {
+  const {
+    definitionId,
+    models,
+    samplePercentage = 100,
+    sampleSeed,
+    samplesPerScenario = 1,
+    temperature,
+    priority = 'NORMAL',
+    runCategory,
+    experimentId,
+    userId,
+    scenarioIds,
+    configExtras,
+  } = input;
+
+  log.info(
+    { definitionId, modelCount: models.length, samplePercentage, sampleSeed, samplesPerScenario, experimentId, userId },
+    'Starting new run'
+  );
+
+  validateStartRunInput(input);
+
+  // Validate that all requested models are ACTIVE
+  const activeModels = await db.llmModel.findMany({
+    where: {
+      modelId: { in: models },
+      status: 'ACTIVE',
+    },
+    select: {
+      modelId: true,
+      displayName: true,
+      apiConfig: true,
+      providerId: true,
+      provider: {
+        select: {
+          name: true,
+        },
+      },
+    },
+  });
+
+  const activeModelIds = activeModels.map(m => m.modelId);
+  const invalidModelIds = models.filter(m => !activeModelIds.includes(m));
+
+  if (invalidModelIds.length > 0) {
+    throw new ValidationError(
+      `The following models are not active or valid: ${invalidModelIds.join(', ')}. Please refresh your page to get the latest model list.`
+    );
+  }
+
+  // Validate experiment if provided. For surveys, always rebuild scenarios from the stored survey plan
+  // so runs use one-question-per-prompt even for surveys created before this behavior existed.
+  if (experimentId !== undefined && experimentId !== null && experimentId !== '') {
+    const experiment = await db.experiment.findUnique({
+      where: { id: experimentId },
+      select: { id: true, analysisPlan: true },
+    });
+    if (!experiment) {
+      throw new NotFoundError('Experiment', experimentId);
+    }
+
+    const plan = experiment.analysisPlan as SurveyPlan | null;
+    if (plan?.kind === 'survey') {
+      if (typeof plan.definitionId !== 'string' || plan.definitionId !== definitionId) {
+        throw new ValidationError('Survey definition mismatch');
+      }
+      await syncSurveyScenariosFromPlan(definitionId, plan);
+    }
+  }
+
+  // Fetch definition with scenarios (filtering out deleted)
+  const definition = await db.definition.findUnique({
+    where: { id: definitionId },
+    include: {
+      scenarios: {
+        where: { deletedAt: null },
+        select: { id: true },
+      },
+      preambleVersion: true,
+      domainContext: true,
+      levelPresetVersion: true,
+      domain: {
+        select: {
+          id: true,
+          valueStatements: {
+            select: {
+              id: true,
+              token: true,
+              body: true,
+              domainId: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!definition || definition.deletedAt !== null) {
+    throw new NotFoundError('Definition', definitionId);
+  }
+
+  if (definition.scenarios.length === 0) {
+    throw new ValidationError(`Definition ${definitionId} has no scenarios`);
+  }
+
+  // Determine scenarios to run
+  const { selectedScenarioIds, jobPlan } = await buildRunJobPlan({
+    definitionId,
+    models,
+    definitionScenarioIds: definition.scenarios.map((scenario) => scenario.id),
+    scenarioIds,
+    samplePercentage,
+    sampleSeed,
+    samplesPerScenario,
+  });
+
+  // Calculate total job count
+  const totalJobs = jobPlan.reduce((sum, item) => sum + item.samples, 0);
+
+  // Calculate cost estimate
+  // We approximate adaptive cost by assuming avg sample count if needed, or we accept we might need to update estimate logic.
+  // For now, let's reuse estimateCost but we need to account for per-model-per-scenario counts.
+  // estimateCost supports uniform sampling. 
+  // Let's just use a simplified estimate or pass explicit counts if we update estimateCost?
+  // For now, we'll pass '100%' and 'avg samples' to get a roughly correct order of magnitude or just use samplePercentage logic effectively.
+  // Actually, cost estimate is just for display/logging usually.
+  // Let's skip detailed adaptive cost estimation update for this task unless critical.
+
+  const costEstimate = await estimateCost({
+    definitionId,
+    modelIds: models,
+    samplePercentage:
+      (Array.isArray(scenarioIds) && scenarioIds.length > 0)
+        ? Math.max(1, Math.round((selectedScenarioIds.length / definition.scenarios.length) * 100))
+        : samplePercentage,
+    samplesPerScenario,
+  });
+
+  const resolvedDefinition = await resolveDefinitionContent(definitionId);
+
+  // Prepare definition snapshot...
+  const content = resolvedDefinition.resolvedContent as unknown as Record<string, unknown>;
+  const findingsSnapshot = await buildFindingsSnapshot({
+    definition,
+    resolvedContent: resolvedDefinition.resolvedContent,
+    selectedModels: activeModels.map((model) => ({
+      modelId: model.modelId,
+      providerId: model.providerId,
+      providerName: model.provider.name,
+      displayName: model.displayName,
+      apiConfig: asRecord(model.apiConfig),
+    })),
+  });
+  const definitionSnapshot = {
+    ...content,
+    preamble: (definition.preambleVersion?.content ?? content.preamble) as string | undefined,
+    _meta: {
+      definitionVersion: definition.version,
+      preambleVersionId: definition.preambleVersion?.id,
+      preambleVersionLabel: definition.preambleVersion?.version,
+      preambleName: definition.preambleVersion ?
+        (await db.preamble.findUnique({ where: { id: definition.preambleVersion.preambleId }, select: { name: true } }))?.name
+        : undefined,
+    }
+  };
+
+  // Sanitize configExtras so a stale client payload with the legacy flag
+  // cannot sneak it into the persisted config.
+  // The runtime defense must be here, not at the type level — configExtras
+  // is typed as Record<string, unknown> by design (see spec §3.3).
+  const rawConfigExtras = configExtras;
+  const configExtrasObject: Record<string, unknown> =
+    rawConfigExtras != null && typeof rawConfigExtras === 'object' && !Array.isArray(rawConfigExtras)
+      ? rawConfigExtras
+      : {};
+  const { isFinalTrial: _dropIsFinalTrial, ...safeConfigExtras } = configExtrasObject;
+
+  // Create run config
+  const config = {
+    ...safeConfigExtras,
+    models,
+    samplePercentage,
+    sampleSeed,
+    samplesPerScenario,
+    temperature: temperature ?? null,
+    scenarioIds: selectedScenarioIds.length > 0 ? selectedScenarioIds : null,
+    runMode: Array.isArray(scenarioIds) && scenarioIds.length > 0 ? 'SPECIFIC_CONDITION' : 'PERCENTAGE',
+    priority,
+    definitionSnapshot,
+    estimatedCosts: costEstimate,
+    ...findingsSnapshot,
+  };
+
+  const initialProgress = {
+    total: totalJobs,
+    completed: 0,
+    failed: 0,
+  };
+
+  // Generate run name
+  const today = new Date();
+  const startOfDay = new Date(today);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(today);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const countToday = await db.run.count({
+    where: {
+      definitionId,
+      createdAt: { gte: startOfDay, lte: endOfDay },
+      deletedAt: null,
+    },
+  });
+
+
+exec
+/bin/zsh -lc "sed -n '260,420p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/start.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+
+  const suffix = convertToAlpha(countToday);
+  const month = today.toLocaleDateString('en-US', { month: 'short' });
+  const day = today.toLocaleDateString('en-US', { day: '2-digit' });
+  const runName = `${month} ${day}-${suffix}`;
+
+  // Create run in transaction
+  const run = await db.$transaction(async (tx) => {
+    const newRun = await tx.run.create({
+      data: {
+        name: runName,
+        definitionId,
+        experimentId: experimentId ?? null,
+        status: 'PENDING',
+        runCategory: runCategory ?? 'UNKNOWN_LEGACY',
+        config,
+        progress: initialProgress,
+        createdByUserId: userId ?? null,
+      },
+    });
+
+    await tx.runScenarioSelection.createMany({
+      data: selectedScenarioIds.map((scenarioId) => ({
+        runId: newRun.id,
+        scenarioId,
+      })),
+      skipDuplicates: true, // Safety for overlaps if any
+    });
+
+    return newRun;
+  });
+
+  // Capture domain config snapshot outside the transaction to avoid concurrent
+  // upsert contention aborting the transaction while $transaction still returns the run.
+  if (definition.domain?.id) {
+    try {
+      const snapshotId = await ensureDomainConfigSnapshot(definition.domain.id);
+      await db.run.update({
+        where: { id: run.id },
+        data: { domainConfigSnapshotId: snapshotId },
+      });
+    } catch (err) {
+      log.warn({ err, runId: run.id, domainId: definition.domain.id }, 'Failed to capture domain config snapshot');
+    }
+  }
+
+  log.info({ runId: run.id, totalJobs }, 'Run created, queuing jobs');
+
+  let jobIds: string[];
+  try {
+    jobIds = await enqueueRunJobs({
+      runId: run.id,
+      jobPlan,
+      priority,
+      temperature,
+      totalJobs,
+    });
+  } catch (error) {
+    if (error instanceof AppError && error.code === 'RUN_INIT_FAILED') {
+      await db.run.update({
+        where: { id: run.id },
+        data: {
+          status: 'FAILED',
+          completedAt: new Date(),
+          stalledModels: [],
+        },
+      });
+    }
+    throw error;
+  }
+
+  log.info(
+    { runId: run.id, jobsCreated: jobIds.length, totalJobs },
+    'Jobs queued successfully'
+  );
+
+  signalRunActivity();
+
+  return {
+    run: {
+      id: run.id,
+      status: run.status,
+      definitionId: run.definitionId,
+      experimentId: run.experimentId,
+      config: run.config,
+      progress: initialProgress,
+      createdAt: run.createdAt,
+    },
+    jobCount: jobIds.length,
+    estimatedCosts: costEstimate,
+  };
+}
+
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/probe-dead-letter.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+/**
+ * Probe Dead Letter Handler
+ *
+ * Handles failed/expired probe_scenario jobs that were moved to the dead letter queue.
+ * Logs the failure and updates run progress to ensure runs don't get stuck.
+ */
+
+import type * as PgBoss from 'pg-boss';
+import { createLogger } from '@valuerank/shared';
+import type { ProbeDeadLetterJobData } from '../types.js';
+import { incrementFailed } from '../../services/run/index.js';
+import { recordProbeFailure } from '../../services/probe-result/index.js';
+
+const log = createLogger('queue:probe-dead-letter');
+
+/**
+ * Creates a handler for probe_dead_letter jobs.
+ *
+ * This handler processes failed/expired probe jobs:
+ * 1. Logs the failure with full context
+ * 2. Records the failure in ProbeResult table
+ * 3. Increments the failed count for the run
+ *
+ * This ensures runs don't get stuck when jobs expire or fail silently.
+ */
+export function createProbeDeadLetterHandler(): PgBoss.WorkHandler<ProbeDeadLetterJobData> {
+  return async (jobs: PgBoss.Job<ProbeDeadLetterJobData>[]) => {
+    for (const job of jobs) {
+      const { runId, scenarioId, modelId, sampleIndex = 0 } = job.data;
+      const jobId = job.id;
+
+      log.error(
+        { jobId, runId, scenarioId, modelId, sampleIndex },
+        'Probe job failed/expired - processing dead letter'
+      );
+
+      try {
+        // Record the failure in ProbeResult table
+        await recordProbeFailure({
+          runId,
+          scenarioId,
+          modelId,
+          sampleIndex,
+          errorCode: 'JOB_EXPIRED',
+          errorMessage: 'Job expired or failed without completing - moved to dead letter queue',
+          retryCount: 0,
+        });
+
+        // Increment failed count for the run
+        const { progress, status } = await incrementFailed(runId);
+
+        log.info(
+          { jobId, runId, scenarioId, modelId, sampleIndex, progress, status },
+          'Dead letter job processed - run progress updated'
+        );
+      } catch (error) {
+        // Log but don't throw - we don't want to retry dead letter jobs
+        log.error(
+          { jobId, runId, scenarioId, modelId, err: error },
+          'Failed to process dead letter job'
+        );
+      }
+    }
+  };
+}
+
+exec
+/bin/zsh -lc "sed -n '1,240p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/probe-scenario/retry.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+/**
+ * Retry logic, error classification, and progress delta helpers.
+ */
+
+import { createLogger } from '@valuerank/shared';
+import { db } from '@valuerank/db';
+import { updateProgress } from '../../../services/run/index.js';
+import { recordProbeFailure } from '../../../services/probe-result/index.js';
+
+const log = createLogger('queue:probe-scenario');
+
+export type ProbeStatus = 'SUCCESS' | 'FAILED' | null;
+
+/**
+ * Checks if an error is retryable.
+ */
+export function isRetryableError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return true; // Unknown errors are retryable by default
+  }
+
+  const message = error.message.toLowerCase();
+
+  // Network errors - retryable
+  const networkErrorPatterns = [
+    'econnrefused',
+    'enotfound',
+    'etimedout',
+    'econnreset',
+    'socket hang up',
+    'network error',
+    'fetch failed',
+  ];
+
+  if (networkErrorPatterns.some((pattern) => message.includes(pattern))) {
+    return true;
+  }
+
+  // HTTP status code errors
+  if (message.includes('429') || message.includes('rate limit')) {
+    return true; // Rate limit - retryable
+  }
+
+  if (/5\d{2}/.test(message)) {
+    return true; // Server errors (5xx) - retryable
+  }
+
+  // Non-retryable errors
+  const nonRetryablePatterns = [
+    'validation',
+    'invalid',
+    '401',
+    '403',
+    '404',
+    '400',
+    'unauthorized',
+    'forbidden',
+    'not found',
+    'bad request',
+  ];
+
+  if (nonRetryablePatterns.some((pattern) => message.includes(pattern))) {
+    return false;
+  }
+
+  // Default: retryable
+  return true;
+}
+
+export function formatWorkerErrorMessage(error: { message: string; details?: string }): string {
+  const baseMessage = error.message;
+  const details = typeof error.details === 'string' ? error.details.trim() : '';
+  if (details === '') {
+    return baseMessage;
+  }
+
+  if (baseMessage.toLowerCase().includes(details.toLowerCase())) {
+    return baseMessage;
+  }
+
+  return `${baseMessage} | ${details}`;
+}
+
+export function getProgressDelta(
+  previousStatus: ProbeStatus,
+  nextStatus: 'SUCCESS' | 'FAILED'
+): { incrementCompleted: number; incrementFailed: number } {
+  if (previousStatus === nextStatus) {
+    return { incrementCompleted: 0, incrementFailed: 0 };
+  }
+
+  if (previousStatus === null) {
+    return nextStatus === 'SUCCESS'
+      ? { incrementCompleted: 1, incrementFailed: 0 }
+      : { incrementCompleted: 0, incrementFailed: 1 };
+  }
+
+  // Transition between terminal states (rare but possible if recovered/overridden)
+  return nextStatus === 'SUCCESS'
+    ? { incrementCompleted: 1, incrementFailed: -1 }
+    : { incrementCompleted: -1, incrementFailed: 1 };
+}
+
+export function extractStoredTranscriptTokenUsage(
+  content: unknown,
+  fallbackTokenCount: number
+): { inputTokens: number; outputTokens: number } {
+  const value = content as Record<string, unknown>;
+  const snapshot = value.costSnapshot as Record<string, unknown> | undefined;
+  const snapshotInput = snapshot?.inputTokens;
+  const snapshotOutput = snapshot?.outputTokens;
+
+  if (typeof snapshotInput === 'number' && typeof snapshotOutput === 'number') {
+    return { inputTokens: snapshotInput, outputTokens: snapshotOutput };
+  }
+
+  const turns = Array.isArray(value.turns) ? value.turns : [];
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let foundAny = false;
+
+  for (const turn of turns) {
+    if (turn === null || typeof turn !== 'object') {
+      continue;
+    }
+
+    const turnObj = turn as Record<string, unknown>;
+    if (typeof turnObj.inputTokens === 'number') {
+      inputTokens += turnObj.inputTokens;
+      foundAny = true;
+    }
+    if (typeof turnObj.outputTokens === 'number') {
+      outputTokens += turnObj.outputTokens;
+      foundAny = true;
+    }
+  }
+
+  if (foundAny) {
+    return { inputTokens, outputTokens };
+  }
+
+  // Last-resort fallback when detailed counts are unavailable in legacy transcript payloads
+  return { inputTokens: 0, outputTokens: fallbackTokenCount };
+}
+
+export async function applyProgressDelta(
+  runId: string,
+  previousStatus: ProbeStatus,
+  nextStatus: 'SUCCESS' | 'FAILED'
+): Promise<{ progress: { total: number; completed: number; failed: number } | null; status: string | null }> {
+  const delta = getProgressDelta(previousStatus, nextStatus);
+  if (delta.incrementCompleted === 0 && delta.incrementFailed === 0) {
+    return { progress: null, status: null };
+  }
+
+  const updated = await updateProgress(runId, delta);
+  return { progress: updated.progress, status: updated.status };
+}
+
+type ProbeResultKey = {
+  runId_scenarioId_modelId_sampleIndex: {
+    runId: string;
+    scenarioId: string;
+    modelId: string;
+    sampleIndex: number;
+  };
+};
+
+/**
+ * Handle a caught error in processProbeJob.
+ *
+ * Returns true if the job should return (terminal failure recorded),
+ * or rethrows if the error should propagate to PgBoss for retry.
+ *
+ * Pause deferral errors are always rethrown before calling this function.
+ */
+export async function handleJobError(
+  error: unknown,
+  jobId: string,
+  runId: string,
+  scenarioId: string,
+  modelId: string,
+  sampleIndex: number,
+  retryCount: number,
+  retryLimit: number,
+  probeResultKey: ProbeResultKey
+): Promise<boolean> {
+  const retryable = isRetryableError(error);
+  const maxRetriesReached = retryCount >= retryLimit;
+
+  log.warn(
+    { jobId, runId, scenarioId, modelId, retryable, retryCount, maxRetriesReached, err: error },
+    'Probe job error'
+  );
+
+  if (!retryable || maxRetriesReached) {
+    try {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorCode = !retryable ? 'NON_RETRYABLE' : 'MAX_RETRIES_EXCEEDED';
+      const existingProbeResult = await db.probeResult.findUnique({
+        where: probeResultKey,
+        select: { status: true },
+      });
+      await recordProbeFailure({
+        runId,
+        scenarioId,
+        modelId,
+        sampleIndex,
+        errorCode,
+        errorMessage,
+        retryCount,
+      });
+      const { progress, status } = await applyProgressDelta(
+        runId,
+        existingProbeResult?.status ?? null,
+        'FAILED'
+      );
+      log.error(
+        { jobId, runId, scenarioId, modelId, progress, status, retryCount, err: error },
+        'Probe job permanently failed'
+      );
+    } catch (progressError) {
+      log.error(
+        { jobId, runId, err: progressError },
+        'Failed to update progress after job failure'
+      );
+    }
+    return true; // caller should return
+  }
+
+  log.info(
+    { jobId, runId, retryCount, retriesRemaining: retryLimit - retryCount },
+    'Job will be retried'
+  );
+  return false; // caller should rethrow
+}
+
+
+codex
+I’ve confirmed the core run plan shape and the current provider-queue routing. Next I’m checking whether the proposed top-up logic can actually reconstruct the same work set the original run created.
+exec
+/bin/zsh -lc "sed -n '1,260p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/job-queue.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+/**
+ * Job Queue Service
+ *
+ * Provides visibility into PgBoss job queue states for runs.
+ * Used by MCP tools for diagnostics and operations.
+ */
+
+import { db } from '@valuerank/db';
+import { createLogger, NotFoundError } from '@valuerank/shared';
+import type { JobQueueStatus, JobQueueStatusOptions, JobFailure } from './types.js';
+
+const log = createLogger('services:run:job-queue');
+
+// PgBoss job state mapping
+const PENDING_STATES = ['created', 'retry'];
+const RUNNING_STATES = ['active'];
+const COMPLETED_STATES = ['completed'];
+const FAILED_STATES = ['failed'];
+
+// Job types we track
+const JOB_TYPES = ['probe_scenario', 'summarize_transcript', 'analyze_basic'] as const;
+
+/**
+ * Raw job count row from PgBoss query
+ */
+type JobCountRow = {
+  name: string;
+  state: string;
+  count: bigint;
+};
+
+/**
+ * Raw failed job row from PgBoss query
+ */
+type FailedJobRow = {
+  id: string;
+  name: string;
+  data: Record<string, unknown>;
+  output: Record<string, unknown> | null;
+  completed_on: Date | null;
+};
+
+/**
+ * Gets job queue status for a specific run.
+ *
+ * Queries PgBoss tables to return counts by job type and state.
+ * Optionally includes recent failure details for debugging.
+ *
+ * @param runId - ID of the run to check
+ * @param options - Query options
+ * @returns Job queue status with counts and optional failures
+ * @throws NotFoundError if run doesn't exist
+ */
+export async function getJobQueueStatus(
+  runId: string,
+  options: JobQueueStatusOptions = {}
+): Promise<JobQueueStatus> {
+  const { includeRecentFailures = false, failureLimit = 10 } = options;
+
+  // Verify run exists
+  const run = await db.run.findUnique({
+    where: { id: runId },
+    select: { id: true },
+  });
+
+  if (!run) {
+    throw new NotFoundError('Run', runId);
+  }
+
+  // Initialize status
+  const status: JobQueueStatus = {
+    runId,
+    byJobType: {},
+    totalPending: 0,
+    totalRunning: 0,
+    totalCompleted: 0,
+    totalFailed: 0,
+  };
+
+  try {
+    // Query job counts from PgBoss
+    // Note: probe_scenario jobs may have model-specific queue names like probe_scenario_openai
+    const jobCounts = await db.$queryRaw<JobCountRow[]>`
+      SELECT
+        CASE
+          WHEN name LIKE 'probe_scenario%' THEN 'probe_scenario'
+          ELSE name
+        END as name,
+        state,
+        COUNT(*) as count
+      FROM pgboss.job
+      WHERE (name LIKE 'probe_scenario%' OR name = 'summarize_transcript' OR name = 'analyze_basic')
+        AND data->>'runId' = ${runId}
+        AND state IN ('created', 'retry', 'active', 'completed', 'failed')
+      GROUP BY
+        CASE
+          WHEN name LIKE 'probe_scenario%' THEN 'probe_scenario'
+          ELSE name
+        END,
+        state
+    `;
+
+    // Process results into typed structure
+    type MutableJobTypeCounts = { pending: number; running: number; completed: number; failed: number };
+    const countsByType: Record<string, MutableJobTypeCounts> = {};
+
+    for (const row of jobCounts) {
+      const jobType = row.name;
+      const state = row.state;
+      const count = Number(row.count);
+
+      // Initialize job type counts if not exists
+      if (!countsByType[jobType]) {
+        countsByType[jobType] = { pending: 0, running: 0, completed: 0, failed: 0 };
+      }
+      const typeCounts = countsByType[jobType];
+
+      if (PENDING_STATES.includes(state)) {
+        typeCounts.pending += count;
+        status.totalPending += count;
+      } else if (RUNNING_STATES.includes(state)) {
+        typeCounts.running += count;
+        status.totalRunning += count;
+      } else if (COMPLETED_STATES.includes(state)) {
+        typeCounts.completed += count;
+        status.totalCompleted += count;
+      } else if (FAILED_STATES.includes(state)) {
+        typeCounts.failed += count;
+        status.totalFailed += count;
+      }
+    }
+
+    // Map to typed byJobType structure
+    for (const jobType of JOB_TYPES) {
+      const counts = countsByType[jobType];
+      if (counts) {
+        status.byJobType[jobType] = counts;
+      }
+    }
+
+    // Optionally fetch recent failures
+    if (includeRecentFailures) {
+      status.recentFailures = await getRecentFailures(runId, failureLimit);
+    }
+
+    log.debug({ runId, status }, 'Job queue status retrieved');
+    return status;
+  } catch (err) {
+    // Handle case where PgBoss tables don't exist
+    if (err instanceof Error && err.message.includes('pgboss.job')) {
+      log.warn({ runId }, 'PgBoss tables not found, returning empty status');
+      return status;
+    }
+    throw err;
+  }
+}
+
+/**
+ * Gets recent failed jobs for a run.
+ */
+async function getRecentFailures(runId: string, limit: number): Promise<JobFailure[]> {
+  try {
+    const failedJobs = await db.$queryRaw<FailedJobRow[]>`
+      SELECT
+        id,
+        name,
+        data,
+        output,
+        completed_on
+      FROM pgboss.job
+      WHERE (name LIKE 'probe_scenario%' OR name = 'summarize_transcript' OR name = 'analyze_basic')
+        AND data->>'runId' = ${runId}
+        AND state = 'failed'
+      ORDER BY completed_on DESC NULLS LAST
+      LIMIT ${limit}
+    `;
+
+    return failedJobs.map((job) => {
+      const data = job.data;
+      const output = job.output;
+
+      // Normalize job type name
+      const jobType = job.name.startsWith('probe_scenario') ? 'probe_scenario' : job.name;
+
+      // Extract error from output
+      let error = 'Unknown error';
+      if (output && typeof output === 'object') {
+        if ('error' in output && typeof output.error === 'string') {
+          error = output.error;
+        } else if ('message' in output && typeof output.message === 'string') {
+          error = output.message;
+        }
+      }
+
+      return {
+        jobId: job.id,
+        jobType,
+        error,
+        failedAt: job.completed_on?.toISOString() ?? new Date().toISOString(),
+        transcriptId: typeof data.transcriptId === 'string' ? data.transcriptId : undefined,
+        scenarioId: typeof data.scenarioId === 'string' ? data.scenarioId : undefined,
+        modelId: typeof data.modelId === 'string' ? data.modelId : undefined,
+      } satisfies JobFailure;
+    });
+  } catch (err) {
+    log.warn({ err, runId }, 'Failed to fetch recent failures');
+    return [];
+  }
+}
+
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/summarize-persistence.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/index.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+/**
+ * Run Service Index
+ *
+ * Re-exports all run service functions.
+ */
+
+export { startRun } from './start.js';
+export type { StartRunInput, StartRunResult } from './start.js';
+
+export {
+  updateProgress,
+  incrementCompleted,
+  incrementFailed,
+  getProgress,
+  calculatePercentComplete,
+  updateSummarizeProgress,
+  incrementSummarizeCompleted,
+  incrementSummarizeFailed,
+} from './progress.js';
+export type { ProgressUpdate, ProgressData } from './progress.js';
+
+export {
+  pauseRun,
+  resumeRun,
+  cancelRun,
+  isRunPaused,
+  isRunTerminal,
+} from './control.js';
+
+export {
+  detectOrphanedRuns,
+  recoverOrphanedRun,
+  recoverOrphanedRuns,
+  runStartupRecovery,
+  RECOVERY_INTERVAL_MS,
+} from './recovery.js';
+export type { OrphanedRunInfo, RecoveryResult } from './recovery.js';
+
+export {
+  startRecoveryScheduler,
+  stopRecoveryScheduler,
+  isRecoverySchedulerRunning,
+  triggerRecovery,
+  signalRunActivity,
+  RECOVERY_ACTIVITY_WINDOW_MS,
+} from './scheduler.js';
+
+export {
+  cancelSummarization,
+  restartSummarization,
+} from './summarization.js';
+export type {
+  SummarizeProgress,
+  CancelSummarizationResult,
+  RestartSummarizationResult,
+} from './summarization.js';
+
+// Job Queue Service (Feature #018)
+export { getJobQueueStatus } from './job-queue.js';
+export type {
+  JobQueueStatus,
+  JobQueueStatusOptions,
+  JobTypeCounts,
+  JobFailure,
+} from './types.js';
+
+export {
+  DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,
+  DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
+} from './config.js';
+
+ succeeded in 0ms:
+import { db, Prisma, type SummaryCache } from '@valuerank/db';
+import { findMissingProbes } from '../../services/run/coverage-completeness.js';
+import { createLogger } from '@valuerank/shared';
+import { DEFAULT_JOB_OPTIONS } from '../types.js';
+import { triggerBasicAnalysis } from '../../services/analysis/index.js';
+import { incrementSummarizeCompleted, incrementSummarizeFailed } from '../../services/run/progress.js';
+import { deductActualProviderBalancesForRun } from '../../services/budget/deduct.js';
+import {
+  buildDecisionMetadataForPersist,
+  isPlainJsonObject,
+  type SummarizeTranscriptJobData,
+  type WinnerFirstSummaryCache,
+} from './summarize-types.js';
+import { buildRawDecisionEvidence } from '../../graphql/queries/domain/shared.js';
+
+const log = createLogger('queue:summarize-transcript');
+
+export function buildSummaryCacheRecord(
+  summary: {
+    decisionCode: string;
+    decisionSource: string;
+    decisionText: string | null;
+    decisionMetadata?: unknown;
+    canonicalDecision?: WinnerFirstSummaryCache | null;
+  },
+  responseSha256: string,
+  parserVersion: string,
+  modelId: string,
+): SummaryCache | null {
+  if (!isPlainJsonObject(summary.decisionMetadata)) {
+    return null;
+  }
+
+  const { summaryCache: _ignoredSummaryCache, ...workerDecisionMetadata } = summary.decisionMetadata;
+
+  return {
+    responseSha256,
+    parserVersion,
+    modelId,
+    summary: {
+      decisionCode: summary.decisionCode,
+      decisionCodeSource: summary.decisionSource,
+      decisionText: summary.decisionText,
+      decisionMetadata: workerDecisionMetadata,
+      ...(summary.canonicalDecision ? { canonicalDecision: summary.canonicalDecision } : {}),
+    },
+  };
+}
+
+export function isCacheRecordMatch(
+  cache: SummaryCache,
+  responseSha256: string | null,
+  parserVersion: string,
+  modelId: string,
+): boolean {
+  return (
+    responseSha256 !== null &&
+    cache.responseSha256 === responseSha256 &&
+    cache.parserVersion === parserVersion &&
+    cache.modelId === modelId
+  );
+}
+
+/**
+ * Queues a compute_token_stats job for cost prediction data.
+ */
+export async function queueComputeTokenStats(runId: string): Promise<void> {
+  // Dynamic import to avoid circular dependency
+  const { getBoss } = await import('../boss.js');
+
+  const boss = getBoss();
+  const jobOptions = DEFAULT_JOB_OPTIONS['compute_token_stats'];
+
+  await boss.send(
+    'compute_token_stats',
+    { runId },
+    {
+      ...jobOptions,
+      singletonKey: runId,
+    }
+  );
+
+  log.info({ runId }, 'Queued compute_token_stats job');
+}
+
+/**
+ * Check if all transcripts for a run have been summarized AND all expected probes
+ * have produced transcripts (or been accounted for).
+ *
+ * Returns false if:
+ * - Any transcript is still unsummarized (existing behavior), OR
+ * - Any expected (scenarioId × modelId × sampleIndex) tuple lacks a transcript
+ *   (new guard: prevents premature completion when AUTH_ERROR probes are re-queued)
+ *
+ * Returns true only when both conditions are satisfied.
+ */
+export async function checkAllSummarized(runId: string): Promise<boolean> {
+  const unsummarized = await db.transcript.count({
+    where: {
+      runId,
+      summarizedAt: null,
+    },
+  });
+  if (unsummarized > 0) {
+    return false;
+  }
+  const missing = await findMissingProbes(runId);
+  return missing.length === 0;
+}
+
+/**
+ * Update run status to COMPLETED if all transcripts are summarized.
+ * Also triggers basic analysis, token statistics computation, and budget deduction.
+ *
+ * Uses an atomic status transition (SUMMARIZING → COMPLETED) to prevent
+ * duplicate side effects when multiple summarization jobs finish concurrently.
+ * Only the first caller that successfully transitions the status will run
+ * the completion side effects (analysis, token stats, budget deduction).
+ */
+export async function maybeCompleteRun(runId: string): Promise<void> {
+  const allDone = await checkAllSummarized(runId);
+
+  if (allDone) {
+    // Atomic transition: only update if status is still SUMMARIZING.
+    // If another caller already moved it to COMPLETED, this returns 0 rows
+    // and we skip all side effects to avoid duplicates (e.g., double deductions).
+    const transitioned = await db.$executeRaw`
+      UPDATE "runs"
+      SET "status" = 'COMPLETED',
+          "completed_at" = NOW(),
+          "stalled_models" = '{}'::text[]
+      WHERE "id" = ${runId}
+        AND "status" = 'SUMMARIZING'
+    `;
+
+    if (transitioned === 0) {
+      log.debug({ runId }, 'Run already completed by another worker — skipping side effects');
+      return;
+    }
+
+    log.info({ runId }, 'Run completed - all transcripts summarized');
+
+    try {
+      const prompted = await triggerBasicAnalysis(runId);
+      if (prompted) {
+        log.info({ runId }, 'Analysis triggered successfully');
+      } else {
+        log.warn({ runId }, 'Analysis not triggered - no qualify transcripts?');
+      }
+    } catch (error) {
+      log.error({ runId, err: error }, 'Failed to trigger basic analysis');
+    }
+
+    try {
+      await queueComputeTokenStats(runId);
+    } catch (error) {
+      log.error({ runId, err: error }, 'Failed to trigger token stats computation');
+    }
+
+    try {
+      await deductActualProviderBalancesForRun(runId);
+    } catch (error) {
+      log.error({ runId, err: error }, 'Failed to deduct provider balances');
+    }
+  }
+}
+
+export async function persistCachedSummary(
+  job: { id: string; data: SummarizeTranscriptJobData },
+  transcript: { id: string },
+  summaryCache: SummaryCache,
+  responseSha256: string | null,
+  parserVersion: string,
+  modelId: string,
+): Promise<void> {
+  const rawDecisionEvidence = buildRawDecisionEvidence(summaryCache.summary.decisionMetadata);
+  const persistedSummaryCache = responseSha256
+    ? buildSummaryCacheRecord(
+        {
+          decisionCode: summaryCache.summary.decisionCode ?? '',
+          decisionSource: summaryCache.summary.decisionCodeSource ?? '',
+          decisionText: summaryCache.summary.decisionText,
+          decisionMetadata: summaryCache.summary.decisionMetadata,
+          canonicalDecision: summaryCache.summary.canonicalDecision ?? null,
+        },
+        responseSha256,
+        parserVersion,
+        modelId,
+      )
+    : null;
+
+  await db.transcript.update({
+    where: { id: transcript.id },
+    data: {
+      decisionText: summaryCache.summary.decisionText,
+      decisionMetadata: buildDecisionMetadataForPersist(
+        summaryCache.summary.decisionMetadata,
+        rawDecisionEvidence,
+        persistedSummaryCache ?? undefined,
+      ),
+      summarizedAt: new Date(),
+    },
+  });
+
+  await incrementSummarizeCompleted(job.data.runId);
+  await maybeCompleteRun(job.data.runId);
+}
+
+export async function persistSuccessfulSummary(
+  job: { id: string; data: SummarizeTranscriptJobData },
+  transcript: { id: string; scenarioId: string | null; definitionSnapshot: unknown },
+  responseSha256: string | null,
+  parserVersion: string,
+  modelId: string,
+  canonicalDecision: WinnerFirstSummaryCache | null,
+  summary: { decisionCode: string; decisionSource: string; decisionText: string | null; decisionMetadata?: unknown },
+): Promise<void> {
+  const rawDecisionEvidence = buildRawDecisionEvidence(summary.decisionMetadata);
+  const freshSummaryCache = responseSha256
+    ? buildSummaryCacheRecord(
+
+exec
+/bin/zsh -lc "sed -n '1,240p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/start-helpers.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/progress.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+import type { DefinitionContent } from '@valuerank/db';
+import { AppError, createLogger } from '@valuerank/shared';
+import type { JobInsert } from 'pg-boss';
+import { getBoss } from '../../queue/boss.js';
+import type { JobOptions, ProbeScenarioJobData } from '../../queue/types.js';
+import { getJudgeModel, getSummarizerModel } from '../infra-models.js';
+export type {
+  SurveyPlan,
+  SurveyQuestion,
+  SurveyResponseOption,
+} from './start-survey.js';
+export { syncSurveyScenariosFromPlan } from './start-survey.js';
+
+const log = createLogger('services:run:start');
+
+export type JobEntry = {
+  queueName: string;
+  data: ProbeScenarioJobData;
+  options: JobOptions;
+};
+
+export type FindingsSnapshotModelConfig = {
+  modelId: string;
+  providerId: string;
+  providerName: string;
+  displayName: string;
+  apiConfig: Record<string, unknown> | null;
+};
+
+export type EnqueueFailure = {
+  job: JobEntry;
+  error: string;
+};
+
+const ENQUEUE_CHUNK_SIZE = 50;
+export const RETRY_ENQUEUE_CHUNK_SIZE = 10;
+
+export async function enqueueJobs(
+  jobs: JobEntry[],
+  send: (queueName: string, data: ProbeScenarioJobData, options: JobOptions) => Promise<string | null>,
+  chunkSize = ENQUEUE_CHUNK_SIZE
+): Promise<{ jobIds: string[]; failures: EnqueueFailure[] }> {
+  const jobIds: string[] = [];
+  const failures: EnqueueFailure[] = [];
+
+  for (let i = 0; i < jobs.length; i += chunkSize) {
+    const chunk = jobs.slice(i, i + chunkSize);
+    const chunkResults = await Promise.allSettled(
+      chunk.map(async (job) => {
+        const id = await send(job.queueName, job.data, job.options);
+        if (id === null) {
+          throw new AppError('send returned null job id', 'QUEUE_SEND_FAILED');
+        }
+        return id;
+      })
+    );
+
+    chunkResults.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        jobIds.push(result.value);
+        return;
+      }
+      failures.push({
+        // Result order matches input order from Promise.allSettled.
+        // Index is guaranteed to map to an entry in `chunk`.
+        job: chunk[index]!,
+        error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+      });
+    });
+  }
+
+  return { jobIds, failures };
+}
+
+/**
+ * Bulk-inserts all jobs for a run using boss.insert(), grouped by queue name.
+ *
+ * A single INSERT ... VALUES (...), (...) round-trip per queue replaces the
+ * N individual boss.send() calls that were the primary bottleneck when
+ * launching many runs at once (e.g. target-batch top-up across 75 vignettes).
+ */
+export async function bulkEnqueueJobs(
+  jobs: JobEntry[],
+): Promise<{ jobIds: string[]; failures: EnqueueFailure[] }> {
+  if (jobs.length === 0) return { jobIds: [], failures: [] };
+
+  const boss = getBoss();
+
+  // Group by queue name — boss.insert() takes a single queue name per call.
+  const jobsByQueue = new Map<string, JobEntry[]>();
+  for (const job of jobs) {
+    const existing = jobsByQueue.get(job.queueName) ?? [];
+    existing.push(job);
+    jobsByQueue.set(job.queueName, existing);
+  }
+
+  const jobIds: string[] = [];
+  const failures: EnqueueFailure[] = [];
+
+  for (const [queueName, queueJobs] of jobsByQueue) {
+    const insertPayloads: JobInsert<ProbeScenarioJobData>[] = queueJobs.map((job) => ({
+      data: job.data,
+      priority: job.options.priority,
+      retryLimit: job.options.retryLimit,
+      retryDelay: job.options.retryDelay,
+      retryBackoff: job.options.retryBackoff,
+      expireInSeconds: job.options.expireInSeconds,
+      ...(job.options.singletonKey !== undefined ? { singletonKey: job.options.singletonKey } : {}),
+    }));
+
+    try {
+      const ids = await boss.insert(queueName, insertPayloads);
+      if (ids === null || ids.length === 0) {
+        failures.push(
+          ...queueJobs.map((job) => ({ job, error: 'bulk insert returned no ids' })),
+        );
+      } else {
+        jobIds.push(...ids);
+        if (ids.length < queueJobs.length) {
+          log.warn(
+            { queueName, expected: queueJobs.length, got: ids.length },
+            'Bulk insert dropped some jobs (possible singleton dedup)',
+          );
+          // We cannot identify which specific jobs were dropped; surface the
+          // count discrepancy so the caller's integrity check catches it.
+          const droppedCount = queueJobs.length - ids.length;
+          for (let i = 0; i < droppedCount; i++) {
+            failures.push({ job: queueJobs[i]!, error: 'dropped by bulk insert' });
+          }
+        }
+      }
+    } catch (err) {
+      failures.push(
+        ...queueJobs.map((job) => ({
+          job,
+          error: err instanceof Error ? err.message : String(err),
+        })),
+      );
+    }
+  }
+
+  return { jobIds, failures };
+}
+
+/**
+ * Generates a numeric hash from a string (for deterministic seeding).
+ * Uses DJB2-style hash algorithm.
+ */
+export function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash | 0; // Convert to 32-bit integer
+  }
+  return Math.abs(hash);
+}
+
+/**
+ * Deterministically samples scenarios based on percentage and seed.
+ * When no seed is provided, derives one from definitionId for reproducibility.
+ */
+export function sampleScenarios(
+  scenarioIds: string[],
+  percentage: number,
+  definitionId: string,
+  seed?: number
+): string[] {
+  if (percentage >= 100) {
+    return scenarioIds;
+  }
+
+  // Calculate target count
+  const targetCount = Math.max(1, Math.floor((scenarioIds.length * percentage) / 100));
+
+  // Create a simple seeded random number generator
+  const seededRandom = (s: number) => {
+    // Simple LCG for deterministic sampling
+    const m = 2147483647;
+    const a = 16807;
+    let state = s;
+    return () => {
+      state = (state * a) % m;
+      return state / m;
+    };
+  };
+
+  // Use provided seed or derive from definitionId for reproducible sampling
+  const effectiveSeed = seed ?? hashString(definitionId);
+  const random = seededRandom(effectiveSeed);
+
+  // Fisher-Yates shuffle with seeded random, then take first N
+  const shuffled = [...scenarioIds];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    const temp = shuffled[i];
+    shuffled[i] = shuffled[j] as string;
+    shuffled[j] = temp as string;
+  }
+
+  return shuffled.slice(0, targetCount);
+}
+
+/**
+ * Converts a zero-based index to an alphabetical suffix.
+ * 0 -> A, 1 -> B, ..., 25 -> Z, 26 -> AA, 27 -> AB
+ */
+export function convertToAlpha(n: number): string {
+  if (n < 0) return '';
+
+  let result = '';
+  // Convert to 1-based index for cleaner math logic
+  let x = n + 1;
+
+  while (x > 0) {
+    // 1-based remainder
+    const remainder = (x - 1) % 26;
+    result = String.fromCharCode(65 + remainder) + result;
+    x = Math.floor((x - 1) / 26);
+  }
+
+  return result;
+}
+
+export function asRecord(value: unknown): Record<string, unknown> | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+export function buildResolvedValueStatements(
+  resolvedContent: DefinitionContent,
+  availableStatements: Array<{ id: string; token: string; body: string; domainId: string }>,
+): Array<Record<string, unknown>> | null {
+  const components = resolvedContent.components;
+  if (!components) return null;
+
+  return [
+    components.value_first,
+
+ succeeded in 0ms:
+/**
+ * Run Progress Service
+ *
+ * Handles atomic progress updates and status transitions for runs.
+ * Uses PostgreSQL JSONB operators for concurrent-safe increments.
+ */
+
+import { db } from '@valuerank/db';
+import { createLogger, NotFoundError } from '@valuerank/shared';
+import type { Prisma } from '@prisma/client';
+
+const log = createLogger('services:run:progress');
+
+export type ProgressUpdate = {
+  incrementCompleted?: number;
+  incrementFailed?: number;
+};
+
+export type ProgressData = {
+  total: number;
+  completed: number;
+  failed: number;
+};
+
+/**
+ * Updates run progress atomically using PostgreSQL JSONB operators.
+ *
+ * This function:
+ * 1. Atomically increments completed/failed counts
+ * 2. Transitions run status based on progress:
+ *    - PENDING -> RUNNING when first job completes
+ *    - RUNNING -> SUMMARIZING when all jobs done
+ * 3. Sets startedAt/completedAt timestamps as appropriate
+ *
+ * Note: Progress is only updated for runs in PENDING or RUNNING state.
+ * Once a run transitions to SUMMARIZING or terminal states, progress
+ * updates are ignored to prevent overcounting.
+ */
+export async function updateProgress(
+  runId: string,
+  update: ProgressUpdate
+): Promise<{ progress: ProgressData; status: string }> {
+  const { incrementCompleted = 0, incrementFailed = 0 } = update;
+
+  // First check current state
+  const currentRun = await db.run.findUnique({
+    where: { id: runId },
+    select: { progress: true, status: true },
+  });
+
+  if (!currentRun) {
+    throw new NotFoundError('Run', runId);
+  }
+
+  // Allow correction swaps regardless of run status.
+  // A correction swap is exactly { +1, -1 } or { -1, +1 } - the counters offset each other.
+  // This handles FAILED -> SUCCESS or SUCCESS -> FAILED probe transitions during recovery
+  // even after the run has moved to SUMMARIZING or a terminal state.
+  const isCorrectionSwap =
+    (incrementCompleted === 1 && incrementFailed === -1) ||
+    (incrementCompleted === -1 && incrementFailed === 1);
+  if (!['PENDING', 'RUNNING'].includes(currentRun.status) && !isCorrectionSwap) {
+    log.debug(
+      { runId, status: currentRun.status, incrementCompleted, incrementFailed },
+      'Skipping progress update - run not in PENDING/RUNNING state'
+    );
+    return {
+      progress: currentRun.progress as ProgressData,
+      status: currentRun.status,
+    };
+  }
+
+  if (incrementCompleted === 0 && incrementFailed === 0) {
+    // No-op, just return current state
+    return {
+      progress: currentRun.progress as ProgressData,
+      status: currentRun.status,
+    };
+  }
+
+  log.debug(
+    { runId, incrementCompleted, incrementFailed },
+    'Updating run progress'
+  );
+
+  // Use raw SQL for atomic JSONB increment
+  // This prevents race conditions when multiple jobs complete simultaneously
+  const result = await db.$queryRaw<Array<{
+    id: string;
+    progress: ProgressData;
+    status: string;
+    started_at: Date | null;
+    completed_at: Date | null;
+  }>>`
+    UPDATE runs
+    SET
+      progress = jsonb_set(
+        jsonb_set(
+          progress,
+          '{completed}',
+          to_jsonb(GREATEST(0, (progress->>'completed')::int + ${incrementCompleted}))
+        ),
+        '{failed}',
+        to_jsonb(GREATEST(0, (progress->>'failed')::int + ${incrementFailed}))
+      ),
+      updated_at = NOW()
+    WHERE id = ${runId}
+    RETURNING id, progress, status, started_at, completed_at
+  `;
+
+  const updatedRun = result[0];
+  if (!updatedRun) {
+    throw new NotFoundError('Run', runId);
+  }
+
+  const progress = updatedRun.progress;
+
+  // Determine if status transition is needed
+  const newStatus = determineStatus(progress, updatedRun.status);
+
+  if (newStatus !== updatedRun.status) {
+    await transitionStatus(runId, updatedRun.status, newStatus);
+    log.info(
+      { runId, oldStatus: updatedRun.status, newStatus, progress },
+      'Run status transitioned'
+    );
+    return { progress, status: newStatus };
+  }
+
+  log.debug({ runId, progress }, 'Progress updated');
+  return { progress, status: updatedRun.status };
+}
+
+// Valid run statuses (from Prisma enum)
+type RunStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUMMARIZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+
+/**
+ * Determines the appropriate run status based on progress.
+ */
+function determineStatus(progress: ProgressData, currentStatus: string): RunStatus {
+  const { total, completed, failed } = progress;
+  const done = completed + failed;
+
+  // If run is already in a terminal state, don't change
+  if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(currentStatus)) {
+    return currentStatus as RunStatus;
+  }
+
+  // If already summarizing, don't change (summarize completion handled separately)
+  if (currentStatus === 'SUMMARIZING') {
+    return 'SUMMARIZING';
+  }
+
+  // If run is PAUSED, keep it paused - only resumeRun can change this
+  if (currentStatus === 'PAUSED') {
+    // But if all jobs are done, transition to SUMMARIZING
+    if (done >= total) {
+      return 'SUMMARIZING';
+    }
+    return 'PAUSED';
+  }
+
+  // If all jobs are done, transition to SUMMARIZING (not directly to COMPLETED)
+  if (done >= total) {
+    return 'SUMMARIZING';
+  }
+
+  // If at least one job has completed/failed, run is RUNNING
+  if (done > 0 && currentStatus === 'PENDING') {
+    return 'RUNNING';
+  }
+
+  return currentStatus as RunStatus;
+}
+
+/**
+ * Transitions run to a new status with appropriate timestamp updates.
+ */
+async function transitionStatus(
+  runId: string,
+  fromStatus: string,
+  toStatus: RunStatus
+): Promise<void> {
+  const updates: Prisma.RunUpdateInput = {
+    status: toStatus,
+  };
+
+  // Set startedAt when transitioning to RUNNING
+  if (toStatus === 'RUNNING' && fromStatus === 'PENDING') {
+    updates.startedAt = new Date();
+  }
+
+  // Set completedAt when transitioning to a terminal state
+  if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(toStatus)) {
+    updates.completedAt = new Date();
+  }
+
+  if (toStatus !== 'RUNNING') {
+    updates.stalledModels = [];
+  }
+
+  await db.run.update({
+    where: { id: runId },
+    data: updates,
+  });
+
+  // When transitioning to SUMMARIZING, queue summarize jobs for all transcripts
+  if (toStatus === 'SUMMARIZING') {
+    await queueSummarizeJobs(runId);
+  }
+}
+
+/**
+ * Wait for transcript rows to settle before counting.
+ *
+ * When the last probe job triggers SUMMARIZING, other probe jobs may still
+ * be committing their transcript rows. This polls briefly (up to 5 seconds)
+ * until the DB transcript count matches the expected total from probe progress,
+ * so the summarization denominator is accurate.
+ */
+
+exec
+/bin/zsh -lc "sed -n '1,180p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/queue/status.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+/**
+ * Queue Status Service
+ *
+ * Provides queue health information by querying PgBoss job tables.
+ */
+
+import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import { getQueueState } from './control.js';
+
+const log = createLogger('services:queue:status');
+
+export type JobTypeStatus = {
+  type: string;
+  pending: number;
+  active: number;
+  completed: number;
+  failed: number;
+};
+
+export type QueueStatus = {
+  isRunning: boolean;
+  isPaused: boolean;
+  jobTypes: JobTypeStatus[];
+  totals: {
+    pending: number;
+    active: number;
+    completed: number;
+    failed: number;
+  };
+};
+
+/**
+ * Gets current queue status with job counts by type and state.
+ */
+export async function getQueueStatus(): Promise<QueueStatus> {
+  log.debug('Fetching queue status');
+
+  try {
+    // Query PgBoss job table for counts by type and state
+    const jobCounts = await db.$queryRaw<Array<{
+      name: string;
+      state: string;
+      count: bigint;
+    }>>`
+      SELECT name, state, COUNT(*) as count
+      FROM pgboss.job
+      WHERE name IN ('probe_scenario', 'summarize_transcript', 'analyze_basic', 'expand_scenarios')
+      GROUP BY name, state
+    `;
+
+    // Note: PgBoss v10+ no longer uses a separate archive table.
+    // All jobs (including completed/failed) stay in pgboss.job with different states.
+
+    // Organize by job type
+    const jobTypeMap = new Map<string, JobTypeStatus>();
+    const knownTypes = ['probe_scenario', 'summarize_transcript', 'analyze_basic', 'expand_scenarios'];
+
+    // Initialize all known types
+    for (const type of knownTypes) {
+      jobTypeMap.set(type, {
+        type,
+        pending: 0,
+        active: 0,
+        completed: 0,
+        failed: 0,
+      });
+    }
+
+    // Process current job counts
+    for (const row of jobCounts) {
+      const status = jobTypeMap.get(row.name);
+      if (status) {
+        const count = Number(row.count);
+        switch (row.state) {
+          case 'created':
+          case 'retry':
+            status.pending += count;
+            break;
+          case 'active':
+            status.active += count;
+            break;
+          case 'completed':
+            status.completed += count;
+            break;
+          case 'failed':
+          case 'expired':
+          case 'cancelled':
+            status.failed += count;
+            break;
+        }
+      }
+    }
+
+    // Calculate totals
+    const totals = { pending: 0, active: 0, completed: 0, failed: 0 };
+    const jobTypes = Array.from(jobTypeMap.values());
+
+    for (const jt of jobTypes) {
+      totals.pending += jt.pending;
+      totals.active += jt.active;
+      totals.completed += jt.completed;
+      totals.failed += jt.failed;
+    }
+
+    log.debug({ totals }, 'Queue status fetched');
+
+    const state = getQueueState();
+    return {
+      isRunning: state.isRunning,
+      isPaused: state.isPaused,
+      jobTypes,
+      totals,
+    };
+  } catch (error) {
+    // If PgBoss tables don't exist, return empty status
+    log.warn({ error }, 'Failed to query queue status (tables may not exist)');
+
+    const state = getQueueState();
+    return {
+      isRunning: state.isRunning,
+      isPaused: state.isPaused,
+      jobTypes: [
+        { type: 'probe_scenario', pending: 0, active: 0, completed: 0, failed: 0 },
+        { type: 'summarize_transcript', pending: 0, active: 0, completed: 0, failed: 0 },
+        { type: 'analyze_basic', pending: 0, active: 0, completed: 0, failed: 0 },
+        { type: 'expand_scenarios', pending: 0, active: 0, completed: 0, failed: 0 },
+      ],
+      totals: { pending: 0, active: 0, completed: 0, failed: 0 },
+    };
+  }
+}
+
+exec
+/bin/zsh -lc "sed -n '320,420p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/graphql/types/run.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+          failed: Number(row.failed),
+        }));
+
+        // Calculate totals dynamically from the actual transcript counts
+        // This avoids race conditions where the stored JSON progress drifts from reality (e.g., getting 7/6)
+        const dynamicCompleted = byModel.reduce((sum, m) => sum + m.completed, 0);
+        const dynamicFailed = byModel.reduce((sum, m) => sum + m.failed, 0);
+
+        return {
+          total: progress.total,
+          completed: dynamicCompleted,
+          failed: dynamicFailed,
+          percentComplete: Math.min(100, Math.round(((dynamicCompleted + dynamicFailed) / progress.total) * 100)),
+          byModel: byModel.length > 0 ? byModel : undefined,
+        };
+      },
+    }),
+
+    // Recent completed/failed tasks from PgBoss
+    recentTasks: t.field({
+      type: [TaskResult],
+      args: {
+        limit: t.arg.int({
+          required: false,
+          defaultValue: 5,
+          description: 'Maximum number of recent tasks to return',
+        }),
+      },
+      description: 'Recent completed or failed tasks for this run',
+      resolve: async (run, args) => {
+        const limit = args.limit ?? 5;
+
+        try {
+          // Query completed/failed jobs from PgBoss job table
+          // Note: PgBoss v10+ no longer uses a separate archive table
+          const completedJobs = await db.$queryRaw<Array<{
+            id: string;
+            data: { runId: string; scenarioId: string; modelId: string };
+            state: string;
+            completed_on: Date | null;
+            output: unknown;
+          }>>`
+            SELECT id, data, state, completed_on, output
+            FROM pgboss.job
+            WHERE name = 'probe_scenario'
+              AND data->>'runId' = ${run.id}
+              AND state IN ('completed', 'failed')
+            ORDER BY completed_on DESC NULLS LAST
+            LIMIT ${limit}
+          `;
+
+          return completedJobs.map((job) => ({
+            scenarioId: job.data.scenarioId,
+            modelId: job.data.modelId,
+            status: (job.state === 'completed' ? 'COMPLETED' : 'FAILED') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+            error: job.state === 'failed' ? normalizeTaskError(job.output) : null,
+            completedAt: job.completed_on,
+          }));
+        } catch {
+          // If PgBoss tables don't exist or query fails, return empty array
+          return [];
+        }
+      },
+    }),
+
+    // Relation: definition (nullable if definition was deleted)
+    definition: t.field({
+      type: DefinitionRef,
+      nullable: true,
+      resolve: async (run, _args, ctx) => {
+        const definition = await ctx.loaders.definition.load(run.definitionId);
+        return definition ?? null;
+      },
+    }),
+
+    // Relation: experiment (optional)
+    experiment: t.field({
+      type: ExperimentRef,
+      nullable: true,
+      resolve: async (run, _args, ctx) => {
+        if (run.experimentId === null || run.experimentId === undefined || run.experimentId === '') return null;
+        return ctx.loaders.experiment.load(run.experimentId);
+      },
+    }),
+
+    // Relation: transcripts with optional model filter and pagination
+    transcripts: t.field({
+      type: [TranscriptRef],
+      args: {
+        modelId: t.arg.string({
+          required: false,
+          description: 'Filter transcripts by model ID',
+        }),
+        limit: t.arg.int({
+          required: false,
+          description: 'Maximum number of transcripts to return (default: all, max: 1000)',
+        }),
+        offset: t.arg.int({
+          required: false,
+          description: 'Number of transcripts to skip for pagination (default: 0)',
+        }),
+
+codex
+I have one clear regression path now: the plan routes probe work into provider queues, but some existing control and recovery code still hard-codes the old queue name. I’m checking whether those paths are core enough to call out as findings.
+exec
+/bin/zsh -lc "sed -n '1,140p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/mcp/tools/delete-run.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+/**
+ * delete_run MCP Tool
+ *
+ * Soft-deletes an evaluation run via MCP.
+ * Cascades to associated transcripts and analysis results.
+ * Cancels any pending/running jobs.
+ */
+
+import { z } from 'zod';
+import crypto from 'crypto';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { db, softDeleteRun, getRunById } from '@valuerank/db';
+import { createLogger, NotFoundError, ValidationError } from '@valuerank/shared';
+import {
+  logAuditEvent,
+  createDeleteAudit,
+} from '../../services/mcp/index.js';
+import { addToolRegistrar } from './registry.js';
+import { getMcpUserId } from './helpers.js';
+
+const log = createLogger('mcp:tools:delete-run');
+
+/**
+ * Input schema for delete_run tool
+ */
+const DeleteRunInputSchema = {
+  run_id: z.string().cuid().describe('ID of the run to delete'),
+};
+
+/**
+ * Format error response for MCP
+ */
+function formatError(code: string, message: string, details?: unknown) {
+  return {
+    content: [
+      {
+        type: 'text' as const,
+        text: JSON.stringify({ error: code, message, details }, null, 2),
+      },
+    ],
+    isError: true,
+  };
+}
+
+/**
+ * Format success response for MCP
+ */
+function formatSuccess(data: unknown) {
+  return {
+    content: [
+      {
+        type: 'text' as const,
+        text: JSON.stringify(data, null, 2),
+      },
+    ],
+  };
+}
+
+/**
+ * Cancels pending jobs for a run via direct SQL update on PgBoss tables.
+ * This is the same pattern used in services/run/control.ts
+ */
+async function cancelRunJobs(runId: string): Promise<{ cancelled: number }> {
+  try {
+    // Cancel pending probe_scenario jobs for this run
+    // PgBoss stores jobs with data.runId, we target those directly
+    const result = await db.$executeRaw`
+      UPDATE pgboss.job
+      SET state = 'cancelled'
+      WHERE name = 'probe_scenario'
+        AND state IN ('created', 'retry')
+        AND data->>'runId' = ${runId}
+    `;
+
+    log.info({ runId, cancelledJobs: result }, 'Cancelled pending jobs');
+    return { cancelled: Number(result) };
+  } catch (error) {
+    // If PgBoss tables don't exist, that's fine - no jobs to cancel
+    log.warn({ runId, error }, 'Failed to cancel jobs in queue (may not exist)');
+    return { cancelled: 0 };
+  }
+}
+
+/**
+ * Registers the delete_run tool on the MCP server
+ */
+function registerDeleteRunTool(server: McpServer): void {
+  log.info('Registering delete_run tool');
+
+  server.registerTool(
+    'delete_run',
+    {
+      description: `Soft-delete an evaluation run and its associated data.
+
+**Behavior:**
+- Sets deletedAt timestamp on the run (soft delete)
+- Cascades soft-delete to all transcripts for the run
+- Cascades soft-delete to all analysis results for the run
+- Cancels any pending/running jobs via PgBoss
+- Sets run status to CANCELLED if currently RUNNING or PENDING
+- Deleted runs no longer appear in list_runs
+
+**Validation:**
+- Returns 404 if run doesn't exist
+- Returns error if already deleted
+
+**Recovery:**
+- Data is not permanently deleted
+- Contact admin to restore if needed`,
+      inputSchema: DeleteRunInputSchema,
+    },
+    async (args, extra) => {
+      const requestId = String(extra.requestId ?? crypto.randomUUID());
+      const userId = getMcpUserId();
+
+      log.debug({
+        runId: args.run_id,
+        requestId,
+      }, 'delete_run called');
+
+      try {
+        // Step 1: Verify run exists first (for better error messages and to get definition)
+        let runDefinitionId: string;
+        let runStatus: string;
+        try {
+          const run = await getRunById(args.run_id);
+          runDefinitionId = run.definitionId;
+          runStatus = run.status;
+        } catch (err) {
+          if (err instanceof NotFoundError) {
+            log.warn({ requestId, runId: args.run_id }, 'Run not found');
+            return formatError('NOT_FOUND', `Run not found: ${args.run_id}`);
+          }
+          throw err;
+        }
+
+        // Step 2: Cancel any pending jobs if run is still active
+        let jobsCancelled = 0;
+        if (runStatus === 'RUNNING' || runStatus === 'PENDING') {
+          log.info({ requestId, runId: args.run_id, runStatus }, 'Cancelling jobs for active run');
+
+exec
+/bin/zsh -lc "sed -n '1,180p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/probe-scenario/index.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+exec
+/bin/zsh -lc "sed -n '1,200p' /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/graphql/types/queue-status.ts" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+/**
+ * Probe Scenario Handler — barrel export.
+ *
+ * Public API surface mirrors the old probe-scenario.ts module so that
+ * callers need only update the import path.
+ */
+
+export { createProbeScenarioHandler } from './handler.js';
+export { resetHealthCheck, ensureHealthCheck } from './health-check.js';
+export { isRetryableError } from './retry.js';
+
+ succeeded in 0ms:
+/**
+ * QueueStatus GraphQL Type
+ *
+ * Exposes queue statistics and health information.
+ */
+
+import { builder } from '../builder.js';
+
+// JobTypeStatus - counts for a specific job type
+export const JobTypeStatus = builder.objectRef<{
+  type: string;
+  pending: number;
+  active: number;
+  completed: number;
+  failed: number;
+}>('JobTypeStatus').implement({
+  description: 'Job counts for a specific job type',
+  fields: (t) => ({
+    type: t.exposeString('type', {
+      description: 'Job type name (e.g., probe_scenario)',
+    }),
+    pending: t.exposeInt('pending', {
+      description: 'Number of jobs waiting to be processed',
+    }),
+    active: t.exposeInt('active', {
+      description: 'Number of jobs currently being processed',
+    }),
+    completed: t.exposeInt('completed', {
+      description: 'Number of completed jobs (from recent archive)',
+    }),
+    failed: t.exposeInt('failed', {
+      description: 'Number of failed jobs',
+    }),
+  }),
+});
+
+// QueueTotals - aggregate counts across all job types
+export const QueueTotals = builder.objectRef<{
+  pending: number;
+  active: number;
+  completed: number;
+  failed: number;
+}>('QueueTotals').implement({
+  description: 'Aggregate job counts across all types',
+  fields: (t) => ({
+    pending: t.exposeInt('pending', {
+      description: 'Total pending jobs across all types',
+    }),
+    active: t.exposeInt('active', {
+      description: 'Total active jobs across all types',
+    }),
+    completed: t.exposeInt('completed', {
+      description: 'Total completed jobs (last 24h)',
+    }),
+    failed: t.exposeInt('failed', {
+      description: 'Total failed jobs',
+    }),
+  }),
+});
+
+// QueueStatus - overall queue health
+export const QueueStatus = builder.objectRef<{
+  isRunning: boolean;
+  isPaused: boolean;
+  jobTypes: Array<{
+    type: string;
+    pending: number;
+    active: number;
+    completed: number;
+    failed: number;
+  }>;
+  totals: {
+    pending: number;
+    active: number;
+    completed: number;
+    failed: number;
+  };
+}>('QueueStatus').implement({
+  description: 'Overall queue status and statistics',
+  fields: (t) => ({
+    isRunning: t.exposeBoolean('isRunning', {
+      description: 'Whether the queue workers are running',
+    }),
+    isPaused: t.exposeBoolean('isPaused', {
+      description: 'Whether the queue is currently paused',
+    }),
+    jobTypes: t.field({
+      type: [JobTypeStatus],
+      description: 'Job counts by type',
+      resolve: (parent) => parent.jobTypes,
+    }),
+    totals: t.field({
+      type: QueueTotals,
+      description: 'Aggregate counts across all job types',
+      resolve: (parent) => parent.totals,
+    }),
+  }),
+});
+
+codex
+I’ve got the main issues. I’m pulling exact line numbers for the hard-coded queue-name paths so the findings are pinned to code, not inference.
+exec
+/bin/zsh -lc "nl -ba /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/control.ts | sed -n '105,140p'" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+   105	 * Jobs currently being processed will complete, but all pending jobs
+   106	 * will be removed from the queue.
+   107	 */
+   108	export async function cancelRun(runId: string): Promise<{
+   109	  id: string;
+   110	  status: string;
+   111	  progress: { total: number; completed: number; failed: number } | null;
+   112	}> {
+   113	  log.info({ runId }, 'Attempting to cancel run');
+   114	
+   115	  const run = await db.run.findUnique({
+   116	    where: { id: runId },
+   117	    select: { id: true, status: true, progress: true },
+   118	  });
+   119	
+   120	  if (!run) {
+   121	    throw new NotFoundError('Run', runId);
+   122	  }
+   123	
+   124	  if (!CANCELLABLE_STATES.includes(run.status)) {
+   125	    throw new RunStateError(runId, run.status, 'cancel');
+   126	  }
+   127	
+   128	  // Cancel pending jobs in PgBoss
+   129	  try {
+   130	    // Query pending jobs for this run and cancel them
+   131	    // PgBoss stores jobs with data.runId, we need to cancel those
+   132	    const result = await db.$executeRaw`
+   133	      UPDATE pgboss.job
+   134	      SET state = 'cancelled'
+   135	      WHERE name = 'probe_scenario'
+   136	        AND state IN ('created', 'retry')
+   137	        AND data->>'runId' = ${runId}
+   138	    `;
+   139	
+   140	    log.info({ runId, cancelledJobs: result }, 'Cancelled pending jobs');
+
+exec
+/bin/zsh -lc "nl -ba /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/mcp/tools/delete-run.ts | sed -n '55,85p'" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+exec
+/bin/zsh -lc "nl -ba /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery.ts | sed -n '228,265p'" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+    55	    ],
+    56	  };
+    57	}
+    58	
+    59	/**
+    60	 * Cancels pending jobs for a run via direct SQL update on PgBoss tables.
+    61	 * This is the same pattern used in services/run/control.ts
+    62	 */
+    63	async function cancelRunJobs(runId: string): Promise<{ cancelled: number }> {
+    64	  try {
+    65	    // Cancel pending probe_scenario jobs for this run
+    66	    // PgBoss stores jobs with data.runId, we target those directly
+    67	    const result = await db.$executeRaw`
+    68	      UPDATE pgboss.job
+    69	      SET state = 'cancelled'
+    70	      WHERE name = 'probe_scenario'
+    71	        AND state IN ('created', 'retry')
+    72	        AND data->>'runId' = ${runId}
+    73	    `;
+    74	
+    75	    log.info({ runId, cancelledJobs: result }, 'Cancelled pending jobs');
+    76	    return { cancelled: Number(result) };
+    77	  } catch (error) {
+    78	    // If PgBoss tables don't exist, that's fine - no jobs to cancel
+    79	    log.warn({ runId, error }, 'Failed to cancel jobs in queue (may not exist)');
+    80	    return { cancelled: 0 };
+    81	  }
+    82	}
+    83	
+    84	/**
+    85	 * Registers the delete_run tool on the MCP server
+
+ succeeded in 0ms:
+   228	 * Detects and recovers all orphaned runs.
+   229	 * This is the main entry point for scheduled recovery.
+   230	 */
+   231	export async function recoverOrphanedRuns(): Promise<RecoveryResult> {
+   232	  const result: RecoveryResult = {
+   233	    detected: [],
+   234	    recovered: [],
+   235	    errors: [],
+   236	  };
+   237	
+   238	  try {
+   239	    // Detect orphaned runs
+   240	    result.detected = await detectOrphanedRuns();
+   241	
+   242	    if (result.detected.length === 0) {
+   243	      log.debug('No orphaned runs detected');
+   244	      return result;
+   245	    }
+   246	
+   247	    log.info(
+   248	      { orphanedCount: result.detected.length },
+   249	      'Recovering orphaned runs'
+   250	    );
+   251	
+   252	    // Recover each orphaned run
+   253	    for (const orphaned of result.detected) {
+   254	      try {
+   255	        const recovery = await recoverOrphanedRun(orphaned.runId);
+   256	        result.recovered.push({
+   257	          runId: orphaned.runId,
+   258	          ...recovery,
+   259	        });
+   260	      } catch (error) {
+   261	        const errorMessage = error instanceof Error ? error.message : String(error);
+   262	        log.error({ runId: orphaned.runId, error: errorMessage }, 'Failed to recover run');
+   263	        result.errors.push({
+   264	          runId: orphaned.runId,
+   265	          error: errorMessage,
+
+exec
+/bin/zsh -lc "nl -ba /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/queue/status.ts | sed -n '30,90p'" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+    30	  };
+    31	};
+    32	
+    33	/**
+    34	 * Gets current queue status with job counts by type and state.
+    35	 */
+    36	export async function getQueueStatus(): Promise<QueueStatus> {
+    37	  log.debug('Fetching queue status');
+    38	
+    39	  try {
+    40	    // Query PgBoss job table for counts by type and state
+    41	    const jobCounts = await db.$queryRaw<Array<{
+    42	      name: string;
+    43	      state: string;
+    44	      count: bigint;
+    45	    }>>`
+    46	      SELECT name, state, COUNT(*) as count
+    47	      FROM pgboss.job
+    48	      WHERE name IN ('probe_scenario', 'summarize_transcript', 'analyze_basic', 'expand_scenarios')
+    49	      GROUP BY name, state
+    50	    `;
+    51	
+    52	    // Note: PgBoss v10+ no longer uses a separate archive table.
+    53	    // All jobs (including completed/failed) stay in pgboss.job with different states.
+    54	
+    55	    // Organize by job type
+    56	    const jobTypeMap = new Map<string, JobTypeStatus>();
+    57	    const knownTypes = ['probe_scenario', 'summarize_transcript', 'analyze_basic', 'expand_scenarios'];
+    58	
+    59	    // Initialize all known types
+    60	    for (const type of knownTypes) {
+    61	      jobTypeMap.set(type, {
+    62	        type,
+    63	        pending: 0,
+    64	        active: 0,
+    65	        completed: 0,
+    66	        failed: 0,
+    67	      });
+    68	    }
+    69	
+    70	    // Process current job counts
+    71	    for (const row of jobCounts) {
+    72	      const status = jobTypeMap.get(row.name);
+    73	      if (status) {
+    74	        const count = Number(row.count);
+    75	        switch (row.state) {
+    76	          case 'created':
+    77	          case 'retry':
+    78	            status.pending += count;
+    79	            break;
+    80	          case 'active':
+    81	            status.active += count;
+    82	            break;
+    83	          case 'completed':
+    84	            status.completed += count;
+    85	            break;
+    86	          case 'failed':
+    87	          case 'expired':
+    88	          case 'cancelled':
+    89	            status.failed += count;
+    90	            break;
+
+exec
+/bin/zsh -lc "nl -ba /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/graphql/types/run.ts | sed -n '360,390p'" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+   360	            output: unknown;
+   361	          }>>`
+   362	            SELECT id, data, state, completed_on, output
+   363	            FROM pgboss.job
+   364	            WHERE name = 'probe_scenario'
+   365	              AND data->>'runId' = ${run.id}
+   366	              AND state IN ('completed', 'failed')
+   367	            ORDER BY completed_on DESC NULLS LAST
+   368	            LIMIT ${limit}
+   369	          `;
+   370	
+   371	          return completedJobs.map((job) => ({
+   372	            scenarioId: job.data.scenarioId,
+   373	            modelId: job.data.modelId,
+   374	            status: (job.state === 'completed' ? 'COMPLETED' : 'FAILED') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+   375	            error: job.state === 'failed' ? normalizeTaskError(job.output) : null,
+   376	            completedAt: job.completed_on,
+   377	          }));
+   378	        } catch {
+   379	          // If PgBoss tables don't exist or query fails, return empty array
+   380	          return [];
+   381	        }
+   382	      },
+   383	    }),
+   384	
+   385	    // Relation: definition (nullable if definition was deleted)
+   386	    definition: t.field({
+   387	      type: DefinitionRef,
+   388	      nullable: true,
+   389	      resolve: async (run, _args, ctx) => {
+   390	        const definition = await ctx.loaders.definition.load(run.definitionId);
+
+exec
+/bin/zsh -lc "nl -ba /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/job-queue.ts | sed -n '70,130p'" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+    70	  // Initialize status
+    71	  const status: JobQueueStatus = {
+    72	    runId,
+    73	    byJobType: {},
+    74	    totalPending: 0,
+    75	    totalRunning: 0,
+    76	    totalCompleted: 0,
+    77	    totalFailed: 0,
+    78	  };
+    79	
+    80	  try {
+    81	    // Query job counts from PgBoss
+    82	    // Note: probe_scenario jobs may have model-specific queue names like probe_scenario_openai
+    83	    const jobCounts = await db.$queryRaw<JobCountRow[]>`
+    84	      SELECT
+    85	        CASE
+    86	          WHEN name LIKE 'probe_scenario%' THEN 'probe_scenario'
+    87	          ELSE name
+    88	        END as name,
+    89	        state,
+    90	        COUNT(*) as count
+    91	      FROM pgboss.job
+    92	      WHERE (name LIKE 'probe_scenario%' OR name = 'summarize_transcript' OR name = 'analyze_basic')
+    93	        AND data->>'runId' = ${runId}
+    94	        AND state IN ('created', 'retry', 'active', 'completed', 'failed')
+    95	      GROUP BY
+    96	        CASE
+    97	          WHEN name LIKE 'probe_scenario%' THEN 'probe_scenario'
+    98	          ELSE name
+    99	        END,
+   100	        state
+   101	    `;
+   102	
+   103	    // Process results into typed structure
+   104	    type MutableJobTypeCounts = { pending: number; running: number; completed: number; failed: number };
+   105	    const countsByType: Record<string, MutableJobTypeCounts> = {};
+   106	
+   107	    for (const row of jobCounts) {
+   108	      const jobType = row.name;
+   109	      const state = row.state;
+   110	      const count = Number(row.count);
+   111	
+   112	      // Initialize job type counts if not exists
+   113	      if (!countsByType[jobType]) {
+   114	        countsByType[jobType] = { pending: 0, running: 0, completed: 0, failed: 0 };
+   115	      }
+   116	      const typeCounts = countsByType[jobType];
+   117	
+   118	      if (PENDING_STATES.includes(state)) {
+   119	        typeCounts.pending += count;
+   120	        status.totalPending += count;
+   121	      } else if (RUNNING_STATES.includes(state)) {
+   122	        typeCounts.running += count;
+   123	        status.totalRunning += count;
+   124	      } else if (COMPLETED_STATES.includes(state)) {
+   125	        typeCounts.completed += count;
+   126	        status.totalCompleted += count;
+   127	      } else if (FAILED_STATES.includes(state)) {
+   128	        typeCounts.failed += count;
+   129	        status.totalFailed += count;
+   130	      }
+
+exec
+/bin/zsh -lc "nl -ba /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery-jobs.ts | sed -n '45,70p'" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+    45	 * Re-queues missing probe jobs for an orphaned run.
+    46	 * Handles multi-sample runs by including sampleIndex in job data.
+    47	 */
+    48	export async function requeueMissingProbes(
+    49	  runId: string,
+    50	  missingProbes: TranscriptKey[]
+    51	): Promise<number> {
+    52	  const boss = getBoss();
+    53	
+    54	  const jobOptions = DEFAULT_JOB_OPTIONS['probe_scenario'];
+    55	  let queuedCount = 0;
+    56	
+    57	  for (const { scenarioId, modelId, sampleIndex } of missingProbes) {
+    58	    const queueName = await getQueueNameForModel(modelId);
+    59	
+    60	    await boss.send(
+    61	      queueName,
+    62	      {
+    63	        runId,
+    64	        scenarioId,
+    65	        modelId,
+    66	        sampleIndex,
+    67	        config: {
+    68	          maxTurns: 10,
+    69	        },
+    70	      },
+
+exec
+/bin/zsh -lc "nl -ba /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery.ts | sed -n '280,340p'" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+   280	    throw error;
+   281	  }
+   282	
+   283	  return result;
+   284	}
+   285	
+   286	/**
+   287	 * Runs recovery immediately on startup.
+   288	 * Called once when the API server starts to recover any runs
+   289	 * that were orphaned during the previous shutdown.
+   290	 */
+   291	export async function runStartupRecovery(): Promise<RecoveryResult> {
+   292	  log.info('Running startup recovery for orphaned runs');
+   293	  // Run both standard recovery and zombie detection
+   294	  const result = await recoverOrphanedRuns();
+   295	  const zombieResult = await detectAndRecoverStuckJobs();
+   296	
+   297	  if (zombieResult.recovered > 0) {
+   298	    log.info({ count: zombieResult.recovered }, 'Startup recovery killed zombie jobs');
+   299	  }
+   300	
+   301	  return result;
+   302	}
+   303	
+   304	/**
+   305	 * Detects and recovers stuck jobs (zombies) that have been active for too long.
+   306	 * This is a failsafe for when PgBoss expiration mechanisms fail or job handlers crash silently.
+   307	 */
+   308	export async function detectAndRecoverStuckJobs(): Promise<{ recovered: number; errors: number }> {
+   309	  // Find jobs active for > 5 minutes (user requested tight watchdog)
+   310	  const ZOMBIE_THRESHOLD_MINUTES = 5;
+   311	
+   312	  const stuckJobs = await db.$queryRaw<Array<{ id: string; name: string; run_id: string }>>`
+   313	    SELECT id, name, data->>'runId' as run_id
+   314	    FROM pgboss.job
+   315	    WHERE state = 'active'
+   316	      AND started_on < NOW() - (${ZOMBIE_THRESHOLD_MINUTES} || ' minutes')::interval
+   317	      AND (name = 'probe_scenario' OR name LIKE 'probe_scenario_%')
+   318	  `;
+   319	
+   320	  if (stuckJobs.length === 0) {
+   321	    return { recovered: 0, errors: 0 };
+   322	  }
+   323	
+   324	  log.warn({ count: stuckJobs.length }, 'Detected zombie jobs (active > 5m)');
+   325	
+   326	  let recovered = 0;
+   327	  let errors = 0;
+   328	
+   329	  for (const job of stuckJobs) {
+   330	    try {
+   331	      // Force fail the job
+   332	      await db.$executeRaw`
+   333	        UPDATE pgboss.job 
+   334	        SET state = 'failed', 
+   335	            output = '{"error": "Zombie job detected and killed by watchdog (active > 15m)"}',
+   336	            completed_on = NOW()
+   337	        WHERE id = ${job.id}::uuid
+   338	      `;
+   339	
+   340	      log.info({ jobId: job.id, runId: job.run_id }, 'Killed zombie job');
+
+exec
+/bin/zsh -lc "nl -ba /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts | sed -n '35,60p'" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+    35	/**
+    36	 * Process a single probe job.
+    37	 * Extracted to allow parallel execution within batches.
+    38	 */
+    39	async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<void> {
+    40	  const { runId, scenarioId, modelId, sampleIndex = 0, config } = job.data;
+    41	  const jobId = job.id;
+    42	  const probeResultKey = {
+    43	    runId_scenarioId_modelId_sampleIndex: {
+    44	      runId,
+    45	      scenarioId,
+    46	      modelId,
+    47	      sampleIndex,
+    48	    },
+    49	  };
+    50	
+    51	  log.info(
+    52	    { jobId, runId, scenarioId, modelId, sampleIndex, config },
+    53	    'Processing probe_scenario job'
+    54	  );
+    55	
+    56	  try {
+    57	    // Check if run is in a terminal state (completed/cancelled) - skip processing
+    58	    if (await isRunTerminal(runId)) {
+    59	      log.info({ jobId, runId }, 'Skipping job - run is in terminal state');
+    60	      return;
+
+exec
+/bin/zsh -lc "nl -ba /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/start-plan.ts | sed -n '1,40p'" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+     1	import { createLogger, ValidationError } from '@valuerank/shared';
+     2	import { sampleScenarios } from './start-helpers.js';
+     3	
+     4	const log = createLogger('services:run:start');
+     5	
+     6	export type RunJobPlanItem = {
+     7	  modelId: string;
+     8	  scenarioId: string;
+     9	  samples: number;
+    10	};
+    11	
+    12	type BuildRunJobPlanInput = {
+    13	  definitionId: string;
+    14	  models: string[];
+    15	  definitionScenarioIds: string[];
+    16	  scenarioIds?: string[];
+    17	  samplePercentage: number;
+    18	  sampleSeed?: number;
+    19	  samplesPerScenario: number;
+    20	};
+    21	
+    22	export async function buildRunJobPlan(input: BuildRunJobPlanInput): Promise<{
+    23	  selectedScenarioIds: string[];
+    24	  jobPlan: RunJobPlanItem[];
+    25	}> {
+    26	  const {
+    27	    definitionId,
+    28	    models,
+    29	    definitionScenarioIds,
+    30	    scenarioIds,
+    31	    samplePercentage,
+    32	    sampleSeed,
+    33	    samplesPerScenario,
+    34	  } = input;
+    35	
+    36	  let selectedScenarioIds: string[] = [];
+    37	  const jobPlan: RunJobPlanItem[] = [];
+    38	
+    39	  if (Array.isArray(scenarioIds) && scenarioIds.length > 0) {
+    40	    const allScenarioIdSet = new Set(definitionScenarioIds);
+
+exec
+/bin/zsh -lc "nl -ba /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/start.ts | sed -n '170,230p'" in /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e
+ succeeded in 0ms:
+   170	  // Let's just use a simplified estimate or pass explicit counts if we update estimateCost?
+   171	  // For now, we'll pass '100%' and 'avg samples' to get a roughly correct order of magnitude or just use samplePercentage logic effectively.
+   172	  // Actually, cost estimate is just for display/logging usually.
+   173	  // Let's skip detailed adaptive cost estimation update for this task unless critical.
+   174	
+   175	  const costEstimate = await estimateCost({
+   176	    definitionId,
+   177	    modelIds: models,
+   178	    samplePercentage:
+   179	      (Array.isArray(scenarioIds) && scenarioIds.length > 0)
+   180	        ? Math.max(1, Math.round((selectedScenarioIds.length / definition.scenarios.length) * 100))
+   181	        : samplePercentage,
+   182	    samplesPerScenario,
+   183	  });
+   184	
+   185	  const resolvedDefinition = await resolveDefinitionContent(definitionId);
+   186	
+   187	  // Prepare definition snapshot...
+   188	  const content = resolvedDefinition.resolvedContent as unknown as Record<string, unknown>;
+   189	  const findingsSnapshot = await buildFindingsSnapshot({
+   190	    definition,
+   191	    resolvedContent: resolvedDefinition.resolvedContent,
+   192	    selectedModels: activeModels.map((model) => ({
+   193	      modelId: model.modelId,
+   194	      providerId: model.providerId,
+   195	      providerName: model.provider.name,
+   196	      displayName: model.displayName,
+   197	      apiConfig: asRecord(model.apiConfig),
+   198	    })),
+   199	  });
+   200	  const definitionSnapshot = {
+   201	    ...content,
+   202	    preamble: (definition.preambleVersion?.content ?? content.preamble) as string | undefined,
+   203	    _meta: {
+   204	      definitionVersion: definition.version,
+   205	      preambleVersionId: definition.preambleVersion?.id,
+   206	      preambleVersionLabel: definition.preambleVersion?.version,
+   207	      preambleName: definition.preambleVersion ?
+   208	        (await db.preamble.findUnique({ where: { id: definition.preambleVersion.preambleId }, select: { name: true } }))?.name
+   209	        : undefined,
+   210	    }
+   211	  };
+   212	
+   213	  // Sanitize configExtras so a stale client payload with the legacy flag
+   214	  // cannot sneak it into the persisted config.
+   215	  // The runtime defense must be here, not at the type level — configExtras
+   216	  // is typed as Record<string, unknown> by design (see spec §3.3).
+   217	  const rawConfigExtras = configExtras;
+   218	  const configExtrasObject: Record<string, unknown> =
+   219	    rawConfigExtras != null && typeof rawConfigExtras === 'object' && !Array.isArray(rawConfigExtras)
+   220	      ? rawConfigExtras
+   221	      : {};
+   222	  const { isFinalTrial: _dropIsFinalTrial, ...safeConfigExtras } = configExtrasObject;
+   223	
+   224	  // Create run config
+   225	  const config = {
+   226	    ...safeConfigExtras,
+   227	    models,
+   228	    samplePercentage,
+   229	    sampleSeed,
+   230	    samplesPerScenario,
+
+2026-04-17T06:59:48.718999Z ERROR codex_core::tools::router: error=exec_command failed for `/bin/zsh -lc "nl -ba /Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/start.ts | sed -n '230,260p'"`: CreateProcess { message: "Rejected(\"Failed to create unified exec process: Not a directory (os error 20)\")" }
+codex
+I hit a path typo while grabbing the config lines. I already have enough to pin the main findings, so I’m moving to the writeup instead of chasing extra citations.
+codex
+## Findings
+- HIGH [CODE-CONFIRMED]: The plan never updates the existing cancellation/deletion paths, and both still hard-code `WHERE name = 'probe_scenario'`, so provider-queued probe jobs will keep running after a run is cancelled or soft-deleted. See [control.ts](/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/control.ts#L128-L137) and [delete-run.ts](/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/mcp/tools/delete-run.ts#L63-L73).
+
+- HIGH [CODE-CONFIRMED]: The scheduler’s zombie-kill path still only matches `probe_scenario` / `probe_scenario_%`, so hung provider-queue jobs will not be force-failed by `detectAndRecoverStuckJobs()`. See [recovery.ts](/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery.ts#L308-L318).
+
+- MEDIUM [CODE-CONFIRMED]: The plan leaves queue-health and recent-task APIs on the old naming scheme. `getQueueStatus()`, `getJobQueueStatus()`, and `recentTasks` still query only `probe_scenario` rows, so the main operator surfaces will underreport or miss provider-queue activity once this change lands. See [queue/status.ts](/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/queue/status.ts#L40-L58), [job-queue.ts](/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/job-queue.ts#L81-L101), and [run.ts](/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/graphql/types/run.ts#L362-L377).
+
+- MEDIUM [CODE-CONFIRMED]: Recovery requeueing still drops run temperature. `requeueMissingProbes()` rebuilds jobs with only `maxTurns`, while the probe handler consumes the job-level `config`, so recovered probes can silently run at the default temperature instead of the original run setting. See [recovery-jobs.ts](/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery-jobs.ts#L48-L70) and [probe-scenario/handler.ts](/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts#L39-L54).
+
+## Residual Risks
+- The new half-cap backstop can leave provider queues underfilled for up to the scheduler interval, so throughput may stay below the intended cap even when the system is healthy.
+- Any remaining hard-coded `probe_scenario` queries outside the files above will behave like the stale paths here and need the same migration sweep.
+tokens used
+78,215

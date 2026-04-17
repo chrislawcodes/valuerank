@@ -1,0 +1,21 @@
+{
+  "paths": [
+    "cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts",
+    "cloud/apps/api/src/queue/handlers/probe-scenario/index.ts",
+    "cloud/apps/api/src/queue/types.ts",
+    "cloud/apps/api/src/services/run/recovery.ts",
+    "cloud/apps/api/src/services/run/scheduler.ts",
+    "cloud/apps/api/src/services/run/start-queue.ts",
+    "cloud/apps/api/src/services/run/start.ts"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts",
+    "cloud/apps/api/src/queue/handlers/probe-scenario/index.ts",
+    "cloud/apps/api/src/queue/types.ts",
+    "cloud/apps/api/src/services/run/recovery.ts",
+    "cloud/apps/api/src/services/run/scheduler.ts",
+    "cloud/apps/api/src/services/run/start-queue.ts",
+    "cloud/apps/api/src/services/run/start.ts",
+    "docs/workflow/feature-runs/032-queue-depth-governor"
+  ]
+}

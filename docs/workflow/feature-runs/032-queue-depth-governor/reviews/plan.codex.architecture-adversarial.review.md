@@ -1,0 +1,45 @@
+---
+reviewer: "codex"
+lens: "architecture-adversarial"
+stage: "plan"
+artifact_path: "docs/workflow/feature-runs/032-queue-depth-governor/plan.md"
+artifact_sha256: "dabf22ee43c904507da0361ccb0680a9b907e1d4ddad34612e7badd987a30841"
+repo_root: "."
+git_head_sha: "e6bddd46b1313e99af81c3846a8ae8e741473024"
+git_base_ref: "origin/main"
+git_base_sha: "9c52998e5757f86c358d3d4be2a2e8febdce3118"
+generation_method: "codex-runner"
+resolution_status: "accepted"
+resolution_note: "HIGH cancel path: fixed — control.ts and delete-run.ts added to scope. HIGH zombie-kill: fixed — recovery.ts added to scope. MEDIUM queue health APIs: pre-existing gap, not in scope for this feature."
+raw_output_path: "docs/workflow/feature-runs/032-queue-depth-governor/reviews/plan.codex.architecture-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: "context files narrowed; plan artifact fully covered"
+---
+
+# Review: plan architecture-adversarial
+
+## Findings
+
+- HIGH [CODE-CONFIRMED]: The plan never updates the existing cancellation/deletion paths, and both still hard-code `WHERE name = 'probe_scenario'`, so provider-queued probe jobs will keep running after a run is cancelled or soft-deleted. See [control.ts](/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/control.ts#L128-L137) and [delete-run.ts](/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/mcp/tools/delete-run.ts#L63-L73).
+
+- HIGH [CODE-CONFIRMED]: The scheduler’s zombie-kill path still only matches `probe_scenario` / `probe_scenario_%`, so hung provider-queue jobs will not be force-failed by `detectAndRecoverStuckJobs()`. See [recovery.ts](/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery.ts#L308-L318).
+
+- MEDIUM [CODE-CONFIRMED]: The plan leaves queue-health and recent-task APIs on the old naming scheme. `getQueueStatus()`, `getJobQueueStatus()`, and `recentTasks` still query only `probe_scenario` rows, so the main operator surfaces will underreport or miss provider-queue activity once this change lands. See [queue/status.ts](/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/queue/status.ts#L40-L58), [job-queue.ts](/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/job-queue.ts#L81-L101), and [run.ts](/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/graphql/types/run.ts#L362-L377).
+
+- MEDIUM [CODE-CONFIRMED]: Recovery requeueing still drops run temperature. `requeueMissingProbes()` rebuilds jobs with only `maxTurns`, while the probe handler consumes the job-level `config`, so recovered probes can silently run at the default temperature instead of the original run setting. See [recovery-jobs.ts](/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/services/run/recovery-jobs.ts#L48-L70) and [probe-scenario/handler.ts](/Users/chrislaw/valuerank/.claude/worktrees/festive-albattani-ec5e5e/cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts#L39-L54).
+
+## Residual Risks
+
+- The new half-cap backstop can leave provider queues underfilled for up to the scheduler interval, so throughput may stay below the intended cap even when the system is healthy.
+- Any remaining hard-coded `probe_scenario` queries outside the files above will behave like the stale paths here and need the same migration sweep.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: accepted
+- note: HIGH cancel path: fixed — control.ts and delete-run.ts added to scope. HIGH zombie-kill: fixed — recovery.ts added to scope. MEDIUM queue health APIs: pre-existing gap, not in scope for this feature.

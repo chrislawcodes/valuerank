@@ -23,6 +23,7 @@ import { recordProbeSuccess, recordProbeFailure } from '../../../services/probe-
 import { schedule as rateLimitSchedule } from '../../../services/rate-limiter/index.js';
 import { getProviderForModel } from '../../../services/parallelism/index.js';
 import { ensureHealthCheck } from './health-check.js';
+import { enqueueTopUpProbesSingleton } from '../top-up-probes.js';
 import { formatWorkerErrorMessage, extractStoredTranscriptTokenUsage, applyProgressDelta, handleJobError } from './retry.js';
 import { PROBE_WORKER_PATH, fetchScenario, buildWorkerInput } from './worker-input.js';
 import type { ProbeWorkerInput, ProbeWorkerOutput } from './worker-input.js';
@@ -87,6 +88,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
         { jobId, runId, scenarioId, modelId, sampleIndex, transcriptId: existingProbeResult.transcriptId },
         'Skipping probe job - result already succeeded'
       );
+      await enqueueTopUpProbesSingleton(runId);
       return;
     }
 
@@ -101,6 +103,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
         { jobId, runId, scenarioId, modelId, sampleIndex, currentRetryCount },
         'Skipping probe job - already terminal failed'
       );
+      await enqueueTopUpProbesSingleton(runId);
       return;
     }
 
@@ -285,6 +288,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
 
     // Update progress based on status transition for this probe key
     const { progress, status } = await applyProgressDelta(runId, previousProbeStatus, 'SUCCESS');
+    await enqueueTopUpProbesSingleton(runId);
 
     // If run is already in SUMMARIZING state (late-arriving probe job),
     // queue a summarize job for this transcript immediately

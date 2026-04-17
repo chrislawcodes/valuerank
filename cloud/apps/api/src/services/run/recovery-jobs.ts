@@ -20,7 +20,7 @@ export async function countJobsForRun(runId: string): Promise<{ pending: number;
   const result = await db.$queryRaw<Array<{ state: string; count: bigint }>>`
     SELECT state, COUNT(*) as count
     FROM pgboss.job
-    WHERE (name = 'probe_scenario' OR name LIKE 'probe_scenario_%')
+    WHERE (name = 'probe_scenario' OR (name LIKE 'probe_%' AND name != 'probe_dead_letter'))
       AND state IN ('created', 'retry', 'active')
       AND data->>'runId' = ${runId}
     GROUP BY state

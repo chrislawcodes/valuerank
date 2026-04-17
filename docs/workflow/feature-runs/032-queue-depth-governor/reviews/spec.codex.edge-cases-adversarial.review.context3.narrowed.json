@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts",
+  "source_artifact_sha256": "97707c444ac8f215f80fb94815805a4bd680e73c1ae543935b07162093960ef1",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/032-queue-depth-governor/reviews/spec.codex.edge-cases-adversarial.review.context3.narrowed.txt",
+  "narrowed_artifact_sha256": "47dfd69b0ace5a055f5b4f8f07038b4b4a8d9d950ecf2cb3534a26d9ec6064b5",
+  "strategy": "head-tail-numbered-lines"
+}

@@ -12,6 +12,7 @@ import {
 import type { RunJobPlanItem } from './start-plan.js';
 
 const log = createLogger('services:run:start');
+export const PROBE_QUEUE_DEPTH_PER_PROVIDER = 15;
 
 type EnqueueRunJobsInput = {
   runId: string;
@@ -59,13 +60,36 @@ export async function enqueueRunJobs(input: EnqueueRunJobsInput): Promise<string
     }
   }
 
-  const queueCounts = new Map<string, number>();
+  const jobsByQueue = new Map<string, JobEntry[]>();
   for (const job of jobs) {
-    queueCounts.set(job.queueName, (queueCounts.get(job.queueName) ?? 0) + 1);
+    const queueJobs = jobsByQueue.get(job.queueName) ?? [];
+    queueJobs.push(job);
+    jobsByQueue.set(job.queueName, queueJobs);
   }
-  log.debug({ runId, queueDistribution: Object.fromEntries(queueCounts) }, 'Job queue distribution');
 
-  const firstPass = await bulkEnqueueJobs(jobs);
+  const launchJobs: JobEntry[] = [];
+  let expectedInitialCount = 0;
+  const launchQueueCounts = new Map<string, number>();
+  for (const [queueName, queueJobs] of jobsByQueue) {
+    const cappedJobs = queueJobs.slice(0, PROBE_QUEUE_DEPTH_PER_PROVIDER);
+    expectedInitialCount += cappedJobs.length;
+    launchJobs.push(...cappedJobs);
+    launchQueueCounts.set(queueName, cappedJobs.length);
+  }
+
+  log.debug(
+    {
+      runId,
+      queueDistribution: Object.fromEntries(
+        Array.from(jobsByQueue.entries(), ([queueName, queueJobs]) => [queueName, queueJobs.length])
+      ),
+      launchDistribution: Object.fromEntries(launchQueueCounts),
+      expectedInitialCount,
+    },
+    'Job queue distribution'
+  );
+
+  const firstPass = await bulkEnqueueJobs(launchJobs);
   let jobIds = firstPass.jobIds;
   let remainingFailures = firstPass.failures;
 
@@ -95,15 +119,16 @@ export async function enqueueRunJobs(input: EnqueueRunJobsInput): Promise<string
     remainingFailures = retryPass.failures;
   }
 
-  if (remainingFailures.length > 0 || jobIds.length !== totalJobs) {
+  if (remainingFailures.length > 0 || jobIds.length !== expectedInitialCount) {
     const failureReason = remainingFailures.length > 0
       ? `${remainingFailures.length} jobs failed to enqueue after retry`
-      : `Expected ${totalJobs} jobs but only ${jobIds.length} were enqueued`;
+      : `Expected ${expectedInitialCount} jobs but only ${jobIds.length} were enqueued`;
 
     log.error(
       {
         runId,
         totalJobs,
+        expectedInitialCount,
         enqueuedJobs: jobIds.length,
         remainingFailures: remainingFailures.slice(0, 10).map((failure) => ({
           queueName: failure.job.queueName,

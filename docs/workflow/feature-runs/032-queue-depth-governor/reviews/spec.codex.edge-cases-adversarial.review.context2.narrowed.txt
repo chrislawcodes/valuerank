@@ -1,0 +1,239 @@
+00001: /**
+00002:  * Queue Handler Registration
+00003:  *
+00004:  * Exports handler registration function for all job types.
+00005:  * Includes provider-specific queues for parallelism enforcement.
+00006:  */
+00007: 
+00008: import type { PgBoss } from 'pg-boss';
+00009: import { createLogger } from '@valuerank/shared';
+00010: import { queueConfig } from '../../config.js';
+00011: import { createProbeScenarioHandler } from './probe-scenario/index.js';
+00012: import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
+00013: import {
+00014:   PROBE_DEAD_LETTER_QUEUE,
+00015:   handlerRegistrations,
+00016: } from './handler-config.js';
+00017: import type { ProbeScenarioJobData, SummarizeTranscriptJobData } from './handler-config.js';
+00018: import {
+00019:   createProviderQueues,
+00020:   getAllProviderQueues,
+00021: } from '../../services/parallelism/index.js';
+00022: 
+00023: export type {
+00024:   ProbeScenarioJobData,
+00025:   SummarizeTranscriptJobData,
+00026: } from './handler-config.js';
+00027: 
+00028: const log = createLogger('queue:handlers');
+00029: /**
+00030:  * Registers provider-specific probe queue handlers.
+00031:  * Each provider queue gets N workers where N = maxParallelRequests.
+00032:  * Each worker fetches one job at a time to preserve per-job retry semantics.
+00033:  */
+00034: async function registerProviderProbeHandlers(boss: PgBoss): Promise<number> {
+00035:   const providerQueues = await getAllProviderQueues();
+00036:   const probeHandler = createProbeScenarioHandler();
+00037: 
+00038:   let registeredCount = 0;
+00039: 
+00040:   for (const [providerName, limits] of providerQueues) {
+00041:     const queueName = limits.queueName;
+00042:     const workerCount = limits.maxParallelRequests;
+00043: 
+00044:     log.info(
+00045:       { provider: providerName, queueName, workerCount, workerBatchSize: 1 },
+00046:       'Registering provider probe handler'
+00047:     );
+00048: 
+00049:     // Register one worker per parallel slot.
+00050:     // Using batchSize > 1 causes pg-boss to mark the whole batch failed when one job throws.
+00051:     // That can retry already-successful jobs and create duplicate transcripts.
+00052:     for (let i = 0; i < workerCount; i++) {
+00053:       await boss.work<ProbeScenarioJobData>(queueName, { batchSize: 1 }, probeHandler);
+00054:       registeredCount++;
+00055:     }
+00056:   }
+00057: 
+00058:   return registeredCount;
+00059: }
+00060: 
+00061: /**
+00062:  * Registers all job handlers with PgBoss.
+00063:  * Creates queues first (required by PgBoss v10+), then registers workers.
+00064:  * Includes provider-specific probe queues for parallelism enforcement.
+00065:  */
+00066: export async function registerHandlers(boss: PgBoss): Promise<void> {
+00067:   // Import summarization parallelism service
+00068:   const { getMaxParallelSummarizations } = await import(
+00069:     '../../services/summarization-parallelism/index.js'
+00070:   );
+00071: 
+00072:   const defaultBatchSize = queueConfig.workerBatchSize;
+00073: 
+00074:   log.info(
+00075:     { defaultBatchSize, jobTypes: handlerRegistrations.map(h => h.name) },
+00076:     'Starting handler registration'
+00077:   );
+00078: 
+00079:   // Create dead letter queue FIRST (required before queues that reference it)
+00080:   log.info({ jobType: PROBE_DEAD_LETTER_QUEUE }, 'Creating dead letter queue');
+00081:   await boss.createQueue(PROBE_DEAD_LETTER_QUEUE);
+00082: 
+00083:   // Create standard queues (required by PgBoss v10+)
+00084:   for (const registration of handlerRegistrations) {
+00085:     // Skip dead letter queue - already created above
+00086:     if (registration.name === 'probe_dead_letter') continue;
+00087: 
+00088:     log.info({ jobType: registration.name }, 'Creating queue');
+00089:     // Add dead letter queue for probe_scenario
+00090:     if (registration.name === 'probe_scenario') {
+00091:       await boss.createQueue(registration.name, { deadLetter: PROBE_DEAD_LETTER_QUEUE });
+00092:     } else {
+00093:       await boss.createQueue(registration.name);
+00094:     }
+00095:   }
+00096: 
+00097:   // Create provider-specific probe queues with dead letter support
+00098:   await createProviderQueues(boss, PROBE_DEAD_LETTER_QUEUE);
+00099: 
+00100:   // Collect handler registration details for summary log
+00101:   const handlerDetails: Array<{ jobType: string; batchSize: number }> = [];
+00102: 
+00103:   // Register standard handlers with appropriate batchSize
+00104:   for (const registration of handlerRegistrations) {
+00105:     // Use dynamic batchSize for summarize_transcript
+00106:     const batchSize = registration.name === 'summarize_transcript'
+00107:       ? await getMaxParallelSummarizations()
+00108:       : defaultBatchSize;
+00109: 
+00110:     log.info(
+00111:       {
+00112:         jobType: registration.name,
+00113:         batchSize,
+00114:         isDynamic: registration.name === 'summarize_transcript',
+00115:       },
+00116:       'Registering handler with batchSize'
+00117:     );
+00118: 
+00119:
+
+... [narrowed review slice: middle omitted] ...
+
+Work(queueName);
+00205:   log.info(
+00206:     { provider: providerName, queueName, activeJobs: activeCount, queuedJobs: queuedCount },
+00207:     'Unregistered existing handler (in-flight jobs will complete)'
+00208:   );
+00209: 
+00210:   // 3. Clear caches to force reload from database
+00211:   clearCache();
+00212: 
+00213:   // 4. Load fresh limits
+00214:   const limits = await loadProviderLimits();
+00215:   const providerLimits = limits.get(providerName);
+00216: 
+00217:   if (!providerLimits) {
+00218:     log.warn({ provider: providerName }, 'Provider not found after cache reload');
+00219:     return;
+00220:   }
+00221: 
+00222:   // 5. Register new handlers with batchSize=1.
+00223:   //    This preserves per-job retry semantics while keeping provider concurrency.
+00224:   const workerCount = providerLimits.maxParallelRequests;
+00225:   const probeHandler = createProbeScenarioHandler();
+00226: 
+00227:   for (let i = 0; i < workerCount; i++) {
+00228:     await boss.work<ProbeScenarioJobData>(queueName, { batchSize: 1 }, probeHandler);
+00229:   }
+00230: 
+00231:   log.info(
+00232:     { provider: providerName, queueName, workerCount, workerBatchSize: 1 },
+00233:     'Provider queue handler re-registered with new settings'
+00234:   );
+00235: 
+00236:   // 6. Reload rate limiters to pick up new settings
+00237:   await reloadLimiters();
+00238:   log.debug({ provider: providerName }, 'Rate limiters reloaded');
+00239: }
+00240: 
+00241: /**
+00242:  * Re-registers the summarize_transcript queue handler with updated batchSize.
+00243:  * Called when summarization parallelism settings are changed via MCP.
+00244:  *
+00245:  * This function:
+00246:  * 1. Unregisters the existing handler (allows in-flight jobs to complete)
+00247:  * 2. Clears the summarization parallelism cache to reload settings from DB
+00248:  * 3. Registers a new handler with the updated batchSize
+00249:  *
+00250:  * Note: Jobs in the queue are NOT affected - they remain queued and will be processed
+00251:  * by the new handler. In-flight jobs complete normally before the handler is replaced.
+00252:  * PgBoss's offWork() is graceful and does not abort running jobs.
+00253:  */
+00254: export async function reregisterSummarizeHandler(boss: PgBoss): Promise<void> {
+00255:   // Import here to avoid circular dependency
+00256:   const { clearSummarizationCache, getMaxParallelSummarizations } = await import(
+00257:     '../../services/summarization-parallelism/index.js'
+00258:   );
+00259: 
+00260:   const queueName = 'summarize_transcript';
+00261:   const reregisterStartTime = Date.now();
+00262: 
+00263:   log.info({ queueName }, 'Starting summarize handler re-registration');
+00264: 
+00265:   // 1. Get queue stats before unregistering (for logging)
+00266:   let activeCount = 0;
+00267:   let queuedCount = 0;
+00268:   try {
+00269:     const queues = await boss.getQueues();
+00270:     const queueInfo = queues.find((q) => q.name === queueName);
+00271:     if (queueInfo) {
+00272:       activeCount = queueInfo.activeCount;
+00273:       queuedCount = queueInfo.queuedCount;
+00274:     }
+00275:   } catch {
+00276:     // Ignore errors getting stats
+00277:   }
+00278: 
+00279:   // Get old batch size for comparison
+00280:   const oldBatchSize = await getMaxParallelSummarizations();
+00281: 
+00282:   // 2. Unregister existing handler - this is GRACEFUL:
+00283:   //    - Stops fetching NEW jobs from the queue
+00284:   //    - In-flight jobs continue to completion
+00285:   //    - Jobs in queue remain untouched
+00286:   await boss.offWork(queueName);
+00287:   log.info(
+00288:     { queueName, activeJobs: activeCount, queuedJobs: queuedCount, oldBatchSize },
+00289:     'Unregistered existing handler (in-flight jobs will complete)'
+00290:   );
+00291: 
+00292:   // 3. Clear cache to force reload from database
+00293:   clearSummarizationCache();
+00294: 
+00295:   // 4. Clear summarize rate limiters so they're recreated with new settings
+00296:   const { clearSummarizeLimiters } = await import('../../services/rate-limiter/index.js');
+00297:   clearSummarizeLimiters();
+00298:   log.debug('Summarize rate limiters cleared');
+00299: 
+00300:   // 5. Load fresh parallelism setting
+00301:   const newBatchSize = await getMaxParallelSummarizations();
+00302: 
+00303:   // 6. Register new handler with updated batchSize
+00304:   //    This immediately starts processing queued jobs with the new concurrency
+00305:   const summarizeHandler = createSummarizeTranscriptHandler();
+00306: 
+00307:   await boss.work<SummarizeTranscriptJobData>(queueName, { batchSize: newBatchSize }, summarizeHandler);
+00308: 
+00309:   const durationMs = Date.now() - reregisterStartTime;
+00310: 
+00311:   log.info(
+00312:     {
+00313:       queueName,
+00314:       oldBatchSize,
+00315:       newBatchSize,
+00316:       batchSizeChanged: oldBatchSize !== newBatchSize,
+00317:       queuedJobsWaiting: queuedCount,
+00318:       durationMs,
+00319:     },
+00320:     'Summarize handler re-

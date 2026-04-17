@@ -1,0 +1,8 @@
+## Findings
+- **MEDIUM** `top_up_probes` is made effectively non-recoverable by `expireInSeconds: 60` and `retryLimit: 0` in T1. If the handler fails for a transient reason, there is no built-in retry path, so a run can stay underfilled until some unrelated later event happens to trigger another top-up.
+- **MEDIUM [UNVERIFIED]** T3 and T5 only treat `SUCCESS` and `FAILED` as terminal probe states. If the domain has any other terminal outcome, the new logic will misclassify it. That can either resurrect work that was intentionally finished or suppress replenishment that should happen.
+- **MEDIUM [UNVERIFIED]** T6/T7 broaden the cleanup/recovery match from `probe_scenario*` to `probe_%` minus `probe_dead_letter`. That is a wider blast radius. If any other probe-prefixed job types exist now or are added later, these maintenance paths will treat them like probe-scenario jobs and may cancel, recover, or kill the wrong work.
+
+## Residual Risks
+- The plan still depends on PgBoss job-state visibility being exact enough for the queue-depth counts. If `created`, `retry`, and `active` transitions lag or are observed inconsistently, the top-up logic can briefly miscount capacity.
+- The test list covers cap behavior and dead-letter exclusion, but it does not explicitly prove idempotency under concurrent probe completions or duplicate scheduler sweeps.

@@ -9,12 +9,14 @@ import type { PgBoss } from 'pg-boss';
 import { createLogger } from '@valuerank/shared';
 import { queueConfig } from '../../config.js';
 import { createProbeScenarioHandler } from './probe-scenario/index.js';
+import { createTopUpProbesHandler } from './top-up-probes.js';
 import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
 import {
   PROBE_DEAD_LETTER_QUEUE,
   handlerRegistrations,
 } from './handler-config.js';
 import type { ProbeScenarioJobData, SummarizeTranscriptJobData } from './handler-config.js';
+import type { TopUpProbesJobData } from '../types.js';
 import {
   createProviderQueues,
   getAllProviderQueues,
@@ -24,8 +26,10 @@ export type {
   ProbeScenarioJobData,
   SummarizeTranscriptJobData,
 } from './handler-config.js';
+export type { TopUpProbesJobData } from '../types.js';
 
 const log = createLogger('queue:handlers');
+const TOP_UP_PROBES_QUEUE = 'top_up_probes';
 /**
  * Registers provider-specific probe queue handlers.
  * Each provider queue gets N workers where N = maxParallelRequests.
@@ -72,7 +76,7 @@ export async function registerHandlers(boss: PgBoss): Promise<void> {
   const defaultBatchSize = queueConfig.workerBatchSize;
 
   log.info(
-    { defaultBatchSize, jobTypes: handlerRegistrations.map(h => h.name) },
+    { defaultBatchSize, jobTypes: getJobTypes() },
     'Starting handler registration'
   );
 
@@ -123,6 +127,11 @@ export async function registerHandlers(boss: PgBoss): Promise<void> {
   // Register provider-specific probe handlers with parallelism limits
   const providerHandlerCount = await registerProviderProbeHandlers(boss);
 
+  log.info({ jobType: TOP_UP_PROBES_QUEUE }, 'Creating top-up queue');
+  await boss.createQueue(TOP_UP_PROBES_QUEUE);
+  log.info({ jobType: TOP_UP_PROBES_QUEUE, batchSize: 1 }, 'Registering top-up handler');
+  await boss.work<TopUpProbesJobData>(TOP_UP_PROBES_QUEUE, { batchSize: 1 }, createTopUpProbesHandler());
+
   // Get current queue states for logging
   let queueStates: Array<{ name: string; activeCount: number; queuedCount: number }> = [];
   try {
@@ -140,6 +149,7 @@ export async function registerHandlers(boss: PgBoss): Promise<void> {
     {
       standardHandlers: handlerRegistrations.length,
       providerHandlers: providerHandlerCount,
+      topUpHandlers: 1,
       handlerDetails,
       queueStates,
     },
@@ -151,7 +161,7 @@ export async function registerHandlers(boss: PgBoss): Promise<void> {
  * Gets list of registered job types.
  */
 export function getJobTypes() {
-  return handlerRegistrations.map((h) => h.name);
+  return [...handlerRegistrations.map((h) => h.name), TOP_UP_PROBES_QUEUE];
 }
 
 /**

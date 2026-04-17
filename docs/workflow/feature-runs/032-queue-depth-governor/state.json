@@ -1,0 +1,43 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [],
+    "summary": "",
+    "updated_at": 1776406813,
+    "answers": {},
+    "non_goals": [],
+    "acceptance_criteria": [],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "parallel_analysis": {
+    "reviewed": true,
+    "found": false,
+    "note": "Tasks are mostly sequential (T1\u2192T2\u2192T3\u2192T4 chain), but T6, T7, T8 (queue pattern fixes) are independent of the new handler chain and could run in parallel with T3/T4/T5. T9 (tests) depends on T1-T8 complete.",
+    "updated_at": 1776409702
+  },
+  "init_head_sha": "e6bddd46b1313e99af81c3846a8ae8e741473024",
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "checkpoint_fallback": {}
+}
