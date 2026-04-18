@@ -69,9 +69,14 @@ builder.queryField('modelsAnalysis', (t) =>
         required: false,
         description: 'Optional domain ID to scope the matrix to a single domain',
       }),
+      signature: t.arg.string({
+        required: false,
+        description: 'Optional batch signature to filter snapshots (e.g. vnewtd, vnewt0)',
+      }),
     },
     resolve: async (_root, args, ctx) => {
       const domainId = args.domainId != null ? String(args.domainId) : null;
+      const signature = args.signature != null ? String(args.signature) : null;
       const activeModels = await getModelsFromDatabase({
         activeOnly: true,
         availableOnly: false,
@@ -85,6 +90,7 @@ builder.queryField('modelsAnalysis', (t) =>
                 startsWith: buildAssumptionKey(''),
               },
           analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
+          ...(signature != null ? { configSignature: signature } : {}),
           status: 'CURRENT',
           deletedAt: null,
         },
