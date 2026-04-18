@@ -5,6 +5,18 @@ description: Generate executable task breakdown from feature plan. Creates tasks
 
 # Feature Tasks Skill
 
+## ⚠️ Keep Moving Between Phases
+
+Do **not** pause between phases of the feature workflow (spec → plan → tasks → implement) unless one of these is true:
+- A runner or checkpoint command returns `mark_blocked`
+- The user explicitly asked to stop at a specific point
+- Constitution check returns **FAIL**
+- The repo state makes the next action unsafe
+
+When tasks are complete, auto-continue into `feature-implement` (or `/feature-implement <slug>` in ValueRank) without waiting for the user to say "continue." Report a one-sentence status and proceed.
+
+---
+
 ## ⚠️ VALUERANK REPO: Use the factory workflow instead
 
 If you are working in the `valuerank` / `chrislawcodes/valuerank` repository, **do not follow this skill**. This is a generic skill that references `.specify/` and constitution files that do not exist in this repo.
@@ -493,24 +505,17 @@ Task Statistics:
 
 Constitution Check: [PASS/WARN/SKIPPED]
 
-Next Steps:
-1. Review tasks.md for completeness
-2. Review checklists/ for quality gates
-3. When ready to implement:
-   - In ValueRank, use `/feature-implement <slug>`
-   - In other repos, invoke the feature-implement skill
-
-To continue:
-- In ValueRank: say `/feature-implement <slug>` or "start implementation"
-- In other repos: say "use feature-implement skill" or "start implementation"
+Tasks complete — proceeding to implementation.
 ```
 
 **Handoff Instructions**:
-- Tell the user the task breakdown is complete and ready for review
-- Invite them to proceed with `/feature-implement <slug>` in ValueRank, or the
-  `feature-implement` skill in other repos
-- DO NOT suggest using `/speckit.implement` or any other speckit command
-- Make it clear that ValueRank uses `/feature-implement <slug>`, not this generic next step
+- Report task breakdown completion in one sentence.
+- **Auto-continue into `/feature-implement <slug>` (ValueRank) or the `feature-implement` skill (other repos) immediately** unless one of the following is true:
+  - Constitution check returned **FAIL**
+  - The user explicitly asked to stop after tasks
+  - The repo state makes proceeding unsafe
+- Do not wait for the user to say "continue" or "start implementation."
+- DO NOT suggest using `/speckit.implement` or any other speckit command.
 
 ---
 

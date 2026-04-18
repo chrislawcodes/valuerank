@@ -5,6 +5,18 @@ description: Execute feature tasks phase-by-phase with automatic progress tracki
 
 # Feature Implementation Skill
 
+## ⚠️ Keep Moving Between Phases
+
+Do **not** pause between phases, checklists, or implementation checkpoints unless one of these is true:
+- A runner or checkpoint command returns `mark_blocked`
+- A task fails and halts execution per Step 7
+- The user explicitly asked to stop at a specific point
+- The repo state makes the next action unsafe
+
+Checklist warnings, diff-size notices, and other advisory signals should be **logged and passed through** — not turned into "yes/no" prompts. Keep moving.
+
+---
+
 ## ⚠️ VALUERANK REPO: Use the factory workflow instead
 
 If you are working in the `valuerank` / `chrislawcodes/valuerank` repository, **do not follow this skill**. This is a generic skill that references `.specify/` and constitution files that do not exist in this repo.
@@ -69,28 +81,7 @@ Executes implementation that:
    - `<feature-dir>/plan.md` (REQUIRED)
    - `<feature-dir>/spec-acceptance.md` OR `<feature-dir>/spec.md` (at least one REQUIRED — prefer spec-acceptance.md if it exists; fall back to spec.md and extract acceptance criteria from it)
 
-4. **Diff size estimate** — count unchecked tasks and files in scope, then warn if the expected diff is likely to be large:
-
-   ```
-   # Count unchecked tasks
-   task_count = grep -c '^\s*- \[ \]' tasks.md
-
-   # Count unique files in task descriptions (rough proxy)
-   file_scope = extract unique paths from [P: ...] annotations and task descriptions
-   ```
-
-   **If `task_count >= 20` OR `len(file_scope) >= 15`**:
-   ```
-   ⚠️  Large task set detected: [N] tasks across [M] files.
-   The diff review stage has a hard cap of 150K chars (~80K triggers a rerun warning).
-   Consider splitting into two implementation passes:
-   - Pass 1: Phases 1–2 (Foundation) + Phase 3 (P1 story)
-   - Pass 2: Remaining phases
-   Proceed anyway? (yes/split)
-   ```
-   Wait for user confirmation before continuing. If "split", stop here and ask which phases to include in pass 1.
-
-   **If `task_count < 20` AND `len(file_scope) < 15`**: proceed without warning.
+4. **Diff size note** — count unchecked tasks and files in scope. If `task_count >= 20` OR `len(file_scope) >= 15`, log a one-line notice that the diff may be large and phase-by-phase commits will help keep review budgets manageable. Do **not** pause or ask the user whether to proceed — the diff checkpoint stage enforces size limits at the right time.
 
 **Output**: Confirmed feature directory and prerequisites met
 
@@ -134,7 +125,7 @@ Starting Phase 1: Setup...
 
 **If ANY checklist incomplete**:
 ```
-⚠️ Some checklists are incomplete
+⚠️ Some checklists are incomplete — continuing with implementation
 
 Incomplete Items:
 - implementation.md: 3 items unchecked
@@ -142,14 +133,10 @@ Incomplete Items:
   - [ ] [Item from checklist]
   - [ ] [Item from checklist]
 
-This may indicate the plan is not fully validated.
-
-Do you want to proceed with implementation anyway? (yes/no)
+These items are logged but not blocking. Review them during diff checkpoint.
 ```
 
-**Wait for user response**:
-- "yes" / "proceed" / "continue" → Continue to Step 3
-- "no" / "wait" / "stop" → Halt execution, suggest reviewing checklists
+Emit the warning, then **proceed to Step 3 without waiting for user input**. Halt only if the user has explicitly asked to stop on checklist warnings.
 
 **If no checklists exist**: Skip validation, proceed to Step 3
 
