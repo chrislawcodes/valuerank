@@ -1,34 +1,22 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import type { db as DbType } from '@valuerank/db';
-import type { findMissingProbes as FindMissingProbesType } from '../../../src/services/run/coverage-completeness.js';
 
-// These vi.mock() calls are hoisted above all imports by Vitest's transform.
+const mockCount = vi.hoisted(() => vi.fn());
+const mockFindMissingProbes = vi.hoisted(() => vi.fn());
+
 vi.mock('@valuerank/db', () => ({
   db: {
     transcript: {
-      count: vi.fn(),
+      count: mockCount,
     },
   },
   Prisma: { DbNull: null },
 }));
 
 vi.mock('../../../src/services/run/coverage-completeness.js', () => ({
-  findMissingProbes: vi.fn(),
+  findMissingProbes: mockFindMissingProbes,
 }));
 
-// Static imports execute after the hoisted vi.mock() factories are registered,
-// so these resolve to the mocked modules.
-import { db } from '@valuerank/db';
-import * as coverageCompleteness from '../../../src/services/run/coverage-completeness.js';
 import { checkAllSummarized } from '../../../src/queue/handlers/summarize-persistence.js';
-
-// eslint-disable-next-line @typescript-eslint/unbound-method
-const mockCount: ReturnType<typeof vi.mocked<typeof DbType.transcript.count>> = vi.mocked(
-  db.transcript.count
-);
-const mockFindMissingProbes: ReturnType<
-  typeof vi.mocked<typeof FindMissingProbesType>
-> = vi.mocked(coverageCompleteness.findMissingProbes);
 
 describe('checkAllSummarized', () => {
   beforeEach(() => {
