@@ -6,13 +6,6 @@ Current status:
 
 - Wave 0 (prep/docs) in progress
 
-Related docs:
-
-- [docs/order-effect-reversal-metrics-spec.md](/Users/chrislaw/valuerank/docs/order-effect-reversal-metrics-spec.md)
-- [docs/order-effect-reversal-metrics-test-plan.md](/Users/chrislaw/valuerank/docs/order-effect-reversal-metrics-test-plan.md)
-- [docs/order-effect-reversal-metrics-implementation-checklist.md](/Users/chrislaw/valuerank/docs/order-effect-reversal-metrics-implementation-checklist.md)
-- [docs/order-effect-reversal-metrics-kickoff-notes.md](/Users/chrislaw/valuerank/docs/order-effect-reversal-metrics-kickoff-notes.md)
-
 ## Locked Decisions
 
 - Analytics move out of React and into backend analysis code.
