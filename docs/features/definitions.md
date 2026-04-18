@@ -2,7 +2,7 @@
 
 Definitions are the core entity in Cloud ValueRank. A definition describes a moral dilemma scenario template that can be expanded into multiple concrete scenarios for evaluation.
 
-> **Original Design:** See [preplanning/database-design.md](../preplanning/database-design.md) for the original entity design and [specs/006-stage-8-definition-ui/spec.md](../../specs/006-stage-8-definition-ui/spec.md) for the full feature specification.
+> **Original Design:** See [preplanning/database-design.md](../preplanning/database-design.md) for the original entity design.
 
 ---
 
