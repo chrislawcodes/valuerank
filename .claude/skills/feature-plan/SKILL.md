@@ -5,6 +5,18 @@ description: Generate technical implementation plan from feature specification. 
 
 # Feature Planning Skill
 
+## ⚠️ Keep Moving Between Phases
+
+Do **not** pause between phases of the feature workflow (spec → plan → tasks → implement) unless one of these is true:
+- A runner or checkpoint command returns `mark_blocked`
+- The user explicitly asked to stop at a specific point
+- Constitution check returns **FAIL**
+- The repo state makes the next action unsafe
+
+When the plan is complete, auto-continue into `feature-tasks` without waiting for the user to say "continue." Report a one-sentence status and proceed.
+
+---
+
 ## ⚠️ VALUERANK REPO: Use the factory workflow instead
 
 If you are working in the `valuerank` / `chrislawcodes/valuerank` repository, **do not follow this skill**. This is a generic skill that references `.specify/` and constitution files that do not exist in this repo.
@@ -582,19 +594,17 @@ Generated Files:
 Constitution Check: [PASS/WARN/FAIL/SKIPPED]
 [If checked:] - [Summary of findings]
 
-Next Steps:
-1. Review generated files for technical accuracy
-2. When ready for task breakdown, invoke the feature-tasks skill
-3. Or refine architecture decisions in plan.md if needed
-
-To continue: Simply say "use feature-tasks skill" or "generate the tasks"
+Plan complete — proceeding to task breakdown.
 ```
 
 **Handoff Instructions**:
-- Tell the user the technical plan is complete and ready for review
-- Invite them to proceed with the `feature-tasks` skill when ready
-- DO NOT suggest using `/speckit.tasks` or any other speckit command
-- Make it clear they should invoke the feature-tasks SKILL, not a slash command
+- Report plan completion in one sentence.
+- **Auto-continue into the `feature-tasks` skill immediately** unless one of the following is true:
+  - Constitution check returned **FAIL** (must be resolved before tasks can be written)
+  - The user explicitly asked to stop after planning
+  - The repo state makes proceeding unsafe
+- Do not wait for the user to say "continue" or "use feature-tasks skill."
+- DO NOT suggest using `/speckit.tasks` or any other speckit command.
 
 ---
 

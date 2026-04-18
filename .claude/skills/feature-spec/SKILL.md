@@ -5,6 +5,18 @@ description: Create a high-quality feature specification with prioritized user s
 
 # Feature Specification Skill
 
+## ⚠️ Keep Moving Between Phases
+
+Do **not** pause between phases of the feature workflow (spec → plan → tasks → implement) unless one of these is true:
+- A runner or checkpoint command returns `mark_blocked`
+- The user explicitly asked to stop at a specific point
+- Discovery questions have unresolved items that require the user's answer
+- The repo state makes the next action unsafe
+
+When the spec is complete, auto-continue into `feature-plan` without waiting for the user to say "continue." Report a one-sentence status and proceed.
+
+---
+
 ## ⚠️ VALUERANK REPO: Use the factory workflow instead
 
 If you are working in the `valuerank` / `chrislawcodes/valuerank` repository, **do not follow this skill**. This is a generic skill that references `.specify/` and constitution files that do not exist in this repo.
@@ -310,19 +322,17 @@ Summary:
 - Success Criteria: 4
 - Constitution Check: PASS (or SKIPPED if no constitution)
 
-Next Steps:
-1. Review spec.md for accuracy
-2. When ready for technical planning, invoke the feature-plan skill
-3. Or ask clarifying questions if requirements need refinement
-
-To continue: Simply say "use feature-plan skill" or "generate the technical plan"
+Spec complete — proceeding to technical planning.
 ```
 
 **Handoff Instructions**:
-- Tell the user the specification is complete and ready for review
-- Invite them to proceed with the `feature-plan` skill when ready
-- DO NOT suggest using `/speckit.plan` or any other speckit command
-- Make it clear they should invoke the feature-plan SKILL, not a slash command
+- Report spec completion in one sentence.
+- **Auto-continue into the `feature-plan` skill immediately** unless one of the following is true:
+  - Constitution check returned **FAIL**
+  - The user explicitly asked to stop after the spec
+  - Discovery questions left unresolved items that require the user's answer before planning
+- Do not wait for the user to say "continue" or "use feature-plan skill."
+- DO NOT suggest using `/speckit.plan` or any other speckit command.
 
 ---
 
