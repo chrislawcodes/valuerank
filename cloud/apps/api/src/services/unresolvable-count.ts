@@ -1,4 +1,5 @@
 import { db } from '@valuerank/db';
+import { resolveTranscriptDecisionModel } from '../graphql/queries/domain/decision-model.js';
 
 export interface UnresolvableByModel {
   modelId: string;
@@ -11,29 +12,41 @@ export interface UnresolvableCount {
 }
 
 export async function getUnresolvableCount(runId: string): Promise<UnresolvableCount> {
-  const rows = await db.$queryRaw<Array<{ model_id: string; unresolvable: bigint }>>`
-    SELECT
-      model_id,
-      COUNT(*) FILTER (
-        WHERE summarized_at IS NOT NULL
-        AND decision_code_source IS DISTINCT FROM 'manual'
-        AND (
-          decision_code = 'other'
-          OR (
-            decision_code IS NULL
-            AND decision_metadata->'summaryCache'->'summary'->'canonicalDecision'->>'decisionState' = 'unknown'
-          )
-          OR decision_metadata->>'parseClass' = 'ambiguous'
-        )
-      ) as unresolvable
-    FROM transcripts
-    WHERE run_id = ${runId}
-    GROUP BY model_id
-  `;
+  const transcripts = await db.transcript.findMany({
+    where: {
+      runId,
+      summarizedAt: { not: null },
+      decisionCodeSource: { not: 'manual' },
+    },
+    select: {
+      modelId: true,
+      decisionCode: true,
+      decisionMetadata: true,
+      definitionSnapshot: true,
+      scenario: {
+        select: { orientationFlipped: true },
+      },
+    },
+  });
 
-  const byModel = rows
-    .map((r) => ({ modelId: r.model_id, count: Number(r.unresolvable) }))
-    .filter((r) => r.count > 0);
+  const byModelMap = new Map<string, number>();
+
+  for (const t of transcripts) {
+    const resolved = resolveTranscriptDecisionModel({
+      decisionCode: t.decisionCode,
+      decisionMetadata: t.decisionMetadata,
+      definitionSnapshot: t.definitionSnapshot,
+      orientationFlipped: t.scenario?.orientationFlipped ?? null,
+    });
+
+    if (resolved.canonical.direction === 'unknown') {
+      byModelMap.set(t.modelId, (byModelMap.get(t.modelId) ?? 0) + 1);
+    }
+  }
+
+  const byModel = Array.from(byModelMap.entries())
+    .map(([modelId, count]) => ({ modelId, count }))
+    .sort((a, b) => b.count - a.count);
 
   return {
     total: byModel.reduce((sum, r) => sum + r.count, 0),
