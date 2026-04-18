@@ -2,8 +2,6 @@
 
 Cloud ValueRank supports data portability through export and import features, enabling interoperability with the original CLI tooling.
 
-> **Original Design:** See [specs/011-stage-15-data-export/spec.md](../../specs/011-stage-15-data-export/spec.md) for the full feature specification.
-
 ---
 
 ## Overview

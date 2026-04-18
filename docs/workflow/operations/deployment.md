@@ -427,4 +427,3 @@ Costs scale with usage. Railway charges based on:
 - [Testing Guide](./testing.md) - Test suites and coverage
 - [Architecture Overview](../architecture/overview.md) - System design
 - [Original Deployment Spec](../preplanning/deployment.md) - Initial planning
-- [Stage 17 Spec](../../specs/012-stage-17-production-deployment/spec.md) - Implementation details

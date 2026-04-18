@@ -2,8 +2,6 @@
 
 Analysis transforms raw transcript data into actionable insights about AI model behavior. Cloud ValueRank automatically runs analysis when runs complete.
 
-> **Original Design:** See [specs/008-stage-11-analysis/spec.md](../../specs/008-stage-11-analysis/spec.md) for the full feature specification.
-
 ---
 
 ## Overview

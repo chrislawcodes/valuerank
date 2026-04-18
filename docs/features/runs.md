@@ -2,8 +2,6 @@
 
 Runs are the execution unit in Cloud ValueRank. A run evaluates one or more AI models against the scenarios generated from a definition.
 
-> **Original Design:** See [specs/007-stage-9-run-execution/spec.md](../../specs/007-stage-9-run-execution/spec.md) for the full feature specification.
-
 ---
 
 ## Overview
