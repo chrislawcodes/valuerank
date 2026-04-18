@@ -220,7 +220,7 @@ export function Select<T extends string = string>({
           id={listboxId}
           role="listbox"
           aria-label={label}
-          className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto py-1"
+          className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto py-1"
         >
           {options.map((option, index) => {
             const isSelected = option.value === value;
