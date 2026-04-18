@@ -30,11 +30,12 @@ export type ModelsAnalysisQueryResult = {
 
 export type ModelsAnalysisQueryVariables = {
   domainId?: string | null;
+  signature?: string | null;
 };
 
 export const MODELS_ANALYSIS_QUERY = gql`
-  query ModelsAnalysis($domainId: ID) {
-    modelsAnalysis(domainId: $domainId) {
+  query ModelsAnalysis($domainId: ID, $signature: String) {
+    modelsAnalysis(domainId: $domainId, signature: $signature) {
       models {
         modelId
         label

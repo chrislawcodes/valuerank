@@ -14,17 +14,45 @@ import {
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import { ModelValueDetailDrawer } from '../components/models/ModelValueDetailDrawer';
 import { ModelsMatrix } from '../components/models/ModelsMatrix';
+import {
+  DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+  type DomainAvailableSignaturesQueryResult,
+} from '../api/operations/domainAnalysis';
+import { formatSignatureOptionLabel } from '../utils/domainAnalysisUtils';
+
+const DEFAULT_SIGNATURE = 'vnewtd';
 
 export function Models() {
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
 
   const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
+  const [selectedSignature, setSelectedSignature] = useState<string>(DEFAULT_SIGNATURE);
+
+  const [{ data: signatureData }] = useQuery<DomainAvailableSignaturesQueryResult, { domainId: string }>({
+    query: DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+    variables: { domainId: selectedDomainId ?? '' },
+    pause: selectedDomainId == null,
+    requestPolicy: 'cache-and-network',
+  });
+
+  const signatureOptions = useMemo(
+    () => signatureData?.domainAvailableSignatures ?? [],
+    [signatureData],
+  );
+
+  // Reset to default when domain changes; keep valid selection if it exists in new options.
+  useEffect(() => {
+    setSelectedSignature(DEFAULT_SIGNATURE);
+  }, [selectedDomainId]);
 
   // Memoized to keep the object reference stable across renders.
   // If new query inputs are added, update the dependency array here too.
   const queryVariables = useMemo(
-    () => (selectedDomainId != null ? { domainId: selectedDomainId } : {}),
-    [selectedDomainId],
+    () => ({
+      ...(selectedDomainId != null ? { domainId: selectedDomainId } : {}),
+      signature: selectedSignature,
+    }),
+    [selectedDomainId, selectedSignature],
   );
   const [{ data, fetching, error }] = useQuery<ModelsAnalysisQueryResult, ModelsAnalysisQueryVariables>({
     query: MODELS_ANALYSIS_QUERY,
@@ -173,6 +201,16 @@ export function Models() {
               placeholder="All domains"
             />
           </div>
+          {selectedDomainId != null && signatureOptions.length > 0 && (
+            <div className="w-48 flex-shrink-0">
+              <Select
+                label="Batch"
+                options={signatureOptions.map((o) => ({ value: o.signature, label: formatSignatureOptionLabel(o) }))}
+                value={selectedSignature}
+                onChange={(value) => setSelectedSignature(value)}
+              />
+            </div>
+          )}
           <details className="flex-1 min-w-[220px]">
             <summary className="cursor-pointer list-none">
               <p className="text-sm font-medium text-gray-700 mb-1">Model set</p>

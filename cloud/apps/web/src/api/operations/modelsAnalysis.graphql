@@ -1,5 +1,5 @@
-query ModelsAnalysis($domainId: ID) {
-  modelsAnalysis(domainId: $domainId) {
+query ModelsAnalysis($domainId: ID, $signature: String) {
+  modelsAnalysis(domainId: $domainId, signature: $signature) {
     models {
       modelId
       label
