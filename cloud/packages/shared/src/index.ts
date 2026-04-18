@@ -34,3 +34,4 @@ export * from './assemble-template.js';
 export * from './job-choice-value-statements.js';
 export * from './software-approach-value-statements.js';
 export * from './neighborhood-value-statements.js';
+export * from './national-priorities-value-statements.js';
