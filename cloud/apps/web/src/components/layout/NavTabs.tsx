@@ -33,6 +33,11 @@ const domainMenuItems: MenuItem[] = [
   { name: 'Manage Domains', path: '/domains/manage' },
 ];
 
+const modelsMenuItems: MenuItem[] = [
+  { name: 'Matrix', path: '/models' },
+  { name: 'Consistency', path: '/models/consistency' },
+];
+
 const archiveMenuItems: MenuItem[] = [
   { name: 'Overview', path: '/archive', aliases: [] as string[] },
   { name: 'Legacy Survey Work', path: '/archive/surveys' },
@@ -62,10 +67,12 @@ export function NavTabs() {
   const location = useLocation();
   const [isVignettesMenuOpen, setIsVignettesMenuOpen] = useState(false);
   const [isDomainsMenuOpen, setIsDomainsMenuOpen] = useState(false);
+  const [isModelsMenuOpen, setIsModelsMenuOpen] = useState(false);
   const [isArchiveMenuOpen, setIsArchiveMenuOpen] = useState(false);
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const vignettesMenuRef = useRef<HTMLDivElement>(null);
   const domainMenuRef = useRef<HTMLDivElement>(null);
+  const modelsMenuRef = useRef<HTMLDivElement>(null);
   const archiveMenuRef = useRef<HTMLDivElement>(null);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
 
@@ -85,12 +92,14 @@ export function NavTabs() {
 
   const isVignettesActive = vignettesMenuItems.some((item) => isMenuItemActive(item));
   const isDomainsActive = domainMenuItems.some((item) => isMenuItemActive(item));
+  const isModelsActive = modelsMenuItems.some((item) => isMenuItemActive(item));
   const isArchiveActive = archiveMenuItems.some((item) => isMenuItemActive(item));
   const isSettingsActive = settingsMenuItems.some((item) => isMenuItemActive(item));
 
   useEffect(() => {
     setIsVignettesMenuOpen(false);
     setIsDomainsMenuOpen(false);
+    setIsModelsMenuOpen(false);
     setIsArchiveMenuOpen(false);
     setIsSettingsMenuOpen(false);
   }, [location.pathname, isMenuItemActive]);
@@ -101,6 +110,9 @@ export function NavTabs() {
   useClickOutside(domainMenuRef, () => {
     if (isDomainsMenuOpen) setIsDomainsMenuOpen(false);
   }, isDomainsMenuOpen);
+  useClickOutside(modelsMenuRef, () => {
+    if (isModelsMenuOpen) setIsModelsMenuOpen(false);
+  }, isModelsMenuOpen);
   useClickOutside(archiveMenuRef, () => {
     if (isArchiveMenuOpen) setIsArchiveMenuOpen(false);
   }, isArchiveMenuOpen);
@@ -218,17 +230,7 @@ export function NavTabs() {
     <nav className="hidden sm:block bg-[#1A1A1A] border-t border-gray-800 sticky top-14 z-10">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex gap-1">
-          <NavLink
-            to="/models"
-            className={`flex items-center gap-2 px-3 py-3 min-h-[44px] text-sm font-medium transition-colors border-b-2 ${
-              isTabActive('/models')
-                ? 'text-white border-teal-500'
-                : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
-            }`}
-          >
-            <Cpu className="w-4 h-4" />
-            <span className="hidden sm:inline">Models</span>
-          </NavLink>
+          {renderMenu(modelsMenuRef, 'Models', '/models', Cpu, modelsMenuItems, isModelsActive, isModelsMenuOpen, setIsModelsMenuOpen)}
           {renderMenu(domainMenuRef, 'Domains', '/domains', FolderTree, domainMenuItems, isDomainsActive, isDomainsMenuOpen, setIsDomainsMenuOpen)}
           {renderMenu(vignettesMenuRef, 'Vignettes', '/definitions', Library, vignettesMenuItems, isVignettesActive, isVignettesMenuOpen, setIsVignettesMenuOpen)}
           {renderMenu(archiveMenuRef, 'Archive', '/archive', Archive, archiveMenuItems, isArchiveActive, isArchiveMenuOpen, setIsArchiveMenuOpen)}

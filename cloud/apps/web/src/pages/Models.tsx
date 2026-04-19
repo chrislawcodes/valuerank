@@ -14,7 +14,6 @@ import {
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import { ModelValueDetailDrawer } from '../components/models/ModelValueDetailDrawer';
 import { ModelsMatrix } from '../components/models/ModelsMatrix';
-import { ModelsTabNav } from '../components/models/ModelsTabNav';
 import {
   DOMAIN_AVAILABLE_SIGNATURES_QUERY,
   type DomainAvailableSignaturesQueryResult,
@@ -180,14 +179,11 @@ export function Models() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Models</h1>
-          <p className="text-sm text-gray-600">
-            Compare model preferences by value and scan whether each pattern stays steady across domains.
-          </p>
-        </div>
-        <ModelsTabNav domainId={selectedDomainId} signature={selectedSignature} />
+      <div className="space-y-2">
+        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Models</h1>
+        <p className="text-sm text-gray-600">
+          Compare model preferences by value and scan whether each pattern stays steady across domains.
+        </p>
       </div>
 
       {(domainsError != null || error != null) && (
