@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """command_deliver and command_closeout implementations."""
 import argparse
+import json
+import os
 import subprocess
 import sys
 import time
@@ -16,6 +18,7 @@ from factory_state import (  # noqa: E402
     DIRTY_OVERRIDE_KEY,
     CHECKPOINT_FALLBACK_KEY,
     load_workflow_state,
+    with_locked_state,
     update_workflow_state,
     checkpoint_manifest_path,
     workflow_dir,
@@ -54,13 +57,207 @@ from factory_deliver import (  # noqa: E402
     compose_closeout_text,
 )
 
+from factory_pr_body import (  # noqa: E402
+    collect_judge_panel_entries,
+    now_iso8601_utc,
+    render_judge_panel_block,
+    upsert_judge_panel_block,
+)
+
 from factory_emit import _emit_next_action  # noqa: E402
+
+
+def _base_pr_body(slug: str) -> str:
+    return "\n".join(
+        [
+            "## Workflow",
+            f"- slug: `{slug}`",
+            f"- spec: `docs/workflow/feature-runs/{slug}/spec.md`",
+            f"- plan: `docs/workflow/feature-runs/{slug}/plan.md`",
+            f"- tasks: `docs/workflow/feature-runs/{slug}/tasks.md`",
+            "",
+            "## Verification",
+            "- Local workflow checkpoints completed through diff review.",
+        ]
+    )
+
+
+def _issue_pr_body(pr: dict | None, state: dict, slug: str) -> tuple[str, bool]:
+    rendered_block = render_judge_panel_block(state)
+    existing_body = str(pr.get("body", "")) if isinstance(pr, dict) else ""
+    if not existing_body:
+        body = _base_pr_body(slug)
+        if rendered_block:
+            body = body + "\n\n" + rendered_block
+        return body, False
+    body, missing_sentinels = upsert_judge_panel_block(existing_body, rendered_block)
+    return body, missing_sentinels
+
+
+def _current_pr_body_payload(pr_number: int | None = None) -> dict | None:
+    cmd = ["gh", "pr", "view"]
+    if pr_number is not None:
+        cmd.append(str(pr_number))
+    cmd.extend(["--json", "body"])
+    result = subprocess.run(cmd, text=True, capture_output=True)
+    if result.returncode != 0:
+        return None
+    output = (result.stdout or "").strip() or "{}"
+    return json.loads(output)
+
+
+def _edit_pr_body(body: str) -> None:
+    result = subprocess.run(["gh", "pr", "edit", "--body", body], text=True, capture_output=True)
+    if result.returncode != 0:
+        raise SystemExit(trim_detail(result.stderr or result.stdout or "PR body update failed"))
+
+
+def _record_override_if_needed(slug: str, reason: str) -> dict | None:
+    recorded: dict | None = None
+    with with_locked_state(slug) as state:
+        concerns, _, _ = collect_judge_panel_entries(state)
+        if not concerns:
+            return None
+        recorded = {
+            "reason": reason,
+            "timestamp_iso8601_utc": now_iso8601_utc(),
+            "operator_id": os.environ.get("USER", "unknown") or "unknown",
+            "affected_concerns": [dict(concern) for concern in concerns],
+        }
+        state["override"] = recorded
+    return recorded
+
+
+def _update_pr_body_from_state(slug: str, pr: dict | None, state: dict, *, warn_on_missing: bool = True) -> None:
+    if not pr:
+        raise SystemExit("deliver --refresh requires an open PR")
+    body, missing_sentinels = _issue_pr_body(pr, state, slug)
+    if missing_sentinels and warn_on_missing:
+        print("warn: ff-judge-panel sentinels were missing from the PR body; prepending judge block")
+    _edit_pr_body(body)
+
+
+def _normalize_pr_merge_fields(pr: dict | None) -> tuple[str, str]:
+    if not pr:
+        return "", ""
+    merge_commit = pr.get("mergeCommit")
+    if isinstance(merge_commit, dict):
+        merged_sha = str(merge_commit.get("oid", "") or "")
+    elif isinstance(merge_commit, str):
+        merged_sha = merge_commit
+    else:
+        merged_sha = ""
+    merged_at = str(pr.get("mergedAt", "") or "")
+    return merged_sha, merged_at
+
+
+def _mark_delivery_state(slug: str, updates: dict) -> None:
+    update_workflow_state(
+        slug,
+        lambda state: state.setdefault(DELIVERY_KEY, {}).update(updates),
+    )
+
+
+def _poll_merge_wait(slug: str, pr_number: int, interval_seconds: int = 60) -> dict | None:
+    while True:
+        pr = current_pr_payload(pr_number)
+        if not pr:
+            raise SystemExit("failed to read PR state while waiting for merge")
+
+        state_value = str(pr.get("state", "") or "").upper()
+        merged_sha, merged_at = _normalize_pr_merge_fields(pr)
+        if merged_sha or merged_at or state_value == "MERGED":
+            _mark_delivery_state(
+                slug,
+                {
+                    "merge_wait_state": "merged",
+                    "merged_sha": merged_sha,
+                    "merged_at_iso8601": merged_at,
+                },
+            )
+            return pr
+        if state_value == "CLOSED":
+            _mark_delivery_state(
+                slug,
+                {
+                    "merge_wait_state": "failed",
+                },
+            )
+            return pr
+        time.sleep(interval_seconds)
+
+
+def _resume_merge_wait_if_needed(slug: str, delivery: dict) -> int:
+    merge_wait_state = str(delivery.get("merge_wait_state", "none") or "none")
+    pr_number = delivery.get("pr_number")
+    if merge_wait_state == "waiting" and pr_number:
+        _poll_merge_wait(slug, int(pr_number))
+        return 0
+
+    if merge_wait_state == "merged":
+        merged_sha = str(delivery.get("merged_sha", "") or "")
+        merged_at = str(delivery.get("merged_at_iso8601", "") or "")
+        if merged_sha and merged_at:
+            print("nothing to resume")
+            return 0
+        if not pr_number:
+            print("nothing to resume")
+            return 0
+        pr = current_pr_payload(int(pr_number))
+        if not pr:
+            print("nothing to resume")
+            return 0
+        merged_sha, merged_at = _normalize_pr_merge_fields(pr)
+        if not merged_sha and not merged_at:
+            print("nothing to resume")
+            return 0
+        _mark_delivery_state(
+            slug,
+            {
+                "merge_wait_state": "merged",
+                "merged_sha": merged_sha,
+                "merged_at_iso8601": merged_at,
+            },
+        )
+        print("nothing to resume")
+        return 0
+
+    print("nothing to resume")
+    return 0
 
 
 def command_deliver(args: argparse.Namespace) -> int:
     ensure_sync()
     if not command_path("gh"):
         raise SystemExit("deliver requires the gh CLI to be installed")
+    if args.override_judges and not args.reason:
+        print("deliver --override-judges requires --reason", file=sys.stderr)
+        raise SystemExit(2)
+
+    auth = subprocess.run(["gh", "auth", "status", "--active"], text=True, capture_output=True)
+    if auth.returncode != 0:
+        raise SystemExit(trim_detail(auth.stderr or auth.stdout or "GitHub authentication is not ready"))
+
+    state = load_workflow_state(args.slug)
+
+    if args.resume_merge_wait:
+        delivery = state.get(DELIVERY_KEY, {})
+        return _resume_merge_wait_if_needed(args.slug, delivery)
+
+    if args.refresh:
+        pr = _current_pr_body_payload()
+        _update_pr_body_from_state(args.slug, pr, state)
+        print(f"branch: {current_branch_name() or '(unknown)'}")
+        print(f"head: {git_output('rev-parse', 'HEAD') or ''}")
+        if pr and pr.get("url"):
+            print(f"pr: {pr.get('url')}")
+        _emit_next_action(args.slug, "deliver")
+        return 0
+
+    if args.override_judges:
+        recorded_override = _record_override_if_needed(args.slug, args.reason)
+        if recorded_override:
+            state = load_workflow_state(args.slug)
 
     for stage in REQUIRED_PREDELIVERY_STAGES:
         manifest_path = checkpoint_manifest_path(args.slug, stage)
@@ -73,10 +270,6 @@ def command_deliver(args: argparse.Namespace) -> int:
     recon_ok, recon_detail = reconciliation_state(args.slug)
     if not recon_ok:
         raise SystemExit(f"deliver requires terminal reconciliation first: {trim_detail(recon_detail)}")
-
-    auth = subprocess.run(["gh", "auth", "status", "--active"], text=True, capture_output=True)
-    if auth.returncode != 0:
-        raise SystemExit(trim_detail(auth.stderr or auth.stdout or "GitHub authentication is not ready"))
 
     branch = current_branch_name()
     if not branch:
@@ -105,18 +298,7 @@ def command_deliver(args: argparse.Namespace) -> int:
         if behind is not None and behind > 0:
             print(f"warning: branch is {behind} commit{'s' if behind != 1 else ''} behind upstream — consider rebasing before creating PR")
         title = args.title or f"Workflow: {args.slug}"
-        body = "\n".join(
-            [
-                f"## Workflow",
-                f"- slug: `{args.slug}`",
-                f"- spec: `docs/workflow/feature-runs/{args.slug}/spec.md`",
-                f"- plan: `docs/workflow/feature-runs/{args.slug}/plan.md`",
-                f"- tasks: `docs/workflow/feature-runs/{args.slug}/tasks.md`",
-                "",
-                "## Verification",
-                "- Local workflow checkpoints completed through diff review.",
-            ]
-        )
+        body, _ = _issue_pr_body(None, state, args.slug)
         cmd = [
             "gh",
             "pr",
@@ -145,9 +327,6 @@ def command_deliver(args: argparse.Namespace) -> int:
     if (args.watch_ci or args.merge_when_green or args.auto_merge) and not pr:
         raise SystemExit("deliver requires an open PR before watching checks or merging")
 
-    checks_summary = "unknown"
-    checks: list[dict] = []
-    checks_detail = ""
     if pr:
         head_mismatch = bool(pr.get("headRefOid")) and bool(head_sha) and pr.get("headRefOid") != head_sha
         if head_mismatch and (args.merge_when_green or args.auto_merge):
@@ -164,6 +343,7 @@ def command_deliver(args: argparse.Namespace) -> int:
         delivery_record["upstream"] = upstream or ""
         delivery_record["checks_detail"] = checks_detail
         delivery_record["head_mismatch"] = head_mismatch
+        _update_pr_body_from_state(args.slug, pr, state, warn_on_missing=True)
 
         if args.dry_run:
             print(f"branch: {branch}")
@@ -231,6 +411,13 @@ def command_deliver(args: argparse.Namespace) -> int:
                 lambda state: state.__setitem__(DELIVERY_KEY, delivery_record),
             )
 
+        if pr.get("number") and not args.dry_run:
+            update_workflow_state(
+                args.slug,
+                lambda state: state.setdefault(DELIVERY_KEY, {}).update({"merge_wait_state": "waiting"}),
+            )
+            _poll_merge_wait(args.slug, int(pr["number"]))
+
     else:
         if args.dry_run:
             print(f"branch: {branch}")
@@ -270,6 +457,8 @@ def command_deliver(args: argparse.Namespace) -> int:
             print(f"merge-state: {delivery.get('merge_state_status')}")
         if delivery.get("head_mismatch"):
             print("head-mismatch: yes")
+        if delivery.get("merge_wait_state") and delivery.get("merge_wait_state") != "none":
+            print(f"merge-wait: {delivery.get('merge_wait_state')}")
     else:
         print("pr: not created")
     _emit_next_action(args.slug, "deliver")
