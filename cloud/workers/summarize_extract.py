@@ -215,6 +215,117 @@ def extract_leading_text_label_decision_relaxed(
     return None, None, None
 
 
+_SUPPORT_PREFIX_RE = re.compile(r"^\s*(strongly|somewhat)\s+support\s+(.+)$", re.IGNORECASE)
+
+
+def _group_labels_by_body(scale_labels: list[dict[str, str]]) -> dict[str, list[dict[str, str]]]:
+    """Group labels by their relaxed body (the part after 'Strongly/Somewhat support ').
+
+    Neutral/Unsure labels and any labels that don't start with 'Strongly/Somewhat
+    support' are skipped — they have no body.
+    """
+    bodies: dict[str, list[dict[str, str]]] = {}
+    for entry in scale_labels:
+        raw = entry.get("label", "")
+        if not raw:
+            continue
+        relaxed = normalize_for_relaxed_match(raw)
+        match = _SUPPORT_PREFIX_RE.match(relaxed)
+        if match is None:
+            continue
+        strength = match.group(1).lower()
+        body_relaxed = match.group(2).strip()
+        if not body_relaxed:
+            continue
+        bodies.setdefault(body_relaxed, []).append(
+            {
+                "code": entry.get("code", ""),
+                "label": raw,
+                "strength": strength,
+            }
+        )
+    return bodies
+
+
+def _compute_distinctive_tail(body: str, other_bodies: list[str]) -> Optional[str]:
+    """Shortest word-suffix of `body` that is NOT a substring of any other body.
+
+    Minimum length is 2 tokens so a single common word (e.g. "team", "work")
+    can't trigger a false match. Returns None if no distinctive tail exists
+    at the required minimum length.
+    """
+    words = body.split()
+    for k in range(2, len(words) + 1):
+        tail = " ".join(words[-k:])
+        if not any(tail in other for other in other_bodies):
+            return tail
+    return None
+
+
+def extract_text_label_decision_distinctive_tail(
+    text: str, scale_labels: list[dict[str, str]]
+) -> tuple[Optional[str], Optional[str]]:
+    """Fallback matcher for cases where the model drops internal words from a
+    scale label but preserves a distinctive trailing phrase.
+
+    Example: canonical label 'Strongly support X relating to connection to the
+    team's established ways' and model response 'Strongly support X relating
+    to the team's established ways' (dropped 'connection to' from the middle).
+
+    Strategy:
+      1. Group labels by their relaxed body (value bodies shared between
+         strong/lean pairs).
+      2. For each unique body, compute the shortest word-suffix that is
+         distinctive among the other bodies in this vignette (min 2 tokens).
+      3. For each response segment that starts with 'Strongly/Somewhat
+         support', check which distinctive tails appear. If exactly one
+         body's tail appears, pair it with the support strength to pick the
+         matching canonical label.
+
+    Returns (code, matched_canonical_label) or (None, None).
+    """
+    if not text or not scale_labels:
+        return None, None
+
+    bodies = _group_labels_by_body(scale_labels)
+    if len(bodies) < 2:
+        return None, None
+
+    body_tails: dict[str, str] = {}
+    body_keys = list(bodies.keys())
+    for body in body_keys:
+        others = [other for other in body_keys if other != body]
+        tail = _compute_distinctive_tail(body, others)
+        if tail is not None:
+            body_tails[body] = tail
+
+    if len(body_tails) < 2:
+        # Need every body to have a distinctive tail; otherwise we could
+        # preferentially match whichever one happens to have a suffix.
+        return None, None
+
+    for segment in response_segments(text):
+        relaxed_segment = normalize_for_relaxed_match(segment)
+        if not relaxed_segment:
+            continue
+        if relaxed_segment.startswith("strongly support"):
+            strength = "strongly"
+        elif relaxed_segment.startswith("somewhat support"):
+            strength = "somewhat"
+        else:
+            continue
+
+        matched_bodies = [body for body, tail in body_tails.items() if tail in relaxed_segment]
+        if len(matched_bodies) != 1:
+            continue
+        matched_body = matched_bodies[0]
+        for entry in bodies[matched_body]:
+            if entry["strength"] == strength:
+                return entry["code"], entry["label"]
+
+    return None, None
+
+
 def extract_leading_decision_code(text: str) -> Optional[str]:
     for candidate, _used_prefix_stripping in leading_response_candidates(text):
         decision_code = extract_explicit_leading_decision_code(candidate)

@@ -18,6 +18,7 @@ from summarize_extract import (
     extract_leading_text_label_decision,
     extract_leading_text_label_decision_relaxed,
     extract_text_label_decision,
+    extract_text_label_decision_distinctive_tail,
     extract_text_label_decision_relaxed,
 )
 from summarize_llm import (
@@ -122,8 +123,25 @@ def extract_decision_result(transcript_content: dict[str, Any]) -> dict[str, Any
                         decision_code = relaxed_code
                         parse_path = "text_label_relaxed"
                     else:
-                        parse_class = "ambiguous"
-                        parse_path = "text_label_ambiguous"
+                        # Final fallback: the model kept the scale label's
+                        # distinctive trailing phrase but dropped some
+                        # internal words (observed on GPT-5.1 tradition
+                        # responses that said "the team's established ways"
+                        # instead of "connection to the team's established
+                        # ways"). Matches only when exactly one body's
+                        # distinctive tail appears in a support segment.
+                        tail_code, tail_matched_label = (
+                            extract_text_label_decision_distinctive_tail(
+                                response_text, scale_labels
+                            )
+                        )
+                        if tail_code is not None:
+                            decision_code = tail_code
+                            matched_label = tail_matched_label
+                            parse_path = "text_label_distinctive_tail"
+                        else:
+                            parse_class = "ambiguous"
+                            parse_path = "text_label_ambiguous"
     elif decision_code == "other":
         parse_class = "ambiguous"
         parse_path = "numeric_ambiguous"

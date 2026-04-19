@@ -1257,6 +1257,142 @@ class TestRunSummarize:
         assert result["decisionSource"] == "deterministic"
         assert "relaxed" in result["decisionMetadata"]["parsePath"]
 
+    def test_distinctive_tail_strongly_support(self) -> None:
+        """Model drops internal words from the scale label but preserves the
+        distinctive trailing phrase.
+
+        Reproduces the observed GPT-5.1 failure on software-approach-choice
+        tradition: canonical label says 'connection to the team's established
+        ways' but model answered 'the team's established ways' (dropped
+        'connection to' entirely). The distinctive-tail fallback recovers
+        these because the last few words ("team's established ways") are
+        still unique among the vignette's 2 bodies.
+        """
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "Give me your judgment on the following scale:\n\n"
+                        "- Strongly support choosing the approach relating to connection to the team's established ways\n"
+                        "- Somewhat support choosing the approach relating to connection to the team's established ways\n"
+                        "- Neutral / Unsure\n"
+                        "- Somewhat support choosing the approach relating to personal security in everyday life\n"
+                        "- Strongly support choosing the approach relating to personal security in everyday life"
+                    ),
+                    "targetResponse": (
+                        "Strongly support choosing the approach relating to the team's established ways\n\n"
+                        "Choosing the approach that provides substantial connection to the team's "
+                        "established ways is strongly preferable here."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "5"
+        assert result["decisionSource"] == "deterministic"
+        assert result["decisionMetadata"]["parsePath"] == "text_label_distinctive_tail"
+
+    def test_distinctive_tail_somewhat_support(self) -> None:
+        """Somewhat-support variant of the distinctive-tail recovery."""
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "Give me your judgment on the following scale:\n\n"
+                        "- Strongly support choosing the approach relating to connection to the team's established ways\n"
+                        "- Somewhat support choosing the approach relating to connection to the team's established ways\n"
+                        "- Neutral / Unsure\n"
+                        "- Somewhat support choosing the approach relating to enjoyment in the building process\n"
+                        "- Strongly support choosing the approach relating to enjoyment in the building process"
+                    ),
+                    "targetResponse": (
+                        "Somewhat support choosing the approach relating to the team's established ways\n\n"
+                        "I somewhat support the approach that connects to the team's established "
+                        "ways, but not strongly."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "4"
+        assert result["decisionSource"] == "deterministic"
+        assert result["decisionMetadata"]["parsePath"] == "text_label_distinctive_tail"
+
+    def test_distinctive_tail_refuses_when_tail_is_ambiguous(self) -> None:
+        """When two bodies end with the same words (stimulation/hedonism both
+        end with 'in the work'), the distinctive-tail fallback MUST not match
+        on that shared tail — the parser should stay ambiguous rather than
+        guess.
+        """
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "Give me your judgment on the following scale:\n\n"
+                        "- Strongly support choosing the approach relating to variety and excitement in the work\n"
+                        "- Somewhat support choosing the approach relating to variety and excitement in the work\n"
+                        "- Neutral / Unsure\n"
+                        "- Somewhat support choosing the approach relating to enjoyment in the work\n"
+                        "- Strongly support choosing the approach relating to enjoyment in the work"
+                    ),
+                    "targetResponse": (
+                        "Strongly support choosing the approach relating to in the work\n\n"
+                        "Garbled response that only preserves the shared suffix."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        # Only "in the work" is present — shared between both bodies — so the
+        # parser should stay unresolved, not guess.
+        assert result["decisionCode"] == "other"
+        assert result["decisionMetadata"]["parseClass"] == "ambiguous"
+
+    def test_distinctive_tail_disambiguates_when_unique_words_present(self) -> None:
+        """When two bodies share a suffix like 'in the work', a model response
+        that mentions the unique discriminating word ('excitement' vs
+        'enjoyment') should still resolve via the distinctive-tail path
+        because each body's distinctive tail includes the discriminator.
+        """
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "Give me your judgment on the following scale:\n\n"
+                        "- Strongly support choosing the approach relating to variety and excitement in the work\n"
+                        "- Somewhat support choosing the approach relating to variety and excitement in the work\n"
+                        "- Neutral / Unsure\n"
+                        "- Somewhat support choosing the approach relating to enjoyment in the work\n"
+                        "- Strongly support choosing the approach relating to enjoyment in the work"
+                    ),
+                    "targetResponse": (
+                        "Strongly support choosing the approach relating to excitement in the work\n\n"
+                        "(Model dropped 'variety and' from the label.)"
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "5"
+        assert result["decisionSource"] == "deterministic"
+        assert result["decisionMetadata"]["parsePath"] == "text_label_distinctive_tail"
+
     @patch("summarize.extract_decision_code")
     def test_uses_default_model(
         self, mock_extract: MagicMock
