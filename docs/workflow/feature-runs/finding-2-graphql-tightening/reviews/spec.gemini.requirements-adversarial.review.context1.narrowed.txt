@@ -1,0 +1,249 @@
+00001: import type {
+00002:   RunsQueryVariables as GeneratedRunsQueryVariables,
+00003:   RunCountQueryVariables as GeneratedRunCountQueryVariables,
+00004:   AnalysisFolderCountsQueryVariables as GeneratedAnalysisFolderCountsQueryVariables,
+00005:   RunQueryVariables as GeneratedRunQueryVariables,
+00006:   StartRunMutationVariables as GeneratedStartRunMutationVariables,
+00007:   PauseRunMutationVariables as GeneratedPauseRunMutationVariables,
+00008:   ResumeRunMutationVariables as GeneratedResumeRunMutationVariables,
+00009:   CancelRunMutationVariables as GeneratedCancelRunMutationVariables,
+00010:   DeleteRunMutationVariables as GeneratedDeleteRunMutationVariables,
+00011:   UpdateRunMutationVariables as GeneratedUpdateRunMutationVariables,
+00012:   CancelSummarizationMutationVariables as GeneratedCancelSummarizationMutationVariables,
+00013:   RestartSummarizationMutationVariables as GeneratedRestartSummarizationMutationVariables,
+00014:   UpdateTranscriptDecisionMutationVariables as GeneratedUpdateTranscriptDecisionMutationVariables,
+00015: } from '../../generated/graphql';
+00016: 
+00017: // ============================================================================
+00018: // TYPES — JSON scalar fields require manual types; codegen types them as unknown
+00019: // ============================================================================
+00020: 
+00021: export type RunStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUMMARIZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+00022: export type RunCategory = 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION' | 'UNKNOWN_LEGACY';
+00023: 
+00024: export type RunProgress = {
+00025:   total: number;
+00026:   completed: number;
+00027:   failed: number;
+00028:   percentComplete: number;
+00029:   byModel?: Array<{ modelId: string; completed: number; failed: number }>;
+00030: };
+00031: 
+00032: export type TaskResult = {
+00033:   scenarioId: string;
+00034:   modelId: string;
+00035:   status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+00036:   error: string | null;
+00037:   completedAt: string | null;
+00038: };
+00039: 
+00040: export type CompletionEvent = {
+00041:   modelId: string;
+00042:   scenarioId: string;
+00043:   success: boolean;
+00044:   completedAt: string;
+00045:   durationMs: number;
+00046: };
+00047: 
+00048: export type ProviderExecutionMetrics = {
+00049:   provider: string;
+00050:   activeJobs: number;
+00051:   queuedJobs: number;
+00052:   maxParallel: number;
+00053:   requestsPerMinute: number;
+00054:   recentCompletions: CompletionEvent[];
+00055:   activeModelIds: string[];
+00056: };
+00057: 
+00058: export type ExecutionMetrics = {
+00059:   providers: ProviderExecutionMetrics[];
+00060:   totalActive: number;
+00061:   totalQueued: number;
+00062:   estimatedSecondsRemaining: number | null;
+00063:   totalRetries: number;
+00064: };
+00065: 
+00066: export type TranscriptDecisionModelV2RawEvidence = {
+00067:   matchedText: string | null;
+00068:   matchedLabel: string | null;
+00069:   parseClass: 'exact' | 'fallback_resolved' | 'ambiguous' | 'unparseable' | null;
+00070:   parsePath: string | null;
+00071:   parserVersion: string | null;
+00072:   responseExcerpt: string | null;
+00073:   manualOverride: {
+00074:     previousValue: string | null;
+00075:     overriddenAt: string | null;
+00076:     overriddenByUserId: string | null;
+00077:   } | null;
+00078: };
+00079: 
+00080: export type TranscriptDecisionModelV2Canonical = {
+00081:   favoredValueKey: string | null;
+00082:   opposedValueKey: string | null;
+00083:   direction: 'favor_first' | 'favor_second' | 'neutral' | 'unknown';
+00084:   strength: 'strong' | 'lean' | 'neutral' | 'unknown';
+00085:   normalizationApplied: boolean;
+00086:   normalizationReason: 'orientation_flipped' | null;
+00087:   source: 'deterministic' | 'manual' | 'error' | 'unknown';
+00088: };
+00089: 
+00090: export type TranscriptDecisionModelV2 = {
+00091:   raw: TranscriptDecisionModelV2RawEvidence;
+00092:   canonical: TranscriptDecisionModelV2Canonical;
+00093: };
+00094: 
+00095: export type Transcript = {
+00096:   id: string;
+00097:   runId: string;
+00098:   scenarioId: string | null;
+00099:   modelId: string;
+00100:   modelVersion: string | null;
+00101:   content: unknown;
+00102:   /** @deprecated Use decisionModelV2 instead */
+00103:   decisionCode?: string | null;
+00104:   /** @deprecated Use decisionModelV2 instead */
+00105:   decisionCodeSource?: string | null;
+00106:   decisionMetadata?: unknown;
+00107:   turnCount: number;
+00108:   tokenCount: number;
+00109:   durationMs: number;
+00110:   estimatedCost: number | null;
+00111:   createdAt: string;
+00112:   lastAccessedAt: string | null;
+00113:   dimensionValues?: Record<string, string | number> | null;
+00114:   decisionModelV2?: TranscriptDecisionModelV2 | null;
+00115: };
+00116: 
+00117: export type RunConfig = {
+00118:   models: string[];
+00119:   samplePercentage?: number;
+00120:   sampleSeed?: number;
+00121:   temperature?: number | null;
+00122:   priority?: string;
+00123:   companionRunId?:
+
+... [narrowed review slice: middle omitted] ...
+
+PAIRED_BATCH' | 'AD_HOC_BATCH';
+00238: };
+00239: 
+00240: export type UpdateRunInput = {
+00241:   name?: string | null;
+00242: };
+00243: 
+00244: // ============================================================================
+00245: // FRAGMENTS + DOCUMENTS — re-exported from generated
+00246: // ============================================================================
+00247: 
+00248: export {
+00249:   RunFieldsFragmentDoc as RUN_FRAGMENT,
+00250:   RunWithTranscriptsFieldsFragmentDoc as RUN_WITH_TRANSCRIPTS_FRAGMENT,
+00251:   RunsDocument as RUNS_QUERY,
+00252:   RunCountDocument as RUN_COUNT_QUERY,
+00253:   AnalysisFolderCountsDocument as ANALYSIS_FOLDER_COUNTS_QUERY,
+00254:   RunDocument as RUN_QUERY,
+00255:   StartRunDocument as START_RUN_MUTATION,
+00256:   PauseRunDocument as PAUSE_RUN_MUTATION,
+00257:   ResumeRunDocument as RESUME_RUN_MUTATION,
+00258:   CancelRunDocument as CANCEL_RUN_MUTATION,
+00259:   DeleteRunDocument as DELETE_RUN_MUTATION,
+00260:   UpdateRunDocument as UPDATE_RUN_MUTATION,
+00261:   CancelSummarizationDocument as CANCEL_SUMMARIZATION_MUTATION,
+00262:   RestartSummarizationDocument as RESTART_SUMMARIZATION_MUTATION,
+00263:   UpdateTranscriptDecisionDocument as UPDATE_TRANSCRIPT_DECISION_MUTATION,
+00264: } from '../../generated/graphql';
+00265: 
+00266: // ============================================================================
+00267: // QUERY VARIABLE TYPES
+00268: // ============================================================================
+00269: 
+00270: export type RunsQueryVariables = GeneratedRunsQueryVariables;
+00271: export type RunCountQueryVariables = GeneratedRunCountQueryVariables;
+00272: export type AnalysisFolderCountsQueryVariables = GeneratedAnalysisFolderCountsQueryVariables;
+00273: export type RunQueryVariables = GeneratedRunQueryVariables;
+00274: 
+00275: // ============================================================================
+00276: // QUERY RESULT TYPES
+00277: // Redefine result types to use our typed Run/Transcript instead of generated unknown fields.
+00278: // ============================================================================
+00279: 
+00280: export type RunsQueryResult = {
+00281:   runs: Run[];
+00282: };
+00283: 
+00284: export type RunCountQueryResult = {
+00285:   runCount: number;
+00286: };
+00287: 
+00288: export type AnalysisFolderCountsQueryResult = {
+00289:   analysisFolderCounts: AnalysisFolderCounts;
+00290: };
+00291: 
+00292: export type RunQueryResult = {
+00293:   run: Run | null;
+00294: };
+00295: 
+00296: // ============================================================================
+00297: // MUTATION VARIABLE TYPES
+00298: // ============================================================================
+00299: 
+00300: export type StartRunMutationVariables = GeneratedStartRunMutationVariables;
+00301: export type PauseRunMutationVariables = GeneratedPauseRunMutationVariables;
+00302: export type ResumeRunMutationVariables = GeneratedResumeRunMutationVariables;
+00303: export type CancelRunMutationVariables = GeneratedCancelRunMutationVariables;
+00304: export type DeleteRunMutationVariables = GeneratedDeleteRunMutationVariables;
+00305: export type UpdateRunMutationVariables = GeneratedUpdateRunMutationVariables;
+00306: export type CancelSummarizationMutationVariables = GeneratedCancelSummarizationMutationVariables;
+00307: export type RestartSummarizationMutationVariables = GeneratedRestartSummarizationMutationVariables;
+00308: export type UpdateTranscriptDecisionMutationVariables =
+00309:   GeneratedUpdateTranscriptDecisionMutationVariables;
+00310: 
+00311: // ============================================================================
+00312: // MUTATION RESULT TYPES
+00313: // Redefine result types to use our typed Run/Transcript instead of generated unknown fields.
+00314: // ============================================================================
+00315: 
+00316: export type StartRunMutationResult = {
+00317:   startRun: {
+00318:     run: Run;
+00319:     jobCount: number;
+00320:     pairedRunIds?: string[] | null;
+00321:   };
+00322: };
+00323: 
+00324: export type PauseRunMutationResult = {
+00325:   pauseRun: Run;
+00326: };
+00327: 
+00328: export type ResumeRunMutationResult = {
+00329:   resumeRun: Run;
+00330: };
+00331: 
+00332: export type CancelRunMutationResult = {
+00333:   cancelRun: Run;
+00334: };
+00335: 
+00336: export type DeleteRunMutationResult = {
+00337:   deleteRun: boolean;
+00338: };
+00339: 
+00340: export type UpdateRunMutationResult = {
+00341:   updateRun: Run;
+00342: };
+00343: 
+00344: export type CancelSummarizationMutationResult = {
+00345:   cancelSummarization: {
+00346:     run: Run;
+00347:     cancelledCount: number;
+00348:   };
+00349: };
+00350: 
+00351: export type RestartSummarizationMutationResult = {
+00352:   restartSummarization: {
+00353:     run: Run;
+00354:     queuedCount: number;
+00355:   };
+00356: };
+00357: 
+00358: export type UpdateTranscriptDecisionMutationResult = {
+00359

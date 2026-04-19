@@ -1,0 +1,11 @@
+## Findings
+1. **High [CODE-CONFIRMED]** The plan’s `Domain` alias swap is not safe as written. `useDomains.ts` returns `createDomain` and `renameDomain` as `Promise<Domain | null>`, but the current `CreateDomainDocument` and `RenameDomainDocument` only select `id`, `name`, `createdAt`, `updatedAt`, and `definitionCount` in `graphql.ts`. Replacing `Domain` with `DomainsQuery['domains'][number]` would require fields those mutation payloads do not contain, so the hook return types would stop lining up unless the mutation documents are also widened.
+
+2. **Medium [CODE-CONFIRMED]** The proposed lint rule is too narrow to enforce the plan. It only flags `TSTypeLiteral` aliases with `>= 2` members, but several of the exact hand-typed shapes the plan wants gone are single-property wrappers in `domains.ts`, including `DomainsQueryResult`, `DomainSettingsQueryResult`, `EstimateDomainEvaluationCostQueryResult`, `SetDomainSettingsMutationResult`, and `BackfillDomainEvaluationModelsMutationResult`. Those would sail past the rule unchanged.
+
+3. **Medium [CODE-CONFIRMED]** Slice 2 drops `DomainTrialRunsStatusQueryResult` without preserving its intentional narrowing. `domains.ts` explicitly says generated `analysisStatus` is `string | null | undefined`, but the manual alias narrows it to `string | null` because consumers assign it directly. The plan only creates a narrowing helper for `estimateConfidence`; it does not replace this `analysisStatus` contract, so deleting the alias will reopen the same type mismatch the comment warns about.
+
+## Residual Risks
+- The backfill mutation is still only half-covered in the plan. `DomainStartBatches.tsx` currently depends on `BackfillDomainEvaluationModelsMutationResult` and `BackfillDomainEvaluationModelsMutationVariables`, so moving only the document into `.graphql` leaves manual types behind unless they are cleaned up in the same pass.
+
+- Slice 0 is a hard prerequisite, and any mismatch between the regenerated `schema.graphql` snapshot and the backend schema will cascade into later slices. If that snapshot is off, codegen can succeed while still omitting fields that the pages now read.

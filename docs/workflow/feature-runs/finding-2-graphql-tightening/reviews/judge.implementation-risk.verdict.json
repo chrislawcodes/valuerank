@@ -1,0 +1,9 @@
+{
+  "judge": "implementation-risk",
+  "model": "claude-sonnet-4-6",
+  "verdict": "block",
+  "confidence": 0,
+  "reasoning": "schema_violation: Expecting value: line 1 column 1 (char 0)",
+  "evidence": [],
+  "timestamp": "2026-04-19T13:54:45.112714Z"
+}

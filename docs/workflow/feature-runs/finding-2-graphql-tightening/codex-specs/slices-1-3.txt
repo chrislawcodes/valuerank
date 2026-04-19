@@ -1,0 +1,361 @@
+You are implementing Slices 1–3 of the "finding-2-graphql-tightening" feature in the
+ValueRank repo (worktree: cloud/apps/web + cloud/apps/api).
+
+The goal: replace hand-maintained type aliases in
+  cloud/apps/web/src/api/operations/domains.ts
+with codegen-generated types, by updating the GraphQL query documents so codegen can
+produce the types consumers need. The schema was already regenerated in Slice 0.
+
+IMPORTANT: After all changes, `npm run build --workspace @valuerank/web` run from
+`cloud/` MUST pass with zero TypeScript errors. Fix every error you encounter.
+Do NOT use `@ts-ignore`, `eslint-disable`, or cast to `any`.
+
+Repo root for this worktree: cloud/
+Run commands from: cloud/
+
+---
+
+## STEP 1: Edit cloud/apps/web/src/api/operations/domains.graphql
+
+Make the following additive changes (add fields only; do not remove or reorder existing fields):
+
+### 1a. Domains query — add three fields to the domains selection:
+```graphql
+query Domains($search: String, $limit: Int, $offset: Int) {
+  domains(search: $search, limit: $limit, offset: $offset) {
+    id
+    name
+    createdAt
+    updatedAt
+    definitionCount
+    defaultLevelPresetVersionId
+    defaultPreambleVersionId
+    defaultContextId
+    defaultModelIds      # ADD THIS
+    sentencePrefix       # ADD THIS
+    labelPrefix          # ADD THIS
+  }
+}
+```
+
+### 1b. DomainEvaluations query — add four fields:
+Add these after `memberCount`:
+  launchableDefinitionIds
+  samplePercentage
+  samplesPerScenario
+  targetBatchCount
+
+### 1c. DomainEvaluation query — add fields:
+Add after `memberCount`:
+  launchableDefinitionIds
+  launchableDefinitions {
+    definitionId
+    definitionName
+    pairKey
+  }
+  samplePercentage
+  samplesPerScenario
+  targetBatchCount
+
+Also add `modelIds` inside the existing `members { ... }` block.
+
+### 1d. DomainSettings query — add one field:
+Add `defaultModelIds` to the `domainSettings { ... }` selection (alongside existing fields).
+
+### 1e. SetDomainSettings mutation — add `defaultModelIds` to the result selection:
+Currently the mutation result selects: id, name, defaultPreambleVersionId,
+defaultLevelPresetVersionId, defaultContextId.
+Add `defaultModelIds` to that list.
+
+### 1f. Add BackfillDomainEvaluationModels mutation document:
+Append a new mutation to the bottom of domains.graphql:
+
+```graphql
+mutation BackfillDomainEvaluationModels(
+  $domainEvaluationId: ID!
+  $modelIds: [String!]!
+  $definitionIds: [ID!]
+  $targetBatchCount: Int
+) {
+  backfillDomainEvaluationModels(
+    domainEvaluationId: $domainEvaluationId
+    modelIds: $modelIds
+    definitionIds: $definitionIds
+    targetBatchCount: $targetBatchCount
+  ) {
+    domainEvaluationId
+    scopeCategory
+    success
+    totalDefinitions
+    targetedDefinitions
+    startedRuns
+    failedDefinitions
+    skippedForBudget
+    projectedCostUsd
+    blockedByActiveLaunch
+    runs {
+      definitionId
+      runId
+      modelIds
+    }
+  }
+}
+```
+
+---
+
+## STEP 2: Run codegen
+
+```bash
+cd cloud && npm run codegen --workspace @valuerank/web
+```
+
+This regenerates cloud/apps/web/src/generated/graphql.ts.
+The following new exports should now exist in generated/graphql.ts:
+- BackfillDomainEvaluationModelsDocument
+- BackfillDomainEvaluationModelsMutation
+- BackfillDomainEvaluationModelsMutationVariables
+- DomainsQuery with defaultModelIds, sentencePrefix, labelPrefix on each domain
+- DomainEvaluationQuery with launchableDefinitionIds, launchableDefinitions, samplePercentage,
+  samplesPerScenario, targetBatchCount, and members[].modelIds
+- DomainEvaluationsQuery with launchableDefinitionIds, samplePercentage, samplesPerScenario,
+  targetBatchCount
+- DomainSettingsQuery with defaultModelIds
+- SetDomainSettingsMutation with defaultModelIds in the domain result
+
+If codegen fails, fix the error before proceeding.
+
+---
+
+## STEP 3: Create cloud/apps/web/src/api/operations/narrowings.ts
+
+Create a new file with exactly this content:
+
+```typescript
+export function narrowEstimateConfidence(
+  value: string | null | undefined
+): 'HIGH' | 'MEDIUM' | 'LOW' | null {
+  if (value === 'HIGH' || value === 'MEDIUM' || value === 'LOW') return value;
+  return null;
+}
+
+export function narrowAnalysisStatus(
+  value: string | null | undefined
+): string | null {
+  return value ?? null;
+}
+```
+
+---
+
+## STEP 4: Rewrite cloud/apps/web/src/api/operations/domains.ts
+
+Replace the file entirely. The new file must:
+
+### 4a. Keep all existing document re-exports from generated/graphql.ts:
+All of the existing `export { XDocument as X_MUTATION, ... }` lines stay.
+
+Add these two new re-exports in the DOCUMENTS section:
+```typescript
+export {
+  BackfillDomainEvaluationModelsDocument as BACKFILL_DOMAIN_EVALUATION_MODELS_MUTATION,
+} from '../../generated/graphql';
+```
+
+### 4b. Remove the manual gql`` block:
+Delete the entire:
+```typescript
+export const BACKFILL_DOMAIN_EVALUATION_MODELS_MUTATION = gql`...`;
+```
+and remove the `import { gql } from 'urql';` line if it's no longer used.
+
+### 4c. Replace hand-typed MANUAL TYPES section with codegen aliases:
+
+```typescript
+import type {
+  DomainsQuery,
+  DomainEvaluationsQuery,
+  DomainEvaluationQuery,
+  DomainSettingsQuery,
+  EstimateDomainEvaluationCostQuery,
+  DomainTrialRunsStatusQuery,
+  DomainConfigSnapshotsQuery,
+  SetDomainSettingsMutation,
+  BackfillDomainEvaluationModelsMutation,
+  // ... all existing GeneratedX imports
+} from '../../generated/graphql';
+
+// Codegen-backed type aliases (replacing hand-typed shapes)
+export type Domain = DomainsQuery['domains'][number];
+export type DomainMutationResult = { success: boolean; affectedDefinitions: number };
+export type DomainEvaluationMember = NonNullable<DomainEvaluationQuery['domainEvaluation']>['members'][number];
+export type DomainEvaluation = NonNullable<DomainEvaluationQuery['domainEvaluation']>;
+export type DomainSettings = NonNullable<DomainSettingsQuery['domainSettings']>;
+export type ValueStatementWithVersions = DomainSettings['valueStatements'][number];
+export type DomainConfigSnapshotSummary = DomainConfigSnapshotsQuery['domainConfigSnapshots'][number];
+```
+
+For the cost estimate types, use codegen-backed aliases:
+```typescript
+type GeneratedCostEstimate = NonNullable<EstimateDomainEvaluationCostQuery['estimateDomainEvaluationCost']>;
+export type DomainEvaluationCostEstimateModel = GeneratedCostEstimate['models'][number];
+export type DomainEvaluationCostEstimateDefinition = GeneratedCostEstimate['definitions'][number];
+export type DomainEvaluationCostEstimate = Omit<GeneratedCostEstimate, 'estimateConfidence'> & {
+  estimateConfidence: 'HIGH' | 'MEDIUM' | 'LOW' | null;
+};
+```
+
+### 4d. Update QUERY RESULT TYPES section:
+
+```typescript
+export type DomainsQueryResult = DomainsQuery;
+export type DomainsQueryVariables = GeneratedDomainsQueryVariables;
+
+export type DomainEvaluationsQueryResult = DomainEvaluationsQuery;
+export type DomainEvaluationsQueryVariables = GeneratedDomainEvaluationsQueryVariables;
+
+export type DomainEvaluationQueryResult = DomainEvaluationQuery;
+export type DomainEvaluationQueryVariables = GeneratedDomainEvaluationQueryVariables;
+
+export type DomainEvaluationStatusQueryResult = GeneratedDomainEvaluationStatusQuery;
+export type DomainEvaluationStatusQueryVariables = GeneratedDomainEvaluationStatusQueryVariables;
+
+export type DomainTrialsPlanQueryResult = GeneratedDomainTrialsPlanQuery;
+export type DomainTrialsPlanQueryVariables = GeneratedDomainTrialsPlanQueryVariables;
+
+export type EstimateDomainEvaluationCostQueryResult = EstimateDomainEvaluationCostQuery;
+export type EstimateDomainEvaluationCostQueryVariables = GeneratedEstimateDomainEvaluationCostQueryVariables;
+
+export type DomainTrialRunsStatusQueryResult = DomainTrialRunsStatusQuery;
+export type DomainTrialRunsStatusQueryVariables = GeneratedDomainTrialRunsStatusQueryVariables;
+
+export type DomainSettingsQueryResult = DomainSettingsQuery;
+export type DomainSettingsQueryVariables = GeneratedDomainSettingsQueryVariables;
+
+export type DomainConfigSnapshotsQueryResult = DomainConfigSnapshotsQuery;
+export type DomainConfigSnapshotsQueryVariables = GeneratedDomainConfigSnapshotsQueryVariables;
+```
+
+### 4e. Update MUTATION RESULT TYPES section:
+
+Keep all existing mutation result re-exports (CreateDomain, RenameDomain, etc.).
+
+Replace manual BackfillDomainEvaluationModels types:
+```typescript
+export type BackfillDomainEvaluationModelsMutationResult = BackfillDomainEvaluationModelsMutation;
+export type BackfillDomainEvaluationModelsMutationVariables = GeneratedBackfillDomainEvaluationModelsMutationVariables;
+```
+(Import GeneratedBackfillDomainEvaluationModelsMutationVariables from generated/graphql)
+
+Replace SetDomainSettings types with codegen types:
+```typescript
+export type SetDomainSettingsMutationResult = SetDomainSettingsMutation;
+export type SetDomainSettingsMutationVariables = GeneratedSetDomainSettingsMutationVariables;
+```
+(Import GeneratedSetDomainSettingsMutationVariables from generated/graphql)
+
+---
+
+## STEP 5: Fix call sites
+
+Run `npm run build --workspace @valuerank/web` from cloud/ to find TypeScript errors.
+For each error:
+
+### Call sites using DomainsQueryResult, DomainEvaluationsQueryResult, DomainEvaluationQueryResult:
+These types now alias the full generated query types. The shape is slightly different:
+- Old DomainsQueryResult = { domains: Domain[] }
+- New DomainsQueryResult = DomainsQuery = { __typename?: 'Query', domains: Array<{...}> }
+
+Fix usages that destructure the old shape. For example:
+- Old: `const domains = (data as DomainsQueryResult)?.domains`
+- New: `const domains = data?.domains`
+  since DomainsQuery already has `domains` at top level.
+
+### Call sites using DomainEvaluationQueryResult:
+Old: `{ domainEvaluation: (DomainEvaluation & { members: DomainEvaluationMember[] }) | null }`
+New: `DomainEvaluationQuery` which has `domainEvaluation?: { ..., members: [...] } | null`
+Fix any nullability or property access errors.
+
+### Call sites using DomainTrialRunsStatusQueryResult:
+Old had `analysisStatus: string | null`
+New generated type has `analysisStatus?: string | null | undefined`
+
+At each call site that does `item.analysisStatus` where it needs `string | null`:
+```typescript
+import { narrowAnalysisStatus } from '../api/operations/narrowings';
+// then:
+narrowAnalysisStatus(item.analysisStatus)
+```
+Use the relative path appropriate for the file.
+
+### Call sites using DomainSettings:
+Old had explicit `defaultModelIds: string[]`, `sentencePrefix`, `labelPrefix`.
+New DomainSettings is NonNullable<DomainSettingsQuery['domainSettings']> which includes
+defaultModelIds (from the updated query). No shape changes needed — the fields exist.
+But `defaultModelIds` was `string[]` before; in the schema it's `[String!]!` which codegen
+produces as `string[]`. Should be compatible. Fix any TypeScript errors that arise.
+
+### Call sites using EstimateDomainEvaluationCostQueryResult:
+Old used DomainEvaluationCostEstimate with `estimateConfidence: 'HIGH' | 'MEDIUM' | 'LOW'`.
+New EstimateDomainEvaluationCostQueryResult = EstimateDomainEvaluationCostQuery
+where estimateConfidence is `string`.
+
+At each call site that uses estimateConfidence as a narrowed type:
+```typescript
+import { narrowEstimateConfidence } from '../api/operations/narrowings';
+// then:
+narrowEstimateConfidence(item.estimateConfidence)
+```
+This returns `'HIGH' | 'MEDIUM' | 'LOW' | null`. Update any prop types to accept `| null`.
+
+### Call sites using SetDomainSettingsMutationVariables:
+Old: `{ domainId, preambleVersionId?, ..., defaultModelIds?: string[] | null, valueStatements: Array<{token, content}> }`
+New (codegen): `SetDomainSettingsMutationVariables` which maps to the schema args.
+
+The schema `setDomainSettings` takes `defaultModelIds: [String!]` (nullable arg, not nullable array).
+Codegen will produce `defaultModelIds?: InputMaybe<Array<Scalars['String']['input']>>` or similar.
+
+Check what the generated type looks like after codegen. Fix call sites to match.
+Key file: cloud/apps/web/src/components/domains/DomainSettingsPanel.tsx
+         cloud/apps/web/src/hooks/useDomainSettings.ts
+
+### Call sites using BackfillDomainEvaluationModelsMutationVariables / Result:
+These types now come from codegen. Variables should be compatible.
+The result type now is `BackfillDomainEvaluationModelsMutation` from codegen.
+Fix any property access errors on the mutation result.
+
+---
+
+## STEP 6: Verify
+
+Run from cloud/:
+```bash
+npm run codegen --workspace @valuerank/web
+npm run build --workspace @valuerank/web
+npm run lint --workspace @valuerank/web
+```
+
+All three must pass. Fix any remaining errors.
+
+Then run:
+```bash
+grep -cE "^export type .+ = \{" cloud/apps/web/src/api/operations/domains.ts
+```
+This should return 0 (no object-literal type aliases remaining).
+
+```bash
+grep -c "gql\`" cloud/apps/web/src/api/operations/domains.ts
+```
+This should return 0.
+
+---
+
+## DO NOT TOUCH
+
+DO NOT MODIFY: CLAUDE.md, AGENTS.md, cloud/CLAUDE.md, MEMORY.md, .gitignore,
+cloud/apps/web/src/api/operations/domainAnalysis.ts,
+cloud/apps/web/src/api/operations/runs.ts,
+cloud/apps/api/ (any API files),
+or any file not mentioned in this spec.
+
+Do not run git commit. Just make the changes and leave them staged/unstaged.

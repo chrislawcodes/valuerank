@@ -23,6 +23,7 @@ import {
   type StartDomainEvaluationMutationResult,
   type StartDomainEvaluationMutationVariables,
 } from '../api/operations/domains';
+import { narrowEstimateConfidence } from '../api/operations/narrowings';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 
 type EvaluationScopeCategory = 'PRODUCTION';
@@ -329,7 +330,7 @@ export function DomainStartBatches() {
         totalPairedBatches={totalPairedBatches}
         totalTrialRuns={totalTrialRuns}
         estimatedTotalCost={estimatedRemainingCost}
-        estimateConfidence={estimate?.estimateConfidence}
+        estimateConfidence={narrowEstimateConfidence(estimate?.estimateConfidence)}
         fallbackReason={estimate?.fallbackReason}
         knownExclusions={estimate?.knownExclusions}
         temperatureLabel={temperatureLabel}

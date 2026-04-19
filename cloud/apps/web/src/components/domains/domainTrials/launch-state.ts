@@ -24,7 +24,7 @@ export type BatchRuntimeState = 'LIVE' | 'EXCEPTION' | 'TERMINAL';
 
 type RunStatusLike = {
   status: string;
-  analysisStatus: string | null;
+  analysisStatus?: string | null;
   stalledModels?: string[];
   latestErrorMessage?: string | null;
 };

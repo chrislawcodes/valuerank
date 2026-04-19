@@ -1,0 +1,266 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": true,
+    "reason": "Plan reviewed over 4 rounds; all findings addressed per convergence rule. Remaining 'repairable' state is infrastructure (partial-coverage, SHA ceremony). Tasks.md authored. Same decision as orchestrator.",
+    "updated_at": 1776501995
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 3,
+    "asked_count": 3,
+    "questions": [
+      {
+        "question": "Scope: fix both schema gaps (fields that exist in resolvers but not in the schema) AND convert JSON-scalar types (cluster analysis output) into proper GraphQL object types, or only the schema gaps?",
+        "recommendation": "Schema gaps only. Leave JSON-scalar types alone.",
+        "rationale": "The two problems have very different shapes. Schema gaps are ~10 missing fields across 3 existing types \u2014 add field, regen, delete manual type. JSON-scalar conversion means defining ~6 new GraphQL object types (ClusterMember, DomainCluster, ValueFaultLine, ClusterPairFaultLines, ClusterAnalysis, DomainAnalysisResult), updating every resolver that returns cluster analysis to construct the nested object graph instead of returning a JSON blob, and dealing with backward compatibility on cached AnalysisResult.output rows. That's a different project. The file's own comment already marks the split line ('kept manual \u2014 JSON scalars'). We follow that line.",
+        "updated_at": 1776456685
+      },
+      {
+        "question": "Orphan mutation: the frontend has a hand-written 'BACKFILL_DOMAIN_EVALUATION_MODELS_MUTATION' using raw gql template because the mutation isn't in the schema. Include it in this feature (add Pothos mutation), or defer?",
+        "recommendation": "Include it. Add the mutation to the schema via Pothos, regen, delete the manual gql block.",
+        "rationale": "It's two files of change (mutation resolver + regen), lives in the same area, and the frontend already calls it via its own document. The resolver logic presumably already exists somewhere (since something is processing this mutation end-to-end) \u2014 we just need to wire it into the Pothos schema. If instead it turns out the resolver doesn't exist and the frontend is dispatching a broken mutation, that's something we want to know right now, not later. Small risk of scope creep.",
+        "updated_at": 1776456689
+      },
+      {
+        "question": "Verification: how do we know we removed everything we intended to remove? Linter rule, test assertion, manual checklist, or just 'grep for exported types at PR time'?",
+        "recommendation": "Grep-based assertion in the PR description plus a simple 'these types should not be exported after the change' list in tasks.md. No linter rule.",
+        "rationale": "A custom ESLint rule or AST guard to enforce 'never hand-type these shapes again' is overkill for a one-time cleanup. The JSON-scalar manual types are staying (Q1), so a blanket rule is wrong anyway. A grep-based checklist keeps the scope tight: before-count / after-count of hand-typed exports in the two files, plus an explicit list of symbols that must be removed (Domain, DomainEvaluationMember, DomainEvaluation in domains.ts; plus the orphan mutation document). Easy to verify in review, no long-term tool overhead.",
+        "updated_at": 1776456696
+      }
+    ],
+    "assumptions": [],
+    "summary": "Replace hand-maintained frontend types in domainAnalysis.ts and domains.ts with generated GraphQL types. Two failure modes coexist: (a) true JSON-scalar fields the schema can't describe (cluster analysis output), (b) fields the resolvers return but the GraphQL schema never declared (defaultModelIds, modelIds, launchableDefinitions, etc.). Three questions: scope of fix, treatment of orphan mutation, verification approach.",
+    "updated_at": 1776474631,
+    "answers": {
+      "Scope: fix both schema gaps (fields that exist in resolvers but not in the schema) AND convert JSON-scalar types (cluster analysis output) into proper GraphQL object types, or only the schema gaps?": "Schema gaps only. JSON-scalar conversion is a separate, deferred feature (finding-2b-json-scalar-graphql-objects). Both are worth doing, but they have different shapes and review needs.",
+      "Orphan mutation: the frontend has a hand-written 'BACKFILL_DOMAIN_EVALUATION_MODELS_MUTATION' using raw gql template because the mutation isn't in the schema. Include it in this feature (add Pothos mutation), or defer?": "Include it. Add the mutation to the schema via Pothos (wire up existing handler if present, or implement if missing), regen, delete the manual gql block.",
+      "Verification: how do we know we removed everything we intended to remove? Linter rule, test assertion, manual checklist, or just 'grep for exported types at PR time'?": "Two layers: (a) grep-based before/after list in PR description, plus explicit 'these symbols must not exist after the change' list in tasks.md; (b) custom ESLint rule that fails CI when a new hand-typed GraphQL shape is added in cloud/apps/web/src/api/operations/, with an allowlist for the JSON-scalar types in domainAnalysis.ts that are intentionally staying. No CLAUDE.md note."
+    },
+    "non_goals": [
+      "JSON-scalar conversion: defining GraphQL object types for ClusterMember, DomainCluster, ValueFaultLine, ClusterPairFaultLines, ClusterAnalysis, DomainAnalysisResult; migrating cached AnalysisResult.output rows; rewriting resolvers that return cluster analysis. Tracked separately as a future feature."
+    ],
+    "acceptance_criteria": [],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "parallel_analysis": {
+    "reviewed": false,
+    "found": false,
+    "note": "",
+    "updated_at": 0
+  },
+  "init_head_sha": "6aa2af3410351431f88a8a4bc12fda6deeef7c8e",
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "checkpoint_fallback": {},
+  "token_usage": [
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T13:52:00.107591Z",
+      "started_at": "2026-04-19T13:51:38.581837Z",
+      "ended_at": "2026-04-19T13:52:00.107591Z",
+      "duration_seconds": 21.525926,
+      "agent_id": null,
+      "artifact_sha_at_time": null,
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T13:52:21.364562Z",
+      "started_at": "2026-04-19T13:52:00.110220Z",
+      "ended_at": "2026-04-19T13:52:21.364562Z",
+      "duration_seconds": 21.254444,
+      "agent_id": null,
+      "artifact_sha_at_time": null,
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T13:52:27.437080Z",
+      "started_at": "2026-04-19T13:51:38.583057Z",
+      "ended_at": "2026-04-19T13:52:27.437080Z",
+      "duration_seconds": 48.854216,
+      "agent_id": null,
+      "artifact_sha_at_time": null,
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T13:52:56.797962Z",
+      "started_at": "2026-04-19T13:52:27.438857Z",
+      "ended_at": "2026-04-19T13:52:56.797962Z",
+      "duration_seconds": 29.359258,
+      "agent_id": null,
+      "artifact_sha_at_time": null,
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T13:53:37.923232Z",
+      "started_at": "2026-04-19T13:51:38.581909Z",
+      "ended_at": "2026-04-19T13:53:37.923232Z",
+      "duration_seconds": 119.34177,
+      "agent_id": null,
+      "artifact_sha_at_time": null,
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T13:54:45.110441Z",
+      "started_at": "2026-04-19T13:53:37.925689Z",
+      "ended_at": "2026-04-19T13:54:45.110441Z",
+      "duration_seconds": 67.183735,
+      "agent_id": null,
+      "artifact_sha_at_time": null,
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    }
+  ],
+  "stages": {
+    "plan": {
+      "adversarial_rounds": 0,
+      "judge_rounds": 1,
+      "judge_verdicts": [
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.2",
+            "verdict": "proceed",
+            "confidence": 4,
+            "reasoning": "plan.codex.architecture-adversarial.review#high-1 is addressed in tasks.md Slice 1 T1.5, which explicitly says to keep Domain as the mutation-result shape for hook return types and add a separate DomainListItem alias for the full query shape; specific enough to implement: yes. plan.gemini.testability-adversarial.review#high-1 is addressed in tasks.md Slice 4 T4.1, which tightens the ESLint rule to flag any TSTypeLiteral and the extend-and-reshape pattern, including single-property wrappers; specific enough to implement: yes. plan.gemini.testability-adversarial.review#high-5 is addressed by the same concrete ESLint-rule mitigation in Slice 4 T4.1; specific enough to implement: yes. plan.gemini.testability-adversarial.review#high-9 is addressed because the ESLint work is now assigned to a concrete implementation slice in plan.md/tasks.md Slice 4, with explicit rule, tests, and registration steps; specific enough to implement: yes. No HIGH finding remains unaddressed or only vaguely acknowledged as a limitation.",
+            "evidence": [
+              {
+                "artifact": "tasks.md",
+                "section": "Slice 1: Core queries \u2014 Domains, DomainEvaluations, DomainEvaluation / T1.5",
+                "quote": "keep Domain as the mutation-result shape (subset) for hook return types, and add a separate DomainListItem = DomainsQuery['domains'][number] alias"
+              },
+              {
+                "artifact": "tasks.md",
+                "section": "Slice 4: ESLint rule + allowlist / T4.1",
+                "quote": "flag ANY TSTypeLiteral (\u2265 1 member), flag TSIntersectionType with any TSTypeLiteral branch. ... Single-property wrappers like { domains: Domain[] } must flag"
+              },
+              {
+                "artifact": "tasks.md",
+                "section": "Slice 4: ESLint rule + allowlist / T4.1",
+                "quote": "flag ANY TSTypeLiteral (\u2265 1 member), flag TSIntersectionType with any TSTypeLiteral branch"
+              },
+              {
+                "artifact": "plan.md",
+                "section": "Slice 4: ESLint rule + allowlist",
+                "quote": "Slice 4: ESLint rule + allowlist"
+              }
+            ],
+            "timestamp": "2026-04-19T00:00:00-07:00"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5",
+            "verdict": "proceed",
+            "confidence": 5,
+            "reasoning": "The latest adversarial round contains no findings at all, so there are no candidate NEW failure modes to classify. With zero latest findings, the loop is no longer surfacing substantive new concerns. Earlier material also records that the prior high-priority issues were addressed or that later review produced no net-new findings, so the review loop appears saturated rather than productive.",
+            "evidence": [
+              {
+                "artifact": "latest-round",
+                "section": "findings",
+                "quote": "No latest findings found."
+              },
+              {
+                "artifact": "plan.codex.implementation-adversarial.review.md",
+                "section": "resolution",
+                "quote": "Round-4 Codex impl review timed out. No net-new findings. Prior rounds' HIGHs already addressed. Per convergence rule, stage stable after round cap."
+              },
+              {
+                "artifact": "plan.codex.architecture-adversarial.review.md",
+                "section": "resolution",
+                "quote": "Round-4 HIGH Domain-alias-mismatch-with-mutation-shape addressed in tasks T1.5 (keep Domain as narrow mutation-result shape, add DomainListItem for list call sites). MEDIUM single-property-wrappers-slip-past-rule addressed in tasks T4.1 (rule now flags ALL TSTypeLiteral in operations/). MEDIUM analysisStatus-narrowing-lost addressed in tasks T3.4 (narrowings.ts gains narrowAnalysisStatus)."
+              }
+            ],
+            "timestamp": "2026-04-19T00:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-6",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: Expecting value: line 1 column 1 (char 0)",
+            "evidence": [],
+            "timestamp": "2026-04-19T13:54:45.112714Z"
+          }
+        ]
+      ],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [],
+      "initial_sha": "",
+      "judge_next_action": "advance"
+    }
+  },
+  "schema_version": 2,
+  "migration_bypass_uses": [
+    {
+      "timestamp": "2026-04-19T13:51:38.548809Z",
+      "stage": "plan",
+      "operator_id": "chrislaw"
+    }
+  ],
+  "plan_judge_rounds": 1,
+  "last_action_result": {
+    "next": "mark_blocked",
+    "reason": "plan judge panel completed: advance",
+    "blockers": [
+      "schema_violation: Expecting value: line 1 column 1 (char 0)"
+    ],
+    "outcome": "advance",
+    "proceed_count": 2,
+    "block_count": 1,
+    "timestamp": "2026-04-19T13:54:45.201462Z",
+    "judge_round": 1
+  }
+}

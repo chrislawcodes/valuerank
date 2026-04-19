@@ -8,6 +8,7 @@ import {
   getProgressBarTone,
   getProgressPercent,
 } from './DomainEvaluationStatusPanel.helpers';
+import { narrowAnalysisStatus } from '../../../api/operations/narrowings';
 import type {
   DomainEvaluation,
   DomainEvaluationMember,
@@ -61,7 +62,7 @@ export function DomainEvaluationStatusPanel({
       definitionId: status.definitionId,
       definitionName: member.definitionNameAtLaunch,
       status: status.status,
-      analysisStatus: status.analysisStatus,
+      analysisStatus: narrowAnalysisStatus(status.analysisStatus),
       updatedAt: status.updatedAt,
       stalledModels: status.stalledModels ?? [],
       latestErrorMessage: status.modelStatuses.find((model) => model.latestErrorMessage != null)?.latestErrorMessage ?? null,

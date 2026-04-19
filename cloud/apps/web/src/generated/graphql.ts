@@ -3723,7 +3723,7 @@ export type DomainsQueryVariables = Exact<{
 }>;
 
 
-export type DomainsQuery = { __typename?: 'Query', domains: Array<{ __typename?: 'Domain', id: string, name: string, createdAt: string, updatedAt: string, definitionCount: number, defaultLevelPresetVersionId?: string | null, defaultPreambleVersionId?: string | null, defaultContextId?: string | null }> };
+export type DomainsQuery = { __typename?: 'Query', domains: Array<{ __typename?: 'Domain', id: string, name: string, createdAt: string, updatedAt: string, definitionCount: number, defaultLevelPresetVersionId?: string | null, defaultPreambleVersionId?: string | null, defaultContextId?: string | null, defaultModelIds: Array<string>, sentencePrefix?: string | null, labelPrefix?: string | null }> };
 
 export type CreateDomainMutationVariables = Exact<{
   name: Scalars['String']['input'];
@@ -3802,14 +3802,14 @@ export type DomainEvaluationsQueryVariables = Exact<{
 }>;
 
 
-export type DomainEvaluationsQuery = { __typename?: 'Query', domainEvaluations: Array<{ __typename?: 'DomainEvaluation', id: string, domainId: string, domainNameAtLaunch: string, scopeCategory: string, status: string, createdAt: string, startedAt?: string | null, completedAt?: string | null, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, models: Array<string>, temperature?: number | null, maxBudgetUsd?: number | null, memberCount: number }> };
+export type DomainEvaluationsQuery = { __typename?: 'Query', domainEvaluations: Array<{ __typename?: 'DomainEvaluation', id: string, domainId: string, domainNameAtLaunch: string, scopeCategory: string, status: string, createdAt: string, startedAt?: string | null, completedAt?: string | null, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, models: Array<string>, temperature?: number | null, maxBudgetUsd?: number | null, memberCount: number, launchableDefinitionIds: Array<string>, samplePercentage?: number | null, samplesPerScenario?: number | null, targetBatchCount?: number | null }> };
 
 export type DomainEvaluationQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
 
 
-export type DomainEvaluationQuery = { __typename?: 'Query', domainEvaluation?: { __typename?: 'DomainEvaluation', id: string, domainId: string, domainNameAtLaunch: string, scopeCategory: string, status: string, createdAt: string, startedAt?: string | null, completedAt?: string | null, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, models: Array<string>, temperature?: number | null, maxBudgetUsd?: number | null, memberCount: number, members: Array<{ __typename?: 'DomainEvaluationMember', runId: string, definitionIdAtLaunch: string, definitionNameAtLaunch: string, domainIdAtLaunch: string, createdAt: string, runStatus: string, runCategory: string, runStartedAt?: string | null, runCompletedAt?: string | null }> } | null };
+export type DomainEvaluationQuery = { __typename?: 'Query', domainEvaluation?: { __typename?: 'DomainEvaluation', id: string, domainId: string, domainNameAtLaunch: string, scopeCategory: string, status: string, createdAt: string, startedAt?: string | null, completedAt?: string | null, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, models: Array<string>, temperature?: number | null, maxBudgetUsd?: number | null, memberCount: number, launchableDefinitionIds: Array<string>, samplePercentage?: number | null, samplesPerScenario?: number | null, targetBatchCount?: number | null, launchableDefinitions: Array<{ __typename?: 'DomainEvaluationLaunchableDefinition', definitionId: string, definitionName: string, pairKey?: string | null }>, members: Array<{ __typename?: 'DomainEvaluationMember', runId: string, definitionIdAtLaunch: string, definitionNameAtLaunch: string, domainIdAtLaunch: string, modelIds: Array<string>, createdAt: string, runStatus: string, runCategory: string, runStartedAt?: string | null, runCompletedAt?: string | null }> } | null };
 
 export type DomainEvaluationStatusQueryVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -3853,7 +3853,7 @@ export type DomainSettingsQueryVariables = Exact<{
 }>;
 
 
-export type DomainSettingsQuery = { __typename?: 'Query', domainSettings?: { __typename?: 'DomainSettings', domainId: string, preambleVersionId?: string | null, levelPresetVersionId?: string | null, contextId?: string | null, sentencePrefix?: string | null, labelPrefix?: string | null, valueStatements: Array<{ __typename?: 'ValueStatementWithVersions', id: string, token: string, currentContent: string, previousContent?: string | null }> } | null };
+export type DomainSettingsQuery = { __typename?: 'Query', domainSettings?: { __typename?: 'DomainSettings', domainId: string, preambleVersionId?: string | null, levelPresetVersionId?: string | null, contextId?: string | null, defaultModelIds: Array<string>, sentencePrefix?: string | null, labelPrefix?: string | null, valueStatements: Array<{ __typename?: 'ValueStatementWithVersions', id: string, token: string, currentContent: string, previousContent?: string | null }> } | null };
 
 export type DomainConfigSnapshotsQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
@@ -3874,7 +3874,17 @@ export type SetDomainSettingsMutationVariables = Exact<{
 }>;
 
 
-export type SetDomainSettingsMutation = { __typename?: 'Mutation', setDomainSettings: { __typename?: 'Domain', id: string, name: string, defaultPreambleVersionId?: string | null, defaultLevelPresetVersionId?: string | null, defaultContextId?: string | null } };
+export type SetDomainSettingsMutation = { __typename?: 'Mutation', setDomainSettings: { __typename?: 'Domain', id: string, name: string, defaultPreambleVersionId?: string | null, defaultLevelPresetVersionId?: string | null, defaultContextId?: string | null, defaultModelIds: Array<string> } };
+
+export type BackfillDomainEvaluationModelsMutationVariables = Exact<{
+  domainEvaluationId: Scalars['ID']['input'];
+  modelIds: Array<Scalars['String']['input']> | Scalars['String']['input'];
+  definitionIds?: InputMaybe<Array<Scalars['ID']['input']> | Scalars['ID']['input']>;
+  targetBatchCount?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type BackfillDomainEvaluationModelsMutation = { __typename?: 'Mutation', backfillDomainEvaluationModels: { __typename?: 'DomainTrialRunResult', domainEvaluationId?: string | null, scopeCategory: string, success: boolean, totalDefinitions: number, targetedDefinitions: number, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, blockedByActiveLaunch: boolean, runs: Array<{ __typename?: 'DomainTrialRunEntry', definitionId: string, runId: string, modelIds: Array<string> }> } };
 
 export type EnsureDomainVignettePairMutationVariables = Exact<{
   input: EnsureDomainVignettePairInput;
@@ -5394,6 +5404,9 @@ export const DomainsDocument = gql`
     defaultLevelPresetVersionId
     defaultPreambleVersionId
     defaultContextId
+    defaultModelIds
+    sentencePrefix
+    labelPrefix
   }
 }
     `;
@@ -5564,6 +5577,10 @@ export const DomainEvaluationsDocument = gql`
     temperature
     maxBudgetUsd
     memberCount
+    launchableDefinitionIds
+    samplePercentage
+    samplesPerScenario
+    targetBatchCount
   }
 }
     `;
@@ -5590,11 +5607,21 @@ export const DomainEvaluationDocument = gql`
     temperature
     maxBudgetUsd
     memberCount
+    launchableDefinitionIds
+    launchableDefinitions {
+      definitionId
+      definitionName
+      pairKey
+    }
+    samplePercentage
+    samplesPerScenario
+    targetBatchCount
     members {
       runId
       definitionIdAtLaunch
       definitionNameAtLaunch
       domainIdAtLaunch
+      modelIds
       createdAt
       runStatus
       runCategory
@@ -5750,6 +5777,7 @@ export const DomainSettingsDocument = gql`
     preambleVersionId
     levelPresetVersionId
     contextId
+    defaultModelIds
     sentencePrefix
     labelPrefix
     valueStatements {
@@ -5797,12 +5825,43 @@ export const SetDomainSettingsDocument = gql`
     defaultPreambleVersionId
     defaultLevelPresetVersionId
     defaultContextId
+    defaultModelIds
   }
 }
     `;
 
 export function useSetDomainSettingsMutation() {
   return Urql.useMutation<SetDomainSettingsMutation, SetDomainSettingsMutationVariables>(SetDomainSettingsDocument);
+};
+export const BackfillDomainEvaluationModelsDocument = gql`
+    mutation BackfillDomainEvaluationModels($domainEvaluationId: ID!, $modelIds: [String!]!, $definitionIds: [ID!], $targetBatchCount: Int) {
+  backfillDomainEvaluationModels(
+    domainEvaluationId: $domainEvaluationId
+    modelIds: $modelIds
+    definitionIds: $definitionIds
+    targetBatchCount: $targetBatchCount
+  ) {
+    domainEvaluationId
+    scopeCategory
+    success
+    totalDefinitions
+    targetedDefinitions
+    startedRuns
+    failedDefinitions
+    skippedForBudget
+    projectedCostUsd
+    blockedByActiveLaunch
+    runs {
+      definitionId
+      runId
+      modelIds
+    }
+  }
+}
+    `;
+
+export function useBackfillDomainEvaluationModelsMutation() {
+  return Urql.useMutation<BackfillDomainEvaluationModelsMutation, BackfillDomainEvaluationModelsMutationVariables>(BackfillDomainEvaluationModelsDocument);
 };
 export const EnsureDomainVignettePairDocument = gql`
     mutation EnsureDomainVignettePair($input: EnsureDomainVignettePairInput!) {

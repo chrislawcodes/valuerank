@@ -26,6 +26,8 @@ import {
 } from '../api/operations/domains';
 
 type RunTrialsForDomainResult = RunTrialsForDomainMutationResult['runTrialsForDomain'];
+type CreatedDomainResult = CreateDomainMutationResult['createDomain'];
+type RenamedDomainResult = RenameDomainMutationResult['renameDomain'];
 
 type UseDomainsResult = {
   domains: Domain[];
@@ -39,8 +41,8 @@ type UseDomainsResult = {
   runningDomainTrials: boolean;
   error: Error | null;
   refetch: () => void;
-  createDomain: (name: string) => Promise<Domain | null>;
-  renameDomain: (id: string, name: string) => Promise<Domain | null>;
+  createDomain: (name: string) => Promise<CreatedDomainResult | null>;
+  renameDomain: (id: string, name: string) => Promise<RenamedDomainResult | null>;
   deleteDomain: (id: string) => Promise<DomainMutationResult | null>;
   assignDomainToDefinitions: (definitionIds: string[], domainId: string | null) => Promise<DomainMutationResult | null>;
   assignDomainToDefinitionsByFilter: (input: {
@@ -70,14 +72,14 @@ export function useDomains(): UseDomainsResult {
 
   const refetch = () => reexecuteQuery({ requestPolicy: 'network-only' });
 
-  const createDomain = async (name: string): Promise<Domain | null> => {
+  const createDomain = async (name: string): Promise<CreatedDomainResult | null> => {
     const result = await createMutation({ name });
     if (result.error) throw new Error(result.error.message);
     refetch();
     return result.data?.createDomain ?? null;
   };
 
-  const renameDomain = async (id: string, name: string): Promise<Domain | null> => {
+  const renameDomain = async (id: string, name: string): Promise<RenamedDomainResult | null> => {
     const result = await renameMutation({ id, name });
     if (result.error) throw new Error(result.error.message);
     refetch();

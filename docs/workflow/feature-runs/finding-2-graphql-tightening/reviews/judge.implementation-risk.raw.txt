@@ -1,0 +1,42 @@
+```json
+{
+  "judge": "implementation-risk",
+  "model": "claude-sonnet-4-6",
+  "verdict": "block",
+  "confidence": 4,
+  "reasoning": "Four load-bearing gaps would cause an implementer to guess or ship a bug. (1) The orphan-allowlist warning mechanism is unspecified: ESLint rules run file-by-file and have no built-in way to emit a warning when a file produces zero violations. The artifact requires this behaviour (FR-011, SC-009) but never describes the implementation pattern (e.g., Program:exit listener, post-lint script, separate check). An implementer would invent an approach with no verification that it matches intent. (2) FR-005 and T3.4 directly contradict each other: FR-005 says 'no hand-typed narrowing of analysisStatus', while T3.4 instructs adding narrowAnalysisStatus() to narrowings.ts. No tie-breaker is given. (3) T1.5 tells the implementer to alias Domain to a mutation-result shape (e.g., CreateDomainMutation['createDomain']) but never confirms the actual codegen field name, which must exist in the regenerated graphql.ts before the alias can be written. This is only resolvable by inspecting the live codebase, not the artifact chain. (4) The emit-schema.ts script (T0.1) must be written if absent, but the artifact gives no guidance on how to extract SDL from a Pothos schema — the correct approach (builder.toSchema(), printSchema(), introspection vs. SDL print) is entirely unspecified.",
+  "evidence": [
+    {
+      "artifact": "TASKS",
+      "section": "Slice 4 — T4.1",
+      "quote": "Orphan allowlist entries (file is listed but contains zero flagged types) produce a warn-level issue, not error, per FR-011 acceptance scenario 4."
+    },
+    {
+      "artifact": "SPEC",
+      "section": "FR-011",
+      "quote": "The rule MUST respect an allowlist of filenames ... and report *orphan* allowlist entries as warnings, not errors."
+    },
+    {
+      "artifact": "SPEC",
+      "section": "FR-005",
+      "quote": "The DomainTrialRunsStatus query in domains.graphql MUST select fields such that consumers (e.g. RowView) can use the generated type directly — no hand-typed narrowing of analysisStatus."
+    },
+    {
+      "artifact": "TASKS",
+      "section": "Slice 3 — T3.4",
+      "quote": "Create narrowings.ts with: (a) narrowEstimateConfidence(value: string): 'HIGH' | 'MEDIUM' | 'LOW' | null, (b) narrowAnalysisStatus(value: string | null | undefined): string | null (round-4 plan review correction — DomainTrialRunsStatusQueryResult.analysisStatus was being narrowed from string|null|undefined to string|null by the hand-type; preserve that narrowing in the helper)."
+    },
+    {
+      "artifact": "TASKS",
+      "section": "Slice 1 — T1.5",
+      "quote": "keep Domain as the *mutation-result shape* (subset) for hook return types, and add a separate DomainListItem = DomainsQuery['domains'][number] alias for list-rendering call sites. Delete the object-literal export type Domain. Similarly handle DomainEvaluation if a mutation returns a narrower shape."
+    },
+    {
+      "artifact": "TASKS",
+      "section": "Slice 0 — T0.1",
+      "quote": "Check if cloud/apps/api/src/scripts/emit-schema.ts (or similar) exists. If yes, use it. If no, add one: print the Pothos schema's SDL to stdout, invocable as npm run emit-schema --workspace @valuerank/api > ../web/schema.graphql."
+    }
+  ],
+  "timestamp": "2026-04-19T00:00:00Z"
+}
+```

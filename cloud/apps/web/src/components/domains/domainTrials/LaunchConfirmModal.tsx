@@ -10,7 +10,7 @@ type LaunchConfirmModalProps = {
   totalPairedBatches: number | null;
   totalTrialRuns: number | null;
   estimatedTotalCost: number;
-  estimateConfidence?: 'HIGH' | 'MEDIUM' | 'LOW';
+  estimateConfidence?: 'HIGH' | 'MEDIUM' | 'LOW' | null;
   fallbackReason?: string | null;
   knownExclusions?: string[];
   temperatureLabel: string;
@@ -64,7 +64,9 @@ export function LaunchConfirmModal({
           <div>Total individual trial runs: <span className="font-medium">{totalTrialRuns ?? 'Not set'}</span></div>
           <div>Models: <span className="font-medium">{modelCount}</span></div>
           <div>Estimated remaining cost: <span className="font-medium">{formatCost(estimatedTotalCost)}</span></div>
-          {estimateConfidence && <div>Estimate confidence: <span className="font-medium">{estimateConfidence.toLowerCase()}</span></div>}
+          {estimateConfidence != null && (
+            <div>Estimate confidence: <span className="font-medium">{estimateConfidence.toLowerCase()}</span></div>
+          )}
           <div>Temperature: <span className="font-medium">{temperatureLabel}</span></div>
           <div>Budget cap: <span className="font-medium">{budgetCap === null ? 'None' : formatCost(budgetCap)}</span></div>
         </div>
