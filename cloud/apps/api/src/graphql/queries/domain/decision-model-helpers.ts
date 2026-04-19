@@ -1,6 +1,6 @@
 import { DOMAIN_ANALYSIS_VALUE_KEYS, toPascalCaseKey, type DomainAnalysisValueKey } from '../domain-analysis-values.js';
 import { JOB_CHOICE_VALUE_STATEMENTS, labelFromBody } from '@valuerank/shared';
-import { stripLevelWords } from './decision-model-level-words.js';
+import { stripFillerWords } from './decision-model-filler-words.js';
 import type {
   DecisionDirection,
   DecisionStrength,
@@ -175,7 +175,7 @@ export function resolveValueKeyFromText(
   if (normalized.length === 0) {
     return null;
   }
-  const normalizedStripped = stripLevelWords(normalized);
+  const normalizedStripped = stripFillerWords(normalized);
 
   const prefix = labelPrefix ?? '';
   let resolved: DomainAnalysisValueKey | null = null;
@@ -185,10 +185,14 @@ export function resolveValueKeyFromText(
     if (!label) {
       continue;
     }
-    // Try exact substring first; fall back to a level-word-stripped match so
-    // responses like "with full freedom in how they live" still resolve to a
-    // label that reads "with freedom in how they live".
-    const matched = normalized.includes(label) || normalizedStripped.includes(label);
+    // Try exact substring first; fall back to a filler-word-stripped match on
+    // BOTH sides so responses that swap articles/possessives ("with my team"
+    // vs label "with your team") or echo a level word ("with full freedom"
+    // vs label "with freedom") still resolve correctly.
+    const labelStripped = stripFillerWords(label);
+    const matched =
+      normalized.includes(label)
+      || (labelStripped.length > 0 && normalizedStripped.includes(labelStripped));
     if (!matched) {
       continue;
     }

@@ -4,6 +4,7 @@ import type { Transcript } from '../../api/operations/runs';
 import { formatTranscriptDate } from '../../lib/format';
 import { formatDisplayLabel } from '../../utils/displayLabels';
 import { getDecisionMetadata } from '../../utils/methodology';
+import { buildDecisionTooltip } from './transcriptDecisionTooltip';
 import {
   formatCanonicalDecisionHeadline,
   getTranscriptDecisionAuditBadge,
@@ -201,6 +202,7 @@ export function TranscriptRow({
     ? canonicalDecisionDisplay
     : legacyDecisionDisplay;
   const isAnalyzableDecision = Boolean(rawDecision);
+  const decisionTooltip = buildDecisionTooltip(canonicalDecision, decisionMetadata, rowDecisionDisplayMode);
   const isDecisionOverrideAllowed = rowDecisionDisplayMode === 'legacy' && Boolean(onDecisionChange) && (
     decisionMetadata?.parseClass === 'ambiguous'
     || !isAnalyzableDecision
@@ -315,7 +317,7 @@ export function TranscriptRow({
                     {auditDecisionBadge}
                   </span>
                 )}
-                <span>{decisionDisplay}</span>
+                <span title={decisionTooltip}>{decisionDisplay}</span>
                 {decisionMetadata?.parseClass === 'ambiguous' && (
                   <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
                     Ambiguous
@@ -350,7 +352,7 @@ export function TranscriptRow({
           <div className="flex items-center gap-4 text-sm text-gray-500 flex-shrink-0">
             <span
               className="flex items-center gap-2"
-              title={rowDecisionDisplayMode === 'audit' ? 'Decision summary' : 'Decision'}
+              title={decisionTooltip}
             >
               {auditDecisionBadge && (
                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
