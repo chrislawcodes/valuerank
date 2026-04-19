@@ -19,6 +19,16 @@ module.exports = {
     'prettier',
   ],
   rules: {
+    // File size warning — production source. Hard cap is enforced by
+    // cloud/scripts/check-file-sizes.sh (errors at 700). This editor-level
+    // warning fires at 400 so the "is this file cohesive?" conversation
+    // happens before the hard cap.
+    'max-lines': ['warn', {
+      max: 400,
+      skipBlankLines: true,
+      skipComments: true,
+    }],
+
     // No any types (per CLAUDE.md)
     '@typescript-eslint/no-explicit-any': 'error',
     '@typescript-eslint/no-unsafe-assignment': 'error',
@@ -116,6 +126,29 @@ module.exports = {
       files: ['**/tests/**/*.ts', '**/*.test.ts'],
       rules: {
         'no-console': 'off',
+      },
+    },
+    {
+      // Tests get a looser file-size warning. Hard cap is 1200 via
+      // check-file-sizes.sh.
+      files: ['**/tests/**/*.ts', '**/tests/**/*.tsx', '**/*.test.ts', '**/*.test.tsx'],
+      rules: {
+        'max-lines': ['warn', {
+          max: 800,
+          skipBlankLines: true,
+          skipComments: true,
+        }],
+      },
+    },
+    {
+      // Generated / declarative files have no size limit.
+      files: [
+        '**/generated/**',
+        '**/*.gen.ts',
+        '**/prisma/**',
+      ],
+      rules: {
+        'max-lines': 'off',
       },
     },
     // ============================================================================

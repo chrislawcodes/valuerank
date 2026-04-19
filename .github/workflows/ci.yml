@@ -52,8 +52,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check file sizes (400-line limit)
+      - name: Check file sizes (tiered thresholds)
         run: ./cloud/scripts/check-file-sizes.sh --base origin/${{ github.base_ref || 'main' }}
+
+      - name: Check filenames (banned placeholder suffixes)
+        run: ./cloud/scripts/check-filenames.sh --base origin/${{ github.base_ref || 'main' }}
+
+      - name: Check barrels (trivial re-export index.ts)
+        run: ./cloud/scripts/check-barrels.sh --base origin/${{ github.base_ref || 'main' }}
+
+      - name: Tech-debt reminders (informational)
+        run: ./cloud/scripts/check-tech-debt.sh --changed
+        continue-on-error: true
 
       - uses: actions/setup-node@v4
         with:

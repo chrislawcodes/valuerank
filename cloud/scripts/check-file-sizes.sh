@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
-# check-file-sizes.sh — Enforce the 400-line file size limit from CLAUDE.md.
+# check-file-sizes.sh — Enforce tiered file size limits.
+#
+# Thresholds (see cloud/CLAUDE.md):
+#   Production source: warn at 400, error at 700
+#   Test files:        warn at 800, error at 1200
+#   Generated, dist, legacy src/, prisma: skipped
+#
+# Grandfather list: cloud/scripts/file-size-allowlist.txt
+#   Files listed there are exempt from the hard error (still get a warning).
 #
 # Usage:
 #   ./scripts/check-file-sizes.sh              # Check files changed vs origin/main
@@ -7,14 +15,19 @@
 #   ./scripts/check-file-sizes.sh --all         # Audit all files (non-blocking report)
 #
 # Exit codes:
-#   0 — No violations (or --all mode, which always exits 0)
-#   1 — At least one changed file exceeds the limit
+#   0 — No hard-error violations (warnings still printed)
+#   1 — At least one changed file exceeds the hard error limit
 
 set -euo pipefail
 
-MAX_LINES=400
+WARN_PROD=400
+ERROR_PROD=700
+WARN_TEST=800
+ERROR_TEST=1200
+
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 CLOUD_DIR="$REPO_ROOT/cloud"
+ALLOWLIST="$CLOUD_DIR/scripts/file-size-allowlist.txt"
 MODE="changed"
 BASE_REF="origin/main"
 
@@ -32,24 +45,28 @@ done
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+is_test_file() {
+  local file="$1"
+  case "$file" in
+    *.test.ts|*.test.tsx|*.spec.ts|*.spec.tsx) return 0 ;;
+    */tests/*|*/__tests__/*|*/test/*) return 0 ;;
+  esac
+  return 1
+}
+
 should_check() {
   local file="$1"
 
-  # Only check source files
+  # Only check TS/TSX/Python source files
   case "$file" in
     *.ts|*.tsx|*.py) ;;
     *) return 1 ;;
   esac
 
-  # Skip test files — CLAUDE.md allows tests to exceed the limit
-  case "$file" in
-    *.test.ts|*.test.tsx|*.spec.ts|*.spec.tsx) return 1 ;;
-    */tests/*|*/__tests__/*|*/test/*) return 1 ;;
-  esac
-
-  # Skip generated files
+  # Skip generated, vendor, build output
   case "$file" in
     */generated/*|*/node_modules/*|*/dist/*|*/build/*) return 1 ;;
+    */prisma/migrations/*) return 1 ;;
   esac
 
   # Skip legacy src/ — not the active product
@@ -71,8 +88,14 @@ should_check() {
   return 0
 }
 
+is_allowlisted() {
+  local file="$1"
+  [[ -f "$ALLOWLIST" ]] || return 1
+  grep -qxF "$file" "$ALLOWLIST"
+}
+
 count_lines() {
-  wc -l < "$1"
+  wc -l < "$1" | tr -d ' '
 }
 
 # ---------------------------------------------------------------------------
@@ -101,8 +124,10 @@ fi
 # ---------------------------------------------------------------------------
 # Check sizes
 # ---------------------------------------------------------------------------
-VIOLATIONS=0
-VIOLATION_LIST=""
+ERRORS=0
+WARNINGS=0
+ERROR_LIST=""
+WARN_LIST=""
 
 # Empty array under `set -u` would error on "${FILES[@]}" dereference.
 if (( ${#FILES[@]} == 0 )); then
@@ -112,10 +137,24 @@ fi
 for file in "${FILES[@]+"${FILES[@]}"}"; do
   full_path="$REPO_ROOT/$file"
   lines=$(count_lines "$full_path")
-  if (( lines > MAX_LINES )); then
-    VIOLATIONS=$((VIOLATIONS + 1))
-    pct=$(( (lines - MAX_LINES) * 100 / MAX_LINES ))
-    VIOLATION_LIST+="  ${lines} lines (+${pct}% over)  ${file}"$'\n'
+
+  if is_test_file "$file"; then
+    warn=$WARN_TEST; err=$ERROR_TEST; tier="test"
+  else
+    warn=$WARN_PROD; err=$ERROR_PROD; tier="prod"
+  fi
+
+  if (( lines > err )); then
+    if is_allowlisted "$file"; then
+      WARNINGS=$((WARNINGS + 1))
+      WARN_LIST+="  ${lines} lines [${tier}, grandfathered]  ${file}"$'\n'
+    else
+      ERRORS=$((ERRORS + 1))
+      ERROR_LIST+="  ${lines} lines [${tier}, limit ${err}]  ${file}"$'\n'
+    fi
+  elif (( lines > warn )); then
+    WARNINGS=$((WARNINGS + 1))
+    WARN_LIST+="  ${lines} lines [${tier}, over warn ${warn}]  ${file}"$'\n'
   fi
 done
 
@@ -123,32 +162,44 @@ done
 # Report
 # ---------------------------------------------------------------------------
 if [[ "$MODE" == "all" ]]; then
-  echo "=== File Size Audit (all files, limit: ${MAX_LINES} lines) ==="
-  if (( VIOLATIONS > 0 )); then
+  echo "=== File Size Audit (all files) ==="
+  echo "Thresholds: prod ${WARN_PROD}/${ERROR_PROD}, test ${WARN_TEST}/${ERROR_TEST}"
+  echo ""
+  if (( ERRORS > 0 )); then
+    echo "${ERRORS} file(s) exceed hard error limit:"
+    echo "$ERROR_LIST" | sort -rn
     echo ""
-    echo "${VIOLATIONS} file(s) exceed the ${MAX_LINES}-line limit:"
-    echo ""
-    echo "$VIOLATION_LIST" | sort -rn
-  else
-    echo "All files are within the ${MAX_LINES}-line limit."
+  fi
+  if (( WARNINGS > 0 )); then
+    echo "${WARNINGS} file(s) over warn threshold:"
+    echo "$WARN_LIST" | sort -rn
+  fi
+  if (( ERRORS == 0 && WARNINGS == 0 )); then
+    echo "All files within thresholds."
   fi
   # Audit mode always exits 0
   exit 0
 fi
 
 # Changed-files mode
-if (( VIOLATIONS > 0 )); then
-  echo "❌ File size check FAILED — ${VIOLATIONS} changed file(s) exceed the ${MAX_LINES}-line limit:"
+if (( WARNINGS > 0 )); then
+  echo "⚠️  File size warnings — ${WARNINGS} file(s) over warn threshold:"
+  echo "$WARN_LIST" | sort -rn
   echo ""
-  echo "$VIOLATION_LIST" | sort -rn
-  echo ""
-  echo "Split oversized files before merging. See CLAUDE.md for guidance."
-  exit 1
-else
-  if (( ${#FILES[@]} > 0 )); then
-    echo "✅ File size check passed — ${#FILES[@]} changed file(s) checked, all within ${MAX_LINES} lines."
-  else
-    echo "✅ File size check passed — no checkable files changed."
-  fi
-  exit 0
 fi
+
+if (( ERRORS > 0 )); then
+  echo "❌ File size check FAILED — ${ERRORS} changed file(s) exceed hard error limit:"
+  echo "$ERROR_LIST" | sort -rn
+  echo ""
+  echo "Split the file by responsibility, or add to cloud/scripts/file-size-allowlist.txt"
+  echo "with a justification. See docs/tech-debt/file-structure.md."
+  exit 1
+fi
+
+if (( ${#FILES[@]} > 0 )); then
+  echo "✅ File size check passed — ${#FILES[@]} changed file(s) checked."
+else
+  echo "✅ File size check passed — no checkable files changed."
+fi
+exit 0

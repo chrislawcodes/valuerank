@@ -56,6 +56,15 @@ echo "   Changed: shared=$SHARED db=$DB api=$API web=$WEB"
 echo "📏 Checking file sizes..."
 "$CLOUD/scripts/check-file-sizes.sh"
 
+echo "🏷️  Checking filenames..."
+"$CLOUD/scripts/check-filenames.sh"
+
+echo "📦 Checking barrels..."
+"$CLOUD/scripts/check-barrels.sh"
+
+echo "📋 Tech-debt reminders..."
+"$CLOUD/scripts/check-tech-debt.sh" --changed || true
+
 cd "$CLOUD"
 
 echo "📦 Running lint..."

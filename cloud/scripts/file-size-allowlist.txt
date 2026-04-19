@@ -1,0 +1,13 @@
+# Files exempt from the file-size hard error. Still emit warnings.
+# Format: one repo-relative path per line. Blank lines and # comments allowed.
+# Remove an entry when you split or shrink the file.
+# See docs/tech-debt/file-structure.md for context.
+
+# Production components / pages over 700
+cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx
+
+# Large test files over 1200
+cloud/apps/api/tests/services/run/start.test.ts
+cloud/apps/api/tests/graphql/queries/definition.test.ts
+cloud/apps/api/tests/graphql/queries/run.test.ts
+cloud/workers/tests/test_summarize.py
