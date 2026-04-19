@@ -1,5 +1,6 @@
 import { DOMAIN_ANALYSIS_VALUE_KEYS, toPascalCaseKey, type DomainAnalysisValueKey } from '../domain-analysis-values.js';
 import { JOB_CHOICE_VALUE_STATEMENTS, labelFromBody } from '@valuerank/shared';
+import { stripLevelWords } from './decision-model-level-words.js';
 import type {
   DecisionDirection,
   DecisionStrength,
@@ -159,24 +160,6 @@ export function parseJobChoiceStrengthFromText(text: string): DecisionStrength |
   if (normalized.startsWith('somewhat support')) return 'lean';
   if (normalized.startsWith('neutral')) return 'neutral';
   return null;
-}
-
-/**
- * Words that may appear in a model's scale-label answer but are not present in
- * the canonical scale label, so they should be tolerated when matching.
- *
- * Mirrors the Python `FILLER_WORDS_PATTERN` in workers/summarize_text.py.
- *
- * Includes the 5 level preset words (negligible|minimal|moderate|substantial|full)
- * because scale labels are level-agnostic by design — the level word appears in
- * the prompt sentence but not in the scale label. Some models echo the level
- * back into their answer ("...with full freedom in how they live"), which would
- * otherwise break substring matching.
- */
-const LEVEL_TOLERANT_FILLER_PATTERN = /\b(?:negligible|minimal|moderate|substantial|full)\b/gi;
-
-function stripLevelWords(normalized: string): string {
-  return normalized.replace(LEVEL_TOLERANT_FILLER_PATTERN, ' ').replace(/\s+/g, ' ').trim();
 }
 
 export function resolveValueKeyFromText(
