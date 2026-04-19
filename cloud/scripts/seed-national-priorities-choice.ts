@@ -101,23 +101,14 @@ async function main(): Promise<void> {
     }
   }
 
-  // 6. Populate defaultModelIds from admin-flagged default models if not already set
-  if (domain.defaultModelIds.length === 0) {
-    const defaultModels = await db.llmModel.findMany({
-      where: { isDefault: true, status: 'ACTIVE' },
-      select: { id: true },
-    });
-    if (defaultModels.length > 0) {
-      const modelIds = defaultModels.map((m) => m.id);
-      await db.domain.update({
-        where: { id: domain.id },
-        data: { defaultModelIds: modelIds },
-      });
-      log.info({ modelCount: modelIds.length }, 'Populated defaultModelIds from admin defaults');
-    } else {
-      log.warn('No admin-flagged default models found; defaultModelIds left empty');
-    }
-  }
+  // 6. Leave Domain.defaultModelIds empty — matches job-choice, neighborhood,
+  // software-approach behavior. resolveEffectiveDefaultModelIds() falls back to
+  // LlmModel.isDefault=true at query time, so the domain stays in sync with
+  // whatever models the admin currently has flagged as default. The previous
+  // implementation tried to snapshot LlmModel.id (cuid) into defaultModelIds,
+  // but the coverage query expects LlmModel.modelId (short name like
+  // "gpt-5.1") to match transcripts.modelId — different ID type. Falling back
+  // is both simpler and consistent with other domains.
 
   log.info({ upserted, domainId: domain.id, contextId: context.id }, 'Seed complete');
 }
