@@ -19,6 +19,7 @@ from factory_state import (  # noqa: E402
     workflow_dir,
     update_workflow_state,
 )
+from factory_heartbeat import HeartbeatEmitter, set_activity as heartbeat_set_activity  # noqa: E402
 from factory_telemetry import record_ai_call  # noqa: E402
 
 from factory_git import (  # noqa: E402
@@ -107,6 +108,7 @@ def _run_serial(slug: str, tasks: list[str]) -> int:
     round_number = _implementation_round(slug)
     rc = 1
     try:
+        heartbeat_set_activity("codex exec running")
         result = record_ai_call(
             slug,
             "tasks",
@@ -178,6 +180,12 @@ def _run_parallel(slug: str, group: dict, max_workers: int = 4) -> int:
                 prompt_path = _codex_prompt_path(slug, i)
                 prompt_paths.append(prompt_path)
                 prompt_text = _build_codex_prompt(slug, i, [task], file_scope)
+                def _call(worktree_path=worktree_path, prompt_text=prompt_text):
+                    heartbeat_set_activity("codex exec running")
+                    return _run_codex_command(
+                        ["codex", "exec", "-m", "gpt-5.4-mini", "-s", "workspace-write", prompt_text],
+                        worktree_path,
+                    )
                 futures[
                     executor.submit(
                         record_ai_call,
@@ -186,10 +194,7 @@ def _run_parallel(slug: str, group: dict, max_workers: int = 4) -> int:
                         round_number,
                         "implementation",
                         "gpt-5.4-mini",
-                        lambda worktree_path=worktree_path, prompt_text=prompt_text: _run_codex_command(
-                            ["codex", "exec", "-m", "gpt-5.4-mini", "-s", "workspace-write", prompt_text],
-                            worktree_path,
-                        ),
+                        _call,
                     )
                 ] = i
             except Exception as exc:
@@ -291,16 +296,18 @@ def command_implement(args: argparse.Namespace) -> int:
         print("nothing to implement — all tasks complete or no tasks.md")
         return 0
 
-    for group in groups:
-        if not group["parallel"]:
-            if group.get("overlap_warning"):
-                print(f"[warn] {group['overlap_warning']} — running serially", file=sys.stderr)
-            rc = _run_serial(args.slug, group["tasks"])
-        else:
-            print(f"[implement] dispatching {len(group['tasks'])} parallel Codex workers...")
-            rc = _run_parallel(args.slug, group, max_workers=args.max_workers)
-        if rc != 0:
-            return rc
+    with HeartbeatEmitter(args.slug, "implement"):
+        for group in groups:
+            heartbeat_set_activity("codex exec running")
+            if not group["parallel"]:
+                if group.get("overlap_warning"):
+                    print(f"[warn] {group['overlap_warning']} — running serially", file=sys.stderr)
+                rc = _run_serial(args.slug, group["tasks"])
+            else:
+                print(f"[implement] dispatching {len(group['tasks'])} parallel Codex workers...")
+                rc = _run_parallel(args.slug, group, max_workers=args.max_workers)
+            if rc != 0:
+                return rc
     return 0
 
 

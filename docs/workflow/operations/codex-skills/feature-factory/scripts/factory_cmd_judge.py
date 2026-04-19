@@ -26,6 +26,7 @@ from factory_state import (  # noqa: E402
     with_locked_state,
     workflow_dir,
 )
+from factory_heartbeat import HeartbeatEmitter, set_activity as heartbeat_set_activity  # noqa: E402
 import factory_embeddings  # noqa: E402
 from factory_telemetry import record_ai_call  # noqa: E402
 
@@ -670,6 +671,7 @@ def _dispatch_panel(
     def _worker(lens: str) -> tuple[str, dict, str]:
         model = JUDGE_MODEL_BY_LENS[lens]
         system_prompt, user_prompt = prepared_prompts[lens]
+        heartbeat_set_activity(f"judge {lens} running")
         verdict, raw_output = _parse_with_retry(
             slug,
             stage,
@@ -926,14 +928,18 @@ def run_judge(
             print(f"→ next: {payload['next']}")
         return 0
 
-    verdicts, current_sha, git_head_sha = _validate_json_output(slug, stage, prompt_override, override_reason)
-    proceed_count = sum(1 for verdict in verdicts if verdict["verdict"] in {"proceed", "proceed-with-annotation"})
-    block_count = sum(1 for verdict in verdicts if verdict["verdict"] == "block")
-    outcome = "advance" if proceed_count >= 2 else "rejudge" if block_count >= 2 else "undecided"
+    with HeartbeatEmitter(slug, stage):
+        heartbeat_set_activity("dispatching judges")
+        verdicts, current_sha, git_head_sha = _validate_json_output(slug, stage, prompt_override, override_reason)
+        heartbeat_set_activity("tallying verdicts")
+        proceed_count = sum(1 for verdict in verdicts if verdict["verdict"] in {"proceed", "proceed-with-annotation"})
+        block_count = sum(1 for verdict in verdicts if verdict["verdict"] == "block")
+        outcome = "advance" if proceed_count >= 2 else "rejudge" if block_count >= 2 else "undecided"
 
-    payload = _persist_state(slug, stage, verdicts, current_sha, outcome, proceed_count, block_count)
-    if json_output:
-        print(json.dumps(payload, indent=2))
-    else:
-        print(f"→ next: {payload['next']}")
-    return 0
+        payload = _persist_state(slug, stage, verdicts, current_sha, outcome, proceed_count, block_count)
+        heartbeat_set_activity("all reviews complete")
+        if json_output:
+            print(json.dumps(payload, indent=2))
+        else:
+            print(f"→ next: {payload['next']}")
+        return 0

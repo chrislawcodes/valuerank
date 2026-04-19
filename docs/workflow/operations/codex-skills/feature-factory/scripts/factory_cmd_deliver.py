@@ -23,6 +23,7 @@ from factory_state import (  # noqa: E402
     checkpoint_manifest_path,
     workflow_dir,
 )
+from factory_heartbeat import HeartbeatEmitter, set_activity as heartbeat_set_activity  # noqa: E402
 
 from factory_git import (  # noqa: E402
     current_branch_name,
@@ -159,32 +160,36 @@ def _mark_delivery_state(slug: str, updates: dict) -> None:
 
 
 def _poll_merge_wait(slug: str, pr_number: int, interval_seconds: int = 60) -> dict | None:
-    while True:
-        pr = current_pr_payload(pr_number)
-        if not pr:
-            raise SystemExit("failed to read PR state while waiting for merge")
+    with HeartbeatEmitter(slug, "deliver") as hb:
+        hb.set_activity(f"waiting for PR merge (PR #{pr_number})")
+        while True:
+            hb.set_activity(f"waiting for PR merge (PR #{pr_number})")
+            heartbeat_set_activity(f"waiting for PR merge (PR #{pr_number})")
+            pr = current_pr_payload(pr_number)
+            if not pr:
+                raise SystemExit("failed to read PR state while waiting for merge")
 
-        state_value = str(pr.get("state", "") or "").upper()
-        merged_sha, merged_at = _normalize_pr_merge_fields(pr)
-        if merged_sha or merged_at or state_value == "MERGED":
-            _mark_delivery_state(
-                slug,
-                {
-                    "merge_wait_state": "merged",
-                    "merged_sha": merged_sha,
-                    "merged_at_iso8601": merged_at,
-                },
-            )
-            return pr
-        if state_value == "CLOSED":
-            _mark_delivery_state(
-                slug,
-                {
-                    "merge_wait_state": "failed",
-                },
-            )
-            return pr
-        time.sleep(interval_seconds)
+            state_value = str(pr.get("state", "") or "").upper()
+            merged_sha, merged_at = _normalize_pr_merge_fields(pr)
+            if merged_sha or merged_at or state_value == "MERGED":
+                _mark_delivery_state(
+                    slug,
+                    {
+                        "merge_wait_state": "merged",
+                        "merged_sha": merged_sha,
+                        "merged_at_iso8601": merged_at,
+                    },
+                )
+                return pr
+            if state_value == "CLOSED":
+                _mark_delivery_state(
+                    slug,
+                    {
+                        "merge_wait_state": "failed",
+                    },
+                )
+                return pr
+            time.sleep(interval_seconds)
 
 
 def _resume_merge_wait_if_needed(slug: str, delivery: dict) -> int:

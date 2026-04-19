@@ -77,6 +77,7 @@ from factory_review import (  # noqa: E402
 )
 
 from factory_emit import _emit_next_action  # noqa: E402
+from factory_heartbeat import HeartbeatEmitter, set_activity as heartbeat_set_activity  # noqa: E402
 from factory_next_action import recommended_next_action  # noqa: E402
 from workflow_utils import normalized_artifact_hash  # noqa: E402
 
@@ -470,77 +471,90 @@ def command_checkpoint(args: argparse.Namespace) -> int:
                 lambda state: state.pop(DIRTY_OVERRIDE_KEY, None),
             )
 
-    cmd = [
-        sys.executable,
-        str(REPAIR),
-        "--checkpoint-manifest",
-        str(manifest_path),
-        "--workspace-dir",
-        str(REPO_ROOT),
-        "--gemini-timeout-seconds",
-        str(args.gemini_timeout_seconds),
-        "--gemini-retries",
-        str(args.gemini_retries),
-    ]
-    try:
-        result = subprocess.run(
-            cmd,
-            text=True,
-            timeout=args.repair_timeout_seconds,
-        )
-    except subprocess.TimeoutExpired:
-        if not args.fallback:
-            _rollback_adversarial_round(args.slug, args.stage)
-            print(
-                f"checkpoint blocked: repair exceeded {args.repair_timeout_seconds}s for "
-                f"{args.stage} on {args.slug}",
-                file=sys.stderr,
+    with HeartbeatEmitter(args.slug, args.stage):
+        heartbeat_set_activity("awaiting reviewers")
+        for review_spec in reviews_arg or []:
+            reviewer = str(review_spec.get("reviewer", "")).strip()
+            lens = str(review_spec.get("lens", "")).strip()
+            if reviewer and lens:
+                heartbeat_set_activity(f"dispatching {reviewer}.{lens}")
+                heartbeat_set_activity(f"reviewer {reviewer}.{lens} running")
+        cmd = [
+            sys.executable,
+            str(REPAIR),
+            "--checkpoint-manifest",
+            str(manifest_path),
+            "--workspace-dir",
+            str(REPO_ROOT),
+            "--gemini-timeout-seconds",
+            str(args.gemini_timeout_seconds),
+            "--gemini-retries",
+            str(args.gemini_retries),
+        ]
+        try:
+            result = subprocess.run(
+                cmd,
+                text=True,
+                timeout=args.repair_timeout_seconds,
             )
-            return 1
-        fallback_reason = f"repair exceeded {args.repair_timeout_seconds}s"
-    except Exception:
-        _rollback_adversarial_round(args.slug, args.stage)
-        raise
-    else:
-        if result.returncode == 0:
-            reverted = revert_protected_files()
-            if reverted:
-                print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
-            _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
-            post_state = load_workflow_state(args.slug)
-            payload = _checkpoint_next_action_payload(args.slug, post_state, args.stage)
-            _persist_last_action_result(args.slug, payload)
-            if args.json:
-                print(json.dumps(payload))
-            else:
-                _emit_next_action(args.slug, f"{args.stage} checkpoint")
-            return 0
-        if not args.fallback:
+        except subprocess.TimeoutExpired:
+            if not args.fallback:
+                _rollback_adversarial_round(args.slug, args.stage)
+                print(
+                    f"checkpoint blocked: repair exceeded {args.repair_timeout_seconds}s for "
+                    f"{args.stage} on {args.slug}",
+                    file=sys.stderr,
+                )
+                return 1
+            fallback_reason = f"repair exceeded {args.repair_timeout_seconds}s"
+        except Exception:
             _rollback_adversarial_round(args.slug, args.stage)
-            return result.returncode
-        fallback_reason = f"repair exited {result.returncode}"
+            raise
+        else:
+            heartbeat_set_activity("aggregating results")
+            if result.returncode == 0:
+                reverted = revert_protected_files()
+                if reverted:
+                    print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
+                _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
+                post_state = load_workflow_state(args.slug)
+                payload = _checkpoint_next_action_payload(args.slug, post_state, args.stage)
+                _persist_last_action_result(args.slug, payload)
+                heartbeat_set_activity("all reviews complete")
+                if args.json:
+                    print(json.dumps(payload))
+                else:
+                    _emit_next_action(args.slug, f"{args.stage} checkpoint")
+                return 0
+            if not args.fallback:
+                _rollback_adversarial_round(args.slug, args.stage)
+                return result.returncode
+            fallback_reason = f"repair exited {result.returncode}"
 
-    fallback_ok, fallback_detail = run_checkpoint_fallback(
-        manifest_path,
-        REPO_ROOT,
-        args.gemini_timeout_seconds,
-        args.gemini_retries,
-    )
-    if not fallback_ok:
-        _rollback_adversarial_round(args.slug, args.stage)
-        print(f"checkpoint blocked: fallback review path failed for {args.stage} on {args.slug}: {trim_detail(fallback_detail)}", file=sys.stderr)
-        return 1
-    reverted = revert_protected_files()
-    if reverted:
-        print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
-    record_checkpoint_fallback(args.slug, args.stage, fallback_reason)
-    _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
-    print(f"warning: fallback checkpoint path used for {args.stage} on {args.slug}: {fallback_reason}", file=sys.stderr)
-    post_state = load_workflow_state(args.slug)
-    payload = _checkpoint_next_action_payload(args.slug, post_state, args.stage)
-    _persist_last_action_result(args.slug, payload)
-    if args.json:
-        print(json.dumps(payload))
-    else:
-        _emit_next_action(args.slug, f"{args.stage} checkpoint")
-    return 0
+        heartbeat_set_activity("reviewer gemini.requirements running")
+        fallback_ok, fallback_detail = run_checkpoint_fallback(
+            manifest_path,
+            REPO_ROOT,
+            args.gemini_timeout_seconds,
+            args.gemini_retries,
+        )
+        if not fallback_ok:
+            _rollback_adversarial_round(args.slug, args.stage)
+            print(f"checkpoint blocked: fallback review path failed for {args.stage} on {args.slug}: {trim_detail(fallback_detail)}", file=sys.stderr)
+            return 1
+        reverted = revert_protected_files()
+        if reverted:
+            print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
+        record_checkpoint_fallback(args.slug, args.stage, fallback_reason)
+        _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
+        heartbeat_set_activity("aggregating results")
+        print(f"warning: fallback checkpoint path used for {args.stage} on {args.slug}: {fallback_reason}", file=sys.stderr)
+        post_state = load_workflow_state(args.slug)
+        payload = _checkpoint_next_action_payload(args.slug, post_state, args.stage)
+        _persist_last_action_result(args.slug, payload)
+        heartbeat_set_activity("all reviews complete")
+        if args.json:
+            print(json.dumps(payload))
+        else:
+            _emit_next_action(args.slug, f"{args.stage} checkpoint")
+        return 0
