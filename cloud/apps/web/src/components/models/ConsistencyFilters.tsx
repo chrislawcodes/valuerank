@@ -47,8 +47,14 @@ export function ConsistencyFilters({
           <input
             type="number"
             min={1}
+            step={1}
             value={minScenarios}
-            onChange={(event) => onMinScenariosChange(Math.max(1, Number(event.target.value) || 1))}
+            onChange={(event) => {
+              // GraphQL $minScenarios is Int; coerce to a positive integer so
+              // fractional input (e.g. 5.5) does not produce a validation error.
+              const parsed = Number.parseInt(event.target.value, 10);
+              onMinScenariosChange(Number.isFinite(parsed) && parsed >= 1 ? parsed : 1);
+            }}
             className="h-11 w-full rounded-lg border border-gray-300 px-3 text-sm text-gray-900 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
           />
         </label>
