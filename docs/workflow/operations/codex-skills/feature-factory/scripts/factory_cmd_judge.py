@@ -426,10 +426,41 @@ def _validate_verdict(verdict: dict) -> str | None:
                 return f"evidence item missing string field: {key}"
     if not isinstance(verdict["timestamp"], str) or not verdict["timestamp"].strip():
         return "timestamp must be a non-empty string"
+    # Tolerate harmless JSON-Schema metadata fields that judges sometimes
+    # echo back when the prompt includes the full schema (Claude in particular
+    # has been observed emitting `$schema` and `$id` alongside valid verdicts).
+    # These have no semantic meaning for the vote, so stripping them silently
+    # is correct and avoids false-block schema_violation fallbacks.
+    IGNORABLE_METADATA_FIELDS = {"$schema", "$id", "$comment", "title", "description"}
+    for meta_field in IGNORABLE_METADATA_FIELDS & set(verdict):
+        verdict.pop(meta_field, None)
     extra = set(verdict) - set(required)
     if extra:
         return f"unexpected fields in verdict: {sorted(extra)}"
     return None
+
+
+def _strip_markdown_json_fences(raw: str) -> str:
+    """Strip a leading ```json / ``` code fence + trailing ``` if present.
+
+    Claude and some Codex versions wrap JSON tool-use output in markdown
+    code fences by default. The first production run (migration against
+    orchestrator-split + finding-2-graphql-tightening) hit 2/6 schema_violation
+    fallbacks purely because of fence wrapping; the actual JSON content was
+    valid and substantive.
+    """
+    if not raw:
+        return raw
+    text = raw.strip()
+    if text.startswith("```"):
+        newline = text.find("\n")
+        if newline != -1:
+            text = text[newline + 1 :]
+        else:
+            text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    return text.strip()
 
 
 def _attempt_model_call(
@@ -499,8 +530,9 @@ def _attempt_model_call(
     stderr = result.stderr or ""
     if result.returncode != 0:
         return None, stdout, stderr or f"non-zero exit status {result.returncode}"
+    cleaned = _strip_markdown_json_fences(stdout)
     try:
-        verdict = json.loads(stdout)
+        verdict = json.loads(cleaned)
     except Exception as exc:
         return None, stdout, str(exc)
     if not isinstance(verdict, dict):

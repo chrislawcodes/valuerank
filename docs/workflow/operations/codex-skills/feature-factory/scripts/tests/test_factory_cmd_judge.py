@@ -593,5 +593,86 @@ class FactoryJudgeTests(unittest.TestCase):
         self.assertIn("operator_id", uses[0])
 
 
+class ValidateVerdictMetadataTests(unittest.TestCase):
+    """Regression tests for $schema / $id / title tolerance in _validate_verdict.
+
+    Claude has been observed echoing JSON-Schema metadata fields ($schema,
+    $id) back into the verdict when the prompt appendix includes the full
+    schema. These fields have no semantic meaning; stripping them before
+    the extra-fields check prevents false-block schema_violation fallbacks.
+    """
+
+    def _valid_verdict_with(self, **extras: object) -> dict:
+        base = {
+            "judge": "completeness",
+            "model": "gpt-5.4-mini",
+            "verdict": "proceed",
+            "confidence": 3,
+            "reasoning": "placeholder reasoning long enough to pass the minimum-length check",
+            "evidence": [{"artifact": "spec", "section": "FR-1", "quote": "X"}],
+            "timestamp": "2026-04-19T00:00:00Z",
+        }
+        base.update(extras)
+        return base
+
+    def test_bare_valid_verdict_passes(self) -> None:
+        self.assertIsNone(JUDGE._validate_verdict(self._valid_verdict_with()))
+
+    def test_schema_metadata_field_tolerated(self) -> None:
+        v = self._valid_verdict_with(**{"$schema": "http://json-schema.org/draft-07/schema#"})
+        self.assertIsNone(JUDGE._validate_verdict(v))
+        self.assertNotIn("$schema", v)  # stripped in place
+
+    def test_id_and_title_tolerated(self) -> None:
+        v = self._valid_verdict_with(**{"$id": "x", "title": "y", "description": "z"})
+        self.assertIsNone(JUDGE._validate_verdict(v))
+
+    def test_non_metadata_extra_still_rejected(self) -> None:
+        v = self._valid_verdict_with(verdict_extra_field="nope")
+        err = JUDGE._validate_verdict(v)
+        self.assertIsNotNone(err)
+        self.assertIn("verdict_extra_field", err)
+
+
+class StripMarkdownJsonFencesTests(unittest.TestCase):
+    """Regression tests for the post-migration fix to _strip_markdown_json_fences.
+
+    Claude (and some Codex CLI output modes) wrap JSON verdicts in
+    ```json ... ``` markdown fences by default. The first production run
+    of the migration script hit 2/6 schema_violation fallbacks purely
+    because the fence wrapping was not being stripped before json.loads.
+    """
+
+    def test_plain_json_passes_through(self) -> None:
+        raw = '{"verdict":"proceed","confidence":3}'
+        self.assertEqual(JUDGE._strip_markdown_json_fences(raw), raw)
+
+    def test_json_fence_with_language_tag_stripped(self) -> None:
+        raw = '```json\n{"verdict":"block","confidence":4}\n```'
+        stripped = JUDGE._strip_markdown_json_fences(raw)
+        self.assertEqual(stripped, '{"verdict":"block","confidence":4}')
+        # And the parser can now load it.
+        self.assertEqual(json.loads(stripped)["verdict"], "block")
+
+    def test_json_fence_without_language_tag_stripped(self) -> None:
+        raw = '```\n{"verdict":"proceed","confidence":2}\n```'
+        stripped = JUDGE._strip_markdown_json_fences(raw)
+        self.assertEqual(stripped, '{"verdict":"proceed","confidence":2}')
+
+    def test_surrounding_whitespace_stripped(self) -> None:
+        raw = '   \n\n```json\n{"verdict":"proceed","confidence":5}\n```\n\n  '
+        stripped = JUDGE._strip_markdown_json_fences(raw)
+        self.assertEqual(stripped, '{"verdict":"proceed","confidence":5}')
+
+    def test_empty_input_returns_empty(self) -> None:
+        self.assertEqual(JUDGE._strip_markdown_json_fences(""), "")
+
+    def test_only_opening_fence_still_stripped(self) -> None:
+        # Malformed but we handle it: strip the opening fence even if no closer.
+        raw = '```json\n{"verdict":"proceed"}'
+        stripped = JUDGE._strip_markdown_json_fences(raw)
+        self.assertEqual(stripped, '{"verdict":"proceed"}')
+
+
 if __name__ == "__main__":
     unittest.main()
