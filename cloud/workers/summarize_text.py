@@ -5,7 +5,23 @@ import re
 from typing import Any
 
 
-FILLER_WORDS_PATTERN = re.compile(r"\b(?:their|the|a|an)\b", re.IGNORECASE)
+# Words that may appear in a model's scale-label answer but are not present in
+# the canonical scale label, so they should be stripped during relaxed matching.
+#
+# - Articles/possessives (their|the|a|an): models often add or drop these.
+# - Level preset words (negligible|minimal|moderate|substantial|full): the
+#   canonical scale labels are level-agnostic by design — the level word
+#   appears in the prompt sentence ("One program provides citizens with
+#   negligible freedom...") but NOT in the scale-line label
+#   ("Strongly support the program that provides citizens with freedom in
+#   how they live"). Some models echo the level back into their answer
+#   ("...with full freedom in how they live"), which broke exact match.
+#   None of the value-statement bodies across our domains contain these
+#   words, so stripping them is safe.
+FILLER_WORDS_PATTERN = re.compile(
+    r"\b(?:their|the|a|an|negligible|minimal|moderate|substantial|full)\b",
+    re.IGNORECASE,
+)
 
 
 def normalize_for_match(text: str) -> str:

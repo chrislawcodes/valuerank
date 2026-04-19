@@ -161,6 +161,24 @@ export function parseJobChoiceStrengthFromText(text: string): DecisionStrength |
   return null;
 }
 
+/**
+ * Words that may appear in a model's scale-label answer but are not present in
+ * the canonical scale label, so they should be tolerated when matching.
+ *
+ * Mirrors the Python `FILLER_WORDS_PATTERN` in workers/summarize_text.py.
+ *
+ * Includes the 5 level preset words (negligible|minimal|moderate|substantial|full)
+ * because scale labels are level-agnostic by design — the level word appears in
+ * the prompt sentence but not in the scale label. Some models echo the level
+ * back into their answer ("...with full freedom in how they live"), which would
+ * otherwise break substring matching.
+ */
+const LEVEL_TOLERANT_FILLER_PATTERN = /\b(?:negligible|minimal|moderate|substantial|full)\b/gi;
+
+function stripLevelWords(normalized: string): string {
+  return normalized.replace(LEVEL_TOLERANT_FILLER_PATTERN, ' ').replace(/\s+/g, ' ').trim();
+}
+
 export function resolveValueKeyFromText(
   text: string,
   valueStatements: readonly ValueStatementEntry[] | undefined,
@@ -174,13 +192,21 @@ export function resolveValueKeyFromText(
   if (normalized.length === 0) {
     return null;
   }
+  const normalizedStripped = stripLevelWords(normalized);
 
   const prefix = labelPrefix ?? '';
   let resolved: DomainAnalysisValueKey | null = null;
   for (const entry of valueStatements) {
     const valueKey = toPascalCaseKey(entry.token) as DomainAnalysisValueKey;
     const label = normalizeJobChoiceLabelText(labelFromBody(entry.body, prefix));
-    if (!label || !normalized.includes(label)) {
+    if (!label) {
+      continue;
+    }
+    // Try exact substring first; fall back to a level-word-stripped match so
+    // responses like "with full freedom in how they live" still resolve to a
+    // label that reads "with freedom in how they live".
+    const matched = normalized.includes(label) || normalizedStripped.includes(label);
+    if (!matched) {
       continue;
     }
     if (resolved !== null && resolved !== valueKey) {
