@@ -1,182 +1,31 @@
-import { gql } from 'urql';
+import type {
+  ModelsConsistencyQuery as GeneratedModelsConsistencyQuery,
+  ModelsConsistencyQueryVariables as GeneratedModelsConsistencyQueryVariables,
+} from '../../generated/graphql';
 
-export type ModelsConsistencyPerScenario = {
-  scenarioId: string;
-  matches: number;
-  trials: number;
-  p: number;
-  ciLow: number;
-  ciHigh: number;
-};
+// ============================================================================
+// QUERY DOCUMENT
+// ============================================================================
 
-export type ModelsConsistencyPerDomain = {
-  domainId: string;
-  domainName: string;
-  value: number;
-  ciLow: number;
-  ciHigh: number;
-  scenariosMeasured: number;
-};
+export { ModelsConsistencyDocument as MODELS_CONSISTENCY_QUERY } from '../../generated/graphql';
 
-export type ModelsConsistencyPerCondition = {
-  scenarioId: string;
-  netPressureRank: number;
-  winRate: number;
-  matches: number;
-  trials: number;
-};
+// ============================================================================
+// TYPES — all derived from the codegen-generated query shape
+// ============================================================================
 
-export type ModelsConsistencyPerPair = {
-  domainId: string;
-  valueKey: string;
-  rho: number | null;
-  pValue: number | null;
-  coherent: boolean;
-  determinate: boolean;
-  targetAnalysisRunId: string | null;
-  targetCompanionRunId: string | null;
-  primaryConditionIds: string[];
-  companionConditionIds: string[];
-  perCondition: ModelsConsistencyPerCondition[];
-};
+export type ModelsConsistencyQueryResult = GeneratedModelsConsistencyQuery;
+export type ModelsConsistencyQueryVariables = GeneratedModelsConsistencyQueryVariables;
 
-export type ModelsConsistencyRepeatability = {
-  value: number;
-  ciLow: number;
-  ciHigh: number;
-  withinScenarioSd: number;
-  betweenScenarioSd: number;
-  scenariosMeasured: number;
-  perDomain: ModelsConsistencyPerDomain[];
-  perScenario: ModelsConsistencyPerScenario[];
-};
+export type ModelsConsistencyResult = GeneratedModelsConsistencyQuery['modelsConsistency'];
+export type ModelsConsistencyModel = ModelsConsistencyResult['models'][number];
+export type ModelsConsistencyInsufficient = ModelsConsistencyResult['insufficient'][number];
 
-export type ModelsConsistencyCoherence = {
-  value: number;
-  coherentPairs: number;
-  determinatePairs: number;
-  indeterminatePairs: number;
-  perPair: ModelsConsistencyPerPair[];
-};
+export type ModelsConsistencyRepeatability = ModelsConsistencyModel['repeatability'];
+export type ModelsConsistencyPerDomain = ModelsConsistencyRepeatability['perDomain'][number];
+export type ModelsConsistencyPerScenario = ModelsConsistencyRepeatability['perScenario'][number];
 
-export type ModelsConsistencyOrderEffect = {
-  samePct: number;
-  flippedPct: number;
-  noisyPct: number;
-  notApplicable: boolean;
-};
+export type ModelsConsistencyCoherence = ModelsConsistencyModel['coherence'];
+export type ModelsConsistencyPerPair = ModelsConsistencyCoherence['perPair'][number];
+export type ModelsConsistencyPerCondition = ModelsConsistencyPerPair['perCondition'][number];
 
-export type ModelsConsistencyModel = {
-  modelId: string;
-  label: string;
-  providerName: string;
-  repeatability: ModelsConsistencyRepeatability;
-  coherence: ModelsConsistencyCoherence;
-  orderEffect: ModelsConsistencyOrderEffect;
-};
-
-export type ModelsConsistencyInsufficient = {
-  modelId: string;
-  label: string;
-  providerName: string;
-  reason: 'no-repeat-coverage' | 'invalid-summary-shape' | 'below-min-scenarios';
-};
-
-export type ModelsConsistencyQueryResult = {
-  modelsConsistency: {
-    models: ModelsConsistencyModel[];
-    insufficient: ModelsConsistencyInsufficient[];
-  };
-};
-
-export type ModelsConsistencyQueryVariables = {
-  domainId?: string | null;
-  providerId?: string | null;
-  minScenarios?: number | null;
-  signature: string;
-};
-
-export const MODELS_CONSISTENCY_QUERY = gql`
-  query ModelsConsistency(
-    $domainId: ID
-    $providerId: ID
-    $minScenarios: Int
-    $signature: String!
-  ) {
-    modelsConsistency(
-      domainId: $domainId
-      providerId: $providerId
-      minScenarios: $minScenarios
-      signature: $signature
-    ) {
-      models {
-        modelId
-        label
-        providerName
-        repeatability {
-          value
-          ciLow
-          ciHigh
-          withinScenarioSd
-          betweenScenarioSd
-          scenariosMeasured
-          perDomain {
-            domainId
-            domainName
-            value
-            ciLow
-            ciHigh
-            scenariosMeasured
-          }
-          perScenario {
-            scenarioId
-            matches
-            trials
-            p
-            ciLow
-            ciHigh
-          }
-        }
-        coherence {
-          value
-          coherentPairs
-          determinatePairs
-          indeterminatePairs
-          perPair {
-            domainId
-            valueKey
-            rho
-            pValue
-            coherent
-            determinate
-            targetAnalysisRunId
-            targetCompanionRunId
-            primaryConditionIds
-            companionConditionIds
-            perCondition {
-              scenarioId
-              netPressureRank
-              winRate
-              matches
-              trials
-            }
-          }
-        }
-        orderEffect {
-          samePct
-          flippedPct
-          noisyPct
-          notApplicable
-        }
-      }
-      insufficient {
-        modelId
-        label
-        providerName
-        reason
-      }
-    }
-  }
-`;
-
-export { MODELS_CONSISTENCY_QUERY as ModelsConsistencyDocument };
+export type ModelsConsistencyOrderEffect = ModelsConsistencyModel['orderEffect'];

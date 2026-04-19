@@ -274,6 +274,15 @@ export type ClusterPairFaultLines = {
   faultLines: Array<ValueFaultLine>;
 };
 
+export type Coherence = {
+  __typename?: 'Coherence';
+  coherentPairs: Scalars['Int']['output'];
+  determinatePairs: Scalars['Int']['output'];
+  indeterminatePairs: Scalars['Int']['output'];
+  perPair: Array<ConsistencyPerPair>;
+  value: Scalars['Float']['output'];
+};
+
 /** A recent job completion event */
 export type CompletionEvent = {
   __typename?: 'CompletionEvent';
@@ -287,6 +296,50 @@ export type CompletionEvent = {
   scenarioId: Scalars['String']['output'];
   /** Whether the probe succeeded */
   success: Scalars['Boolean']['output'];
+};
+
+export type ConsistencyPerCondition = {
+  __typename?: 'ConsistencyPerCondition';
+  matches: Scalars['Int']['output'];
+  netPressureRank: Scalars['Int']['output'];
+  scenarioId: Scalars['String']['output'];
+  trials: Scalars['Int']['output'];
+  winRate: Scalars['Float']['output'];
+};
+
+export type ConsistencyPerDomain = {
+  __typename?: 'ConsistencyPerDomain';
+  ciHigh: Scalars['Float']['output'];
+  ciLow: Scalars['Float']['output'];
+  domainId: Scalars['String']['output'];
+  domainName: Scalars['String']['output'];
+  scenariosMeasured: Scalars['Int']['output'];
+  value: Scalars['Float']['output'];
+};
+
+export type ConsistencyPerPair = {
+  __typename?: 'ConsistencyPerPair';
+  coherent: Scalars['Boolean']['output'];
+  companionConditionIds: Array<Scalars['String']['output']>;
+  determinate: Scalars['Boolean']['output'];
+  domainId: Scalars['String']['output'];
+  pValue?: Maybe<Scalars['Float']['output']>;
+  perCondition: Array<ConsistencyPerCondition>;
+  primaryConditionIds: Array<Scalars['String']['output']>;
+  rho?: Maybe<Scalars['Float']['output']>;
+  targetAnalysisRunId?: Maybe<Scalars['String']['output']>;
+  targetCompanionRunId?: Maybe<Scalars['String']['output']>;
+  valueKey: Scalars['String']['output'];
+};
+
+export type ConsistencyPerScenario = {
+  __typename?: 'ConsistencyPerScenario';
+  ciHigh: Scalars['Float']['output'];
+  ciLow: Scalars['Float']['output'];
+  matches: Scalars['Int']['output'];
+  p: Scalars['Float']['output'];
+  scenarioId: Scalars['String']['output'];
+  trials: Scalars['Int']['output'];
 };
 
 /** A scenario with high disagreement across models */
@@ -1139,6 +1192,14 @@ export type ForkDefinitionInput = {
   parentId: Scalars['String']['input'];
 };
 
+export type InsufficientModel = {
+  __typename?: 'InsufficientModel';
+  label: Scalars['String']['output'];
+  modelId: Scalars['String']['output'];
+  providerName: Scalars['String']['output'];
+  reason: Scalars['String']['output'];
+};
+
 /** Job counts for a specific job type */
 export type JobTypeStatus = {
   __typename?: 'JobTypeStatus';
@@ -1246,6 +1307,16 @@ export type LlmProvider = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
+export type ModelConsistency = {
+  __typename?: 'ModelConsistency';
+  coherence: Coherence;
+  label: Scalars['String']['output'];
+  modelId: Scalars['String']['output'];
+  orderEffect: OrderEffect;
+  providerName: Scalars['String']['output'];
+  repeatability: Repeatability;
+};
+
 /** Cost estimate for a single model in a run */
 export type ModelCostEstimate = {
   __typename?: 'ModelCostEstimate';
@@ -1321,6 +1392,12 @@ export type ModelsAnalysisValueResult = {
   pooledWinRate?: Maybe<Scalars['Float']['output']>;
   stabilityScore?: Maybe<Scalars['Float']['output']>;
   valueKey: Scalars['String']['output'];
+};
+
+export type ModelsConsistencyResult = {
+  __typename?: 'ModelsConsistencyResult';
+  insufficient: Array<InsufficientModel>;
+  models: Array<ModelConsistency>;
 };
 
 export type Mutation = {
@@ -2021,6 +2098,14 @@ export type MutationUpdateValueStatementArgs = {
   input: UpdateValueStatementInput;
 };
 
+export type OrderEffect = {
+  __typename?: 'OrderEffect';
+  flippedPct: Scalars['Float']['output'];
+  noisyPct: Scalars['Float']['output'];
+  notApplicable: Scalars['Boolean']['output'];
+  samePct: Scalars['Float']['output'];
+};
+
 /** A reusable preamble that can be prepended to scenarios */
 export type Preamble = {
   __typename?: 'Preamble';
@@ -2278,6 +2363,7 @@ export type Query = {
   /** Get token statistics for specific models. Useful for understanding prediction quality. */
   modelTokenStats: Array<ModelTokenStats>;
   modelsAnalysis: ModelsAnalysisResult;
+  modelsConsistency: ModelsConsistencyResult;
   /** Get a specific preamble by ID */
   preamble?: Maybe<Preamble>;
   /** List all preambles */
@@ -2669,6 +2755,14 @@ export type QueryModelsAnalysisArgs = {
 };
 
 
+export type QueryModelsConsistencyArgs = {
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  minScenarios?: InputMaybe<Scalars['Int']['input']>;
+  providerId?: InputMaybe<Scalars['ID']['input']>;
+  signature: Scalars['String']['input'];
+};
+
+
 export type QueryPreambleArgs = {
   id: Scalars['ID']['input'];
 };
@@ -2893,6 +2987,18 @@ export type ReliabilitySummary = {
   __typename?: 'ReliabilitySummary';
   /** Per-model baseline noise and reliability summary */
   perModel: Scalars['JSON']['output'];
+};
+
+export type Repeatability = {
+  __typename?: 'Repeatability';
+  betweenScenarioSd: Scalars['Float']['output'];
+  ciHigh: Scalars['Float']['output'];
+  ciLow: Scalars['Float']['output'];
+  perDomain: Array<ConsistencyPerDomain>;
+  perScenario: Array<ConsistencyPerScenario>;
+  scenariosMeasured: Scalars['Int']['output'];
+  value: Scalars['Float']['output'];
+  withinScenarioSd: Scalars['Float']['output'];
 };
 
 /** Result of restarting summarization for a run */
@@ -4038,6 +4144,16 @@ export type ModelsAnalysisQueryVariables = Exact<{
 
 
 export type ModelsAnalysisQuery = { __typename?: 'Query', modelsAnalysis: { __typename?: 'ModelsAnalysisResult', models: Array<{ __typename?: 'ModelsAnalysisModelResult', modelId: string, label: string, values: Array<{ __typename?: 'ModelsAnalysisValueResult', valueKey: string, pooledWinRate?: number | null, stabilityScore?: number | null, eligibleDomainCount: number, domains: Array<{ __typename?: 'ModelsAnalysisDomainBreakdown', domainId: string, domainName: string, winRate: number, evidenceWeight?: number | null }> }> }> } };
+
+export type ModelsConsistencyQueryVariables = Exact<{
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  providerId?: InputMaybe<Scalars['ID']['input']>;
+  minScenarios?: InputMaybe<Scalars['Int']['input']>;
+  signature: Scalars['String']['input'];
+}>;
+
+
+export type ModelsConsistencyQuery = { __typename?: 'Query', modelsConsistency: { __typename?: 'ModelsConsistencyResult', models: Array<{ __typename?: 'ModelConsistency', modelId: string, label: string, providerName: string, repeatability: { __typename?: 'Repeatability', value: number, ciLow: number, ciHigh: number, withinScenarioSd: number, betweenScenarioSd: number, scenariosMeasured: number, perDomain: Array<{ __typename?: 'ConsistencyPerDomain', domainId: string, domainName: string, value: number, ciLow: number, ciHigh: number, scenariosMeasured: number }>, perScenario: Array<{ __typename?: 'ConsistencyPerScenario', scenarioId: string, matches: number, trials: number, p: number, ciLow: number, ciHigh: number }> }, coherence: { __typename?: 'Coherence', value: number, coherentPairs: number, determinatePairs: number, indeterminatePairs: number, perPair: Array<{ __typename?: 'ConsistencyPerPair', domainId: string, valueKey: string, rho?: number | null, pValue?: number | null, coherent: boolean, determinate: boolean, targetAnalysisRunId?: string | null, targetCompanionRunId?: string | null, primaryConditionIds: Array<string>, companionConditionIds: Array<string>, perCondition: Array<{ __typename?: 'ConsistencyPerCondition', scenarioId: string, netPressureRank: number, winRate: number, matches: number, trials: number }> }> }, orderEffect: { __typename?: 'OrderEffect', samePct: number, flippedPct: number, noisyPct: number, notApplicable: boolean } }>, insufficient: Array<{ __typename?: 'InsufficientModel', modelId: string, label: string, providerName: string, reason: string }> } };
 
 export type CreatePairedVignetteMutationVariables = Exact<{
   input: CreatePairedVignetteInput;
@@ -6202,6 +6318,87 @@ export const ModelsAnalysisDocument = gql`
 
 export function useModelsAnalysisQuery(options?: Omit<Urql.UseQueryArgs<ModelsAnalysisQueryVariables>, 'query'>) {
   return Urql.useQuery<ModelsAnalysisQuery, ModelsAnalysisQueryVariables>({ query: ModelsAnalysisDocument, ...options });
+};
+export const ModelsConsistencyDocument = gql`
+    query ModelsConsistency($domainId: ID, $providerId: ID, $minScenarios: Int, $signature: String!) {
+  modelsConsistency(
+    domainId: $domainId
+    providerId: $providerId
+    minScenarios: $minScenarios
+    signature: $signature
+  ) {
+    models {
+      modelId
+      label
+      providerName
+      repeatability {
+        value
+        ciLow
+        ciHigh
+        withinScenarioSd
+        betweenScenarioSd
+        scenariosMeasured
+        perDomain {
+          domainId
+          domainName
+          value
+          ciLow
+          ciHigh
+          scenariosMeasured
+        }
+        perScenario {
+          scenarioId
+          matches
+          trials
+          p
+          ciLow
+          ciHigh
+        }
+      }
+      coherence {
+        value
+        coherentPairs
+        determinatePairs
+        indeterminatePairs
+        perPair {
+          domainId
+          valueKey
+          rho
+          pValue
+          coherent
+          determinate
+          targetAnalysisRunId
+          targetCompanionRunId
+          primaryConditionIds
+          companionConditionIds
+          perCondition {
+            scenarioId
+            netPressureRank
+            winRate
+            matches
+            trials
+          }
+        }
+      }
+      orderEffect {
+        samePct
+        flippedPct
+        noisyPct
+        notApplicable
+      }
+    }
+    insufficient {
+      modelId
+      label
+      providerName
+      reason
+    }
+  }
+}
+    `;
+
+export function useModelsConsistencyQuery(options: Omit<Urql.UseQueryArgs<ModelsConsistencyQueryVariables>, 'query'>) {
+  return Urql.useQuery<ModelsConsistencyQuery, ModelsConsistencyQueryVariables>({ query: ModelsConsistencyDocument, ...options });
 };
 export const CreatePairedVignetteDocument = gql`
     mutation CreatePairedVignette($input: CreatePairedVignetteInput!) {
