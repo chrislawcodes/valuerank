@@ -1,0 +1,11 @@
+## Findings
+1. **Medium: signature lookup failures are silently converted into a fallback report.** In `cloud/apps/web/src/pages/ModelsConsistency.tsx`, `signatureError` is never surfaced. If `DOMAIN_AVAILABLE_SIGNATURES_QUERY` fails, the page falls back to `DEFAULT_SIGNATURE` and continues rendering, which can show a report for the wrong batch instead of telling the user the signature lookup broke.
+
+2. **Medium: switching to `All domains` keeps the prior domain’s signature filter.** In `cloud/apps/web/src/pages/ModelsConsistency.tsx`, `handleDomainChange(null)` writes `domainId=all` but preserves `signatureParam` when it exists. Because the backend query still filters by `signature`, the “all domains” view can remain pinned to a domain-specific batch from the previous selection instead of resetting to a valid cross-domain batch.
+
+3. **[UNVERIFIED] Medium: transcript drilldown links hardcode `repeatPattern: 'noisy'`.** Both `cloud/apps/web/src/components/models/ConsistencyDrill.tsx` and `cloud/apps/web/src/components/models/ConsistencyTable.tsx` build transcript URLs with a fixed `repeatPattern` even though the linked data does not provide a repeat-pattern value. If the transcripts page treats that param literally, these links can land on an unrelated or empty transcript view.
+
+## Residual Risks
+- The page still depends on backend conventions for `signature`, `repeatPattern`, and paired run IDs. If those meanings drift, the links can become misleading without a compile-time failure.
+- `providerId`, `minScenarios`, and the selected model are local UI state only. Reloads and shared links will not reconstruct the exact same view.
+- The insufficient-coverage footer omits model IDs and only shows label/provider, so duplicate labels from the same provider can be hard to disambiguate.

@@ -1,0 +1,1148 @@
+diff --git a/cloud/apps/web/src/api/operations/modelsConsistency.graphql b/cloud/apps/web/src/api/operations/modelsConsistency.graphql
+new file mode 100644
+index 00000000..d16e7f75
+--- /dev/null
++++ b/cloud/apps/web/src/api/operations/modelsConsistency.graphql
+@@ -0,0 +1,80 @@
++query ModelsConsistency(
++  $domainId: ID
++  $providerId: ID
++  $minScenarios: Int
++  $signature: String!
++) {
++  modelsConsistency(
++    domainId: $domainId
++    providerId: $providerId
++    minScenarios: $minScenarios
++    signature: $signature
++  ) {
++    models {
++      modelId
++      label
++      providerName
++      repeatability {
++        value
++        ciLow
++        ciHigh
++        withinScenarioSd
++        betweenScenarioSd
++        scenariosMeasured
++        perDomain {
++          domainId
++          domainName
++          value
++          ciLow
++          ciHigh
++          scenariosMeasured
++        }
++        perScenario {
++          scenarioId
++          matches
++          trials
++          p
++          ciLow
++          ciHigh
++        }
++      }
++      coherence {
++        value
++        coherentPairs
++        determinatePairs
++        indeterminatePairs
++        perPair {
++          domainId
++          valueKey
++          rho
++          pValue
++          coherent
++          determinate
++          targetAnalysisRunId
++          targetCompanionRunId
++          primaryConditionIds
++          companionConditionIds
++          perCondition {
++            scenarioId
++            netPressureRank
++            winRate
++            matches
++            trials
++          }
++        }
++      }
++      orderEffect {
++        samePct
++        flippedPct
++        noisyPct
++        notApplicable
++      }
++    }
++    insufficient {
++      modelId
++      label
++      providerName
++      reason
++    }
++  }
++}
+diff --git a/cloud/apps/web/src/api/operations/modelsConsistency.ts b/cloud/apps/web/src/api/operations/modelsConsistency.ts
+new file mode 100644
+index 00000000..e56c4288
+--- /dev/null
++++ b/cloud/apps/web/src/api/operations/modelsConsistency.ts
+@@ -0,0 +1,182 @@
++import { gql } from 'urql';
++
++export type ModelsConsistencyPerScenario = {
++  scenarioId: string;
++  matches: number;
++  trials: number;
++  p: number;
++  ciLow: number;
++  ciHigh: number;
++};
++
++export type ModelsConsistencyPerDomain = {
++  domainId: string;
++  domainName: string;
++  value: number;
++  ciLow: number;
++  ciHigh: number;
++  scenariosMeasured: number;
++};
++
++export type ModelsConsistencyPerCondition = {
++  scenarioId: string;
++  netPressureRank: number;
++  winRate: number;
++  matches: number;
++  trials: number;
++};
++
++export type ModelsConsistencyPerPair = {
++  domainId: string;
++  valueKey: string;
++  rho: number | null;
++  pValue: number | null;
++  coherent: boolean;
++  determinate: boolean;
++  targetAnalysisRunId: string | null;
++  targetCompanionRunId: string | null;
++  primaryConditionIds: string[];
++  companionConditionIds: string[];
++  perCondition: ModelsConsistencyPerCondition[];
++};
++
++export type ModelsConsistencyRepeatability = {
++  value: number;
++  ciLow: number;
++  ciHigh: number;
++  withinScenarioSd: number;
++  betweenScenarioSd: number;
++  scenariosMeasured: number;
++  perDomain: ModelsConsistencyPerDomain[];
++  perScenario: ModelsConsistencyPerScenario[];
++};
++
++export type ModelsConsistencyCoherence = {
++  value: number;
++  coherentPairs: number;
++  determinatePairs: number;
++  indeterminatePairs: number;
++  perPair: ModelsConsistencyPerPair[];
++};
++
++export type ModelsConsistencyOrderEffect = {
++  samePct: number;
++  flippedPct: number;
++  noisyPct: number;
++  notApplicable: boolean;
++};
++
++export type ModelsConsistencyModel = {
++  modelId: string;
++  label: string;
++  providerName: string;
++  repeatability: ModelsConsistencyRepeatability;
++  coherence: ModelsConsistencyCoherence;
++  orderEffect: ModelsConsistencyOrderEffect;
++};
++
++export type ModelsConsistencyInsufficient = {
++  modelId: string;
++  label: string;
++  providerName: string;
++  reason: 'no-repeat-coverage' | 'invalid-summary-shape' | 'below-min-scenarios';
++};
++
++export type ModelsConsistencyQueryResult = {
++  modelsConsistency: {
++    models: ModelsConsistencyModel[];
++    insufficient: ModelsConsistencyInsufficient[];
++  };
++};
++
++export type ModelsConsistencyQueryVariables = {
++  domainId?: string | null;
++  providerId?: string | null;
++  minScenarios?: number | null;
++  signature: string;
++};
++
++export const MODELS_CONSISTENCY_QUERY = gql`
++  query ModelsConsistency(
++    $domainId: ID
++    $providerId: ID
++    $minScenarios: Int
++    $signature: String!
++  ) {
++    modelsConsistency(
++      domainId: $domainId
++      providerId: $providerId
++      minScenarios: $minScenarios
++      signature: $signature
++    ) {
++      models {
++        modelId
++        label
++        providerName
++        repeatability {
++          value
++          ciLow
++          ciHigh
++          withinScenarioSd
++          betweenScenarioSd
++          scenariosMeasured
++          perDomain {
++            domainId
++            domainName
++            value
++            ciLow
++            ciHigh
++            scenariosMeasured
++          }
++          perScenario {
++            scenarioId
++            matches
++            trials
++            p
++            ciLow
++            ciHigh
++          }
++        }
++        coherence {
++          value
++          coherentPairs
++          determinatePairs
++          indeterminatePairs
++          perPair {
++            domainId
++            valueKey
++            rho
++            pValue
++            coherent
++            determinate
++            targetAnalysisRunId
++            targetCompanionRunId
++            primaryConditionIds
++            companionConditionIds
++            perCondition {
++              scenarioId
++              netPressureRank
++              winRate
++              matches
++              trials
++            }
++          }
++        }
++        orderEffect {
++          samePct
++          flippedPct
++          noisyPct
++          notApplicable
++        }
++      }
++      insufficient {
++        modelId
++        label
++        providerName
++        reason
++      }
++    }
++  }
++`;
++
++export { MODELS_CONSISTENCY_QUERY as ModelsConsistencyDocument };
+diff --git a/cloud/apps/web/src/components/models/ConsistencyDrill.tsx b/cloud/apps/web/src/components/models/ConsistencyDrill.tsx
+new file mode 100644
+index 00000000..94b72043
+--- /dev/null
++++ b/cloud/apps/web/src/components/models/ConsistencyDrill.tsx
+@@ -0,0 +1,112 @@
++import { Link } from 'react-router-dom';
++import { ANALYSIS_BASE_PATH, buildAnalysisTranscriptsPath } from '../../utils/analysisRouting';
++import type { ModelsConsistencyModel } from '../../api/operations/modelsConsistency';
++
++type Props = {
++  model: ModelsConsistencyModel;
++  domainId: string | null;
++  signature: string;
++};
++
++function pct(value: number): string {
++  return `${(value * 100).toFixed(1)}%`;
++}
++
++function regionLabel(repeatability: number, coherence: number): string {
++  if (repeatability >= 0.85 && coherence >= 0.8) return 'Reliable & follows pressure';
++  if (repeatability < 0.85 && coherence >= 0.8) return 'Follows pressure but jittery';
++  if (repeatability >= 0.85 && coherence < 0.8) return "Steady but doesn't follow pressure";
++  return 'Neither steady nor responsive';
++}
++
++function conditionMatrixUrl(args: { domainId: string; modelId: string; valueKey: string; signature: string }): string {
++  const params = new URLSearchParams({
++    domainId: args.domainId,
++    modelId: args.modelId,
++    valueKey: args.valueKey,
++    signature: args.signature,
++    scoreMethod: 'LOG_ODDS',
++  });
++  return `/domains/analysis/value-detail?${params.toString()}`;
++}
++
++type PerPair = ModelsConsistencyModel['coherence']['perPair'][number];
++
++function transcriptsUrlForPair(modelId: string, pair: PerPair): string | null {
++  if (pair.targetAnalysisRunId == null || pair.targetCompanionRunId == null) {
++    return null;
++  }
++  const params = new URLSearchParams({
++    modelId,
++    repeatPattern: 'noisy',
++    companionRunId: pair.targetCompanionRunId,
++    primaryConditionIds: pair.primaryConditionIds.join(','),
++    companionConditionIds: pair.companionConditionIds.join(','),
++  });
++  return buildAnalysisTranscriptsPath(ANALYSIS_BASE_PATH, pair.targetAnalysisRunId, params);
++}
++
++export function ConsistencyDrill({ model, domainId, signature }: Props) {
++  const headline = regionLabel(model.repeatability.value, model.coherence.value);
++
++  return (
++    <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
++      <div className="flex flex-wrap items-start justify-between gap-3">
++        <div>
++          <h2 className="text-lg font-semibold text-gray-900">{model.label}</h2>
++          <p className="text-sm text-gray-600">{model.providerName} - {headline}</p>
++          <p className="mt-1 text-sm text-gray-600">
++            This model is {headline.toLowerCase()}. That means its answers are {model.repeatability.value >= 0.85 ? 'fairly steady' : 'less steady'} and its response to pressure is {model.coherence.value >= 0.8 ? 'usually lawful' : 'often weak'}.
++          </p>
++        </div>
++      </div>
++
++      <div className="mt-4 grid gap-4 md:grid-cols-3">
++        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
++          <div className="text-sm font-medium text-gray-900">Repeatability by domain</div>
++          <div className="mt-2 space-y-2 text-sm text-gray-700">
++            {model.repeatability.perDomain.map((domain) => (
++              <div key={domain.domainId} className="flex items-center justify-between gap-3">
++                <span>{domain.domainName}</span>
++                <span>{pct(domain.value)} ± {pct((domain.ciHigh - domain.ciLow) / 2)} ({domain.scenariosMeasured})</span>
++              </div>
++            ))}
++          </div>
++        </div>
++        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 md:col-span-2">
++          <div className="text-sm font-medium text-gray-900">Coherence chips</div>
++          <div className="mt-3 flex flex-wrap gap-2">
++            {model.coherence.perPair.map((pair) => {
++              const pairTranscriptsUrl = transcriptsUrlForPair(model.modelId, pair);
++              const resolvedDomainId = pair.domainId || domainId;
++              return (
++                <div key={`${pair.domainId}:${pair.valueKey}`} className={`rounded-full border px-3 py-1 text-xs ${pair.coherent ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : pair.determinate ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-gray-200 bg-gray-100 text-gray-600'}`}>
++                  <span>{pair.valueKey}: ρ {pair.rho == null ? '—' : pair.rho.toFixed(2)}, p {pair.pValue == null ? '—' : pair.pValue.toFixed(3)} {pair.coherent ? '✓' : pair.determinate ? '✗' : 'indeterminate'}</span>
++                  {resolvedDomainId != null && (
++                    <Link
++                      to={conditionMatrixUrl({ domainId: resolvedDomainId, modelId: model.modelId, valueKey: pair.valueKey, signature })}
++                      className="ml-2 font-medium text-teal-700 hover:underline"
++                    >
++                      condition matrix →
++                    </Link>
++                  )}
++                  {pairTranscriptsUrl != null && (
++                    <Link
++                      to={pairTranscriptsUrl}
++                      className="ml-2 font-medium text-teal-700 hover:underline"
++                    >
++                      transcripts →
++                    </Link>
++                  )}
++                </div>
++              );
++            })}
++          </div>
++          <div className="mt-3 text-xs text-gray-600">
++            Order effect: {model.orderEffect.notApplicable ? 'n/a' : `${pct(model.orderEffect.samePct)} same, ${pct(model.orderEffect.flippedPct)} flipped, ${pct(model.orderEffect.noisyPct)} noisy`}
++          </div>
++        </div>
++      </div>
++    </section>
++  );
++}
+diff --git a/cloud/apps/web/src/components/models/ConsistencyFilters.tsx b/cloud/apps/web/src/components/models/ConsistencyFilters.tsx
+new file mode 100644
+index 00000000..8d6841cf
+--- /dev/null
++++ b/cloud/apps/web/src/components/models/ConsistencyFilters.tsx
+@@ -0,0 +1,64 @@
++import { Select } from '../ui/Select';
++
++type Option = { value: string; label: string };
++
++type ConsistencyFiltersProps = {
++  domainId: string | null;
++  providerId: string | null;
++  minScenarios: number;
++  domainOptions: Option[];
++  providerOptions: Option[];
++  onDomainChange: (value: string | null) => void;
++  onProviderChange: (value: string | null) => void;
++  onMinScenariosChange: (value: number) => void;
++};
++
++export function ConsistencyFilters({
++  domainId,
++  providerId,
++  minScenarios,
++  domainOptions,
++  providerOptions,
++  onDomainChange,
++  onProviderChange,
++  onMinScenariosChange,
++}: ConsistencyFiltersProps) {
++  return (
++    <section className="rounded-xl border border-gray-200 bg-white p-4">
++      <div className="flex flex-wrap gap-4">
++        <div className="min-w-[220px] flex-1">
++          <Select
++            label="Domain"
++            value={domainId ?? 'all'}
++            onChange={(value) => onDomainChange(value === 'all' ? null : value)}
++            options={[{ value: 'all', label: 'All domains' }, ...domainOptions]}
++          />
++        </div>
++        <div className="min-w-[220px] flex-1">
++          <Select
++            label="Provider"
++            value={providerId ?? 'all'}
++            onChange={(value) => onProviderChange(value === 'all' ? null : value)}
++            options={[{ value: 'all', label: 'All providers' }, ...providerOptions]}
++          />
++        </div>
++        <label className="min-w-[120px] flex-1">
++          <span className="mb-1 block text-sm font-medium text-gray-700">Min n</span>
++          <input
++            type="number"
++            min={1}
++            step={1}
++            value={minScenarios}
++            onChange={(event) => {
++              // GraphQL $minScenarios is Int; coerce to a positive integer so
++              // fractional input (e.g. 5.5) does not produce a validation error.
++              const parsed = Number.parseInt(event.target.value, 10);
++              onMinScenariosChange(Number.isFinite(parsed) && parsed >= 1 ? parsed : 1);
++            }}
++            className="h-11 w-full rounded-lg border border-gray-300 px-3 text-sm text-gray-900 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
++          />
++        </label>
++      </div>
++    </section>
++  );
++}
+diff --git a/cloud/apps/web/src/components/models/ConsistencyScatter.tsx b/cloud/apps/web/src/components/models/ConsistencyScatter.tsx
+new file mode 100644
+index 00000000..508b4ce0
+--- /dev/null
++++ b/cloud/apps/web/src/components/models/ConsistencyScatter.tsx
+@@ -0,0 +1,145 @@
++import {
++  ReferenceLine,
++  ResponsiveContainer,
++  Scatter,
++  ScatterChart,
++  Tooltip,
++  XAxis,
++  YAxis,
++} from 'recharts';
++import type { ModelsConsistencyModel } from '../../api/operations/modelsConsistency';
++
++type ConsistencyScatterProps = {
++  models: ModelsConsistencyModel[];
++  selectedModelId: string | null;
++  onSelectModel: (modelId: string) => void;
++};
++
++type ScatterPoint = ModelsConsistencyModel & {
++  repeatabilityValue: number;
++  coherenceValue: number;
++  radius: number;
++};
++
++function formatPercent(value: number): string {
++  return `${(value * 100).toFixed(1)}%`;
++}
++
++function providerFill(providerName: string): string {
++  const palette = ['#0f766e', '#0ea5e9', '#7c3aed', '#d97706', '#dc2626', '#16a34a', '#4f46e5', '#0f172a'];
++  let hash = 0;
++  for (let index = 0; index < providerName.length; index += 1) {
++    hash = (hash * 31 + providerName.charCodeAt(index)) >>> 0;
++  }
++  return palette[hash % palette.length] ?? palette[0]!;
++}
++
++function regionLabel(x: number, y: number): string {
++  if (x >= 0.85 && y >= 0.8) return 'Reliable & follows pressure';
++  if (x < 0.85 && y >= 0.8) return 'Follows pressure but jittery';
++  if (x >= 0.85 && y < 0.8) return "Steady but doesn't follow pressure";
++  return 'Neither steady nor responsive';
++}
++
++function ScatterTooltip({
++  active,
++  payload,
++}: {
++  active?: boolean;
++  payload?: Array<{ payload: ScatterPoint }>;
++}) {
++  if (!active || payload == null || payload[0] == null) {
++    return null;
++  }
++
++  const point = payload[0].payload;
++
++  return (
++    <div className="rounded-lg border border-gray-200 bg-white p-3 text-xs shadow-lg">
++      <div className="font-medium text-gray-900">{point.label}</div>
++      <div className="mt-2 space-y-1 text-gray-600">
++        <div>Provider: {point.providerName}</div>
++        <div>Repeatability: {formatPercent(point.repeatabilityValue)}</div>
++        <div>Coherence: {formatPercent(point.coherenceValue)}</div>
++        <div>n scenarios: {point.repeatability.scenariosMeasured}</div>
++      </div>
++    </div>
++  );
++}
++
++export function ConsistencyScatter({ models, selectedModelId, onSelectModel }: ConsistencyScatterProps) {
++  const data: ScatterPoint[] = models.map((model) => ({
++    ...model,
++    repeatabilityValue: model.repeatability.value,
++    coherenceValue: model.coherence.value,
++    radius: Math.max(5, Math.min(14, 4 + Math.sqrt(model.repeatability.scenariosMeasured) * 1.7)),
++  }));
++
++  const quadrantLabels = new Set(data.map((point) => regionLabel(point.repeatabilityValue, point.coherenceValue)));
++  const homogeneity = quadrantLabels.size === 1;
++
++  return (
++    <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
++      <div className="mb-3 flex items-center justify-between gap-3">
++        <div>
++          <h2 className="text-lg font-semibold text-gray-900">Failure-mode map</h2>
++          <p className="text-sm text-gray-600">Repeatability on x, Coherence on y.</p>
++        </div>
++        {homogeneity && (
++          <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-800">
++            All models fall in the same quadrant.
++          </div>
++        )}
++      </div>
++      <div className="relative h-[420px]">
++        <div className="pointer-events-none absolute left-4 top-4 text-xs text-gray-500">High Coherence</div>
++        <div className="pointer-events-none absolute right-4 top-4 text-right text-xs text-gray-500">High Coherence</div>
++        <div className="pointer-events-none absolute left-4 bottom-4 text-xs text-gray-500">Low Coherence</div>
++        <div className="pointer-events-none absolute right-4 bottom-4 text-right text-xs text-gray-500">Low Coherence</div>
++        <div className="pointer-events-none absolute left-6 top-1/2 -translate-y-1/2 text-xs text-gray-500">Low Repeatability</div>
++        <div className="pointer-events-none absolute right-6 top-1/2 -translate-y-1/2 text-xs text-gray-500">High Repeatability</div>
++        <ResponsiveContainer width="100%" height="100%">
++          <ScatterChart margin={{ top: 28, right: 28, bottom: 28, left: 28 }}>
++            <XAxis type="number" dataKey="repeatabilityValue" domain={[0, 1]} name="Repeatability" tickCount={6} />
++            <YAxis type="number" dataKey="coherenceValue" domain={[0, 1]} name="Coherence" tickCount={6} />
++            <Tooltip content={<ScatterTooltip />} />
++            <ReferenceLine x={0.85} stroke="#9ca3af" strokeDasharray="4 4" />
++            <ReferenceLine y={0.8} stroke="#9ca3af" strokeDasharray="4 4" />
++            <Scatter data={data} shape={(props: { cx?: number; cy?: number; payload?: ScatterPoint }) => (
++              <g>
++                <circle
++                  cx={props.cx}
++                  cy={props.cy}
++                  r={props.payload?.radius ?? 6}
++                  fill={providerFill(props.payload?.providerName ?? '')}
++                  fillOpacity={0.22}
++                  stroke={props.payload?.modelId === selectedModelId ? '#111827' : providerFill(props.payload?.providerName ?? '')}
++                  strokeWidth={props.payload?.modelId === selectedModelId ? 3 : 1.5}
++                  onClick={(event) => {
++                    event.stopPropagation();
++                    if (props.payload?.modelId != null) {
++                      onSelectModel(props.payload.modelId);
++                    }
++                  }}
++                  style={{ cursor: 'pointer' }}
++                />
++              </g>
++            )} />
++          </ScatterChart>
++        </ResponsiveContainer>
++      </div>
++      <div className="mt-3 grid gap-2 text-xs text-gray-600 sm:grid-cols-2">
++        {[
++          'Reliable & follows pressure',
++          'Follows pressure but jittery',
++          "Steady but doesn't follow pressure",
++          'Neither steady nor responsive',
++        ].map((label) => (
++          <div key={label} className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
++            <div className="font-medium text-gray-900">{label}</div>
++          </div>
++        ))}
++      </div>
++    </section>
++  );
++}
+diff --git a/cloud/apps/web/src/components/models/ConsistencyTable.tsx b/cloud/apps/web/src/components/models/ConsistencyTable.tsx
+new file mode 100644
+index 00000000..8e329ca1
+--- /dev/null
++++ b/cloud/apps/web/src/components/models/ConsistencyTable.tsx
+@@ -0,0 +1,150 @@
++import { useMemo, useState } from 'react';
++import { Link } from 'react-router-dom';
++import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
++import { MetricDisclosure } from './MetricDisclosure';
++import type { ModelsConsistencyModel } from '../../api/operations/modelsConsistency';
++import { ANALYSIS_BASE_PATH, buildAnalysisTranscriptsPath } from '../../utils/analysisRouting';
++
++type SortKey = 'model' | 'provider' | 'repeatability' | 'coherence' | 'scenarios';
++
++type ConsistencyTableProps = {
++  models: ModelsConsistencyModel[];
++  onSelectModel: (modelId: string) => void;
++  selectedModelId: string | null;
++};
++
++function formatPercent(value: number): string {
++  return `${(value * 100).toFixed(1)}%`;
++}
++
++function sortValue(model: ModelsConsistencyModel, key: SortKey): number | string {
++  switch (key) {
++    case 'provider':
++      return model.providerName;
++    case 'repeatability':
++      return model.repeatability.value;
++    case 'coherence':
++      return model.coherence.value;
++    case 'scenarios':
++      return model.repeatability.scenariosMeasured;
++    case 'model':
++    default:
++      return model.label;
++  }
++}
++
++export function ConsistencyTable({ models, onSelectModel, selectedModelId }: ConsistencyTableProps) {
++  const [sortKey, setSortKey] = useState<SortKey>('repeatability');
++  const [direction, setDirection] = useState<'asc' | 'desc'>('desc');
++
++  const sorted = useMemo(() => {
++    return [...models].sort((left, right) => {
++      const a = sortValue(left, sortKey);
++      const b = sortValue(right, sortKey);
++      const delta = typeof a === 'number' && typeof b === 'number' ? a - b : String(a).localeCompare(String(b));
++      return direction === 'asc' ? delta : -delta;
++    });
++  }, [direction, models, sortKey]);
++
++  const toggle = (next: SortKey) => {
++    if (next === sortKey) {
++      setDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
++      return;
++    }
++    setSortKey(next);
++    setDirection(next === 'model' || next === 'provider' ? 'asc' : 'desc');
++  };
++
++  return (
++    <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
++      <div className="mb-3 flex items-center justify-between gap-3">
++        <div>
++          <h2 className="text-lg font-semibold text-gray-900">Model ranking</h2>
++          <p className="text-sm text-gray-600">Click a header to sort. Click a row to open the drill-down.</p>
++        </div>
++      </div>
++      <Table variant="bordered">
++        <TableHeader variant="bordered">
++          <TableRow>
++            {[
++              ['model', 'Model'],
++              ['provider', 'Provider'],
++              ['repeatability', 'Repeatability'],
++              ['coherence', 'Coherence'],
++              ['scenarios', 'n scenarios'],
++            ].map(([key, label]) => (
++              <TableHead
++                key={key}
++                className="cursor-pointer select-none"
++                onClick={() => toggle(key as SortKey)}
++              >
++                {label}
++              </TableHead>
++            ))}
++          </TableRow>
++        </TableHeader>
++        <TableBody>
++          {sorted.map((model) => (
++            <TableRow
++              key={model.modelId}
++              hoverable
++              className={model.modelId === selectedModelId ? 'bg-teal-50' : 'cursor-pointer'}
++              onClick={() => onSelectModel(model.modelId)}
++            >
++              <TableCell className="font-medium text-gray-900">{model.label}</TableCell>
++              <TableCell>{model.providerName}</TableCell>
++              <TableCell>
++                <MetricDisclosure
++                  title="Repeatability"
++                  summary={`${formatPercent(model.repeatability.value)} ± ${formatPercent((model.repeatability.ciHigh - model.repeatability.ciLow) / 2)}`}
++                  definition="Repeatability asks whether the model gives the same answer when we ask the same question again in the same vignette."
++                  formula="Repeatability = random-effects pooled match rate from scenario Wilson intervals."
++                  rows={model.repeatability.perScenario}
++                  rowLabel={(row) => row.scenarioId}
++                  renderRow={(row) => `${row.scenarioId} - ${row.matches}/${row.trials} (${formatPercent(row.p)})`}
++                  renderRowDetail={(row) => `Wilson CI: ${formatPercent(row.ciLow)} to ${formatPercent(row.ciHigh)}.`}
++                />
++              </TableCell>
++              <TableCell>
++                <MetricDisclosure
++                  title="Coherence"
++                  summary={`${model.coherence.coherentPairs} / ${model.coherence.determinatePairs} pairs`}
++                  definition="Coherence asks whether win rate rises as pressure to favor a value rises."
++                  formula="Coherence = coherent pairs / determinate pairs, where coherent means rho >= 0.8 and p < 0.05."
++                  rows={model.coherence.perPair}
++                  rowLabel={(row) => `${row.domainId} / ${row.valueKey}`}
++                  renderRow={(row) => `${row.valueKey} - ρ ${row.rho == null ? '—' : row.rho.toFixed(3)}; p ${row.pValue == null ? '—' : row.pValue.toFixed(3)}`}
++                  renderRowDetail={(row) => (
++                    <div className="space-y-2">
++                      <div>coherent: {row.coherent ? 'yes' : 'no'}; determinate: {row.determinate ? 'yes' : 'no'}</div>
++                      {row.targetAnalysisRunId != null && row.targetCompanionRunId != null && (
++                        <Link
++                          to={buildAnalysisTranscriptsPath(
++                            ANALYSIS_BASE_PATH,
++                            row.targetAnalysisRunId,
++                            new URLSearchParams({
++                              modelId: model.modelId,
++                              repeatPattern: 'noisy',
++                              companionRunId: row.targetCompanionRunId,
++                              primaryConditionIds: row.primaryConditionIds.join(','),
++                              companionConditionIds: row.companionConditionIds.join(','),
++                            }),
++                          )}
++                          className="font-medium text-teal-700 hover:underline"
++                          onClick={(event) => event.stopPropagation()}
++                        >
++                          View transcripts →
++                        </Link>
++                      )}
++                    </div>
++                  )}
++                />
++              </TableCell>
++              <TableCell>{model.repeatability.scenariosMeasured}</TableCell>
++            </TableRow>
++          ))}
++        </TableBody>
++      </Table>
++    </section>
++  );
++}
+diff --git a/cloud/apps/web/src/components/models/InsufficientCoverageFooter.tsx b/cloud/apps/web/src/components/models/InsufficientCoverageFooter.tsx
+new file mode 100644
+index 00000000..94ad7ac4
+--- /dev/null
++++ b/cloud/apps/web/src/components/models/InsufficientCoverageFooter.tsx
+@@ -0,0 +1,44 @@
++import type { ModelsConsistencyInsufficient } from '../../api/operations/modelsConsistency';
++
++type Props = {
++  insufficient: ModelsConsistencyInsufficient[];
++};
++
++const labels: Record<ModelsConsistencyInsufficient['reason'], string> = {
++  'no-repeat-coverage': 'No repeat coverage available',
++  'invalid-summary-shape': 'Invalid summary shape',
++  'below-min-scenarios': 'Below min n',
++};
++
++export function InsufficientCoverageFooter({ insufficient }: Props) {
++  if (insufficient.length === 0) {
++    return null;
++  }
++
++  const grouped = insufficient.reduce<Record<string, ModelsConsistencyInsufficient[]>>((acc, row) => {
++    const key = row.reason;
++    (acc[key] ??= []).push(row);
++    return acc;
++  }, {});
++
++  return (
++    <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
++      <h2 className="text-lg font-semibold text-gray-900">Insufficient coverage</h2>
++      <div className="mt-3 space-y-3">
++        {Object.entries(grouped).map(([reason, rows]) => (
++          <div key={reason} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
++            <div className="text-sm font-medium text-gray-900">{labels[reason as ModelsConsistencyInsufficient['reason']]}</div>
++            <div className="mt-1 space-y-1 text-xs text-gray-600">
++              {rows.map((row) => (
++                <div key={row.modelId} className="flex items-start justify-between gap-3">
++                  <span>{row.label}</span>
++                  <span>{row.providerName}</span>
++                </div>
++              ))}
++            </div>
++          </div>
++        ))}
++      </div>
++    </section>
++  );
++}
+diff --git a/cloud/apps/web/src/components/models/MetricDisclosure.tsx b/cloud/apps/web/src/components/models/MetricDisclosure.tsx
+new file mode 100644
+index 00000000..2848df2f
+--- /dev/null
++++ b/cloud/apps/web/src/components/models/MetricDisclosure.tsx
+@@ -0,0 +1,76 @@
++import { useState, type ReactNode } from 'react';
++import { Button } from '../ui/Button';
++
++export type MetricDisclosureProps<T> = {
++  title: string;
++  summary: ReactNode;
++  definition: string;
++  formula: string;
++  rows: T[];
++  emptyLabel?: string;
++  rowLabel: (row: T) => string;
++  renderRow: (row: T) => ReactNode;
++  renderRowDetail: (row: T) => ReactNode;
++};
++
++export function MetricDisclosure<T>({
++  title,
++  summary,
++  definition,
++  formula,
++  rows,
++  emptyLabel = 'No breakdown available.',
++  rowLabel,
++  renderRow,
++  renderRowDetail,
++}: MetricDisclosureProps<T>) {
++  const [selectedIndex, setSelectedIndex] = useState(0);
++  const selectedRow = rows[Math.min(selectedIndex, Math.max(rows.length - 1, 0))] ?? null;
++
++  return (
++    <details className="group rounded-lg border border-gray-200 bg-white p-2">
++      <summary
++        className="cursor-pointer list-none rounded-md px-1 py-0.5 text-left text-sm font-medium text-gray-700 hover:text-gray-900"
++        onClick={(event) => {
++          event.stopPropagation();
++        }}
++      >
++        <div className="flex items-center justify-between gap-3">
++          <span>{title}</span>
++          <span className="font-normal text-gray-500">{summary}</span>
++        </div>
++      </summary>
++      <div className="space-y-3 px-1 pb-1 pt-3">
++        <p className="text-sm text-gray-600">{definition}</p>
++        <p className="text-xs text-gray-500"><span className="font-medium text-gray-700">Formula:</span> {formula}</p>
++        {rows.length === 0 ? (
++          <p className="text-xs text-gray-500">{emptyLabel}</p>
++        ) : (
++          <div className="overflow-hidden rounded-lg border border-gray-200">
++            <div className="divide-y divide-gray-200">
++              {rows.map((row, index) => (
++                <Button
++                  key={`${title}-${rowLabel(row)}-${index}`}
++                  variant="ghost"
++                  onClick={(event) => {
++                    event.stopPropagation();
++                    setSelectedIndex(index);
++                  }}
++                  className={`block w-full justify-start rounded-none px-3 py-2 text-left text-xs ${index === selectedIndex ? 'bg-teal-50 text-teal-900' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
++                >
++                  {renderRow(row)}
++                </Button>
++              ))}
++            </div>
++          </div>
++        )}
++        {selectedRow != null && (
++          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700">
++            <div className="font-medium text-gray-900">{rowLabel(selectedRow)}</div>
++            <div className="mt-2">{renderRowDetail(selectedRow)}</div>
++          </div>
++        )}
++      </div>
++    </details>
++  );
++}
+diff --git a/cloud/apps/web/src/components/models/ModelsTabNav.tsx b/cloud/apps/web/src/components/models/ModelsTabNav.tsx
+new file mode 100644
+index 00000000..701258e2
+--- /dev/null
++++ b/cloud/apps/web/src/components/models/ModelsTabNav.tsx
+@@ -0,0 +1,43 @@
++import { Link, useLocation } from 'react-router-dom';
++
++type ModelsTabNavProps = {
++  domainId: string | null;
++  signature: string | null;
++};
++
++function buildPath(pathname: string, domainId: string | null, signature: string | null): string {
++  const params = new URLSearchParams();
++  if (domainId) params.set('domainId', domainId);
++  if (signature) params.set('signature', signature);
++  const query = params.toString();
++  return query.length > 0 ? `${pathname}?${query}` : pathname;
++}
++
++export function ModelsTabNav({ domainId, signature }: ModelsTabNavProps) {
++  const location = useLocation();
++  const matrixActive = location.pathname === '/models';
++  const consistencyActive = location.pathname === '/models/consistency';
++
++  const matrixPath = buildPath('/models', domainId, signature);
++  const consistencyPath = buildPath('/models/consistency', domainId, signature);
++
++  const tabClass = (active: boolean) => (
++    active
++      ? 'border-teal-600 bg-teal-50 text-teal-800'
++      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:text-gray-900'
++  );
++
++  return (
++    <nav aria-label="Models tabs" className="flex flex-wrap gap-2">
++      <Link to={matrixPath} className={`rounded-full border px-3 py-1.5 text-sm font-medium ${tabClass(matrixActive)}`}>
++        Matrix
++      </Link>
++      <Link
++        to={consistencyPath}
++        className={`rounded-full border px-3 py-1.5 text-sm font-medium ${tabClass(consistencyActive)}`}
++      >
++        Consistency
++      </Link>
++    </nav>
++  );
++}
+diff --git a/cloud/apps/web/src/pages/ModelsConsistency.tsx b/cloud/apps/web/src/pages/ModelsConsistency.tsx
+new file mode 100644
+index 00000000..c3e23835
+--- /dev/null
++++ b/cloud/apps/web/src/pages/ModelsConsistency.tsx
+@@ -0,0 +1,192 @@
++import { useEffect, useMemo, useState } from 'react';
++import { useQuery } from 'urql';
++import { useSearchParams } from 'react-router-dom';
++import { ErrorMessage } from '../components/ui/ErrorMessage';
++import { Loading } from '../components/ui/Loading';
++import { useDomains } from '../hooks/useDomains';
++import {
++  DOMAIN_AVAILABLE_SIGNATURES_QUERY,
++  type DomainAvailableSignaturesQueryResult,
++} from '../api/operations/domainAnalysis';
++import {
++  MODELS_CONSISTENCY_QUERY,
++  type ModelsConsistencyQueryResult,
++  type ModelsConsistencyQueryVariables,
++} from '../api/operations/modelsConsistency';
++import { ModelsTabNav } from '../components/models/ModelsTabNav';
++import { ConsistencyFilters } from '../components/models/ConsistencyFilters';
++import { ConsistencyScatter } from '../components/models/ConsistencyScatter';
++import { ConsistencyTable } from '../components/models/ConsistencyTable';
++import { ConsistencyDrill } from '../components/models/ConsistencyDrill';
++import { InsufficientCoverageFooter } from '../components/models/InsufficientCoverageFooter';
++
++const DEFAULT_SIGNATURE = 'vnewtd';
++
++function buildDomainOptions(domains: Array<{ id: string; name: string }>) {
++  return domains.map((domain) => ({ value: domain.id, label: domain.name }));
++}
++
++export function ModelsConsistency() {
++  const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
++  const [searchParams, setSearchParams] = useSearchParams();
++  const domainParam = searchParams.get('domainId');
++  const signatureParam = searchParams.get('signature');
++  const hasDomainParam = searchParams.has('domainId');
++  const domainFilter = domainParam === 'all' ? null : domainParam;
++  const [providerId, setProviderId] = useState<string | null>(null);
++  const [minScenarios, setMinScenarios] = useState(5);
++  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
++
++  const defaultDomainId = domains[0]?.id ?? null;
++  const urlDomainId = hasDomainParam ? domainFilter : defaultDomainId;
++  const hasExplicitDomain = hasDomainParam && domainParam !== 'all';
++
++  const [{ data: signatureData, error: signatureError }] = useQuery<DomainAvailableSignaturesQueryResult, { domainId: string }>({
++    query: DOMAIN_AVAILABLE_SIGNATURES_QUERY,
++    variables: { domainId: hasExplicitDomain && urlDomainId != null ? urlDomainId : (defaultDomainId ?? '') },
++    pause: !hasExplicitDomain && defaultDomainId == null,
++    requestPolicy: 'cache-and-network',
++  });
++
++  const signatureChoice = signatureParam
++    ?? (hasDomainParam && domainParam === 'all'
++      ? DEFAULT_SIGNATURE
++      : signatureError != null
++        ? DEFAULT_SIGNATURE
++      : signatureData != null
++        ? signatureData.domainAvailableSignatures[0]?.signature ?? DEFAULT_SIGNATURE
++        : null);
++  const selectedSignature = signatureChoice ?? DEFAULT_SIGNATURE;
++
++  useEffect(() => {
++    if (signatureParam != null || signatureChoice == null) {
++      return;
++    }
++    if (hasDomainParam && domainParam === 'all') {
++      setSearchParams({ domainId: 'all', signature: signatureChoice }, { replace: true });
++      return;
++    }
++    if (urlDomainId != null) {
++      setSearchParams({ domainId: urlDomainId, signature: signatureChoice }, { replace: true });
++    }
++  }, [domainParam, hasDomainParam, setSearchParams, signatureChoice, signatureParam, urlDomainId]);
++
++  const queryVariables = useMemo<ModelsConsistencyQueryVariables>(() => ({
++    ...(urlDomainId != null ? { domainId: urlDomainId } : {}),
++    ...(providerId != null ? { providerId } : {}),
++    minScenarios,
++    signature: selectedSignature,
++  }), [minScenarios, providerId, selectedSignature, urlDomainId]);
++
++  const [{ data, fetching, error }] = useQuery<ModelsConsistencyQueryResult, ModelsConsistencyQueryVariables>({
++    query: MODELS_CONSISTENCY_QUERY,
++    variables: queryVariables,
++    pause: (!hasDomainParam && urlDomainId == null) || signatureChoice == null,
++    requestPolicy: 'cache-and-network',
++  });
++
++  const models = data?.modelsConsistency.models ?? [];
++  const insufficient = data?.modelsConsistency.insufficient ?? [];
++  const providerOptions = useMemo(() => {
++    const unique = new Map<string, string>();
++    for (const model of models) {
++      unique.set(model.providerName, model.providerName);
++    }
++    for (const row of insufficient) {
++      unique.set(row.providerName, row.providerName);
++    }
++    return [...unique.values()].map((value) => ({ value, label: value }));
++  }, [insufficient, models]);
++
++  useEffect(() => {
++    if (selectedModelId == null && models.length > 0) {
++      setSelectedModelId(models[0]!.modelId);
++      return;
++    }
++    if (selectedModelId != null && !models.some((model) => model.modelId === selectedModelId)) {
++      setSelectedModelId(models[0]?.modelId ?? null);
++    }
++  }, [models, selectedModelId]);
++
++  const selectedModel = selectedModelId != null
++    ? models.find((model) => model.modelId === selectedModelId) ?? null
++    : models[0] ?? null;
++
++  const loading = (domainsLoading && domains.length === 0) || (signatureChoice == null) || (fetching && data == null);
++  const emptyState = models.length === 0;
++
++  const handleDomainChange = (value: string | null) => {
++    const next = new URLSearchParams(searchParams);
++    if (value == null) {
++      next.set('domainId', 'all');
++      next.set('signature', signatureParam ?? DEFAULT_SIGNATURE);
++    } else {
++      next.set('domainId', value);
++      next.delete('signature');
++    }
++    setSearchParams(next, { replace: true });
++  };
++
++  const handleProviderChange = (value: string | null) => {
++    setProviderId(value);
++  };
++
++  const handleMinScenariosChange = (value: number) => {
++    setMinScenarios(value);
++  };
++
++  // Order matters: surface errors and empty-domain state BEFORE the loading
++  // spinner so a failed useDomains() or an empty domain list does not leave
++  // the page stuck on an infinite loading state.
++  if (domainsError != null || error != null) {
++    return <ErrorMessage message={`Failed to load consistency report: ${(domainsError ?? error)?.message ?? 'Unknown error'}`} />;
++  }
++
++  if (!domainsLoading && domains.length === 0 && !hasDomainParam) {
++    return <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">No domains are available yet. Populate domains first, then reopen this report.</div>;
++  }
++
++  if (loading) {
++    return <Loading text="Loading consistency report..." />;
++  }
++
++  return (
++    <div className="space-y-6">
++      <div className="space-y-3">
++        <div className="flex flex-wrap items-center justify-between gap-3">
++          <div>
++            <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Models / Consistency</h1>
++            <p className="text-sm text-gray-600">Repeatability shows same-answer behavior. Coherence shows whether answers follow pressure.</p>
++          </div>
++          <ModelsTabNav domainId={urlDomainId ?? 'all'} signature={selectedSignature} />
++        </div>
++      </div>
++
++      <ConsistencyFilters
++        domainId={urlDomainId}
++        providerId={providerId}
++        minScenarios={minScenarios}
++        domainOptions={buildDomainOptions(domains)}
++        providerOptions={providerOptions}
++        onDomainChange={handleDomainChange}
++        onProviderChange={handleProviderChange}
++        onMinScenariosChange={handleMinScenariosChange}
++      />
++
++      {emptyState ? (
++        <section className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
++          <p className="font-medium text-gray-900">No models have sufficient coverage yet.</p>
++          <p className="mt-1">This report depends on the aggregate analysis pipeline. Once the pipeline has populated repeat coverage, the scatter and table will appear here.</p>
++        </section>
++      ) : (
++        <>
++          <ConsistencyScatter models={models} selectedModelId={selectedModel?.modelId ?? null} onSelectModel={setSelectedModelId} />
++          <ConsistencyTable models={models} onSelectModel={setSelectedModelId} selectedModelId={selectedModel?.modelId ?? null} />
++          {selectedModel && <ConsistencyDrill model={selectedModel} domainId={urlDomainId} signature={selectedSignature} />}
++        </>
++      )}
++
++      <InsufficientCoverageFooter insufficient={insufficient} />
++    </div>
++  );
++}

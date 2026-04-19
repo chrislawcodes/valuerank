@@ -1,0 +1,23 @@
+YOLO mode is enabled. All tool calls will be automatically approved.
+Keychain initialization encountered an error: UNIX[Operation not permitted]
+Using FileKeychain fallback for secure storage.
+Loaded cached credentials.
+YOLO mode is enabled. All tool calls will be automatically approved.
+[MCP error] Error during discovery for MCP server 'agentchattr': SSE error: TypeError: fetch failed: connect ECONNREFUSED 127.0.0.1:8201 SseError: SSE error: TypeError: fetch failed: connect ECONNREFUSED 127.0.0.1:8201
+    at _eventSource.onerror (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/bundle/chunk-QVTX2M5J.js:335643:25)
+    at EventSource.scheduleReconnect_fn (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/bundle/chunk-QVTX2M5J.js:335538:56)
+    at file:///opt/homebrew/lib/node_modules/@google/gemini-cli/bundle/chunk-QVTX2M5J.js:335388:178
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {
+  code: undefined,
+  event: {
+    type: 'error',
+    message: 'TypeError: fetch failed: connect ECONNREFUSED 127.0.0.1:8201',
+    code: undefined,
+    defaultPrevented: false,
+    cancelable: false,
+    timeStamp: 2178.900791
+  }
+}
+Scheduling MCP context refresh...
+Executing MCP context refresh...
+MCP context refresh complete.

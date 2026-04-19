@@ -1,0 +1,3960 @@
+00001: import gql from 'graphql-tag';
+00002: import * as Urql from 'urql';
+00003: export type Maybe<T> = T | null;
+00004: export type InputMaybe<T> = Maybe<T>;
+00005: export type Exact<T extends { [key: string]: unknown }> = { [K in keyof T]: T[K] };
+00006: export type MakeOptional<T, K extends keyof T> = Omit<T, K> & { [SubKey in K]?: Maybe<T[SubKey]> };
+00007: export type MakeMaybe<T, K extends keyof T> = Omit<T, K> & { [SubKey in K]: Maybe<T[SubKey]> };
+00008: export type MakeEmpty<T extends { [key: string]: unknown }, K extends keyof T> = { [_ in K]?: never };
+00009: export type Incremental<T> = T | { [P in keyof T]?: P extends ' $fragmentName' | '__typename' ? T[P] : never };
+00010: export type Omit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
+00011: /** All built-in and custom scalars, mapped to their actual values */
+00012: export type Scalars = {
+00013:   ID: { input: string; output: string; }
+00014:   String: { input: string; output: string; }
+00015:   Boolean: { input: boolean; output: boolean; }
+00016:   Int: { input: number; output: number; }
+00017:   Float: { input: number; output: number; }
+00018:   DateTime: { input: string; output: string; }
+00019:   JSON: { input: unknown; output: unknown; }
+00020: };
+00021: 
+00022: /** Actual cost summary for a completed run */
+00023: export type ActualCost = {
+00024:   __typename?: 'ActualCost';
+00025:   /** Per-model actual cost breakdown */
+00026:   perModel: Array<ActualModelCost>;
+00027:   /** Total actual cost in USD */
+00028:   total: Scalars['Float']['output'];
+00029: };
+00030: 
+00031: /** Actual cost for a single model from a completed run */
+00032: export type ActualModelCost = {
+00033:   __typename?: 'ActualModelCost';
+00034:   /** Actual cost in USD */
+00035:   cost: Scalars['Float']['output'];
+00036:   /** Total input tokens used */
+00037:   inputTokens: Scalars['Int']['output'];
+00038:   /** Model identifier */
+00039:   modelId: Scalars['ID']['output'];
+00040:   /** Total output tokens used */
+00041:   outputTokens: Scalars['Int']['output'];
+00042:   /** Number of probes completed */
+00043:   probeCount: Scalars['Int']['output'];
+00044: };
+00045: 
+00046: /** Eligibility and coverage metadata for same-signature aggregate analysis support */
+00047: export type AggregateMetadata = {
+00048:   __typename?: 'AggregateMetadata';
+00049:   aggregateEligibility: Scalars['String']['output'];
+00050:   aggregateIneligibilityReason?: Maybe<Scalars['String']['output']>;
+00051:   /** Coverage of the planned baseline condition set */
+00052:   conditionCoverage: Scalars['JSON']['output'];
+00053:   /** Per-model pooled cross-run drift metadata */
+00054:   perModelDrift: Scalars['JSON']['output'];
+00055:   /** Per-model pooled repeat coverage metadata */
+00056:   perModelRepeatCoverage: Scalars['JSON']['output'];
+00057:   sourceRunCount: Scalars['Int']['output'];
+00058:   sourceRunIds: Array<Scalars['String']['output']>;
+00059: };
+00060: 
+00061: export type AnalysisFolderCounts = {
+00062:   __typename?: 'AnalysisFolderCounts';
+00063:   aggregateCount: Scalars['Int']['output'];
+00064:   aggregateTagCounts: Array<AnalysisFolderTagCount>;
+00065:   aggregateUntaggedCount: Scalars['Int']['output'];
+00066:   tagCounts: Array<AnalysisFolderTagCount>;
+00067:   untaggedCount: Scalars['Int']['output'];
+00068: };
+00069: 
+00070: export type AnalysisFolderTagCount = {
+00071:   __typename?: 'AnalysisFolderTagCount';
+00072:   count: Scalars['Int']['output'];
+00073:   name: Scalars['String']['output'];
+00074:   tagId: Scalars['String']['output'];
+00075: };
+00076: 
+00077: /** Analysis results for a run */
+00078: export type AnalysisResult = {
+00079:   __typename?: 'AnalysisResult';
+00080:   /** Actual cost computed from completed transcripts for this run */
+00081:   actualCost?: Maybe<ActualCost>;
+00082:   /** Eligibility and repeat-coverage metadata for aggregate analysis rows */
+00083:   aggregateMetadata?: Maybe<AggregateMetadata>;
+00084:   analysisType: Scalars['String']['output'];
+00085:   codeVersion: Scalars['String']['output'];
+00086:   computedAt?: Maybe<Scalars['DateTime']['output']>;
+00087:   createdAt: Scalars['DateTime']['output'];
+00088:   /** Dimension impact analysis showing which variables drive variance */
+00089:   dimensionAnalysis?: Maybe<Scalars['JSON']['output']>;
+00090:   durationMs?: Maybe<Scalars['Int']['output']>;
+00091:   id: Scalars['ID']['output'];
+00092:   inputHash: Scalars['String']['output'];
+00093:   /** Statistical methods and parameters used in analysis */
+00094:   methodsUsed: Scalars['JSON']['output'];
+00095:   /** Model agreement matrix with pairwise correlations */
+00096:   modelAgreement: Scalars['JSON']['output'];
+00097:   /** Scenarios with highest disagreement across models */
+00098:   mostContestedScenarios: Array<ContestedScenario>;
+00099:   /** Per-model statistics with win rates and confidence intervals */
+00100:   perModel: Scalars['JSON']['output'];
+00101:   /** Explicit preference direction and strength summary */
+00102:   preferenceSummary?: Maybe<PreferenceSummary>;
+00103:   /** Explicit baseline noise and reliability summary */
+00104:   reliabilitySummary?: Maybe<ReliabilitySummary>;
+00105:   runId: Scalars['String']['output'];
+00106:   /** Status of the analysis result (CURRENT or SUPERSEDED) */
+00107:   status: Scalars['String']['output'];
+00108:   /** Variance analysis from multi-sample runs (when samplesPerScenario > 1) */
+00109:   varianceAnalysis?: Maybe<Scalars['JSON']['output']>;
+00110:   /** Data for frontend visualizations (decision distribution, model-scenario matrix) */
+00111:   visualizationData?: Maybe<Scalars['JSON']['output']>;
+00112:   /** Warnings about statistical assumptions or data quality */
+00113:   warnings: Array<AnalysisWarning>;
+00114: };
+00115: 
+00116: /** Status of an analysis result */
+00117: export type AnalysisStatus =
+00118:   | 'CURRENT'
+00119:   | 'SUPERSEDED';
+00120: 
+00121: /** Warning about statistical assumptions or data quality */
+00122: export type AnalysisWarning = {
+00123:   __typename?: 'AnalysisWarning';
+00124:   code: Scalars['String']['output'];
+00125:   message: Scalars['String']['output'];
+00126:   recommendation: Scalars['String']['output'];
+00127: };
+00128: 
+00129: /** API key for programmatic/MCP access. The full key is only returned once at creation time. */
+00130: export type ApiKey = {
+00131:   __typename?: 'ApiKey';
+00132:   /** When this key was created */
+00133:   createdAt: Scalars['DateTime']['output'];
+00134:   /** When this key expires (null = never expires) */
+00135:   expiresAt?: Maybe<Scalars['DateTime']['output']>;
+00136:   /** Unique API key identifier */
+00137:   id: Scalars['ID']['output'];
+00138:   /** Key prefix for identification (e.g., "vr_abc123") */
+00139:   keyPrefix: Scalars['String']['output'];
+00140:   /** When this key was last used for authentication */
+00141:   lastUsedAt?: Maybe<Scalars['DateTime']['output']>;
+00142:   /** User-provided name for this key */
+00143:   name: Scalars['String']['output'];
+00144: };
+00145: 
+00146: export type AssumptionsTempZeroResult = {
+00147:   __typename?: 'AssumptionsTempZeroResult';
+00148:   domainName: Scalars['String']['output'];
+00149:   generatedAt: Scalars['DateTime']['output'];
+00150:   note?: Maybe<Scalars['String']['output']>;
+00151:   preflight: TempZeroPreflight;
+00152:   rows: Array<TempZeroRow>;
+00153:   summary: TempZeroSummary;
+00154: };
+00155: 
+00156: /** Type of action that was audited */
+00157: export type AuditAction =
+00158:   | 'ACTION'
+00159:   | 'CREATE'
+00160:   | 'DELETE'
+00161:   | 'UPDATE';
+00162: 
+00163: /** An audit log entry recording a mutation */
+00164: export type AuditLog = {
+00165:   __typename?: 'AuditLog';
+00166:   /** Type of action performed (CREATE, UPDATE, DELETE, ACTION) */
+00167:   action: Scalars['String']['output'];
+00168:   /** When the action occurred */
+00169:   createdAt: Scalars['DateTime']['output'];
+00170:   /** ID of the affected entity */
+00171:   entityId: Scalars['String']['output'];
+00172:   /** Type of entity affected (e.g., Definition, Run) */
+00173:   entityType: Scalars['String']['output'];
+00174:   /** Unique identifier */
+00175:   id: Scalars['ID']['output'];
+00176:   /** Additional context about the action */
+00177:   metadata?: Maybe<Scalars['JSON']['output']>;
+00178:   /** User who performed the action (null for system actions) */
+00179:   user?: Maybe<User>;
+00180: };
+00181: 
+00182: /** Paginated list of audit log entries */
+00183: export type AuditLogConnection = {
+00184:   __typename?: 'AuditLogConnection';
+00185:   /** Cursor for the last item in the current page (for pagination) */
+00186:   endCursor?: Maybe<Scalars['String']['output']>;
+00187:   /** Whether there are more results after the current page */
+00188:   hasNextPage: Scalars['Boolean']['output'];
+00189:   /** List of audit log entries */
+00190:   nodes: Array<AuditLog>;
+00191:   /** Total number of matching audit log entries */
+00192:   totalCount: Scalars['Int']['output'];
+00193: };
+00194: 
+00195: /** Filters for querying audit logs */
+00196: export type AuditLogFilterInput = {
+00197:   /** Filter by action type (CREATE, UPDATE, DELETE, ACTION) */
+00198:   action?: InputMaybe<Scalars['String']['input']>;
+00199:   /** Filter by specific entity ID */
+00200:   entityId?: InputMaybe<Scalars['String']['input']>;
+00201:   /** Filter by entity type (e.g., "Definition", "Run") */
+00202:   entityType?: InputMaybe<Scalars['String']['input']>;
+00203:   /** Filter logs from this date/time (inclusive) */
+00204:   from?: InputMaybe<Scalars['DateTime']['input']>;
+00205:   /** Filter logs until this date/time (inclusive) */
+00206:   to?: InputMaybe<Scalars['DateTime']['input']>;
+00207:   /** Filter by user who performed the action */
+00208:   userId?: InputMaybe<Scalars['String']['input']>;
+00209: };
+00210: 
+00211: /** An LLM model available for evaluation runs */
+00212: export type AvailableModel = {
+00213:   __typename?: 'AvailableModel';
+00214:   /** Default version to use if none specified */
+00215:   defaultVersion?: Maybe<Scalars['String']['output']>;
+00216:   /** Human-readable model name (e.g., "GPT-4o") */
+00217:   displayName: Scalars['String']['output'];
+00218:   /** Model identifier (e.g., "gpt-4o") */
+00219:   id: Scalars['String']['output'];
+00220:   /** Whether the model is available (API key configured) */
+00221:   isAvailable: Scalars['Boolean']['output'];
+00222:   /** Whether this is the default model for its provider */
+00223:   isDefault: Scalars['Boolean']['output'];
+00224:   /** Provider identifier (e.g., "openai") */
+00225:   providerId: Scalars['String']['output'];
+00226:   /** Available model versions */
+00227:   versions: Array<Scalars['String']['output']>;
+00228: };
+00229: 
+00230: /** Progress breakdown for a specific model */
+00231: export type ByModelProgress = {
+00232:   __typename?: 'ByModelProgress';
+00233:   completed: Scalars['Int']['output'];
+00234:   failed: Scalars['Int']['output'];
+00235:   modelId: Scalars['String']['output'];
+00236: };
+00237: 
+00238: /** Result of cancelling scenario expansion */
+00239: export type CancelExpansionResult = {
+00240:   __typename?: 'CancelExpansionResult';
+00241:   /** Whether an active job was cancelled */
+00242:   cancelled: Scalars['Boolean']['output'];
+00243:   /** ID of the definition */
+00244:   definitionId: Scalars['String']['output'];
+00245:   /** ID of the cancelled job (null if no active job) */
+00246:   jobId?: Maybe<Scalars['String']['output']>;
+00247:   /** Status message */
+00248:   message: Scalars['String']['output'];
+00249: };
+00250: 
+00251: /** Result of cancelling summarization for a run */
+00252: export type CancelSummarizationPayload = {
+00253:   __typename?: 'CancelSummarizationPayload';
+00254:   /** Number of pending summarization jobs cancelled */
+00255:   cancelledCount: Scalars['Int']['output'];
+00256:   /** The updated run */
+00257:   run: Run;
+00258: };
+00259: 
+00260: export type ClusterAnalysis = {
+00261:   __typename?: 'ClusterAnalysis';
+00262:   clusters: Array<DomainCluster>;
+00263:   defaultPair?: Maybe<Array<Scalars['String']['output']>>;
+00264:   faultLinesByPair: Scalars['JSON']['output'];
+00265:   skipReason?: Maybe<Scalars['String']['output']>;
+00266:   skipped: Scalars['Boolean']['output'];
+00267: };
+00268: 
+00269: export type ClusterMember = {
+00270:   __typename?: 'ClusterMember';
+00271:   distancesToNearestClusters?: Maybe<Array<Scalars['Float']['output']>>;
+00272:   isOutlier: Scalars['Boolean']['output'];
+00273:   label: Scalars['String']['output'];
+00274:   model: Scalars['String']['output'];
+00275:   nearestClusterIds?: Maybe<Array<Scalars['String']['output']>>;
+00276:   silhouetteScore: Scalars['Float']['output'];
+00277: };
+00278: 
+00279: export type ClusterPairFaultLines = {
+00280:   __typename?: 'ClusterPairFaultLines';
+00281:   clusterAId: Scalars['String']['output'];
+00282:   clusterBId: Scalars['String']['output'];
+00283:   distance: Scalars['Float']['output'];
+00284:   faultLines: Array<ValueFaultLine>;
+00285: };
+00286: 
+00287: /** A recent job completion event */
+00288: export type CompletionEvent = {
+00289:   __typename?: 'CompletionEvent';
+00290:   /** When the probe completed */
+00291:   completedAt: Scalars['DateTime']['output'];
+00292:   /** How long the probe took in milliseconds */
+00293:   durationMs: Scalars['Int']['output'];
+00294:   /** The model that was probed */
+00295:   modelId: Scalars['String']['output'];
+00296:   /** The scenario that was evaluated */
+00297:   scenarioId: Scalars['String']['output'];
+00298:   /** Whether the probe succeeded */
+00299:   success: Scalars['Boolean']['output'];
+00300: };
+00301: 
+00302: export type ConditionPlan = {
+00303:   __typename?: 'ConditionPlan';
+00304:   conditionKey: Scalars['String']['output'];
+00305:   currentSEM?: Maybe<Scalars['Float']['output']>;
+00306:   currentSamples: Scalars['Int']['output'];
+00307:   neededSamples: Scalars['Int']['output'];
+00308:   scenarioId: Scalars['String']['output'];
+00309:   status: Scalars['String']['output'];
+00310: };
+00311: 
+00312: /** A scenario with high disagreement across models */
+00313: export type ContestedScenario = {
+00314:   __typename?: 'ContestedScenario';
+00315:   modelScores: Scalars['JSON']['output'];
+00316:   scenarioId: Scalars['String']['output'];
+00317:   scenarioName: Scalars['String']['output'];
+00318:   variance: Scalars['Float']['output'];
+00319: };
+00320: 
+00321: /** Complete cost estimate for a run before execution */
+00322: export type CostEstimate = {
+00323:   __typename?: 'CostEstimate';
+00324:   /** Minimum sample count across all models (indicates estimate quality) */
+00325:   basedOnSampleCount: Scalars['Int']['output'];
+00326:   /** Explanation of fallback usage if applicable */
+00327:   fallbackReason?: Maybe<Scalars['String']['output']>;
+00328:   /** True if any model is using fallback estimates */
+00329:   isUsingFallback: Scalars['Boolean']['output'];
+00330:   /** Per-model cost breakdown */
+00331:   perModel: Array<ModelCostEstimate>;
+00332:   /** Total number of scenarios to be run */
+00333:   scenarioCount: Scalars['Int']['output'];
+00334:   /** Total estimated cost in USD across all models */
+00335:   total: Scalars['Float']['output'];
+00336: };
+00337: 
+00338: export type CoverageModelBreakdown = {
+00339:   __typename?: 'CoverageModelBreakdown';
+00340:   label: Scalars['String']['output'];
+00341:   modelId: Scalars['String']['output'];
+00342:   trialCount: Scalars['Int']['output'];
+00343: };
+00344: 
+00345: export type CoverageModelOption = {
+00346:   __typename?: 'CoverageModelOption';
+00347:   label: Scalars['String']['output'];
+00348:   modelId: Scalars['String']['output'];
+00349: };
+00350: 
+00351: export type CreateApiKeyInput = {
+00352:   /** Human-readable name for the key (e.g., "Claude Desktop", "Cursor IDE") */
+00353:   name: Scalars['String']['input'];
+00354: };
+00355: 
+00356: /** Result of creating a new API key. The full key is only available in this response. */
+00357: export type CreateApiKeyResult = {
+00358:   __typename?: 'CreateApiKeyResult';
+00359:   /** The created API key metadata */
+00360:   apiKey: ApiKey;
+00361:   /** The full API key value. IMPORTANT: This is the only time the full key will be shown. */
+00362:   key: Scalars['String']['output'];
+00363: };
+00364: 
+00365: export type CreateDefinitionInput = {
+00366:   /** JSONB content for the definition */
+00367:   content: Scalars['JSON']['input'];
+00368:   /** Name of the definition */
+00369:   name: Scalars['String']['input'];
+00370:   /** Optional parent definition ID for forking */
+00371:   parentId?: InputMaybe<Scalars['String']['input']>;
+00372:   /** ID of the preamble version to use */
+00373:   preambleVersionId?: InputMaybe<Scalars['String']['input']>;
+00374: };
+00375: 
+00376: export type CreateDomainContextInput = {
+00377:   domainId: Scalars['String']['input'];
+00378:   text: Scalars['String']['input'];
+00379: };
+00380: 
+00381: export type CreateLevelPresetInput = {
+00382:   l1: Scalars['String']['input'];
+00383:   l2: Scalars['String']['input'];
+00384:   l3: Scalars['String']['input'];
+00385:   l4: Scalars['String']['input'];
+00386:   l5: Scalars['String']['input'];
+00387:   name: Scalars['String']['input'];
+00388: };
+00389: 
+00390: /** Input for creating a new LLM model */
+00391: export type CreateLlmModelInput = {
+00392:   /** Cost per 1M input tokens in USD */
+00393:   costInputPerMillion: Scalars['Float']['input'];
+00394:   /** Cost per 1M output tokens in USD */
+00395:   costOutputPerMillion: Scalars['Float']['input'];
+00396:   /** Human-readable display name */
+00397:   displayName: Scalars['String']['input'];
+00398:   /** API model identifier (e.g., "gpt-4o-mini") */
+00399:   modelId: Scalars['String']['input'];
+00400:   /** Provider ID this model belongs to */
+00401:   providerId: Scalars['String']['input'];
+00402:   /** Set as default for this provider */
+00403:   setAsDefault?: InputMaybe<Scalars['Boolean']['input']>;
+00404: };
+00405: 
+00406: export type CreatePairedVignetteInput = {
+00407:   contextId: Scalars['ID']['input'];
+00408:   domainId: Scalars['ID']['input'];
+00409:   levelPresetVersionId?: InputMaybe<Scalars['ID']['input']>;
+00410:   name: Scalars['String']['input'];
+00411:   preambleVersionId?: InputMaybe<Scalars['ID']['input']>;
+00412:   valueFirstId: Scalars['ID']['input'];
+00413:   valueSecondId: Scalars['ID']['input'];
+00414: };
+00415: 
+00416: export type CreatePairedVignetteResult = {
+00417:   __typename?: 'CreatePairedVignetteResult';
+00418:   definitionA: Definition;
+00419:   definitionB: Definition;
+00420: };
+00421: 
+00422: export type CreatePreambleInput = {
+00423:   content: Scalars['String']['input'];
+00424:   name: Scalars['String']['input'];
+00425: };
+00426: 
+00427: export type CreateSurveyInput = {
+00428:   description?: InputMaybe<Scalars['String']['input']>;
+00429:   instructions?: InputMaybe<Scalars['String']['input']>;
+00430:   name: Scalars['String']['input'];
+00431:   questions: Array<SurveyQuestionInput>;
+00432:   responseOptions: Array<SurveyResponseOptionInput>;
+00433: };
+00434: 
+00435: export type CreateValueStatementInput = {
+00436:   body: Scalars['String']['input'];
+00437:   domainId: Scalars['String']['input'];
+00438:   token: Scalars['String']['input'];
+00439: };
+00440: 
+00441: export type DebugMismatchResult = {
+00442:   __typename?: 'DebugMismatchResult';
+00443:   decisionCodes: Array<Maybe<Scalars['String']['output']>>;
+00444:   modelId: Scalars['String']['output'];
+00445:   promptHashes: Array<Maybe<Scalars['String']['output']>>;
+00446:   promptHashesMatch?: Maybe<Scalars['Boolean']['output']>;
+00447:   rawResponseSummary: Scalars['String']['output'];
+00448:   scenarioId: Scalars['String']['output'];
+00449:   systemFingerprints: Array<Maybe<Scalars['String']['output']>>;
+00450:   systemFingerprintsMatch?: Maybe<Scalars['Boolean']['output']>;
+00451:   transcriptCount: Scalars['Int']['output'];
+00452: };
+00453: 
+00454: /** A scenario definition that can be versioned through parent-child relationships */
+00455: export type Definition = {
+00456:   __typename?: 'Definition';
+00457:   /** All tags including both local and inherited (deduplicated) */
+00458:   allTags: Array<Tag>;
+00459:   /** Full ancestry chain from this definition to root (oldest first) */
+00460:   ancestors: Array<Definition>;
+00461:   /** Child definitions forked from this one */
+00462:   children: Array<Definition>;
+00463:   /** JSONB content with scenario configuration */
+00464:   content: Scalars['JSON']['output'];
+00465:   /** When this definition was created */
+00466:   createdAt: Scalars['DateTime']['output'];
+00467:   /** User who created this definition */
+00468:   createdBy?: Maybe<User>;
+00469:   /** User who deleted this definition (only populated for soft-deleted records) */
+00470:   deletedBy?: Maybe<User>;
+00471:   /** All descendants forked from this definition (newest first) */
+00472:   descendants: Array<Definition>;
+00473:   /** Domain assigned to this definition */
+00474:   domain?: Maybe<Domain>;
+00475:   /** ID of the domain context attached to this definition */
+00476:   domainContextId?: Maybe<Scalars['ID']['output']>;
+00477:   /** ID of assigned domain (null means None) */
+00478:   domainId?: Maybe<Scalars['ID']['output']>;
+00479:   /** Debug info from last scenario expansion, including raw LLM response and parse errors */
+00480:   expansionDebug?: Maybe<Scalars['JSON']['output']>;
+00481:   /** Status of scenario expansion job for this definition */
+00482:   expansionStatus: ExpansionStatus;
+00483:   /** Unique identifier */
+00484:   id: Scalars['ID']['output'];
+00485:   /** Tags inherited from all ancestor definitions (union of ancestor tags) */
+00486:   inheritedTags: Array<Tag>;
+00487:   /** Whether this definition is a fork (has a parent) */
+00488:   isForked: Scalars['Boolean']['output'];
+00489:   /** When this definition was last accessed (for retention) */
+00490:   lastAccessedAt?: Maybe<Scalars['DateTime']['output']>;
+00491:   /** The level preset version used when this vignette was created */
+00492:   levelPresetVersion?: Maybe<LevelPresetVersion>;
+00493:   /** ID of the level preset version used when this vignette was created */
+00494:   levelPresetVersionId?: Maybe<Scalars['String']['output']>;
+00495:   /** Raw stored content. For forked definitions, only locally overridden fields are present. */
+00496:   localContent: Scalars['JSON']['output'];
+00497:   /** Human-readable name */
+00498:   name: Scalars['String']['output'];
+00499:   /** Indicates which content fields are locally defined vs inherited from parent */
+00500:   overrides: DefinitionOverrides;
+00501:   /** Parent definition in version tree */
+00502:   parent?: Maybe<Definition>;
+00503:   /** ID of parent definition (null for root definitions) */
+00504:   parentId?: Maybe<Scalars['ID']['output']>;
+00505:   /** The specific version of the preamble used */
+00506:   preambleVersion?: Maybe<PreambleVersion>;
+00507:   /** ID of the specific preamble version used */
+00508:   preambleVersionId?: Maybe<Scalars['String']['output']>;
+00509:   /** Fully resolved content after walking ancestor chain. All fields are guaranteed present. */
+00510:   resolvedContent: Scalars['JSON']['output'];
+00511:   /** Number of runs using this definition */
+00512:   runCount: Scalars['Int']['output'];
+00513:   /** Runs executed with this definition */
+00514:   runs: Array<Run>;
+00515:   /** Number of scenarios generated from this definition */
+00516:   scenarioCount: Scalars['Int']['output'];
+00517:   /** Scenarios generated from this definition */
+00518:   scenarios: Array<Scenario>;
+00519:   /** Tags assigned to this definition */
+00520:   tags: Array<Tag>;
+00521:   /** Version and temperature consistency across trials for this definition */
+00522:   trialConfig: TrialConfigSummary;
+00523:   /** Number of prompt/response trials (transcripts) for this definition */
+00524:   trialCount: Scalars['Int']['output'];
+00525:   /** When this definition was last updated */
+00526:   updatedAt: Scalars['DateTime']['output'];
+00527:   /** Version counter (increments on every update) */
+00528:   version: Scalars['Int']['output'];
+00529: };
+00530: 
+00531: 
+00532: /** A scenario definition that can be versioned through parent-child relationships */
+00533: export type DefinitionRunsArgs = {
+00534:   limit?: InputMaybe<Scalars['Int']['input']>;
+00535:   offset?: InputMaybe<Scalars['Int']['input']>;
+00536: };
+00537: 
+00538: 
+00539: /** A scenario definition that can be versioned through parent-child relationships */
+00540: export type DefinitionScenariosArgs = {
+00541:   limit?: InputMaybe<Scalars['Int']['input']>;
+00542:   offset?: InputMaybe<Scalars['Int']['input']>;
+00543: };
+00544: 
+00545: /** Indicates which content fields are locally overridden vs inherited from parent */
+00546: export type DefinitionOverrides = {
+00547:   __typename?: 'DefinitionOverrides';
+00548:   /** True if dimensions are locally defined, false if inherited */
+00549:   dimensions: Scalars['Boolean']['output'];
+00550:   /** True if matching rules are locally defined, false if inherited */
+00551:   matchingRules: Scalars['Boolean']['output'];
+00552:   /** True if template is locally defined, false if inherited */
+00553:   template: Scalars['Boolean']['output'];
+00554: };
+00555: 
+00556: /** Result of deleting a definition */
+00557: export type DeleteDefinitionResult = {
+00558:   __typename?: 'DeleteDefinitionResult';
+00559:   /** Total number of definitions deleted */
+00560:   count: Scalars['Int']['output'];
+00561:   /** IDs of all definitions that were deleted (includes descendants) */
+00562:   deletedIds: Array<Scalars['String']['output']>;
+00563: };
+00564: 
+00565: export type DeleteLevelPresetResult = {
+00566:   __typename?: 'DeleteLevelPresetResult';
+00567:   id: Scalars['ID']['output'];
+00568: };
+00569: 
+00570: /** Result type for tag deletion */
+00571: export type DeleteTagResult = {
+00572:   __typename?: 'DeleteTagResult';
+00573:   /** Number of definitions the tag was removed from */
+00574:   affectedDefinitions: Scalars['Int']['output'];
+00575:   /** Whether deletion was successful */
+00576:   success: Scalars['Boolean']['output'];
+00577: };
+00578: 
+00579: /** Result of deprecating a model */
+00580: export type DeprecateModelResult = {
+00581:   __typename?: 'DeprecateModelResult';
+00582:   /** The deprecated model */
+00583:   model: LlmModel;
+00584:   /** The new default model (if previous default was deprecated) */
+00585:   newDefault?: Maybe<LlmModel>;
+00586: };
+00587: 
+00588: /** A single domain used to group vignettes */
+00589: export type Domain = {
+00590:   __typename?: 'Domain';
+00591:   createdAt: Scalars['DateTime']['output'];
+00592:   defaultContext?: Maybe<DomainContext>;
+00593:   defaultContextId?: Maybe<Scalars['String']['output']>;
+00594:   defaultLevelPresetVersion?: Maybe<LevelPresetVersion>;
+00595:   defaultLevelPresetVersionId?: Maybe<Scalars['String']['output']>;
+00596:   defaultPreambleVersion?: Maybe<PreambleVersion>;
+00597:   defaultPreambleVersionId?: Maybe<Scalars['String']['output']>;
+00598:   definitionCount: Scalars['Int']['output'];
+00599:   definitions: Array<Definition>;
+00600:   id: Scalars['ID']['output'];
+00601:   name: Scalars['String']['output'];
+00602:   normalizedName: Scalars['String']['output'];
+00603:   updatedAt: Scalars['DateTime']['output'];
+00604: };
+00605: 
+00606: export type DomainAnalysisConditionDetail = {
+00607:   __typename?: 'DomainAnalysisConditionDetail';
+00608:   conditionName: Scalars['String']['output'];
+00609:   deprioritized: Scalars['Int']['output'];
+00610:   dimensions?: Maybe<Scalars['JSON']['output']>;
+00611:   neutral: Scalars['Int']['output'];
+00612:   opponentSomewhat: Scalars['Int']['output'];
+00613:   opponentStrongly: Scalars['Int']['output'];
+00614:   prioritized: Scalars['Int']['output'];
+00615:   scenarioId?: Maybe<Scalars['ID']['output']>;
+00616:   selectedValueWinRate?: Maybe<Scalars['Float']['output']>;
+00617:   somewhat: Scalars['Int']['output'];
+00618:   strongly: Scalars['Int']['output'];
+00619:   totalTrials: Scalars['Int']['output'];
+00620:   unknownCount: Scalars['Int']['output'];
+00621: };
+00622: 
+00623: export type DomainAnalysisConditionTranscript = {
+00624:   __typename?: 'DomainAnalysisConditionTranscript';
+00625:   content: Scalars['JSON']['output'];
+00626:   createdAt: Scalars['DateTime']['output'];
+00627:   decisionCode?: Maybe<Scalars['String']['output']>;
+00628:   decisionCodeSource?: Maybe<Scalars['String']['output']>;
+00629:   decisionModelV2?: Maybe<Scalars['JSON']['output']>;
+00630:   durationMs: Scalars['Int']['output'];
+00631:   id: Scalars['ID']['output'];
+00632:   modelId: Scalars['String']['output'];
+00633:   runId: Scalars['ID']['output'];
+00634:   scenarioId?: Maybe<Scalars['ID']['output']>;
+00635:   tokenCount: Scalars['Int']['output'];
+00636:   turnCount: Scalars['Int']['output'];
+00637: };
+00638: 
+00639: export type DomainAnalysisMissingDefinition = {
+00640:   __typename?: 'DomainAnalysisMissingDefinition';
+00641:   definitionId: Scalars['ID']['output'];
+00642:   definitionName: Scalars['String']['output'];
+00643:   missingAllModels: Scalars['Boolean']['output'];
+00644:   missingModelIds: Array<Scalars['String']['output']>;
+00645:   missingModelLabels: Array<Scalars['String']['output']>;
+00646:   reasonCode: Scalars['String']['output'];
+00647:   reasonLabel: Scalars['String']['output'];
+00648: };
+00649: 
+00650: export type DomainAnalysisModel = {
+00651:   __typename?: 'DomainAnalysisModel';
+00652:   label: Scalars['String']['output'];
+00653:   model: Scalars['String']['output'];
+00654:   rankingShape: RankingShape;
+00655:   values: Array<DomainAnalysisValueScore>;
+00656: };
+00657: 
+00658: export type DomainAnalysisRefreshResult = {
+00659:   __typename?: 'DomainAnalysisRefreshResult';
+00660:   message: Scalars['String']['output'];
+00661:   mode: Scalars['String']['output'];
+00662:   success: Scalars['Boolean']['output'];
+00663: };
+00664: 
+00665: export type DomainAnalysisResult = {
+00666:   __typename?: 'DomainAnalysisResult';
+00667:   cacheStatus: Scalars['String']['output'];
+00668:   clusterAnalysis: ClusterAnalysis;
+00669:   coveredDefinitions: Scalars['Int']['output'];
+00670:   definitionsWithAnalysis: Scalars['Int']['output'];
+00671:   domainId: Scalars['ID']['output'];
+00672:   domainName: Scalars['String']['output'];
+00673:   generatedAt: Scalars['DateTime']['output'];
+00674:   missingDefinitionIds: Array<Scalars['ID']['output']>;
+00675:   missingDefinitions: Array<DomainAnalysisMissingDefinition>;
+00676:   models: Array<DomainAnalysisModel>;
+00677:   rankingShapeBenchmarks: RankingShapeBenchmarks;
+00678:   targetedDefinitions: Scalars['Int']['output'];
+00679:   totalDefinitions: Scalars['Int']['output'];
+00680:   unavailableModels: Array<DomainAnalysisUnavailableModel>;
+00681: };
+00682: 
+00683: export type DomainAnalysisUnavailableModel = {
+00684:   __typename?: 'DomainAnalysisUnavailableModel';
+00685:   label: Scalars['String']['output'];
+00686:   model: Scalars['String']['output'];
+00687:   reason: Scalars['String']['output'];
+00688: };
+00689: 
+00690: export type DomainAnalysisValueDetailResult = {
+00691:   __typename?: 'DomainAnalysisValueDetailResult';
+00692:   coveredDefinitions: Scalars['Int']['output'];
+00693:   deprioritized: Scalars['Int']['output'];
+00694:   domainId: Scalars['ID']['output'];
+00695:   domainName: Scalars['String']['output'];
+00696:   generatedAt: Scalars['DateTime']['output'];
+00697:   missingDefinitionIds: Array<Scalars['ID']['output']>;
+00698:   modelId: Scalars['String']['output'];
+00699:   modelLabel: Scalars['String']['output'];
+00700:   neutral: Scalars['Int']['output'];
+00701:   prioritized: Scalars['Int']['output'];
+00702:   score: Scalars['Float']['output'];
+00703:   targetedDefinitions: Scalars['Int']['output'];
+00704:   totalTrials: Scalars['Int']['output'];
+00705:   valueKey: Scalars['String']['output'];
+00706:   vignettes: Array<DomainAnalysisVignetteDetail>;
+00707: };
+00708: 
+00709: export type DomainAnalysisValueScore = {
+00710:   __typename?: 'DomainAnalysisValueScore';
+00711:   deprioritized: Scalars['Float']['output'];
+00712:   neutral: Scalars['Float']['output'];
+00713:   prioritized: Scalars['Float']['output'];
+00714:   score: Scalars['Float']['output'];
+00715:   totalComparisons: Scalars['Float']['output'];
+00716:   valueKey: Scalars['String']['output'];
+00717: };
+00718: 
+00719: export type DomainAnalysisVignetteDetail = {
+00720:   __typename?: 'DomainAnalysisVignetteDetail';
+00721:   aggregateRunId?: Maybe<Scalars['ID']['output']>;
+00722:   conditions: Array<DomainAnalysisConditionDetail>;
+00723:   definitionId: Scalars['ID']['output'];
+00724:   definitionName: Scalars['String']['output'];
+00725:   definitionVersion: Scalars['Int']['output'];
+00726:   deprioritized: Scalars['Int']['output'];
+00727:   neutral: Scalars['Int']['output'];
+00728:   otherValueKey: Scalars['String']['output'];
+00729:   prioritized: Scalars['Int']['output'];
+00730:   selectedValueWinRate?: Maybe<Scalars['Float']['output']>;
+00731:   totalTrials: Scalars['Int']['output'];
+00732: };
+00733: 
+00734: export type DomainAvailableSignature = {
+00735:   __typename?: 'DomainAvailableSignature';
+00736:   isVirtual: Scalars['Boolean']['output'];
+00737:   label: Scalars['String']['output'];
+00738:   signature: Scalars['String']['output'];
+00739:   temperature?: Maybe<Scalars['Float']['output']>;
+00740: };
+00741: 
+00742: export type DomainCluster = {
+00743:   __typename?: 'DomainCluster';
+00744:   centroid: Scalars['JSON']['output'];
+00745:   definingValues: Array<Scalars['String']['output']>;
+00746:   id: Scalars['String']['output'];
+00747:   members: Array<ClusterMember>;
+00748:   name: Scalars['String']['output'];
+00749: };
+00750: 
+00751: /** A snapshot of all domain config at a point in time */
+00752: export type DomainConfigSnapshot = {
+00753:   __typename?: 'DomainConfigSnapshot';
+00754:   contextId?: Maybe<Scalars['String']['output']>;
+00755:   createdAt: Scalars['DateTime']['output'];
+00756:   domainId: Scalars['String']['output'];
+00757:   fingerprint: Scalars['String']['output'];
+00758:   id: Scalars['ID']['output'];
+00759:   levelPresetVersionId?: Maybe<Scalars['String']['output']>;
+00760:   preambleVersionId?: Maybe<Scalars['String']['output']>;
+00761:   valueStatementVersionIds: Array<Scalars['String']['output']>;
+00762: };
+00763: 
+00764: /** Summary of a domain config snapshot for history display */
+00765: export type DomainConfigSnapshotSummary = {
+00766:   __typename?: 'DomainConfigSnapshotSummary';
+00767:   contextLabel?: Maybe<Scalars['String']['output']>;
+00768:   createdAt: Scalars['DateTime']['output'];
+00769:   id: Scalars['ID']['output'];
+00770:   levelPresetLabel?: Maybe<Scalars['String']['output']>;
+00771:   preambleLabel?: Maybe<Scalars['String']['output']>;
+00772:   valueStatementCount: Scalars['Int']['output'];
+00773: };
+00774: 
+00775: /** A shared context paragraph for all vignettes in a domain */
+00776: export type DomainContext = {
+00777:   __typename?: 'DomainContext';
+00778:   createdAt: Scalars['DateTime']['output'];
+00779:   domain?: Maybe<Domain>;
+00780:   domainId: Scalars['ID']['output'];
+00781:   id: Scalars['ID']['output'];
+00782:   text: Scalars['String']['output'];
+00783:   updatedAt: Scalars['DateTime']['output'];
+00784:   version: Scalars['Int']['output'];
+00785: };
+00786: 
+00787: export type DomainEvaluation = {
+00788:   __typename?: 'DomainEvaluation';
+00789:   completedAt?: Maybe<Scalars['DateTime']['output']>;
+00790:   createdAt: Scalars['DateTime']['output'];
+00791:   createdByUserId?: Maybe<Scalars['ID']['output']>;
+00792:   domainId: Scalars['ID']['output'];
+00793:   domainNameAtLaunch: Scalars['String']['output'];
+00794:   failedDefinitions: Scalars['Int']['output'];
+00795:   id: Scalars['ID']['output'];
+00796:   maxBudgetUsd?: Maybe<Scalars['Float']['output']>;
+00797:   memberCount: Scalars['Int']['output'];
+00798:   members: Array<DomainEvaluationMember>;
+00799:   models: Array<Scalars['String']['output']>;
+00800:   projectedCostUsd: Scalars['Float']['output'];
+00801:   scopeCategory: Scalars['String']['output'];
+00802:   skippedForBudget: Scalars['Int']['output'];
+00803:   startedAt?: Maybe<Scalars['DateTime']['output']>;
+00804:   startedRuns: Scalars['Int']['output'];
+00805:   status: Scalars['String']['output'];
+00806:   temperature?: Maybe<Scalars['Float']['output']>;
+00807: };
+00808: 
+00809: export type DomainEvaluationCostEstimate = {
+00810:   __typename?: 'DomainEvaluationCostEstimate';
+00811:   basedOnSampleCount: Scalars['Int']['output'];
+00812:   defaultTemperature?: Maybe<Scalars['Float']['output']>;
+00813:   definitions: Array<DomainEvaluationEstimateDefinition>;
+00814:   domainId: Scalars['ID']['output'];
+00815:   domainName: Scalars['String']['output'];
+00816:   estimateConfidence: Scalars['String']['output'];
+00817:   existingTemperatures: Array<Scalars['Float']['output']>;
+00818:   fallbackReason?: Maybe<Scalars['String']['output']>;
+00819:   isUsingFallback: Scalars['Boolean']['output'];
+00820:   knownExclusions: Array<Scalars['String']['output']>;
+00821:   models: Array<DomainEvaluationEstimateModel>;
+00822:   scopeCategory: Scalars['String']['output'];
+00823:   targetedDefinitions: Scalars['Int']['output'];
+00824:   temperatureWarning?: Maybe<Scalars['String']['output']>;
+00825:   totalEstimatedCost: Scalars['Float']['output'];
+00826:   totalScenarioCount: Scalars['Int']['output'];
+00827: };
+00828: 
+00829: export type DomainEvaluationEstimateDefinition = {
+00830:   __typename?: 'DomainEvaluationEstimateDefinition';
+00831:   basedOnSampleCount: Scalars['Int']['output'];
+00832:   definitionId: Scalars['ID']['output'];
+00833:   definitionName: Scalars['String']['output'];
+00834:   definitionVersion: Scalars['Int']['output'];
+00835:   estimatedCost: Scalars['Float']['output'];
+00836:   isUsingFallback: Scalars['Boolean']['output'];
+00837:   scenarioCount: Scalars['Int']['output'];
+00838:   signature: Scalars['String']['output'];
+00839: };
+00840: 
+00841: export type DomainEvaluationEstimateModel = {
+00842:   __typename?: 'DomainEvaluationEstimateModel';
+00843:   basedOnSampleCount: Scalars['Int']['output'];
+00844:   estimatedCost: Scalars['Float']['output'];
+00845:   isDefault: Scalars['Boolean']['output'];
+00846:   isUsingFallback: Scalars['Boolean']['output'];
+00847:   label: Scalars['String']['output'];
+00848:   modelId: Scalars['String']['output'];
+00849:   supportsTemperature: Scalars['Boolean']['output'];
+00850: };
+00851: 
+00852: export type DomainEvaluationMember = {
+00853:   __typename?: 'DomainEvaluationMember';
+00854:   createdAt: Scalars['DateTime']['output'];
+00855:   definitionIdAtLaunch: Scalars['ID']['output'];
+00856:   definitionNameAtLaunch: Scalars['String']['output'];
+00857:   domainIdAtLaunch: Scalars['ID']['output'];
+00858:   runCategory: Scalars['String']['output'];
+00859:   runCompletedAt?: Maybe<Scalars['DateTime']['output']>;
+00860:   runId: Scalars['ID']['output'];
+00861:   runStartedAt?: Maybe<Scalars['DateTime']['output']>;
+00862:   runStatus: Scalars['String']['output'];
+00863: };
+00864: 
+00865: export type DomainEvaluationStatus = {
+00866:   __typename?: 'DomainEvaluationStatus';
+00867:   cancelledRuns: Scalars['Int']['output'];
+00868:   completedRuns: Scalars['Int']['output'];
+00869:   failedRuns: Scalars['Int']['output'];
+00870:   id: Scalars['ID']['output'];
+00871:   pendingRuns: Scalars['Int']['output'];
+00872:   runningRuns: Scalars['Int']['output'];
+00873:   status: Scalars['String']['output'];
+00874:   totalRuns: Scalars['Int']['output'];
+00875: };
+00876: 
+00877: export type DomainFindingsEligibility = {
+00878:   __typename?: 'DomainFindingsEligibility';
+00879:   completedEligibleEvaluationCount: Scalars['Int']['output'];
+00880:   consideredScopeCategories: Array<Scalars['String']['output']>;
+00881:   domainId: Scalars['ID']['output'];
+00882:   eligible: Scalars['Boolean']['output'];
+00883:   latestEligibleCompletedAt?: Maybe<Scalars['DateTime']['output']>;
+00884:   latestEligibleEvaluationId?: Maybe<Scalars['ID']['output']>;
+00885:   latestEligibleScopeCategory?: Maybe<Scalars['String']['output']>;
+00886:   reasons: Array<Scalars['String']['output']>;
+00887:   recommendedActions: Array<Scalars['String']['output']>;
+00888:   status: Scalars['String']['output'];
+00889:   summary: Scalars['String']['output'];
+00890: };
+00891: 
+00892: export type DomainMutationResult = {
+00893:   __typename?: 'DomainMutationResult';
+00894:   affectedDefinitions: Scalars['Int']['output'];
+00895:   success: Scalars['Boolean']['output'];
+00896: };
+00897: 
+00898: export type DomainRunSummary = {
+00899:   __typename?: 'DomainRunSummary';
+00900:   cancelledEvaluations: Scalars['Int']['output'];
+00901:   cancelledMemberRuns: Scalars['Int']['output'];
+00902:   completedEvaluations: Scalars['Int']['output'];
+00903:   completedMemberRuns: Scalars['Int']['output'];
+00904:   domainId: Scalars['ID']['output'];
+00905:   failedEvaluations: Scalars['Int']['output'];
+00906:   failedMemberRuns: Scalars['Int']['output'];
+00907:   latestEvaluationCreatedAt?: Maybe<Scalars['DateTime']['output']>;
+00908:   latestEvaluationId?: Maybe<Scalars['ID']['output']>;
+00909:   latestEvaluationStatus?: Maybe<Scalars['String']['output']>;
+00910:   latestScopeCategory?: Maybe<Scalars['String']['output']>;
+00911:   pendingEvaluations: Scalars['Int']['output'];
+00912:   pendingMemberRuns: Scalars['Int']['output'];
+00913:   pilotEvaluations: Scalars['Int']['output'];
+00914:   productionEvaluations: Scalars['Int']['output'];
+00915:   replicationEvaluations: Scalars['Int']['output'];
+00916:   runningEvaluations: Scalars['Int']['output'];
+00917:   runningMemberRuns: Scalars['Int']['output'];
+00918:   scopeCategory?: Maybe<Scalars['String']['output']>;
+00919:   totalEvaluations: Scalars['Int']['output'];
+00920:   totalMemberRuns: Scalars['Int']['output'];
+00921:   validationEvaluations: Scalars['Int']['output'];
+00922: };
+00923: 
+00924: /** Current domain settings: pickers and value statements with versions */
+00925: export type DomainSettings = {
+00926:   __typename?: 'DomainSettings';
+00927:   contextId?: Maybe<Scalars['String']['output']>;
+00928:   domainId: Scalars['ID']['output'];
+00929:   labelPrefix?: Maybe<Scalars['String']['output']>;
+00930:   levelPresetVersionId?: Maybe<Scalars['String']['output']>;
+00931:   preambleVersionId?: Maybe<Scalars['String']['output']>;
+00932:   sentencePrefix?: Maybe<Scalars['String']['output']>;
+00933:   valueStatements: Array<ValueStatementWithVersions>;
+00934: };
+00935: 
+00936: export type DomainTrialModelStatus = {
+00937:   __typename?: 'DomainTrialModelStatus';
+00938:   generationCompleted: Scalars['Int']['output'];
+00939:   generationFailed: Scalars['Int']['output'];
+00940:   generationTotal: Scalars['Int']['output'];
+00941:   latestErrorMessage?: Maybe<Scalars['String']['output']>;
+00942:   modelId: Scalars['String']['output'];
+00943:   summarizationCompleted: Scalars['Int']['output'];
+00944:   summarizationFailed: Scalars['Int']['output'];
+00945:   summarizationTotal: Scalars['Int']['output'];
+00946: };
+00947: 
+00948: export type DomainTrialPlanCellEstimate = {
+00949:   __typename?: 'DomainTrialPlanCellEstimate';
+00950:   definitionId: Scalars['ID']['output'];
+00951:   estimatedCost: Scalars['Float']['output'];
+00952:   modelId: Scalars['String']['output'];
+00953: };
+00954: 
+00955: export type DomainTrialPlanModel = {
+00956:   __typename?: 'DomainTrialPlanModel';
+00957:   isDefault: Scalars['Boolean']['output'];
+00958:   label: Scalars['String']['output'];
+00959:   modelId: Scalars['String']['output'];
+00960:   supportsTemperature: Scalars['Boolean']['output'];
+00961: };
+00962: 
+00963: export type DomainTrialPlanResult = {
+00964:   __typename?: 'DomainTrialPlanResult';
+00965:   cellEstimates: Array<DomainTrialPlanCellEstimate>;
+00966:   defaultTemperature?: Maybe<Scalars['Float']['output']>;
+00967:   domainId: Scalars['ID']['output'];
+00968:   domainName: Scalars['String']['output'];
+00969:   existingTemperatures: Array<Scalars['Float']['output']>;
+00970:   models: Array<DomainTrialPlanModel>;
+00971:   temperatureWarning?: Maybe<Scalars['String']['output']>;
+00972:   totalEstimatedCost: Scalars['Float']['output'];
+00973:   vignettes: Array<DomainTrialPlanVignette>;
+00974: };
+00975: 
+00976: export type DomainTrialPlanVignette = {
+00977:   __typename?: 'DomainTrialPlanVignette';
+00978:   definitionId: Scalars['ID']['output'];
+00979:   definitionName: Scalars['String']['output'];
+00980:   definitionVersion: Scalars['Int']['output'];
+00981:   existingBatchCount: Scalars['Int']['output'];
+00982:   scenarioCount: Scalars['Int']['output'];
+00983:   signature: Scalars['String']['output'];
+00984: };
+00985: 
+00986: export type DomainTrialRunEntry = {
+00987:   __typename?: 'DomainTrialRunEntry';
+00988:   definitionId: Scalars['ID']['output'];
+00989:   modelIds: Array<Scalars['String']['output']>;
+00990:   runId: Scalars['ID']['output'];
+00991: };
+00992: 
+00993: export type DomainTrialRunResult = {
+00994:   __typename?: 'DomainTrialRunResult';
+00995:   blockedByActiveLaunch: Scalars['Boolean']['output'];
+00996:   domainEvaluationId?: Maybe<Scalars['ID']['output']>;
+00997:   failedDefinitions: Scalars['Int']['output'];
+00998:   projectedCostUsd: Scalars['Float']['output'];
+00999:   runs: Array<DomainTrialRunEntry>;
+01000:   scopeCategory: Scalars['String']['output'];
+01001:   skippedForBudget: Scalars['Int']['output'];
+01002:   startedRuns: Scalars['Int']['output'];
+01003:   success: Scalars['Boolean']['output'];
+01004:   targetedDefinitions: Scalars['Int']['output'];
+01005:   totalDefinitions: Scalars['Int']['output'];
+01006: };
+01007: 
+01008: export type DomainTrialRunStatus = {
+01009:   __typename?: 'DomainTrialRunStatus';
+01010:   analysisStatus?: Maybe<Scalars['String']['output']>;
+01011:   definitionId: Scalars['ID']['output'];
+01012:   modelStatuses: Array<DomainTrialModelStatus>;
+01013:   runId: Scalars['ID']['output'];
+01014:   stalledModels: Array<Scalars['String']['output']>;
+01015:   status: Scalars['String']['output'];
+01016:   updatedAt: Scalars['DateTime']['output'];
+01017: };
+01018: 
+01019: export type DomainValueCoverageCell = {
+01020:   __typename?: 'DomainValueCoverageCell';
+01021:   aggregateRunId?: Maybe<Scalars['String']['output']>;
+01022:   batchCount: Scalars['Int']['output'];
+01023:   definitionId?: Maybe<Scalars['String']['output']>;
+01024:   definitionName?: Maybe<Scalars['String']['output']>;
+01025:   incompleteBatchCount: Scalars['Int']['output'];
+01026:   maxTrialCount?: Maybe<Scalars['Int']['output']>;
+01027:   minTrialCount?: Maybe<Scalars['Int']['output']>;
+01028:   modelBreakdown?: Maybe<Array<CoverageModelBreakdown>>;
+01029:   pairedBatchCount: Scalars['Int']['output'];
+01030:   valueA: Scalars['String']['output'];
+01031:   valueB: Scalars['String']['output'];
+01032: };
+01033: 
+01034: export type DomainValueCoverageResult = {
+01035:   __typename?: 'DomainValueCoverageResult';
+01036:   availableModels: Array<CoverageModelOption>;
+01037:   cells: Array<DomainValueCoverageCell>;
+01038:   domainId: Scalars['String']['output'];
+01039:   values: Array<Scalars['String']['output']>;
+01040: };
+01041: 
+01042: export type EnsureDomainVignettePairInput = {
+01043:   domainId: Scalars['ID']['input'];
+01044:   valueFirstId: Scalars['ID']['input'];
+01045:   valueSecondId: Scalars['ID']['input'];
+01046: };
+01047: 
+01048: export type EnsureDomainVignettePairResult = {
+01049:   __typename?: 'EnsureDomainVignettePairResult';
+01050:   definitionAId?: Maybe<Scalars['ID']['output']>;
+01051:   definitionBId?: Maybe<Scalars['ID']['output']>;
+01052:   status: VignettePairStatus;
+01053: };
+01054: 
+01055: /** Real-time execution metrics for monitoring parallel processing */
+01056: export type ExecutionMetrics = {
+01057:   __typename?: 'ExecutionMetrics';
+01058:   /** Estimated seconds until all pending jobs complete */
+01059:   estimatedSecondsRemaining?: Maybe<Scalars['Int']['output']>;
+01060:   /** Metrics for each LLM provider */
+01061:   providers: Array<ProviderExecutionMetrics>;
+01062:   /** Total jobs actively being processed across all providers */
+01063:   totalActive: Scalars['Int']['output'];
+01064:   /** Total jobs queued across all providers */
+01065:   totalQueued: Scalars['Int']['output'];
+01066:   /** Total probe retry attempts across all models for this run */
+01067:   totalRetries: Scalars['Int']['output'];
+01068: };
+01069: 
+01070: /** Status of a scenario expansion job */
+01071: export type ExpansionJobStatus =
+01072:   /** Job is currently running */
+01073:   | 'ACTIVE'
+01074:   /** Job completed successfully */
+01075:   | 'COMPLETED'
+01076:   /** Job failed */
+01077:   | 'FAILED'
+01078:   /** No expansion job exists */
+01079:   | 'NONE'
+01080:   /** Job is queued and waiting to run */
+01081:   | 'PENDING';
+01082: 
+01083: /** Real-time progress during scenario expansion */
+01084: export type ExpansionProgress = {
+01085:   __typename?: 'ExpansionProgress';
+01086:   /** Total number of scenarios expected to be generated */
+01087:   expectedScenarios: Scalars['Int']['output'];
+01088:   /** Number of scenarios generated so far */
+01089:   generatedScenarios: Scalars['Int']['output'];
+01090:   /** Number of input tokens used */
+01091:   inputTokens: Scalars['Int']['output'];
+01092:   /** Human-readable status message */
+01093:   message: Scalars['String']['output'];
+01094:   /** Number of output tokens received */
+01095:   outputTokens: Scalars['Int']['output'];
+01096:   /** Current phase (starting, calling_llm, parsing, completed, failed) */
+01097:   phase: Scalars['String']['output'];
+01098:   /** When this progress was last updated (ISO timestamp) */
+01099:   updatedAt: Scalars['String']['output'];
+01100: };
+01101: 
+01102: /** Status of scenario expansion for a definition */
+01103: export type ExpansionStatus = {
+01104:   __typename?: 'ExpansionStatus';
+01105:   /** When the expansion job completed */
+01106:   completedAt?: Maybe<Scalars['DateTime']['output']>;
+01107:   /** When the expansion job was created */
+01108:   createdAt?: Maybe<Scalars['DateTime']['output']>;
+01109:   /** Error message if the job failed */
+01110:   error?: Maybe<Scalars['String']['output']>;
+01111:   /** ID of the expansion job (if any) */
+01112:   jobId?: Maybe<Scalars['String']['output']>;
+01113:   /** Real-time progress during expansion (null when not actively expanding) */
+01114:   progress?: Maybe<ExpansionProgress>;
+01115:   /** Number of scenarios currently generated for this definition */
+01116:   scenarioCount: Scalars['Int']['output'];
+01117:   /** Current status of the expansion job */
+01118:   status: ExpansionJobStatus;
+01119:   /** What triggered the expansion (create, update, fork) */
+01120:   triggeredBy?: Maybe<Scalars['String']['output']>;
+01121: };
+01122: 
+01123: /** An experiment grouping multiple runs for comparison */
+01124: export type Experiment = {
+01125:   __typename?: 'Experiment';
+01126:   analysisPlan?: Maybe<Scalars['JSON']['output']>;
+01127:   createdAt: Scalars['DateTime']['output'];
+01128:   hypothesis?: Maybe<Scalars['String']['output']>;
+01129:   id: Scalars['ID']['output'];
+01130:   name: Scalars['String']['output'];
+01131:   runCount: Scalars['Int']['output'];
+01132:   runs: Array<Run>;
+01133:   updatedAt: Scalars['DateTime']['output'];
+01134: };
+01135: 
+01136: /** Result of a synchronous export operation */
+01137: export type ExportResult = {
+01138:   __typename?: 'ExportResult';
+01139:   /** The exported content (text/markdown/yaml/etc) */
+01140:   content: Scalars['String']['output'];
+01141:   /** Suggested filename for download */
+01142:   filename: Scalars['String']['output'];
+01143:   /** MIME type for the content */
+01144:   mimeType: Scalars['String']['output'];
+01145: };
+01146: 
+01147: export type ForkDefinitionInput = {
+01148:   /** Optional content override. If not provided, inherits everything from parent (stores minimal v2 content). */
+01149:   content?: InputMaybe<Scalars['JSON']['input']>;
+01150:   /** If true, fork with minimal content (inherit everything). Default: true. Set to false to copy parent content. */
+01151:   inheritAll?: InputMaybe<Scalars['Boolean']['input']>;
+01152:   /** Name for the forked definition */
+01153:   name: Scalars['String']['input'];
+01154:   /** ID of the definition to fork from */
+01155:   parentId: Scalars['String']['input'];
+01156: };
+01157: 
+01158: /** Job counts for a specific job type */
+01159: export type JobTypeStatus = {
+01160:   __typename?: 'JobTypeStatus';
+01161:   /** Number of jobs currently being processed */
+01162:   active: Scalars['Int']['output'];
+01163:   /** Number of completed jobs (from recent archive) */
+01164:   completed: Scalars['Int']['output'];
+01165:   /** Number of failed jobs */
+01166:   failed: Scalars['Int']['output'];
+01167:   /** Number of jobs waiting to be processed */
+01168:   pending: Scalars['Int']['output'];
+01169:   /** Job type name (e.g., probe_scenario) */
+01170:   type: Scalars['String']['output'];
+01171: };
+01172: 
+01173: export type LaunchAssumptionsTempZeroPayload = {
+01174:   __typename?: 'LaunchAssumptionsTempZeroPayload';
+01175:   failedVignetteIds: Array<Scalars['String']['output']>;
+01176:   modelCount: Scalars['Int']['output'];
+01177:   runIds: Array<Scalars['String']['output']>;
+01178:   startedRuns: Scalars['Int']['output'];
+01179:   totalVignettes: Scalars['Int']['output'];
+01180: };
+01181: 
+01182: export type LaunchOrderInvariancePayload = {
+01183:   __typename?: 'LaunchOrderInvariancePayload';
+01184:   approvedPairs: Scalars['Int']['output'];
+01185:   failedDefinitionIds: Array<Scalars['String']['output']>;
+01186:   modelCount: Scalars['Int']['output'];
+01187:   runIds: Array<Scalars['String']['output']>;
+01188:   runsByVariantType: Scalars['JSON']['output'];
+01189:   startedRuns: Scalars['Int']['output'];
+01190: };
+01191: 
+01192: /** A named level preset defining the 5-word intensity scale for job-choice conditions */
+01193: export type LevelPreset = {
+01194:   __typename?: 'LevelPreset';
+01195:   createdAt: Scalars['DateTime']['output'];
+01196:   id: Scalars['ID']['output'];
+01197:   /** The most recently created version */
+01198:   latestVersion?: Maybe<LevelPresetVersion>;
+01199:   name: Scalars['String']['output'];
+01200:   updatedAt: Scalars['DateTime']['output'];
+01201:   /** All versions of this level preset (newest first) */
+01202:   versions: Array<LevelPresetVersion>;
+01203: };
+01204: 
+01205: /** A versioned snapshot of a level preset (5-word intensity scale) */
+01206: export type LevelPresetVersion = {
+01207:   __typename?: 'LevelPresetVersion';
+01208:   createdAt: Scalars['DateTime']['output'];
+01209:   id: Scalars['ID']['output'];
+01210:   l1: Scalars['String']['output'];
+01211:   l2: Scalars['String']['output'];
+01212:   l3: Scalars['String']['output'];
+01213:   l4: Scalars['String']['output'];
+01214:   l5: Scalars['String']['output'];
+01215:   /** The parent level preset */
+01216:   levelPreset?: Maybe<LevelPreset>;
+01217:   levelPresetId: Scalars['String']['output'];
+01218:   version: Scalars['String']['output'];
+01219: };
+01220: 
+01221: /** An LLM model with pricing and lifecycle status */
+01222: export type LlmModel = {
+01223:   __typename?: 'LlmModel';
+01224:   /** Provider-specific API configuration (e.g., {"maxTokensParam": "max_completion_tokens"}) */
+01225:   apiConfig?: Maybe<Scalars['JSON']['output']>;
+01226:   /** Cost per 1M input tokens in USD */
+01227:   costInputPerMillion: Scalars['Float']['output'];
+01228:   /** Cost per 1M output tokens in USD */
+01229:   costOutputPerMillion: Scalars['Float']['output'];
+01230:   createdAt: Scalars['DateTime']['output'];
+01231:   /** User who created this LLM model */
+01232:   createdBy?: Maybe<User>;
+01233:   /** Human-readable name (e.g., "GPT-4o Mini") */
+01234:   displayName: Scalars['String']['output'];
+01235:   id: Scalars['ID']['output'];
+01236:   /** Whether this model is available (provider has API key configured) */
+01237:   isAvailable: Scalars['Boolean']['output'];
+01238:   /** Whether this is the default model for its provider */
+01239:   isDefault: Scalars['Boolean']['output'];
+01240:   /** API model identifier (e.g., "gpt-4o-mini") */
+01241:   modelId: Scalars['String']['output'];
+01242:   /** The provider this model belongs to */
+01243:   provider: LlmProvider;
+01244:   /** Provider this model belongs to */
+01245:   providerId: Scalars['ID']['output'];
+01246:   /** Lifecycle status (ACTIVE or DEPRECATED) */
+01247:   status: Scalars['String']['output'];
+01248:   updatedAt: Scalars['DateTime']['output'];
+01249: };
+01250: 
+01251: /** Lifecycle status of an LLM model */
+01252: export type LlmModelStatus =
+01253:   | 'ACTIVE'
+01254:   | 'DEPRECATED';
+01255: 
+01256: /** An LLM API provider with rate limiting and parallelism settings */
+01257: export type LlmProvider = {
+01258:   __typename?: 'LlmProvider';
+01259:   /** Active models only (excludes deprecated) */
+01260:   activeModels: Array<LlmModel>;
+01261:   /** Remaining budget balance in dollars (null = budget tracking disabled) */
+01262:   balance?: Maybe<Scalars['Float']['output']>;
+01263:   createdAt: Scalars['DateTime']['output'];
+01264:   /** The default model for this provider */
+01265:   defaultModel?: Maybe<LlmModel>;
+01266:   /** Human-readable name (e.g., "OpenAI") */
+01267:   displayName: Scalars['String']['output'];
+01268:   id: Scalars['ID']['output'];
+01269:   /** Whether the provider is available for use */
+01270:   isEnabled: Scalars['Boolean']['output'];
+01271:   /** Timestamp of the most recent manual balance sync (null = never synced) */
+01272:   lastSyncedAt?: Maybe<Scalars['DateTime']['output']>;
+01273:   /** Maximum concurrent API requests allowed */
+01274:   maxParallelRequests: Scalars['Int']['output'];
+01275:   /** All models belonging to this provider */
+01276:   models: Array<LlmModel>;
+01277:   /** Provider identifier (e.g., "openai", "anthropic") */
+01278:   name: Scalars['String']['output'];
+01279:   /** Rate limit (requests per minute) */
+01280:   requestsPerMinute: Scalars['Int']['output'];
+01281:   updatedAt: Scalars['DateTime']['output'];
+01282: };
+01283: 
+01284: /** Cost estimate for a single model in a run */
+01285: export type ModelCostEstimate = {
+01286:   __typename?: 'ModelCostEstimate';
+01287:   /** Average input tokens per probe used for prediction */
+01288:   avgInputPerProbe: Scalars['Float']['output'];
+01289:   /** Average output tokens per probe used for prediction */
+01290:   avgOutputPerProbe: Scalars['Float']['output'];
+01291:   /** Human-readable model name */
+01292:   displayName: Scalars['String']['output'];
+01293:   /** Cost for input tokens in USD */
+01294:   inputCost: Scalars['Float']['output'];
+01295:   /** Predicted total input tokens for all scenarios */
+01296:   inputTokens: Scalars['Float']['output'];
+01297:   /** True if using fallback estimates (no model-specific history) */
+01298:   isUsingFallback: Scalars['Boolean']['output'];
+01299:   /** Model identifier (e.g., 'openai:gpt-4o') */
+01300:   modelId: Scalars['ID']['output'];
+01301:   /** Cost for output tokens in USD */
+01302:   outputCost: Scalars['Float']['output'];
+01303:   /** Predicted total output tokens for all scenarios */
+01304:   outputTokens: Scalars['Float']['output'];
+01305:   /** Number of historical probes used to compute averages */
+01306:   sampleCount: Scalars['Int']['output'];
+01307:   /** Number of scenarios this model will run */
+01308:   scenarioCount: Scalars['Int']['output'];
+01309:   /** Total cost (inputCost + outputCost) in USD */
+01310:   totalCost: Scalars['Float']['output'];
+01311: };
+01312: 
+01313: export type ModelPlan = {
+01314:   __typename?: 'ModelPlan';
+01315:   conditions: Array<ConditionPlan>;
+01316:   modelId: Scalars['String']['output'];
+01317:   totalNeededSamples: Scalars['Int']['output'];
+01318: };
+01319: 
+01320: /** Token usage statistics for a model, used for cost prediction */
+01321: export type ModelTokenStats = {
+01322:   __typename?: 'ModelTokenStats';
+01323:   /** Average input tokens per probe based on historical data */
+01324:   avgInputTokens: Scalars['Float']['output'];
+01325:   /** Average output tokens per probe based on historical data */
+01326:   avgOutputTokens: Scalars['Float']['output'];
+01327:   /** When these statistics were last updated */
+01328:   lastUpdatedAt: Scalars['DateTime']['output'];
+01329:   /** Model identifier (e.g., 'openai:gpt-4o') */
+01330:   modelId: Scalars['ID']['output'];
+01331:   /** Number of probes used to compute these averages */
+01332:   sampleCount: Scalars['Int']['output'];
+01333: };
+01334: 
+01335: export type ModelsAnalysisDomainBreakdown = {
+01336:   __typename?: 'ModelsAnalysisDomainBreakdown';
+01337:   domainId: Scalars['String']['output'];
+01338:   domainName: Scalars['String']['output'];
+01339:   evidenceWeight: Scalars['Int']['output'];
+01340:   winRate: Scalars['Float']['output'];
+01341: };
+01342: 
+01343: export type ModelsAnalysisModelResult = {
+01344:   __typename?: 'ModelsAnalysisModelResult';
+01345:   label: Scalars['String']['output'];
+01346:   modelId: Scalars['String']['output'];
+01347:   values: Array<ModelsAnalysisValueResult>;
+01348: };
+01349: 
+01350: export type ModelsAnalysisResult = {
+01351:   __typename?: 'ModelsAnalysisResult';
+01352:   models: Array<ModelsAnalysisModelResult>;
+01353: };
+01354: 
+01355: export type ModelsAnalysisValueResult = {
+01356:   __typename?: 'ModelsAnalysisValueResult';
+01357:   domains: Array<ModelsAnalysisDomainBreakdown>;
+01358:   eligibleDomainCount: Scalars['Int']['output'];
+01359:   pooledWinRate?: Maybe<Scalars['Float']['output']>;
+01360:   stabilityScore?: Maybe<Scalars['Float']['output']>;
+01361:   valueKey: Scalars['String']['output'];
+01362: };
+01363: 
+01364: export type Mutation = {
+01365:   __typename?: 'Mutation';
+01366:   /** Add a tag to a definition. No-op if tag is already assigned. */
+01367:   addTagToDefinition: Definition;
+01368:   assignDomainToDefinitions: DomainMutationResult;
+01369:   assignDomainToDefinitionsByFilter: DomainMutationResult;
+01370:   /**
+01371:    *
+01372:    *       Cancel an evaluation run.
+01373:    *
+01374:    *       Jobs currently being processed will complete, but all pending jobs
+01375:    *       will be removed from the queue. Completed results are preserved.
+01376:    *
+01377:    *       Requires authentication. Run must be in PENDING, RUNNING, or PAUSED state.
+01378:    *
+01379:    */
+01380:   cancelRun: Run;
+01381:   /** Cancel an in-progress scenario expansion for a definition. */
+01382:   cancelScenarioExpansion: CancelExpansionResult;
+01383:   /**
+01384:    *
+01385:    *       Cancel pending summarization jobs for a run.
+01386:    *
+01387:    *       Only works when run is in SUMMARIZING state.
+01388:    *       Cancels pending summarize_transcript jobs in the queue.
+01389:    *       Preserves already-completed summaries.
+01390:    *       Transitions run to COMPLETED state.
+01391:    *
+01392:    *       Requires authentication.
+01393:    *
+01394:    */
+01395:   cancelSummarization: CancelSummarizationPayload;
+01396:   /** Create a tag and immediately assign it to a definition. Convenience mutation for inline tag creation. */
+01397:   createAndAssignTag: Definition;
+01398:   /**
+01399:    *
+01400:    *       Create a new API key for the current user.
+01401:    *       Requires authentication.
+01402:    *
+01403:    *       The full key value is returned ONLY in this response.
+01404:    *       Store it securely - it cannot be retrieved later.
+01405:    *
+01406:    */
+01407:   createApiKey: CreateApiKeyResult;
+01408:   /** Create a new definition. Automatically adds schema_version to content if not present. */
+01409:   createDefinition: Definition;
+01410:   createDomain: Domain;
+01411:   createDomainContext: DomainContext;
+01412:   /** @deprecated Renamed to createPairedVignette */
+01413:   createJobChoicePair: CreatePairedVignetteResult;
+01414:   createLevelPreset: LevelPreset;
+01415:   /** Create a new LLM model under a provider */
+01416:   createLlmModel: LlmModel;
+01417:   createPairedVignette: CreatePairedVignetteResult;
+01418:   /** Create a new preamble */
+01419:   createPreamble: Preamble;
+01420:   /** Create a survey with a backing definition and one scenario per question. */
+01421:   createSurvey: Experiment;
+01422:   /** Create a new tag. Name is normalized to lowercase and must be unique. */
+01423:   createTag: Tag;
+01424:   createValueStatement: ValueStatement;
+01425:   /** Soft delete a definition and all its descendants. Related scenarios and tags are also soft deleted. */
+01426:   deleteDefinition: DeleteDefinitionResult;
+01427:   deleteDomain: DomainMutationResult;
+01428:   deleteDomainContext: Scalars['Boolean']['output'];
+01429:   deleteLevelPreset: DeleteLevelPresetResult;
+01430:   /** Delete a preamble */
+01431:   deletePreamble: Preamble;
+01432:   /**
+01433:    *
+01434:    *       Soft delete a run and its associated data.
+01435:    *
+01436:    *       Sets deletedAt timestamp on the run. Transcripts and analysis results
+01437:    *       associated with this run will be filtered out in queries.
+01438:    *
+01439:    *       Requires authentication.
+01440:    *
+01441:    */
+01442:   deleteRun: Scalars['Boolean']['output'];
+01443:   /** Delete a survey and detach runs from it. */
+01444:   deleteSurvey: Scalars['Boolean']['output'];
+01445:   /** Delete a tag. Removes the tag from all definitions that use it. */
+01446:   deleteTag: DeleteTagResult;
+01447:   deleteValueStatement: Scalars['Boolean']['output'];
+01448:   /** Deprecate an LLM model (mark as no longer recommended for new runs) */
+01449:   deprecateLlmModel: DeprecateModelResult;
+01450:   /** Duplicate a survey into a new survey family at version 1. */
+01451:   duplicateSurvey: Experiment;
+01452:   ensureDomainVignettePair: EnsureDomainVignettePairResult;
+01453:   /** Export a definition as markdown in devtool-compatible format */
+01454:   exportDefinitionAsMd: ExportResult;
+01455:   /** Export scenarios as CLI-compatible YAML for use with probe.py */
+01456:   exportScenariosAsYaml: ExportResult;
+01457:   /** Fork an existing definition. By default inherits all content from parent (sparse v2 storage). */
+01458:   forkDefinition: Definition;
+01459:   launchAssumptionsTempZero: LaunchAssumptionsTempZeroPayload;
+01460:   launchOrderInvariance: LaunchOrderInvariancePayload;
+01461:   /**
+01462:    *
+01463:    *       Pause the global job queue.
+01464:    *
+01465:    *       All job processing will stop until the queue is resumed.
+01466:    *       Jobs will continue to be queued but not processed.
+01467:    *
+01468:    *       Requires authentication.
+01469:    *
+01470:    */
+01471:   pauseQueue: QueueStatus;
+01472:   /**
+01473:    *
+01474:    *       Pause a running evaluation.
+01475:    *
+01476:    *       Jobs currently being processed will complete, but no new jobs
+01477:    *       will be started until the run is resumed.
+01478:    *
+01479:    *       Requires authentication. Run must be in PENDING or RUNNING state.
+01480:    *
+01481:    */
+01482:   pauseRun: Run;
+01483:   /** Reactivate a deprecated LLM model */
+01484:   reactivateLlmModel: LlmModel;
+01485:   /**
+01486:    *
+01487:    *       Recompute analysis for a run.
+01488:    *
+01489:    *       This will:
+01490:    *       1. Mark any existing analysis as SUPERSEDED
+01491:    *       2. Queue a new analyze_basic job
+01492:    *       3. Return the job status (analysis will be computed asynchronously)
+01493:    *
+01494:    *       Returns null if the run is not found or not completed.
+01495:    *       Requires authentication.
+01496:    *
+01497:    */
+01498:   recomputeAnalysis?: Maybe<AnalysisResult>;
+01499:   /**
+01500:    *
+01501:    *       Attempt to recover an orphaned run.
+01502:    *
+01503:    *       If the run is stuck in RUNNING or SUMMARIZING state with no active jobs,
+01504:    *       this will re-queue missing probe jobs or summarize jobs as needed.
+01505:    *
+01506:    *       Useful for recovering from API restarts or other interruptions.
+01507:    *
+01508:    *       Requires authentication.
+01509:    *
+01510:    */
+01511:   recoverRun: RecoverRunPayload;
+01512:   refreshDomainAnalysis: DomainAnalysisRefreshResult;
+01513:   /** Manually trigger scenario regeneration for a definition. Queues a new expansion job. */
+01514:   regenerateScenarios: RegenerateScenariosResult;
+01515:   /** Remove a tag from a definition. No-op if tag was not assigned. */
+01516:   removeTagFromDefinition: Definition;
+01517:   renameDomain: Domain;
+01518:   /**
+01519:    *
+01520:    *       Restart summarization for a run.
+01521:    *
+01522:    *       Only works when run is in a terminal state (COMPLETED/FAILED/CANCELLED).
+01523:    *       By default, only re-queues transcripts without summaries or with errors.
+01524:    *       With force=true, re-queues all transcripts.
+01525:    *
+01526:    *       Requires authentication.
+01527:    *
+01528:    */
+01529:   restartSummarization: RestartSummarizationPayload;
+01530:   /**
+01531:    *
+01532:    *       Resume the global job queue.
+01533:    *
+01534:    *       Job processing will restart from where it left off.
+01535:    *
+01536:    *       Requires authentication.
+01537:    *
+01538:    */
+01539:   resumeQueue: QueueStatus;
+01540:   /**
+01541:    *
+01542:    *       Resume a paused evaluation.
+01543:    *
+01544:    *       Jobs will begin processing again from where they left off.
+01545:    *
+01546:    *       Requires authentication. Run must be in PAUSED state.
+01547:    *
+01548:    */
+01549:   resumeRun: Run;
+01550:   retryDomainTrialCell: RetryDomainTrialCellResult;
+01551:   reviewOrderInvariancePair: ReviewOrderInvariancePairPayload;
+01552:   /**
+01553:    *
+01554:    *       Revoke (delete) an API key.
+01555:    *       Requires authentication and ownership of the key.
+01556:    *
+01557:    *       Returns true if the key was successfully revoked.
+01558:    *       Throws NotFoundError if the key doesn't exist or belongs to another user.
+01559:    *
+01560:    */
+01561:   revokeApiKey: Scalars['Boolean']['output'];
+01562:   runTrialsForDomain: DomainTrialRunResult;
+01563:   /** Set a model as a default for its provider */
+01564:   setDefaultLlmModel: SetDefaultModelResult;
+01565:   setDomainDefaults: Domain;
+01566:   setDomainSettings: Domain;
+01567:   /** Set the budget balance for a provider (null disables budget tracking) */
+01568:   setProviderBalance: LlmProvider;
+01569:   startDomainEvaluation: DomainTrialRunResult;
+01570:   /**
+01571:    *
+01572:    *       Start a new evaluation run.
+01573:    *
+01574:    *       Creates a run record and queues probe_scenario jobs for each model-scenario combination.
+01575:    *       Requires authentication.
+01576:    *
+01577:    *       Returns the created run and the number of jobs queued.
+01578:    *
+01579:    */
+01580:   startRun: StartRunPayload;
+01581:   /** Sync the provider balance with the real balance from the provider dashboard */
+01582:   syncProviderBalance: ProviderBalanceSyncLog;
+01583:   /**
+01584:    *
+01585:    *       Trigger a system-wide scan for orphaned runs.
+01586:    *
+01587:    *       Detects all runs stuck in RUNNING or SUMMARIZING state with no active jobs,
+01588:    *       and attempts to recover them by re-queuing missing jobs.
+01589:    *
+01590:    *       This is normally run automatically every 5 minutes, but can be triggered manually.
+01591:    *
+01592:    *       Requires authentication.
+01593:    *
+01594:    */
+01595:   triggerRecovery: TriggerRecoveryPayload;
+01596:   /** Detach a forked definition from its parent and snapshot inherited content locally. */
+01597:   unforkDefinition: Definition;
+01598:   /** Remove a model from defaults for its provider */
+01599:   unsetDefaultLlmModel: LlmModel;
+01600:   /** Update an existing definition. Note: If definition has runs, consider forking instead to preserve history. */
+01601:   updateDefinition: Definition;
+01602:   /** Update specific content fields of a definition. Supports clearing overrides to inherit from parent. */
+01603:   updateDefinitionContent: Definition;
+01604:   updateDomainContext: DomainContext;
+01605:   /** @deprecated Renamed to updatePairedVignette */
+01606:   updateJobChoicePair: CreatePairedVignetteResult;
+01607:   updateLevelPreset: LevelPreset;
+01608:   /** Update an LLM model (display name, costs, API config) */
+01609:   updateLlmModel: LlmModel;
+01610:   /** Update LLM provider settings (rate limits, enabled status) */
+01611:   updateLlmProvider: LlmProvider;
+01612:   updatePairedVignette: CreatePairedVignetteResult;
+01613:   /** Update a preamble (creates a new version) */
+01614:   updatePreamble: Preamble;
+01615:   /**
+01616:    *
+01617:    *       Update a run's properties.
+01618:    *
+01619:    *       Currently supports updating the run name.
+01620:    *
+01621:    *       Requires authentication.
+01622:    *
+01623:    */
+01624:   updateRun: Run;
+01625:   /** Create a new survey version from an existing survey. */
+01626:   updateSurvey: Experiment;
+01627:   /** Update a system setting (creates if not exists) */
+01628:   updateSystemSetting: SystemSetting;
+01629:   /**
+01630:    *
+01631:    *       Manually update a transcript decision code.
+01632:    *
+01633:    *       Accepts only positive integer decision codes.
+01634:    *       If the run is already completed, this will supersede current analysis
+01635:    *       and queue a recompute job.
+01636:    *
+01637:    *       Requires authentication.
+01638:    *
+01639:    */
+01640:   updateTranscriptDecision: Transcript;
+01641:   updateValueStatement: ValueStatement;
+01642: };
+01643: 
+01644: 
+01645: export type MutationAddTagToDefinitionArgs = {
+01646:   definitionId: Scalars['String']['input'];
+01647:   tagId: Scalars['String']['input'];
+01648: };
+01649: 
+01650: 
+01651: export type MutationAssignDomainToDefinitionsArgs = {
+01652:   definitionIds: Array<Scalars['ID']['input']>;
+01653:   domainId?: InputMaybe<Scalars['ID']['input']>;
+01654: };
+01655: 
+01656: 
+01657: export type MutationAssignDomainToDefinitionsByFilterArgs = {
+01658:   domainId?: InputMaybe<Scalars['ID']['input']>;
+01659:   hasRuns?: InputMaybe<Scalars['Boolean']['input']>;
+01660:   rootOnly?: InputMaybe<Scalars['Boolean']['input']>;
+01661:   search?: InputMaybe<Scalars['String']['input']>;
+01662:   sourceDomainId?: InputMaybe<Scalars['ID']['input']>;
+01663:   tagIds?: InputMaybe<Array<Scalars['ID']['input']>>;
+01664:   withoutDomain?: InputMaybe<Scalars['Boolean']['input']>;
+01665: };
+01666: 
+01667: 
+01668: export type MutationCancelRunArgs = {
+01669:   runId: Scalars['ID']['input'];
+01670: };
+01671: 
+01672: 
+01673: export type MutationCancelScenarioExpansionArgs = {
+01674:   definitionId: Scalars['String']['input'];
+01675: };
+01676: 
+01677: 
+01678: export type MutationCancelSummarizationArgs = {
+01679:   runId: Scalars['ID']['input'];
+01680: };
+01681: 
+01682: 
+01683: export type MutationCreateAndAssignTagArgs = {
+01684:   definitionId: Scalars['String']['input'];
+01685:   tagName: Scalars['Stri
+
+... [narrowed review slice: middle omitted] ...
+
+status
+04727:   config
+04728:   progress
+04729:   startedAt
+04730:   completedAt
+04731:   createdAt
+04732:   transcriptCount
+04733:   analysisStatus
+04734:   definition {
+04735:     id
+04736:     name
+04737:     parentId
+04738:     resolvedContent
+04739:     tags {
+04740:       id
+04741:       name
+04742:     }
+04743:   }
+04744: }
+04745:     `;
+04746: export const LlmModelFieldsFragmentDoc = gql`
+04747:     fragment LlmModelFields on LlmModel {
+04748:   id
+04749:   providerId
+04750:   modelId
+04751:   displayName
+04752:   costInputPerMillion
+04753:   costOutputPerMillion
+04754:   status
+04755:   isDefault
+04756:   isAvailable
+04757:   apiConfig
+04758:   createdAt
+04759:   updatedAt
+04760: }
+04761:     `;
+04762: export const LlmProviderFieldsFragmentDoc = gql`
+04763:     fragment LlmProviderFields on LlmProvider {
+04764:   id
+04765:   name
+04766:   displayName
+04767:   maxParallelRequests
+04768:   requestsPerMinute
+04769:   isEnabled
+04770:   balance
+04771:   createdAt
+04772:   updatedAt
+04773: }
+04774:     `;
+04775: export const RunFieldsFragmentDoc = gql`
+04776:     fragment RunFields on Run {
+04777:   id
+04778:   name
+04779:   definitionId
+04780:   definitionVersion
+04781:   experimentId
+04782:   status
+04783:   runCategory
+04784:   config
+04785:   stalledModels
+04786:   companionRunId
+04787:   batchCount
+04788:   pairedBatchGroupId
+04789:   progress
+04790:   runProgress {
+04791:     total
+04792:     completed
+04793:     failed
+04794:     percentComplete
+04795:     byModel {
+04796:       modelId
+04797:       completed
+04798:       failed
+04799:     }
+04800:   }
+04801:   summarizeProgress {
+04802:     total
+04803:     completed
+04804:     failed
+04805:     percentComplete
+04806:   }
+04807:   unresolvableTranscriptCount {
+04808:     total
+04809:     byModel {
+04810:       modelId
+04811:       count
+04812:     }
+04813:   }
+04814:   startedAt
+04815:   completedAt
+04816:   createdAt
+04817:   updatedAt
+04818:   lastAccessedAt
+04819:   transcriptCount
+04820:   analysisStatus
+04821:   tags {
+04822:     id
+04823:     name
+04824:   }
+04825:   definition {
+04826:     id
+04827:     name
+04828:     version
+04829:     domain {
+04830:       name
+04831:     }
+04832:     tags: allTags {
+04833:       id
+04834:       name
+04835:     }
+04836:     content
+04837:   }
+04838:   definitionSnapshot
+04839: }
+04840:     `;
+04841: export const RunWithTranscriptsFieldsFragmentDoc = gql`
+04842:     fragment RunWithTranscriptsFields on Run {
+04843:   ...RunFields
+04844:   failedProbes {
+04845:     modelId
+04846:     errorCode
+04847:     errorMessage
+04848:   }
+04849:   transcripts {
+04850:     id
+04851:     runId
+04852:     scenarioId
+04853:     modelId
+04854:     modelVersion
+04855:     content
+04856:     decisionMetadata
+04857:     turnCount
+04858:     tokenCount
+04859:     durationMs
+04860:     estimatedCost
+04861:     createdAt
+04862:     lastAccessedAt
+04863:     dimensionValues
+04864:     decisionModelV2
+04865:   }
+04866:   analysis {
+04867:     actualCost {
+04868:       total
+04869:       perModel {
+04870:         modelId
+04871:         inputTokens
+04872:         outputTokens
+04873:         cost
+04874:         probeCount
+04875:       }
+04876:     }
+04877:   }
+04878:   recentTasks(limit: 10) {
+04879:     scenarioId
+04880:     modelId
+04881:     status
+04882:     error
+04883:     completedAt
+04884:   }
+04885:   executionMetrics {
+04886:     providers {
+04887:       provider
+04888:       activeJobs
+04889:       queuedJobs
+04890:       maxParallel
+04891:       requestsPerMinute
+04892:       activeModelIds
+04893:       recentCompletions {
+04894:         modelId
+04895:         scenarioId
+04896:         success
+04897:         completedAt
+04898:         durationMs
+04899:       }
+04900:     }
+04901:     totalActive
+04902:     totalQueued
+04903:     estimatedSecondsRemaining
+04904:     totalRetries
+04905:   }
+04906: }
+04907:     ${RunFieldsFragmentDoc}`;
+04908: export const AnalysisDocument = gql`
+04909:     query Analysis($runId: ID!) {
+04910:   analysis(runId: $runId) {
+04911:     ...AnalysisResultFields
+04912:   }
+04913: }
+04914:     ${AnalysisResultFieldsFragmentDoc}`;
+04915: 
+04916: export function useAnalysisQuery(options: Omit<Urql.UseQueryArgs<AnalysisQueryVariables>, 'query'>) {
+04917:   return Urql.useQuery<AnalysisQuery, AnalysisQueryVariables>({ query: AnalysisDocument, ...options });
+04918: };
+04919: export const RecomputeAnalysisDocument = gql`
+04920:     mutation RecomputeAnalysis($runId: ID!) {
+04921:   recomputeAnalysis(runId: $runId) {
+04922:     ...AnalysisResultFields
+04923:   }
+04924: }
+04925:     ${AnalysisResultFieldsFragmentDoc}`;
+04926: 
+04927: export function useRecomputeAnalysisMutation() {
+04928:   return Urql.useMutation<RecomputeAnalysisMutation, RecomputeAnalysisMutationVariables>(RecomputeAnalysisDocument);
+04929: };
+04930: export const ApiKeysDocument = gql`
+04931:     query ApiKeys {
+04932:   apiKeys {
+04933:     id
+04934:     name
+04935:     keyPrefix
+04936:     lastUsedAt
+04937:     expiresAt
+04938:     createdAt
+04939:   }
+04940: }
+04941:     `;
+04942: 
+04943: export function useApiKeysQuery(options?: Omit<Urql.UseQueryArgs<ApiKeysQueryVariables>, 'query'>) {
+04944:   return Urql.useQuery<ApiKeysQuery, ApiKeysQueryVariables>({ query: ApiKeysDocument, ...options });
+04945: };
+04946: export const CreateApiKeyDocument = gql`
+04947:     mutation CreateApiKey($input: CreateApiKeyInput!) {
+04948:   createApiKey(input: $input) {
+04949:     apiKey {
+04950:       id
+04951:       name
+04952:       keyPrefix
+04953:       lastUsedAt
+04954:       expiresAt
+04955:       createdAt
+04956:     }
+04957:     key
+04958:   }
+04959: }
+04960:     `;
+04961: 
+04962: export function useCreateApiKeyMutation() {
+04963:   return Urql.useMutation<CreateApiKeyMutation, CreateApiKeyMutationVariables>(CreateApiKeyDocument);
+04964: };
+04965: export const RevokeApiKeyDocument = gql`
+04966:     mutation RevokeApiKey($id: ID!) {
+04967:   revokeApiKey(id: $id)
+04968: }
+04969:     `;
+04970: 
+04971: export function useRevokeApiKeyMutation() {
+04972:   return Urql.useMutation<RevokeApiKeyMutation, RevokeApiKeyMutationVariables>(RevokeApiKeyDocument);
+04973: };
+04974: export const MeDocument = gql`
+04975:     query Me {
+04976:   me {
+04977:     id
+04978:     email
+04979:     name
+04980:     lastLoginAt
+04981:     createdAt
+04982:   }
+04983: }
+04984:     `;
+04985: 
+04986: export function useMeQuery(options?: Omit<Urql.UseQueryArgs<MeQueryVariables>, 'query'>) {
+04987:   return Urql.useQuery<MeQuery, MeQueryVariables>({ query: MeDocument, ...options });
+04988: };
+04989: export const RunsWithAnalysisDocument = gql`
+04990:     query RunsWithAnalysis($ids: [ID!]!) {
+04991:   runsWithAnalysis(ids: $ids) {
+04992:     ...ComparisonRunFullFields
+04993:     analysis {
+04994:       ...AnalysisResultFields
+04995:     }
+04996:   }
+04997: }
+04998:     ${ComparisonRunFullFieldsFragmentDoc}
+04999: ${AnalysisResultFieldsFragmentDoc}`;
+05000: 
+05001: export function useRunsWithAnalysisQuery(options: Omit<Urql.UseQueryArgs<RunsWithAnalysisQueryVariables>, 'query'>) {
+05002:   return Urql.useQuery<RunsWithAnalysisQuery, RunsWithAnalysisQueryVariables>({ query: RunsWithAnalysisDocument, ...options });
+05003: };
+05004: export const ComparisonRunsListDocument = gql`
+05005:     query ComparisonRunsList($definitionId: String, $analysisStatus: String, $limit: Int, $offset: Int) {
+05006:   runs(
+05007:     hasAnalysis: true
+05008:     definitionId: $definitionId
+05009:     analysisStatus: $analysisStatus
+05010:     limit: $limit
+05011:     offset: $offset
+05012:   ) {
+05013:     ...ComparisonRunListFields
+05014:   }
+05015: }
+05016:     ${ComparisonRunListFieldsFragmentDoc}`;
+05017: 
+05018: export function useComparisonRunsListQuery(options?: Omit<Urql.UseQueryArgs<ComparisonRunsListQueryVariables>, 'query'>) {
+05019:   return Urql.useQuery<ComparisonRunsListQuery, ComparisonRunsListQueryVariables>({ query: ComparisonRunsListDocument, ...options });
+05020: };
+05021: export const EstimateCostDocument = gql`
+05022:     query EstimateCost($definitionId: ID!, $models: [String!]!, $samplePercentage: Int, $samplesPerScenario: Int) {
+05023:   estimateCost(
+05024:     definitionId: $definitionId
+05025:     models: $models
+05026:     samplePercentage: $samplePercentage
+05027:     samplesPerScenario: $samplesPerScenario
+05028:   ) {
+05029:     total
+05030:     scenarioCount
+05031:     basedOnSampleCount
+05032:     isUsingFallback
+05033:     fallbackReason
+05034:     perModel {
+05035:       modelId
+05036:       displayName
+05037:       scenarioCount
+05038:       inputTokens
+05039:       outputTokens
+05040:       inputCost
+05041:       outputCost
+05042:       totalCost
+05043:       avgInputPerProbe
+05044:       avgOutputPerProbe
+05045:       sampleCount
+05046:       isUsingFallback
+05047:     }
+05048:   }
+05049: }
+05050:     `;
+05051: 
+05052: export function useEstimateCostQuery(options: Omit<Urql.UseQueryArgs<EstimateCostQueryVariables>, 'query'>) {
+05053:   return Urql.useQuery<EstimateCostQuery, EstimateCostQueryVariables>({ query: EstimateCostDocument, ...options });
+05054: };
+05055: export const DefinitionsDocument = gql`
+05056:     query Definitions($rootOnly: Boolean, $search: String, $tagIds: [ID!], $hasRuns: Boolean, $domainId: ID, $withoutDomain: Boolean, $limit: Int, $offset: Int) {
+05057:   definitions(
+05058:     rootOnly: $rootOnly
+05059:     search: $search
+05060:     tagIds: $tagIds
+05061:     hasRuns: $hasRuns
+05062:     domainId: $domainId
+05063:     withoutDomain: $withoutDomain
+05064:     limit: $limit
+05065:     offset: $offset
+05066:   ) {
+05067:     id
+05068:     name
+05069:     domainId
+05070:     domain {
+05071:       id
+05072:       name
+05073:     }
+05074:     parentId
+05075:     content
+05076:     createdAt
+05077:     updatedAt
+05078:     lastAccessedAt
+05079:     version
+05080:     runCount
+05081:     trialCount
+05082:     trialConfig {
+05083:       definitionVersion
+05084:       temperature
+05085:       signature
+05086:       signatureBreakdown {
+05087:         signature
+05088:         definitionVersion
+05089:         temperature
+05090:         trialCount
+05091:       }
+05092:       isConsistent
+05093:       message
+05094:     }
+05095:     tags {
+05096:       id
+05097:       name
+05098:     }
+05099:     allTags {
+05100:       id
+05101:       name
+05102:     }
+05103:   }
+05104: }
+05105:     `;
+05106: 
+05107: export function useDefinitionsQuery(options?: Omit<Urql.UseQueryArgs<DefinitionsQueryVariables>, 'query'>) {
+05108:   return Urql.useQuery<DefinitionsQuery, DefinitionsQueryVariables>({ query: DefinitionsDocument, ...options });
+05109: };
+05110: export const DefinitionDocument = gql`
+05111:     query Definition($id: ID!) {
+05112:   definition(id: $id) {
+05113:     id
+05114:     name
+05115:     domainId
+05116:     domainContextId
+05117:     domain {
+05118:       id
+05119:       name
+05120:     }
+05121:     parentId
+05122:     content
+05123:     createdAt
+05124:     updatedAt
+05125:     lastAccessedAt
+05126:     version
+05127:     runCount
+05128:     trialCount
+05129:     trialConfig {
+05130:       definitionVersion
+05131:       temperature
+05132:       signature
+05133:       signatureBreakdown {
+05134:         signature
+05135:         definitionVersion
+05136:         temperature
+05137:         trialCount
+05138:       }
+05139:       isConsistent
+05140:       message
+05141:     }
+05142:     scenarioCount
+05143:     preambleVersionId
+05144:     levelPresetVersionId
+05145:     preambleVersion {
+05146:       id
+05147:       version
+05148:       content
+05149:       preamble {
+05150:         name
+05151:       }
+05152:     }
+05153:     tags {
+05154:       id
+05155:       name
+05156:       createdAt
+05157:     }
+05158:     parent {
+05159:       id
+05160:       name
+05161:     }
+05162:     children {
+05163:       id
+05164:       name
+05165:       createdAt
+05166:     }
+05167:     isForked
+05168:     resolvedContent
+05169:     localContent
+05170:     overrides {
+05171:       template
+05172:       dimensions
+05173:       matchingRules
+05174:     }
+05175:     inheritedTags {
+05176:       id
+05177:       name
+05178:       createdAt
+05179:     }
+05180:     allTags {
+05181:       id
+05182:       name
+05183:       createdAt
+05184:     }
+05185:     expansionStatus {
+05186:       status
+05187:       jobId
+05188:       triggeredBy
+05189:       createdAt
+05190:       completedAt
+05191:       error
+05192:       scenarioCount
+05193:       progress {
+05194:         phase
+05195:         expectedScenarios
+05196:         generatedScenarios
+05197:         inputTokens
+05198:         outputTokens
+05199:         message
+05200:         updatedAt
+05201:       }
+05202:     }
+05203:   }
+05204: }
+05205:     `;
+05206: 
+05207: export function useDefinitionQuery(options: Omit<Urql.UseQueryArgs<DefinitionQueryVariables>, 'query'>) {
+05208:   return Urql.useQuery<DefinitionQuery, DefinitionQueryVariables>({ query: DefinitionDocument, ...options });
+05209: };
+05210: export const DefinitionAncestorsDocument = gql`
+05211:     query DefinitionAncestors($id: ID!, $maxDepth: Int) {
+05212:   definitionAncestors(id: $id, maxDepth: $maxDepth) {
+05213:     id
+05214:     name
+05215:     parentId
+05216:     createdAt
+05217:   }
+05218: }
+05219:     `;
+05220: 
+05221: export function useDefinitionAncestorsQuery(options: Omit<Urql.UseQueryArgs<DefinitionAncestorsQueryVariables>, 'query'>) {
+05222:   return Urql.useQuery<DefinitionAncestorsQuery, DefinitionAncestorsQueryVariables>({ query: DefinitionAncestorsDocument, ...options });
+05223: };
+05224: export const DefinitionDescendantsDocument = gql`
+05225:     query DefinitionDescendants($id: ID!, $maxDepth: Int) {
+05226:   definitionDescendants(id: $id, maxDepth: $maxDepth) {
+05227:     id
+05228:     name
+05229:     parentId
+05230:     createdAt
+05231:   }
+05232: }
+05233:     `;
+05234: 
+05235: export function useDefinitionDescendantsQuery(options: Omit<Urql.UseQueryArgs<DefinitionDescendantsQueryVariables>, 'query'>) {
+05236:   return Urql.useQuery<DefinitionDescendantsQuery, DefinitionDescendantsQueryVariables>({ query: DefinitionDescendantsDocument, ...options });
+05237: };
+05238: export const DefinitionCountDocument = gql`
+05239:     query DefinitionCount($rootOnly: Boolean, $search: String, $tagIds: [ID!], $hasRuns: Boolean, $domainId: ID, $withoutDomain: Boolean) {
+05240:   definitionCount(
+05241:     rootOnly: $rootOnly
+05242:     search: $search
+05243:     tagIds: $tagIds
+05244:     hasRuns: $hasRuns
+05245:     domainId: $domainId
+05246:     withoutDomain: $withoutDomain
+05247:   )
+05248: }
+05249:     `;
+05250: 
+05251: export function useDefinitionCountQuery(options?: Omit<Urql.UseQueryArgs<DefinitionCountQueryVariables>, 'query'>) {
+05252:   return Urql.useQuery<DefinitionCountQuery, DefinitionCountQueryVariables>({ query: DefinitionCountDocument, ...options });
+05253: };
+05254: export const CreateDefinitionDocument = gql`
+05255:     mutation CreateDefinition($input: CreateDefinitionInput!) {
+05256:   createDefinition(input: $input) {
+05257:     id
+05258:     name
+05259:     parentId
+05260:     content
+05261:     createdAt
+05262:     updatedAt
+05263:   }
+05264: }
+05265:     `;
+05266: 
+05267: export function useCreateDefinitionMutation() {
+05268:   return Urql.useMutation<CreateDefinitionMutation, CreateDefinitionMutationVariables>(CreateDefinitionDocument);
+05269: };
+05270: export const UpdateDefinitionDocument = gql`
+05271:     mutation UpdateDefinition($id: String!, $input: UpdateDefinitionInput!) {
+05272:   updateDefinition(id: $id, input: $input) {
+05273:     id
+05274:     name
+05275:     content
+05276:     updatedAt
+05277:   }
+05278: }
+05279:     `;
+05280: 
+05281: export function useUpdateDefinitionMutation() {
+05282:   return Urql.useMutation<UpdateDefinitionMutation, UpdateDefinitionMutationVariables>(UpdateDefinitionDocument);
+05283: };
+05284: export const ForkDefinitionDocument = gql`
+05285:     mutation ForkDefinition($input: ForkDefinitionInput!) {
+05286:   forkDefinition(input: $input) {
+05287:     id
+05288:     name
+05289:     parentId
+05290:     content
+05291:     createdAt
+05292:     isForked
+05293:     resolvedContent
+05294:     localContent
+05295:     overrides {
+05296:       template
+05297:       dimensions
+05298:       matchingRules
+05299:     }
+05300:   }
+05301: }
+05302:     `;
+05303: 
+05304: export function useForkDefinitionMutation() {
+05305:   return Urql.useMutation<ForkDefinitionMutation, ForkDefinitionMutationVariables>(ForkDefinitionDocument);
+05306: };
+05307: export const UnforkDefinitionDocument = gql`
+05308:     mutation UnforkDefinition($id: String!) {
+05309:   unforkDefinition(id: $id) {
+05310:     id
+05311:     name
+05312:     parentId
+05313:     content
+05314:     updatedAt
+05315:     version
+05316:     isForked
+05317:     resolvedContent
+05318:     localContent
+05319:     overrides {
+05320:       template
+05321:       dimensions
+05322:       matchingRules
+05323:     }
+05324:   }
+05325: }
+05326:     `;
+05327: 
+05328: export function useUnforkDefinitionMutation() {
+05329:   return Urql.useMutation<UnforkDefinitionMutation, UnforkDefinitionMutationVariables>(UnforkDefinitionDocument);
+05330: };
+05331: export const DeleteDefinitionDocument = gql`
+05332:     mutation DeleteDefinition($id: String!) {
+05333:   deleteDefinition(id: $id) {
+05334:     deletedIds
+05335:     count
+05336:   }
+05337: }
+05338:     `;
+05339: 
+05340: export function useDeleteDefinitionMutation() {
+05341:   return Urql.useMutation<DeleteDefinitionMutation, DeleteDefinitionMutationVariables>(DeleteDefinitionDocument);
+05342: };
+05343: export const RegenerateScenariosDocument = gql`
+05344:     mutation RegenerateScenarios($definitionId: String!) {
+05345:   regenerateScenarios(definitionId: $definitionId) {
+05346:     definitionId
+05347:     jobId
+05348:     queued
+05349:   }
+05350: }
+05351:     `;
+05352: 
+05353: export function useRegenerateScenariosMutation() {
+05354:   return Urql.useMutation<RegenerateScenariosMutation, RegenerateScenariosMutationVariables>(RegenerateScenariosDocument);
+05355: };
+05356: export const CancelScenarioExpansionDocument = gql`
+05357:     mutation CancelScenarioExpansion($definitionId: String!) {
+05358:   cancelScenarioExpansion(definitionId: $definitionId) {
+05359:     definitionId
+05360:     cancelled
+05361:     jobId
+05362:     message
+05363:   }
+05364: }
+05365:     `;
+05366: 
+05367: export function useCancelScenarioExpansionMutation() {
+05368:   return Urql.useMutation<CancelScenarioExpansionMutation, CancelScenarioExpansionMutationVariables>(CancelScenarioExpansionDocument);
+05369: };
+05370: export const DomainContextsDocument = gql`
+05371:     query DomainContexts($domainId: String) {
+05372:   domainContexts(domainId: $domainId) {
+05373:     id
+05374:     domainId
+05375:     domain {
+05376:       id
+05377:       name
+05378:     }
+05379:     text
+05380:     version
+05381:     updatedAt
+05382:   }
+05383: }
+05384:     `;
+05385: 
+05386: export function useDomainContextsQuery(options?: Omit<Urql.UseQueryArgs<DomainContextsQueryVariables>, 'query'>) {
+05387:   return Urql.useQuery<DomainContextsQuery, DomainContextsQueryVariables>({ query: DomainContextsDocument, ...options });
+05388: };
+05389: export const CreateDomainContextDocument = gql`
+05390:     mutation CreateDomainContext($input: CreateDomainContextInput!) {
+05391:   createDomainContext(input: $input) {
+05392:     id
+05393:     domainId
+05394:     text
+05395:     version
+05396:     updatedAt
+05397:   }
+05398: }
+05399:     `;
+05400: 
+05401: export function useCreateDomainContextMutation() {
+05402:   return Urql.useMutation<CreateDomainContextMutation, CreateDomainContextMutationVariables>(CreateDomainContextDocument);
+05403: };
+05404: export const UpdateDomainContextDocument = gql`
+05405:     mutation UpdateDomainContext($id: ID!, $input: UpdateDomainContextInput!) {
+05406:   updateDomainContext(id: $id, input: $input) {
+05407:     id
+05408:     domainId
+05409:     text
+05410:     version
+05411:     updatedAt
+05412:   }
+05413: }
+05414:     `;
+05415: 
+05416: export function useUpdateDomainContextMutation() {
+05417:   return Urql.useMutation<UpdateDomainContextMutation, UpdateDomainContextMutationVariables>(UpdateDomainContextDocument);
+05418: };
+05419: export const DeleteDomainContextDocument = gql`
+05420:     mutation DeleteDomainContext($id: ID!) {
+05421:   deleteDomainContext(id: $id)
+05422: }
+05423:     `;
+05424: 
+05425: export function useDeleteDomainContextMutation() {
+05426:   return Urql.useMutation<DeleteDomainContextMutation, DeleteDomainContextMutationVariables>(DeleteDomainContextDocument);
+05427: };
+05428: export const DomainAnalysisDocument = gql`
+05429:     query DomainAnalysis($domainId: ID!, $scoreMethod: String, $signature: String) {
+05430:   domainAnalysis(
+05431:     domainId: $domainId
+05432:     scoreMethod: $scoreMethod
+05433:     signature: $signature
+05434:   ) {
+05435:     domainId
+05436:     domainName
+05437:     totalDefinitions
+05438:     targetedDefinitions
+05439:     coveredDefinitions
+05440:     missingDefinitionIds
+05441:     missingDefinitions {
+05442:       definitionId
+05443:       definitionName
+05444:       reasonCode
+05445:       reasonLabel
+05446:       missingAllModels
+05447:       missingModelIds
+05448:       missingModelLabels
+05449:     }
+05450:     definitionsWithAnalysis
+05451:     cacheStatus
+05452:     generatedAt
+05453:     models {
+05454:       model
+05455:       label
+05456:       values {
+05457:         valueKey
+05458:         score
+05459:         prioritized
+05460:         deprioritized
+05461:         neutral
+05462:         totalComparisons
+05463:       }
+05464:       rankingShape {
+05465:         topStructure
+05466:         bottomStructure
+05467:         topGap
+05468:         bottomGap
+05469:         spread
+05470:         steepness
+05471:         dominanceZScore
+05472:       }
+05473:     }
+05474:     unavailableModels {
+05475:       model
+05476:       label
+05477:       reason
+05478:     }
+05479:     rankingShapeBenchmarks {
+05480:       domainMeanTopGap
+05481:       domainStdTopGap
+05482:       medianSpread
+05483:     }
+05484:     clusterAnalysis {
+05485:       skipped
+05486:       skipReason
+05487:       defaultPair
+05488:       clusters {
+05489:         id
+05490:         name
+05491:         definingValues
+05492:         centroid
+05493:         members {
+05494:           model
+05495:           label
+05496:           silhouetteScore
+05497:           isOutlier
+05498:           nearestClusterIds
+05499:           distancesToNearestClusters
+05500:         }
+05501:       }
+05502:       faultLinesByPair
+05503:     }
+05504:   }
+05505: }
+05506:     `;
+05507: 
+05508: export function useDomainAnalysisQuery(options: Omit<Urql.UseQueryArgs<DomainAnalysisQueryVariables>, 'query'>) {
+05509:   return Urql.useQuery<DomainAnalysisQuery, DomainAnalysisQueryVariables>({ query: DomainAnalysisDocument, ...options });
+05510: };
+05511: export const RefreshDomainAnalysisDocument = gql`
+05512:     mutation RefreshDomainAnalysis($domainId: ID!, $signature: String) {
+05513:   refreshDomainAnalysis(domainId: $domainId, signature: $signature) {
+05514:     success
+05515:     mode
+05516:     message
+05517:   }
+05518: }
+05519:     `;
+05520: 
+05521: export function useRefreshDomainAnalysisMutation() {
+05522:   return Urql.useMutation<RefreshDomainAnalysisMutation, RefreshDomainAnalysisMutationVariables>(RefreshDomainAnalysisDocument);
+05523: };
+05524: export const DomainAnalysisLegacyDocument = gql`
+05525:     query DomainAnalysisLegacy($domainId: ID!) {
+05526:   domainAnalysis(domainId: $domainId) {
+05527:     domainId
+05528:     domainName
+05529:     totalDefinitions
+05530:     targetedDefinitions
+05531:     definitionsWithAnalysis
+05532:     generatedAt
+05533:     models {
+05534:       model
+05535:       label
+05536:       values {
+05537:         valueKey
+05538:         score
+05539:         prioritized
+05540:         deprioritized
+05541:         neutral
+05542:         totalComparisons
+05543:       }
+05544:     }
+05545:     unavailableModels {
+05546:       model
+05547:       label
+05548:       reason
+05549:     }
+05550:   }
+05551: }
+05552:     `;
+05553: 
+05554: export function useDomainAnalysisLegacyQuery(options: Omit<Urql.UseQueryArgs<DomainAnalysisLegacyQueryVariables>, 'query'>) {
+05555:   return Urql.useQuery<DomainAnalysisLegacyQuery, DomainAnalysisLegacyQueryVariables>({ query: DomainAnalysisLegacyDocument, ...options });
+05556: };
+05557: export const DomainAnalysisValueDetailDocument = gql`
+05558:     query DomainAnalysisValueDetail($domainId: ID!, $modelId: String!, $valueKey: String!, $scoreMethod: String, $signature: String) {
+05559:   domainAnalysisValueDetail(
+05560:     domainId: $domainId
+05561:     modelId: $modelId
+05562:     valueKey: $valueKey
+05563:     scoreMethod: $scoreMethod
+05564:     signature: $signature
+05565:   ) {
+05566:     domainId
+05567:     domainName
+05568:     modelId
+05569:     modelLabel
+05570:     valueKey
+05571:     score
+05572:     prioritized
+05573:     deprioritized
+05574:     neutral
+05575:     totalTrials
+05576:     targetedDefinitions
+05577:     coveredDefinitions
+05578:     missingDefinitionIds
+05579:     generatedAt
+05580:     vignettes {
+05581:       definitionId
+05582:       definitionName
+05583:       definitionVersion
+05584:       aggregateRunId
+05585:       otherValueKey
+05586:       prioritized
+05587:       deprioritized
+05588:       neutral
+05589:       totalTrials
+05590:       selectedValueWinRate
+05591:       conditions {
+05592:         scenarioId
+05593:         conditionName
+05594:         dimensions
+05595:         prioritized
+05596:         deprioritized
+05597:         neutral
+05598:         totalTrials
+05599:         selectedValueWinRate
+05600:         strongly
+05601:         somewhat
+05602:         opponentSomewhat
+05603:         opponentStrongly
+05604:         unknownCount
+05605:       }
+05606:     }
+05607:   }
+05608: }
+05609:     `;
+05610: 
+05611: export function useDomainAnalysisValueDetailQuery(options: Omit<Urql.UseQueryArgs<DomainAnalysisValueDetailQueryVariables>, 'query'>) {
+05612:   return Urql.useQuery<DomainAnalysisValueDetailQuery, DomainAnalysisValueDetailQueryVariables>({ query: DomainAnalysisValueDetailDocument, ...options });
+05613: };
+05614: export const DomainAnalysisConditionTranscriptsDocument = gql`
+05615:     query DomainAnalysisConditionTranscripts($domainId: ID!, $modelId: String!, $valueKey: String!, $definitionId: ID!, $scenarioId: ID, $limit: Int, $signature: String) {
+05616:   domainAnalysisConditionTranscripts(
+05617:     domainId: $domainId
+05618:     modelId: $modelId
+05619:     valueKey: $valueKey
+05620:     definitionId: $definitionId
+05621:     scenarioId: $scenarioId
+05622:     limit: $limit
+05623:     signature: $signature
+05624:   ) {
+05625:     id
+05626:     runId
+05627:     scenarioId
+05628:     modelId
+05629:     decisionCode
+05630:     decisionModelV2
+05631:     turnCount
+05632:     tokenCount
+05633:     durationMs
+05634:     createdAt
+05635:     content
+05636:   }
+05637: }
+05638:     `;
+05639: 
+05640: export function useDomainAnalysisConditionTranscriptsQuery(options: Omit<Urql.UseQueryArgs<DomainAnalysisConditionTranscriptsQueryVariables>, 'query'>) {
+05641:   return Urql.useQuery<DomainAnalysisConditionTranscriptsQuery, DomainAnalysisConditionTranscriptsQueryVariables>({ query: DomainAnalysisConditionTranscriptsDocument, ...options });
+05642: };
+05643: export const DomainAvailableSignaturesDocument = gql`
+05644:     query DomainAvailableSignatures($domainId: ID!) {
+05645:   domainAvailableSignatures(domainId: $domainId) {
+05646:     signature
+05647:     label
+05648:     isVirtual
+05649:     temperature
+05650:   }
+05651: }
+05652:     `;
+05653: 
+05654: export function useDomainAvailableSignaturesQuery(options: Omit<Urql.UseQueryArgs<DomainAvailableSignaturesQueryVariables>, 'query'>) {
+05655:   return Urql.useQuery<DomainAvailableSignaturesQuery, DomainAvailableSignaturesQueryVariables>({ query: DomainAvailableSignaturesDocument, ...options });
+05656: };
+05657: export const DomainFindingsEligibilityDocument = gql`
+05658:     query DomainFindingsEligibility($domainId: ID!) {
+05659:   domainFindingsEligibility(domainId: $domainId) {
+05660:     domainId
+05661:     eligible
+05662:     status
+05663:     summary
+05664:     reasons
+05665:     recommendedActions
+05666:     consideredScopeCategories
+05667:     completedEligibleEvaluationCount
+05668:     latestEligibleEvaluationId
+05669:     latestEligibleScopeCategory
+05670:     latestEligibleCompletedAt
+05671:   }
+05672: }
+05673:     `;
+05674: 
+05675: export function useDomainFindingsEligibilityQuery(options: Omit<Urql.UseQueryArgs<DomainFindingsEligibilityQueryVariables>, 'query'>) {
+05676:   return Urql.useQuery<DomainFindingsEligibilityQuery, DomainFindingsEligibilityQueryVariables>({ query: DomainFindingsEligibilityDocument, ...options });
+05677: };
+05678: export const DomainValueCoverageDocument = gql`
+05679:     query DomainValueCoverage($domainId: ID!, $modelIds: [String!], $signature: String) {
+05680:   domainValueCoverage(
+05681:     domainId: $domainId
+05682:     modelIds: $modelIds
+05683:     signature: $signature
+05684:   ) {
+05685:     domainId
+05686:     values
+05687:     cells {
+05688:       valueA
+05689:       valueB
+05690:       batchCount
+05691:       pairedBatchCount
+05692:       incompleteBatchCount
+05693:       definitionId
+05694:       definitionName
+05695:       aggregateRunId
+05696:       minTrialCount
+05697:       maxTrialCount
+05698:       modelBreakdown {
+05699:         modelId
+05700:         label
+05701:         trialCount
+05702:       }
+05703:     }
+05704:     availableModels {
+05705:       modelId
+05706:       label
+05707:     }
+05708:   }
+05709: }
+05710:     `;
+05711: 
+05712: export function useDomainValueCoverageQuery(options: Omit<Urql.UseQueryArgs<DomainValueCoverageQueryVariables>, 'query'>) {
+05713:   return Urql.useQuery<DomainValueCoverageQuery, DomainValueCoverageQueryVariables>({ query: DomainValueCoverageDocument, ...options });
+05714: };
+05715: export const DomainValueCoverageLegacyDocument = gql`
+05716:     query DomainValueCoverageLegacy($domainId: ID!, $modelIds: [String!]) {
+05717:   domainValueCoverage(domainId: $domainId, modelIds: $modelIds) {
+05718:     domainId
+05719:     values
+05720:     cells {
+05721:       valueA
+05722:       valueB
+05723:       batchCount
+05724:       pairedBatchCount
+05725:       definitionId
+05726:       definitionName
+05727:       aggregateRunId
+05728:     }
+05729:     availableModels {
+05730:       modelId
+05731:       label
+05732:     }
+05733:   }
+05734: }
+05735:     `;
+05736: 
+05737: export function useDomainValueCoverageLegacyQuery(options: Omit<Urql.UseQueryArgs<DomainValueCoverageLegacyQueryVariables>, 'query'>) {
+05738:   return Urql.useQuery<DomainValueCoverageLegacyQuery, DomainValueCoverageLegacyQueryVariables>({ query: DomainValueCoverageLegacyDocument, ...options });
+05739: };
+05740: export const DomainsDocument = gql`
+05741:     query Domains($search: String, $limit: Int, $offset: Int) {
+05742:   domains(search: $search, limit: $limit, offset: $offset) {
+05743:     id
+05744:     name
+05745:     createdAt
+05746:     updatedAt
+05747:     definitionCount
+05748:     defaultLevelPresetVersionId
+05749:     defaultPreambleVersionId
+05750:     defaultContextId
+05751:   }
+05752: }
+05753:     `;
+05754: 
+05755: export function useDomainsQuery(options?: Omit<Urql.UseQueryArgs<DomainsQueryVariables>, 'query'>) {
+05756:   return Urql.useQuery<DomainsQuery, DomainsQueryVariables>({ query: DomainsDocument, ...options });
+05757: };
+05758: export const CreateDomainDocument = gql`
+05759:     mutation CreateDomain($name: String!) {
+05760:   createDomain(name: $name) {
+05761:     id
+05762:     name
+05763:     createdAt
+05764:     updatedAt
+05765:     definitionCount
+05766:   }
+05767: }
+05768:     `;
+05769: 
+05770: export function useCreateDomainMutation() {
+05771:   return Urql.useMutation<CreateDomainMutation, CreateDomainMutationVariables>(CreateDomainDocument);
+05772: };
+05773: export const RenameDomainDocument = gql`
+05774:     mutation RenameDomain($id: ID!, $name: String!) {
+05775:   renameDomain(id: $id, name: $name) {
+05776:     id
+05777:     name
+05778:     createdAt
+05779:     updatedAt
+05780:     definitionCount
+05781:   }
+05782: }
+05783:     `;
+05784: 
+05785: export function useRenameDomainMutation() {
+05786:   return Urql.useMutation<RenameDomainMutation, RenameDomainMutationVariables>(RenameDomainDocument);
+05787: };
+05788: export const DeleteDomainDocument = gql`
+05789:     mutation DeleteDomain($id: ID!) {
+05790:   deleteDomain(id: $id) {
+05791:     success
+05792:     affectedDefinitions
+05793:   }
+05794: }
+05795:     `;
+05796: 
+05797: export function useDeleteDomainMutation() {
+05798:   return Urql.useMutation<DeleteDomainMutation, DeleteDomainMutationVariables>(DeleteDomainDocument);
+05799: };
+05800: export const AssignDomainToDefinitionsDocument = gql`
+05801:     mutation AssignDomainToDefinitions($definitionIds: [ID!]!, $domainId: ID) {
+05802:   assignDomainToDefinitions(definitionIds: $definitionIds, domainId: $domainId) {
+05803:     success
+05804:     affectedDefinitions
+05805:   }
+05806: }
+05807:     `;
+05808: 
+05809: export function useAssignDomainToDefinitionsMutation() {
+05810:   return Urql.useMutation<AssignDomainToDefinitionsMutation, AssignDomainToDefinitionsMutationVariables>(AssignDomainToDefinitionsDocument);
+05811: };
+05812: export const AssignDomainToDefinitionsByFilterDocument = gql`
+05813:     mutation AssignDomainToDefinitionsByFilter($domainId: ID, $rootOnly: Boolean, $search: String, $tagIds: [ID!], $hasRuns: Boolean, $sourceDomainId: ID, $withoutDomain: Boolean) {
+05814:   assignDomainToDefinitionsByFilter(
+05815:     domainId: $domainId
+05816:     rootOnly: $rootOnly
+05817:     search: $search
+05818:     tagIds: $tagIds
+05819:     hasRuns: $hasRuns
+05820:     sourceDomainId: $sourceDomainId
+05821:     withoutDomain: $withoutDomain
+05822:   ) {
+05823:     success
+05824:     affectedDefinitions
+05825:   }
+05826: }
+05827:     `;
+05828: 
+05829: export function useAssignDomainToDefinitionsByFilterMutation() {
+05830:   return Urql.useMutation<AssignDomainToDefinitionsByFilterMutation, AssignDomainToDefinitionsByFilterMutationVariables>(AssignDomainToDefinitionsByFilterDocument);
+05831: };
+05832: export const RunTrialsForDomainDocument = gql`
+05833:     mutation RunTrialsForDomain($domainId: ID!, $temperature: Float, $maxBudgetUsd: Float, $definitionIds: [ID!]) {
+05834:   runTrialsForDomain(
+05835:     domainId: $domainId
+05836:     temperature: $temperature
+05837:     maxBudgetUsd: $maxBudgetUsd
+05838:     definitionIds: $definitionIds
+05839:   ) {
+05840:     domainEvaluationId
+05841:     success
+05842:     totalDefinitions
+05843:     targetedDefinitions
+05844:     startedRuns
+05845:     failedDefinitions
+05846:     skippedForBudget
+05847:     projectedCostUsd
+05848:     blockedByActiveLaunch
+05849:     runs {
+05850:       definitionId
+05851:       runId
+05852:       modelIds
+05853:     }
+05854:   }
+05855: }
+05856:     `;
+05857: 
+05858: export function useRunTrialsForDomainMutation() {
+05859:   return Urql.useMutation<RunTrialsForDomainMutation, RunTrialsForDomainMutationVariables>(RunTrialsForDomainDocument);
+05860: };
+05861: export const StartDomainEvaluationDocument = gql`
+05862:     mutation StartDomainEvaluation($domainId: ID!, $scopeCategory: String, $temperature: Float, $maxBudgetUsd: Float, $definitionIds: [ID!], $modelIds: [String!], $samplePercentage: Int, $samplesPerScenario: Int, $targetBatchCount: Int) {
+05863:   startDomainEvaluation(
+05864:     domainId: $domainId
+05865:     scopeCategory: $scopeCategory
+05866:     temperature: $temperature
+05867:     maxBudgetUsd: $maxBudgetUsd
+05868:     definitionIds: $definitionIds
+05869:     modelIds: $modelIds
+05870:     samplePercentage: $samplePercentage
+05871:     samplesPerScenario: $samplesPerScenario
+05872:     targetBatchCount: $targetBatchCount
+05873:   ) {
+05874:     domainEvaluationId
+05875:     scopeCategory
+05876:     success
+05877:     totalDefinitions
+05878:     targetedDefinitions
+05879:     startedRuns
+05880:     failedDefinitions
+05881:     skippedForBudget
+05882:     projectedCostUsd
+05883:     blockedByActiveLaunch
+05884:     runs {
+05885:       definitionId
+05886:       runId
+05887:       modelIds
+05888:     }
+05889:   }
+05890: }
+05891:     `;
+05892: 
+05893: export function useStartDomainEvaluationMutation() {
+05894:   return Urql.useMutation<StartDomainEvaluationMutation, StartDomainEvaluationMutationVariables>(StartDomainEvaluationDocument);
+05895: };
+05896: export const DomainEvaluationsDocument = gql`
+05897:     query DomainEvaluations($domainId: ID!, $scopeCategory: String, $status: String, $limit: Int, $offset: Int) {
+05898:   domainEvaluations(
+05899:     domainId: $domainId
+05900:     scopeCategory: $scopeCategory
+05901:     status: $status
+05902:     limit: $limit
+05903:     offset: $offset
+05904:   ) {
+05905:     id
+05906:     domainId
+05907:     domainNameAtLaunch
+05908:     scopeCategory
+05909:     status
+05910:     createdAt
+05911:     startedAt
+05912:     completedAt
+05913:     startedRuns
+05914:     failedDefinitions
+05915:     skippedForBudget
+05916:     projectedCostUsd
+05917:     models
+05918:     temperature
+05919:     maxBudgetUsd
+05920:     memberCount
+05921:   }
+05922: }
+05923:     `;
+05924: 
+05925: export function useDomainEvaluationsQuery(options: Omit<Urql.UseQueryArgs<DomainEvaluationsQueryVariables>, 'query'>) {
+05926:   return Urql.useQuery<DomainEvaluationsQuery, DomainEvaluationsQueryVariables>({ query: DomainEvaluationsDocument, ...options });
+05927: };
+05928: export const DomainEvaluationDocument = gql`
+05929:     query DomainEvaluation($id: ID!) {
+05930:   domainEvaluation(id: $id) {
+05931:     id
+05932:     domainId
+05933:     domainNameAtLaunch
+05934:     scopeCategory
+05935:     status
+05936:     createdAt
+05937:     startedAt
+05938:     completedAt
+05939:     startedRuns
+05940:     failedDefinitions
+05941:     skippedForBudget
+05942:     projectedCostUsd
+05943:     models
+05944:     temperature
+05945:     maxBudgetUsd
+05946:     memberCount
+05947:     members {
+05948:       runId
+05949:       definitionIdAtLaunch
+05950:       definitionNameAtLaunch
+05951:       domainIdAtLaunch
+05952:       createdAt
+05953:       runStatus
+05954:       runCategory
+05955:       runStartedAt
+05956:       runCompletedAt
+05957:     }
+05958:   }
+05959: }
+05960:     `;
+05961: 
+05962: export function useDomainEvaluationQuery(options: Omit<Urql.UseQueryArgs<DomainEvaluationQueryVariables>, 'query'>) {
+05963:   return Urql.useQuery<DomainEvaluationQuery, DomainEvaluationQueryVariables>({ query: DomainEvaluationDocument, ...options });
+05964: };
+05965: export const DomainEvaluationStatusDocument = gql`
+05966:     query DomainEvaluationStatus($id: ID!) {
+05967:   domainEvaluationStatus(id: $id) {
+05968:     id
+05969:     status
+05970:     totalRuns
+05971:     pendingRuns
+05972:     runningRuns
+05973:     completedRuns
+05974:     failedRuns
+05975:     cancelledRuns
+05976:   }
+05977: }
+05978:     `;
+05979: 
+05980: export function useDomainEvaluationStatusQuery(options: Omit<Urql.UseQueryArgs<DomainEvaluationStatusQueryVariables>, 'query'>) {
+05981:   return Urql.useQuery<DomainEvaluationStatusQuery, DomainEvaluationStatusQueryVariables>({ query: DomainEvaluationStatusDocument, ...options });
+05982: };
+05983: export const DomainTrialsPlanDocument = gql`
+05984:     query DomainTrialsPlan($domainId: ID!, $temperature: Float, $definitionIds: [ID!], $scopeCategory: String) {
+05985:   domainTrialsPlan(
+05986:     domainId: $domainId
+05987:     temperature: $temperature
+05988:     definitionIds: $definitionIds
+05989:     scopeCategory: $scopeCategory
+05990:   ) {
+05991:     domainId
+05992:     domainName
+05993:     vignettes {
+05994:       definitionId
+05995:       definitionName
+05996:       definitionVersion
+05997:       signature
+05998:       scenarioCount
+05999:       existingBatchCount
+06000:     }
+06001:     models {
+06002:       modelId
+06003:       label
+06004:       isDefault
+06005:       supportsTemperature
+06006:     }
+06007:     cellEstimates {
+06008:       definitionId
+06009:       modelId
+06010:       estimatedCost
+06011:     }
+06012:     totalEstimatedCost
+06013:     existingTemperatures
+06014:     defaultTemperature
+06015:     temperatureWarning
+06016:   }
+06017: }
+06018:     `;
+06019: 
+06020: export function useDomainTrialsPlanQuery(options: Omit<Urql.UseQueryArgs<DomainTrialsPlanQueryVariables>, 'query'>) {
+06021:   return Urql.useQuery<DomainTrialsPlanQuery, DomainTrialsPlanQueryVariables>({ query: DomainTrialsPlanDocument, ...options });
+06022: };
+06023: export const EstimateDomainEvaluationCostDocument = gql`
+06024:     query EstimateDomainEvaluationCost($domainId: ID!, $definitionIds: [ID!], $modelIds: [String!], $temperature: Float, $samplePercentage: Int, $samplesPerScenario: Int, $scopeCategory: String) {
+06025:   estimateDomainEvaluationCost(
+06026:     domainId: $domainId
+06027:     definitionIds: $definitionIds
+06028:     modelIds: $modelIds
+06029:     temperature: $temperature
+06030:     samplePercentage: $samplePercentage
+06031:     samplesPerScenario: $samplesPerScenario
+06032:     scopeCategory: $scopeCategory
+06033:   ) {
+06034:     domainId
+06035:     domainName
+06036:     scopeCategory
+06037:     targetedDefinitions
+06038:     totalScenarioCount
+06039:     totalEstimatedCost
+06040:     basedOnSampleCount
+06041:     isUsingFallback
+06042:     fallbackReason
+06043:     estimateConfidence
+06044:     knownExclusions
+06045:     models {
+06046:       modelId
+06047:       label
+06048:       isDefault
+06049:       supportsTemperature
+06050:       estimatedCost
+06051:       basedOnSampleCount
+06052:       isUsingFallback
+06053:     }
+06054:     definitions {
+06055:       definitionId
+06056:       definitionName
+06057:       definitionVersion
+06058:       signature
+06059:       scenarioCount
+06060:       estimatedCost
+06061:       basedOnSampleCount
+06062:       isUsingFallback
+06063:     }
+06064:     existingTemperatures
+06065:     defaultTemperature
+06066:     temperatureWarning
+06067:   }
+06068: }
+06069:     `;
+06070: 
+06071: export function useEstimateDomainEvaluationCostQuery(options: Omit<Urql.UseQueryArgs<EstimateDomainEvaluationCostQueryVariables>, 'query'>) {
+06072:   return Urql.useQuery<EstimateDomainEvaluationCostQuery, EstimateDomainEvaluationCostQueryVariables>({ query: EstimateDomainEvaluationCostDocument, ...options });
+06073: };
+06074: export const DomainTrialRunsStatusDocument = gql`
+06075:     query DomainTrialRunsStatus($runIds: [ID!]!) {
+06076:   domainTrialRunsStatus(runIds: $runIds) {
+06077:     runId
+06078:     definitionId
+06079:     status
+06080:     updatedAt
+06081:     stalledModels
+06082:     analysisStatus
+06083:     modelStatuses {
+06084:       modelId
+06085:       generationCompleted
+06086:       generationFailed
+06087:       generationTotal
+06088:       summarizationCompleted
+06089:       summarizationFailed
+06090:       summarizationTotal
+06091:       latestErrorMessage
+06092:     }
+06093:   }
+06094: }
+06095:     `;
+06096: 
+06097: export function useDomainTrialRunsStatusQuery(options: Omit<Urql.UseQueryArgs<DomainTrialRunsStatusQueryVariables>, 'query'>) {
+06098:   return Urql.useQuery<DomainTrialRunsStatusQuery, DomainTrialRunsStatusQueryVariables>({ query: DomainTrialRunsStatusDocument, ...options });
+06099: };
+06100: export const DomainSettingsDocument = gql`
+06101:     query DomainSettings($domainId: ID!) {
+06102:   domainSettings(domainId: $domainId) {
+06103:     domainId
+06104:     preambleVersionId
+06105:     levelPresetVersionId
+06106:     contextId
+06107:     sentencePrefix
+06108:     labelPrefix
+06109:     valueStatements {
+06110:       id
+06111:       token
+06112:       currentContent
+06113:       previousContent
+06114:     }
+06115:   }
+06116: }
+06117:     `;
+06118: 
+06119: export function useDomainSettingsQuery(options: Omit<Urql.UseQueryArgs<DomainSettingsQueryVariables>, 'query'>) {
+06120:   return Urql.useQuery<DomainSettingsQuery, DomainSettingsQueryVariables>({ query: DomainSettingsDocument, ...options });
+06121: };
+06122: export const DomainConfigSnapshotsDocument = gql`
+06123:     query DomainConfigSnapshots($domainId: ID!, $limit: Int) {
+06124:   domainConfigSnapshots(domainId: $domainId, limit: $limit) {
+06125:     id
+06126:     createdAt
+06127:     preambleLabel
+06128:     levelPresetLabel
+06129:     contextLabel
+06130:     valueStatementCount
+06131:   }
+06132: }
+06133:     `;
+06134: 
+06135: export function useDomainConfigSnapshotsQuery(options: Omit<Urql.UseQueryArgs<DomainConfigSnapshotsQueryVariables>, 'query'>) {
+06136:   return Urql.useQuery<DomainConfigSnapshotsQuery, DomainConfigSnapshotsQueryVariables>({ query: DomainConfigSnapshotsDocument, ...options });
+06137: };
+06138: export const SetDomainSettingsDocument = gql`
+06139:     mutation SetDomainSettings($domainId: ID!, $preambleVersionId: ID, $levelPresetVersionId: ID, $contextId: ID, $sentencePrefix: String, $labelPrefix: String, $valueStatements: [ValueStatementInput!]!) {
+06140:   setDomainSettings(
+06141:     domainId: $domainId
+06142:     preambleVersionId: $preambleVersionId
+06143:     levelPresetVersionId: $levelPresetVersionId
+06144:     contextId: $contextId
+06145:     sentencePrefix: $sentencePrefix
+06146:     labelPrefix: $labelPrefix
+06147:     valueStatements: $valueStatements
+06148:   ) {
+06149:     id
+06150:     name
+06151:     defaultPreambleVersionId
+06152:     defaultLevelPresetVersionId
+06153:     defaultContextId
+06154:   }
+06155: }
+06156:     `;
+06157: 
+06158: export function useSetDomainSettingsMutation() {
+06159:   return Urql.useMutation<SetDomainSettingsMutation, SetDomainSettingsMutationVariables>(SetDomainSettingsDocument);
+06160: };
+06161: export const EnsureDomainVignettePairDocument = gql`
+06162:     mutation EnsureDomainVignettePair($input: EnsureDomainVignettePairInput!) {
+06163:   ensureDomainVignettePair(input: $input) {
+06164:     status
+06165:     definitionAId
+06166:     definitionBId
+06167:   }
+06168: }
+06169:     `;
+06170: 
+06171: export function useEnsureDomainVignettePairMutation() {
+06172:   return Urql.useMutation<EnsureDomainVignettePairMutation, EnsureDomainVignettePairMutationVariables>(EnsureDomainVignettePairDocument);
+06173: };
+06174: export const SystemHealthDocument = gql`
+06175:     query SystemHealth($refresh: Boolean) {
+06176:   systemHealth(refresh: $refresh) {
+06177:     providers {
+06178:       providers {
+06179:         id
+06180:         name
+06181:         configured
+06182:         connected
+06183:         error
+06184:         remainingBudgetUsd
+06185:         lastChecked
+06186:       }
+06187:       checkedAt
+06188:     }
+06189:     queue {
+06190:       isHealthy
+06191:       isRunning
+06192:       isPaused
+06193:       activeJobs
+06194:       pendingJobs
+06195:       completedLast24h
+06196:       failedLast24h
+06197:       successRate
+06198:       jobTypes {
+06199:         type
+06200:         pending
+06201:         active
+06202:         completed
+06203:         failed
+06204:       }
+06205:       error
+06206:       checkedAt
+06207:     }
+06208:     worker {
+06209:       isHealthy
+06210:       pythonVersion
+06211:       packages
+06212:       apiKeys
+06213:       warnings
+06214:       error
+06215:       checkedAt
+06216:     }
+06217:   }
+06218: }
+06219:     `;
+06220: 
+06221: export function useSystemHealthQuery(options?: Omit<Urql.UseQueryArgs<SystemHealthQueryVariables>, 'query'>) {
+06222:   return Urql.useQuery<SystemHealthQuery, SystemHealthQueryVariables>({ query: SystemHealthDocument, ...options });
+06223: };
+06224: export const GetLevelPresetsDocument = gql`
+06225:     query GetLevelPresets {
+06226:   levelPresets {
+06227:     id
+06228:     name
+06229:     updatedAt
+06230:     latestVersion {
+06231:       id
+06232:       version
+06233:       l1
+06234:       l2
+06235:       l3
+06236:       l4
+06237:       l5
+06238:       createdAt
+06239:     }
+06240:   }
+06241: }
+06242:     `;
+06243: 
+06244: export function useGetLevelPresetsQuery(options?: Omit<Urql.UseQueryArgs<GetLevelPresetsQueryVariables>, 'query'>) {
+06245:   return Urql.useQuery<GetLevelPresetsQuery, GetLevelPresetsQueryVariables>({ query: GetLevelPresetsDocument, ...options });
+06246: };
+06247: export const CreateLevelPresetDocument = gql`
+06248:     mutation CreateLevelPreset($name: String!, $l1: String!, $l2: String!, $l3: String!, $l4: String!, $l5: String!) {
+06249:   createLevelPreset(name: $name, l1: $l1, l2: $l2, l3: $l3, l4: $l4, l5: $l5) {
+06250:     id
+06251:     name
+06252:     latestVersion {
+06253:       id
+06254:       version
+06255:       l1
+06256:       l2
+06257:       l3
+06258:       l4
+06259:       l5
+06260:     }
+06261:   }
+06262: }
+06263:     `;
+06264: 
+06265: export function useCreateLevelPresetMutation() {
+06266:   return Urql.useMutation<CreateLevelPresetMutation, CreateLevelPresetMutationVariables>(CreateLevelPresetDocument);
+06267: };
+06268: export const UpdateLevelPresetDocument = gql`
+06269:     mutation UpdateLevelPreset($id: ID!, $l1: String!, $l2: String!, $l3: String!, $l4: String!, $l5: String!) {
+06270:   updateLevelPreset(id: $id, l1: $l1, l2: $l2, l3: $l3, l4: $l4, l5: $l5) {
+06271:     id
+06272:     name
+06273:     updatedAt
+06274:     latestVersion {
+06275:       id
+06276:       version
+06277:       l1
+06278:       l2
+06279:       l3
+06280:       l4
+06281:       l5
+06282:     }
+06283:   }
+06284: }
+06285:     `;
+06286: 
+06287: export function useUpdateLevelPresetMutation() {
+06288:   return Urql.useMutation<UpdateLevelPresetMutation, UpdateLevelPresetMutationVariables>(UpdateLevelPresetDocument);
+06289: };
+06290: export const DeleteLevelPresetDocument = gql`
+06291:     mutation DeleteLevelPreset($id: ID!) {
+06292:   deleteLevelPreset(id: $id) {
+06293:     id
+06294:   }
+06295: }
+06296:     `;
+06297: 
+06298: export function useDeleteLevelPresetMutation() {
+06299:   return Urql.useMutation<DeleteLevelPresetMutation, DeleteLevelPresetMutationVariables>(DeleteLevelPresetDocument);
+06300: };
+06301: export const LlmProvidersDocument = gql`
+06302:     query LlmProviders {
+06303:   llmProviders {
+06304:     ...LlmProviderFields
+06305:     models {
+06306:       ...LlmModelFields
+06307:     }
+06308:   }
+06309: }
+06310:     ${LlmProviderFieldsFragmentDoc}
+06311: ${LlmModelFieldsFragmentDoc}`;
+06312: 
+06313: export function useLlmProvidersQuery(options?: Omit<Urql.UseQueryArgs<LlmProvidersQueryVariables>, 'query'>) {
+06314:   return Urql.useQuery<LlmProvidersQuery, LlmProvidersQueryVariables>({ query: LlmProvidersDocument, ...options });
+06315: };
+06316: export const LlmModelsDocument = gql`
+06317:     query LlmModels($providerId: String, $status: String) {
+06318:   llmModels(providerId: $providerId, status: $status) {
+06319:     ...LlmModelFields
+06320:     provider {
+06321:       ...LlmProviderFields
+06322:     }
+06323:   }
+06324: }
+06325:     ${LlmModelFieldsFragmentDoc}
+06326: ${LlmProviderFieldsFragmentDoc}`;
+06327: 
+06328: export function useLlmModelsQuery(options?: Omit<Urql.UseQueryArgs<LlmModelsQueryVariables>, 'query'>) {
+06329:   return Urql.useQuery<LlmModelsQuery, LlmModelsQueryVariables>({ query: LlmModelsDocument, ...options });
+06330: };
+06331: export const InfraModelDocument = gql`
+06332:     query InfraModel($purpose: String!) {
+06333:   infraModel(purpose: $purpose) {
+06334:     ...LlmModelFields
+06335:     provider {
+06336:       ...LlmProviderFields
+06337:     }
+06338:   }
+06339: }
+06340:     ${LlmModelFieldsFragmentDoc}
+06341: ${LlmProviderFieldsFragmentDoc}`;
+06342: 
+06343: export function useInfraModelQuery(options: Omit<Urql.UseQueryArgs<InfraModelQueryVariables>, 'query'>) {
+06344:   return Urql.useQuery<InfraModelQuery, InfraModelQueryVariables>({ query: InfraModelDocument, ...options });
+06345: };
+06346: export const CreateLlmModelDocument = gql`
+06347:     mutation CreateLlmModel($input: CreateLlmModelInput!) {
+06348:   createLlmModel(input: $input) {
+06349:     ...LlmModelFields
+06350:   }
+06351: }
+06352:     ${LlmModelFieldsFragmentDoc}`;
+06353: 
+06354: export function useCreateLlmModelMutation() {
+06355:   return Urql.useMutation<CreateLlmModelMutation, CreateLlmModelMutationVariables>(CreateLlmModelDocument);
+06356: };
+06357: export const UpdateLlmModelDocument = gql`
+06358:     mutation UpdateLlmModel($id: String!, $input: UpdateLlmModelInput!) {
+06359:   updateLlmModel(id: $id, input: $input) {
+06360:     ...LlmModelFields
+06361:   }
+06362: }
+06363:     ${LlmModelFieldsFragmentDoc}`;
+06364: 
+06365: export function useUpdateLlmModelMutation() {
+06366:   return Urql.useMutation<UpdateLlmModelMutation, UpdateLlmModelMutationVariables>(UpdateLlmModelDocument);
+06367: };
+06368: export const DeprecateLlmModelDocument = gql`
+06369:     mutation DeprecateLlmModel($id: String!) {
+06370:   deprecateLlmModel(id: $id) {
+06371:     model {
+06372:       ...LlmModelFields
+06373:     }
+06374:     newDefault {
+06375:       ...LlmModelFields
+06376:     }
+06377:   }
+06378: }
+06379:     ${LlmModelFieldsFragmentDoc}`;
+06380: 
+06381: export function useDeprecateLlmModelMutation() {
+06382:   return Urql.useMutation<DeprecateLlmModelMutation, DeprecateLlmModelMutationVariables>(DeprecateLlmModelDocument);
+06383: };
+06384: export const ReactivateLlmModelDocument = gql`
+06385:     mutation ReactivateLlmModel($id: String!) {
+06386:   reactivateLlmModel(id: $id) {
+06387:     ...LlmModelFields
+06388:   }
+06389: }
+06390:     ${LlmModelFieldsFragmentDoc}`;
+06391: 
+06392: export function useReactivateLlmModelMutation() {
+06393:   return Urql.useMutation<ReactivateLlmModelMutation, ReactivateLlmModelMutationVariables>(ReactivateLlmModelDocument);
+06394: };
+06395: export const SetDefaultLlmModelDocument = gql`
+06396:     mutation SetDefaultLlmModel($id: String!) {
+06397:   setDefaultLlmModel(id: $id) {
+06398:     model {
+06399:       ...LlmModelFields
+06400:     }
+06401:     previousDefault {
+06402:       ...LlmModelFields
+06403:     }
+06404:   }
+06405: }
+06406:     ${LlmModelFieldsFragmentDoc}`;
+06407: 
+06408: export function useSetDefaultLlmModelMutation() {
+06409:   return Urql.useMutation<SetDefaultLlmModelMutation, SetDefaultLlmModelMutationVariables>(SetDefaultLlmModelDocument);
+06410: };
+06411: export const UnsetDefaultLlmModelDocument = gql`
+06412:     mutation UnsetDefaultLlmModel($id: String!) {
+06413:   unsetDefaultLlmModel(id: $id) {
+06414:     ...LlmModelFields
+06415:   }
+06416: }
+06417:     ${LlmModelFieldsFragmentDoc}`;
+06418: 
+06419: export function useUnsetDefaultLlmModelMutation() {
+06420:   return Urql.useMutation<UnsetDefaultLlmModelMutation, UnsetDefaultLlmModelMutationVariables>(UnsetDefaultLlmModelDocument);
+06421: };
+06422: export const UpdateLlmProviderDocument = gql`
+06423:     mutation UpdateLlmProvider($id: String!, $input: UpdateLlmProviderInput!) {
+06424:   updateLlmProvider(id: $id, input: $input) {
+06425:     ...LlmProviderFields
+06426:   }
+06427: }
+06428:     ${LlmProviderFieldsFragmentDoc}`;
+06429: 
+06430: export function useUpdateLlmProviderMutation() {
+06431:   return Urql.useMutation<UpdateLlmProviderMutation, UpdateLlmProviderMutationVariables>(UpdateLlmProviderDocument);
+06432: };
+06433: export const UpdateSystemSettingDocument = gql`
+06434:     mutation UpdateSystemSetting($input: UpdateSystemSettingInput!) {
+06435:   updateSystemSetting(input: $input) {
+06436:     id
+06437:     key
+06438:     value
+06439:     updatedAt
+06440:   }
+06441: }
+06442:     `;
+06443: 
+06444: export function useUpdateSystemSettingMutation() {
+06445:   return Urql.useMutation<UpdateSystemSettingMutation, UpdateSystemSettingMutationVariables>(UpdateSystemSettingDocument);
+06446: };
+06447: export const SetProviderBalanceDocument = gql`
+06448:     mutation SetProviderBalance($providerId: String!, $balance: Float) {
+06449:   setProviderBalance(providerId: $providerId, balance: $balance) {
+06450:     ...LlmProviderFields
+06451:   }
+06452: }
+06453:     ${LlmProviderFieldsFragmentDoc}`;
+06454: 
+06455: export function useSetProviderBalanceMutation() {
+06456:   return Urql.useMutation<SetProviderBalanceMutation, SetProviderBalanceMutationVariables>(SetProviderBalanceDocument);
+06457: };
+06458: export const AvailableModelsDocument = gql`
+06459:     query AvailableModels {
+06460:   availableModels {
+06461:     id
+06462:     providerId
+06463:     displayName
+06464:     versions
+06465:     defaultVersion
+06466:     isAvailable
+06467:     isDefault
+06468:   }
+06469: }
+06470:     `;
+06471: 
+06472: export function useAvailableModelsQuery(options?: Omit<Urql.UseQueryArgs<AvailableModelsQueryVariables>, 'query'>) {
+06473:   return Urql.useQuery<AvailableModelsQuery, AvailableModelsQueryVariables>({ query: AvailableModelsDocument, ...options });
+06474: };
+06475: export const ModelsAnalysisDocument = gql`
+06476:     query ModelsAnalysis($domainId: ID) {
+06477:   modelsAnalysis(domainId: $domainId) {
+06478:     models {
+06479:       modelId
+06480:       label
+06481:       values {
+06482:         valueKey
+06483:         pooledWinRate
+06484:         stabilityScore
+06485:         eligibleDomainCount
+06486:         domains {
+06487:           domainId
+06488:           domainName
+06489:           winRate
+06490:           evidenceWeight
+06491:         }
+06492:       }
+06493:     }
+06494:   }
+06495: }
+06496:     `;
+06497: 
+06498: export function useModelsAnalysisQuery(options?: Omit<Urql.UseQueryArgs<ModelsAnalysisQueryVariables>, 'query'>) {
+06499:   return Urql.useQuery<ModelsAnalysisQuery, ModelsAnalysisQueryVariables>({ query: ModelsAnalysisDocument, ...options });
+06500: };
+06501: export const CreatePairedVignetteDocument = gql`
+06502:     mutation CreatePairedVignette($input: CreatePairedVignetteInput!) {
+06503:   createPairedVignette(input: $input) {
+06504:     definitionA {
+06505:       id
+06506:       name
+06507:     }
+06508:     definitionB {
+06509:       id
+06510:       name
+06511:     }
+06512:   }
+06513: }
+06514:     `;
+06515: 
+06516: export function useCreatePairedVignetteMutation() {
+06517:   return Urql.useMutation<CreatePairedVignetteMutation, CreatePairedVignetteMutationVariables>(CreatePairedVignetteDocument);
+06518: };
+06519: export const UpdatePairedVignetteDocument = gql`
+06520:     mutation UpdatePairedVignette($input: UpdatePairedVignetteInput!) {
+06521:   updatePairedVignette(input: $input) {
+06522:     definitionA {
+06523:       id
+06524:       name
+06525:     }
+06526:     definitionB {
+06527:       id
+06528:       name
+06529:     }
+06530:   }
+06531: }
+06532:     `;
+06533: 
+06534: export function useUpdatePairedVignetteMutation() {
+06535:   return Urql.useMutation<UpdatePairedVignetteMutation, UpdatePairedVignetteMutationVariables>(UpdatePairedVignetteDocument);
+06536: };
+06537: export const RunsDocument = gql`
+06538:     query Runs($definitionId: String, $experimentId: String, $status: String, $runCategory: String, $hasAnalysis: Boolean, $analysisStatus: String, $runType: String, $limit: Int, $offset: Int) {
+06539:   runs(
+06540:     definitionId: $definitionId
+06541:     experimentId: $experimentId
+06542:     status: $status
+06543:     runCategory: $runCategory
+06544:     hasAnalysis: $hasAnalysis
+06545:     analysisStatus: $analysisStatus
+06546:     runType: $runType
+06547:     limit: $limit
+06548:     offset: $offset
+06549:   ) {
+06550:     ...RunFields
+06551:   }
+06552: }
+06553:     ${RunFieldsFragmentDoc}`;
+06554: 
+06555: export function useRunsQuery(options?: Omit<Urql.UseQueryArgs<RunsQueryVariables>, 'query'>) {
+06556:   return Urql.useQuery<RunsQuery, RunsQueryVariables>({ query: RunsDocument, ...options });
+06557: };
+06558: export const RunCountDocument = gql`
+06559:     query RunCount($definitionId: String, $experimentId: String, $status: String, $runCategory: String, $hasAnalysis: Boolean, $analysisStatus: String, $runType: String) {
+06560:   runCount(
+06561:     definitionId: $definitionId
+06562:     experimentId: $experimentId
+06563:     status: $status
+06564:     runCategory: $runCategory
+06565:     hasAnalysis: $hasAnalysis
+06566:     analysisStatus: $analysisStatus
+06567:     runType: $runType
+06568:   )
+06569: }
+06570:     `;
+06571: 
+06572: export function useRunCountQuery(options?: Omit<Urql.UseQueryArgs<RunCountQueryVariables>, 'query'>) {
+06573:   return Urql.useQuery<RunCountQuery, RunCountQueryVariables>({ query: RunCountDocument, ...options });
+06574: };
+06575: export const AnalysisFolderCountsDocument = gql`
+06576:     query AnalysisFolderCounts($definitionId: String, $definitionTagIds: [ID!], $experimentId: String, $status: String, $runCategory: String, $analysisStatus: String, $runType: String) {
+06577:   analysisFolderCounts(
+06578:     definitionId: $definitionId
+06579:     definitionTagIds: $definitionTagIds
+06580:     experimentId: $experimentId
+06581:     status: $status
+06582:     runCategory: $runCategory
+06583:     analysisStatus: $analysisStatus
+06584:     runType: $runType
+06585:   ) {
+06586:     aggregateCount
+06587:     untaggedCount
+06588:     aggregateUntaggedCount
+06589:     tagCounts {
+06590:       tagId
+06591:       name
+06592:       count
+06593:     }
+06594:     aggregateTagCounts {
+06595:       tagId
+06596:       name
+06597:       count
+06598:     }
+06599:   }
+06600: }
+06601:     `;
+06602: 
+06603: export function useAnalysisFolderCountsQuery(options?: Omit<Urql.UseQueryArgs<AnalysisFolderCountsQueryVariables>, 'query'>) {
+06604:   return Urql.useQuery<AnalysisFolderCountsQuery, AnalysisFolderCountsQueryVariables>({ query: AnalysisFolderCountsDocument, ...options });
+06605: };
+06606: export const RunDocument = gql`
+06607:     query Run($id: ID!) {
+06608:   run(id: $id) {
+06609:     ...RunWithTranscriptsFields
+06610:   }
+06611: }
+06612:     ${RunWithTranscriptsFieldsFragmentDoc}`;
+06613: 
+06614: export function useRunQuery(options: Omit<Urql.UseQueryArgs<RunQueryVariables>, 'query'>) {
+06615:   return Urql.useQuery<RunQuery, RunQueryVariables>({ query: RunDocument, ...options });
+06616: };
+06617: export const StartRunDocument = gql`
+06618:     mutation StartRun($input: StartRunInput!) {
+06619:   startRun(input: $input) {
+06620:     run {
+06621:       ...RunFields
+06622:     }
+06623:     jobCount
+06624:     pairedRunIds
+06625:   }
+06626: }
+06627:     ${RunFieldsFragmentDoc}`;
+06628: 
+06629: export function useStartRunMutation() {
+06630:   return Urql.useMutation<StartRunMutation, StartRunMutationVariables>(StartRunDocument);
+06631: };
+06632: export const PauseRunDocument = gql`
+06633:     mutation PauseRun($runId: ID!) {
+06634:   pauseRun(runId: $runId) {
+06635:     ...RunFields
+06636:   }
+06637: }
+06638:     ${RunFieldsFragmentDoc}`;
+06639: 
+06640: export function usePauseRunMutation() {
+06641:   return Urql.useMutation<PauseRunMutation, PauseRunMutationVariables>(PauseRunDocument);
+06642: };
+06643: export const ResumeRunDocument = gql`
+06644:     mutation ResumeRun($runId: ID!) {
+06645:   resumeRun(runId: $runId) {
+06646:     ...RunFields
+06647:   }
+06648: }
+06649:     ${RunFieldsFragmentDoc}`;
+06650: 
+06651: export function useResumeRunMutation() {
+06652:   return Urql.useMutation<ResumeRunMutation, ResumeRunMutationVariables>(ResumeRunDocument);
+06653: };
+06654: export const CancelRunDocument = gql`
+06655:     mutation CancelRun($runId: ID!) {
+06656:   cancelRun(runId: $runId) {
+06657:     ...RunFields
+06658:   }
+06659: }
+06660:     ${RunFieldsFragmentDoc}`;
+06661: 
+06662: export function useCancelRunMutation() {
+06663:   return Urql.useMutation<CancelRunMutation, CancelRunMutationVariables>(CancelRunDocument);
+06664: };
+06665: export const DeleteRunDocument = gql`
+06666:     mutation DeleteRun($runId: ID!) {
+06667:   deleteRun(runId: $runId)
+06668: }
+06669:     `;
+06670: 
+06671: export function useDeleteRunMutation() {
+06672:   return Urql.useMutation<DeleteRunMutation, DeleteRunMutationVariables>(DeleteRunDocument);
+06673: };
+06674: export const UpdateRunDocument = gql`
+06675:     mutation UpdateRun($runId: ID!, $input: UpdateRunInput!) {
+06676:   updateRun(runId: $runId, input: $input) {
+06677:     ...RunFields
+06678:   }
+06679: }
+06680:     ${RunFieldsFragmentDoc}`;
+06681: 
+06682: export function useUpdateRunMutation() {
+06683:   return Urql.useMutation<UpdateRunMutation, UpdateRunMutationVariables>(UpdateRunDocument);
+06684: };
+06685: export const CancelSummarizationDocument = gql`
+06686:     mutation CancelSummarization($runId: ID!) {
+06687:   cancelSummarization(runId: $runId) {
+06688:     run {
+06689:       ...RunFields
+06690:     }
+06691:     cancelledCount
+06692:   }
+06693: }
+06694:     ${RunFieldsFragmentDoc}`;
+06695: 
+06696: export function useCancelSummarizationMutation() {
+06697:   return Urql.useMutation<CancelSummarizationMutation, CancelSummarizationMutationVariables>(CancelSummarizationDocument);
+06698: };
+06699: export const RestartSummarizationDocument = gql`
+06700:     mutation RestartSummarization($runId: ID!, $force: Boolean) {
+06701:   restartSummarization(runId: $runId, force: $force) {
+06702:     run {
+06703:       ...RunFields
+06704:     }
+06705:     queuedCount
+06706:   }
+06707: }
+06708:     ${RunFieldsFragmentDoc}`;
+06709: 
+06710: export function useRestartSummarizationMutation() {
+06711:   return Urql.useMutation<RestartSummarizationMutation, RestartSummarizationMutationVariables>(RestartSummarizationDocument);
+06712: };
+06713: export const UpdateTranscriptDecisionDocument = gql`
+06714:     mutation UpdateTranscriptDecision($transcriptId: ID!, $decisionCode: String!) {
+06715:   updateTranscriptDecision(
+06716:     transcriptId: $transcriptId
+06717:     decisionCode: $decisionCode
+06718:   ) {
+06719:     id
+06720:     runId
+06721:     scenarioId
+06722:     modelId
+06723:     modelVersion
+06724:     content
+06725:     decisionMetadata
+06726:     turnCount
+06727:     tokenCount
+06728:     durationMs
+06729:     estimatedCost
+06730:     createdAt
+06731:     lastAccessedAt
+06732:   }
+06733: }
+06734:     `;
+06735: 
+06736: export function useUpdateTranscriptDecisionMutation() {
+06737:   return Urql.useMutation<UpdateTranscriptDecisionMutation, UpdateTranscriptDecisionMutationVariables>(UpdateTranscriptDecisionDocument);
+06738: };
+06739: export const ScenariosDocument = gql`
+06740:     query Scenarios($definitionId: ID!, $limit: Int, $offset: Int) {
+06741:   scenarios(definitionId: $definitionId, limit: $limit, offset: $offset) {
+06742:     id
+06743:     definitionId
+06744:     name
+06745:     content
+06746:     createdAt
+06747:   }
+06748: }
+06749:     `;
+06750: 
+06751: export function useScenariosQuery(options: Omit<Urql.UseQueryArgs<ScenariosQueryVariables>, 'query'>) {
+06752:   return Urql.useQuery<ScenariosQuery, ScenariosQueryVariables>({ query: ScenariosDocument, ...options });
+06753: };
+06754: export const ScenarioCountDocument = gql`
+06755:     query ScenarioCount($definitionId: ID!) {
+06756:   scenarioCount(definitionId: $definitionId)
+06757: }
+06758:     `;
+06759: 
+06760: export function useScenarioCountQuery(options: Omit<Urql.UseQueryArgs<ScenarioCountQueryVariables>, 'query'>) {
+06761:   return Urql.useQuery<ScenarioCountQuery, ScenarioCountQueryVariables>({ query: ScenarioCountDocument, ...options });
+06762: };
+06763: export const RunConditionGridDocument = gql`
+06764:     query RunConditionGrid($definitionId: ID!) {
+06765:   runConditionGrid(definitionId: $definitionId) {
+06766:     attributeA
+06767:     attributeB
+06768:     rowLevels
+06769:     colLevels
+06770:     cells {
+06771:       rowLevel
+06772:       colLevel
+06773:       trialCount
+06774:       scenarioCount
+06775:       scenarioIds
+06776:     }
+06777:   }
+06778: }
+06779:     `;
+06780: 
+06781: export function useRunConditionGridQuery(options: Omit<Urql.UseQueryArgs<RunConditionGridQueryVariables>, 'query'>) {
+06782:   return Urql.useQuery<RunConditionGridQuery, RunConditionGridQueryVariables>({ query: RunConditionGridDocument, ...options });
+06783: };
+06784: export const SurveysDocument = gql`
+06785:     query Surveys($search: String) {
+06786:   surveys(search: $search) {
+06787:     id
+06788:     name
+06789:     hypothesis
+06790:     analysisPlan
+06791:     createdAt
+06792:     updatedAt
+06793:     runCount
+06794:   }
+06795: }
+06796:     `;
+06797: 
+06798: export function useSurveysQuery(options?: Omit<Urql.UseQueryArgs<SurveysQueryVariables>, 'query'>) {
+06799:   return Urql.useQuery<SurveysQuery, SurveysQueryVariables>({ query: SurveysDocument, ...options });
+06800: };
+06801: export const CreateSurveyDocument = gql`
+06802:     mutation CreateSurvey($input: CreateSurveyInput!) {
+06803:   createSurvey(input: $input) {
+06804:     id
+06805:     name
+06806:     hypothesis
+06807:     analysisPlan
+06808:     createdAt
+06809:     updatedAt
+06810:     runCount
+06811:   }
+06812: }
+06813:     `;
+06814: 
+06815: export function useCreateSurveyMutation() {
+06816:   return Urql.useMutation<CreateSurveyMutation, CreateSurveyMutationVariables>(CreateSurveyDocument);
+06817: };
+06818: export const UpdateSurveyDocument = gql`
+06819:     mutation UpdateSurvey($id: ID!, $input: UpdateSurveyInput!) {
+06820:   updateSurvey(id: $id, input: $input) {
+06821:     id
+06822:     name
+06823:     hypothesis
+06824:     analysisPlan
+06825:     createdAt
+06826:     updatedAt
+06827:     runCount
+06828:   }
+06829: }
+06830:     `;
+06831: 
+06832: export function useUpdateSurveyMutation() {
+06833:   return Urql.useMutation<UpdateSurveyMutation, UpdateSurveyMutationVariables>(UpdateSurveyDocument);
+06834: };
+06835: export const DeleteSurveyDocument = gql`
+06836:     mutation DeleteSurvey($id: ID!) {
+06837:   deleteSurvey(id: $id)
+06838: }
+06839:     `;
+06840: 
+06841: export function useDeleteSurveyMutation() {
+06842:   return Urql.useMutation<DeleteSurveyMutation, DeleteSurveyMutationVariables>(DeleteSurveyDocument);
+06843: };
+06844: export const DuplicateSurveyDocument = gql`
+06845:     mutation DuplicateSurvey($id: ID!, $name: String) {
+06846:   duplicateSurvey(id: $id, name: $name) {
+06847:     id
+06848:     name
+06849:     hypothesis
+06850:     analysisPlan
+06851:     createdAt
+06852:     updatedAt
+06853:     runCount
+06854:   }
+06855: }
+06856:     `;
+06857: 
+06858: export function useDuplicateSurveyMutation() {
+06859:   return Urql.useMutation<DuplicateSurveyMutation, DuplicateSurveyMutationVariables>(DuplicateSurveyDocument);
+06860: };
+06861: export const TagsDocument = gql`
+06862:     query Tags($search: String, $limit: Int) {
+06863:   tags(search: $search, limit: $limit) {
+06864:     id
+06865:     name
+06866:     createdAt
+06867:     definitionCount
+06868:   }
+06869: }
+06870:     `;
+06871: 
+06872: export function useTagsQuery(options?: Omit<Urql.UseQueryArgs<TagsQueryVariables>, 'query'>) {
+06873:   return Urql.useQuery<TagsQuery, TagsQueryVariables>({ query: TagsDocument, ...options });
+06874: };
+06875: export const CreateTagDocument = gql`
+06876:     mutation CreateTag($name: String!) {
+06877:   createTag(name: $name) {
+06878:     id
+06879:     name
+06880:     createdAt
+06881:   }
+06882: }
+06883:     `;
+06884: 
+06885: export function useCreateTagMutation() {
+06886:   return Urql.useMutation<CreateTagMutation, CreateTagMutationVariables>(CreateTagDocument);
+06887: };
+06888: export const DeleteTagDocument = gql`
+06889:     mutation DeleteTag($id: String!) {
+06890:   deleteTag(id: $id) {
+06891:     success
+06892:     affectedDefinitions
+06893:   }
+06894: }
+06895:     `;
+06896: 
+06897: export function useDeleteTagMutation() {
+06898:   return Urql.useMutation<DeleteTagMutation, DeleteTagMutationVariables>(DeleteTagDocument);
+06899: };
+06900: export const AddTagToDefinitionDocument = gql`
+06901:     mutation AddTagToDefinition($definitionId: String!, $tagId: String!) {
+06902:   addTagToDefinition(definitionId: $definitionId, tagId: $tagId) {
+06903:     id
+06904:     tags {
+06905:       id
+06906:       name
+06907:     }
+06908:   }
+06909: }
+06910:     `;
+06911: 
+06912: export function useAddTagToDefinitionMutation() {
+06913:   return Urql.useMutation<AddTagToDefinitionMutation, AddTagToDefinitionMutationVariables>(AddTagToDefinitionDocument);
+06914: };
+06915: export const RemoveTagFromDefinitionDocument = gql`
+06916:     mutation RemoveTagFromDefinition($definitionId: String!, $tagId: String!) {
+06917:   removeTagFromDefinition(definitionId: $definitionId, tagId: $tagId) {
+06918:     id
+06919:     tags {
+06920:       id
+06921:       name
+06922:     }
+06923:   }
+06924: }
+06925:     `;
+06926: 
+06927: export function useRemoveTagFromDefinitionMutation() {
+06928:   return Urql.useMutation<RemoveTagFromDefinitionMutation, RemoveTagFromDefinitionMutationVariables>(RemoveTagFromDefinitionDocument);
+06929: };
+06930: export const CreateAndAssignTagDocument = gql`
+06931:     mutation CreateAndAssignTag($definitionId: String!, $tagName: String!) {
+06932:   createAndAssignTag(definitionId: $definitionId, tagName: $tagName) {
+06933:     id
+06934:     tags {
+06935:       id
+06936:       name
+06937:     }
+06938:   }
+06939: }
+06940:     `;
+06941: 
+06942: export function useCreateAndAssignTagMutation() {
+06943:   return Urql.useMutation<CreateAndAssignTagMutation, CreateAndAssignTagMutationVariables>(CreateAndAssignTagDocument);
+06944: };
+06945: export const ValueStatementsDocument = gql`
+06946:     query ValueStatements($domainId: ID!) {
+06947:   valueStatements(domainId: $domainId) {
+06948:     id
+06949:     domainId
+06950:     token
+06951:     body
+06952:     updatedAt
+06953:   }
+06954: }
+06955:     `;
+06956: 
+06957: export function useValueStatementsQuery(options: Omit<Urql.UseQueryArgs<ValueStatementsQueryVariables>, 'query'>) {
+06958:   return Urql.useQuery<ValueStatementsQuery, ValueStatementsQueryVariables>({ query: ValueStatementsDocument, ...options });
+06959: };
+06960: export const CreateValueStatementDocument = gql`
+06961:     mutation CreateValueStatement($input: CreateValueStatementInput!) {
+06962:   createValueStatement(input: $input) {
+06963:     id
+06964:     domainId
+06965:     token
+06966:     body
+06967:     updatedAt
+06968:   }
+06969: }
+06970:     `;
+06971: 
+06972: export function useCreateValueStatementMutation() {
+06973:   return Urql.useMutation<CreateValueStatementMutation, CreateValueStatementMutationVariables>(CreateValueStatementDocument);
+06974: };
+06975: export const UpdateValueStatementDocument = gql`
+06976:     mutation UpdateValueStatement($id: ID!, $input: UpdateValueStatementInput!) {
+06977:   updateValueStatement(id: $id, input: $input) {
+06978:     id
+06979:     domainId
+06980:     token
+06981:     body
+06982:     updatedAt
+06983:   }
+06984: }
+06985:     `;
+06986: 
+06987: export function useUpdateValueStatementMutation() {
+06988:   return Urql.useMutation<UpdateValueStatementMutation, UpdateValueStatementMutationVariables>(UpdateValueStatementDocument);
+06989: };
+06990: export const DeleteValueStatementDocument = gql`
+06991:     mutation DeleteValueStatement($id: ID!) {
+06992:   deleteValueStatement(id: $id)
+06993: }
+06994:     `;
+06995: 
+06996: export function useDeleteValueStatementMutation() {
+06997:   return Urql.useMutation<DeleteValueStatementMutation, DeleteValueStatementMutation

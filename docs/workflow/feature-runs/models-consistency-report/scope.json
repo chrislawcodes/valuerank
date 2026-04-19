@@ -1,0 +1,15 @@
+{
+  "paths": [
+    "cloud/apps/web/src/api/operations",
+    "cloud/apps/web/src/components/analysis-v2",
+    "cloud/apps/web/src/components/models",
+    "cloud/apps/web/src/pages"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/web/src/api/operations",
+    "cloud/apps/web/src/components/analysis-v2",
+    "cloud/apps/web/src/components/models",
+    "cloud/apps/web/src/pages",
+    "docs/workflow/feature-runs/models-consistency-report"
+  ]
+}

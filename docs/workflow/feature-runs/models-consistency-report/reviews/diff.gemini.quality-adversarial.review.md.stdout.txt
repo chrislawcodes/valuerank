@@ -1,0 +1,57 @@
+MCP issues detected. Run /mcp list for status.{
+  "session_id": "07be566e-d689-4d4b-82fd-9073c9d2c274",
+  "response": "## Findings\n\n| Severity | Finding | Location(s) |\n| :--- | :--- | :--- |\n| **HIGH** | **Invalid input type sent to API** | `cloud/apps/web/src/components/models/ConsistencyFilters.tsx` |\n| | The \"Min n\" (minimum scenarios) input field is a `type=\"number\"`, which allows floating-point numbers (e.g., \"5.5\"). The `onChange` handler preserves these floats. However, the `modelsConsistency` GraphQL query expects an `Int` for the `$minScenarios` variable. Sending a float will cause a GraphQL validation error, breaking the query. The input should be parsed to an integer (e.g., using `parseInt`) to prevent invalid API calls. | |\n| **MEDIUM** | **API request waterfall causes slow page loads** | `cloud/apps/web/src/pages/ModelsConsistency.tsx` |\n| | The page loading sequence involves multiple, sequential API calls: one to fetch all domains, another to fetch available signatures for a domain, and a final one to fetch the consistency data. This waterfall approach significantly increases the total time to load the page and display data, as each step must wait for the previous one to complete. | |\n| **MEDIUM** | **Overlapping data points in scatter plot are hidden** | `cloud/apps/web/src/components/models/ConsistencyScatter.tsx` |\n| | If multiple models have identical or very similar repeatability and coherence scores, their corresponding circles on the scatter plot will render on top of each other. A user has no way of knowing that multiple models exist at that location, and they can only click on and select the topmost model. This can hide data and lead to incorrect interpretations. | |\n| **MEDIUM** | **Fragile state derivation logic** | `cloud/apps/web/src/pages/ModelsConsistency.tsx` |\n| | The logic to determine the active `domainId` and `signature` for the query is spread across several `useState`, `useSearchParams`, `useEffect`, and `useMemo` hooks with multiple fallbacks and default values. This complexity is fragile and difficult to reason about, making it prone to bugs and race conditions, especially as it coordinates multiple asynchronous data fetches. For example, the page's behavior is highly dependent on the timing and results of the `useDomains` hook. | |\n| **MEDIUM** | **[UNVERIFIED] Missing navigation link in some filter conditions** | `cloud/apps/web/src/components/models/ConsistencyDrill.tsx` |\n| | In the `ConsistencyDrill` component, the link to the \"condition matrix\" is only rendered if a `domainId` is available, either from the `perPair` data object itself or from the top-level page filter. If the user selects \"All domains\" and the backend API does not return a `domainId` within the `perPair` object, the link will not be rendered, leaving the user without a key navigation path. The assumption is that the backend should always provide this ID, but if it doesn't, the UI gracefully degrades in a potentially unhelpful way. | |\n| **MEDIUM** | **Lack of API pagination can cause performance issues** | `cloud/apps/web/src/api/operations/modelsConsistency.graphql` |\n| | The `modelsConsistency` GraphQL query returns several unbounded lists (`models`, `insufficient`, `perDomain`, `perScenario`, `perPair`). The implementation lacks pagination controls (e.g., `limit`/`offset` or cursor-based arguments). If the number of models or the underlying data (scenarios, pairs) is large, these lists could become enormous, leading to high memory consumption, slow frontend rendering, and potential API timeouts. | |\n| **LOW** | **Hardcoded logic for descriptive text** | `cloud/apps/web/src/components/models/ConsistencyDrill.tsx` |\n| | The component contains descriptive text with hardcoded thresholds (`model.repeatability.value >= 0.85`, `model.coherence.value >= 0.8`) to generate sentences like \"its answers are fairly steady\". This duplicates the logic from the `regionLabel` function. If the thresholds for defining the regions are changed in one place, they must be manually updated in the other, creating a maintenance risk. | |\n| **LOW** | **State selection is not durable** | `cloud/apps/web/src/pages/ModelsConsistency.tsx` |\n| | The page uses an effect to automatically select the first model in the list. If the user applies filters that reorder the list, the selection will jump to the new first model, even if the previously selected model is still visible. A more stable user experience would be to maintain the current selection as long as that model remains in the filtered list. | |\n| **LOW** | **Clickable table headers are not fully accessible** | `cloud/apps/web/src/components/models/ConsistencyTable.tsx` |\n| | Table headers are used to sort the table and are given a `cursor-pointer` style, but they are not implemented as `<button>` elements. This means screen reader users may not know they are interactive controls, limiting the accessibility of the sorting feature. | |\n\n## Residual Risks\n\n-   **Backend Contract Brittleness**: The frontend defines a strict TypeScript union type for the `reason` field on insufficient models (`'no-repeat-coverage' | ...`), while the GraphQL schema defines it as a generic `String`. If the backend introduces a new reason, the frontend will not recognize it, potentially causing the `InsufficientCoverageFooter` component to fail to render that category correctly.\n-   **Scatter Plot Accessibility**: The scatter plot relies on hover-to-see-details and color to distinguish providers. This presents a significant accessibility challenge for users who rely on keyboards or screen readers, or who have color vision deficiencies. While the same data is available in the table, the visual summary and its insights are not accessible.\n-   **Hardcoded Default Signature**: The page falls back to a hardcoded `DEFAULT_SIGNATURE = 'vnewtd'` when viewing \"All domains\" or when a signature cannot be determined. If this signature becomes obsolete or contains no data, a key view of the application will appear broken or empty to users.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 63921
+        },
+        "tokens": {
+          "input": 25005,
+          "prompt": 25005,
+          "candidates": 1353,
+          "total": 31930,
+          "cached": 0,
+          "thoughts": 5572,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 63921,
+            "tokens": {
+              "input": 25005,
+              "prompt": 25005,
+              "candidates": 1353,
+              "total": 31930,
+              "cached": 0,
+              "thoughts": 5572,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

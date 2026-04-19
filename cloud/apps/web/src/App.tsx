@@ -17,6 +17,7 @@ import { DomainAnalysis } from './pages/DomainAnalysis';
 import { DomainCoverage } from './pages/DomainCoverage';
 import { DomainAnalysisValueDetail } from './pages/DomainAnalysisValueDetail';
 import { Models } from './pages/Models';
+import { ModelsConsistency } from './pages/ModelsConsistency';
 import { DefinitionDetail } from './pages/DefinitionDetail';
 import { StartPairedBatchPage } from './pages/DefinitionDetail/StartPairedBatchPage';
 import { Runs } from './pages/Runs';
@@ -166,6 +167,14 @@ function App() {
               element={
                 <ProtectedLayout>
                   <Models />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/models/consistency"
+              element={
+                <ProtectedLayout>
+                  <ModelsConsistency />
                 </ProtectedLayout>
               }
             />

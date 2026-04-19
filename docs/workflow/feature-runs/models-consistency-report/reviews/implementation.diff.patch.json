@@ -1,0 +1,18 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "f8aeaf754a4045379bffa6785415b2d1b955bc47",
+  "git_base_ref": "b65967cf",
+  "git_base_sha": "b65967cf93803a8699a04505be0a4a057172831d",
+  "paths": [
+    "cloud/apps/web/src/api/operations",
+    "cloud/apps/web/src/components/analysis-v2",
+    "cloud/apps/web/src/components/models",
+    "cloud/apps/web/src/pages"
+  ],
+  "allowed_dirty_paths": [
+    ".claude/scheduled_tasks.lock"
+  ],
+  "untracked_files_included": [],
+  "artifact_path": "docs/workflow/feature-runs/models-consistency-report/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}
