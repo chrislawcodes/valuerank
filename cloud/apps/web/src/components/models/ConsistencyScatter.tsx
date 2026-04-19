@@ -100,7 +100,7 @@ export function ConsistencyScatter({ models, selectedModelId, onSelectModel }: C
         <div className="pointer-events-none absolute right-6 top-1/2 -translate-y-1/2 text-xs text-gray-500">High Repeatability</div>
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart margin={{ top: 28, right: 28, bottom: 28, left: 28 }}>
-            <XAxis type="number" dataKey="repeatabilityValue" domain={[0.5, 1]} name="Repeatability" tickCount={6} />
+            <XAxis type="number" dataKey="repeatabilityValue" domain={[0, 1]} name="Repeatability" tickCount={6} />
             <YAxis type="number" dataKey="coherenceValue" domain={[0, 1]} name="Coherence" tickCount={6} />
             <Tooltip content={<ScatterTooltip />} />
             <ReferenceLine x={0.85} stroke="#9ca3af" strokeDasharray="4 4" />

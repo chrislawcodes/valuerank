@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeOrderEffect } from './orderEffectPairing.js';
+import { computeOrderEffect } from '../../../src/services/consistency/orderEffectPairing.js';
 
 function makeTranscript(
   scenarioId: string,

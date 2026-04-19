@@ -1,14 +1,19 @@
-type CanonicalDecision = {
+// Narrow view of the canonical decision — only the fields this helper actually
+// reads. Callers pass a value-pair object that at minimum exposes these
+// properties; they may pass the repo's richer CanonicalDecision from
+// graphql/queries/domain/decision-model-types.ts since extra properties are
+// ignored.
+type CanonicalDecisionView = {
   favoredValueKey?: string | null;
   opposedValueKey?: string | null;
-  direction?: 'favor_first' | 'favor_second' | 'neutral' | 'unknown' | null;
-  strength?: 'strong' | 'lean' | 'neutral' | 'unknown' | null;
+  direction?: string | null;
+  strength?: string | null;
 };
 
 export type OrderEffectTranscript = {
   scenarioId: string | null;
   decisionModelV2?: {
-    canonical?: CanonicalDecision | null;
+    canonical?: CanonicalDecisionView | null;
   } | null;
 };
 

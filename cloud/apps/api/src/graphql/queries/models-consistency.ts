@@ -3,7 +3,7 @@ import { builder } from '../builder.js';
 import { runMatchesSignature } from './domain-coverage-gql-types.js';
 import { resolveTranscriptDecisionModel } from './domain/shared.js';
 import { ModelsConsistencyResultRef, type ModelsConsistencyShape } from '../types/models-consistency.js';
-import { computeOrderEffect } from '../../services/consistency/orderEffectPairing.js';
+import { computeOrderEffect, type OrderEffectTranscript } from '../../services/consistency/orderEffectPairing.js';
 import {
   computeRepeatability,
   parsePairList,
@@ -57,7 +57,9 @@ function buildParsedModelData(runs: RunRow[], modelId: string): ParsedModelData 
       if (analysis.analysisType !== 'AGGREGATE' || analysis.status !== 'CURRENT') continue;
       const rawSummary = readConsistencySummary(analysis.output);
       const rawModel = rawSummary?.perModel;
-      const rawEntry = rawModel != null ? rawModel[modelId] : null;
+      const rawEntry = rawModel != null && typeof rawModel === 'object' && !Array.isArray(rawModel)
+        ? (rawModel as Record<string, unknown>)[modelId] ?? null
+        : null;
       if (rawEntry == null || typeof rawEntry !== 'object') {
         continue;
       }
@@ -97,11 +99,11 @@ function buildRepeatabilitySummary(scenarios: ConsistencyParsedScenario[]): Mode
     ...repeatability,
     perDomain: [...perDomainMap.entries()]
       .map(([key, rows]) => {
-        const [domainId, domainName] = key.split('::');
+        const [rawDomainId, rawDomainName] = key.split('::');
         const pooled = computeRepeatability(rows);
         return {
-          domainId,
-          domainName: domainName ?? 'Unknown domain',
+          domainId: rawDomainId ?? 'unknown',
+          domainName: rawDomainName ?? 'Unknown domain',
           value: pooled.value,
           ciLow: pooled.ciLow,
           ciHigh: pooled.ciHigh,
@@ -155,8 +157,9 @@ type OrderEffectTranscriptRow = {
   scenario: { orientationFlipped: boolean } | null;
 };
 
-function toOrderEffectTranscript(row: OrderEffectTranscriptRow) {
+function toOrderEffectTranscript(row: OrderEffectTranscriptRow): OrderEffectTranscript {
   const decisionModelV2 = resolveTranscriptDecisionModel({
+    decisionCode: null,
     decisionMetadata: row.decisionMetadata,
     definitionSnapshot: row.definitionSnapshot,
     orientationFlipped: row.scenario?.orientationFlipped ?? null,
@@ -187,9 +190,18 @@ builder.queryField('modelsConsistency', (t) =>
         where: { status: 'ACTIVE' },
         include: { provider: true },
       });
+      // The UI currently builds the provider filter from `providerName` values
+      // (see ConsistencyFilters), so accept either a provider UUID or a
+      // provider display name / slug. This keeps the filter working until the
+      // client exposes `providerId` on its filter options.
       const models = providerId == null
         ? activeModels
-        : activeModels.filter((model) => model.providerId === providerId || model.provider.id === providerId);
+        : activeModels.filter((model) =>
+            model.providerId === providerId
+            || model.provider.id === providerId
+            || model.provider.name === providerId
+            || model.provider.displayName === providerId,
+          );
 
       const runs = await db.run.findMany({
         where: {

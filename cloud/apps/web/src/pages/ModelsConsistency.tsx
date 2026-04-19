@@ -135,16 +135,19 @@ export function ModelsConsistency() {
     setMinScenarios(value);
   };
 
-  if (loading) {
-    return <Loading message="Loading consistency report..." />;
-  }
-
+  // Order matters: surface errors and empty-domain state BEFORE the loading
+  // spinner so a failed useDomains() or an empty domain list does not leave
+  // the page stuck on an infinite loading state.
   if (domainsError != null || error != null) {
     return <ErrorMessage message={`Failed to load consistency report: ${(domainsError ?? error)?.message ?? 'Unknown error'}`} />;
   }
 
-  if (defaultDomainId == null && !hasDomainParam) {
+  if (!domainsLoading && domains.length === 0 && !hasDomainParam) {
     return <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">No domains are available yet. Populate domains first, then reopen this report.</div>;
+  }
+
+  if (loading) {
+    return <Loading text="Loading consistency report..." />;
   }
 
   return (

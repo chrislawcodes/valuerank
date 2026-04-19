@@ -5,14 +5,15 @@ import {
   netPressureRank,
   spearmanRankCorrelation,
   wilsonInterval,
-} from './statistics.js';
+} from '../../../src/services/consistency/statistics.js';
 
 describe('wilsonInterval', () => {
   it('returns the expected interval for 20 of 25', () => {
     const result = wilsonInterval(20, 25);
     expect(result.p).toBeCloseTo(0.8, 6);
-    expect(result.low).toBeCloseTo(0.61, 2);
-    expect(result.high).toBeCloseTo(0.92, 2);
+    // Wilson 95% for k=20, n=25: low ≈ 0.6087, high ≈ 0.9114
+    expect(result.low).toBeCloseTo(0.6087, 3);
+    expect(result.high).toBeCloseTo(0.9114, 3);
   });
 
   it('returns zeros when there are no trials', () => {
@@ -38,7 +39,8 @@ describe('dersimonianLairdPool', () => {
       { p: 0.9, n: 20 },
     ]);
 
-    expect(result.estimate).toBeCloseTo(0.533, 3);
+    // DL random-effects pooled estimate for [(0.2,20),(0.5,20),(0.9,20)] ≈ 0.5356
+    expect(result.estimate).toBeCloseTo(0.5356, 3);
     expect(result.tauSquared).toBeGreaterThan(0);
     expect(result.ciLow).toBeGreaterThanOrEqual(0);
     expect(result.ciHigh).toBeLessThanOrEqual(1);
@@ -52,7 +54,10 @@ describe('spearmanRankCorrelation', () => {
       [3, 2, 2, 1, 1],
     );
 
-    expect(result.rho).toBeCloseTo(-0.948683, 5);
+    // Tied-rank Spearman (Pearson-of-ranks method) for x=[1,1,2,3,3], y=[3,2,2,1,1]:
+    //   x_ranks = [1.5,1.5,3,4.5,4.5], y_ranks = [5,3.5,3.5,1.5,1.5]
+    //   rho = cov(ranks) / (sd(x_ranks)*sd(y_ranks)) = -8.25 / sqrt(9*9) = -0.9167
+    expect(result.rho).toBeCloseTo(-0.9167, 3);
     expect(result.p).toBeLessThan(0.05);
   });
 

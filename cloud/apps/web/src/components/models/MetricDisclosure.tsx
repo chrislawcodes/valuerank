@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { Button } from '../ui/Button';
 
 export type MetricDisclosureProps<T> = {
   title: string;
@@ -48,17 +49,17 @@ export function MetricDisclosure<T>({
           <div className="overflow-hidden rounded-lg border border-gray-200">
             <div className="divide-y divide-gray-200">
               {rows.map((row, index) => (
-                <button
+                <Button
                   key={`${title}-${rowLabel(row)}-${index}`}
-                  type="button"
+                  variant="ghost"
                   onClick={(event) => {
                     event.stopPropagation();
                     setSelectedIndex(index);
                   }}
-                  className={`block w-full px-3 py-2 text-left text-xs ${index === selectedIndex ? 'bg-teal-50 text-teal-900' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                  className={`block w-full justify-start rounded-none px-3 py-2 text-left text-xs ${index === selectedIndex ? 'bg-teal-50 text-teal-900' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
                 >
                   {renderRow(row)}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
