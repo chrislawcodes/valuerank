@@ -184,6 +184,7 @@ def _default_workflow_state() -> dict:
         CHECKPOINT_FALLBACK_KEY: {},
         PARALLEL_ANALYSIS_KEY: default_parallel_analysis_state(),
         INIT_HEAD_SHA_KEY: "",
+        "token_usage": [],
         "stages": {},
         "schema_version": 1,
     }
@@ -384,6 +385,7 @@ def load_workflow_state(slug: str) -> dict:
     state.setdefault(CHECKPOINT_FALLBACK_KEY, {})
     state.setdefault(PARALLEL_ANALYSIS_KEY, default_parallel_analysis_state())
     state.setdefault(INIT_HEAD_SHA_KEY, "")
+    state.setdefault("token_usage", [])
     state.setdefault("stages", {})
     state.setdefault("schema_version", 1)
     return state

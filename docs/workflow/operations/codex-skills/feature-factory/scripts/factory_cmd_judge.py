@@ -27,6 +27,7 @@ from factory_state import (  # noqa: E402
     workflow_dir,
 )
 import factory_embeddings  # noqa: E402
+from factory_telemetry import record_ai_call  # noqa: E402
 
 REVIEW_SCRIPTS = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills" / "review-lens" / "scripts"
 if str(REVIEW_SCRIPTS) not in sys.path:
@@ -414,6 +415,9 @@ def _validate_verdict(verdict: dict) -> str | None:
 
 
 def _attempt_model_call(
+    slug: str,
+    stage: str,
+    round_number: int,
     lens: str,
     model: str,
     system_prompt: str,
@@ -423,22 +427,41 @@ def _attempt_model_call(
     command = list(JUDGE_COMMAND_BY_LENS[lens])
     try:
         if command[0] == "codex":
-            result = subprocess.run(
-                command,
-                input=f"{system_prompt}\n\n{user_prompt}",
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=timeout_seconds,
-            )
+            def _call() -> subprocess.CompletedProcess:
+                try:
+                    return subprocess.run(
+                        command,
+                        input=f"{system_prompt}\n\n{user_prompt}",
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        timeout=timeout_seconds,
+                    )
+                except subprocess.TimeoutExpired as exc:
+                    return subprocess.CompletedProcess(
+                        command,
+                        124,
+                        stdout=exc.stdout or "",
+                        stderr=exc.stderr or "",
+                    )
         else:
-            result = subprocess.run(
-                [*command, "--system-prompt", system_prompt, user_prompt],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=timeout_seconds,
-            )
+            def _call() -> subprocess.CompletedProcess:
+                try:
+                    return subprocess.run(
+                        [*command, "--system-prompt", system_prompt, user_prompt],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        timeout=timeout_seconds,
+                    )
+                except subprocess.TimeoutExpired as exc:
+                    return subprocess.CompletedProcess(
+                        [*command, "--system-prompt", system_prompt, user_prompt],
+                        124,
+                        stdout=exc.stdout or "",
+                        stderr=exc.stderr or "",
+                    )
+        result = record_ai_call(slug, stage, round_number, "judge_panel", model, _call)
     except Exception as exc:
         return None, "", str(exc)
 
@@ -459,6 +482,9 @@ def _attempt_model_call(
 
 
 def _parse_with_retry(
+    slug: str,
+    stage: str,
+    round_number: int,
     lens: str,
     model: str,
     system_prompt: str,
@@ -474,12 +500,30 @@ def _parse_with_retry(
         "Do not include any prose outside the JSON.\n"
     )
 
-    verdict, stdout, error = _attempt_model_call(lens, model, system_prompt, user_prompt, timeout_seconds)
+    verdict, stdout, error = _attempt_model_call(
+        slug,
+        stage,
+        round_number,
+        lens,
+        model,
+        system_prompt,
+        user_prompt,
+        timeout_seconds,
+    )
     if verdict is not None:
         return verdict, stdout
 
     retry_prompt = user_prompt + appendix
-    verdict, retry_stdout, retry_error = _attempt_model_call(lens, model, system_prompt, retry_prompt, timeout_seconds)
+    verdict, retry_stdout, retry_error = _attempt_model_call(
+        slug,
+        stage,
+        round_number,
+        lens,
+        model,
+        system_prompt,
+        retry_prompt,
+        timeout_seconds,
+    )
     if verdict is not None:
         return verdict, retry_stdout
 
@@ -606,6 +650,7 @@ def _dispatch_panel(
     diff_text = _git_diff(slug, diff_base)
 
     prepared_prompts: dict[str, tuple[str, str]] = {}
+    judge_round = _stage_int(stage_state, "judge_rounds") + 1
     for lens in JUDGE_LENS_ORDER:
         system_prompt, user_prompt, _, _ = _build_variables(
             slug,
@@ -625,7 +670,16 @@ def _dispatch_panel(
     def _worker(lens: str) -> tuple[str, dict, str]:
         model = JUDGE_MODEL_BY_LENS[lens]
         system_prompt, user_prompt = prepared_prompts[lens]
-        verdict, raw_output = _parse_with_retry(lens, model, system_prompt, user_prompt, timeout_seconds)
+        verdict, raw_output = _parse_with_retry(
+            slug,
+            stage,
+            judge_round,
+            lens,
+            model,
+            system_prompt,
+            user_prompt,
+            timeout_seconds,
+        )
         _write_review_outputs(
             slug,
             stage,
