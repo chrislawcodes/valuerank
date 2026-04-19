@@ -42,7 +42,7 @@ We picked advisor over ruler deliberately. Some models are trained to refuse rol
 | `name` | `National Priorities` |
 | `sentencePrefix` | `One program provides citizens with [level]` |
 | `labelPrefix` | `the program that provides citizens with` |
-| `defaultModelIds` | Pulled at seed time from `LlmModel` where `isDefault = true` and `status = ACTIVE` |
+| `defaultModelIds` | Left empty (`[]`). `resolveEffectiveDefaultModelIds()` falls back to `LlmModel.isDefault=true` at query time, keeping the domain in sync with admin-set defaults. Matches `job-choice`, `neighborhood`, `software-approach`. |
 | `defaultPreambleVersionId` | Copied from `job-choice` domain at seed time |
 | `defaultLevelPresetVersionId` | Copied from `job-choice` domain at seed time |
 
@@ -63,9 +63,11 @@ This adds one word of scope divergence from other domains. Justified by the diff
 
 The existing "[verb] the [thing] with" pattern fits options that *have* features. A program *does* things. Paralleling the sentence prefix keeps the language consistent and puts "citizens" in the label as the explicit beneficiary, matching the body structure.
 
-### Why `defaultModelIds` is populated at seed time
+### `defaultModelIds` is left empty by design
 
-Other domains leave `defaultModelIds` empty and rely on the admin UI to configure it. For this domain we instead pull the system-level default set (`LlmModel` rows flagged `isDefault = true`) at seed time, so the domain is usable without an extra UI step. The admin-flagged default set stays the source of truth; the seed just snapshots it.
+Other domains (`job-choice`, `neighborhood`, `software-approach`) leave `Domain.defaultModelIds` as `[]`. Coverage and analysis queries call `resolveEffectiveDefaultModelIds()`, which falls back to `LlmModel` rows flagged `isDefault = true` at query time. This keeps the domain automatically in sync with whatever the admin currently has marked default — no per-domain configuration step needed.
+
+An earlier draft of the seed script tried to *snapshot* the admin defaults into `Domain.defaultModelIds` at seed time, but stored `LlmModel.id` (cuid) when the coverage query actually compares against `LlmModel.modelId` (short name like `gpt-5.1`). That ID-type mismatch made every cell report `minTrialCount: 0` even though transcripts existed. Falling back via the empty-array path is both simpler and consistent with every other domain.
 
 ### Scale labels are level-agnostic (accepted behavior)
 
@@ -128,5 +130,5 @@ Three files, following the `software-approach-choice` pattern:
 | File | Purpose |
 |---|---|
 | `cloud/packages/shared/src/national-priorities-value-statements.ts` | The 10 bodies above, exported as a typed const array |
-| `cloud/scripts/seed-national-priorities-choice.ts` | Creates the Domain + DomainContext + sentencePrefix/labelPrefix + ValueStatements; copies level preset and preamble defaults from `job-choice`; populates `defaultModelIds` from `LlmModel` where `isDefault = true` |
+| `cloud/scripts/seed-national-priorities-choice.ts` | Creates the Domain + DomainContext + sentencePrefix/labelPrefix + ValueStatements; copies level preset and preamble defaults from `job-choice`. Leaves `defaultModelIds` empty; the resolver falls back to `LlmModel.isDefault = true` at query time. |
 | `cloud/scripts/seed-national-priorities-pairs.ts` | Creates all 45 definition pairs (10 values choose 2) with vignettes, in dry-run + `--apply` modes |
