@@ -13,28 +13,82 @@ from factory_state import (  # noqa: E402
     DELIVERY_KEY,
     PARALLEL_ANALYSIS_KEY,
     blocking_unresolved_items,
+    load_workflow_state,
     workflow_dir,
 )
 
 from factory_stages import (  # noqa: E402
+    CHECKPOINT_STAGES,
     diff_review_budget_state,
     later_progress_exists,
     status_md_changed_since_init,
 )
 
 
+def _stage_state(state: dict, stage: str) -> dict:
+    stages = state.get("stages", {})
+    stage_state = stages.get(stage, {}) if isinstance(stages, dict) else {}
+    if not isinstance(stage_state, dict):
+        stage_state = {}
+    stage_state = dict(stage_state)
+    if "adversarial_rounds" not in stage_state:
+        try:
+            stage_state["adversarial_rounds"] = int(state.get(f"{stage}_adversarial_rounds", 0) or 0)
+        except (TypeError, ValueError):
+            stage_state["adversarial_rounds"] = 0
+    if "judge_rounds" not in stage_state:
+        try:
+            stage_state["judge_rounds"] = int(state.get(f"{stage}_judge_rounds", 0) or 0)
+        except (TypeError, ValueError):
+            stage_state["judge_rounds"] = 0
+    if "judge_verdicts" not in stage_state or not isinstance(stage_state.get("judge_verdicts"), list):
+        stage_state["judge_verdicts"] = []
+    return stage_state
+
+
+def _judge_panel_needed(state: dict) -> bool:
+    for stage in CHECKPOINT_STAGES:
+        stage_state = _stage_state(state, stage)
+        adversarial_rounds = stage_state.get("adversarial_rounds", 0)
+        judge_rounds = stage_state.get("judge_rounds", 0)
+        judge_verdicts = stage_state.get("judge_verdicts", [])
+        try:
+            adversarial_rounds_int = int(adversarial_rounds)
+        except (TypeError, ValueError):
+            adversarial_rounds_int = 0
+        try:
+            judge_rounds_int = int(judge_rounds)
+        except (TypeError, ValueError):
+            judge_rounds_int = 0
+        latest_round = judge_verdicts[-1] if judge_verdicts else []
+        block_count = 0
+        if isinstance(latest_round, list):
+            for verdict in latest_round:
+                if isinstance(verdict, dict) and verdict.get("verdict") == "block":
+                    block_count += 1
+        if adversarial_rounds_int >= 3 and judge_rounds_int == 0:
+            return True
+        if judge_rounds_int < 3 and block_count >= 2:
+            return True
+    return False
+
+
 def recommended_next_action(
     slug: str,
-    state: dict,
+    state: dict | None,
     stages: dict[str, dict[str, object]],
     reconciliation_ok: bool,
 ) -> str:
+    if state is None:
+        state = load_workflow_state(slug)
     blocked = state.get(BLOCKED_KEY, {})
     if blocked.get("active"):
         return "mark_blocked"
     discovery = state.get(DISCOVERY_KEY, {})
     if blocking_unresolved_items(discovery) or (discovery.get("required") and not discovery.get("complete")):
         return "discover"
+    if _judge_panel_needed(state):
+        return "judge_panel"
     if not stages["spec"]["artifact_exists"] or not stages["spec"]["artifact_meaningful"]:
         if later_progress_exists(stages, "spec")[0]:
             return "mark_blocked"

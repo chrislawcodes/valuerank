@@ -265,6 +265,7 @@ def build_parser() -> argparse.ArgumentParser:
     checkpoint_parser.add_argument("--repair-timeout-seconds", type=int, default=300)
     checkpoint_parser.add_argument("--allow-large-diff-rerun", action="store_true")
     checkpoint_parser.add_argument("--fallback", action="store_true")
+    checkpoint_parser.add_argument("--json", action="store_true")
     checkpoint_parser.add_argument("--fast", action="store_true",
         help="Fast path: skip prerequisites, run 1 Gemini + 1 Codex review. Requires --stage diff.")
     checkpoint_parser.set_defaults(func=command_checkpoint)

@@ -64,6 +64,7 @@ def command_status(args: argparse.Namespace) -> int:
     stages = {stage: stage_manifest_state(args.slug, stage) for stage in CHECKPOINT_STAGES}
     recon_ok, recon_detail = reconciliation_state(args.slug)
     next_action = recommended_next_action(args.slug, state, stages, recon_ok)
+    last_action_result = state.get("last_action_result", None)
     branch = current_branch_name() or "(detached HEAD)"
     upstream = upstream_branch_name() or "(none)"
     blocked = state.get(BLOCKED_KEY, {})
@@ -75,11 +76,23 @@ def command_status(args: argparse.Namespace) -> int:
 
     behind = commits_behind_upstream()
 
+    if next_action == "judge_panel":
+        print("⚠ next: judge_panel")
     print(f"workflow: {args.slug}")
     print(f"branch: {branch}")
     print(f"upstream: {upstream}")
     if behind is not None and behind > 0:
         print(f"warning: branch is {behind} commit{'s' if behind != 1 else ''} behind upstream — rebase before creating PR")
+    if isinstance(last_action_result, dict) and last_action_result.get("next"):
+        reason = str(last_action_result.get("reason", "")).strip()
+        next_label = str(last_action_result.get("next", "")).strip()
+        if reason:
+            print(f"Last recommended action: {next_label} — {reason}")
+        else:
+            print(f"Last recommended action: {next_label}")
+        blockers = last_action_result.get("blockers", [])
+        if isinstance(blockers, list) and blockers:
+            print(f"Last action blockers: {', '.join(str(item) for item in blockers)}")
     print("")
     print("stages:")
     for stage in CHECKPOINT_STAGES:

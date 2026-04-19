@@ -18,6 +18,8 @@ from factory_state import (  # noqa: E402
     PARALLEL_ANALYSIS_KEY,
     atomic_json_write,
     normalized_repo_path,
+    update_stage_state,
+    with_locked_state,
     workflow_dir,
     reviews_dir,
     scope_manifest_path,
@@ -42,6 +44,7 @@ from factory_git import (  # noqa: E402
 from factory_stages import (  # noqa: E402
     HARD_DIFF_ARTIFACT_MAX_CHARS,
     LARGE_DIFF_RERUN_WARN_CHARS,
+    CHECKPOINT_STAGES,
     STAGE_ARTIFACT_HEADINGS,
     _CHECKPOINT_MARKER_RE,
     parse_checkpoint_markers,
@@ -51,6 +54,8 @@ from factory_stages import (  # noqa: E402
     diff_review_budget_state,
     preferred_diff_base_ref,
     prerequisite_failure,
+    reconciliation_state,
+    stage_manifest_state,
 )
 
 from factory_review import (  # noqa: E402
@@ -72,6 +77,103 @@ from factory_review import (  # noqa: E402
 )
 
 from factory_emit import _emit_next_action  # noqa: E402
+from factory_next_action import recommended_next_action  # noqa: E402
+from workflow_utils import normalized_artifact_hash  # noqa: E402
+
+
+def _ensure_stage_state_blob(state: dict, stage: str) -> dict:
+    stages = state.setdefault("stages", {})
+    stage_state = stages.get(stage)
+    if not isinstance(stage_state, dict):
+        stage_state = {}
+    stage_state.setdefault("adversarial_rounds", 0)
+    stage_state.setdefault("judge_rounds", 0)
+    stage_state.setdefault("judge_verdicts", [])
+    stage_state.setdefault("annotations", [])
+    stage_state.setdefault("unresolved_concerns", [])
+    stage_state.setdefault("adversarial_sha_history", [])
+    stage_state.setdefault("initial_sha", "")
+    stages[stage] = stage_state
+    try:
+        schema_version = int(state.get("schema_version", 1))
+    except (TypeError, ValueError):
+        schema_version = 1
+    if schema_version < 2:
+        state["schema_version"] = 2
+    return stage_state
+
+
+def _stage_int(stage_state: dict, key: str) -> int:
+    try:
+        return int(stage_state.get(key, 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _judge_panel_payload_from_state(slug: str, state: dict) -> dict[str, object] | None:
+    stages = state.get("stages", {})
+    if not isinstance(stages, dict):
+        stages = {}
+    for stage in ("spec", "plan", "tasks", "diff", "closeout"):
+        stage_state = stages.get(stage, {})
+        if not isinstance(stage_state, dict):
+            stage_state = {}
+        adversarial_rounds = _stage_int(stage_state, "adversarial_rounds")
+        judge_rounds = _stage_int(stage_state, "judge_rounds")
+        judge_verdicts = stage_state.get("judge_verdicts", [])
+        latest_round = judge_verdicts[-1] if isinstance(judge_verdicts, list) and judge_verdicts else []
+        block_count = 0
+        if isinstance(latest_round, list):
+            for verdict in latest_round:
+                if isinstance(verdict, dict) and verdict.get("verdict") == "block":
+                    block_count += 1
+        if adversarial_rounds >= 3 and judge_rounds == 0:
+            return {
+                "next": "judge_panel",
+                "reason": f"{stage} reached adversarial round cap",
+                "blockers": [f"{stage}.adversarial_rounds >= 3"],
+            }
+        if judge_rounds < 3 and block_count >= 2:
+            return {
+                "next": "judge_panel",
+                "reason": f"{stage} judge panel voted block",
+                "blockers": [f"{stage}.judge_verdicts[-1] block-majority"],
+            }
+    return None
+
+
+def _checkpoint_next_action_payload(slug: str, state: dict, completed_stage: str) -> dict[str, object]:
+    stages = {stage: stage_manifest_state(slug, stage) for stage in CHECKPOINT_STAGES}
+    recon_ok, _ = reconciliation_state(slug)
+    next_action = recommended_next_action(slug, state, stages, recon_ok)
+    judge_panel_payload = _judge_panel_payload_from_state(slug, state)
+    if next_action == "judge_panel" and judge_panel_payload is not None:
+        return judge_panel_payload
+    return {
+        "next": next_action,
+        "reason": f"{completed_stage} checkpoint completed",
+        "blockers": [],
+    }
+
+
+def _persist_last_action_result(slug: str, payload: dict[str, object]) -> None:
+    update_workflow_state(
+        slug,
+        lambda state: state.__setitem__("last_action_result", payload),
+    )
+
+
+def _rollback_adversarial_round(slug: str, stage: str) -> None:
+    state = load_workflow_state(slug)
+    stage_state = state.get("stages", {}).get(stage, {})
+    if not isinstance(stage_state, dict):
+        stage_state = {}
+    current_rounds = _stage_int(stage_state, "adversarial_rounds")
+    update_stage_state(
+        slug,
+        stage,
+        {"adversarial_rounds": max(current_rounds - 1, 0)},
+    )
 
 
 def command_checkpoint(args: argparse.Namespace) -> int:
@@ -273,6 +375,34 @@ def command_checkpoint(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
 
+    artifact_sha = normalized_artifact_hash(args.stage, artifact_path)
+    cap_hit_payload: dict[str, object] | None = None
+    with with_locked_state(args.slug) as state:
+        stage_state = _ensure_stage_state_blob(state, args.stage)
+        current_rounds = _stage_int(stage_state, "adversarial_rounds")
+        if current_rounds >= 3:
+            cap_hit_payload = {
+                "next": "judge_panel",
+                "reason": f"{args.stage} reached adversarial round cap",
+                "blockers": [f"{args.stage}.adversarial_rounds >= 3"],
+            }
+            state["last_action_result"] = cap_hit_payload
+        else:
+            next_rounds = current_rounds + 1
+            stage_state["adversarial_rounds"] = next_rounds
+            stage_state["adversarial_sha_history"] = list(stage_state.get("adversarial_sha_history", []))
+            stage_state["adversarial_sha_history"].append(artifact_sha)
+            if not str(stage_state.get("initial_sha", "")).strip():
+                stage_state["initial_sha"] = artifact_sha
+            state[f"{args.stage}_adversarial_rounds"] = next_rounds
+
+    if cap_hit_payload is not None:
+        if args.json:
+            print(json.dumps(cap_hit_payload))
+        else:
+            print("→ next: judge_panel")
+        return 2
+
     reviews_arg = getattr(args, "required_reviews", None)
     if reviews_arg is None:
         small_task_set = False
@@ -360,6 +490,7 @@ def command_checkpoint(args: argparse.Namespace) -> int:
         )
     except subprocess.TimeoutExpired:
         if not args.fallback:
+            _rollback_adversarial_round(args.slug, args.stage)
             print(
                 f"checkpoint blocked: repair exceeded {args.repair_timeout_seconds}s for "
                 f"{args.stage} on {args.slug}",
@@ -367,15 +498,25 @@ def command_checkpoint(args: argparse.Namespace) -> int:
             )
             return 1
         fallback_reason = f"repair exceeded {args.repair_timeout_seconds}s"
+    except Exception:
+        _rollback_adversarial_round(args.slug, args.stage)
+        raise
     else:
         if result.returncode == 0:
             reverted = revert_protected_files()
             if reverted:
                 print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
             _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
-            _emit_next_action(args.slug, f"{args.stage} checkpoint")
+            post_state = load_workflow_state(args.slug)
+            payload = _checkpoint_next_action_payload(args.slug, post_state, args.stage)
+            _persist_last_action_result(args.slug, payload)
+            if args.json:
+                print(json.dumps(payload))
+            else:
+                _emit_next_action(args.slug, f"{args.stage} checkpoint")
             return 0
         if not args.fallback:
+            _rollback_adversarial_round(args.slug, args.stage)
             return result.returncode
         fallback_reason = f"repair exited {result.returncode}"
 
@@ -386,6 +527,7 @@ def command_checkpoint(args: argparse.Namespace) -> int:
         args.gemini_retries,
     )
     if not fallback_ok:
+        _rollback_adversarial_round(args.slug, args.stage)
         print(f"checkpoint blocked: fallback review path failed for {args.stage} on {args.slug}: {trim_detail(fallback_detail)}", file=sys.stderr)
         return 1
     reverted = revert_protected_files()
@@ -394,5 +536,11 @@ def command_checkpoint(args: argparse.Namespace) -> int:
     record_checkpoint_fallback(args.slug, args.stage, fallback_reason)
     _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
     print(f"warning: fallback checkpoint path used for {args.stage} on {args.slug}: {fallback_reason}", file=sys.stderr)
-    _emit_next_action(args.slug, f"{args.stage} checkpoint")
+    post_state = load_workflow_state(args.slug)
+    payload = _checkpoint_next_action_payload(args.slug, post_state, args.stage)
+    _persist_last_action_result(args.slug, payload)
+    if args.json:
+        print(json.dumps(payload))
+    else:
+        _emit_next_action(args.slug, f"{args.stage} checkpoint")
     return 0
