@@ -1,348 +1,271 @@
 # Tech Stack
 
-> Technologies used in Cloud ValueRank and the rationale for each choice
+> Technologies used in ValueRank and the rationale for each choice.
 
 ---
 
 ## Overview
 
-Cloud ValueRank is built as a TypeScript-first monorepo with Python workers for LLM operations. The stack prioritizes:
+ValueRank is a TypeScript-first monorepo with Python workers for LLM-bound work. The stack prioritizes:
 
-- **Developer experience** - Hot reload, type safety, familiar tools
-- **Operational simplicity** - Single database, minimal infrastructure
-- **Token efficiency** - GraphQL for flexible queries, structured responses
-- **CLI compatibility** - Python workers can share adapters with the CLI pipeline
-
----
-
-## Core Technologies
-
-### Runtime & Package Management
-
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| **Node.js** | 20+ | JavaScript runtime |
-| **npm** | 10.2 | Package manager |
-| **Turborepo** | 2.3 | Monorepo build orchestration |
-| **TypeScript** | 5.3 | Type-safe JavaScript |
-| **Python** | 3.10+ | Worker scripts for LLM operations |
-
-**Rationale:**
-- Node.js 20 LTS provides stable ES module support
-- Turborepo enables cached builds across packages
-- TypeScript catches errors at compile time
-- Python workers reuse LLM adapters from the CLI pipeline
+- **Developer experience** — hot reload, end-to-end types, familiar tools
+- **Operational simplicity** — single Postgres, no separate worker process
+- **Token efficiency** — GraphQL for flexible queries, token-budgeted MCP responses
+- **Python interop** — workers reuse provider SDKs and analysis code from the original CLI pipeline
 
 ---
 
-### API Server
+## Runtime & Package Management
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| **Express** | 4.18 | HTTP server framework |
-| **GraphQL Yoga** | 5.1 | GraphQL server |
-| **Pothos** | 3.41 | Schema builder (type-safe) |
-| **DataLoader** | 2.2 | N+1 query prevention |
-| **Zod** | 3.22 | Input validation |
+| Node.js | 20 LTS | JavaScript runtime |
+| npm | 10+ | Package manager / workspaces |
+| Turborepo | 2.x | Monorepo orchestration + caching |
+| TypeScript | 5.3 | Type-safe JS |
+| Python | 3.10+ | Workers for LLM and statistics |
 
-**Rationale:**
+---
 
-**Express over Fastify:**
-- Mature ecosystem, extensive middleware
-- Team familiarity
-- No need for Fastify's extra performance
+## API Server (`apps/api`)
 
-**GraphQL over REST:**
-- LLMs can introspect schema and construct precise queries
-- Single endpoint simplifies MCP integration
-- Flexible data fetching critical for token budgets
-- Nested relationships in single query
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| Express | 4.18 | HTTP server |
+| GraphQL Yoga | 5.1 | GraphQL server |
+| Pothos | 3.41 (`@pothos/core`, `plugin-prisma`, `plugin-validation`) | Code-first schema |
+| DataLoader | 2.2 | N+1 prevention |
+| Zod | 3.22 | Input validation |
+| pg-boss | 12.5 | Postgres-backed job queue |
+| `@modelcontextprotocol/sdk` | 1.24 | MCP server |
+| jsonwebtoken | 9.0 | JWT auth |
+| bcrypt | 5.1 | Password hashing |
+| express-rate-limit | 7.1 | Request rate limiting |
+| cors | 2.8 | CORS middleware (exposes `Content-Disposition`) |
+| compression | 1.8 | gzip/br response compression |
+| dotenv | 17.2 | Env loading for CLI scripts |
+| adm-zip | 0.5 | Export bundle zipping |
+| exceljs | 4.4 | XLSX export |
+| bottleneck | 2.19 | Per-provider rate-limit / concurrency control |
+| yaml | 2.8 | Definition import/export |
 
-**Pothos over SDL-first:**
-- Type-safe schema definition
-- Better IDE support
-- No schema drift
+**Design notes:**
+
+- **GraphQL over REST** — LLMs introspect the schema; single endpoint simplifies MCP and web auth.
+- **Pothos over SDL-first** — type-safe, no schema drift, good IDE support.
+- **Express over Fastify** — mature ecosystem and team familiarity outweigh Fastify's perf wins.
+- **In-process PgBoss** — queue orchestrator runs inside the API; simpler deploy than a separate worker service.
 
 ```typescript
-// Example: Type-safe schema with Pothos
+// Pothos example
 const Definition = builder.prismaObject('Definition', {
   fields: (t) => ({
     id: t.exposeID('id'),
     name: t.exposeString('name'),
-    content: t.field({
-      type: 'JSON',
-      resolve: (def) => def.content,
-    }),
+    content: t.field({ type: 'JSON', resolve: (d) => d.content }),
   }),
 });
 ```
 
 ---
 
-### Database
+## Database (`packages/db`)
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| **PostgreSQL** | 15+ | Primary database |
-| **Prisma** | 5.7 | ORM and query builder |
-| **PgBoss** | 12.5 | Job queue (PostgreSQL-backed) |
+| PostgreSQL | 15+ | Primary store |
+| PgBouncer | — | Transaction-pooled connections for the app |
+| Prisma | 5.7 | ORM / migrations / typed client |
 
 **Rationale:**
 
-**PostgreSQL over MongoDB:**
-- Definition versioning requires DAG queries (ancestry, descendants)
-- Recursive CTEs handle version trees efficiently
-- JSONB provides schema flexibility without migrations
-- Single database for both app data and job queue
-
-**PgBoss over BullMQ/Redis:**
-- Uses same PostgreSQL - no additional infrastructure
-- Built-in retry, scheduling, priority queues
-- Transactional with application data
-- Simpler operational model
-
-**Prisma over raw SQL:**
-- Type-safe queries
-- Migration management
-- Generated TypeScript types
+- **PostgreSQL over MongoDB** — definition DAGs need recursive CTEs; JSONB gives schema flexibility without migrations; same DB serves the queue.
+- **PgBouncer** — app goes through the pooler (`DATABASE_URL` with `?pgbouncer=true`, prepared statements off). Migrations use a direct connection (`DIRECT_URL`).
+- **Prisma Migrate only** — never `db push` in shared envs. Production runs `prisma migrate deploy` on startup.
 
 ---
 
-### Frontend
+## Frontend (`apps/web`)
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| **React** | 18.2 | UI framework |
-| **Vite** | 5.0 | Build tool and dev server |
-| **TypeScript** | 5.3 | Type safety |
-| **Tailwind CSS** | 3.3 | Utility-first styling |
-| **urql** | 4.0 | GraphQL client |
-| **React Router** | 6.21 | Client-side routing |
-| **Monaco Editor** | 4.7 | Code/definition editing |
-| **Recharts** | 3.5 | Data visualization |
-| **Lucide** | 0.294 | Icons |
+| React | 18.2 | UI framework |
+| Vite | 5.0 | Dev server + bundler |
+| TypeScript | 5.3 | Type safety |
+| Tailwind CSS | 3.3 | Utility-first styling |
+| urql | 4.0 | GraphQL client |
+| `@urql/exchange-auth` | 2.1 | JWT auth exchange |
+| GraphQL Code Generator | 6.x (`client-preset`, `typescript-urql`) | Typed documents from schema |
+| React Router | 6.21 | Client-side routing |
+| Monaco Editor | 4.7 | Definition editing |
+| Recharts | 3.5 | Charts |
+| `@tanstack/react-virtual` | 3.13 | Virtualized tables |
+| Radix Popover | 1.1 | Accessible primitives |
+| `class-variance-authority`, `clsx`, `tailwind-merge` | latest | Styling helpers |
+| `date-fns` | 4.1 | Date formatting |
+| `html-to-image`, `html2canvas` | latest | Chart export |
+| Lucide | 0.294 | Icons |
 
 **Rationale:**
 
-**React over alternatives:**
-- Team familiarity
-- Component reuse from DevTool
-- Extensive ecosystem
-
-**Vite over CRA/Webpack:**
-- Fast hot reload
-- Modern ES module handling
-- Simpler configuration
-
-**urql over Apollo:**
-- Lighter weight
-- Simpler caching model
-- Good TypeScript support
-
-**Tailwind over CSS-in-JS:**
-- Consistent design system
-- No runtime overhead
-- Easy responsive design
+- **Vite over CRA/Webpack** — fast HMR, ESM-native, minimal config.
+- **urql over Apollo** — lighter, simpler cache; pairs well with GraphQL codegen.
+- **Codegen workflow** — `npm run codegen` in `apps/web` writes `src/generated/`; `npm run verify` enforces that generated output is up to date.
+- **Tailwind + CVA** — design tokens in Tailwind; component variants via `class-variance-authority`.
 
 ---
 
-### Authentication
+## Authentication
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| **bcrypt** | 5.1 | Password hashing |
-| **jsonwebtoken** | 9.0 | JWT creation/verification |
-| **express-rate-limit** | 7.1 | Request rate limiting |
+| bcrypt | 5.1 | Password hashing |
+| jsonwebtoken | 9.0 | JWT signing/verification |
+| express-rate-limit | 7.1 | Brute-force protection |
 
-**Rationale:**
-- JWT for stateless authentication
-- bcrypt for secure password storage
-- Rate limiting protects against abuse
+**Auth channels:**
+
+- **Web:** JWT (HTTP-only cookie).
+- **Programmatic / MCP (legacy):** API keys (hashed in `api_keys`).
+- **Remote MCP agents (Claude.ai / Claude Code / Codex):** OAuth 2.1 with PKCE and RFC 7591 Dynamic Client Registration. Metadata exposed at `/.well-known/oauth-authorization-server` (RFC 8414) and `/.well-known/oauth-protected-resource` (RFC 9728). Implementation in `apps/api/src/mcp/oauth/`.
 
 ---
 
-### MCP Integration
+## MCP Integration
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| **@modelcontextprotocol/sdk** | 1.24 | MCP server implementation |
+| `@modelcontextprotocol/sdk` | 1.24 | MCP server protocol |
 
-**Rationale:**
-- Official MCP SDK for protocol compliance
-- Stdio transport for local LLM integration
-- Enables AI agents to query and author data
+- **Transport:** Streamable HTTP at `POST /mcp` (remote) + stdio for local development.
+- **Tools:** 40+ read/write tools live in `apps/api/src/mcp/tools/` (definitions, runs, models, queue, transcripts, pairwise outcomes, etc.). They reuse the GraphQL resolvers.
+- **Resources:** authoring guide, annotated examples, value-pair catalog, preamble templates (`mcp/resources/`).
+- **Rate limiting:** 120 req/min per API key (in `mcp/rate-limit.ts`).
 
 ---
 
-### Testing
+## Python Workers (`workers/`)
+
+| Package | Purpose |
+|---------|---------|
+| `anthropic`, `openai`, `google-generativeai`, plus HTTP-based adapters for xAI / DeepSeek / Mistral | Provider clients |
+| `requests` | HTTP |
+| `PyYAML` | definition I/O |
+| `pytest` | tests in `workers/tests/` |
+
+Adapters live in `workers/common/llm_adapters/`. Statistics helpers live in `workers/stats/`.
+
+Workers expose a JSON-in/JSON-out protocol so the TypeScript orchestrator can spawn and parse them without sharing process state.
+
+---
+
+## Testing
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| **Vitest** | 2.1 | Test runner |
-| **@testing-library/react** | 14.1 | React component testing |
-| **supertest** | 6.3 | HTTP assertion library |
-| **pytest** | 7+ | Python test runner |
+| Vitest | 2.1 (api) / 1.x (web) | Unit + integration tests |
+| `@testing-library/react` | 14.1 | Component testing |
+| supertest | 6.3 | HTTP assertions |
+| jsdom | 23 | DOM for web tests |
+| pytest | 7+ | Python worker tests |
+| `@vitest/coverage-v8` | — | Coverage |
 
-**Rationale:**
-- Vitest is fast and Vite-native
-- Testing Library encourages user-centric tests
-- supertest enables API integration tests
-
----
-
-### Development Tools
-
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| **ESLint** | 8.56 | Linting |
-| **Prettier** | 3.2 | Code formatting |
-| **tsx** | 4.6 | TypeScript execution |
-| **pino** | 8+ | Structured logging |
+Coverage targets (per `cloud/CLAUDE.md`): 80 % line, 75 % branch, 80 % function minimum.
 
 ---
 
-### Infrastructure
+## Development & Tooling
 
 | Technology | Purpose |
 |------------|---------|
-| **Docker Compose** | Local development |
-| **Railway** | Production deployment |
-
-**Railway over other platforms:**
-- Simple deployment model
-- Good developer experience
-- PostgreSQL included
-- No container management needed
+| ESLint 8, Prettier 3 | Lint / format |
+| `tsx` 4 | TypeScript execution for dev and scripts |
+| `pino` 8 (via `@valuerank/shared`) | Structured logging |
+| Docker Compose | Local Postgres (+ PgBouncer) |
+| Railway | Production deployment (Postgres + API) |
 
 ---
 
-## Package Dependencies by App
-
-### API (`@valuerank/api`)
-
-```json
-{
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.24.3",
-    "@pothos/core": "^3.41.0",
-    "@pothos/plugin-prisma": "^3.65.0",
-    "@pothos/plugin-validation": "^3.10.1",
-    "bcrypt": "^5.1.1",
-    "cors": "^2.8.5",
-    "dataloader": "^2.2.2",
-    "express": "^4.18.2",
-    "express-rate-limit": "^7.1.5",
-    "graphql": "^16.8.1",
-    "graphql-yoga": "^5.1.1",
-    "jsonwebtoken": "^9.0.2",
-    "pg-boss": "^12.5.2",
-    "yaml": "^2.8.2",
-    "zod": "^3.22.4"
-  }
-}
-```
-
-### Web (`@valuerank/web`)
-
-```json
-{
-  "dependencies": {
-    "@monaco-editor/react": "^4.7.0",
-    "@urql/exchange-auth": "^2.1.6",
-    "graphql": "^16.8.0",
-    "lucide-react": "^0.294.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^6.21.0",
-    "recharts": "^3.5.1",
-    "urql": "^4.0.0"
-  }
-}
-```
-
-### Database (`@valuerank/db`)
-
-```json
-{
-  "dependencies": {
-    "@prisma/client": "^5.7.0"
-  }
-}
-```
-
-### Python Workers
+## Type-Safe End-to-End
 
 ```
-# workers/requirements.txt
-requests>=2.31.0
-PyYAML>=6.0
-anthropic>=0.25.0
-openai>=1.12.0
-google-generativeai>=0.4.0
+Prisma schema
+   ▼  (prisma generate)
+@valuerank/db client
+   ▼  (Pothos plugin-prisma)
+GraphQL schema
+   ▼  (GraphQL Code Generator — web only)
+Typed urql documents
+   ▼
+React components
 ```
+
+This chain means a schema change surfaces as a TypeScript error in the API resolvers, the web codegen step, and the React call sites.
 
 ---
 
-## Architectural Patterns
-
-### Type-Safe End-to-End
-
-The stack enables type safety from database to UI:
-
-```
-Prisma Schema → Generated Types → Pothos Schema → GraphQL → urql Codegen → React
-```
-
-### Structured Logging
-
-All logging uses pino for structured JSON output:
+## Structured Logging
 
 ```typescript
 import { createLogger } from '@valuerank/shared';
-const log = createLogger('service-name');
-
-log.info({ userId, action: 'login' }, 'User logged in');
+const log = createLogger('runs');
+log.info({ runId, userId }, 'Run created');
+log.error({ err, config }, 'Failed to create run');
 ```
 
-### Error Handling
+Always object-then-message. Never `console.log`.
 
-Custom error classes with codes and status:
+---
+
+## Error Handling
 
 ```typescript
 import { NotFoundError, ValidationError } from '@valuerank/shared';
-
 throw new NotFoundError('Definition', id);
 throw new ValidationError('Invalid dimensions', errors);
 ```
+
+A global Express error middleware maps `AppError` subclasses to HTTP status + code.
 
 ---
 
 ## Configuration
 
-### Environment Variables
+### Ports
+
+| Service | Port |
+|---------|------|
+| Web (Vite) | 3030 |
+| API (Express + GraphQL + MCP) | 3031 |
+| Postgres (Docker Compose) | 5433 |
+| PgBouncer (Docker Compose) | 6432 |
+
+### Environment variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `JWT_SECRET` | Yes | Secret for JWT signing (32+ chars) |
-| `OPENAI_API_KEY` | For runs | OpenAI API key |
-| `ANTHROPIC_API_KEY` | For runs | Anthropic API key |
-| `GOOGLE_API_KEY` | For runs | Google AI API key |
-| `XAI_API_KEY` | For runs | xAI API key |
-| `DEEPSEEK_API_KEY` | For runs | DeepSeek API key |
-| `MISTRAL_API_KEY` | For runs | Mistral API key |
-| `PORT` | No | API server port (default: 3001) |
-| `LOG_LEVEL` | No | Logging level (default: info) |
+| `DATABASE_URL` | yes | App Postgres URL (via PgBouncer, `?pgbouncer=true`) |
+| `DIRECT_URL` | yes | Direct Postgres URL for Prisma Migrate |
+| `JWT_SECRET` | yes | 32+ chars |
+| `OPENAI_API_KEY` | for runs | OpenAI |
+| `ANTHROPIC_API_KEY` | for runs | Anthropic |
+| `GOOGLE_API_KEY` | for runs | Google AI |
+| `XAI_API_KEY` | for runs | xAI |
+| `DEEPSEEK_API_KEY` | for runs | DeepSeek |
+| `MISTRAL_API_KEY` | for runs | Mistral |
+| `PORT` | no | API port (default 3031) |
+| `LOG_LEVEL` | no | pino level |
 
-### Database Connection
-
-Development and test databases run on port 5433:
+### Example local URLs
 
 ```bash
-# Development
-DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank"
+# App traffic (via PgBouncer)
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:6432/valuerank?pgbouncer=true"
 
-# Test
+# Direct connection for migrations
+DIRECT_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank"
+
+# Test database (direct, no pooler)
 DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test"
 ```
 
@@ -353,7 +276,7 @@ DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test"
 | Component | Minimum | Recommended |
 |-----------|---------|-------------|
 | Node.js | 20.0 | 20 LTS |
-| npm | 10.0 | 10.2 |
+| npm | 10.0 | 10+ |
 | PostgreSQL | 14 | 15 |
 | Python | 3.10 | 3.11 |
 
@@ -361,7 +284,8 @@ DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test"
 
 ## Related Documentation
 
-- [Architecture Overview](./overview.md) - System components
-- [Data Model](./data-model.md) - Database schema
-- [Local Development](../operations/local-development.md) - Setup guide
-- [Project Constitution](../../CLAUDE.md) - Coding standards
+- [Architecture Overview](./overview.md)
+- [Data Model](./data-model.md)
+- [Queue System](../backend/queue-system.md)
+- [LLM Providers](../backend/llm-providers.md)
+- [Project Constitution](../../cloud/CLAUDE.md) — coding standards, preflight gate
