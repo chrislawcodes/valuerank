@@ -1,0 +1,17 @@
+{
+  "paths": [
+    "docs/workflow/feature-runs",
+    "docs/workflow/operations/codex-skills/feature-factory/SKILL.md",
+    "docs/workflow/operations/codex-skills/feature-factory/scripts",
+    "docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py",
+    "docs/workflow/operations/codex-skills/review-lens/scripts"
+  ],
+  "allowed_dirty_paths": [
+    "docs/workflow/feature-runs",
+    "docs/workflow/feature-runs/ff-judge-panel",
+    "docs/workflow/operations/codex-skills/feature-factory/SKILL.md",
+    "docs/workflow/operations/codex-skills/feature-factory/scripts",
+    "docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py",
+    "docs/workflow/operations/codex-skills/review-lens/scripts"
+  ]
+}

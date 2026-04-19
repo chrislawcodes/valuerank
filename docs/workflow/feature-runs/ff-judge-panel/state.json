@@ -1,0 +1,87 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 3,
+    "asked_count": 3,
+    "questions": [
+      {
+        "question": "Dogfooding: do we apply the new judge-panel rule to this feature's own FF workflow once the runner changes land mid-feature, or treat the whole thing as Level 1 voluntary and apply Level 2 only to future features?",
+        "recommendation": "Treat the whole build as Level 1 throughout. Apply Level 2 to future features only, starting with retroactively unblocking orchestrator + Finding #2 after this ships.",
+        "rationale": "Mid-feature rule switching is operationally messy \u2014 state.json format would need migration, and partially applying a half-built runner to its own feature invites foot-guns. Cleaner: ship the feature end-to-end with discipline (I strictly apply the convergence rule manually in my role), then first real test is unblocking the two waiting features.",
+        "updated_at": 1776535956
+      },
+      {
+        "question": "Back-test scope: build the quarterly back-test loop (correlate unresolved_concerns with actual regressions) as part of this feature, or ship judge-panel enforcement first and add back-test as a follow-up?",
+        "recommendation": "Follow-up feature. Scope this one to just the enforcement mechanism.",
+        "rationale": "Back-test needs real shipped data to be meaningful (requires features to have already flowed through the new rule for weeks). Building it now means we're writing a script to analyze an empty corpus. Ship enforcement, accumulate ~10-15 features of data, then build the back-test as its own feature with real signal. Smaller blast radius per PR. Also avoids scope bloat on this feature.",
+        "updated_at": 1776535961
+      },
+      {
+        "question": "Judge prompts: do they ship as fixed templates in the repo (versioned with code) or as configurable files operators can tweak per-workflow without a code change?",
+        "recommendation": "Fixed templates in the repo, versioned with the runner. One file per judge under docs/workflow/operations/codex-skills/feature-factory/judge-prompts/.",
+        "rationale": "Per-workflow tweakability sounds flexible but invites (a) drift between features, (b) gaming ('let's loosen the Completeness prompt for this feature'), and (c) a back-test nightmare because we can't compare votes if prompts differ. Fixed+versioned means we change the prompts via a PR (tracked, reviewable, reasoned). If a prompt is wrong we fix it once for everyone. Operators can still override via env vars or CLI flags in edge cases, but the default path is frozen templates.",
+        "updated_at": 1776535967
+      }
+    ],
+    "assumptions": [],
+    "summary": "Runner-enforced judge panel for FF: after 3 adversarial rounds per stage, dispatch 3 judges (Codex mini + Codex heavy + Claude Sonnet 4.6) with distinct lenses. Majority 2/3 proceed advances; 2/3 block triggers edit + re-vote (max 3 judge rounds). Unresolved concerns get injected into PR. Three shaping decisions: dogfooding, back-test scope, judge-prompt flexibility.",
+    "updated_at": 1776536591,
+    "answers": {
+      "Dogfooding: do we apply the new judge-panel rule to this feature's own FF workflow once the runner changes land mid-feature, or treat the whole thing as Level 1 voluntary and apply Level 2 only to future features?": "Level 1 throughout this build. Orchestrator strictly applies the 3-round convergence cap manually. Level 2 ships, then first real use is retroactively unblocking orchestrator + Finding #2.",
+      "Back-test scope: build the quarterly back-test loop (correlate unresolved_concerns with actual regressions) as part of this feature, or ship judge-panel enforcement first and add back-test as a follow-up?": "Both together. Feature includes: (a) enforcement runner changes, (b) back-test script that correlates unresolved_concerns with CI regressions + PR reverts + prod incidents, runnable as a cron/manual script. Back-test starts returning empty results at launch; will produce real signal after ~10-15 features have flowed through the new rule.",
+      "Judge prompts: do they ship as fixed templates in the repo (versioned with code) or as configurable files operators can tweak per-workflow without a code change?": "Fixed templates in repo under docs/workflow/operations/codex-skills/feature-factory/judge-prompts/. CLI flag --prompt-override path/to/custom.md as escape hatch, logged to state.json. Specific prompt content TBD pending parallel research agents."
+    },
+    "non_goals": [],
+    "acceptance_criteria": [],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "parallel_analysis": {
+    "reviewed": false,
+    "found": false,
+    "note": "",
+    "updated_at": 0
+  },
+  "init_head_sha": "bfaba32f7d10406e0658c81541974dd4589c9bda",
+  "schema_version": 2,
+  "stages": {
+    "spec": {
+      "adversarial_rounds": 3,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [],
+      "initial_sha": ""
+    }
+  },
+  "spec_adversarial_rounds": 3,
+  "spec_judge_rounds": 0,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "checkpoint_fallback": {},
+  "last_action_result": {
+    "next": "judge_panel",
+    "reason": "spec reached adversarial round cap",
+    "blockers": [
+      "spec.adversarial_rounds >= 3"
+    ]
+  }
+}
