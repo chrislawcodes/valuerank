@@ -1,0 +1,18 @@
+# Files exempt from the banned-filename check.
+# Format: one repo-relative path per line. Blank lines and # comments allowed.
+# Remove an entry when you rename or inline the file.
+# See docs/tech-debt/file-structure.md for context.
+
+cloud/apps/api/src/graphql/mutations/paired-vignette-helpers.ts
+cloud/apps/api/src/graphql/mutations/run/lifecycle-helpers.ts
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts
+cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts
+cloud/apps/api/src/graphql/queries/domain/planning-utils.ts
+cloud/apps/api/src/graphql/queries/scenarios-utils.ts
+cloud/apps/api/src/mcp/tools/value-pair-helpers.ts
+cloud/apps/api/src/services/analysis/aggregate/aggregate-helpers.ts
+cloud/apps/api/src/services/run/start-helpers.ts
+cloud/apps/api/src/services/scenario/expand-helpers.ts
+
+# One-off data/migration scripts
+cloud/scripts/job-choice-vignette-utils.ts

@@ -1,0 +1,69 @@
+{
+  "_comment": "Machine-readable tech-debt manifest. Consumed by cloud/scripts/check-tech-debt.sh and the Claude Code PostToolUse hook. Each cluster lists files that should be collapsed together next time the area is touched. Each grandfathered file should be split or shrunk next time it is touched. Keep paths repo-relative.",
+  "clusters": [
+    {
+      "name": "domain/decision-model",
+      "files": [
+        "cloud/apps/api/src/graphql/queries/domain/decision-model.ts",
+        "cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts",
+        "cloud/apps/api/src/graphql/queries/domain/decision-model-types.ts"
+      ],
+      "action": "Collapse into a single decision-model.ts (or split by real responsibility with domain-meaningful names)."
+    },
+    {
+      "name": "domain/planning",
+      "files": [
+        "cloud/apps/api/src/graphql/queries/domain/planning.ts",
+        "cloud/apps/api/src/graphql/queries/domain/planning-utils.ts",
+        "cloud/apps/api/src/graphql/queries/domain/planning-estimate.ts"
+      ],
+      "action": "Collapse into a single planning.ts, or split by real responsibility."
+    },
+    {
+      "name": "domain/types",
+      "files": [
+        "cloud/apps/api/src/graphql/queries/domain/types.ts",
+        "cloud/apps/api/src/graphql/queries/domain/types-detail.ts"
+      ],
+      "action": "Merge types-detail.ts back into types.ts."
+    },
+    {
+      "name": "coverageMatrixHelpers",
+      "files": [
+        "cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts",
+        "cloud/apps/web/src/components/domains/CoverageMatrix.tsx"
+      ],
+      "action": "Inline coverageMatrixHelpers.ts (28 lines, single caller) into CoverageMatrix.tsx."
+    },
+    {
+      "name": "shared/math-utilities",
+      "files": [
+        "cloud/packages/shared/src/cosine-similarity.ts",
+        "cloud/packages/shared/src/decision-scoring.ts"
+      ],
+      "action": "Consolidate scattered small utilities into a single math.ts or scoring.ts for discoverability."
+    }
+  ],
+  "grandfatheredLargeFiles": [
+    {
+      "file": "cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx",
+      "lines": 889,
+      "action": "Decompose by responsibility next time you touch it."
+    },
+    {
+      "file": "cloud/apps/api/tests/services/run/start.test.ts",
+      "lines": 1975,
+      "action": "Split by scenario group next time you touch it."
+    },
+    {
+      "file": "cloud/apps/api/tests/graphql/queries/definition.test.ts",
+      "lines": 1336,
+      "action": "Split by test group next time you touch it."
+    },
+    {
+      "file": "cloud/apps/api/tests/graphql/queries/run.test.ts",
+      "lines": 1226,
+      "action": "Split by test group next time you touch it."
+    }
+  ]
+}

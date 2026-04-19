@@ -1,0 +1,7 @@
+# index.ts files exempt from the trivial-barrel check.
+# Format: one repo-relative path per line. Blank lines and # comments allowed.
+# Remove an entry when you inline the barrel.
+
+cloud/apps/web/src/components/definitions/index.ts
+cloud/apps/api/src/graphql/mutations/domain/launch/index.ts
+cloud/apps/web/src/components/import/index.ts

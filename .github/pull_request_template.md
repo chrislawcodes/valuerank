@@ -1,6 +1,11 @@
 ## Summary
 - 
 
+## File structure
+- [ ] No new file uses a `-helpers` / `-utils` / `-misc` / `-types-detail` suffix
+- [ ] New files have ≥3 callers OR a clearly nameable single responsibility
+- [ ] No file was split purely to satisfy `max-lines` (split by responsibility, not line count)
+
 ## Validation
 - [ ] `npm run lint --workspace @valuerank/shared`
 - [ ] `npm run lint --workspace @valuerank/db`
