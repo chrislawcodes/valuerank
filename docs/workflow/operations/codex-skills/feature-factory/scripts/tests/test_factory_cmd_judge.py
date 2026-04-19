@@ -2,6 +2,7 @@ import contextlib
 import importlib.util
 import io
 import json
+from collections import Counter
 import subprocess
 import sys
 import tempfile
@@ -18,6 +19,12 @@ assert STATE_SPEC and STATE_SPEC.loader
 FACTORY_STATE = importlib.util.module_from_spec(STATE_SPEC)
 sys.modules[STATE_SPEC.name] = FACTORY_STATE
 STATE_SPEC.loader.exec_module(FACTORY_STATE)
+
+EMBEDDINGS_SPEC = importlib.util.spec_from_file_location("factory_embeddings", SCRIPT_DIR / "factory_embeddings.py")
+assert EMBEDDINGS_SPEC and EMBEDDINGS_SPEC.loader
+FACTORY_EMBEDDINGS = importlib.util.module_from_spec(EMBEDDINGS_SPEC)
+sys.modules[EMBEDDINGS_SPEC.name] = FACTORY_EMBEDDINGS
+EMBEDDINGS_SPEC.loader.exec_module(FACTORY_EMBEDDINGS)
 
 JUDGE_SPEC = importlib.util.spec_from_file_location("factory_cmd_judge", SCRIPT_DIR / "factory_cmd_judge.py")
 assert JUDGE_SPEC and JUDGE_SPEC.loader
@@ -45,16 +52,21 @@ def _base_state() -> dict:
     return state
 
 
-def _stage_state(adversarial_rounds: int, judge_rounds: int = 0) -> dict:
-    return {
+def _stage_state(
+    adversarial_rounds: int,
+    judge_rounds: int = 0,
+    judge_verdicts: list[list[dict]] | None = None,
+) -> dict:
+    state = {
         "adversarial_rounds": adversarial_rounds,
         "judge_rounds": judge_rounds,
-        "judge_verdicts": [],
+        "judge_verdicts": judge_verdicts if judge_verdicts is not None else [],
         "annotations": [],
         "unresolved_concerns": [],
         "adversarial_sha_history": ["sha-round-1", "sha-round-2", "sha-round-3"],
         "initial_sha": "sha-round-1",
     }
+    return state
 
 
 def _write_review(path: Path, artifact_sha: str, resolution_note: str, findings: list[str]) -> None:
@@ -282,8 +294,55 @@ class FactoryJudgeTests(unittest.TestCase):
         rc, _, state = self._run_judge(stage_state, review_specs, side_effect)
         self.assertEqual(rc, 0)
         self.assertEqual(state["stages"][STAGE]["judge_rounds"], 1)
-        self.assertEqual(state["stages"][STAGE]["judge_next_action"], "edit-and-rejudge")
+        self.assertEqual(state["stages"][STAGE]["judge_next_action"], "edit_and_rerun_judge")
+        self.assertEqual(state["last_action_result"]["next"], "edit_and_rerun_judge")
         self.assertEqual(state["last_action_result"]["outcome"], "rejudge")
+
+    def test_judge_round2_dispatches_after_round1_block(self) -> None:
+        stage_state = _stage_state(3)
+        review_specs = [("plan.codex.feasibility-adversarial.review.md", "sha-round-3", ["- HIGH: High finding."])]
+        call_rounds: list[tuple[int, str]] = []
+
+        def side_effect(cmd, *args, **kwargs):
+            if cmd[0] == "git":
+                return _make_git_response(cmd, Path(self._tmpdir.name))
+            if cmd[0] == "codex" or cmd[0] == "claude":
+                model = cmd[cmd.index("-m") + 1] if "-m" in cmd else cmd[cmd.index("--model") + 1]
+                current_state = json.loads(FACTORY_STATE.factory_state_path(SLUG).read_text(encoding="utf-8"))
+                judge_round = current_state["stages"][STAGE]["judge_rounds"]
+                call_rounds.append((judge_round, model))
+                verdict_by_round = {
+                    0: {
+                        "gpt-5.4-mini": "block",
+                        "gpt-5.4": "block",
+                        "claude-sonnet-4-6": "proceed",
+                    },
+                    1: {
+                        "gpt-5.4-mini": "proceed",
+                        "gpt-5.4": "proceed",
+                        "claude-sonnet-4-6": "block",
+                    },
+                }[judge_round]
+                verdict = verdict_by_round[model]
+                return subprocess.CompletedProcess(cmd, 0, stdout=_model_response(model, verdict, f"{model} round {judge_round}"), stderr="")
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        _write_workflow(self._tmpdir.name, stage_state, review_specs)
+        with patch.object(JUDGE.subprocess, "run", side_effect=side_effect), \
+            patch.object(JUDGE, "stage_manifest_state", side_effect=_fake_stage_manifest_state):
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                first_rc = JUDGE.run_judge(SLUG, STAGE)
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                second_rc = JUDGE.run_judge(SLUG, STAGE)
+
+        self.assertEqual(first_rc, 0)
+        self.assertEqual(second_rc, 0)
+        state = json.loads(FACTORY_STATE.factory_state_path(SLUG).read_text(encoding="utf-8"))
+        self.assertEqual(state["stages"][STAGE]["judge_rounds"], 2)
+        self.assertEqual(len(state["stages"][STAGE]["judge_verdicts"]), 2)
+        self.assertEqual(state["stages"][STAGE]["judge_next_action"], "advance")
+        self.assertEqual(Counter(round_index for round_index, _ in call_rounds), Counter({0: 3, 1: 3}))
+        self.assertEqual(state["last_action_result"]["outcome"], "advance")
 
     def test_judge_schema_violation_retry_then_fallback_block(self) -> None:
         stage_state = _stage_state(3)
@@ -327,6 +386,163 @@ class FactoryJudgeTests(unittest.TestCase):
         self.assertEqual(annotations[0]["judge"], "completeness")
         self.assertEqual(annotations[0]["stage"], STAGE)
         self.assertEqual(state["stages"][STAGE]["judge_verdicts"][0][0]["verdict"], "proceed-with-annotation")
+
+    def test_judge_auto_advance_at_round_3_with_unresolved_concerns(self) -> None:
+        prior_rounds = [
+            [
+                {
+                    "judge": "completeness",
+                    "model": "gpt-5.4-mini",
+                    "verdict": "block",
+                    "confidence": 4,
+                    "reasoning": "Shared concern about missing rollback path.",
+                    "evidence": [],
+                    "timestamp": "2026-04-18T10:15:30Z",
+                }
+            ],
+            [
+                {
+                    "judge": "restatement",
+                    "model": "gpt-5.4",
+                    "verdict": "block",
+                    "confidence": 4,
+                    "reasoning": "Shared concern about missing rollback path.",
+                    "evidence": [],
+                    "timestamp": "2026-04-18T10:20:30Z",
+                }
+            ],
+        ]
+        stage_state = _stage_state(3, judge_rounds=2, judge_verdicts=prior_rounds)
+        review_specs = [("plan.codex.feasibility-adversarial.review.md", "sha-round-3", ["- HIGH: High finding."])]
+
+        def side_effect(cmd, *args, **kwargs):
+            if cmd[0] == "git":
+                return _make_git_response(cmd, Path(self._tmpdir.name))
+            if cmd[0] == "codex" or cmd[0] == "claude":
+                model = cmd[cmd.index("-m") + 1] if "-m" in cmd else cmd[cmd.index("--model") + 1]
+                verdict = "block" if model != "claude-sonnet-4-6" else "proceed"
+                return subprocess.CompletedProcess(cmd, 0, stdout=_model_response(model, verdict, f"{model} round 2 {verdict}"), stderr="")
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        _write_workflow(self._tmpdir.name, stage_state, review_specs)
+        with patch.object(JUDGE.subprocess, "run", side_effect=side_effect), \
+            patch.object(JUDGE, "stage_manifest_state", side_effect=_fake_stage_manifest_state), \
+            patch.object(FACTORY_EMBEDDINGS, "cosine_similarity", return_value=0.9), \
+            self.assertLogs(JUDGE.__name__, level="WARNING") as logs:
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                rc = JUDGE.run_judge(SLUG, STAGE)
+
+        self.assertEqual(rc, 0)
+        state = json.loads(FACTORY_STATE.factory_state_path(SLUG).read_text(encoding="utf-8"))
+        self.assertEqual(state["stages"][STAGE]["judge_rounds"], 3)
+        concerns = state["stages"][STAGE]["unresolved_concerns"]
+        self.assertEqual(len(concerns), 2)
+        self.assertEqual(state["stages"][STAGE]["judge_next_action"], "advance")
+        self.assertEqual(state["last_action_result"]["outcome"], "advance")
+        self.assertIn("judge panel exhausted; advancing with unresolved concerns", state["last_action_result"]["reason"])
+        self.assertTrue(any("judge panel exhausted; advancing with unresolved concerns" in line for line in logs.output))
+        for concern in concerns:
+            self.assertEqual(concern["also_raised_in_round"], [1, 2])
+
+    def test_judge_also_raised_in_round_populated_when_similar(self) -> None:
+        prior_rounds = [
+            [
+                {
+                    "judge": "completeness",
+                    "model": "gpt-5.4-mini",
+                    "verdict": "block",
+                    "confidence": 4,
+                    "reasoning": "Round 1 concern about missing rollback path.",
+                    "evidence": [],
+                    "timestamp": "2026-04-18T10:15:30Z",
+                }
+            ],
+            [
+                {
+                    "judge": "restatement",
+                    "model": "gpt-5.4",
+                    "verdict": "block",
+                    "confidence": 4,
+                    "reasoning": "Round 2 concern about missing rollback path.",
+                    "evidence": [],
+                    "timestamp": "2026-04-18T10:20:30Z",
+                }
+            ],
+        ]
+        stage_state = _stage_state(3, judge_rounds=2, judge_verdicts=prior_rounds)
+        review_specs = [("plan.codex.feasibility-adversarial.review.md", "sha-round-3", ["- HIGH: High finding."])]
+
+        def side_effect(cmd, *args, **kwargs):
+            if cmd[0] == "git":
+                return _make_git_response(cmd, Path(self._tmpdir.name))
+            if cmd[0] == "codex" or cmd[0] == "claude":
+                model = cmd[cmd.index("-m") + 1] if "-m" in cmd else cmd[cmd.index("--model") + 1]
+                verdict = "block" if model != "claude-sonnet-4-6" else "proceed"
+                return subprocess.CompletedProcess(cmd, 0, stdout=_model_response(model, verdict, f"{model} round 3 {verdict}"), stderr="")
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        _write_workflow(self._tmpdir.name, stage_state, review_specs)
+        with patch.object(JUDGE.subprocess, "run", side_effect=side_effect), \
+            patch.object(JUDGE, "stage_manifest_state", side_effect=_fake_stage_manifest_state), \
+            patch.object(FACTORY_EMBEDDINGS, "cosine_similarity", return_value=0.9):
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                rc = JUDGE.run_judge(SLUG, STAGE)
+
+        self.assertEqual(rc, 0)
+        state = json.loads(FACTORY_STATE.factory_state_path(SLUG).read_text(encoding="utf-8"))
+        concerns = state["stages"][STAGE]["unresolved_concerns"]
+        self.assertEqual(len(concerns), 2)
+        self.assertTrue(all(concern["also_raised_in_round"] == [1, 2] for concern in concerns))
+
+    def test_judge_also_raised_in_round_empty_when_dissimilar(self) -> None:
+        prior_rounds = [
+            [
+                {
+                    "judge": "completeness",
+                    "model": "gpt-5.4-mini",
+                    "verdict": "block",
+                    "confidence": 4,
+                    "reasoning": "Round 1 concern about missing rollback path.",
+                    "evidence": [],
+                    "timestamp": "2026-04-18T10:15:30Z",
+                }
+            ],
+            [
+                {
+                    "judge": "restatement",
+                    "model": "gpt-5.4",
+                    "verdict": "block",
+                    "confidence": 4,
+                    "reasoning": "Round 2 concern about missing rollback path.",
+                    "evidence": [],
+                    "timestamp": "2026-04-18T10:20:30Z",
+                }
+            ],
+        ]
+        stage_state = _stage_state(3, judge_rounds=2, judge_verdicts=prior_rounds)
+        review_specs = [("plan.codex.feasibility-adversarial.review.md", "sha-round-3", ["- HIGH: High finding."])]
+
+        def side_effect(cmd, *args, **kwargs):
+            if cmd[0] == "git":
+                return _make_git_response(cmd, Path(self._tmpdir.name))
+            if cmd[0] == "codex" or cmd[0] == "claude":
+                model = cmd[cmd.index("-m") + 1] if "-m" in cmd else cmd[cmd.index("--model") + 1]
+                verdict = "block" if model != "claude-sonnet-4-6" else "proceed"
+                return subprocess.CompletedProcess(cmd, 0, stdout=_model_response(model, verdict, f"{model} round 3 {verdict}"), stderr="")
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        _write_workflow(self._tmpdir.name, stage_state, review_specs)
+        with patch.object(JUDGE.subprocess, "run", side_effect=side_effect), \
+            patch.object(JUDGE, "stage_manifest_state", side_effect=_fake_stage_manifest_state), \
+            patch.object(FACTORY_EMBEDDINGS, "cosine_similarity", return_value=0.2):
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                rc = JUDGE.run_judge(SLUG, STAGE)
+
+        self.assertEqual(rc, 0)
+        state = json.loads(FACTORY_STATE.factory_state_path(SLUG).read_text(encoding="utf-8"))
+        concerns = state["stages"][STAGE]["unresolved_concerns"]
+        self.assertEqual(len(concerns), 2)
+        self.assertTrue(all(concern["also_raised_in_round"] == [] for concern in concerns))
 
 
 if __name__ == "__main__":

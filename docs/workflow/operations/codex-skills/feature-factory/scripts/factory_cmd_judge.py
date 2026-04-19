@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import json
+import logging
 import re
 import subprocess
 import sys
@@ -25,6 +26,7 @@ from factory_state import (  # noqa: E402
     with_locked_state,
     workflow_dir,
 )
+import factory_embeddings  # noqa: E402
 
 REVIEW_SCRIPTS = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills" / "review-lens" / "scripts"
 if str(REVIEW_SCRIPTS) not in sys.path:
@@ -53,6 +55,7 @@ JUDGE_COMMAND_BY_LENS: dict[str, list[str]] = {
 JUDGE_LENS_ORDER = ["completeness", "restatement", "implementation-risk"]
 JUDGE_BASE_REF = "origin/main"
 JUDGE_TIMEOUT_SECONDS = 180
+_LOGGER = logging.getLogger(__name__)
 
 
 def _now_iso8601_utc() -> str:
@@ -98,6 +101,58 @@ def _stage_int(stage_state: dict, key: str) -> int:
         return int(stage_state.get(key, 0) or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _block_verdicts(verdicts: list[dict]) -> list[dict]:
+    return [verdict for verdict in verdicts if isinstance(verdict, dict) and verdict.get("verdict") == "block"]
+
+
+def _block_reasonings(verdicts: list[dict]) -> list[str]:
+    reasonings: list[str] = []
+    for verdict in _block_verdicts(verdicts):
+        reasoning = str(verdict.get("reasoning", "")).strip()
+        if reasoning:
+            reasonings.append(reasoning)
+    return reasonings
+
+
+def _also_raised_in_round(current_reasoning: str, prior_rounds: list[list[dict]]) -> list[int]:
+    also_raised: set[int] = set()
+    current_reasoning = current_reasoning.strip()
+    if not current_reasoning:
+        return []
+    for round_index, round_verdicts in enumerate(prior_rounds, start=1):
+        if not isinstance(round_verdicts, list):
+            continue
+        for prior_verdict in round_verdicts:
+            if not isinstance(prior_verdict, dict) or prior_verdict.get("verdict") != "block":
+                continue
+            prior_reasoning = str(prior_verdict.get("reasoning", "")).strip()
+            if not prior_reasoning:
+                continue
+            similarity = factory_embeddings.cosine_similarity(current_reasoning, prior_reasoning)
+            if similarity >= 0.85:
+                also_raised.add(round_index)
+                break
+    return sorted(also_raised)
+
+
+def _unresolved_concern_from_verdict(
+    stage: str,
+    verdict: dict,
+    round_raised: int,
+    prior_rounds: list[list[dict]],
+) -> dict[str, object]:
+    reasoning = str(verdict.get("reasoning", "")).strip()
+    return {
+        "stage": stage,
+        "judge": verdict.get("judge", ""),
+        "model": verdict.get("model", ""),
+        "confidence": verdict.get("confidence"),
+        "reasoning": reasoning,
+        "round_raised": round_raised,
+        "also_raised_in_round": _also_raised_in_round(reasoning, prior_rounds),
+    }
 
 
 def _stage_artifact_path(slug: str, stage: str) -> Path:
@@ -595,17 +650,54 @@ def _dispatch_panel(
     return ordered_verdicts, current_sha, combined_raw, git_head_sha
 
 
-def _payload_for_state(stage: str, outcome: str, proceed_count: int, block_count: int) -> dict[str, object]:
-    next_action = "judge_panel" if outcome == "rejudge" else "advance"
+def _payload_for_state(
+    stage: str,
+    outcome: str,
+    proceed_count: int,
+    block_count: int,
+    *,
+    next_action: str,
+    reason: str,
+    blockers: list[str],
+    judge_round: int,
+) -> dict[str, object]:
     return {
         "next": next_action,
-        "reason": f"{stage} judge panel completed: {outcome}",
-        "blockers": [f"{stage}.judge_verdicts[-1] block-majority"] if block_count >= 2 else [],
+        "reason": reason,
+        "blockers": blockers,
         "outcome": outcome,
         "proceed_count": proceed_count,
         "block_count": block_count,
         "timestamp": _now_iso8601_utc(),
+        "judge_round": judge_round,
     }
+
+
+def _build_exhausted_payload(slug: str, stage: str, state: dict, stage_state: dict) -> dict[str, object]:
+    judge_round = _stage_int(stage_state, "judge_rounds")
+    judge_history = stage_state.get("judge_verdicts", [])
+    latest_round = judge_history[-1] if isinstance(judge_history, list) and judge_history else []
+    latest_round_verdicts = latest_round if isinstance(latest_round, list) else []
+    block_verdicts = _block_verdicts(latest_round_verdicts)
+    proceed_count = sum(
+        1
+        for verdict in latest_round_verdicts
+        if isinstance(verdict, dict) and verdict.get("verdict") in {"proceed", "proceed-with-annotation"}
+    )
+    block_count = len(block_verdicts)
+    stages = {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}
+    next_action = recommended_next_action(slug, state, stages, True)
+    reason = "judge panel exhausted; advancing with unresolved concerns" if block_count >= 2 else f"{stage} judge panel completed: advance"
+    return _payload_for_state(
+        stage,
+        "advance",
+        proceed_count,
+        block_count,
+        next_action=next_action,
+        reason=reason,
+        blockers=_block_reasonings(block_verdicts),
+        judge_round=judge_round,
+    )
 
 
 def _fallback_block_verdict(lens: str) -> dict:
@@ -638,6 +730,7 @@ def _persist_state(
         judge_history = stage_state.get("judge_verdicts", [])
         if not isinstance(judge_history, list):
             judge_history = []
+        prior_rounds = list(judge_history)
         judge_history = list(judge_history)
         judge_history.append(verdicts)
         stage_state["judge_verdicts"] = judge_history
@@ -659,13 +752,46 @@ def _persist_state(
                     }
                 )
         stage_state["annotations"] = annotations
-        stage_state["judge_next_action"] = "edit-and-rejudge" if block_count >= 2 else "advance"
+        block_verdicts = _block_verdicts(verdicts)
+        blockers = _block_reasonings(block_verdicts)
 
-        stages = {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}
+        if block_count >= 2 and judge_round < 3:
+            next_action = "edit_and_rerun_judge"
+            reason = f"block majority; {block_count} of {len(verdicts)} judges blocked"
+            outcome_value = "rejudge"
+            stage_state["judge_next_action"] = next_action
+        elif block_count >= 2 and judge_round >= 3:
+            next_action = recommended_next_action(slug, state, {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}, True)
+            reason = "judge panel exhausted; advancing with unresolved concerns"
+            outcome_value = "advance"
+            stage_state["judge_next_action"] = "advance"
+            unresolved = stage_state.get("unresolved_concerns", [])
+            if not isinstance(unresolved, list):
+                unresolved = []
+            unresolved = list(unresolved)
+            unresolved.extend(
+                _unresolved_concern_from_verdict(stage, verdict, 3, prior_rounds)
+                for verdict in block_verdicts
+            )
+            stage_state["unresolved_concerns"] = unresolved
+            _LOGGER.warning("judge panel exhausted; advancing with unresolved concerns")
+        else:
+            next_action = recommended_next_action(slug, state, {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}, True)
+            reason = f"{stage} judge panel completed: advance"
+            outcome_value = "advance"
+            stage_state["judge_next_action"] = "advance"
+
         state["last_action_result"] = {
-            **_payload_for_state(stage, outcome, proceed_count, block_count),
-            "next": recommended_next_action(slug, state, stages, True),
-            "judge_round": judge_round,
+            **_payload_for_state(
+                stage,
+                outcome_value,
+                proceed_count,
+                block_count,
+                next_action=next_action,
+                reason=reason,
+                blockers=blockers,
+                judge_round=judge_round,
+            ),
         }
     return load_workflow_state(slug).get("last_action_result", {})
 
@@ -732,6 +858,19 @@ def run_judge(
         else:
             print("→ next: checkpoint")
         return 2
+
+    if _stage_int(stage_state, "judge_rounds") >= 3:
+        payload = state.get("last_action_result")
+        if not isinstance(payload, dict) or not payload.get("next"):
+            payload = _build_exhausted_payload(slug, stage, state, stage_state)
+            with with_locked_state(slug) as locked_state:
+                _ensure_stage_state(locked_state, stage)
+                locked_state["last_action_result"] = payload
+        if json_output:
+            print(json.dumps(payload, indent=2))
+        else:
+            print(f"→ next: {payload['next']}")
+        return 0
 
     verdicts, current_sha, git_head_sha = _validate_json_output(slug, stage, prompt_override, override_reason)
     proceed_count = sum(1 for verdict in verdicts if verdict["verdict"] in {"proceed", "proceed-with-annotation"})
