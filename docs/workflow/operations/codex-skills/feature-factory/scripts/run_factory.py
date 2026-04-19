@@ -91,6 +91,7 @@ from factory_deliver import (  # noqa: E402
 )
 from factory_cmd_deliver import command_deliver, command_closeout  # noqa: E402
 from factory_cmd_block import command_block  # noqa: E402
+from factory_cmd_judge import run_judge  # noqa: E402
 from factory_cmd_implement import command_implement, command_parallel, _run_serial, _run_parallel  # noqa: E402
 from factory_cmd_status import command_status, command_repair, command_doctor  # noqa: E402
 from workflow_utils import resolve_stored_path  # noqa: E402
@@ -294,6 +295,20 @@ def build_parser() -> argparse.ArgumentParser:
     block_parser.add_argument("--reason")
     block_parser.add_argument("--clear", action="store_true")
     block_parser.set_defaults(func=command_block)
+
+    judge_parser = subparsers.add_parser("judge")
+    judge_parser.add_argument("--slug", required=True)
+    judge_parser.add_argument("--stage", required=True, choices=CHECKPOINT_STAGES)
+    judge_parser.add_argument("--json", action="store_true")
+    judge_parser.add_argument("--prompt-override", type=Path)
+    judge_parser.add_argument("--override-reason")
+    judge_parser.set_defaults(func=lambda args: run_judge(
+        args.slug,
+        args.stage,
+        json_output=args.json,
+        prompt_override=args.prompt_override,
+        override_reason=args.override_reason,
+    ))
 
     discover_parser = subparsers.add_parser("discover")
     discover_parser.add_argument("--slug", required=True)
