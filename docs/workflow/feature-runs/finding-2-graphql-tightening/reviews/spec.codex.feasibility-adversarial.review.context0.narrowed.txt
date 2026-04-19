@@ -1,0 +1,196 @@
+00001: import { gql } from 'urql';
+00002: import type {
+00003:   DomainsQueryVariables as GeneratedDomainsQueryVariables,
+00004:   CreateDomainMutation as GeneratedCreateDomainMutation,
+00005:   CreateDomainMutationVariables as GeneratedCreateDomainMutationVariables,
+00006:   RenameDomainMutation as GeneratedRenameDomainMutation,
+00007:   RenameDomainMutationVariables as GeneratedRenameDomainMutationVariables,
+00008:   DeleteDomainMutation as GeneratedDeleteDomainMutation,
+00009:   DeleteDomainMutationVariables as GeneratedDeleteDomainMutationVariables,
+00010:   AssignDomainToDefinitionsMutation as GeneratedAssignDomainToDefinitionsMutation,
+00011:   AssignDomainToDefinitionsMutationVariables as GeneratedAssignDomainToDefinitionsMutationVariables,
+00012:   AssignDomainToDefinitionsByFilterMutation as GeneratedAssignDomainToDefinitionsByFilterMutation,
+00013:   AssignDomainToDefinitionsByFilterMutationVariables as GeneratedAssignDomainToDefinitionsByFilterMutationVariables,
+00014:   RunTrialsForDomainMutation as GeneratedRunTrialsForDomainMutation,
+00015:   RunTrialsForDomainMutationVariables as GeneratedRunTrialsForDomainMutationVariables,
+00016:   StartDomainEvaluationMutation as GeneratedStartDomainEvaluationMutation,
+00017:   StartDomainEvaluationMutationVariables as GeneratedStartDomainEvaluationMutationVariables,
+00018:   DomainEvaluationsQuery as GeneratedDomainEvaluationsQuery,
+00019:   DomainEvaluationsQueryVariables as GeneratedDomainEvaluationsQueryVariables,
+00020:   DomainEvaluationQueryVariables as GeneratedDomainEvaluationQueryVariables,
+00021:   DomainEvaluationStatusQuery as GeneratedDomainEvaluationStatusQuery,
+00022:   DomainEvaluationStatusQueryVariables as GeneratedDomainEvaluationStatusQueryVariables,
+00023:   DomainTrialsPlanQuery as GeneratedDomainTrialsPlanQuery,
+00024:   DomainTrialsPlanQueryVariables as GeneratedDomainTrialsPlanQueryVariables,
+00025:   EstimateDomainEvaluationCostQueryVariables as GeneratedEstimateDomainEvaluationCostQueryVariables,
+00026:   DomainTrialRunsStatusQueryVariables as GeneratedDomainTrialRunsStatusQueryVariables,
+00027:   DomainSettingsQueryVariables as GeneratedDomainSettingsQueryVariables,
+00028:   DomainConfigSnapshotsQuery as GeneratedDomainConfigSnapshotsQuery,
+00029:   DomainConfigSnapshotsQueryVariables as GeneratedDomainConfigSnapshotsQueryVariables,
+00030: } from '../../generated/graphql';
+00031: 
+00032: // ============================================================================
+00033: // DOCUMENTS — codegen
+00034: // ============================================================================
+00035: 
+00036: export {
+00037:   DomainsDocument as DOMAINS_QUERY,
+00038:   CreateDomainDocument as CREATE_DOMAIN_MUTATION,
+00039:   RenameDomainDocument as RENAME_DOMAIN_MUTATION,
+00040:   DeleteDomainDocument as DELETE_DOMAIN_MUTATION,
+00041:   AssignDomainToDefinitionsDocument as ASSIGN_DOMAIN_TO_DEFINITIONS_MUTATION,
+00042:   AssignDomainToDefinitionsByFilterDocument as ASSIGN_DOMAIN_TO_DEFINITIONS_BY_FILTER_MUTATION,
+00043:   RunTrialsForDomainDocument as RUN_TRIALS_FOR_DOMAIN_MUTATION,
+00044:   StartDomainEvaluationDocument as START_DOMAIN_EVALUATION_MUTATION,
+00045:   DomainEvaluationsDocument as DOMAIN_EVALUATIONS_QUERY,
+00046:   DomainEvaluationDocument as DOMAIN_EVALUATION_QUERY,
+00047:   DomainEvaluationStatusDocument as DOMAIN_EVALUATION_STATUS_QUERY,
+00048:   DomainTrialsPlanDocument as DOMAIN_TRIALS_PLAN_QUERY,
+00049:   EstimateDomainEvaluationCostDocument as ESTIMATE_DOMAIN_EVALUATION_COST_QUERY,
+00050:   DomainTrialRunsStatusDocument as DOMAIN_TRIAL_RUNS_STATUS_QUERY,
+00051:   DomainSettingsDocument as DOMAIN_SETTINGS_QUERY,
+00052:   DomainConfigSnapshotsDocument as DOMAIN_CONFIG_SNAPSHOTS_QUERY,
+00053:   SetDomainSettingsDocument as SET_DOMAIN_SETTINGS_MUTATION,
+00054: } from '../../generated/graphql';
+00055: 
+00056: // ============================================================================
+00057: // DOCUMENT — manual (backfillDomainEvaluationModels not in schema yet)
+00058: // ============================================================================
+00059: 
+00060: export const BACKFILL_DOMAIN_EVALUATION_MODELS_MUTATION = gql`
+00061:   mutation BackfillDomainEvaluationModels(
+00062:     $domainEvaluationId: ID!
+00063:     $modelIds: [String!]!
+00064:     $definitionIds: [ID!]
+00065:     $targetBatchCount: Int
+00066:   ) {
+00067:     backfillDomainEvaluationModels(
+00068:       domainEvaluationId: $domainEvaluationId
+00069:       modelIds: $modelIds
+00070:       definitionIds: $definitionIds
+00071:       targetBatchCount: $targetBatchCount
+00072:     ) {
+00073:       domainEvaluationId
+00074:       scopeCategory
+00075:       success
+00076:       totalDefinitions
+00077:       targetedDefinitions
+00078:       startedRuns
+00079:       failedDefinitions
+00080:       skippedForBudget
+00081:       projectedCostUsd
+00082:       blockedByActiveLaunch
+00083:       runs {
+00084:         definitionId
+00085:         runId
+00086:         mo
+
+... [narrowed review slice: middle omitted] ...
+
+eneratedEstimateDomainEvaluationCostQueryVariables;
+00254: 
+00255: // Manual — analysisStatus is typed string | null | undefined in the generated type,
+00256: // but consumers declare RowView.analysisStatus as string | null and assign directly.
+00257: export type DomainTrialRunsStatusQueryResult = {
+00258:   domainTrialRunsStatus: Array<{
+00259:     runId: string;
+00260:     definitionId: string;
+00261:     status: string;
+00262:     updatedAt: string;
+00263:     stalledModels: string[];
+00264:     analysisStatus: string | null;
+00265:     modelStatuses: Array<{
+00266:       modelId: string;
+00267:       generationCompleted: number;
+00268:       generationFailed: number;
+00269:       generationTotal: number;
+00270:       summarizationCompleted: number;
+00271:       summarizationFailed: number;
+00272:       summarizationTotal: number;
+00273:       latestErrorMessage: string | null;
+00274:     }>;
+00275:   }>;
+00276: };
+00277: export type DomainTrialRunsStatusQueryVariables = GeneratedDomainTrialRunsStatusQueryVariables;
+00278: 
+00279: export type DomainSettingsQueryResult = { domainSettings: DomainSettings | null };
+00280: export type DomainSettingsQueryVariables = GeneratedDomainSettingsQueryVariables;
+00281: 
+00282: export type DomainConfigSnapshotsQueryResult = GeneratedDomainConfigSnapshotsQuery;
+00283: export type DomainConfigSnapshotsQueryVariables = GeneratedDomainConfigSnapshotsQueryVariables;
+00284: 
+00285: // ============================================================================
+00286: // MUTATION RESULT TYPES
+00287: // ============================================================================
+00288: 
+00289: export type CreateDomainMutationResult = GeneratedCreateDomainMutation;
+00290: export type CreateDomainMutationVariables = GeneratedCreateDomainMutationVariables;
+00291: 
+00292: export type RenameDomainMutationResult = GeneratedRenameDomainMutation;
+00293: export type RenameDomainMutationVariables = GeneratedRenameDomainMutationVariables;
+00294: 
+00295: export type DeleteDomainMutationResult = GeneratedDeleteDomainMutation;
+00296: export type DeleteDomainMutationVariables = GeneratedDeleteDomainMutationVariables;
+00297: 
+00298: export type AssignDomainToDefinitionsMutationResult = GeneratedAssignDomainToDefinitionsMutation;
+00299: export type AssignDomainToDefinitionsMutationVariables = GeneratedAssignDomainToDefinitionsMutationVariables;
+00300: 
+00301: export type AssignDomainToDefinitionsByFilterMutationResult = GeneratedAssignDomainToDefinitionsByFilterMutation;
+00302: export type AssignDomainToDefinitionsByFilterMutationVariables = GeneratedAssignDomainToDefinitionsByFilterMutationVariables;
+00303: 
+00304: export type RunTrialsForDomainMutationResult = GeneratedRunTrialsForDomainMutation;
+00305: export type RunTrialsForDomainMutationVariables = GeneratedRunTrialsForDomainMutationVariables;
+00306: 
+00307: export type StartDomainEvaluationMutationResult = GeneratedStartDomainEvaluationMutation;
+00308: export type StartDomainEvaluationMutationVariables = GeneratedStartDomainEvaluationMutationVariables;
+00309: 
+00310: // BackfillDomainEvaluationModels — not in schema yet, manual types
+00311: export type BackfillDomainEvaluationModelsMutationResult = {
+00312:   backfillDomainEvaluationModels: {
+00313:     domainEvaluationId: string | null;
+00314:     scopeCategory: string;
+00315:     success: boolean;
+00316:     totalDefinitions: number;
+00317:     targetedDefinitions: number;
+00318:     startedRuns: number;
+00319:     failedDefinitions: number;
+00320:     skippedForBudget: number;
+00321:     projectedCostUsd: number;
+00322:     blockedByActiveLaunch: boolean;
+00323:     runs: Array<{
+00324:       definitionId: string;
+00325:       runId: string;
+00326:       modelIds: string[];
+00327:     }>;
+00328:   };
+00329: };
+00330: 
+00331: export type BackfillDomainEvaluationModelsMutationVariables = {
+00332:   domainEvaluationId: string;
+00333:   modelIds: string[];
+00334:   definitionIds?: string[];
+00335:   targetBatchCount?: number;
+00336: };
+00337: 
+00338: // SetDomainSettings — schema omits defaultModelIds, sentencePrefix, labelPrefix from args
+00339: // and result; keep variables manual to preserve the richer call signature used in the app
+00340: export type SetDomainSettingsMutationResult = {
+00341:   setDomainSettings: {
+00342:     id: string;
+00343:     name: string;
+00344:     defaultPreambleVersionId: string | null;
+00345:     defaultLevelPresetVersionId: string | null;
+00346:     defaultContextId: string | null;
+00347:     defaultModelIds: string[];
+00348:   };
+00349: };
+00350: 
+00351: export type SetDomainSettingsMutationVariables = {
+00352:   domainId: string;
+00353:   preambleVersionId?: string | null;
+00354:   levelPresetVersionId?: string | null;
+00355:   contextId?: string | null;
+00356:   defaultModelIds?: string[] | null;
+00357:   sentencePrefix?: string | null;
+00358:   labelPrefix?: string | null;
+00359:   valueStatements: A

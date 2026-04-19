@@ -1,5 +1,5 @@
-import { gql } from 'urql';
 import type {
+  DomainsQuery,
   DomainsQueryVariables as GeneratedDomainsQueryVariables,
   CreateDomainMutation as GeneratedCreateDomainMutation,
   CreateDomainMutationVariables as GeneratedCreateDomainMutationVariables,
@@ -15,22 +15,30 @@ import type {
   RunTrialsForDomainMutationVariables as GeneratedRunTrialsForDomainMutationVariables,
   StartDomainEvaluationMutation as GeneratedStartDomainEvaluationMutation,
   StartDomainEvaluationMutationVariables as GeneratedStartDomainEvaluationMutationVariables,
-  DomainEvaluationsQuery as GeneratedDomainEvaluationsQuery,
+  DomainEvaluationsQuery,
   DomainEvaluationsQueryVariables as GeneratedDomainEvaluationsQueryVariables,
+  DomainEvaluationQuery,
   DomainEvaluationQueryVariables as GeneratedDomainEvaluationQueryVariables,
   DomainEvaluationStatusQuery as GeneratedDomainEvaluationStatusQuery,
   DomainEvaluationStatusQueryVariables as GeneratedDomainEvaluationStatusQueryVariables,
   DomainTrialsPlanQuery as GeneratedDomainTrialsPlanQuery,
   DomainTrialsPlanQueryVariables as GeneratedDomainTrialsPlanQueryVariables,
+  EstimateDomainEvaluationCostQuery,
   EstimateDomainEvaluationCostQueryVariables as GeneratedEstimateDomainEvaluationCostQueryVariables,
+  DomainTrialRunsStatusQuery,
   DomainTrialRunsStatusQueryVariables as GeneratedDomainTrialRunsStatusQueryVariables,
+  DomainSettingsQuery,
   DomainSettingsQueryVariables as GeneratedDomainSettingsQueryVariables,
-  DomainConfigSnapshotsQuery as GeneratedDomainConfigSnapshotsQuery,
+  DomainConfigSnapshotsQuery,
   DomainConfigSnapshotsQueryVariables as GeneratedDomainConfigSnapshotsQueryVariables,
+  SetDomainSettingsMutation,
+  SetDomainSettingsMutationVariables as GeneratedSetDomainSettingsMutationVariables,
+  BackfillDomainEvaluationModelsMutation,
+  BackfillDomainEvaluationModelsMutationVariables as GeneratedBackfillDomainEvaluationModelsMutationVariables,
 } from '../../generated/graphql';
 
 // ============================================================================
-// DOCUMENTS — codegen
+// DOCUMENTS
 // ============================================================================
 
 export {
@@ -51,192 +59,52 @@ export {
   DomainSettingsDocument as DOMAIN_SETTINGS_QUERY,
   DomainConfigSnapshotsDocument as DOMAIN_CONFIG_SNAPSHOTS_QUERY,
   SetDomainSettingsDocument as SET_DOMAIN_SETTINGS_MUTATION,
+  BackfillDomainEvaluationModelsDocument as BACKFILL_DOMAIN_EVALUATION_MODELS_MUTATION,
 } from '../../generated/graphql';
 
 // ============================================================================
-// DOCUMENT — manual (backfillDomainEvaluationModels not in schema yet)
+// TYPES
 // ============================================================================
 
-export const BACKFILL_DOMAIN_EVALUATION_MODELS_MUTATION = gql`
-  mutation BackfillDomainEvaluationModels(
-    $domainEvaluationId: ID!
-    $modelIds: [String!]!
-    $definitionIds: [ID!]
-    $targetBatchCount: Int
-  ) {
-    backfillDomainEvaluationModels(
-      domainEvaluationId: $domainEvaluationId
-      modelIds: $modelIds
-      definitionIds: $definitionIds
-      targetBatchCount: $targetBatchCount
-    ) {
-      domainEvaluationId
-      scopeCategory
-      success
-      totalDefinitions
-      targetedDefinitions
-      startedRuns
-      failedDefinitions
-      skippedForBudget
-      projectedCostUsd
-      blockedByActiveLaunch
-      runs {
-        definitionId
-        runId
-        modelIds
-      }
-    }
-  }
-`;
+export type Domain = DomainsQuery['domains'][number];
 
-// ============================================================================
-// MANUAL TYPES
-// Manual types are kept where the schema type is incomplete or where the
-// consumer code relies on fields not yet in the schema (defaultModelIds,
-// sentencePrefix, labelPrefix, launchableDefinitions, modelIds on members).
-// ============================================================================
+export type DomainMutationResult = GeneratedDeleteDomainMutation['deleteDomain'];
 
-// Domain — schema doesn't yet have defaultModelIds, sentencePrefix, labelPrefix.
-// Those fields are optional so the generated type (which omits them) is assignable here.
-export type Domain = {
-  id: string;
-  name: string;
-  createdAt: string;
-  updatedAt: string;
-  definitionCount: number;
-  defaultLevelPresetVersionId?: string | null;
-  defaultPreambleVersionId?: string | null;
-  defaultContextId?: string | null;
-  defaultModelIds?: string[];
-  sentencePrefix?: string | null;
-  labelPrefix?: string | null;
-};
+export type DomainEvaluationMember =
+  NonNullable<DomainEvaluationQuery['domainEvaluation']>['members'][number];
 
-export type DomainMutationResult = {
-  success: boolean;
-  affectedDefinitions: number;
-};
+export type DomainEvaluation = NonNullable<DomainEvaluationQuery['domainEvaluation']>;
 
-// DomainEvaluationMember — schema doesn't have modelIds
-export type DomainEvaluationMember = {
-  runId: string;
-  definitionIdAtLaunch: string;
-  definitionNameAtLaunch: string;
-  domainIdAtLaunch: string;
-  modelIds: string[];
-  createdAt: string;
-  runStatus: string;
-  runCategory: string;
-  runStartedAt: string | null;
-  runCompletedAt: string | null;
-};
+export type DomainEvaluationStatus =
+  NonNullable<GeneratedDomainEvaluationStatusQuery['domainEvaluationStatus']>;
 
-// DomainEvaluation — schema doesn't have launchableDefinitionIds, launchableDefinitions,
-// samplePercentage, samplesPerScenario, targetBatchCount
-export type DomainEvaluation = {
-  id: string;
-  domainId: string;
-  domainNameAtLaunch: string;
-  scopeCategory: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION';
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-  createdAt: string;
-  startedAt: string | null;
-  completedAt: string | null;
-  startedRuns: number;
-  failedDefinitions: number;
-  skippedForBudget: number;
-  projectedCostUsd: number;
-  models: string[];
-  launchableDefinitionIds?: string[];
-  launchableDefinitions?: Array<{
-    definitionId: string;
-    definitionName: string;
-    pairKey: string | null;
-  }>;
-  samplePercentage?: number | null;
-  samplesPerScenario?: number | null;
-  targetBatchCount?: number | null;
-  temperature: number | null;
-  maxBudgetUsd: number | null;
-  memberCount: number;
-};
+export type DomainSettings = NonNullable<DomainSettingsQuery['domainSettings']>;
 
-export type DomainEvaluationStatus = NonNullable<GeneratedDomainEvaluationStatusQuery['domainEvaluationStatus']>;
+export type ValueStatementWithVersions = DomainSettings['valueStatements'][number];
 
-// DomainSettings — schema doesn't have defaultModelIds, sentencePrefix, labelPrefix
-export type ValueStatementWithVersions = {
-  id: string;
-  token: string;
-  currentContent: string;
-  previousContent: string | null;
-};
+export type DomainConfigSnapshotSummary = DomainConfigSnapshotsQuery['domainConfigSnapshots'][number];
 
-export type DomainSettings = {
-  domainId: string;
-  preambleVersionId: string | null;
-  levelPresetVersionId: string | null;
-  contextId: string | null;
-  defaultModelIds: string[];
-  sentencePrefix: string | null;
-  labelPrefix: string | null;
-  valueStatements: ValueStatementWithVersions[];
-};
+type GeneratedCostEstimate = NonNullable<EstimateDomainEvaluationCostQuery['estimateDomainEvaluationCost']>;
 
-export type DomainConfigSnapshotSummary = GeneratedDomainConfigSnapshotsQuery['domainConfigSnapshots'][number];
+export type DomainEvaluationCostEstimateModel = GeneratedCostEstimate['models'][number];
 
-export type DomainEvaluationCostEstimateModel = {
-  modelId: string;
-  label: string;
-  isDefault: boolean;
-  supportsTemperature: boolean;
-  estimatedCost: number;
-  basedOnSampleCount: number;
-  isUsingFallback: boolean;
-};
+export type DomainEvaluationCostEstimateDefinition = GeneratedCostEstimate['definitions'][number];
 
-export type DomainEvaluationCostEstimateDefinition = {
-  definitionId: string;
-  definitionName: string;
-  definitionVersion: number;
-  signature: string;
-  scenarioCount: number;
-  estimatedCost: number;
-  basedOnSampleCount: number;
-  isUsingFallback: boolean;
-};
-
-export type DomainEvaluationCostEstimate = {
-  domainId: string;
-  domainName: string;
-  scopeCategory: string;
-  targetedDefinitions: number;
-  totalScenarioCount: number;
-  totalEstimatedCost: number;
-  basedOnSampleCount: number;
-  isUsingFallback: boolean;
-  fallbackReason: string | null;
-  estimateConfidence: 'HIGH' | 'MEDIUM' | 'LOW';
-  knownExclusions: string[];
-  models: DomainEvaluationCostEstimateModel[];
-  definitions: DomainEvaluationCostEstimateDefinition[];
-  existingTemperatures: number[];
-  defaultTemperature: number | null;
-  temperatureWarning: string | null;
+export type DomainEvaluationCostEstimate = Omit<GeneratedCostEstimate, 'estimateConfidence'> & {
+  estimateConfidence: 'HIGH' | 'MEDIUM' | 'LOW' | null;
 };
 
 // ============================================================================
 // QUERY RESULT TYPES
 // ============================================================================
 
-export type DomainsQueryResult = { domains: Domain[] };
+export type DomainsQueryResult = DomainsQuery;
 export type DomainsQueryVariables = GeneratedDomainsQueryVariables;
 
-export type DomainEvaluationsQueryResult = GeneratedDomainEvaluationsQuery;
+export type DomainEvaluationsQueryResult = DomainEvaluationsQuery;
 export type DomainEvaluationsQueryVariables = GeneratedDomainEvaluationsQueryVariables;
 
-export type DomainEvaluationQueryResult = {
-  domainEvaluation: (DomainEvaluation & { members: DomainEvaluationMember[] }) | null;
-};
+export type DomainEvaluationQueryResult = DomainEvaluationQuery;
 export type DomainEvaluationQueryVariables = GeneratedDomainEvaluationQueryVariables;
 
 export type DomainEvaluationStatusQueryResult = GeneratedDomainEvaluationStatusQuery;
@@ -245,41 +113,16 @@ export type DomainEvaluationStatusQueryVariables = GeneratedDomainEvaluationStat
 export type DomainTrialsPlanQueryResult = GeneratedDomainTrialsPlanQuery;
 export type DomainTrialsPlanQueryVariables = GeneratedDomainTrialsPlanQueryVariables;
 
-// Manual — estimateConfidence is string in generated type but consumers expect
-// the narrower union 'HIGH' | 'MEDIUM' | 'LOW' (LaunchConfirmModal prop type).
-export type EstimateDomainEvaluationCostQueryResult = {
-  estimateDomainEvaluationCost: DomainEvaluationCostEstimate;
-};
+export type EstimateDomainEvaluationCostQueryResult = EstimateDomainEvaluationCostQuery;
 export type EstimateDomainEvaluationCostQueryVariables = GeneratedEstimateDomainEvaluationCostQueryVariables;
 
-// Manual — analysisStatus is typed string | null | undefined in the generated type,
-// but consumers declare RowView.analysisStatus as string | null and assign directly.
-export type DomainTrialRunsStatusQueryResult = {
-  domainTrialRunsStatus: Array<{
-    runId: string;
-    definitionId: string;
-    status: string;
-    updatedAt: string;
-    stalledModels: string[];
-    analysisStatus: string | null;
-    modelStatuses: Array<{
-      modelId: string;
-      generationCompleted: number;
-      generationFailed: number;
-      generationTotal: number;
-      summarizationCompleted: number;
-      summarizationFailed: number;
-      summarizationTotal: number;
-      latestErrorMessage: string | null;
-    }>;
-  }>;
-};
+export type DomainTrialRunsStatusQueryResult = DomainTrialRunsStatusQuery;
 export type DomainTrialRunsStatusQueryVariables = GeneratedDomainTrialRunsStatusQueryVariables;
 
-export type DomainSettingsQueryResult = { domainSettings: DomainSettings | null };
+export type DomainSettingsQueryResult = DomainSettingsQuery;
 export type DomainSettingsQueryVariables = GeneratedDomainSettingsQueryVariables;
 
-export type DomainConfigSnapshotsQueryResult = GeneratedDomainConfigSnapshotsQuery;
+export type DomainConfigSnapshotsQueryResult = DomainConfigSnapshotsQuery;
 export type DomainConfigSnapshotsQueryVariables = GeneratedDomainConfigSnapshotsQueryVariables;
 
 // ============================================================================
@@ -307,54 +150,8 @@ export type RunTrialsForDomainMutationVariables = GeneratedRunTrialsForDomainMut
 export type StartDomainEvaluationMutationResult = GeneratedStartDomainEvaluationMutation;
 export type StartDomainEvaluationMutationVariables = GeneratedStartDomainEvaluationMutationVariables;
 
-// BackfillDomainEvaluationModels — not in schema yet, manual types
-export type BackfillDomainEvaluationModelsMutationResult = {
-  backfillDomainEvaluationModels: {
-    domainEvaluationId: string | null;
-    scopeCategory: string;
-    success: boolean;
-    totalDefinitions: number;
-    targetedDefinitions: number;
-    startedRuns: number;
-    failedDefinitions: number;
-    skippedForBudget: number;
-    projectedCostUsd: number;
-    blockedByActiveLaunch: boolean;
-    runs: Array<{
-      definitionId: string;
-      runId: string;
-      modelIds: string[];
-    }>;
-  };
-};
+export type BackfillDomainEvaluationModelsMutationResult = BackfillDomainEvaluationModelsMutation;
+export type BackfillDomainEvaluationModelsMutationVariables = GeneratedBackfillDomainEvaluationModelsMutationVariables;
 
-export type BackfillDomainEvaluationModelsMutationVariables = {
-  domainEvaluationId: string;
-  modelIds: string[];
-  definitionIds?: string[];
-  targetBatchCount?: number;
-};
-
-// SetDomainSettings — schema omits defaultModelIds, sentencePrefix, labelPrefix from args
-// and result; keep variables manual to preserve the richer call signature used in the app
-export type SetDomainSettingsMutationResult = {
-  setDomainSettings: {
-    id: string;
-    name: string;
-    defaultPreambleVersionId: string | null;
-    defaultLevelPresetVersionId: string | null;
-    defaultContextId: string | null;
-    defaultModelIds: string[];
-  };
-};
-
-export type SetDomainSettingsMutationVariables = {
-  domainId: string;
-  preambleVersionId?: string | null;
-  levelPresetVersionId?: string | null;
-  contextId?: string | null;
-  defaultModelIds?: string[] | null;
-  sentencePrefix?: string | null;
-  labelPrefix?: string | null;
-  valueStatements: Array<{ token: string; content: string }>;
-};
+export type SetDomainSettingsMutationResult = SetDomainSettingsMutation;
+export type SetDomainSettingsMutationVariables = GeneratedSetDomainSettingsMutationVariables;

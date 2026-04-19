@@ -43,9 +43,9 @@ export function DomainSettingsPanel({ domainId, onSaved }: Props) {
   // Sync local state when settings load
   useEffect(() => {
     if (settings == null) return;
-    setLocalPreambleVersionId(settings.preambleVersionId);
-    setLocalLevelPresetVersionId(settings.levelPresetVersionId);
-    setLocalContextId(settings.contextId);
+    setLocalPreambleVersionId(settings.preambleVersionId ?? null);
+    setLocalLevelPresetVersionId(settings.levelPresetVersionId ?? null);
+    setLocalContextId(settings.contextId ?? null);
     setLocalSentencePrefix(settings.sentencePrefix ?? '');
     setLocalLabelPrefix(settings.labelPrefix ?? '');
     setDrafts({});

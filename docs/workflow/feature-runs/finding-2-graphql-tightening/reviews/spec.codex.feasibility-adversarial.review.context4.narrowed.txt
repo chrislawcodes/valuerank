@@ -1,0 +1,211 @@
+00001: # Architecture Overview
+00002: 
+00003: > Cloud ValueRank is a cloud-native platform for evaluating how AI models prioritize moral values in ethical dilemmas.
+00004: 
+00005: This document describes the system architecture, component responsibilities, and how data flows through the system.
+00006: 
+00007: ---
+00008: 
+00009: ## System Architecture
+00010: 
+00011: The same architecture runs locally (Docker Compose) and in production (Railway):
+00012: 
+00013: ```
+00014: ┌─────────────────────────────────────────────────────────────────────────┐
+00015: │                           Cloud ValueRank                                │
+00016: │              (Local: Docker Compose / Production: Railway)               │
+00017: ├─────────────────────────────────────────────────────────────────────────┤
+00018: │                                                                          │
+00019: │  ┌──────────────┐         ┌──────────────────────────────────────────┐  │
+00020: │  │   Frontend   │────────▶│     GraphQL API (POST /graphql)          │  │
+00021: │  │  (apps/web)  │         │     - Schema introspection for LLMs      │  │
+00022: │  │  JWT Auth    │         │     - Single endpoint for all queries    │  │
+00023: │  │  :3030       │         │     :3001                                │  │
+00024: │  └──────────────┘         └──────────────────┬───────────────────────┘  │
+00025: │                                              │                           │
+00026: │  ┌──────────────┐                            │                           │
+00027: │  │  Local LLM   │────────────────────────────┤ (same GraphQL endpoint)  │
+00028: │  │  via MCP     │                            │                           │
+00029: │  │  API Key     │                            │                           │
+00030: │  └──────────────┘                            │                           │
+00031: │                                              │                           │
+00032: │              ┌───────────────────────────────┴───────────────┐           │
+00033: │              ▼                                               ▼           │
+00034: │       ┌──────────────┐                          ┌──────────────┐        │
+00035: │       │  PostgreSQL  │                          │   Workers    │        │
+00036: │       │  + PgBoss    │◀─────────────────────────│  (Python)    │        │
+00037: │       │  + Users     │       queue polling      └──────┬───────┘        │
+00038: │       │  :5433       │                                 │                │
+00039: │       └──────────────┘                                 ▼                │
+00040: │                                               ┌──────────────┐          │
+00041: │                                               │ LLM Providers│          │
+00042: │                                               │ (OpenAI, etc)│          │
+00043: │                                               └──────────────┘          │
+00044: └─────────────────────────────────────────────────────────────────────────┘
+00045: 
+00046: Monorepo Structure (Turborepo):
+00047: ├── apps/api      → Express + GraphQL API + PgBoss queue handlers
+00048: ├── apps/web      → React + Vite frontend
+00049: ├── packages/db   → Prisma schema + shared database queries
+00050: ├── packages/shared → Logger, errors, environment utilities
+00051: └── workers/      → Python scripts for LLM interactions
+00052: ```
+00053: 
+00054: ---
+00055: 
+00056: ## Component Details
+00057: 
+00058: ### Web Frontend (`apps/web/`)
+00059: 
+00060: **Technology:** React 18 + TypeScript + Vite + Tailwind CSS
+00061: 
+00062: **Purpose:** Single-page application for:
+00063: - Viewing and editing definitions
+00064: - Starting and monitoring runs
+00065: - Viewing analysis results and visualizations
+00066: - Managing settings and API keys
+00067: 
+00068: **Key features:**
+00069: - JWT authentication via auth context
+00070: - GraphQL data fetching with urql
+00071: - Monaco editor for definition content
+00072: - Recharts for analysis visualizations
+00073: 
+00074: **Pages:**
+00075: | Page | Route | Purpose |
+00076: |------|-------|---------|
+00077: | Dashboard | `/` | Overview and recent activity |
+00078: | Definitions | `/definitions` | List and search definitions |
+00079: | Definition Detail | `/definitions/:id` | View/edit definition, start runs |
+00080: | Runs | `/runs` | List all runs |
+00081: | Run Detail | `/runs/:id` | View progress, transcripts, analysis |
+00082: | Settings | `/settings` | API keys, preferences |
+00083: | Login | `/login` | Authentication |
+00084: 
+00085: ---
+00086: 
+00087: ### GraphQL API (`apps/api/`)
+00088: 
+00089: **Technology:** Express + GraphQL Yoga + Pothos Schema Builder
+00090: 
+00091: **Purpose:** Central API server handling:
+00092: - GraphQL queries and mutations
+00093: - JWT and API key authentication
+00094: - Job queue management (PgBoss)
+00095: - Worker orchestration
+00096: - MCP server (stdio-based)
+00097: 
+00098: **Key directories:**
+00099: ```
+
+... [narrowed review slice: middle omitted] ...
+
+strator receives job from PgBoss
+00184: 2. Spawns Python process with JSON input on stdin
+00185: 3. Python worker executes, writes JSON to stdout
+00186: 4. Orchestrator parses output, updates database
+00187: 
+00188: This approach gives us:
+00189: - Native PgBoss integration (TypeScript)
+00190: - Python ecosystem for LLM adapters (compatible with CLI pipeline)
+00191: - Simple debugging (JSON stdin/stdout)
+00192: 
+00193: ---
+00194: 
+00195: ## Data Flow Examples
+00196: 
+00197: ### Starting a Run
+00198: 
+00199: ```
+00200: ┌────────┐     ┌─────────┐     ┌──────────┐     ┌─────────┐
+00201: │ Web UI │────▶│ GraphQL │────▶│ Database │────▶│ PgBoss  │
+00202: └────────┘     │ Mutation│     │ Create   │     │ Enqueue │
+00203:                └─────────┘     │ Run      │     │ Jobs    │
+00204:                                └──────────┘     └────┬────┘
+00205:                                                      │
+00206:                                                      ▼
+00207:                                ┌──────────┐     ┌─────────┐
+00208:                                │ Update   │◀────│ Worker  │
+00209:                                │ Progress │     │ Process │
+00210:                                └──────────┘     └─────────┘
+00211: ```
+00212: 
+00213: 1. User clicks "Start Run" in web UI
+00214: 2. `startRun` mutation creates Run record with PENDING status
+00215: 3. Mutation enqueues `probe_scenario` jobs for each model×scenario pair
+00216: 4. PgBoss workers pick up jobs, spawn Python probe.py
+00217: 5. Python worker calls LLM provider, returns transcript
+00218: 6. Orchestrator updates Transcript and Run.progress
+00219: 7. When all probes complete, status changes to SUMMARIZING
+00220: 8. Summarize jobs run, then status becomes COMPLETED
+00221: 9. Analysis is auto-triggered
+00222: 
+00223: ### Querying Data via MCP
+00224: 
+00225: ```
+00226: ┌────────────┐     ┌────────────┐     ┌─────────┐
+00227: │ Local LLM  │────▶│ MCP Server │────▶│ GraphQL │
+00228: │ (Claude)   │     │ (stdio)    │     │ Query   │
+00229: └────────────┘     └────────────┘     └────┬────┘
+00230:                                            │
+00231:                                            ▼
+00232:                    ┌────────────┐     ┌─────────┐
+00233:                    │ Format for │◀────│ Database│
+00234:                    │ Token Size │     │ Query   │
+00235:                    └────────────┘     └─────────┘
+00236: ```
+00237: 
+00238: 1. User asks Claude about ValueRank data
+00239: 2. Claude calls MCP tool (e.g., `list_runs`)
+00240: 3. MCP server authenticates via API key
+00241: 4. Server executes GraphQL query
+00242: 5. Results are formatted for token efficiency (<5KB)
+00243: 6. Claude receives structured response
+00244: 
+00245: ---
+00246: 
+00247: ## Key Design Decisions
+00248: 
+00249: ### GraphQL over REST
+00250: 
+00251: **Why:** LLMs can introspect the schema and construct precise queries. Single endpoint simplifies auth and MCP integration. Flexible data fetching critical for token budgets.
+00252: 
+00253: ### PgBoss over Redis
+00254: 
+00255: **Why:** Uses same PostgreSQL database - no additional infrastructure. Built-in retry, priority queues, scheduling. Transactional with application data.
+00256: 
+00257: ### TypeScript Orchestrator + Python Workers
+00258: 
+00259: **Why:** Best of both worlds. TypeScript handles PgBoss natively. Python workers reuse LLM adapters from CLI tool. JSON stdin/stdout is simple and debuggable.
+00260: 
+00261: ### Single Tenant Architecture
+00262: 
+00263: **Why:** Internal team tool. All users share one workspace, all data visible to all users. No tenant_id columns, no ACLs needed.
+00264: 
+00265: ### JSONB for Flexible Schema
+00266: 
+00267: **Why:** Definition content structure varies by scenario type. JSONB provides schema flexibility without migrations. `schema_version` field enables future migrations at read time.
+00268: 
+00269: ---
+00270: 
+00271: ## Deviations from Original Design
+00272: 
+00273: The system was built following the [preplanning documents](../preplanning/), with these notable changes:
+00274: 
+00275: | Original Design | Current Implementation | Reason |
+00276: |-----------------|----------------------|--------|
+00277: | Docker Compose for production | Railway | Simpler deployment, better DX |
+00278: | Separate worker container | Spawned Python processes | Simpler architecture, same outcome |
+00279: | Experiment framework | Deferred | Focused on core features first |
+00280: | Run comparison | Deferred | Focused on core features first |
+00281: 
+00282: ---
+00283: 
+00284: ## Related Documentation
+00285: 
+00286: - [Data Model](./data-model.md) - Database schema details
+00287: - [Tech Stack](./tech-stack.md) - Technology choices
+00288: - [Queue System](../backend/queue-system.md) - PgBoss configuration
+00289: - [Python Workers](../backend/python-workers.md) - Worker implementation
+00290: 
+00291: See also: [Original Architecture Overview](../preplann

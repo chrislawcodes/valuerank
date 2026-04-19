@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "docs/architecture/data-model.md",
+  "source_artifact_sha256": "3572983b175df8903aa2fea1102643e9f6e6cac6487d7d7f627e9ab613631242",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/finding-2-graphql-tightening/reviews/spec.gemini.requirements-adversarial.review.context5.narrowed.txt",
+  "narrowed_artifact_sha256": "60215a95ac405ccccbb722b4396de1e2a574b86677ba3fb468174b846f23b276",
+  "strategy": "head-tail-numbered-lines"
+}

@@ -1,0 +1,57 @@
+{
+  "session_id": "fe4be10d-0c85-4f97-a1e6-17ce52d0fff2",
+  "response": "## Findings\n\n| Severity | Finding | Evidence |\n| --- | --- | --- |\n| **HIGH** | ESLint rule is too permissive and can be bypassed. | `[CODE-CONFIRMED]` |\n| **MEDIUM** | Inconsistent cache invalidation creates stale UI risk. | `[CODE-CONFIRMED]` |\n| **LOW** | Verification for schema regeneration is insufficient. | `[CODE-CONFIRMED]` |\n| **LOW** | Creation of `narrowings.ts` is not assigned to a slice. | `[UNVERIFIED]` |\n\n### 1. High - ESLint rule is too permissive and can be bypassed\n\nThe proposed ESLint rule `no-hand-typed-graphql-shapes` is designed to flag `TSTypeAliasDeclaration`s that are object literals (`TSTypeLiteral`) only if they have `\u2265 2` members. This would allow developers to manually define single-property type aliases (e.g., `export type MyBadType = { customField: string };`), which subverts the primary goal of the rule. This creates a loophole that allows the same category of technical debt\u2014manually-defined GraphQL shapes that can go stale\u2014to persist or be reintroduced. The rule should flag any `TSTypeLiteral` with one or more members when used for a GraphQL type alias to be effective.\n\n**Evidence**: `[CODE-CONFIRMED]`\nThe plan artifact itself describes this flawed logic:\n> `TSTypeLiteral` (object literal) with \u2265 2 members \u2192 FLAG\n\n### 2. Medium - Inconsistent cache invalidation creates stale UI risk\n\nThe `useDomains` hook has inconsistent cache invalidation logic. While `createDomain`, `renameDomain`, and `deleteDomain` all correctly call `refetch()` to update the main `DOMAINS_QUERY`, the `assignDomainToDefinitions` and `assignDomainToDefinitionsByFilter` mutations do not. Consequently, after assigning definitions to a domain, the UI will not reflect changes (e.g., an updated `definitionCount`) until a manual page refresh. This is a pre-existing bug, but since the plan involves modifying types consumed by this hook, it presents a missed opportunity for a simple correctness and testability fix.\n\n**Evidence**: `[CODE-CONFIRMED]`\nThe `useDomains.ts` file shows the `assignDomainToDefinitions` function awaiting the mutation and returning without calling `refetch()` or `reexecuteQuery()`, unlike other mutations in the same hook.\n```typescript\n// cloud/apps/web/src/hooks/useDomains.ts\n\n  const assignDomainToDefinitions = async (\n    definitionIds: string[],\n    domainId: string | null\n  ): Promise<DomainMutationResult | null> => {\n    const result = await assignIdsMutation({ definitionIds, domainId });\n    if (result.error) throw new Error(result.error.message);\n    // >> MISSING refetch() call here <<\n    return result.data?.assignDomainToDefinitions ?? null;\n  };\n```\n\n### 3. Low - Verification for schema regeneration is insufficient\n\nThe verification plan for Slice 0, which regenerates the `schema.graphql` snapshot, is not robust enough. The plan's verification consists of searching for key fields with `grep` and ensuring `npm run codegen` succeeds. This does not check for breaking type changes introduced in the new schema (e.g., a field changing from required to optional, or a type name changing). The `tsc` build check, which would catch such errors, is not mentioned until the verification steps for later slices. It should be performed immediately after schema regeneration in Slice 0 to isolate any schema-related breakages early.\n\n**Evidence**: `[CODE-CONFIRMED]`\nThe \"Verification\" section for Slice 0 in `plan.md` only lists `grep` and `npm run codegen`, omitting a type-checking step.\n\n### 4. Low - Creation of `narrowings.ts` is not assigned to a slice\n\nThe plan correctly identifies the need for a `narrowings.ts` file to handle the `estimateConfidence` string-to-union-type conversion. However, the creation of this file is only mentioned in the high-level \"Approach\" and \"ESLint rule design\" sections and is not assigned to a concrete implementation slice. This makes the plan less actionable. This task should be explicitly included in a slice, likely Slice 2 where the related `ESTIMATE_DOMAIN_EVALUATION_COST_QUERY` is handled, or in its own slice before the ESLint rule is added.\n\n**Evidence**: `[UNVERIFIED]`\nThis is a finding about the structure of the `plan.md` artifact itself; the slice breakdown does not contain an explicit action item to create this file.\n\n## Residual Risks\n\n### 1. Unassessed Performance Impact of Larger Generated File\n\nThe generated `graphql.ts` file is already large (over 6,900 lines). Adding more fields to multiple queries will increase its size further. The plan does not account for assessing the potential performance degradation on IDE features (e.g., TypeScript language server, IntelliSense) or on build times. While the impact may be minor, this risk is unmitigated.\n\n### 2. Inconsistent Codebase State\n\nThe plan makes a pragmatic decision to limit the refactoring scope to `domains.ts` and allowlist several other files (`runs.ts`, `definitions.ts`, etc.) that contain the same type of technical debt. While this is a reasonable scoping choice, it leaves the codebase in a temporarily inconsistent state where some GraphQL operation files are strictly typed against the schema and others are not. This increases the cognitive load for future developers and creates a risk that new code will follow the old, untyped pattern in those files until the follow-up work is done.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 83089
+        },
+        "tokens": {
+          "input": 3867,
+          "prompt": 102548,
+          "candidates": 1247,
+          "total": 109529,
+          "cached": 98681,
+          "thoughts": 5734,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 83089,
+            "tokens": {
+              "input": 3867,
+              "prompt": 102548,
+              "candidates": 1247,
+              "total": 109529,
+              "cached": 98681,
+              "thoughts": 5734,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

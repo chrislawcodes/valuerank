@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/src/api/operations/domains.ts",
+  "source_artifact_sha256": "e6ebc64b9d5fda6f0017d0cf594d4c13826417eb4dd6eed68d0e18af754de19f",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/finding-2-graphql-tightening/reviews/spec.codex.edge-cases-adversarial.review.context0.narrowed.txt",
+  "narrowed_artifact_sha256": "d06dd765d34836ca3a3dab98331fc3bc4e9ea94c26a61e73dacefe2ca2e0d258",
+  "strategy": "head-tail-numbered-lines"
+}

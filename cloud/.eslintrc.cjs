@@ -151,6 +151,62 @@ module.exports = {
         'max-lines': 'off',
       },
     },
+    {
+      // Enforce codegen-backed types in GraphQL operations files.
+      // Hand-typed object literal shapes must be replaced with codegen aliases.
+      files: ['apps/web/src/api/operations/**/*.ts'],
+      rules: {
+        'no-hand-typed-graphql-shapes': 'error',
+      },
+    },
+    {
+      // Allowlisted operations files that still contain hand-typed shapes.
+      // These are legacy files that predate codegen-backed types. Remove each
+      // from this list once the file has been ported to codegen aliases.
+      // TODO(finding-3): port runs.ts to codegen-backed types and remove from allowlist
+      // TODO(finding-4): port domainAnalysis.ts to codegen-backed types and remove from allowlist
+      // TODO(finding-4): port modelsAnalysis.ts to codegen-backed types and remove from allowlist
+      // TODO(finding-4): port scenarios.ts to codegen-backed types and remove from allowlist
+      // TODO(finding-4): port definitions.ts to codegen-backed types and remove from allowlist
+      // TODO(finding-4): port llm.ts to codegen-backed types and remove from allowlist
+      // TODO(finding-5): port analysis.ts to codegen-backed types and remove from allowlist
+      // TODO(finding-5): port api-keys.ts to codegen-backed types and remove from allowlist
+      // TODO(finding-5): port auth.ts to codegen-backed types and remove from allowlist
+      // TODO(finding-5): port comparison.ts to codegen-backed types and remove from allowlist
+      // TODO(finding-5): port costs.ts to codegen-backed types and remove from allowlist
+      // TODO(finding-5): port domainCoverage.ts to codegen-backed types and remove from allowlist
+      // TODO(finding-5): port health.ts to codegen-backed types and remove from allowlist
+      // TODO(finding-5): port level-presets.ts to codegen-backed types and remove from allowlist
+      // TODO(finding-5): port paired-vignette.ts to codegen-backed types and remove from allowlist
+      // TODO(finding-5): port preambles.ts to codegen-backed types and remove from allowlist
+      // TODO(finding-5): port surveys.ts to codegen-backed types and remove from allowlist
+      // TODO(finding-5): port tags.ts to codegen-backed types and remove from allowlist
+      // narrowings.ts exports functions, not type aliases — not applicable
+      files: [
+        'apps/web/src/api/operations/runs.ts',
+        'apps/web/src/api/operations/domainAnalysis.ts',
+        'apps/web/src/api/operations/modelsAnalysis.ts',
+        'apps/web/src/api/operations/scenarios.ts',
+        'apps/web/src/api/operations/definitions.ts',
+        'apps/web/src/api/operations/llm.ts',
+        'apps/web/src/api/operations/narrowings.ts',
+        'apps/web/src/api/operations/analysis.ts',
+        'apps/web/src/api/operations/api-keys.ts',
+        'apps/web/src/api/operations/auth.ts',
+        'apps/web/src/api/operations/comparison.ts',
+        'apps/web/src/api/operations/costs.ts',
+        'apps/web/src/api/operations/domainCoverage.ts',
+        'apps/web/src/api/operations/health.ts',
+        'apps/web/src/api/operations/level-presets.ts',
+        'apps/web/src/api/operations/paired-vignette.ts',
+        'apps/web/src/api/operations/preambles.ts',
+        'apps/web/src/api/operations/surveys.ts',
+        'apps/web/src/api/operations/tags.ts',
+      ],
+      rules: {
+        'no-hand-typed-graphql-shapes': 'off',
+      },
+    },
     // ============================================================================
     // API Server and DB Package Overrides
     // These codebases use dynamic data from Prisma, GraphQL resolvers, and

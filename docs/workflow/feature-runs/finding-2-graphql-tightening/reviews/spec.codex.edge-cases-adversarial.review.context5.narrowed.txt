@@ -1,0 +1,236 @@
+00001: # Data Model
+00002: 
+00003: > PostgreSQL schema for Cloud ValueRank
+00004: 
+00005: This document describes the database schema, entity relationships, and data patterns used in Cloud ValueRank.
+00006: 
+00007: **Schema location:** `packages/db/prisma/schema.prisma`
+00008: 
+00009: ---
+00010: 
+00011: ## Entity Relationship Overview
+00012: 
+00013: ```
+00014: ┌─────────────────────────────────────────────────────────────────────────┐
+00015: │                           AUTHENTICATION                                 │
+00016: ├─────────────────────────────────────────────────────────────────────────┤
+00017: │                                                                          │
+00018: │  ┌──────────┐           ┌──────────┐                                    │
+00019: │  │   User   │──────────▶│  ApiKey  │                                    │
+00020: │  └──────────┘   1:N     └──────────┘                                    │
+00021: │                                                                          │
+00022: └─────────────────────────────────────────────────────────────────────────┘
+00023: 
+00024: ┌─────────────────────────────────────────────────────────────────────────┐
+00025: │                            CORE DOMAIN                                   │
+00026: ├─────────────────────────────────────────────────────────────────────────┤
+00027: │                                                                          │
+00028: │  ┌────────────┐        ┌────────────┐        ┌────────────┐             │
+00029: │  │ Definition │───────▶│  Scenario  │        │    Tag     │             │
+00030: │  │            │  1:N   │            │        │            │             │
+00031: │  └─────┬──────┘        └─────┬──────┘        └─────┬──────┘             │
+00032: │        │                     │                     │                     │
+00033: │        │ parent_id           │                     │                     │
+00034: │        ▼ (self-ref)          │                     │                     │
+00035: │  ┌────────────┐              │               ┌─────┴──────┐             │
+00036: │  │ Definition │              │               │DefinitionTag│             │
+00037: │  └────────────┘              │               │  (join)    │             │
+00038: │        │                     │               └────────────┘             │
+00039: │        │ 1:N                 │                                          │
+00040: │        ▼                     │                                          │
+00041: │  ┌────────────┐              │                                          │
+00042: │  │    Run     │◀─────────────┘                                          │
+00043: │  │            │◀───────────────────────────────┐                        │
+00044: │  └─────┬──────┘               1:N              │                        │
+00045: │        │                                       │                        │
+00046: │        │ 1:N                             ┌─────┴──────┐                 │
+00047: │        ▼                                 │RunScenario │                 │
+00048: │  ┌────────────┐                          │ Selection  │                 │
+00049: │  │ Transcript │                          └────────────┘                 │
+00050: │  └────────────┘                                                         │
+00051: │        │                                                                 │
+00052: │        ▼ N:1                                                            │
+00053: │  ┌────────────┐                                                         │
+00054: │  │  Scenario  │                                                         │
+00055: │  └────────────┘                                                         │
+00056: │                                                                          │
+00057: └─────────────────────────────────────────────────────────────────────────┘
+00058: 
+00059: ┌─────────────────────────────────────────────────────────────────────────┐
+00060: │                         ANALYSIS & EXPERIMENTS                           │
+00061: ├─────────────────────────────────────────────────────────────────────────┤
+00062: │                                                                          │
+00063: │  ┌────────────┐        ┌────────────┐                                   │
+00064: │  │ Experiment │───────▶│    Run     │ (N:1)                             │
+00065: │  │            │───────▶│RunComparison│ (1:N)                            │
+00066: │  └────────────┘        └────────────┘                                   │
+00067: │                                                                          │
+00068: │  ┌────────────┐        ┌────────────┐                                   │
+00069: │  │    Run     │───────▶│ Analysis   │ (1:N)                             │
+00070: │  │            │        │  Result    │                                   │
+00071: │  └────────────┘        └────────────┘
+
+... [narrowed review slice: middle omitted] ...
+
+timestamp |
+00373: 
+00374: ---
+00375: 
+00376: ## JSONB Schema Patterns
+00377: 
+00378: ### Definition Content
+00379: 
+00380: ```json
+00381: {
+00382:   "preamble": "You are being asked to reason about a moral dilemma...",
+00383:   "template": "A café owner faces [situation] where [severity]...",
+00384:   "dimensions": [
+00385:     {
+00386:       "name": "situation",
+00387:       "levels": [
+00388:         {"score": 1, "label": "minor", "options": ["small spill", "loose tile"]},
+00389:         {"score": 5, "label": "severe", "options": ["gas leak", "structural damage"]}
+00390:       ]
+00391:     }
+00392:   ],
+00393:   "matchingRules": {
+00394:     "type": "cartesian"
+00395:   },
+00396:   "valueConflict": {
+00397:     "value1": "Physical_Safety",
+00398:     "value2": "Economics"
+00399:   }
+00400: }
+00401: ```
+00402: 
+00403: ### Run Config
+00404: 
+00405: ```json
+00406: {
+00407:   "models": ["gpt-4o", "claude-3-5-sonnet-latest"],
+00408:   "samplePercentage": 100,
+00409:   "temperature": 0.7
+00410: }
+00411: ```
+00412: 
+00413: ### Run Progress
+00414: 
+00415: ```json
+00416: {
+00417:   "total": 20,
+00418:   "completed": 15,
+00419:   "failed": 1,
+00420:   "byModel": {
+00421:     "gpt-4o": {"completed": 8, "total": 10},
+00422:     "claude-3-5-sonnet-latest": {"completed": 7, "total": 10}
+00423:   }
+00424: }
+00425: ```
+00426: 
+00427: ### Transcript Content
+00428: 
+00429: ```json
+00430: {
+00431:   "messages": [
+00432:     {"role": "user", "content": "A café owner discovers..."},
+00433:     {"role": "assistant", "content": "I would prioritize..."}
+00434:   ],
+00435:   "model": "gpt-4o",
+00436:   "finishReason": "stop"
+00437: }
+00438: ```
+00439: 
+00440: ### Analysis Output
+00441: 
+00442: ```json
+00443: {
+00444:   "decisionCounts": {"1": 5, "2": 8, "3": 12, "4": 3, "5": 2},
+00445:   "agreementScore": 0.73,
+00446:   "methodsDocumentation": "Analysis computed using...",
+00447:   "visualizationData": {
+00448:     "decisionDistribution": [...],
+00449:     "modelScenarioMatrix": [...]
+00450:   }
+00451: }
+00452: ```
+00453: 
+00454: ---
+00455: 
+00456: ## Soft Delete Pattern
+00457: 
+00458: Three tables use soft delete via `deleted_at` timestamp:
+00459: 
+00460: - `definitions` - Preserves version history
+00461: - `scenarios` - Preserves transcript references
+00462: - `definition_tags` - Preserves tag associations
+00463: 
+00464: **Rules:**
+00465: 1. Records are never physically deleted
+00466: 2. **All queries must filter** `WHERE deleted_at IS NULL`
+00467: 3. GraphQL resolvers apply this filter automatically
+00468: 4. `deleted_at` is NOT exposed in the GraphQL API
+00469: 5. Cascading: when parent is deleted, related records are also soft-deleted
+00470: 
+00471: ```typescript
+00472: // Querying (always filter deleted)
+00473: const definitions = await prisma.definition.findMany({
+00474:   where: { deletedAt: null }
+00475: });
+00476: 
+00477: // Deleting (set timestamp, don't delete)
+00478: await prisma.definition.update({
+00479:   where: { id },
+00480:   data: { deletedAt: new Date() }
+00481: });
+00482: ```
+00483: 
+00484: ---
+00485: 
+00486: ## Access Tracking
+00487: 
+00488: Major entities include `last_accessed_at` timestamp:
+00489: - Updated on read operations (view, export, analysis)
+00490: - Enables identification of unused data
+00491: - Useful for future pruning decisions
+00492: 
+00493: ---
+00494: 
+00495: ## Indexes
+00496: 
+00497: Key indexes for performance:
+00498: 
+00499: | Table | Index | Purpose |
+00500: |-------|-------|---------|
+00501: | definitions | `parent_id` | Version tree queries |
+00502: | runs | `definition_id`, `experiment_id`, `status` | Filtering |
+00503: | transcripts | `run_id`, `scenario_id`, `model_id` | Lookups |
+00504: | scenarios | `definition_id` | Definition scenarios |
+00505: | analysis_results | `run_id`, `analysis_type`, `status` | Cache lookup |
+00506: | api_keys | `key_prefix`, `user_id` | Authentication |
+00507: 
+00508: ---
+00509: 
+00510: ## Differences from Original Design
+00511: 
+00512: The schema evolved from the [original database design](../preplanning/database-design.md):
+00513: 
+00514: | Addition | Reason |
+00515: |----------|--------|
+00516: | `LlmProvider`, `LlmModel` tables | Database-driven provider/model configuration |
+00517: | `RunScenarioSelection` table | Track sampled scenarios per run |
+00518: | `SystemSetting` table | Runtime configuration |
+00519: | Summary fields on Transcript | Store decision codes and summaries |
+00520: 
+00521: | Simplification | Reason |
+00522: |----------------|--------|
+00523: | No `ltree` extension | Recursive CTEs sufficient for our queries |
+00524: | No `created_by` on most tables | Single-tenant, less audit trail needed |
+00525: | Simpler experiment schema | Feature deferred |
+00526: 
+00527: ---
+00528: 
+00529: ## Related Documentation
+00530: 
+00531: - [Architecture Overview](./overview.md) - System components
+00532: - [Tech Stack](./tech-stack.md) - Technology choices
+00533: - [Original Database Design](../pr

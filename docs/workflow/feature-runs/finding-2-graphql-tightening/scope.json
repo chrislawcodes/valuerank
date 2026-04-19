@@ -1,0 +1,33 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/mutations/domain",
+    "cloud/apps/api/src/graphql/queries/domain",
+    "cloud/apps/api/src/graphql/queries/domain-analysis-values.ts",
+    "cloud/apps/api/src/graphql/queries/domain-clustering.ts",
+    "cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts",
+    "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+    "cloud/apps/api/src/graphql/queries/domain-settings.ts",
+    "cloud/apps/api/src/graphql/queries/domain.ts",
+    "cloud/apps/api/src/graphql/types",
+    "cloud/apps/web/codegen.ts",
+    "cloud/apps/web/src/api/operations/domainAnalysis.ts",
+    "cloud/apps/web/src/api/operations/domains.ts",
+    "cloud/apps/web/src/generated"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/mutations/domain",
+    "cloud/apps/api/src/graphql/queries/domain",
+    "cloud/apps/api/src/graphql/queries/domain-analysis-values.ts",
+    "cloud/apps/api/src/graphql/queries/domain-clustering.ts",
+    "cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts",
+    "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+    "cloud/apps/api/src/graphql/queries/domain-settings.ts",
+    "cloud/apps/api/src/graphql/queries/domain.ts",
+    "cloud/apps/api/src/graphql/types",
+    "cloud/apps/web/codegen.ts",
+    "cloud/apps/web/src/api/operations/domainAnalysis.ts",
+    "cloud/apps/web/src/api/operations/domains.ts",
+    "cloud/apps/web/src/generated",
+    "docs/workflow/feature-runs/finding-2-graphql-tightening"
+  ]
+}

@@ -8,6 +8,9 @@ query Domains($search: String, $limit: Int, $offset: Int) {
     defaultLevelPresetVersionId
     defaultPreambleVersionId
     defaultContextId
+    defaultModelIds
+    sentencePrefix
+    labelPrefix
   }
 }
 
@@ -146,6 +149,10 @@ query DomainEvaluations($domainId: ID!, $scopeCategory: String, $status: String,
     temperature
     maxBudgetUsd
     memberCount
+    launchableDefinitionIds
+    samplePercentage
+    samplesPerScenario
+    targetBatchCount
   }
 }
 
@@ -167,11 +174,21 @@ query DomainEvaluation($id: ID!) {
     temperature
     maxBudgetUsd
     memberCount
+    launchableDefinitionIds
+    launchableDefinitions {
+      definitionId
+      definitionName
+      pairKey
+    }
+    samplePercentage
+    samplesPerScenario
+    targetBatchCount
     members {
       runId
       definitionIdAtLaunch
       definitionNameAtLaunch
       domainIdAtLaunch
+      modelIds
       createdAt
       runStatus
       runCategory
@@ -305,6 +322,7 @@ query DomainSettings($domainId: ID!) {
     preambleVersionId
     levelPresetVersionId
     contextId
+    defaultModelIds
     sentencePrefix
     labelPrefix
     valueStatements {
@@ -350,6 +368,37 @@ mutation SetDomainSettings(
     defaultPreambleVersionId
     defaultLevelPresetVersionId
     defaultContextId
+    defaultModelIds
+  }
+}
+
+mutation BackfillDomainEvaluationModels(
+  $domainEvaluationId: ID!
+  $modelIds: [String!]!
+  $definitionIds: [ID!]
+  $targetBatchCount: Int
+) {
+  backfillDomainEvaluationModels(
+    domainEvaluationId: $domainEvaluationId
+    modelIds: $modelIds
+    definitionIds: $definitionIds
+    targetBatchCount: $targetBatchCount
+  ) {
+    domainEvaluationId
+    scopeCategory
+    success
+    totalDefinitions
+    targetedDefinitions
+    startedRuns
+    failedDefinitions
+    skippedForBudget
+    projectedCostUsd
+    blockedByActiveLaunch
+    runs {
+      definitionId
+      runId
+      modelIds
+    }
   }
 }
 

@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/src/generated/graphql.ts",
+  "source_artifact_sha256": "4d050459fa3b70121a9fcc5b0a6fe70637e0a27fb155708e14d3a1dcdcb396e1",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/finding-2-graphql-tightening/reviews/plan.codex.architecture-adversarial.review.context2.narrowed.txt",
+  "narrowed_artifact_sha256": "5c807470671bdcedb86bbc916be0da3d8e4b41bb68b8dc390ed838959763cfdd",
+  "strategy": "head-tail-numbered-lines"
+}
