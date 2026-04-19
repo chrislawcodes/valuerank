@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "JudgeVerdict",
+  "type": "object",
+  "required": ["judge", "model", "verdict", "confidence", "reasoning", "evidence", "timestamp"],
+  "properties": {
+    "judge": {"type": "string", "enum": ["completeness", "restatement", "implementation-risk"]},
+    "model": {"type": "string"},
+    "verdict": {"type": "string", "enum": ["proceed", "proceed-with-annotation", "block"]},
+    "confidence": {"type": "integer", "minimum": 0, "maximum": 5},
+    "reasoning": {"type": "string", "minLength": 10},
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["artifact", "section", "quote"],
+        "properties": {
+          "artifact": {"type": "string"},
+          "section": {"type": "string"},
+          "quote": {"type": "string"}
+        }
+      }
+    },
+    "timestamp": {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": false
+}
