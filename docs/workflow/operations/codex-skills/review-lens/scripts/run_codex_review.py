@@ -17,11 +17,19 @@ from run_gemini_review import (
     resolve_repo_info,
     resolve_workspace_root,
     sha256_text,
+    workflow_round_from_paths,
+    workflow_slug_from_paths,
     text_or_empty,
     write_failure,
     write_narrowed_artifact,
     write_report,
 )
+
+FEATURE_FACTORY_SCRIPTS = Path(__file__).resolve().parents[2] / "feature-factory" / "scripts"
+if str(FEATURE_FACTORY_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(FEATURE_FACTORY_SCRIPTS))
+
+from factory_telemetry import record_ai_call
 
 
 def main() -> int:
@@ -137,6 +145,9 @@ def main() -> int:
         ]
     )
 
+    workflow_slug = workflow_slug_from_paths(output_path, artifact_path) or artifact_path.parent.name
+    workflow_round = workflow_round_from_paths(args.stage, output_path, artifact_path)
+
     raw_path = output_path.with_suffix(output_path.suffix + ".raw.txt")
     stdout_path = output_path.with_suffix(output_path.suffix + ".stdout.txt")
     stderr_path = output_path.with_suffix(output_path.suffix + ".stderr.txt")
@@ -156,17 +167,35 @@ def main() -> int:
         args.model,
         prompt,
     ]
-    try:
-        result = subprocess.run(
-            cmd,
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=args.timeout_seconds,
-        )
-    except subprocess.TimeoutExpired as exc:
-        stdout_path.write_text(text_or_empty(exc.stdout), encoding="utf-8")
-        stderr_path.write_text(text_or_empty(exc.stderr), encoding="utf-8")
+    def _call() -> subprocess.CompletedProcess:
+        try:
+            return subprocess.run(
+                cmd,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=args.timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            return subprocess.CompletedProcess(
+                cmd,
+                124,
+                stdout=text_or_empty(exc.stdout),
+                stderr=text_or_empty(exc.stderr),
+            )
+
+    result = record_ai_call(
+        workflow_slug,
+        args.stage,
+        workflow_round,
+        "adversarial_review",
+        args.model,
+        _call,
+    )
+
+    stdout_path.write_text(result.stdout, encoding="utf-8")
+    stderr_path.write_text(result.stderr, encoding="utf-8")
+    if result.returncode == 124:
         last_message_path.unlink(missing_ok=True)
         write_failure(
             output_path,
@@ -176,9 +205,7 @@ def main() -> int:
             stderr_path,
         )
         return 3
-    except subprocess.CalledProcessError as exc:
-        stdout_path.write_text(text_or_empty(exc.stdout), encoding="utf-8")
-        stderr_path.write_text(text_or_empty(exc.stderr), encoding="utf-8")
+    if result.returncode != 0:
         last_message_path.unlink(missing_ok=True)
         write_failure(
             output_path,
@@ -188,9 +215,6 @@ def main() -> int:
             stderr_path,
         )
         return 4
-
-    stdout_path.write_text(result.stdout, encoding="utf-8")
-    stderr_path.write_text(result.stderr, encoding="utf-8")
 
     try:
         response = last_message_path.read_text(encoding="utf-8").strip()

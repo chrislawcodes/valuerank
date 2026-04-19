@@ -6,6 +6,9 @@ No subprocess calls.  All I/O is file-based JSON read/write.
 Every public symbol is safe to import in tests without side effects.
 """
 import json
+from contextlib import contextmanager
+import fcntl
+import errno
 import os
 import tempfile
 import time
@@ -161,6 +164,87 @@ def default_parallel_analysis_state() -> dict:
     }
 
 
+def _default_workflow_state() -> dict:
+    """Return the baseline workflow state for a new or migrated run."""
+    return {
+        "review_policy": {
+            "sensitive": False,
+            "large_structural": False,
+            "performance_sensitive": False,
+            "extra_gemini_lenses": [],
+        },
+        BLOCKED_KEY: {
+            "active": False,
+            "reason": "",
+            "updated_at": 0,
+        },
+        DISCOVERY_KEY: default_discovery_state(),
+        DELIVERY_KEY: {},
+        DIRTY_OVERRIDE_KEY: {},
+        CHECKPOINT_FALLBACK_KEY: {},
+        PARALLEL_ANALYSIS_KEY: default_parallel_analysis_state(),
+        INIT_HEAD_SHA_KEY: "",
+        "token_usage": [],
+        "stages": {},
+        "schema_version": 1,
+    }
+
+
+def _default_stage_state(state: dict | None = None, stage: str | None = None) -> dict:
+    """Return the canonical nested state blob for a single workflow stage."""
+    stage_state = {
+        "adversarial_rounds": 0,
+        "judge_rounds": 0,
+        "judge_verdicts": [],
+        "annotations": [],
+        "unresolved_concerns": [],
+        "adversarial_sha_history": [],
+        "initial_sha": "",
+    }
+    if state is None or stage is None:
+        return stage_state
+    for key in ("adversarial_rounds", "judge_rounds"):
+        legacy_key = f"{stage}_{key}"
+        if legacy_key in state:
+            stage_state[key] = state[legacy_key]
+    return stage_state
+
+
+@contextmanager
+def with_locked_state(slug: str):
+    """Lock state.json, yield the loaded state, and persist mutations on exit."""
+    path = factory_state_path(slug)
+    if not path.exists():
+        atomic_json_write(path, _default_workflow_state())
+
+    last_error: Exception | None = None
+    backoff_seconds = 0.1
+    for attempt in range(11):
+        with path.open("r+", encoding="utf-8") as lock_fh:
+            try:
+                fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except Exception as exc:
+                busy_errno = getattr(exc, "errno", None)
+                if not isinstance(exc, BlockingIOError) and busy_errno not in {errno.EACCES, errno.EAGAIN}:
+                    raise
+                last_error = exc
+                if attempt == 10:
+                    break
+                time.sleep(backoff_seconds)
+                backoff_seconds *= 2
+                continue
+
+            try:
+                state = load_workflow_state(slug)
+                yield state
+                atomic_json_write(path, state)
+            finally:
+                fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)
+            return
+
+    raise TimeoutError(f"Timed out acquiring exclusive lock for {path} after 10 retries") from last_error
+
+
 def migrate_discovery_state(d: dict) -> dict:
     """Upgrade a V1 discovery blob to V2. Returns a new dict (does not mutate input.
 
@@ -287,50 +371,23 @@ def save_scope_manifest(slug: str, paths: list[str]) -> Path:
 
 
 def load_workflow_state(slug: str) -> dict:
+    """Load workflow state and add missing schema defaults without writing."""
     path = factory_state_path(slug)
     if not path.exists():
-        return {
-            "review_policy": {
-                "sensitive": False,
-                "large_structural": False,
-                "performance_sensitive": False,
-                "extra_gemini_lenses": [],
-            },
-            BLOCKED_KEY: {
-                "active": False,
-                "reason": "",
-                "updated_at": 0,
-            },
-            DISCOVERY_KEY: default_discovery_state(),
-            DELIVERY_KEY: {},
-            DIRTY_OVERRIDE_KEY: {},
-            PARALLEL_ANALYSIS_KEY: default_parallel_analysis_state(),
-            INIT_HEAD_SHA_KEY: "",
-        }
+        return _default_workflow_state()
     state = json.loads(path.read_text(encoding="utf-8"))
-    state.setdefault(
-        "review_policy",
-        {
-            "sensitive": False,
-            "large_structural": False,
-            "performance_sensitive": False,
-            "extra_gemini_lenses": [],
-        },
-    )
-    state.setdefault(
-        BLOCKED_KEY,
-        {
-            "active": False,
-            "reason": "",
-            "updated_at": 0,
-        },
-    )
+    defaults = _default_workflow_state()
+    state.setdefault("review_policy", defaults["review_policy"])
+    state.setdefault(BLOCKED_KEY, defaults[BLOCKED_KEY])
     state.setdefault(DISCOVERY_KEY, default_discovery_state())
     state.setdefault(DELIVERY_KEY, {})
     state.setdefault(DIRTY_OVERRIDE_KEY, {})
     state.setdefault(CHECKPOINT_FALLBACK_KEY, {})
     state.setdefault(PARALLEL_ANALYSIS_KEY, default_parallel_analysis_state())
     state.setdefault(INIT_HEAD_SHA_KEY, "")
+    state.setdefault("token_usage", [])
+    state.setdefault("stages", {})
+    state.setdefault("schema_version", 1)
     return state
 
 
@@ -341,9 +398,36 @@ def save_workflow_state(slug: str, state: dict) -> Path:
 
 
 def update_workflow_state(slug: str, mutate) -> dict:
-    state = load_workflow_state(slug)
-    mutate(state)
-    save_workflow_state(slug, state)
+    """Mutate workflow state under the exclusive file lock."""
+    with with_locked_state(slug) as state:
+        mutate(state)
+    return state
+
+
+def update_stage_state(slug: str, stage: str, updates: dict) -> dict:
+    """Update nested stage state and mirror legacy top-level counters."""
+    with with_locked_state(slug) as state:
+        stages = state.get("stages")
+        if not isinstance(stages, dict):
+            stages = {}
+            state["stages"] = stages
+        stage_state = stages.get(stage)
+        if not isinstance(stage_state, dict):
+            stage_state = {}
+        defaults = _default_stage_state(state, stage)
+        for key, value in defaults.items():
+            stage_state.setdefault(key, value)
+        for key, value in updates.items():
+            stage_state[key] = value
+            if key in {"adversarial_rounds", "judge_rounds"}:
+                state[f"{stage}_{key}"] = value
+        stages[stage] = stage_state
+        try:
+            schema_version = int(state.get("schema_version", 1))
+        except (TypeError, ValueError):
+            schema_version = 1
+        if schema_version < 2:
+            state["schema_version"] = 2
     return state
 
 

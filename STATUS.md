@@ -83,6 +83,8 @@ Once the above are resolved:
 
 **Assessment (2026-03-30):** Front half (discovery → spec → plan → tasks → adversarial review) is solid. Back half is now catching up: fast path added, parallel Codex dispatch added (PR #458, merged), parallel reviews validated. Second experiment complete (aggregate-cross-batch-reliability): factory caught a real correctness gap Claude-direct missed. Pattern is mixed across 2 data points. Remaining gaps: more experiment runs needed, phantom task detection deferred, Composio not evaluated.
 
+**Update (2026-04-19):** ff-judge-panel slice 10 migration script + SKILL.md update + smoke test are implemented locally. Migration dry-run reports the two blocked workflows cleanly as missing in this worktree, the judge smoke test passes with stub judges, and the Feature Factory scripts test suite is green.
+
 ### What We Keep (Differentiated)
 - Mandatory discovery phase — catches bad requirements early
 - Multi-agent adversarial review (Gemini + Codex attack, Claude judges)

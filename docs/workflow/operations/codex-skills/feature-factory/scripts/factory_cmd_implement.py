@@ -15,9 +15,12 @@ if str(_SCRIPT_DIR) not in sys.path:
 from factory_state import (  # noqa: E402
     REPO_ROOT,
     PARALLEL_ANALYSIS_KEY,
+    load_workflow_state,
     workflow_dir,
     update_workflow_state,
 )
+from factory_heartbeat import HeartbeatEmitter, set_activity as heartbeat_set_activity  # noqa: E402
+from factory_telemetry import record_ai_call  # noqa: E402
 
 from factory_git import (  # noqa: E402
     ensure_sync,
@@ -37,6 +40,38 @@ from factory_emit import _emit_next_action  # noqa: E402
 def _codex_prompt_path(slug: str, i: int) -> Path:
     safe_slug = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in slug)
     return Path(f"/tmp/codex-impl-{safe_slug}-{os.getpid()}-{i}.txt")
+
+
+def _implementation_round(slug: str) -> int:
+    state = load_workflow_state(slug)
+    stages = state.get("stages", {})
+    if not isinstance(stages, dict):
+        return 0
+    stage_state = stages.get("tasks", {})
+    if not isinstance(stage_state, dict):
+        return 0
+    try:
+        return int(stage_state.get("adversarial_rounds", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _run_codex_command(command: list[str], cwd: Path) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(
+            command,
+            cwd=str(cwd),
+            timeout=3600,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return subprocess.CompletedProcess(
+            command,
+            124,
+            stdout=exc.stdout or "",
+            stderr=exc.stderr or "",
+        )
 
 
 def _build_codex_prompt(slug: str, i: int, tasks: list[str], file_scope: list[str]) -> str:
@@ -70,14 +105,25 @@ def _build_codex_prompt(slug: str, i: int, tasks: list[str], file_scope: list[st
 def _run_serial(slug: str, tasks: list[str]) -> int:
     prompt_path = _codex_prompt_path(slug, 0)
     prompt_text = _build_codex_prompt(slug, 0, tasks, [])
+    round_number = _implementation_round(slug)
     rc = 1
     try:
-        result = subprocess.run(
-            ["codex", "exec", "-m", "gpt-5.4-mini", "-s", "workspace-write", prompt_text],
-            cwd=str(REPO_ROOT),
-            timeout=3600,
+        heartbeat_set_activity("codex exec running")
+        result = record_ai_call(
+            slug,
+            "tasks",
+            round_number,
+            "implementation",
+            "gpt-5.4-mini",
+            lambda: _run_codex_command(
+                ["codex", "exec", "-m", "gpt-5.4-mini", "-s", "workspace-write", prompt_text],
+                REPO_ROOT,
+            ),
         )
         rc = result.returncode
+        if rc == 124:
+            print("[error] codex execution timed out after 3600 seconds", file=sys.stderr)
+            rc = 1
     except subprocess.TimeoutExpired:
         print("[error] codex execution timed out after 3600 seconds", file=sys.stderr)
         rc = 1
@@ -115,6 +161,7 @@ def _run_parallel(slug: str, group: dict, max_workers: int = 4) -> int:
         )
         return 1
     base_sha = head_result.stdout.strip()
+    round_number = _implementation_round(slug)
 
     worktree_paths: list[Path] = []
     prompt_paths: list[Path] = []
@@ -133,12 +180,21 @@ def _run_parallel(slug: str, group: dict, max_workers: int = 4) -> int:
                 prompt_path = _codex_prompt_path(slug, i)
                 prompt_paths.append(prompt_path)
                 prompt_text = _build_codex_prompt(slug, i, [task], file_scope)
+                def _call(worktree_path=worktree_path, prompt_text=prompt_text):
+                    heartbeat_set_activity("codex exec running")
+                    return _run_codex_command(
+                        ["codex", "exec", "-m", "gpt-5.4-mini", "-s", "workspace-write", prompt_text],
+                        worktree_path,
+                    )
                 futures[
                     executor.submit(
-                        subprocess.run,
-                        ["codex", "exec", "-m", "gpt-5.4-mini", "-s", "workspace-write", prompt_text],
-                        cwd=str(worktree_path),
-                        timeout=3600,
+                        record_ai_call,
+                        slug,
+                        "tasks",
+                        round_number,
+                        "implementation",
+                        "gpt-5.4-mini",
+                        _call,
                     )
                 ] = i
             except Exception as exc:
@@ -240,16 +296,18 @@ def command_implement(args: argparse.Namespace) -> int:
         print("nothing to implement — all tasks complete or no tasks.md")
         return 0
 
-    for group in groups:
-        if not group["parallel"]:
-            if group.get("overlap_warning"):
-                print(f"[warn] {group['overlap_warning']} — running serially", file=sys.stderr)
-            rc = _run_serial(args.slug, group["tasks"])
-        else:
-            print(f"[implement] dispatching {len(group['tasks'])} parallel Codex workers...")
-            rc = _run_parallel(args.slug, group, max_workers=args.max_workers)
-        if rc != 0:
-            return rc
+    with HeartbeatEmitter(args.slug, "implement"):
+        for group in groups:
+            heartbeat_set_activity("codex exec running")
+            if not group["parallel"]:
+                if group.get("overlap_warning"):
+                    print(f"[warn] {group['overlap_warning']} — running serially", file=sys.stderr)
+                rc = _run_serial(args.slug, group["tasks"])
+            else:
+                print(f"[implement] dispatching {len(group['tasks'])} parallel Codex workers...")
+                rc = _run_parallel(args.slug, group, max_workers=args.max_workers)
+            if rc != 0:
+                return rc
     return 0
 
 

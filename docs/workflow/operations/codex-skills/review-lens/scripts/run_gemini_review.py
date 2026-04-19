@@ -14,7 +14,13 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
+FEATURE_FACTORY_SCRIPTS = Path(__file__).resolve().parents[2] / "feature-factory" / "scripts"
+if str(FEATURE_FACTORY_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(FEATURE_FACTORY_SCRIPTS))
+
 from workflow_utils import normalized_artifact_text, repo_relative_path
+from factory_state import load_workflow_state
+from factory_telemetry import record_ai_call
 
 
 BASE_REF_CANDIDATES = ["origin/main", "origin/master", "main", "master"]
@@ -164,6 +170,42 @@ def resolve_repo_info(path: Path, requested_base_ref: str | None) -> dict[str, s
         "git_base_ref": git_base_ref,
         "git_base_sha": git_base_sha,
     }
+
+
+def workflow_slug_from_path(path: Path) -> str | None:
+    resolved = path.resolve()
+    parts = resolved.parts
+    if "feature-runs" not in parts:
+        return None
+    index = parts.index("feature-runs")
+    if index + 1 >= len(parts):
+        return None
+    return parts[index + 1]
+
+
+def workflow_slug_from_paths(*paths: Path) -> str | None:
+    for path in paths:
+        slug = workflow_slug_from_path(path)
+        if slug:
+            return slug
+    return None
+
+
+def workflow_round_from_paths(stage: str, *paths: Path) -> int:
+    slug = workflow_slug_from_paths(*paths)
+    if not slug:
+        return 0
+    state = load_workflow_state(slug)
+    stages = state.get("stages", {})
+    if not isinstance(stages, dict):
+        return 0
+    stage_state = stages.get(stage, {})
+    if not isinstance(stage_state, dict):
+        return 0
+    try:
+        return int(stage_state.get("adversarial_rounds", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def extract_json(stdout: str) -> dict:
@@ -541,6 +583,9 @@ def main() -> int:
     if args.model:
         cmd.extend(["-m", args.model])
 
+    workflow_slug = workflow_slug_from_paths(output_path, artifact_path) or artifact_path.parent.name
+    workflow_round = workflow_round_from_paths(args.stage, output_path, artifact_path)
+
     run_cwd = workspace_root
     stdout_path = output_path.with_suffix(output_path.suffix + ".stdout.txt")
     stderr_path = output_path.with_suffix(output_path.suffix + ".stderr.txt")
@@ -554,33 +599,47 @@ def main() -> int:
         if not args.no_gemini_lock:
             lock_path, owner_pid = acquire_gemini_lock(workspace_root, args.timeout_seconds)
         for _ in range(args.retries + 1):
-            try:
-                if run_cwd is None:
-                    with tempfile.TemporaryDirectory() as tmpdir:
-                        result = subprocess.run(
-                            cmd,
-                            check=True,
-                            capture_output=True,
-                            text=True,
-                            cwd=tmpdir,
-                            timeout=args.timeout_seconds,
-                        )
-                else:
-                    result = subprocess.run(
+            def _call(cwd: str | None) -> subprocess.CompletedProcess:
+                try:
+                    return subprocess.run(
                         cmd,
-                        check=True,
+                        check=False,
                         capture_output=True,
                         text=True,
-                        cwd=run_cwd,
+                        cwd=cwd,
                         timeout=args.timeout_seconds,
                     )
+                except subprocess.TimeoutExpired as exc:
+                    return subprocess.CompletedProcess(
+                        cmd,
+                        124,
+                        stdout=text_or_empty(exc.stdout),
+                        stderr=text_or_empty(exc.stderr),
+                    )
+
+            if run_cwd is None:
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    result = record_ai_call(
+                        workflow_slug,
+                        args.stage,
+                        workflow_round,
+                        "adversarial_review",
+                        args.model,
+                        lambda tmpdir=tmpdir: _call(tmpdir),
+                    )
+            else:
+                result = record_ai_call(
+                    workflow_slug,
+                    args.stage,
+                    workflow_round,
+                    "adversarial_review",
+                    args.model,
+                    lambda: _call(str(run_cwd)),
+                )
+            if result.returncode == 0:
                 break
-            except subprocess.TimeoutExpired as exc:
-                last_failure = (exc.stdout or "", exc.stderr or "")
-                continue
-            except subprocess.CalledProcessError as exc:
-                last_failure = (exc.stdout or "", exc.stderr or "")
-                continue
+            last_failure = (result.stdout or "", result.stderr or "")
+            result = None
     except TimeoutError as exc:
         write_failure(
             output_path,

@@ -91,6 +91,7 @@ from factory_deliver import (  # noqa: E402
 )
 from factory_cmd_deliver import command_deliver, command_closeout  # noqa: E402
 from factory_cmd_block import command_block  # noqa: E402
+from factory_cmd_judge import run_judge  # noqa: E402
 from factory_cmd_implement import command_implement, command_parallel, _run_serial, _run_parallel  # noqa: E402
 from factory_cmd_status import command_status, command_repair, command_doctor  # noqa: E402
 from workflow_utils import resolve_stored_path  # noqa: E402
@@ -265,6 +266,7 @@ def build_parser() -> argparse.ArgumentParser:
     checkpoint_parser.add_argument("--repair-timeout-seconds", type=int, default=300)
     checkpoint_parser.add_argument("--allow-large-diff-rerun", action="store_true")
     checkpoint_parser.add_argument("--fallback", action="store_true")
+    checkpoint_parser.add_argument("--json", action="store_true")
     checkpoint_parser.add_argument("--fast", action="store_true",
         help="Fast path: skip prerequisites, run 1 Gemini + 1 Codex review. Requires --stage diff.")
     checkpoint_parser.set_defaults(func=command_checkpoint)
@@ -293,6 +295,22 @@ def build_parser() -> argparse.ArgumentParser:
     block_parser.add_argument("--reason")
     block_parser.add_argument("--clear", action="store_true")
     block_parser.set_defaults(func=command_block)
+
+    judge_parser = subparsers.add_parser("judge")
+    judge_parser.add_argument("--slug", required=True)
+    judge_parser.add_argument("--stage", required=True, choices=CHECKPOINT_STAGES)
+    judge_parser.add_argument("--json", action="store_true")
+    judge_parser.add_argument("--prompt-override", type=Path)
+    judge_parser.add_argument("--override-reason")
+    judge_parser.add_argument("--migration-bypass", action="store_true")
+    judge_parser.set_defaults(func=lambda args: run_judge(
+        args.slug,
+        args.stage,
+        json_output=args.json,
+        prompt_override=args.prompt_override,
+        override_reason=args.override_reason,
+        migration_bypass=args.migration_bypass,
+    ))
 
     discover_parser = subparsers.add_parser("discover")
     discover_parser.add_argument("--slug", required=True)
@@ -354,6 +372,10 @@ def build_parser() -> argparse.ArgumentParser:
     deliver_parser.add_argument("--draft", action="store_true")
     deliver_parser.add_argument("--base")
     deliver_parser.add_argument("--title")
+    deliver_parser.add_argument("--override-judges", action="store_true")
+    deliver_parser.add_argument("--reason")
+    deliver_parser.add_argument("--refresh", action="store_true")
+    deliver_parser.add_argument("--resume-merge-wait", action="store_true")
     deliver_parser.add_argument("--watch-ci", action="store_true")
     deliver_parser.add_argument("--interval", type=int, default=10)
     deliver_parser.add_argument("--merge-when-green", action="store_true")
