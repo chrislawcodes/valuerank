@@ -57,6 +57,17 @@ should_check() {
     src/*) return 1 ;;
   esac
 
+  # Skip Feature Factory / review-lens workflow tooling.
+  # These are orchestration scripts under docs/workflow/, not cloud/*
+  # application code. They legitimately grow larger because they're glue
+  # between subprocesses (codex/gemini/claude CLIs, gh, git) where each
+  # code path has its own I/O contract. Splitting them into many small
+  # modules makes the spec-time reasoning harder, not easier.
+  # Scoped narrowly so real application drift can't hide here.
+  case "$file" in
+    docs/workflow/operations/codex-skills/*) return 1 ;;
+  esac
+
   return 0
 }
 
@@ -93,7 +104,12 @@ fi
 VIOLATIONS=0
 VIOLATION_LIST=""
 
-for file in "${FILES[@]}"; do
+# Empty array under `set -u` would error on "${FILES[@]}" dereference.
+if (( ${#FILES[@]} == 0 )); then
+  FILES=()
+fi
+
+for file in "${FILES[@]+"${FILES[@]}"}"; do
   full_path="$REPO_ROOT/$file"
   lines=$(count_lines "$full_path")
   if (( lines > MAX_LINES )); then
