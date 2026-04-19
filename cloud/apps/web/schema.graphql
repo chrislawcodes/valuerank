@@ -1911,6 +1911,93 @@ type ProviderHealthStatus {
   remainingBudgetUsd: Float
 }
 
+type ConsistencyPerCondition {
+  matches: Int!
+  netPressureRank: Int!
+  scenarioId: String!
+  trials: Int!
+  winRate: Float!
+}
+
+type ConsistencyPerDomain {
+  ciHigh: Float!
+  ciLow: Float!
+  domainId: String!
+  domainName: String!
+  scenariosMeasured: Int!
+  value: Float!
+}
+
+type ConsistencyPerPair {
+  companionConditionIds: [String!]!
+  coherent: Boolean!
+  determinate: Boolean!
+  domainId: String!
+  pValue: Float
+  perCondition: [ConsistencyPerCondition!]!
+  primaryConditionIds: [String!]!
+  rho: Float
+  targetAnalysisRunId: String
+  targetCompanionRunId: String
+  valueKey: String!
+}
+
+type ConsistencyPerScenario {
+  ciHigh: Float!
+  ciLow: Float!
+  matches: Int!
+  p: Float!
+  scenarioId: String!
+  trials: Int!
+}
+
+type Coherence {
+  coherentPairs: Int!
+  determinatePairs: Int!
+  indeterminatePairs: Int!
+  perPair: [ConsistencyPerPair!]!
+  value: Float!
+}
+
+type InsufficientModel {
+  label: String!
+  modelId: String!
+  providerName: String!
+  reason: String!
+}
+
+type ModelConsistency {
+  coherence: Coherence!
+  label: String!
+  modelId: String!
+  orderEffect: OrderEffect!
+  providerName: String!
+  repeatability: Repeatability!
+}
+
+type ModelsConsistencyResult {
+  insufficient: [InsufficientModel!]!
+  models: [ModelConsistency!]!
+}
+
+type OrderEffect {
+  flippedPct: Float!
+  noisyPct: Float!
+  notApplicable: Boolean!
+  samePct: Float!
+}
+
+type Repeatability {
+  betweenScenarioSd: Float!
+  ciHigh: Float!
+  ciLow: Float!
+  perDomain: [ConsistencyPerDomain!]!
+  perScenario: [ConsistencyPerScenario!]!
+  scenariosMeasured: Int!
+  value: Float!
+  withinScenarioSd: Float!
+}
+
 type Query {
   """
   Get the average token statistics across all models. Used as fallback when model-specific stats are unavailable.
@@ -2009,6 +2096,7 @@ type Query {
     """Number of results to skip (default: 0)"""
     offset: Int
   ): [AvailableModel!]!
+  modelsConsistency(domainId: ID, minScenarios: Int, providerId: ID, signature: String!): ModelsConsistencyResult!
 
   """Fetch a single definition by ID. Returns null if not found."""
   definition(

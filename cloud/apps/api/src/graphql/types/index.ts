@@ -26,6 +26,7 @@ import './probe-result.js';
 // Model types
 import './available-model.js';
 import './models-analysis.js';
+import './models-consistency.js';
 
 // LLM Provider types
 import './llm-provider.js';
