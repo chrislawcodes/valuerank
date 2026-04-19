@@ -1,5 +1,6 @@
 import { DOMAIN_ANALYSIS_VALUE_KEYS, toPascalCaseKey, type DomainAnalysisValueKey } from '../domain-analysis-values.js';
 import { JOB_CHOICE_VALUE_STATEMENTS, labelFromBody } from '@valuerank/shared';
+import { stripLevelWords } from './decision-model-level-words.js';
 import type {
   DecisionDirection,
   DecisionStrength,
@@ -174,13 +175,21 @@ export function resolveValueKeyFromText(
   if (normalized.length === 0) {
     return null;
   }
+  const normalizedStripped = stripLevelWords(normalized);
 
   const prefix = labelPrefix ?? '';
   let resolved: DomainAnalysisValueKey | null = null;
   for (const entry of valueStatements) {
     const valueKey = toPascalCaseKey(entry.token) as DomainAnalysisValueKey;
     const label = normalizeJobChoiceLabelText(labelFromBody(entry.body, prefix));
-    if (!label || !normalized.includes(label)) {
+    if (!label) {
+      continue;
+    }
+    // Try exact substring first; fall back to a level-word-stripped match so
+    // responses like "with full freedom in how they live" still resolve to a
+    // label that reads "with freedom in how they live".
+    const matched = normalized.includes(label) || normalizedStripped.includes(label);
+    if (!matched) {
       continue;
     }
     if (resolved !== null && resolved !== valueKey) {

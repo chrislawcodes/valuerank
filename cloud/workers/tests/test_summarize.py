@@ -1122,6 +1122,74 @@ class TestRunSummarize:
         assert result["decisionSource"] == "deterministic"
         assert "relaxed" not in result["decisionMetadata"]["parsePath"]
 
+    def test_relaxed_match_drops_level_word_full(self) -> None:
+        """Model echoes the level word (full) into a level-agnostic scale label.
+
+        Reproduces an observed Grok 4.1 fast-reasoning failure on the
+        national-priorities domain where the model wrote
+        '...with full freedom in how they live' but the canonical scale
+        label is '...with freedom in how they live' (level-agnostic).
+        Stripping the 5 level preset words during relaxed matching
+        recovers the correct decision code.
+        """
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "One program provides citizens with full freedom in how they live...\n"
+                        "One program provides citizens with negligible variety and excitement in their daily lives...\n\n"
+                        "Give me your judgment on the following scale:\n\n"
+                        "- Strongly support the program that provides citizens with freedom in how they live\n"
+                        "- Somewhat support the program that provides citizens with freedom in how they live\n"
+                        "- Neutral / Unsure\n"
+                        "- Somewhat support the program that provides citizens with variety and excitement in their daily lives\n"
+                        "- Strongly support the program that provides citizens with variety and excitement in their daily lives"
+                    ),
+                    "targetResponse": (
+                        "Strongly support the program that provides citizens with full freedom in how they live\n\n"
+                        "Freedom in goals and actions is the bedrock of human flourishing..."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "5"
+        assert result["decisionSource"] == "deterministic"
+        assert "relaxed" in result["decisionMetadata"]["parsePath"]
+
+    def test_relaxed_match_drops_level_word_negligible(self) -> None:
+        """Model echoes the negligible level into the scale label."""
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "Give me your judgment on the following scale:\n\n"
+                        "- Strongly support the program that provides citizens with personal security in everyday life\n"
+                        "- Somewhat support the program that provides citizens with personal security in everyday life\n"
+                        "- Neutral / Unsure\n"
+                        "- Somewhat support the program that provides citizens with enjoyment in their daily experience\n"
+                        "- Strongly support the program that provides citizens with enjoyment in their daily experience"
+                    ),
+                    "targetResponse": (
+                        "Somewhat support the program that provides citizens with negligible enjoyment in their daily experience\n\n"
+                        "While enjoyment is light here, the alternative offers stronger security."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "2"
+        assert result["decisionSource"] == "deterministic"
+        assert "relaxed" in result["decisionMetadata"]["parsePath"]
+
     @patch("summarize.extract_decision_code")
     def test_uses_default_model(
         self, mock_extract: MagicMock
