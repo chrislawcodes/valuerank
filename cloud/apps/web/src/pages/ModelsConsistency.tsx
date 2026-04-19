@@ -13,7 +13,6 @@ import {
   type ModelsConsistencyQueryResult,
   type ModelsConsistencyQueryVariables,
 } from '../api/operations/modelsConsistency';
-import { ModelsTabNav } from '../components/models/ModelsTabNav';
 import { ConsistencyFilters } from '../components/models/ConsistencyFilters';
 import { ConsistencyScatter } from '../components/models/ConsistencyScatter';
 import { ConsistencyTable } from '../components/models/ConsistencyTable';
@@ -152,14 +151,9 @@ export function ModelsConsistency() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Models / Consistency</h1>
-            <p className="text-sm text-gray-600">Repeatability shows same-answer behavior. Coherence shows whether answers follow pressure.</p>
-          </div>
-          <ModelsTabNav domainId={urlDomainId ?? 'all'} signature={selectedSignature} />
-        </div>
+      <div className="space-y-2">
+        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Models / Consistency</h1>
+        <p className="text-sm text-gray-600">Repeatability shows same-answer behavior. Coherence shows whether answers follow pressure.</p>
       </div>
 
       <ConsistencyFilters
