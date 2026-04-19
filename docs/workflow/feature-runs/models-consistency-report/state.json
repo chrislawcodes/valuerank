@@ -43,7 +43,13 @@
     "unresolved": []
   },
   "delivery": {},
-  "dirty_overrides": {},
+  "dirty_overrides": {
+    "allowed_dirty_paths": [
+      ".claude/scheduled_tasks.lock"
+    ],
+    "used": true,
+    "updated_at": 1776612764
+  },
   "parallel_analysis": {
     "reviewed": true,
     "found": false,

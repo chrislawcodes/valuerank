@@ -20,6 +20,9 @@ Four implementation slices, each under ~300 lines: (A) API calculation + resolve
 - review: reviews/tasks.codex.execution-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
 - review: reviews/tasks.gemini.coverage-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
 - review: reviews/tasks.codex.dependency-order-adversarial.review.md | status: accepted | note: HIGH findings fixed in tasks.md: (1) ConsistencyPerPair extended with conditionsMeasured + perCondition array (with matches, trials, scenarioId) so MetricDisclosure Level-4 rows have the data they need; (2) A4 step 11 now explicitly says 'move' models below minScenarios (remove from models[] AND push to insufficient[]) so no double-counting. MEDIUM URL-writeback fixed in B4: defaults are written back via setSearchParams on first render. MEDIUM runMatchesSignature on historical data accepted as residual risk — acceptable v1 trade-off.
+- review: reviews/diff.codex.correctness-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
+- review: reviews/diff.codex.regression-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
+- review: reviews/diff.gemini.quality-adversarial.review.md | status: accepted | note: HIGH minScenarios float bug fixed in commit f8aeaf75: parseInt with step={1} and fallback to 1. MEDIUM request waterfall, scatter overlap, fragile state derivation, pagination absence, all-domains deep-link edge case, hardcoded threshold text accepted as residual risks — acceptable v1 trade-offs; documented for follow-up. LOW selection stability on filter change and table-header accessibility accepted as follow-up items.
 
 ## Technical Context
 

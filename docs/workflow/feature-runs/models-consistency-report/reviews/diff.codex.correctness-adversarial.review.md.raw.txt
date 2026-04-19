@@ -1,0 +1,8 @@
+## Findings
+- [UNVERIFIED] Medium - Provider filtering appears to use provider names, not IDs. `ConsistencyFilters` populates the dropdown from `model.providerName`, but the query variable is named `providerId`. If the backend expects a real ID, selecting a provider will send the wrong value and the filter will silently misbehave or return the wrong models.
+- [UNVERIFIED] Medium - The transcript drill-downs always hardcode `repeatPattern: 'noisy'`. Both the table and drill view build the transcript URL with that fixed value, regardless of which pair is being opened. If the target transcript page distinguishes repeat patterns, these links can land on the wrong evidence for non-noisy cases.
+- [UNVERIFIED] Medium - The page’s implicit defaults depend on array order. `ModelsConsistency.tsx` picks `domains[0]` and `domainAvailableSignatures[0]` as the initial scope/signature. If the API does not guarantee a stable sort, the same entry point can resolve to different domain/signature combinations across requests, making the report non-deterministic.
+
+## Residual Risks
+- No backend schema or resolver context was provided, so the true contract for `providerId`, `repeatPattern`, and available signature ordering could not be verified.
+- I could not verify router wiring or surrounding page integration, so there may still be accessibility or navigation gaps outside this diff.
