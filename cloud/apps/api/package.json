@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "create-user": "tsx --env-file=../../.env src/cli/create-user.ts",
     "normalize:aggregate-analysis": "tsx --env-file=../../.env src/cli/normalize-aggregate-analysis-output.ts",
-    "shadow:decision-model": "tsx --env-file=../../.env src/cli/decision-model-shadow-validation.ts"
+    "shadow:decision-model": "tsx --env-file=../../.env src/cli/decision-model-shadow-validation.ts",
+    "emit-schema": "LOG_LEVEL=silent DATABASE_URL=postgresql://x:x@localhost/x JWT_SECRET=placeholder-for-schema-emit-xxxxxxxxx npx tsx src/scripts/emit-schema.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.24.3",

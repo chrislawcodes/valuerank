@@ -146,15 +146,6 @@ type ApiKey {
   name: String!
 }
 
-type AssumptionsTempZeroResult {
-  domainName: String!
-  generatedAt: DateTime!
-  note: String
-  preflight: TempZeroPreflight!
-  rows: [TempZeroRow!]!
-  summary: TempZeroSummary!
-}
-
 """Type of action that was audited"""
 enum AuditAction {
   ACTION
@@ -320,15 +311,6 @@ type CompletionEvent {
   success: Boolean!
 }
 
-type ConditionPlan {
-  conditionKey: String!
-  currentSEM: Float
-  currentSamples: Int!
-  neededSamples: Int!
-  scenarioId: String!
-  status: String!
-}
-
 """A scenario with high disagreement across models"""
 type ContestedScenario {
   modelScores: JSON!
@@ -406,21 +388,6 @@ input CreateDomainContextInput {
   text: String!
 }
 
-input CreatePairedVignetteInput {
-  contextId: ID!
-  domainId: ID!
-  levelPresetVersionId: ID
-  name: String!
-  preambleVersionId: ID
-  valueFirstId: ID!
-  valueSecondId: ID!
-}
-
-type CreatePairedVignetteResult {
-  definitionA: Definition!
-  definitionB: Definition!
-}
-
 input CreateLevelPresetInput {
   l1: String!
   l2: String!
@@ -451,6 +418,21 @@ input CreateLlmModelInput {
   setAsDefault: Boolean
 }
 
+input CreatePairedVignetteInput {
+  contextId: ID!
+  domainId: ID!
+  levelPresetVersionId: ID
+  name: String!
+  preambleVersionId: ID
+  valueFirstId: ID!
+  valueSecondId: ID!
+}
+
+type CreatePairedVignetteResult {
+  definitionA: Definition!
+  definitionB: Definition!
+}
+
 input CreatePreambleInput {
   content: String!
   name: String!
@@ -471,18 +453,6 @@ input CreateValueStatementInput {
 }
 
 scalar DateTime
-
-type DebugMismatchResult {
-  decisionCodes: [String]!
-  modelId: String!
-  promptHashes: [String]!
-  promptHashesMatch: Boolean
-  rawResponseSummary: String!
-  scenarioId: String!
-  systemFingerprints: [String]!
-  systemFingerprintsMatch: Boolean
-  transcriptCount: Int!
-}
 
 """
 A scenario definition that can be versioned through parent-child relationships
@@ -671,13 +641,16 @@ type Domain {
   defaultContextId: String
   defaultLevelPresetVersion: LevelPresetVersion
   defaultLevelPresetVersionId: String
+  defaultModelIds: [String!]!
   defaultPreambleVersion: PreambleVersion
   defaultPreambleVersionId: String
   definitionCount: Int!
   definitions: [Definition!]!
   id: ID!
+  labelPrefix: String
   name: String!
   normalizedName: String!
+  sentencePrefix: String
   updatedAt: DateTime!
 }
 
@@ -855,16 +828,21 @@ type DomainEvaluation {
   domainNameAtLaunch: String!
   failedDefinitions: Int!
   id: ID!
+  launchableDefinitionIds: [ID!]!
+  launchableDefinitions: [DomainEvaluationLaunchableDefinition!]!
   maxBudgetUsd: Float
   memberCount: Int!
   members: [DomainEvaluationMember!]!
   models: [String!]!
   projectedCostUsd: Float!
+  samplePercentage: Int
+  samplesPerScenario: Int
   scopeCategory: String!
   skippedForBudget: Int!
   startedAt: DateTime
   startedRuns: Int!
   status: String!
+  targetBatchCount: Int
   temperature: Float
 }
 
@@ -908,11 +886,18 @@ type DomainEvaluationEstimateModel {
   supportsTemperature: Boolean!
 }
 
+type DomainEvaluationLaunchableDefinition {
+  definitionId: ID!
+  definitionName: String!
+  pairKey: String
+}
+
 type DomainEvaluationMember {
   createdAt: DateTime!
   definitionIdAtLaunch: ID!
   definitionNameAtLaunch: String!
   domainIdAtLaunch: ID!
+  modelIds: [String!]!
   runCategory: String!
   runCompletedAt: DateTime
   runId: ID!
@@ -977,12 +962,13 @@ type DomainRunSummary {
 
 """Current domain settings: pickers and value statements with versions"""
 type DomainSettings {
-  labelPrefix: String
-  sentencePrefix: String
   contextId: String
+  defaultModelIds: [String!]!
   domainId: ID!
+  labelPrefix: String
   levelPresetVersionId: String
   preambleVersionId: String
+  sentencePrefix: String
   valueStatements: [ValueStatementWithVersions!]!
 }
 
@@ -1080,6 +1066,18 @@ type DomainValueCoverageResult {
   cells: [DomainValueCoverageCell!]!
   domainId: String!
   values: [String!]!
+}
+
+input EnsureDomainVignettePairInput {
+  domainId: ID!
+  valueFirstId: ID!
+  valueSecondId: ID!
+}
+
+type EnsureDomainVignettePairResult {
+  definitionAId: String
+  definitionBId: String
+  status: VignettePairStatus!
 }
 
 """Real-time execution metrics for monitoring parallel processing"""
@@ -1229,23 +1227,6 @@ type JobTypeStatus {
 
   """Job type name (e.g., probe_scenario)"""
   type: String!
-}
-
-type LaunchAssumptionsTempZeroPayload {
-  failedVignetteIds: [String!]!
-  modelCount: Int!
-  runIds: [String!]!
-  startedRuns: Int!
-  totalVignettes: Int!
-}
-
-type LaunchOrderInvariancePayload {
-  approvedPairs: Int!
-  failedDefinitionIds: [String!]!
-  modelCount: Int!
-  runIds: [String!]!
-  runsByVariantType: JSON!
-  startedRuns: Int!
 }
 
 """
@@ -1402,12 +1383,6 @@ type ModelCostEstimate {
   totalCost: Float!
 }
 
-type ModelPlan {
-  conditions: [ConditionPlan!]!
-  modelId: String!
-  totalNeededSamples: Int!
-}
-
 """Token usage statistics for a model, used for cost prediction"""
 type ModelTokenStats {
   """Average input tokens per probe based on historical data"""
@@ -1426,23 +1401,33 @@ type ModelTokenStats {
   sampleCount: Int!
 }
 
-enum VignettePairStatus {
-  CREATED
-  UPDATED
-  SKIPPED
-  SKIPPED_HAS_RUNS
+"""A domain-level contribution for a model/value pair"""
+type ModelsAnalysisDomainBreakdown {
+  domainId: String!
+  domainName: String!
+  evidenceWeight: Int
+  winRate: Float!
 }
 
-type EnsureDomainVignettePairResult {
-  status: VignettePairStatus!
-  definitionAId: ID
-  definitionBId: ID
+"""A model row in the models analysis matrix"""
+type ModelsAnalysisModelResult {
+  label: String!
+  modelId: String!
+  values: [ModelsAnalysisValueResult!]!
 }
 
-input EnsureDomainVignettePairInput {
-  domainId: ID!
-  valueFirstId: ID!
-  valueSecondId: ID!
+"""Cross-domain model analysis matrix results"""
+type ModelsAnalysisResult {
+  models: [ModelsAnalysisModelResult!]!
+}
+
+"""A model/value summary across eligible domains"""
+type ModelsAnalysisValueResult {
+  domains: [ModelsAnalysisDomainBreakdown!]!
+  eligibleDomainCount: Int!
+  pooledWinRate: Float
+  stabilityScore: Float
+  valueKey: String!
 }
 
 type Mutation {
@@ -1456,6 +1441,7 @@ type Mutation {
   ): Definition!
   assignDomainToDefinitions(definitionIds: [ID!]!, domainId: ID): DomainMutationResult!
   assignDomainToDefinitionsByFilter(domainId: ID, hasRuns: Boolean, rootOnly: Boolean, search: String, sourceDomainId: ID, tagIds: [ID!], withoutDomain: Boolean): DomainMutationResult!
+  backfillDomainEvaluationModels(definitionIds: [ID!], domainEvaluationId: ID!, modelIds: [String!]!, targetBatchCount: Int): DomainTrialRunResult!
 
   "\n      Cancel an evaluation run.\n\n      Jobs currently being processed will complete, but all pending jobs\n      will be removed from the queue. Completed results are preserved.\n\n      Requires authentication. Run must be in PENDING, RUNNING, or PAUSED state.\n    "
   cancelRun(
@@ -1495,13 +1481,12 @@ type Mutation {
   createDefinition(input: CreateDefinitionInput!): Definition!
   createDomain(name: String!): Domain!
   createDomainContext(input: CreateDomainContextInput!): DomainContext!
-  ensureDomainVignettePair(input: EnsureDomainVignettePairInput!): EnsureDomainVignettePairResult!
   createJobChoicePair(input: CreatePairedVignetteInput!): CreatePairedVignetteResult! @deprecated(reason: "Renamed to createPairedVignette")
-  createPairedVignette(input: CreatePairedVignetteInput!): CreatePairedVignetteResult!
   createLevelPreset(l1: String!, l2: String!, l3: String!, l4: String!, l5: String!, name: String!): LevelPreset!
 
   """Create a new LLM model under a provider"""
   createLlmModel(input: CreateLlmModelInput!): LlmModel!
+  createPairedVignette(input: CreatePairedVignetteInput!): CreatePairedVignetteResult!
 
   """Create a new preamble"""
   createPreamble(input: CreatePreambleInput!): Preamble!
@@ -1556,6 +1541,7 @@ type Mutation {
 
   """Duplicate a survey into a new survey family at version 1."""
   duplicateSurvey(id: ID!, name: String): Experiment!
+  ensureDomainVignettePair(input: EnsureDomainVignettePairInput!): EnsureDomainVignettePairResult!
 
   """Export a definition as markdown in devtool-compatible format"""
   exportDefinitionAsMd(
@@ -1573,8 +1559,6 @@ type Mutation {
   Fork an existing definition. By default inherits all content from parent (sparse v2 storage).
   """
   forkDefinition(input: ForkDefinitionInput!): Definition!
-  launchAssumptionsTempZero(force: Boolean = false): LaunchAssumptionsTempZeroPayload!
-  launchOrderInvariance(force: Boolean = false): LaunchOrderInvariancePayload!
 
   "\n      Pause the global job queue.\n\n      All job processing will stop until the queue is resumed.\n      Jobs will continue to be queued but not processed.\n\n      Requires authentication.\n    "
   pauseQueue: QueueStatus!
@@ -1602,6 +1586,7 @@ type Mutation {
     """The ID of the run to recover"""
     runId: ID!
   ): RecoverRunPayload!
+  refreshDomainAnalysis(domainId: ID!, signature: String): DomainAnalysisRefreshResult!
 
   """
   Manually trigger scenario regeneration for a definition. Queues a new expansion job.
@@ -1619,7 +1604,6 @@ type Mutation {
     """Tag to remove"""
     tagId: String!
   ): Definition!
-  refreshDomainAnalysis(domainId: ID!, signature: String): DomainAnalysisRefreshResult!
   renameDomain(id: ID!, name: String!): Domain!
 
   "\n      Restart summarization for a run.\n\n      Only works when run is in a terminal state (COMPLETED/FAILED/CANCELLED).\n      By default, only re-queues transcripts without summaries or with errors.\n      With force=true, re-queues all transcripts.\n\n      Requires authentication.\n    "
@@ -1640,7 +1624,6 @@ type Mutation {
     runId: ID!
   ): Run!
   retryDomainTrialCell(definitionId: ID!, domainId: ID!, modelId: String!, scopeCategory: String, temperature: Float): RetryDomainTrialCellResult!
-  reviewOrderInvariancePair(pairId: ID!, reviewNotes: String, reviewStatus: String!): ReviewOrderInvariancePairPayload!
 
   "\n      Revoke (delete) an API key.\n      Requires authentication and ownership of the key.\n\n      Returns true if the key was successfully revoked.\n      Throws NotFoundError if the key doesn't exist or belongs to another user.\n    "
   revokeApiKey(
@@ -1654,8 +1637,8 @@ type Mutation {
     """Model ID to set as default"""
     id: String!
   ): SetDefaultModelResult!
-  setDomainDefaults(defaultContextId: ID, defaultLevelPresetVersionId: ID, defaultPreambleVersionId: ID, id: ID!): Domain!
-  setDomainSettings(contextId: ID, domainId: ID!, labelPrefix: String, levelPresetVersionId: ID, preambleVersionId: ID, sentencePrefix: String, valueStatements: [ValueStatementInput!]!): Domain!
+  setDomainDefaults(defaultContextId: ID, defaultLevelPresetVersionId: ID, defaultModelIds: [String!], defaultPreambleVersionId: ID, id: ID!): Domain!
+  setDomainSettings(contextId: ID, defaultModelIds: [String!], domainId: ID!, labelPrefix: String, levelPresetVersionId: ID, preambleVersionId: ID, sentencePrefix: String, valueStatements: [ValueStatementInput!]!): Domain!
 
   """Set the budget balance for a provider (null disables budget tracking)"""
   setProviderBalance(
@@ -1720,7 +1703,6 @@ type Mutation {
   ): Definition!
   updateDomainContext(id: ID!, input: UpdateDomainContextInput!): DomainContext!
   updateJobChoicePair(input: UpdatePairedVignetteInput!): CreatePairedVignetteResult! @deprecated(reason: "Renamed to updatePairedVignette")
-  updatePairedVignette(input: UpdatePairedVignetteInput!): CreatePairedVignetteResult!
   updateLevelPreset(id: ID!, l1: String!, l2: String!, l3: String!, l4: String!, l5: String!): LevelPreset!
 
   """Update an LLM model (display name, costs, API config)"""
@@ -1736,6 +1718,7 @@ type Mutation {
     id: String!
     input: UpdateLlmProviderInput!
   ): LlmProvider!
+  updatePairedVignette(input: UpdatePairedVignetteInput!): CreatePairedVignetteResult!
 
   """Update a preamble (creates a new version)"""
   updatePreamble(id: ID!, input: UpdatePreambleInput!): Preamble!
@@ -1764,171 +1747,6 @@ type Mutation {
     transcriptId: ID!
   ): Transcript!
   updateValueStatement(id: ID!, input: UpdateValueStatementInput!): ValueStatement!
-}
-
-type OrderInvarianceExclusionCount {
-  count: Int!
-  reason: String!
-}
-
-type OrderInvarianceLaunchRun {
-  completedAt: DateTime
-  completedTrials: Int!
-  failedTrials: Int!
-  isStalled: Boolean!
-  percentComplete: Float!
-  runId: ID!
-  startedAt: DateTime
-  status: String!
-  targetedTrials: Int!
-}
-
-type OrderInvarianceLaunchStatus {
-  activeRuns: Int!
-  completedRuns: Int!
-  completedTrials: Int!
-  failedRuns: Int!
-  failedTrials: Int!
-  failureSummaries: [String!]!
-  generatedAt: DateTime!
-  isComplete: Boolean!
-  percentComplete: Float!
-  runs: [OrderInvarianceLaunchRun!]!
-  stalledModels: [String!]!
-  targetedTrials: Int!
-  totalRuns: Int!
-}
-
-type OrderInvarianceModelMetrics {
-  matchCount: Int!
-  matchEligibleCount: Int!
-  matchRate: Float
-  modelId: String!
-  modelLabel: String!
-  pairLevelMarginSummary: PairLevelMarginSummary
-  scaleOrderEligibleCount: Int!
-  scaleOrderExcludedCount: Int!
-  scaleOrderPull: String!
-  scaleOrderReversalRate: Float
-  valueOrderEligibleCount: Int!
-  valueOrderExcludedCount: Int!
-  valueOrderPull: String!
-  valueOrderReversalRate: Float
-  withinCellDisagreementRate: Float
-}
-
-type OrderInvarianceResult {
-  generatedAt: DateTime!
-  modelMetrics: [OrderInvarianceModelMetrics!]!
-  rows: [OrderInvarianceRow!]!
-  summary: OrderInvarianceSummary!
-}
-
-type OrderInvarianceReviewResult {
-  generatedAt: DateTime!
-  summary: OrderInvarianceReviewSummary!
-  vignettes: [OrderInvarianceReviewVignette!]!
-}
-
-type OrderInvarianceReviewSummary {
-  approvedVignettes: Int!
-  launchReady: Boolean!
-  pendingVignettes: Int!
-  rejectedVignettes: Int!
-  reviewedVignettes: Int!
-  totalVignettes: Int!
-}
-
-type OrderInvarianceReviewVignette {
-  baselineName: String!
-  baselineText: String!
-  conditionKey: String!
-  conditionPairCount: Int!
-  flippedName: String!
-  flippedText: String!
-  pairId: ID!
-  reviewNotes: String
-  reviewStatus: String!
-  reviewedAt: DateTime
-  reviewedBy: String
-  sourceScenarioId: ID!
-  variantScenarioId: ID!
-  variantType: String
-  vignetteId: ID!
-  vignetteTitle: String!
-}
-
-type OrderInvarianceRow {
-  conditionKey: String!
-  isMatch: Boolean
-  majorityVoteBaseline: Int
-  majorityVoteFlipped: Int
-  mismatchType: String
-  modelId: String!
-  modelLabel: String!
-  ordinalDistance: Int
-  variantType: String
-  vignetteId: ID!
-  vignetteTitle: String!
-}
-
-type OrderInvarianceSummary {
-  comparablePairs: Int!
-  exactMatchRate: Float
-  excludedPairs: [OrderInvarianceExclusionCount!]!
-  matchComparablePairs: Int!
-  matchRate: Float
-  missingPairs: Int!
-  presentationComparablePairs: Int!
-  presentationEffectMAD: Float
-  presentationMissingPairs: Int!
-  qualifyingPairs: Int!
-  scaleComparablePairs: Int!
-  scaleEffectMAD: Float
-  scaleMissingPairs: Int!
-  sensitiveModelCount: Int!
-  sensitiveVignetteCount: Int!
-  status: String!
-  totalCandidatePairs: Int!
-}
-
-type OrderInvarianceTranscript {
-  attributeALevel: Int
-  attributeBLevel: Int
-  content: JSON
-  createdAt: DateTime!
-  decisionCode: String
-  decisionCodeSource: String
-  durationMs: Int!
-  estimatedCost: Float
-  id: ID!
-  lastAccessedAt: DateTime
-  modelId: String!
-  modelVersion: String
-  orderLabel: String!
-  runId: ID!
-  scenarioId: ID!
-  tokenCount: Int!
-  turnCount: Int!
-}
-
-type OrderInvarianceTranscriptResult {
-  attributeALabel: String
-  attributeBLabel: String
-  conditionKey: String!
-  generatedAt: DateTime!
-  modelId: String!
-  modelLabel: String!
-  transcripts: [OrderInvarianceTranscript!]!
-  vignetteId: ID!
-  vignetteTitle: String!
-}
-
-type PairLevelMarginSummary {
-  mean: Float
-  median: Float
-  p25: Float
-  p75: Float
 }
 
 """A reusable preamble that can be prepended to scenarios"""
@@ -2093,31 +1911,6 @@ type ProviderHealthStatus {
   remainingBudgetUsd: Float
 }
 
-type ModelsAnalysisDomainBreakdown {
-  domainId: String!
-  domainName: String!
-  evidenceWeight: Int!
-  winRate: Float!
-}
-
-type ModelsAnalysisModelResult {
-  label: String!
-  modelId: String!
-  values: [ModelsAnalysisValueResult!]!
-}
-
-type ModelsAnalysisResult {
-  models: [ModelsAnalysisModelResult!]!
-}
-
-type ModelsAnalysisValueResult {
-  domains: [ModelsAnalysisDomainBreakdown!]!
-  eligibleDomainCount: Int!
-  pooledWinRate: Float
-  stabilityScore: Float
-  valueKey: String!
-}
-
 type Query {
   """
   Get the average token statistics across all models. Used as fallback when model-specific stats are unavailable.
@@ -2192,11 +1985,6 @@ type Query {
     """Number of results to skip (default: 0)"""
     offset: Int
   ): [ApiKey!]!
-  assumptionsOrderInvariance(directionOnly: Boolean, trimOutliers: Boolean): OrderInvarianceResult!
-  assumptionsOrderInvarianceLaunchStatus(runIds: [ID!]!): OrderInvarianceLaunchStatus!
-  assumptionsOrderInvarianceReview: OrderInvarianceReviewResult!
-  assumptionsOrderInvarianceTranscripts(conditionKey: String!, modelId: String!, vignetteId: ID!): OrderInvarianceTranscriptResult!
-  assumptionsTempZero(directionOnly: Boolean): AssumptionsTempZeroResult!
 
   "\n      Query audit logs with optional filters and pagination.\n\n      Returns a paginated connection with audit log entries.\n      Use the 'after' cursor for pagination through large result sets.\n    "
   auditLogs(
@@ -2221,8 +2009,6 @@ type Query {
     """Number of results to skip (default: 0)"""
     offset: Int
   ): [AvailableModel!]!
-  modelsAnalysis(domainId: ID): ModelsAnalysisResult!
-  debugAssumptionsMismatches(modelId: String!, scenarioId: String!): DebugMismatchResult!
 
   """Fetch a single definition by ID. Returns null if not found."""
   definition(
@@ -2444,6 +2230,13 @@ type Query {
     """Model IDs to get stats for (returns all if not specified)"""
     modelIds: [String!]
   ): [ModelTokenStats!]!
+  modelsAnalysis(
+    """Optional domain ID to scope the matrix to a single domain"""
+    domainId: ID
+
+    """Optional batch signature to filter snapshots (e.g. vnewtd, vnewt0)"""
+    signature: String
+  ): ModelsAnalysisResult!
 
   """Get a specific preamble by ID"""
   preamble(id: ID!): Preamble
@@ -2633,7 +2426,6 @@ type Query {
     """Search tags by name (contains match)"""
     search: String
   ): [Tag!]!
-  tempZeroVerificationReport: TempZeroVerificationReport
   valueStatement(id: ID!): ValueStatement
   valueStatements(domainId: ID!): [ValueStatement!]!
 
@@ -2775,12 +2567,6 @@ type RetryDomainTrialCellResult {
   success: Boolean!
 }
 
-type ReviewOrderInvariancePairPayload {
-  pairId: ID!
-  reviewStatus: String!
-  reviewedAt: DateTime!
-}
-
 """A saved record of a model evaluation or launch"""
 type Run {
   """Most recent analysis result for this run"""
@@ -2893,9 +2679,6 @@ type Run {
   """
   summarizeProgress: RunProgress
 
-  """Count of summarized transcripts that could not be scored"""
-  unresolvableTranscriptCount: UnresolvableCount
-
   """Tags associated with this run"""
   tags: [Tag!]!
   transcriptCount: Int!
@@ -2909,6 +2692,9 @@ type Run {
     """Number of transcripts to skip for pagination (default: 0)"""
     offset: Int
   ): [Transcript!]!
+
+  """Count of summarized transcripts that could not be scored"""
+  unresolvableTranscriptCount: UnresolvableCount
   updatedAt: DateTime!
 }
 
@@ -3110,86 +2896,6 @@ enum TaskStatus {
   RUNNING
 }
 
-type TempZeroDecision {
-  content: JSON
-  decision: String
-  label: String!
-  transcriptId: String
-}
-
-type TempZeroModelVerification {
-  adapterModes: [String!]!
-  decisionMatchRatePct: Float
-  fingerprintDriftPct: Float
-  modelId: String!
-  promptHashStabilityPct: Float
-  transcriptCount: Int!
-}
-
-type TempZeroPreflight {
-  estimatedCostUsd: Float
-  estimatedInputTokens: Int
-  estimatedOutputTokens: Int
-  models: [TempZeroPreflightModel!]!
-  projectedComparisons: Int!
-  projectedPromptCount: Int!
-  runsToLaunch: Int!
-  selectedSignature: String
-  title: String!
-  totalBatchesToRun: Int!
-  vignettes: [TempZeroPreflightVignette!]!
-}
-
-type TempZeroPreflightModel {
-  adapterMode: String
-  label: String!
-  modelId: String!
-}
-
-type TempZeroPreflightVignette {
-  batchesToRun: Int!
-  conditionCount: Int!
-  rationale: String!
-  title: String!
-  vignetteId: ID!
-}
-
-type TempZeroRow {
-  batch1: String
-  batch2: String
-  batch3: String
-  conditionKey: String!
-  decisions: [TempZeroDecision!]!
-  isMatch: Boolean!
-  mismatchType: String
-  modelId: String!
-  modelLabel: String!
-  vignetteId: ID!
-  vignetteTitle: String!
-}
-
-type TempZeroSummary {
-  batchesRun: Int!
-  comparisons: Int!
-  differenceRate: Float
-  excludedComparisons: Int!
-  matchRate: Float
-  modelsTested: Int!
-  status: String!
-  title: String!
-  vignettesTested: Int!
-  worstModelId: String
-  worstModelLabel: String
-  worstModelMatchRate: Float
-}
-
-type TempZeroVerificationReport {
-  batchTimestamp: DateTime
-  generatedAt: DateTime!
-  models: [TempZeroModelVerification!]!
-  transcriptCount: Int!
-}
-
 """A transcript from a model conversation during a run"""
 type Transcript {
   content: JSON!
@@ -3200,7 +2906,7 @@ type Transcript {
   decisionMetadata: JSON
 
   """
-  Feature-flagged V2 decision envelope with raw evidence and canonical compatibility data
+  V2 decision envelope with raw evidence and canonical direction/strength decision
   """
   decisionModelV2: JSON
   definitionSnapshot: JSON
@@ -3277,6 +2983,16 @@ type TriggerRecoveryPayload {
   recovered: Int!
 }
 
+type UnresolvableByModel {
+  count: Int!
+  modelId: String!
+}
+
+type UnresolvableCount {
+  byModel: [UnresolvableByModel!]!
+  total: Int!
+}
+
 input UpdateDefinitionContentInput {
   """
   List of fields to clear local override for (inherit from parent). Valid values: template, dimensions, matching_rules
@@ -3310,16 +3026,6 @@ input UpdateDefinitionInput {
 
 input UpdateDomainContextInput {
   text: String!
-}
-
-input UpdatePairedVignetteInput {
-  contextId: ID!
-  definitionId: ID!
-  levelPresetVersionId: ID
-  name: String!
-  preambleVersionId: ID
-  valueFirstId: ID!
-  valueSecondId: ID!
 }
 
 input UpdateLevelPresetInput {
@@ -3357,6 +3063,16 @@ input UpdateLlmProviderInput {
 
   """Rate limit (requests per minute)"""
   requestsPerMinute: Int
+}
+
+input UpdatePairedVignetteInput {
+  contextId: ID!
+  definitionId: ID!
+  levelPresetVersionId: ID
+  name: String!
+  preambleVersionId: ID
+  valueFirstId: ID!
+  valueSecondId: ID!
 }
 
 input UpdatePreambleInput {
@@ -3454,6 +3170,13 @@ type ValueStatementWithVersions {
   token: String!
 }
 
+enum VignettePairStatus {
+  CREATED
+  SKIPPED
+  SKIPPED_HAS_RUNS
+  UPDATED
+}
+
 """Health status for Python workers"""
 type WorkerHealth {
   """API key configuration status by provider"""
@@ -3476,14 +3199,4 @@ type WorkerHealth {
 
   """Health check warnings"""
   warnings: [String!]!
-}
-
-type UnresolvableByModel {
-  modelId: String!
-  count: Int!
-}
-
-type UnresolvableCount {
-  total: Int!
-  byModel: [UnresolvableByModel!]!
 }

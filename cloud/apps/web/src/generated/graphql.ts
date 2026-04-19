@@ -143,16 +143,6 @@ export type ApiKey = {
   name: Scalars['String']['output'];
 };
 
-export type AssumptionsTempZeroResult = {
-  __typename?: 'AssumptionsTempZeroResult';
-  domainName: Scalars['String']['output'];
-  generatedAt: Scalars['DateTime']['output'];
-  note?: Maybe<Scalars['String']['output']>;
-  preflight: TempZeroPreflight;
-  rows: Array<TempZeroRow>;
-  summary: TempZeroSummary;
-};
-
 /** Type of action that was audited */
 export type AuditAction =
   | 'ACTION'
@@ -299,16 +289,6 @@ export type CompletionEvent = {
   success: Scalars['Boolean']['output'];
 };
 
-export type ConditionPlan = {
-  __typename?: 'ConditionPlan';
-  conditionKey: Scalars['String']['output'];
-  currentSEM?: Maybe<Scalars['Float']['output']>;
-  currentSamples: Scalars['Int']['output'];
-  neededSamples: Scalars['Int']['output'];
-  scenarioId: Scalars['String']['output'];
-  status: Scalars['String']['output'];
-};
-
 /** A scenario with high disagreement across models */
 export type ContestedScenario = {
   __typename?: 'ContestedScenario';
@@ -436,19 +416,6 @@ export type CreateValueStatementInput = {
   body: Scalars['String']['input'];
   domainId: Scalars['String']['input'];
   token: Scalars['String']['input'];
-};
-
-export type DebugMismatchResult = {
-  __typename?: 'DebugMismatchResult';
-  decisionCodes: Array<Maybe<Scalars['String']['output']>>;
-  modelId: Scalars['String']['output'];
-  promptHashes: Array<Maybe<Scalars['String']['output']>>;
-  promptHashesMatch?: Maybe<Scalars['Boolean']['output']>;
-  rawResponseSummary: Scalars['String']['output'];
-  scenarioId: Scalars['String']['output'];
-  systemFingerprints: Array<Maybe<Scalars['String']['output']>>;
-  systemFingerprintsMatch?: Maybe<Scalars['Boolean']['output']>;
-  transcriptCount: Scalars['Int']['output'];
 };
 
 /** A scenario definition that can be versioned through parent-child relationships */
@@ -593,13 +560,16 @@ export type Domain = {
   defaultContextId?: Maybe<Scalars['String']['output']>;
   defaultLevelPresetVersion?: Maybe<LevelPresetVersion>;
   defaultLevelPresetVersionId?: Maybe<Scalars['String']['output']>;
+  defaultModelIds: Array<Scalars['String']['output']>;
   defaultPreambleVersion?: Maybe<PreambleVersion>;
   defaultPreambleVersionId?: Maybe<Scalars['String']['output']>;
   definitionCount: Scalars['Int']['output'];
   definitions: Array<Definition>;
   id: Scalars['ID']['output'];
+  labelPrefix?: Maybe<Scalars['String']['output']>;
   name: Scalars['String']['output'];
   normalizedName: Scalars['String']['output'];
+  sentencePrefix?: Maybe<Scalars['String']['output']>;
   updatedAt: Scalars['DateTime']['output'];
 };
 
@@ -793,16 +763,21 @@ export type DomainEvaluation = {
   domainNameAtLaunch: Scalars['String']['output'];
   failedDefinitions: Scalars['Int']['output'];
   id: Scalars['ID']['output'];
+  launchableDefinitionIds: Array<Scalars['ID']['output']>;
+  launchableDefinitions: Array<DomainEvaluationLaunchableDefinition>;
   maxBudgetUsd?: Maybe<Scalars['Float']['output']>;
   memberCount: Scalars['Int']['output'];
   members: Array<DomainEvaluationMember>;
   models: Array<Scalars['String']['output']>;
   projectedCostUsd: Scalars['Float']['output'];
+  samplePercentage?: Maybe<Scalars['Int']['output']>;
+  samplesPerScenario?: Maybe<Scalars['Int']['output']>;
   scopeCategory: Scalars['String']['output'];
   skippedForBudget: Scalars['Int']['output'];
   startedAt?: Maybe<Scalars['DateTime']['output']>;
   startedRuns: Scalars['Int']['output'];
   status: Scalars['String']['output'];
+  targetBatchCount?: Maybe<Scalars['Int']['output']>;
   temperature?: Maybe<Scalars['Float']['output']>;
 };
 
@@ -849,12 +824,20 @@ export type DomainEvaluationEstimateModel = {
   supportsTemperature: Scalars['Boolean']['output'];
 };
 
+export type DomainEvaluationLaunchableDefinition = {
+  __typename?: 'DomainEvaluationLaunchableDefinition';
+  definitionId: Scalars['ID']['output'];
+  definitionName: Scalars['String']['output'];
+  pairKey?: Maybe<Scalars['String']['output']>;
+};
+
 export type DomainEvaluationMember = {
   __typename?: 'DomainEvaluationMember';
   createdAt: Scalars['DateTime']['output'];
   definitionIdAtLaunch: Scalars['ID']['output'];
   definitionNameAtLaunch: Scalars['String']['output'];
   domainIdAtLaunch: Scalars['ID']['output'];
+  modelIds: Array<Scalars['String']['output']>;
   runCategory: Scalars['String']['output'];
   runCompletedAt?: Maybe<Scalars['DateTime']['output']>;
   runId: Scalars['ID']['output'];
@@ -925,6 +908,7 @@ export type DomainRunSummary = {
 export type DomainSettings = {
   __typename?: 'DomainSettings';
   contextId?: Maybe<Scalars['String']['output']>;
+  defaultModelIds: Array<Scalars['String']['output']>;
   domainId: Scalars['ID']['output'];
   labelPrefix?: Maybe<Scalars['String']['output']>;
   levelPresetVersionId?: Maybe<Scalars['String']['output']>;
@@ -1047,8 +1031,8 @@ export type EnsureDomainVignettePairInput = {
 
 export type EnsureDomainVignettePairResult = {
   __typename?: 'EnsureDomainVignettePairResult';
-  definitionAId?: Maybe<Scalars['ID']['output']>;
-  definitionBId?: Maybe<Scalars['ID']['output']>;
+  definitionAId?: Maybe<Scalars['String']['output']>;
+  definitionBId?: Maybe<Scalars['String']['output']>;
   status: VignettePairStatus;
 };
 
@@ -1168,25 +1152,6 @@ export type JobTypeStatus = {
   pending: Scalars['Int']['output'];
   /** Job type name (e.g., probe_scenario) */
   type: Scalars['String']['output'];
-};
-
-export type LaunchAssumptionsTempZeroPayload = {
-  __typename?: 'LaunchAssumptionsTempZeroPayload';
-  failedVignetteIds: Array<Scalars['String']['output']>;
-  modelCount: Scalars['Int']['output'];
-  runIds: Array<Scalars['String']['output']>;
-  startedRuns: Scalars['Int']['output'];
-  totalVignettes: Scalars['Int']['output'];
-};
-
-export type LaunchOrderInvariancePayload = {
-  __typename?: 'LaunchOrderInvariancePayload';
-  approvedPairs: Scalars['Int']['output'];
-  failedDefinitionIds: Array<Scalars['String']['output']>;
-  modelCount: Scalars['Int']['output'];
-  runIds: Array<Scalars['String']['output']>;
-  runsByVariantType: Scalars['JSON']['output'];
-  startedRuns: Scalars['Int']['output'];
 };
 
 /** A named level preset defining the 5-word intensity scale for job-choice conditions */
@@ -1310,13 +1275,6 @@ export type ModelCostEstimate = {
   totalCost: Scalars['Float']['output'];
 };
 
-export type ModelPlan = {
-  __typename?: 'ModelPlan';
-  conditions: Array<ConditionPlan>;
-  modelId: Scalars['String']['output'];
-  totalNeededSamples: Scalars['Int']['output'];
-};
-
 /** Token usage statistics for a model, used for cost prediction */
 export type ModelTokenStats = {
   __typename?: 'ModelTokenStats';
@@ -1332,14 +1290,16 @@ export type ModelTokenStats = {
   sampleCount: Scalars['Int']['output'];
 };
 
+/** A domain-level contribution for a model/value pair */
 export type ModelsAnalysisDomainBreakdown = {
   __typename?: 'ModelsAnalysisDomainBreakdown';
   domainId: Scalars['String']['output'];
   domainName: Scalars['String']['output'];
-  evidenceWeight: Scalars['Int']['output'];
+  evidenceWeight?: Maybe<Scalars['Int']['output']>;
   winRate: Scalars['Float']['output'];
 };
 
+/** A model row in the models analysis matrix */
 export type ModelsAnalysisModelResult = {
   __typename?: 'ModelsAnalysisModelResult';
   label: Scalars['String']['output'];
@@ -1347,11 +1307,13 @@ export type ModelsAnalysisModelResult = {
   values: Array<ModelsAnalysisValueResult>;
 };
 
+/** Cross-domain model analysis matrix results */
 export type ModelsAnalysisResult = {
   __typename?: 'ModelsAnalysisResult';
   models: Array<ModelsAnalysisModelResult>;
 };
 
+/** A model/value summary across eligible domains */
 export type ModelsAnalysisValueResult = {
   __typename?: 'ModelsAnalysisValueResult';
   domains: Array<ModelsAnalysisDomainBreakdown>;
@@ -1367,6 +1329,7 @@ export type Mutation = {
   addTagToDefinition: Definition;
   assignDomainToDefinitions: DomainMutationResult;
   assignDomainToDefinitionsByFilter: DomainMutationResult;
+  backfillDomainEvaluationModels: DomainTrialRunResult;
   /**
    *
    *       Cancel an evaluation run.
@@ -1456,8 +1419,6 @@ export type Mutation = {
   exportScenariosAsYaml: ExportResult;
   /** Fork an existing definition. By default inherits all content from parent (sparse v2 storage). */
   forkDefinition: Definition;
-  launchAssumptionsTempZero: LaunchAssumptionsTempZeroPayload;
-  launchOrderInvariance: LaunchOrderInvariancePayload;
   /**
    *
    *       Pause the global job queue.
@@ -1548,7 +1509,6 @@ export type Mutation = {
    */
   resumeRun: Run;
   retryDomainTrialCell: RetryDomainTrialCellResult;
-  reviewOrderInvariancePair: ReviewOrderInvariancePairPayload;
   /**
    *
    *       Revoke (delete) an API key.
@@ -1662,6 +1622,14 @@ export type MutationAssignDomainToDefinitionsByFilterArgs = {
   sourceDomainId?: InputMaybe<Scalars['ID']['input']>;
   tagIds?: InputMaybe<Array<Scalars['ID']['input']>>;
   withoutDomain?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+
+export type MutationBackfillDomainEvaluationModelsArgs = {
+  definitionIds?: InputMaybe<Array<Scalars['ID']['input']>>;
+  domainEvaluationId: Scalars['ID']['input'];
+  modelIds: Array<Scalars['String']['input']>;
+  targetBatchCount?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -1827,16 +1795,6 @@ export type MutationForkDefinitionArgs = {
 };
 
 
-export type MutationLaunchAssumptionsTempZeroArgs = {
-  force?: InputMaybe<Scalars['Boolean']['input']>;
-};
-
-
-export type MutationLaunchOrderInvarianceArgs = {
-  force?: InputMaybe<Scalars['Boolean']['input']>;
-};
-
-
 export type MutationPauseRunArgs = {
   runId: Scalars['ID']['input'];
 };
@@ -1900,13 +1858,6 @@ export type MutationRetryDomainTrialCellArgs = {
 };
 
 
-export type MutationReviewOrderInvariancePairArgs = {
-  pairId: Scalars['ID']['input'];
-  reviewNotes?: InputMaybe<Scalars['String']['input']>;
-  reviewStatus: Scalars['String']['input'];
-};
-
-
 export type MutationRevokeApiKeyArgs = {
   id: Scalars['ID']['input'];
 };
@@ -1928,6 +1879,7 @@ export type MutationSetDefaultLlmModelArgs = {
 export type MutationSetDomainDefaultsArgs = {
   defaultContextId?: InputMaybe<Scalars['ID']['input']>;
   defaultLevelPresetVersionId?: InputMaybe<Scalars['ID']['input']>;
+  defaultModelIds?: InputMaybe<Array<Scalars['String']['input']>>;
   defaultPreambleVersionId?: InputMaybe<Scalars['ID']['input']>;
   id: Scalars['ID']['input'];
 };
@@ -1935,6 +1887,7 @@ export type MutationSetDomainDefaultsArgs = {
 
 export type MutationSetDomainSettingsArgs = {
   contextId?: InputMaybe<Scalars['ID']['input']>;
+  defaultModelIds?: InputMaybe<Array<Scalars['String']['input']>>;
   domainId: Scalars['ID']['input'];
   labelPrefix?: InputMaybe<Scalars['String']['input']>;
   levelPresetVersionId?: InputMaybe<Scalars['ID']['input']>;
@@ -2066,184 +2019,6 @@ export type MutationUpdateTranscriptDecisionArgs = {
 export type MutationUpdateValueStatementArgs = {
   id: Scalars['ID']['input'];
   input: UpdateValueStatementInput;
-};
-
-export type OrderInvarianceExclusionCount = {
-  __typename?: 'OrderInvarianceExclusionCount';
-  count: Scalars['Int']['output'];
-  reason: Scalars['String']['output'];
-};
-
-export type OrderInvarianceLaunchRun = {
-  __typename?: 'OrderInvarianceLaunchRun';
-  completedAt?: Maybe<Scalars['DateTime']['output']>;
-  completedTrials: Scalars['Int']['output'];
-  failedTrials: Scalars['Int']['output'];
-  isStalled: Scalars['Boolean']['output'];
-  percentComplete: Scalars['Float']['output'];
-  runId: Scalars['ID']['output'];
-  startedAt?: Maybe<Scalars['DateTime']['output']>;
-  status: Scalars['String']['output'];
-  targetedTrials: Scalars['Int']['output'];
-};
-
-export type OrderInvarianceLaunchStatus = {
-  __typename?: 'OrderInvarianceLaunchStatus';
-  activeRuns: Scalars['Int']['output'];
-  completedRuns: Scalars['Int']['output'];
-  completedTrials: Scalars['Int']['output'];
-  failedRuns: Scalars['Int']['output'];
-  failedTrials: Scalars['Int']['output'];
-  failureSummaries: Array<Scalars['String']['output']>;
-  generatedAt: Scalars['DateTime']['output'];
-  isComplete: Scalars['Boolean']['output'];
-  percentComplete: Scalars['Float']['output'];
-  runs: Array<OrderInvarianceLaunchRun>;
-  stalledModels: Array<Scalars['String']['output']>;
-  targetedTrials: Scalars['Int']['output'];
-  totalRuns: Scalars['Int']['output'];
-};
-
-export type OrderInvarianceModelMetrics = {
-  __typename?: 'OrderInvarianceModelMetrics';
-  matchCount: Scalars['Int']['output'];
-  matchEligibleCount: Scalars['Int']['output'];
-  matchRate?: Maybe<Scalars['Float']['output']>;
-  modelId: Scalars['String']['output'];
-  modelLabel: Scalars['String']['output'];
-  pairLevelMarginSummary?: Maybe<PairLevelMarginSummary>;
-  scaleOrderEligibleCount: Scalars['Int']['output'];
-  scaleOrderExcludedCount: Scalars['Int']['output'];
-  scaleOrderPull: Scalars['String']['output'];
-  scaleOrderReversalRate?: Maybe<Scalars['Float']['output']>;
-  valueOrderEligibleCount: Scalars['Int']['output'];
-  valueOrderExcludedCount: Scalars['Int']['output'];
-  valueOrderPull: Scalars['String']['output'];
-  valueOrderReversalRate?: Maybe<Scalars['Float']['output']>;
-  withinCellDisagreementRate?: Maybe<Scalars['Float']['output']>;
-};
-
-export type OrderInvarianceResult = {
-  __typename?: 'OrderInvarianceResult';
-  generatedAt: Scalars['DateTime']['output'];
-  modelMetrics: Array<OrderInvarianceModelMetrics>;
-  rows: Array<OrderInvarianceRow>;
-  summary: OrderInvarianceSummary;
-};
-
-export type OrderInvarianceReviewResult = {
-  __typename?: 'OrderInvarianceReviewResult';
-  generatedAt: Scalars['DateTime']['output'];
-  summary: OrderInvarianceReviewSummary;
-  vignettes: Array<OrderInvarianceReviewVignette>;
-};
-
-export type OrderInvarianceReviewSummary = {
-  __typename?: 'OrderInvarianceReviewSummary';
-  approvedVignettes: Scalars['Int']['output'];
-  launchReady: Scalars['Boolean']['output'];
-  pendingVignettes: Scalars['Int']['output'];
-  rejectedVignettes: Scalars['Int']['output'];
-  reviewedVignettes: Scalars['Int']['output'];
-  totalVignettes: Scalars['Int']['output'];
-};
-
-export type OrderInvarianceReviewVignette = {
-  __typename?: 'OrderInvarianceReviewVignette';
-  baselineName: Scalars['String']['output'];
-  baselineText: Scalars['String']['output'];
-  conditionKey: Scalars['String']['output'];
-  conditionPairCount: Scalars['Int']['output'];
-  flippedName: Scalars['String']['output'];
-  flippedText: Scalars['String']['output'];
-  pairId: Scalars['ID']['output'];
-  reviewNotes?: Maybe<Scalars['String']['output']>;
-  reviewStatus: Scalars['String']['output'];
-  reviewedAt?: Maybe<Scalars['DateTime']['output']>;
-  reviewedBy?: Maybe<Scalars['String']['output']>;
-  sourceScenarioId: Scalars['ID']['output'];
-  variantScenarioId: Scalars['ID']['output'];
-  variantType?: Maybe<Scalars['String']['output']>;
-  vignetteId: Scalars['ID']['output'];
-  vignetteTitle: Scalars['String']['output'];
-};
-
-export type OrderInvarianceRow = {
-  __typename?: 'OrderInvarianceRow';
-  conditionKey: Scalars['String']['output'];
-  isMatch?: Maybe<Scalars['Boolean']['output']>;
-  majorityVoteBaseline?: Maybe<Scalars['Int']['output']>;
-  majorityVoteFlipped?: Maybe<Scalars['Int']['output']>;
-  mismatchType?: Maybe<Scalars['String']['output']>;
-  modelId: Scalars['String']['output'];
-  modelLabel: Scalars['String']['output'];
-  ordinalDistance?: Maybe<Scalars['Int']['output']>;
-  variantType?: Maybe<Scalars['String']['output']>;
-  vignetteId: Scalars['ID']['output'];
-  vignetteTitle: Scalars['String']['output'];
-};
-
-export type OrderInvarianceSummary = {
-  __typename?: 'OrderInvarianceSummary';
-  comparablePairs: Scalars['Int']['output'];
-  exactMatchRate?: Maybe<Scalars['Float']['output']>;
-  excludedPairs: Array<OrderInvarianceExclusionCount>;
-  matchComparablePairs: Scalars['Int']['output'];
-  matchRate?: Maybe<Scalars['Float']['output']>;
-  missingPairs: Scalars['Int']['output'];
-  presentationComparablePairs: Scalars['Int']['output'];
-  presentationEffectMAD?: Maybe<Scalars['Float']['output']>;
-  presentationMissingPairs: Scalars['Int']['output'];
-  qualifyingPairs: Scalars['Int']['output'];
-  scaleComparablePairs: Scalars['Int']['output'];
-  scaleEffectMAD?: Maybe<Scalars['Float']['output']>;
-  scaleMissingPairs: Scalars['Int']['output'];
-  sensitiveModelCount: Scalars['Int']['output'];
-  sensitiveVignetteCount: Scalars['Int']['output'];
-  status: Scalars['String']['output'];
-  totalCandidatePairs: Scalars['Int']['output'];
-};
-
-export type OrderInvarianceTranscript = {
-  __typename?: 'OrderInvarianceTranscript';
-  attributeALevel?: Maybe<Scalars['Int']['output']>;
-  attributeBLevel?: Maybe<Scalars['Int']['output']>;
-  content?: Maybe<Scalars['JSON']['output']>;
-  createdAt: Scalars['DateTime']['output'];
-  decisionCode?: Maybe<Scalars['String']['output']>;
-  decisionCodeSource?: Maybe<Scalars['String']['output']>;
-  durationMs: Scalars['Int']['output'];
-  estimatedCost?: Maybe<Scalars['Float']['output']>;
-  id: Scalars['ID']['output'];
-  lastAccessedAt?: Maybe<Scalars['DateTime']['output']>;
-  modelId: Scalars['String']['output'];
-  modelVersion?: Maybe<Scalars['String']['output']>;
-  orderLabel: Scalars['String']['output'];
-  runId: Scalars['ID']['output'];
-  scenarioId: Scalars['ID']['output'];
-  tokenCount: Scalars['Int']['output'];
-  turnCount: Scalars['Int']['output'];
-};
-
-export type OrderInvarianceTranscriptResult = {
-  __typename?: 'OrderInvarianceTranscriptResult';
-  attributeALabel?: Maybe<Scalars['String']['output']>;
-  attributeBLabel?: Maybe<Scalars['String']['output']>;
-  conditionKey: Scalars['String']['output'];
-  generatedAt: Scalars['DateTime']['output'];
-  modelId: Scalars['String']['output'];
-  modelLabel: Scalars['String']['output'];
-  transcripts: Array<OrderInvarianceTranscript>;
-  vignetteId: Scalars['ID']['output'];
-  vignetteTitle: Scalars['String']['output'];
-};
-
-export type PairLevelMarginSummary = {
-  __typename?: 'PairLevelMarginSummary';
-  mean?: Maybe<Scalars['Float']['output']>;
-  median?: Maybe<Scalars['Float']['output']>;
-  p25?: Maybe<Scalars['Float']['output']>;
-  p75?: Maybe<Scalars['Float']['output']>;
 };
 
 /** A reusable preamble that can be prepended to scenarios */
@@ -2404,11 +2179,6 @@ export type Query = {
    *
    */
   apiKeys: Array<ApiKey>;
-  assumptionsOrderInvariance: OrderInvarianceResult;
-  assumptionsOrderInvarianceLaunchStatus: OrderInvarianceLaunchStatus;
-  assumptionsOrderInvarianceReview: OrderInvarianceReviewResult;
-  assumptionsOrderInvarianceTranscripts: OrderInvarianceTranscriptResult;
-  assumptionsTempZero: AssumptionsTempZeroResult;
   /**
    *
    *       Query audit logs with optional filters and pagination.
@@ -2429,7 +2199,6 @@ export type Query = {
    *
    */
   availableModels: Array<AvailableModel>;
-  debugAssumptionsMismatches: DebugMismatchResult;
   /** Fetch a single definition by ID. Returns null if not found. */
   definition?: Maybe<Definition>;
   /** Get ancestors of a definition (full chain to root). Returns definitions ordered from root to immediate parent. */
@@ -2592,7 +2361,6 @@ export type Query = {
   tagCount: Scalars['Int']['output'];
   /** List all tags, optionally filtered by name search. */
   tags: Array<Tag>;
-  tempZeroVerificationReport?: Maybe<TempZeroVerificationReport>;
   valueStatement?: Maybe<ValueStatement>;
   valueStatements: Array<ValueStatement>;
   /**
@@ -2648,29 +2416,6 @@ export type QueryApiKeysArgs = {
 };
 
 
-export type QueryAssumptionsOrderInvarianceArgs = {
-  directionOnly?: InputMaybe<Scalars['Boolean']['input']>;
-  trimOutliers?: InputMaybe<Scalars['Boolean']['input']>;
-};
-
-
-export type QueryAssumptionsOrderInvarianceLaunchStatusArgs = {
-  runIds: Array<Scalars['ID']['input']>;
-};
-
-
-export type QueryAssumptionsOrderInvarianceTranscriptsArgs = {
-  conditionKey: Scalars['String']['input'];
-  modelId: Scalars['String']['input'];
-  vignetteId: Scalars['ID']['input'];
-};
-
-
-export type QueryAssumptionsTempZeroArgs = {
-  directionOnly?: InputMaybe<Scalars['Boolean']['input']>;
-};
-
-
 export type QueryAuditLogsArgs = {
   after?: InputMaybe<Scalars['String']['input']>;
   filter?: InputMaybe<AuditLogFilterInput>;
@@ -2682,12 +2427,6 @@ export type QueryAvailableModelsArgs = {
   availableOnly?: InputMaybe<Scalars['Boolean']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
-};
-
-
-export type QueryDebugAssumptionsMismatchesArgs = {
-  modelId: Scalars['String']['input'];
-  scenarioId: Scalars['String']['input'];
 };
 
 
@@ -2926,6 +2665,7 @@ export type QueryModelTokenStatsArgs = {
 
 export type QueryModelsAnalysisArgs = {
   domainId?: InputMaybe<Scalars['ID']['input']>;
+  signature?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -3171,13 +2911,6 @@ export type RetryDomainTrialCellResult = {
   modelId: Scalars['String']['output'];
   runId?: Maybe<Scalars['ID']['output']>;
   success: Scalars['Boolean']['output'];
-};
-
-export type ReviewOrderInvariancePairPayload = {
-  __typename?: 'ReviewOrderInvariancePairPayload';
-  pairId: Scalars['ID']['output'];
-  reviewStatus: Scalars['String']['output'];
-  reviewedAt: Scalars['DateTime']['output'];
 };
 
 /** A saved record of a model evaluation or launch */
@@ -3445,94 +3178,6 @@ export type TaskStatus =
   | 'PENDING'
   | 'RUNNING';
 
-export type TempZeroDecision = {
-  __typename?: 'TempZeroDecision';
-  content?: Maybe<Scalars['JSON']['output']>;
-  decision?: Maybe<Scalars['String']['output']>;
-  label: Scalars['String']['output'];
-  transcriptId?: Maybe<Scalars['String']['output']>;
-};
-
-export type TempZeroModelVerification = {
-  __typename?: 'TempZeroModelVerification';
-  adapterModes: Array<Scalars['String']['output']>;
-  decisionMatchRatePct?: Maybe<Scalars['Float']['output']>;
-  fingerprintDriftPct?: Maybe<Scalars['Float']['output']>;
-  modelId: Scalars['String']['output'];
-  promptHashStabilityPct?: Maybe<Scalars['Float']['output']>;
-  transcriptCount: Scalars['Int']['output'];
-};
-
-export type TempZeroPreflight = {
-  __typename?: 'TempZeroPreflight';
-  estimatedCostUsd?: Maybe<Scalars['Float']['output']>;
-  estimatedInputTokens?: Maybe<Scalars['Int']['output']>;
-  estimatedOutputTokens?: Maybe<Scalars['Int']['output']>;
-  models: Array<TempZeroPreflightModel>;
-  projectedComparisons: Scalars['Int']['output'];
-  projectedPromptCount: Scalars['Int']['output'];
-  runsToLaunch: Scalars['Int']['output'];
-  selectedSignature?: Maybe<Scalars['String']['output']>;
-  title: Scalars['String']['output'];
-  totalBatchesToRun: Scalars['Int']['output'];
-  vignettes: Array<TempZeroPreflightVignette>;
-};
-
-export type TempZeroPreflightModel = {
-  __typename?: 'TempZeroPreflightModel';
-  adapterMode?: Maybe<Scalars['String']['output']>;
-  label: Scalars['String']['output'];
-  modelId: Scalars['String']['output'];
-};
-
-export type TempZeroPreflightVignette = {
-  __typename?: 'TempZeroPreflightVignette';
-  batchesToRun: Scalars['Int']['output'];
-  conditionCount: Scalars['Int']['output'];
-  rationale: Scalars['String']['output'];
-  title: Scalars['String']['output'];
-  vignetteId: Scalars['ID']['output'];
-};
-
-export type TempZeroRow = {
-  __typename?: 'TempZeroRow';
-  batch1?: Maybe<Scalars['String']['output']>;
-  batch2?: Maybe<Scalars['String']['output']>;
-  batch3?: Maybe<Scalars['String']['output']>;
-  conditionKey: Scalars['String']['output'];
-  decisions: Array<TempZeroDecision>;
-  isMatch: Scalars['Boolean']['output'];
-  mismatchType?: Maybe<Scalars['String']['output']>;
-  modelId: Scalars['String']['output'];
-  modelLabel: Scalars['String']['output'];
-  vignetteId: Scalars['ID']['output'];
-  vignetteTitle: Scalars['String']['output'];
-};
-
-export type TempZeroSummary = {
-  __typename?: 'TempZeroSummary';
-  batchesRun: Scalars['Int']['output'];
-  comparisons: Scalars['Int']['output'];
-  differenceRate?: Maybe<Scalars['Float']['output']>;
-  excludedComparisons: Scalars['Int']['output'];
-  matchRate?: Maybe<Scalars['Float']['output']>;
-  modelsTested: Scalars['Int']['output'];
-  status: Scalars['String']['output'];
-  title: Scalars['String']['output'];
-  vignettesTested: Scalars['Int']['output'];
-  worstModelId?: Maybe<Scalars['String']['output']>;
-  worstModelLabel?: Maybe<Scalars['String']['output']>;
-  worstModelMatchRate?: Maybe<Scalars['Float']['output']>;
-};
-
-export type TempZeroVerificationReport = {
-  __typename?: 'TempZeroVerificationReport';
-  batchTimestamp?: Maybe<Scalars['DateTime']['output']>;
-  generatedAt: Scalars['DateTime']['output'];
-  models: Array<TempZeroModelVerification>;
-  transcriptCount: Scalars['Int']['output'];
-};
-
 /** A transcript from a model conversation during a run */
 export type Transcript = {
   __typename?: 'Transcript';
@@ -3541,7 +3186,7 @@ export type Transcript = {
   createdAt: Scalars['DateTime']['output'];
   /** Parser and adjudication metadata for the transcript decision */
   decisionMetadata?: Maybe<Scalars['JSON']['output']>;
-  /** Feature-flagged V2 decision envelope with raw evidence and canonical compatibility data */
+  /** V2 decision envelope with raw evidence and canonical direction/strength decision */
   decisionModelV2?: Maybe<Scalars['JSON']['output']>;
   definitionSnapshot?: Maybe<Scalars['JSON']['output']>;
   /** Dimension values for this transcript's scenario (e.g. attribute levels for job-choice vignettes) */
@@ -4378,10 +4023,11 @@ export type AvailableModelsQuery = { __typename?: 'Query', availableModels: Arra
 
 export type ModelsAnalysisQueryVariables = Exact<{
   domainId?: InputMaybe<Scalars['ID']['input']>;
+  signature?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
-export type ModelsAnalysisQuery = { __typename?: 'Query', modelsAnalysis: { __typename?: 'ModelsAnalysisResult', models: Array<{ __typename?: 'ModelsAnalysisModelResult', modelId: string, label: string, values: Array<{ __typename?: 'ModelsAnalysisValueResult', valueKey: string, pooledWinRate?: number | null, stabilityScore?: number | null, eligibleDomainCount: number, domains: Array<{ __typename?: 'ModelsAnalysisDomainBreakdown', domainId: string, domainName: string, winRate: number, evidenceWeight: number }> }> }> } };
+export type ModelsAnalysisQuery = { __typename?: 'Query', modelsAnalysis: { __typename?: 'ModelsAnalysisResult', models: Array<{ __typename?: 'ModelsAnalysisModelResult', modelId: string, label: string, values: Array<{ __typename?: 'ModelsAnalysisValueResult', valueKey: string, pooledWinRate?: number | null, stabilityScore?: number | null, eligibleDomainCount: number, domains: Array<{ __typename?: 'ModelsAnalysisDomainBreakdown', domainId: string, domainName: string, winRate: number, evidenceWeight?: number | null }> }> }> } };
 
 export type CreatePairedVignetteMutationVariables = Exact<{
   input: CreatePairedVignetteInput;
@@ -6473,8 +6119,8 @@ export function useAvailableModelsQuery(options?: Omit<Urql.UseQueryArgs<Availab
   return Urql.useQuery<AvailableModelsQuery, AvailableModelsQueryVariables>({ query: AvailableModelsDocument, ...options });
 };
 export const ModelsAnalysisDocument = gql`
-    query ModelsAnalysis($domainId: ID) {
-  modelsAnalysis(domainId: $domainId) {
+    query ModelsAnalysis($domainId: ID, $signature: String) {
+  modelsAnalysis(domainId: $domainId, signature: $signature) {
     models {
       modelId
       label
