@@ -1,0 +1,57 @@
+MCP issues detected. Run /mcp list for status.{
+  "session_id": "e6930f87-19a6-4b85-8cd8-fd1bf11c8b8b",
+  "response": "## Findings\n\n### High Severity\n*(No high-severity findings were identified. The plan is thorough and proactively addresses many potential issues.)*\n\n### Medium Severity\n\n| Finding ID | Slice | Description |\n| :--- | :--- | :--- |\n| **M-01** | A1, A1b | **Potential for division-by-zero in meta-analysis.** The `dersimonianLairdPool` function calculates weights based on within-study variance. For scenarios with a win rate (`p`) of exactly 0% or 100%, the variance is zero, which would lead to an infinite weight (division by zero) during pooling. The task plan does not specify how to handle this edge case, and the tests do not cover it. |\n| **M-02** | A4 | **[UNVERIFIED] Unspecified source for `winRate` data.** The resolver flow (A4, step 8a) requires `winRate` for each condition to calculate coherence. The task artifact does not specify where this `winRate` value is sourced from within the `analysisResults` object or how it's calculated. This creates an implicit dependency on an assumed data shape that, if incorrect, will break the coherence calculation. |\n\n### Low Severity\n\n| Finding ID | Slice | Description |\n| :--- | :--- | :--- |\n| **L-01** | A2, A2b | **[UNVERIFIED] Incomplete testing for order-effect logic.** The tests for the extracted `orderEffectPairing` helper cover \"same\", \"flipped\", \"mixed\", and \"not applicable\" cases. However, the definition of the helper's output includes a `noisyPct`, but there is no corresponding test case to verify the logic for identifying and calculating \"noisy\" outcomes. |\n| **L-02** | A1b | **Statistical function tests miss edge cases.** The tests for `wilsonInterval` do not verify behavior for proportions at the boundaries (e.g., `matches = 0` or `matches = trials`) or for zero trials (`trials = 0`). While the underlying formula may be robust, the implementation's handling of these cases is not explicitly tested. |\n| **L-03** | C2 | **Misleading display of confidence intervals.** The table component (`C2`) plans to display the Repeatability confidence interval using symmetric `±` notation. Confidence intervals for proportions, especially near 0 or 1, are often asymmetric. Displaying them with `±` can be statistically misleading. A `[low, high]` format would be more accurate. |\n| **L-04** | D1 | **Ambiguous display logic for per-domain repeatability.** The drill-down view (`D1`) specifies showing \"3 rows from `repeatability.perDomain`\". This is ambiguous. It doesn't define the sorting criteria (e.g., by number of scenarios, by value) or what to do if there are fewer than three domains with data. |\n| **L-05** | C1 | **Undefined scaling for scatter plot radius.** The scatter plot (`C1`) plans to size dots based on `scenariosMeasured`. If the range of this number is large across models (e.g., 10 vs. 1000), using the raw value for the radius `r` will produce a poorly scaled and unreadable chart. The plan omits the need for a scaling function (e.g., logarithmic or square root). |\n| **L-06** | B4 | **Incomplete error handling for initial page load.** The page skeleton (`B4`) defines a fallback mechanism to fetch available domains and signatures if they are not in the URL. However, it does not specify what should happen if this fallback query fails or returns no data, which could leave the page in an unhandled error or loading state. |\n\n## Residual Risks\n\nEven if all tasks are executed perfectly as described, the following risks may remain:\n\n1.  **Data Integrity:** The feature's accuracy is entirely dependent on the semantic correctness of upstream data in `analysisResults`. The planned checks only validate data shape and presence, not semantic validity (e.g., `matches` cannot be greater than `trials`). Flaws in the upstream data generation pipeline will be presented as fact by this feature.\n2.  **Performance at Scale:** The resolver (`A4`) fetches all `Aggregate` runs and then filters them in memory by signature. As the number of runs in the database grows, this approach could lead to performance degradation or high memory consumption on the API server.\n3.  **User Misinterpretation:** The feature synthesizes complex statistical concepts into a single visualization. Despite the excellent `MetricDisclosure` component, there is a risk that users may oversimplify the results, equating the \"high/high\" quadrant with \"good models\" without understanding the underlying definitions of Repeatability and Coherence or the context of the `signature` being analyzed.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 50565
+        },
+        "tokens": {
+          "input": 17180,
+          "prompt": 17180,
+          "candidates": 1058,
+          "total": 22249,
+          "cached": 0,
+          "thoughts": 4011,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 50565,
+            "tokens": {
+              "input": 17180,
+              "prompt": 17180,
+              "candidates": 1058,
+              "total": 22249,
+              "cached": 0,
+              "thoughts": 4011,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

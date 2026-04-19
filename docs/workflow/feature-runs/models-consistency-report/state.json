@@ -1,0 +1,60 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "Report name is 'Consistency' and lives under the Models tab alongside the existing cross-domain Stability view",
+      "Metric 1 is named 'Repeatability' (user-recommended option (a) from the offered list); name can be revisited during plan phase if desired",
+      "Metric 2 is named 'Coherence' (no collision with existing vocabulary)",
+      "'Stability' stays reserved for the existing Models-tab cross-domain win-rate consistency metric; do not overload it",
+      "Repeatability reuses baselineReliability from analysisSemantics.reliability.ts (buildMergedReliabilityModel), coverage-weighted across scenarios",
+      "Coherence is a new metric: Spearman rank correlation (rho >= 0.8, p < 0.05) between condition pressure rank and win rate across conditions, aggregated as fraction of value pairs that pass, per model",
+      "Confidence intervals use Wilson score (95%); shown as '+/- X%' next to each metric",
+      "Main view is a scatter: x=Repeatability, y=Coherence, dot color=provider, dot size=n trials; quadrant lines at 0.85 Repeatability and 0.80 Coherence with plain-English region labels ('Reliable & follows pressure', 'Follows pressure but jittery', 'Steady but doesn't follow pressure', 'Neither steady nor responsive')",
+      "Drill-down per model shows: Repeatability by domain, a grid of existing ConditionMatrix thumbnails shaded green/red by monotonicity, and an order-effect panel reusing PairedStabilityView data",
+      "On-page copy uses high-school English and shows the exact equation alongside each metric (not just in a methods appendix)",
+      "Primary audiences: AAPOR survey methodologists and AI alignment researchers; secondary: ACM reviewers, moral-psychology researchers, AI policy/governance analysts",
+      "Data is already gathered; no new model runs or new vignettes in scope. Depends on AGGREGATE-analysis pipeline being populated, which user is fixing in parallel"
+    ],
+    "summary": "Discovery satisfied from prior conversation with user; no new questions needed. Carrying in explicit assumptions.",
+    "updated_at": 1776581161,
+    "answers": {},
+    "non_goals": [
+      "Debugging or fixing the AGGREGATE-analysis pipeline (tracked separately by user)"
+    ],
+    "acceptance_criteria": [
+      "No existing Models-tab Stability functionality is broken or renamed"
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "parallel_analysis": {
+    "reviewed": true,
+    "found": false,
+    "note": "Parallel opportunities documented in tasks.md section 'Parallel Task Summary'. Safe same-slice parallel pairs: A1 stat functions and A1b tests; C1 scatter + C2 table + C3 footer (disjoint files); D1 drill + D3 filters. Partial parallel: D1 drill depends on D2 MetricDisclosure \u2014 build D2 first in isolation.",
+    "updated_at": 1776609467
+  },
+  "init_head_sha": "a450f809c2b386ed7e089c87a5d4e83845aa4a68",
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "checkpoint_fallback": {}
+}

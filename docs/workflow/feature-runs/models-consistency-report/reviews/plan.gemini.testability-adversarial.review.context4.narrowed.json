@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/src/generated/graphql.ts",
+  "source_artifact_sha256": "3e23483c06a023126a2636f9018a95f4f87d24dfc398c269ad276821977b1251",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/models-consistency-report/reviews/plan.gemini.testability-adversarial.review.context4.narrowed.txt",
+  "narrowed_artifact_sha256": "7d6a86f1d65bb1b570afe9cdb074bd903ac7dcb90c3e6f5c4b3803d83aacd48e",
+  "strategy": "head-tail-numbered-lines"
+}

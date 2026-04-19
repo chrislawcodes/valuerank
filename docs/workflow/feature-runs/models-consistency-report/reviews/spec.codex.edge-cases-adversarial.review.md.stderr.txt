@@ -1,0 +1,2380 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019da4c9-dd4c-7ba2-a33f-99b1c692665b
+--------
+user
+Review this spec artifact using a edge-cases-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: ConditionMatrix.tsx
+import { compareConditionLevels } from '../../utils/conditionOrdering';
+import {
+  summarizeCanonicalConditionCounts,
+  getConditionCellDisplay,
+} from '../../utils/canonicalConditionSummary';
+
+export type MatrixCondition = {
+  scenarioId: string | null;
+  conditionName: string;
+  dimensions: Record<string, string | number> | null;
+  prioritized: number;
+  deprioritized: number;
+  neutral: number;
+  totalTrials: number;
+  unknownCount: number;
+  strongly: number;
+  somewhat: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+};
+
+function isValidCount(value: number): boolean {
+  return Number.isFinite(value) && value >= 0;
+}
+
+function validateMatrixCondition(condition: MatrixCondition): string | null {
+  const countFields: Array<[string, number]> = [
+    ['prioritized', condition.prioritized],
+    ['deprioritized', condition.deprioritized],
+    ['neutral', condition.neutral],
+    ['totalTrials', condition.totalTrials],
+    ['unknownCount', condition.unknownCount],
+    ['strongly', condition.strongly],
+    ['somewhat', condition.somewhat],
+    ['opponentSomewhat', condition.opponentSomewhat],
+    ['opponentStrongly', condition.opponentStrongly],
+  ];
+
+  for (const [name, value] of countFields) {
+    if (!isValidCount(value)) {
+      return `ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" has an invalid ${name} value of ${String(value)}.`;
+    }
+  }
+
+  const TOLERANCE = 1e-6;
+
+  const expectedTotal = condition.prioritized + condition.deprioritized + condition.neutral;
+  if (Math.abs(condition.totalTrials - expectedTotal) >= TOLERANCE) {
+    return `ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" reports totalTrials=${condition.totalTrials} and counts sum to ${expectedTotal}.`;
+  }
+
+  // Cross-field consistency: canonical-bucket pairs must match the summary counts.
+  const selfSum = condition.strongly + condition.somewhat;
+  if (Math.abs(selfSum - condition.prioritized) >= TOLERANCE) {
+    return `ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" has strongly+somewhat=${selfSum} which does not match prioritized=${condition.prioritized}.`;
+  }
+
+  const opponentSum = condition.opponentStrongly + condition.opponentSomewhat;
+  if (Math.abs(opponentSum - condition.deprioritized) >= TOLERANCE) {
+    return `ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" has opponentStrongly+opponentSomewhat=${opponentSum} which does not match deprioritized=${condition.deprioritized}.`;
+  }
+
+  return null;
+}
+
+type ConditionMatrixProps = {
+  vignetteId: string;
+  conditions: MatrixCondition[];
+  selectedConditionKey: string;
+  onSelect: (definitionId: string, conditionName: string, scenarioId: string | null) => void;
+};
+
+export function ConditionMatrix({ vignetteId, conditions, selectedConditionKey, onSelect }: ConditionMatrixProps) {
+  const dimensions = Array.from(
+    new Set(
+      conditions.flatMap((condition) =>
+        Object.keys(condition.dimensions ?? {}),
+      ),
+    ),
+  ).sort();
+
+  if (dimensions.length < 2) {
+    return (
+      <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        Scenario dimensions are missing for this vignette, so pivot matrix rendering is unavailable.
+      </div>
+    );
+  }
+
+  const validationError = conditions
+    .map((condition) => validateMatrixCondition(condition))
+    .find((message): message is string => message !== null);
+  if (validationError !== undefined) {
+    return (
+      <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+        {validationError}
+      </div>
+    );
+  }
+
+  const rowDim = dimensions[0]!;
+  const colDim = dimensions[1]!;
+  const rows = Array.from(
+    new Set(conditions.map((condition) => String(condition.dimensions?.[rowDim] ?? 'N/A'))),
+  ).sort(compareConditionLevels);
+  const cols = Array.from(
+    new Set(conditions.map((condition) => String(condition.dimensions?.[colDim] ?? 'N/A'))),
+  ).sort(compareConditionLevels);
+
+  const cellByKey = new Map<string, MatrixCondition>();
+  for (const condition of conditions) {
+    const rowValue = String(condition.dimensions?.[rowDim] ?? 'N/A');
+    const colValue = String(condition.dimensions?.[colDim] ?? 'N/A');
+    cellByKey.set(`${rowValue}::${colValue}`, condition);
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full border-collapse text-xs">
+        <thead>
+          <tr>
+            <th className="border border-gray-200 border-b-0 bg-gray-50 p-2" />
+            <th
+              colSpan={cols.length}
+              className="border border-gray-200 bg-gray-100 p-2 text-center text-xs font-bold uppercase text-gray-700"
+            >
+              {colDim}
+            </th>
+          </tr>
+          <tr>
+            <th className="w-32 border border-gray-200 bg-gray-100 p-2 text-left text-xs font-bold uppercase text-gray-700">
+              {rowDim}
+            </th>
+            {cols.map((col) => (
+              <th
+                key={col}
+                className="border border-gray-200 bg-gray-50 p-2 text-center font-mono text-xs font-medium text-gray-500"
+              >
+                {col}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row}>
+              <td className="whitespace-nowrap border border-gray-200 bg-gray-50 p-2 font-mono text-sm font-bold text-gray-900">
+                {row}
+              </td>
+              {cols.map((col) => {
+                const condition = cellByKey.get(`${row}::${col}`);
+                const conditionKey = condition
+                  ? `${vignetteId}:${condition.scenarioId ?? '__unknown__'}`
+                  : '';
+                const isSelected = condition != null && selectedConditionKey === conditionKey;
+                let display: ReturnType<typeof getConditionCellDisplay> | null = null;
+                if (condition) {
+                  const summary = summarizeCanonicalConditionCounts({
+                    strongly: condition.strongly,
+                    somewhat: condition.somewhat,
+                    neutral: condition.neutral,
+                    opponentSomewhat: condition.opponentSomewhat,
+                    opponentStrongly: condition.opponentStrongly,
+                  });
+                  display = getConditionCellDisplay(summary);
+                }
+
+                return (
+                  <td
+                    key={`${row}-${col}`}
+                    className={`border border-gray-100 p-3 text-center text-sm transition-colors ${
+                      condition ? 'cursor-pointer hover:ring-1 hover:ring-sky-300' : ''
+                    } ${isSelected ? 'ring-1 ring-sky-400' : ''}`}
+                    style={{ backgroundColor: display?.backgroundColor }}
+                    onClick={() => {
+                      if (!condition) return;
+                      onSelect(vignetteId, condition.conditionName, condition.scenarioId);
+                    }}
+                    title={condition?.conditionName ?? 'No condition'}
+                  >
+                    {display ? (
+                      <span className={`font-semibold ${display.textColorClass}`}>
+                        {display.label}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="mt-2 text-xs text-gray-500">
+        Click a cell to load condition transcripts below.
+        {conditions.some((c) => c.unknownCount > 0) && (
+          <span className="ml-2 font-semibold text-gray-600">
+            · Unknown trials are excluded from the canonical condition counts.
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+Context: PairedStabilityView.tsx
+/**
+ * PairedStabilityView
+ *
+ * Renders the paired stability drilldown view showing transcripts split by
+ * primary and companion vignette order.
+ */
+
+import { TranscriptList } from '../components/runs/TranscriptList';
+import { formatRepeatPatternLabel } from '../utils/analysisTranscriptParams';
+import type { Transcript } from '../api/operations/runs';
+
+interface PairedStabilityViewProps {
+  repeatPattern: string;
+  primaryRunName: string | null | undefined;
+  companionRunName: string | null | undefined;
+  primaryTranscripts: Transcript[];
+  companionTranscripts: Transcript[];
+  primaryScenarioDimensions: Record<string, Record<string, string | number>> | null | undefined;
+  companionScenarioDimensions: Record<string, Record<string, string | number>> | null | undefined;
+  onSelectTranscript: (transcript: Transcript) => void;
+  onDecisionChange: (transcript: Transcript, nextDecisionCode: string) => Promise<void>;
+  updatingTranscriptIds: Set<string>;
+  decisionColumnLabel: string;
+  decisionColumnTooltip: string;
+  decisionDisplayMode: 'audit';
+}
+
+export function PairedStabilityView({
+  repeatPattern,
+  primaryRunName,
+  companionRunName,
+  primaryTranscripts,
+  companionTranscripts,
+  primaryScenarioDimensions,
+  companionScenarioDimensions,
+  onSelectTranscript,
+  onDecisionChange,
+  updatingTranscriptIds,
+  decisionColumnLabel,
+  decisionColumnTooltip,
+  decisionDisplayMode,
+}: PairedStabilityViewProps) {
+  return (
+    <div className="space-y-6">
+      <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">
+        Stability drilldown is active for <span className="font-medium">{formatRepeatPatternLabel(repeatPattern)}</span>. Transcripts are shown separately for each vignette order.
+      </div>
+      {primaryTranscripts.length === 0 && companionTranscripts.length === 0 && (
+        <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
+          No transcripts match the selected stability pattern.
+        </div>
+      )}
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold text-gray-700">{primaryRunName ?? 'Primary vignette order'}</h3>
+        {primaryTranscripts.length > 0 ? (
+          <TranscriptList
+            transcripts={primaryTranscripts}
+            onSelect={onSelectTranscript}
+            groupByModel={false}
+            scenarioDimensions={primaryScenarioDimensions ?? undefined}
+            onDecisionChange={onDecisionChange}
+            updatingTranscriptIds={updatingTranscriptIds}
+            decisionColumnLabel={decisionColumnLabel}
+            decisionColumnTooltip={decisionColumnTooltip}
+            decisionDisplayMode={decisionDisplayMode}
+          />
+        ) : (
+          <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-500">
+            No transcripts matched this pattern for this vignette order.
+          </div>
+        )}
+      </section>
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold text-gray-700">{companionRunName ?? 'Companion vignette order'}</h3>
+        {companionTranscripts.length > 0 ? (
+          <TranscriptList
+            transcripts={companionTranscripts}
+            onSelect={onSelectTranscript}
+            groupByModel={false}
+            scenarioDimensions={companionScenarioDimensions ?? undefined}
+            onDecisionChange={onDecisionChange}
+            updatingTranscriptIds={updatingTranscriptIds}
+            decisionColumnLabel={decisionColumnLabel}
+            decisionColumnTooltip={decisionColumnTooltip}
+            decisionDisplayMode={decisionDisplayMode}
+          />
+        ) : (
+          <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-500">
+            No transcripts matched this pattern for this vignette order.
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+
+Artifact: spec.md
+# Spec: Models Consistency Report
+
+**Feature slug:** models-consistency-report
+**Created:** 2026-04-18
+**Revised:** 2026-04-19
+**Status:** draft
+**Path:** Feature Factory (`docs/workflow/feature-runs/models-consistency-report/`)
+
+---
+
+## Background
+
+The `Models` tab today answers **"which values does each model favor, and is the pattern stable across domains?"** using the existing `cross-domain Stability` metric (variance of win rate across domains).
+
+It does **not** answer two related questions that both AAPOR survey methodologists and AI-alignment researchers ask about any instrument and any respondent:
+
+1. **If we ask the same question twice, does the model give the same answer?** (a within-scenario reliability question)
+2. **As we ramp up the pressure to favor one value inside a vignette, does the model's response follow that pressure?** (a dose-response question)
+
+This spec adds a new report inside the `Models` tab, named **Consistency**, that shows two metrics per model — **Repeatability** and **Coherence** — and plots them as a failure-mode map. The framing is *characterization*, not pass/fail audit: every model lands somewhere, and the location tells you what kind of inconsistency it has.
+
+---
+
+## Discovery: Assumptions Carried In
+
+Discovery was completed against the prior conversation with the user. The following assumptions are carried in:
+
+1. **Report name** is **Consistency**, lives under the existing `Models` tab alongside the current `cross-domain Stability` view.
+2. **Metric 1** is named **Repeatability**. Do **not** call it "Stability" (collides with the existing Models-tab metric) or "Reliability" (too jargon-y). Alternatives (Steadiness, Same-Answer Rate, Self-Agreement, Stickiness) may be revisited in plan phase.
+3. **Metric 2** is named **Coherence**. No collision with existing vocabulary.
+4. **Repeatability** reuses `baselineReliability` per scenario from `analysisSemantics.reliability.ts`, but the **model-level value is computed fresh** using random-effects meta-analysis (see FR-004). We do not display the naive coverage-weighted pool.
+5. **Coherence pressure scale**: for each `(model, value pair)`, we flatten the existing 2D condition grid to a 1D "net pressure" rank defined as `(appeal of target value) − (appeal of opposing value)` for each condition. We compute Spearman rank correlation ρ between net pressure rank and win rate across conditions. A pair counts as **coherent** if ρ ≥ 0.8 **and** the correlation's p-value is < 0.05. `Coherence(model) = (coherent pairs) / (total pairs tested)`.
+6. **Confidence intervals** for Repeatability use **random-effects meta-analysis**: compute per-scenario Wilson 95% CIs, then combine using DerSimonian-Laird pooling to account for between-scenario variance (τ²). The final ± reflects both within-scenario sampling error and between-scenario heterogeneity. Coherence does not carry a ± in v1 (it is itself a proportion over a small number of pairs; the per-pair ρ and p are shown directly in drill-down).
+7. **Failure-mode map**: main view is a scatter, x = Repeatability, y = Coherence, one dot per model, color = provider, size = n scenarios measured. Quadrant lines at **Repeatability = 0.85** (midpoint of Landis & Koch substantial-to-almost-perfect) and **Coherence = 0.80** (conventional psychometric floor). Region labels in plain English:
+   - **Reliable & follows pressure** (high / high)
+   - **Follows pressure but jittery** (low / high)
+   - **Steady but doesn't follow pressure** (high / low)
+   - **Neither steady nor responsive** (low / low)
+8. **Drill-down — summary + links, not embeds**: the ConditionMatrix and PairedStabilityView components are not embedded or modified. Instead the report computes summary chips (per-pair ρ with coherent ✓/✗; same/flipped/noisy proportions for order effects) and provides **"View condition matrix →"** / **"View transcripts →"** links that open the existing components on their current pages.
+9. **Progressive disclosure**: every summary number on the report page exposes its intermediate calculations. Click or hover opens a tooltip/panel stack that lets a reader trace any number back to the formula and raw counts it was computed from (see FR-015).
+10. **On-page copy** uses high-school English. The **exact formula** for each metric appears on the page, not only in a methods appendix.
+11. **Primary audiences**: AAPOR survey methodologists and AI-alignment researchers. **Secondary**: ACM reviewers, moral-psychology researchers, AI policy/governance analysts.
+12. **Data scope**: current 8-model roster, 270 definitions, 3 domains. No new data collection. Report depends on `AGGREGATE`-analysis pipeline being populated across definitions (user fixing in parallel).
+
+---
+
+## Product Goal
+
+The `Consistency` report should let a researcher quickly answer:
+
+1. **Which models answer the same question the same way across trials?**
+2. **Which models respond lawfully to increasing pressure inside a vignette?**
+3. **What type of inconsistency — noise, rigidity, or both — characterizes each model?**
+
+All three should be answerable in under 30 seconds of scan time, with progressive drill-down available for any model that looks surprising.
+
+---
+
+## User Stories
+
+### US-1 — See the failure-mode map at a glance (P1)
+
+As an AAPOR or alignment researcher, I want one scatter plot that shows every model's Repeatability against its Coherence so I can see the distribution of failure modes across the whole field.
+
+**Why this priority:** The scatter IS the headline finding.
+
+**Independent test:** Open the report; a scatter renders with dots for every model with sufficient coverage; quadrant lines and region labels are visible without hover.
+
+**Acceptance scenarios:**
+
+1. **Given** I open `Models → Consistency`, **when** the page loads, **then** I see a scatter with Repeatability on x, Coherence on y, one dot per model, color-coded by provider.
+2. **Given** the scatter is visible, **when** I look without interacting, **then** I see quadrant lines at 0.85 / 0.80 and the four region labels in plain English.
+3. **Given** a model has insufficient coverage, **when** the scatter renders, **then** that model appears in an "Insufficient coverage" footer with the specific reason, not silently dropped.
+
+### US-2 — See each metric spelled out with its equation and intermediate math (P1)
+
+As a researcher who will cite this report, I want every metric's plain-English definition, exact formula, and intermediate calculations available on the page itself.
+
+**Why this priority:** Credibility bar for both audiences. Reviewers reject reports that hide the math.
+
+**Independent test:** Every displayed number has a progressive-disclosure path to its formula and raw counts (see FR-015).
+
+**Acceptance scenarios:**
+
+1. **Given** I hover or click the Repeatability column header, **when** the info opens, **then** I see a plain-English definition, the per-scenario Wilson formula, and the random-effects pooling formula.
+2. **Given** I hover or click the Coherence column header, **when** the info opens, **then** I see the definition, the net-pressure formula, the Spearman threshold, and the aggregation.
+3. **Given** any `± X%` value on Repeatability, **when** I hover, **then** I see that it is a random-effects CI and the within/between components are shown separately.
+4. **Given** I am reading the copy, **when** I read it aloud, **then** it reads at or below US high-school level.
+
+### US-3 — Rank and compare models in a table (P1)
+
+As a researcher, I want a table under the scatter listing every model with Repeatability ± CI, Coherence, and coverage counts, sortable by any column.
+
+**Acceptance scenarios:**
+
+1. **Given** the report is open, **when** I scroll below the scatter, **then** I see a table with columns: Model, Provider, Repeatability ± CI, Coherence (with coherent-pair fraction), n scenarios measured, n coherent pairs / total.
+2. **Given** the table is visible, **when** I click a column header, **then** the table sorts by that column, ascending then descending on subsequent clicks.
+3. **Given** the table is sorted, **when** I click a row, **then** the per-model drill-down opens.
+
+### US-4 — Drill down to diagnose why a model sits where it does (P1)
+
+As a researcher who sees a model in an unexpected quadrant, I want to click in and see per-domain, per-pair, and order-effect summaries with links out to the existing detail tools.
+
+**Why this priority:** The diagnosis is the finding. Without drill-down the map is just a picture.
+
+**Acceptance scenarios:**
+
+1. **Given** I click a dot or row, **when** the drill-down opens, **then** I see (a) headline with model name, region label, and one-line plain-English explanation, (b) Repeatability per domain (Job / Neighborhood / Software) with its own ± CI, (c) per-pair Coherence chips showing ρ, p-value, and coherent ✓/✗, (d) an order-effect summary (same / flipped / noisy proportions).
+2. **Given** the per-domain panel is visible, **when** one domain is materially different from the others, **then** it is flagged visually.
+3. **Given** a per-pair Coherence chip is visible, **when** I click or hover, **then** I see the per-condition win-rate progression, and a **"View condition matrix →"** link that opens the existing ConditionMatrix page for that definition.
+4. **Given** the order-effect summary is visible, **when** I click it, **then** I see a **"View transcripts →"** link that opens the existing PairedStabilityView page.
+
+### US-5 — Filter by domain, provider, and coverage (P2)
+
+As a researcher focusing on one domain or provider, I want to filter the scatter and table without leaving the page.
+
+**Acceptance scenarios:**
+
+1. **Given** the report is open, **when** I change the Domain filter, **then** the scatter and table recompute using only that domain's runs.
+2. **Given** the Min n filter is set, **when** the scatter renders, **then** models below that threshold move to the "Insufficient coverage" footer.
+3. **Given** the Provider filter is set, **when** the scatter renders, **then** only matching models appear.
+
+### US-6 — Understand empty states and coverage gaps (P2)
+
+As a user opening the report before the aggregation pipeline has caught up, I want clear messaging about what's missing.
+
+**Acceptance scenarios:**
+
+1. **Given** no models have `AGGREGATE`-eligible coverage, **when** the report loads, **then** an empty state names the pipeline dependency and suggests when to retry.
+2. **Given** some models have coverage and some don't, **when** the report loads, **then** the scatter shows the covered ones and the footer lists the rest with reasons.
+3. **Given** a model has low but non-zero coverage, **when** its row renders, **then** a warning badge indicates the CI is wider than usual.
+4. **Given** the pipeline emits an `invalid-summary-shape` error for a model, **when** the row renders, **then** it is shown distinctly from simple low-coverage cases so malformed data is not silently mislabeled.
+
+### US-7 — Copy-ready methodology block (P3)
+
+As a researcher writing a paper, I want a copy-paste methodology block describing exactly how Repeatability, Coherence, and CIs are computed, with citations.
+
+**Acceptance scenario:**
+
+1. **Given** I click "Copy methodology", **when** I paste into a doc, **then** I see a well-formed paragraph with definitions, formulas, thresholds, and citations (Landis & Koch, DerSimonian-Laird, Wilson).
+
+---
+
+## Edge Cases
+
+- **Model with only one run's worth of repeat coverage:** CI will be wide. Show with a coverage warning badge; do not hide.
+- **Model with 0 `AGGREGATE`-eligible scenarios:** list in "Insufficient coverage" footer with "No repeat coverage available."
+- **Value pair where Spearman ρ is unstable** (small n, or ρ's p-value > 0.05): mark the pair as `indeterminate` (gray) rather than coherent or not, and exclude from both numerator and denominator of Coherence. Do not rely on a flat "n < 3" cutoff — use p-value instead.
+- **All models in the same quadrant:** the map is still useful. Show the scatter with an annotation calling out the homogeneity explicitly.
+- **Order-reversed pair missing for a scenario:** order-effect summary shows "n/a" for that pair, not zero.
+- **Domain filter or provider filter with no matches:** show explanatory empty state.
+- **Refresh during pipeline backfill:** report reads from existing analysis JSON; stale reads are acceptable. This report does not trigger re-computation.
+- **`invalid-summary-shape` payload from the pipeline:** surface as a distinct row state, separate from no-repeat-coverage, so corruption is visible.
+- **2D condition grid is irregular** (not every `(row, col)` has scenarios): compute net-pressure rank over the conditions that exist; do not impute missing cells.
+
+---
+
+## Functional Requirements
+
+- **FR-001:** System MUST render a Consistency report at a new route under the `Models` tab (exact route TBD in plan phase).
+- **FR-002:** System MUST compute **per-scenario Repeatability** using the existing `baselineReliability` definition from `analysisSemantics.reliability.ts` as an input, treating per-scenario match/total counts as the Bernoulli data.
+- **FR-003:** System MUST compute **Coherence** per `(model, value pair)`:
+  (a) Assign each condition a `net_pressure = (appeal of target value) − (appeal of opposing value)` using the canonical condition-grid appeal levels;
+  (b) Compute Spearman rank correlation ρ between `net_pressure` rank and condition win rate across all conditions in the pair;
+  (c) The pair is **coherent** if ρ ≥ 0.8 AND p < 0.05;
+  (d) `Coherence(model) = (coherent pairs) / (determinate pairs)`, where `determinate` excludes pairs with insufficient data to compute a p-value.
+- **FR-004:** System MUST compute **model-level Repeatability ± CI** using random-effects meta-analysis:
+  (a) Compute per-scenario Wilson 95% CI from clean `(matches, trials)` counts;
+  (b) Estimate between-scenario variance τ² using DerSimonian-Laird;
+  (c) Combine with inverse-variance weighted mean and random-effects variance to produce a model-level 95% CI that reflects both within- and between-scenario uncertainty;
+  (d) Display both the within-scenario and between-scenario components separately in the Level-2 tooltip (see FR-015).
+- **FR-005:** System MUST render a scatter with Repeatability on x (0.5–1.0), Coherence on y (0.0–1.0), one dot per model, color = provider, size = n scenarios measured.
+- **FR-006:** System MUST draw quadrant lines at Repeatability = 0.85 and Coherence = 0.80, with region labels visible without interaction.
+- **FR-007:** System MUST render a sortable table below the scatter with columns: Model, Provider, Repeatability ± CI, Coherence (as `k / n pairs coherent`), n scenarios measured.
+- **FR-008:** System MUST provide a drill-down per model showing: (a) headline with region label and plain-English explanation; (b) Repeatability per domain (Job / Neighborhood / Software) with its own random-effects CI; (c) per-pair Coherence chips with ρ, p-value, coherent ✓/✗; (d) order-effect summary (same / flipped / noisy proportions). Drill-down MUST include links to `ConditionMatrix` and `PairedStabilityView` pages; it MUST NOT embed or modify those components.
+- **FR-009:** System MUST expose filters for Domain, Provider, and Min n (number of scenarios measured).
+- **FR-010:** System MUST render plain-English on-page copy for each metric that includes (a) a high-school-level explanation and (b) the exact formula. Tooltip/expandable placement is acceptable; the content must be on the page.
+- **FR-011:** System MUST render an empty state when no models have sufficient coverage, and MUST surface `invalid-summary-shape` pipeline errors as a state distinct from low-coverage.
+- **FR-012:** System MUST NOT modify or rename the existing Models-tab `cross-domain Stability` metric or its terminology.
+- **FR-013:** System MUST use the word "Repeatability" (not "Stability", not "Reliability") for Metric 1 in all user-visible copy, unless the plan phase explicitly chooses an alternative from the discovery list.
+- **FR-014:** System MUST treat `AGGREGATE`-eligible analysis availability as a data dependency; the report must render correctly once the pipeline is populated without triggering re-computation.
+- **FR-015:** System MUST provide **progressive disclosure** for every summary number. Hover or click MUST expose a tooltip/panel stack with:
+  (a) **Level 2** — the metric's plain-English definition, the aggregation formula, and separated intermediate components (e.g. within-scenario vs. between-scenario variance for Repeatability; coherent-pair fraction and representative ρ-distribution summary for Coherence);
+  (b) **Level 3** — a table of the underlying per-scenario or per-pair values that rolled up into the summary (each row showing its own n, statistic, and confidence or p-value);
+  (c) **Level 4** — for any Level-3 row, a plain-English "we asked this question N times; the model matched K times" drilldown with the per-row formula written out and a link to the source transcripts.
+  No summary number on the report page should be a black box.
+
+---
+
+## Success Criteria
+
+- **SC-001:** A researcher reading the report for the first time can describe each model's failure mode in under 30 seconds.
+- **SC-002:** On-page copy for every metric passes a high-school-reading-level check (Flesch-Kincaid grade 10 or below).
+- **SC-003:** Every numeric value on the page is traceable to a formula and to raw counts within three clicks (see FR-015).
+- **SC-004:** No existing Models-tab test passes become failures; the existing `cross-domain Stability` UI is byte-for-byte unchanged.
+- **SC-005:** The report renders in under 2 seconds with the full current model roster, once analysis JSON is in the client cache.
+- **SC-006:** Users hitting the report while the `AGGREGATE` pipeline is still backfilling see the pipeline-pending empty state, not a broken chart.
+- **SC-007:** For any displayed number, a user can click through to the exact formula and the intermediate values it was computed from, within three clicks.
+
+---
+
+## Non-Goals
+
+- Adding or changing models, vignettes, or domains.
+- Rewriting or renaming the existing Models-tab `cross-domain Stability` metric.
+- Implementing the alternative within-model transitivity definition of Coherence (we commit to the net-pressure / Spearman approach).
+- Modifying or embedding `ConditionMatrix` or `PairedStabilityView` — the report links to them in their existing form.
+- Building the `Similarity` (B2) or `Disagreement` (B3) reports — separate features.
+- Debugging the `AGGREGATE`-analysis pipeline backfill — tracked separately.
+- Bootstrap CI for Repeatability (possible v2 upgrade if reviewers push back on random-effects).
+- Publishing a methods paper — downstream of this UI.
+
+---
+
+## Open Questions
+
+*(Do not block spec checkpoint; resolved in plan phase.)*
+
+1. **Final name for Metric 1** — default `Repeatability`. Alternatives: `Steadiness`, `Same-Answer Rate`, `Self-Agreement`, `Stickiness`.
+2. **Quadrant line values** — defaults 0.85 / 0.80. May be tuned once aggregated data is visible across all 270 definitions.
+3. **Routing** — nest under existing `Models` tab vs. new top-level `Models → Consistency` route.
+4. **Net-pressure definition of appeal levels** — we assume the existing canonical condition grid's `strongly / somewhat / neutral / opponentSomewhat / opponentStrongly` labels can be mapped to integer pressure levels. Plan phase must confirm the exact mapping (e.g. `+2 / +1 / 0 / −1 / −2`) and how to handle scenarios that deviate from this 5-point canonical grid.
+
+---
+
+## Dependencies
+
+- **Analysis pipeline** emits `AGGREGATE`-typed analyses populated with per-scenario `baselineReliability` counts across the relevant definitions.
+- **`baselineReliability`** semantics in `analysisSemantics.reliability.ts` continue to expose per-scenario match/total counts (or a direct field can be added — see Open Question — but this report needs *some* path to per-scenario Bernoulli counts).
+- **`ConditionMatrix`** page at `cloud/apps/web/src/components/domains/ConditionMatrix.tsx` continues to render correctly in its current form; we link to it.
+- **`PairedStabilityView`** at `cloud/apps/web/src/pages/PairedStabilityView.tsx` continues to render correctly; we link to it.
+- **Canonical condition labels** from `canonicalConditionSummary.ts` provide the appeal-level ordering used to compute net pressure.
+
+---
+
+## Glossary (canonical terms reused)
+
+| Term | Meaning | Source |
+|---|---|---|
+| Stability (existing) | Cross-domain consistency of a value's win rate across domains (MAD of win rate) | `stabilityDots.ts` |
+| baselineReliability | Within-scenario test-retest agreement rate per analysis | `analysisSemantics.reliability.ts` |
+| Win rate | `prioritized / (prioritized + deprioritized + neutral)` per condition | `ModelValueDetailDrawer.tsx` |
+| Condition | One cell in a vignette's 2D pressure grid with canonical appeal-level labels | `canonicalConditionSummary.ts` |
+| Net pressure | `(target value appeal level) − (opposing value appeal level)` per condition | new (defined in FR-003) |
+| Definition / vignette | One value-pair tension narrative | repo-wide |
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the spec against the provided component code first, then I’ll call out the parts that are weakest under edge cases. I’m looking for places where the spec’s assumptions don’t line up with how the current UI actually behaves.
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/PairedStabilityView.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/components/domains/ConditionMatrix.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+/**
+ * PairedStabilityView
+ *
+ * Renders the paired stability drilldown view showing transcripts split by
+ * primary and companion vignette order.
+ */
+
+import { TranscriptList } from '../components/runs/TranscriptList';
+import { formatRepeatPatternLabel } from '../utils/analysisTranscriptParams';
+import type { Transcript } from '../api/operations/runs';
+
+interface PairedStabilityViewProps {
+  repeatPattern: string;
+  primaryRunName: string | null | undefined;
+  companionRunName: string | null | undefined;
+  primaryTranscripts: Transcript[];
+  companionTranscripts: Transcript[];
+  primaryScenarioDimensions: Record<string, Record<string, string | number>> | null | undefined;
+  companionScenarioDimensions: Record<string, Record<string, string | number>> | null | undefined;
+  onSelectTranscript: (transcript: Transcript) => void;
+  onDecisionChange: (transcript: Transcript, nextDecisionCode: string) => Promise<void>;
+  updatingTranscriptIds: Set<string>;
+  decisionColumnLabel: string;
+  decisionColumnTooltip: string;
+  decisionDisplayMode: 'audit';
+}
+
+export function PairedStabilityView({
+  repeatPattern,
+  primaryRunName,
+  companionRunName,
+  primaryTranscripts,
+  companionTranscripts,
+  primaryScenarioDimensions,
+  companionScenarioDimensions,
+  onSelectTranscript,
+  onDecisionChange,
+  updatingTranscriptIds,
+  decisionColumnLabel,
+  decisionColumnTooltip,
+  decisionDisplayMode,
+}: PairedStabilityViewProps) {
+  return (
+    <div className="space-y-6">
+      <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">
+        Stability drilldown is active for <span className="font-medium">{formatRepeatPatternLabel(repeatPattern)}</span>. Transcripts are shown separately for each vignette order.
+      </div>
+      {primaryTranscripts.length === 0 && companionTranscripts.length === 0 && (
+        <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
+          No transcripts match the selected stability pattern.
+        </div>
+      )}
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold text-gray-700">{primaryRunName ?? 'Primary vignette order'}</h3>
+        {primaryTranscripts.length > 0 ? (
+          <TranscriptList
+            transcripts={primaryTranscripts}
+            onSelect={onSelectTranscript}
+            groupByModel={false}
+            scenarioDimensions={primaryScenarioDimensions ?? undefined}
+            onDecisionChange={onDecisionChange}
+            updatingTranscriptIds={updatingTranscriptIds}
+            decisionColumnLabel={decisionColumnLabel}
+            decisionColumnTooltip={decisionColumnTooltip}
+            decisionDisplayMode={decisionDisplayMode}
+          />
+        ) : (
+          <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-500">
+            No transcripts matched this pattern for this vignette order.
+          </div>
+        )}
+      </section>
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold text-gray-700">{companionRunName ?? 'Companion vignette order'}</h3>
+        {companionTranscripts.length > 0 ? (
+          <TranscriptList
+            transcripts={companionTranscripts}
+            onSelect={onSelectTranscript}
+            groupByModel={false}
+            scenarioDimensions={companionScenarioDimensions ?? undefined}
+            onDecisionChange={onDecisionChange}
+            updatingTranscriptIds={updatingTranscriptIds}
+            decisionColumnLabel={decisionColumnLabel}
+            decisionColumnTooltip={decisionColumnTooltip}
+            decisionDisplayMode={decisionDisplayMode}
+          />
+        ) : (
+          <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-500">
+            No transcripts matched this pattern for this vignette order.
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+ succeeded in 0ms:
+import { compareConditionLevels } from '../../utils/conditionOrdering';
+import {
+  summarizeCanonicalConditionCounts,
+  getConditionCellDisplay,
+} from '../../utils/canonicalConditionSummary';
+
+export type MatrixCondition = {
+  scenarioId: string | null;
+  conditionName: string;
+  dimensions: Record<string, string | number> | null;
+  prioritized: number;
+  deprioritized: number;
+  neutral: number;
+  totalTrials: number;
+  unknownCount: number;
+  strongly: number;
+  somewhat: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+};
+
+function isValidCount(value: number): boolean {
+  return Number.isFinite(value) && value >= 0;
+}
+
+function validateMatrixCondition(condition: MatrixCondition): string | null {
+  const countFields: Array<[string, number]> = [
+    ['prioritized', condition.prioritized],
+    ['deprioritized', condition.deprioritized],
+    ['neutral', condition.neutral],
+    ['totalTrials', condition.totalTrials],
+    ['unknownCount', condition.unknownCount],
+    ['strongly', condition.strongly],
+    ['somewhat', condition.somewhat],
+    ['opponentSomewhat', condition.opponentSomewhat],
+    ['opponentStrongly', condition.opponentStrongly],
+  ];
+
+  for (const [name, value] of countFields) {
+    if (!isValidCount(value)) {
+      return `ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" has an invalid ${name} value of ${String(value)}.`;
+    }
+  }
+
+  const TOLERANCE = 1e-6;
+
+  const expectedTotal = condition.prioritized + condition.deprioritized + condition.neutral;
+  if (Math.abs(condition.totalTrials - expectedTotal) >= TOLERANCE) {
+    return `ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" reports totalTrials=${condition.totalTrials} and counts sum to ${expectedTotal}.`;
+  }
+
+  // Cross-field consistency: canonical-bucket pairs must match the summary counts.
+  const selfSum = condition.strongly + condition.somewhat;
+  if (Math.abs(selfSum - condition.prioritized) >= TOLERANCE) {
+    return `ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" has strongly+somewhat=${selfSum} which does not match prioritized=${condition.prioritized}.`;
+  }
+
+  const opponentSum = condition.opponentStrongly + condition.opponentSomewhat;
+  if (Math.abs(opponentSum - condition.deprioritized) >= TOLERANCE) {
+    return `ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" has opponentStrongly+opponentSomewhat=${opponentSum} which does not match deprioritized=${condition.deprioritized}.`;
+  }
+
+  return null;
+}
+
+type ConditionMatrixProps = {
+  vignetteId: string;
+  conditions: MatrixCondition[];
+  selectedConditionKey: string;
+  onSelect: (definitionId: string, conditionName: string, scenarioId: string | null) => void;
+};
+
+export function ConditionMatrix({ vignetteId, conditions, selectedConditionKey, onSelect }: ConditionMatrixProps) {
+  const dimensions = Array.from(
+    new Set(
+      conditions.flatMap((condition) =>
+        Object.keys(condition.dimensions ?? {}),
+      ),
+    ),
+  ).sort();
+
+  if (dimensions.length < 2) {
+    return (
+      <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        Scenario dimensions are missing for this vignette, so pivot matrix rendering is unavailable.
+      </div>
+    );
+  }
+
+  const validationError = conditions
+    .map((condition) => validateMatrixCondition(condition))
+    .find((message): message is string => message !== null);
+  if (validationError !== undefined) {
+    return (
+      <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+        {validationError}
+      </div>
+    );
+  }
+
+  const rowDim = dimensions[0]!;
+  const colDim = dimensions[1]!;
+  const rows = Array.from(
+    new Set(conditions.map((condition) => String(condition.dimensions?.[rowDim] ?? 'N/A'))),
+  ).sort(compareConditionLevels);
+  const cols = Array.from(
+    new Set(conditions.map((condition) => String(condition.dimensions?.[colDim] ?? 'N/A'))),
+  ).sort(compareConditionLevels);
+
+  const cellByKey = new Map<string, MatrixCondition>();
+  for (const condition of conditions) {
+    const rowValue = String(condition.dimensions?.[rowDim] ?? 'N/A');
+    const colValue = String(condition.dimensions?.[colDim] ?? 'N/A');
+    cellByKey.set(`${rowValue}::${colValue}`, condition);
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full border-collapse text-xs">
+        <thead>
+          <tr>
+            <th className="border border-gray-200 border-b-0 bg-gray-50 p-2" />
+            <th
+              colSpan={cols.length}
+              className="border border-gray-200 bg-gray-100 p-2 text-center text-xs font-bold uppercase text-gray-700"
+            >
+              {colDim}
+            </th>
+          </tr>
+          <tr>
+            <th className="w-32 border border-gray-200 bg-gray-100 p-2 text-left text-xs font-bold uppercase text-gray-700">
+              {rowDim}
+            </th>
+            {cols.map((col) => (
+              <th
+                key={col}
+                className="border border-gray-200 bg-gray-50 p-2 text-center font-mono text-xs font-medium text-gray-500"
+              >
+                {col}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row}>
+              <td className="whitespace-nowrap border border-gray-200 bg-gray-50 p-2 font-mono text-sm font-bold text-gray-900">
+                {row}
+              </td>
+              {cols.map((col) => {
+                const condition = cellByKey.get(`${row}::${col}`);
+                const conditionKey = condition
+                  ? `${vignetteId}:${condition.scenarioId ?? '__unknown__'}`
+                  : '';
+                const isSelected = condition != null && selectedConditionKey === conditionKey;
+                let display: ReturnType<typeof getConditionCellDisplay> | null = null;
+                if (condition) {
+                  const summary = summarizeCanonicalConditionCounts({
+                    strongly: condition.strongly,
+                    somewhat: condition.somewhat,
+                    neutral: condition.neutral,
+                    opponentSomewhat: condition.opponentSomewhat,
+                    opponentStrongly: condition.opponentStrongly,
+                  });
+                  display = getConditionCellDisplay(summary);
+                }
+
+                return (
+                  <td
+                    key={`${row}-${col}`}
+                    className={`border border-gray-100 p-3 text-center text-sm transition-colors ${
+                      condition ? 'cursor-pointer hover:ring-1 hover:ring-sky-300' : ''
+                    } ${isSelected ? 'ring-1 ring-sky-400' : ''}`}
+                    style={{ backgroundColor: display?.backgroundColor }}
+                    onClick={() => {
+                      if (!condition) return;
+                      onSelect(vignetteId, condition.conditionName, condition.scenarioId);
+                    }}
+                    title={condition?.conditionName ?? 'No condition'}
+                  >
+                    {display ? (
+                      <span className={`font-semibold ${display.textColorClass}`}>
+                        {display.label}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="mt-2 text-xs text-gray-500">
+        Click a cell to load condition transcripts below.
+        {conditions.some((c) => c.unknownCount > 0) && (
+          <span className="ml-2 font-semibold text-gray-600">
+            · Unknown trials are excluded from the canonical condition counts.
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+exec
+/bin/zsh -lc "rg --files /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src | rg 'ConditionMatrix|PairedStabilityView|ModelValueDetailDrawer|stabilityDots|canonicalConditionSummary|analysisSemantics/reliability|TranscriptList'" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/PairedStabilityView.tsx
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/components/models/stabilityDots.ts
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/utils/canonicalConditionSummary.ts
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/components/runs/TranscriptList.tsx
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/components/domains/ConditionMatrix.tsx
+
+codex
+I’ve confirmed the current condition matrix and paired stability components are pretty strict about their data shape. Next I’m checking whether the spec’s drill-down and metric language assumes things those components do not actually support.
+exec
+/bin/zsh -lc "sed -n '1,260p' /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { Link } from 'react-router-dom';
+import { Info, X } from 'lucide-react';
+import { type ModelsAnalysisModelResult, type ModelsAnalysisValueResult } from '../../api/operations/modelsAnalysis';
+import { VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
+import { Button } from '../ui/Button';
+import { Tooltip } from '../ui/Tooltip';
+import { computeDots, computeSimpleMad, computeSimpleMean, formatStabilityTooltip } from './stabilityDots';
+
+type ModelValueDetailDrawerProps = {
+  open: boolean;
+  model: ModelsAnalysisModelResult | null;
+  value: ModelsAnalysisValueResult | null;
+  singleDomainActive: boolean;
+  onClose: () => void;
+};
+
+function formatPercent(value: number | null): string {
+  if (value == null || Number.isNaN(value)) return 'n/a';
+  return `${Math.round(value)}%`;
+}
+
+function InfoIcon() {
+  return <Info className="h-3.5 w-3.5" />;
+}
+
+function Dots({ score }: { score: number | null }) {
+  const states = computeDots(score);
+  return (
+    <span className="inline-flex items-center gap-0.5" aria-hidden="true">
+      {states.map((state, i) => {
+        if (state === 'full') {
+          return <span key={i} className="inline-block w-3 h-3 rounded-full flex-shrink-0 bg-current" />;
+        }
+        if (state === 'half') {
+          return (
+            <span
+              key={i}
+              className="inline-block w-3 h-3 rounded-full flex-shrink-0"
+              style={{
+                background: 'linear-gradient(to right, currentColor 50%, transparent 50%)',
+                boxShadow: '0 0 0 1px currentColor',
+              }}
+            />
+          );
+        }
+        if (state === 'muted') {
+          return <span key={i} className="inline-block w-3 h-3 rounded-full flex-shrink-0 border border-current opacity-30" />;
+        }
+        return <span key={i} className="inline-block w-3 h-3 rounded-full flex-shrink-0 border border-current" />;
+      })}
+    </span>
+  );
+}
+
+export function ModelValueDetailDrawer({
+  open,
+  model,
+  value,
+  singleDomainActive,
+  onClose,
+}: ModelValueDetailDrawerProps) {
+  useEffect(() => {
+    if (!open) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+
+    const originalBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open, onClose]);
+
+  if (!open || model == null || value == null) return null;
+
+  const valueKey = value.valueKey as ValueKey;
+  const valueLabel = VALUE_LABELS[valueKey] ?? value.valueKey;
+  const mad = computeSimpleMad(value.domains);
+  const stabilityCardText = formatStabilityTooltip(value.stabilityScore, value.eligibleDomainCount, mad, singleDomainActive);
+  const domains = [...value.domains].sort((left, right) => {
+    const diff = (right.evidenceWeight ?? 0) - (left.evidenceWeight ?? 0);
+    return diff !== 0 ? diff : left.domainName.localeCompare(right.domainName);
+  });
+
+  // --- Pooled win rate tooltip data ---
+  const pooledWinRateTooltip = (
+    <div className="space-y-2">
+      <p>
+        <strong>What it means:</strong> A simple average of win rates across eligible domains.
+        Each domain counts equally — a domain with more vignettes does not pull the average harder.
+        Win rate per domain = prioritized ÷ (prioritized + deprioritized + neutral) across all its vignettes for this value.
+      </p>
+      <p>
+        <strong>Formula:</strong> add up all domain win rates, then divide by the number of domains.
+      </p>
+      {domains.length > 0 && (
+        <div className="border-t border-gray-200 pt-2">
+          <p className="font-semibold mb-1">Calculation for this cell:</p>
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b border-gray-200 text-gray-500">
+                <th className="text-left pb-1 pr-3 font-medium">Domain</th>
+                <th className="text-right pb-1 px-2 font-medium">Vignettes</th>
+                <th className="text-right pb-1 pl-2 font-medium">Win rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {domains.map((d) => (
+                <tr key={d.domainId} className="border-b border-gray-100">
+                  <td className="py-0.5 pr-3">{d.domainName}</td>
+                  <td className="text-right py-0.5 px-2">{d.evidenceWeight ?? '—'}</td>
+                  <td className="text-right py-0.5 pl-2">{formatPercent(d.winRate)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-gray-300 font-semibold">
+                <td className="pt-1 pr-3 text-gray-500 font-normal" colSpan={2}>
+                  sum ÷ {domains.length} =
+                </td>
+                <td className="text-right pt-1 pl-2">{formatPercent(value.pooledWinRate)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+
+  // --- Cross-domain stability tooltip data ---
+  const simpleMean = computeSimpleMean(domains);
+
+  const crossDomainStabilityTooltip = (
+    <div className="space-y-2">
+      <p>
+        <strong>What it means:</strong> How consistently this model wins across different domains.
+        A high score means the model behaves the same way no matter which domain it&apos;s tested in.
+        A low score means the results vary a lot by domain.
+      </p>
+      <p>
+        <strong>How the score is built:</strong>
+      </p>
+      <ol className="list-decimal pl-4 space-y-0.5">
+        <li>Find each domain&apos;s win rate (table below).</li>
+        <li>Measure how far each domain&apos;s win rate is from the mean — the &quot;spread.&quot;</li>
+        <li>
+          Take a simple average of those distances.
+          This is called the <strong>MAD</strong> (Mean Absolute Deviation).
+          Every domain counts equally — a domain with more vignettes does not pull the average harder.
+        </li>
+        <li>
+          Convert to a score: <strong>score = 100 × (1 − MAD ÷ 50)</strong>.
+          A MAD of 0 → score 100 (all domains identical).
+          A MAD of 50 → score 0 (maximum disagreement possible).
+        </li>
+      </ol>
+      {!singleDomainActive && value.eligibleDomainCount >= 2 && simpleMean != null && domains.length > 0 && (
+        <div className="border-t border-gray-200 pt-2">
+          <p className="font-semibold mb-1">
+            Calculation for this cell <span className="font-normal text-gray-500">(mean: {formatPercent(simpleMean)})</span>:
+          </p>
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b border-gray-200 text-gray-500">
+                <th className="text-left pb-1 pr-3 font-medium">Domain</th>
+                <th className="text-right pb-1 px-2 font-medium">Win rate</th>
+                <th className="text-right pb-1 pl-2 font-medium">Distance from mean</th>
+              </tr>
+            </thead>
+            <tbody>
+              {domains.map((d) => (
+                <tr key={d.domainId} className="border-b border-gray-100">
+                  <td className="py-0.5 pr-3">{d.domainName}</td>
+                  <td className="text-right py-0.5 px-2">{formatPercent(d.winRate)}</td>
+                  <td className="text-right py-0.5 pl-2">{Math.round(Math.abs(d.winRate - simpleMean))} pts</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-gray-300 font-semibold">
+                <td className="pt-1 pr-3" colSpan={2}>MAD</td>
+                <td className="text-right pt-1 pl-2">{mad != null ? `${Math.round(mad)} pts` : 'n/a'}</td>
+              </tr>
+              <tr className="font-semibold">
+                <td className="pt-0.5 pr-3 font-normal text-gray-500" colSpan={2}>
+                  {mad != null ? `100 × (1 − MAD ${Math.round(mad)} ÷ 50) =` : 'Score'}
+                </td>
+                <td className="text-right pt-0.5 pl-2">
+                  {value.stabilityScore != null ? `${Math.round(value.stabilityScore)}/100` : 'n/a'}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+          <p className="mt-1.5 text-gray-500">Score guide: 75–100 very consistent · 50–74 some variation · 0–49 changes a lot by domain.</p>
+        </div>
+      )}
+      {singleDomainActive && (
+        <p className="text-amber-700 border-t border-gray-200 pt-2">
+          Not available when a single domain is selected — you need at least 2 domains to compare consistency.
+        </p>
+      )}
+      {!singleDomainActive && value.eligibleDomainCount < 2 && (
+        <p className="text-amber-700 border-t border-gray-200 pt-2">
+          Needs at least 2 eligible domains. Currently: {value.eligibleDomainCount}.
+        </p>
+      )}
+    </div>
+  );
+
+  // --- Vignette count tooltip ---
+  const vignetteCountTooltip = (
+    <div className="space-y-2">
+      <p>
+        <strong>What it means:</strong> The number of distinct vignettes in this domain that test this value.
+        A vignette is a head-to-head scenario set where two values are compared.
+      </p>
+      <p>
+        Multiple runs of the same vignette are pooled into a single win rate before counting,
+        so this number reflects distinct vignettes, not total scenarios or runs.
+      </p>
+      <p>
+        Every vignette counts equally when computing the domain win rate —
+        a domain with 5 vignettes does not pull the average harder than one with 1.
+      </p>
+    </div>
+  );
+
+  return createPortal(
+    <div className="fixed inset-0 z-50">
+      <div
+        className="absolute inset-0 bg-black/40"
+        aria-hidden="true"
+        onClick={onClose}
+      />
+      <aside className="absolute right-0 top-0 h-full w-full max-w-3xl border-l border-gray-200 bg-white shadow-2xl flex flex-col">
+        <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-5 py-4">
+          <div className="min-w-0">
+            <h2 className="truncate text-lg font-semibold text-gray-900">{model.label}</h2>
+            <p className="text-sm text-gray-600">
+              {valueLabel} · {value.eligibleDomainCount} eligible domain{value.eligibleDomainCount === 1 ? '' : 's'}
+            </p>
+          </div>
+          <Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label="Close model value details">
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          <section className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <span>Pooled win rate</span>
+                <Tooltip
+
+exec
+/bin/zsh -lc "sed -n '1,240p' /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/components/runs/TranscriptList.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+exec
+/bin/zsh -lc "sed -n '1,260p' /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/utils/canonicalConditionSummary.ts" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+import type { Transcript } from '../api/operations/runs';
+
+export type CanonicalConditionSummary = {
+  strongly: number;
+  somewhat: number;
+  neutral: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+  unknownCount: number;
+  totalTrials: number;
+  netScore: number | null;
+  direction: 'self' | 'opponent' | 'neutral';
+  hasData: boolean;
+};
+
+export type CanonicalConditionCounts = {
+  strongly: number;
+  somewhat: number;
+  neutral: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+};
+
+export type CanonicalTranscriptIndex = Map<string, Map<string, Transcript[]>>;
+
+type CanonicalBucket = 'strongly' | 'somewhat' | 'neutral' | 'opponentSomewhat' | 'opponentStrongly';
+type CanonicalConditionTally = CanonicalConditionCounts & { unknownCount: number };
+
+function getCanonicalBucket(transcript: Transcript): CanonicalBucket | null {
+  const canonical = transcript.decisionModelV2?.canonical;
+  if (!canonical) {
+    return null;
+  }
+
+  if (canonical.strength === 'neutral') {
+    return 'neutral';
+  }
+
+  const { favoredValueKey, opposedValueKey, strength } = canonical;
+  if (favoredValueKey == null || opposedValueKey == null) {
+    return null;
+  }
+
+  // Alphabetically-first value is the canonical "first" (blue) side; second is
+  // the "opponent" (orange) side.  This is stable across both runs in a paired
+  // batch, unlike canonical.direction which is position-based (valueA/valueB)
+  // and flips between companion runs.
+  const isFirst = favoredValueKey.localeCompare(opposedValueKey) < 0;
+
+  if (isFirst && strength === 'strong') return 'strongly';
+  if (isFirst && strength === 'lean') return 'somewhat';
+  if (!isFirst && strength === 'lean') return 'opponentSomewhat';
+  if (!isFirst && strength === 'strong') return 'opponentStrongly';
+
+  return null;
+}
+
+export function buildCanonicalTranscriptIndex(transcripts: Transcript[] | null | undefined): CanonicalTranscriptIndex {
+  const index = new Map<string, Map<string, Transcript[]>>();
+
+  for (const transcript of transcripts ?? []) {
+    if (!transcript.scenarioId) {
+      continue;
+    }
+
+    const modelId = transcript.modelId;
+    const scenarioId = String(transcript.scenarioId);
+    const byScenario = index.get(modelId) ?? new Map<string, Transcript[]>();
+    const current = byScenario.get(scenarioId);
+    if (current) {
+      current.push(transcript);
+    } else {
+      byScenario.set(scenarioId, [transcript]);
+    }
+    index.set(modelId, byScenario);
+  }
+
+  return index;
+}
+
+export function collectCanonicalConditionTranscripts(
+  transcriptIndex: CanonicalTranscriptIndex,
+  modelId: string,
+  scenarioIds: string[],
+): Transcript[] {
+  const byScenario = transcriptIndex.get(modelId);
+  if (!byScenario) {
+    return [];
+  }
+
+  const collected: Transcript[] = [];
+  scenarioIds.forEach((scenarioId) => {
+    collected.push(...(byScenario.get(scenarioId) ?? []));
+  });
+  return collected;
+}
+
+export function summarizeCanonicalConditionTranscripts(
+  transcripts: Transcript[] | null | undefined,
+): CanonicalConditionSummary {
+  const counts: CanonicalConditionTally = {
+    strongly: 0,
+    somewhat: 0,
+    neutral: 0,
+    opponentSomewhat: 0,
+    opponentStrongly: 0,
+    unknownCount: 0,
+  };
+
+  for (const transcript of transcripts ?? []) {
+    const bucket = getCanonicalBucket(transcript);
+    if (!bucket) {
+      counts.unknownCount += 1;
+      continue;
+    }
+
+    counts[bucket] += 1;
+  }
+
+  return summarizeCanonicalConditionTally(counts);
+}
+
+export function summarizeCanonicalConditionCounts(
+  counts: CanonicalConditionCounts,
+): CanonicalConditionSummary {
+  return summarizeCanonicalConditionTally({
+    strongly: coerceNonNegativeFiniteCount(counts.strongly),
+    somewhat: coerceNonNegativeFiniteCount(counts.somewhat),
+    neutral: coerceNonNegativeFiniteCount(counts.neutral),
+    opponentSomewhat: coerceNonNegativeFiniteCount(counts.opponentSomewhat),
+    opponentStrongly: coerceNonNegativeFiniteCount(counts.opponentStrongly),
+    unknownCount: 0,
+  });
+}
+
+function coerceNonNegativeFiniteCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function summarizeCanonicalConditionTally(counts: CanonicalConditionTally): CanonicalConditionSummary {
+  const totalTrials =
+    counts.strongly
+    + counts.somewhat
+    + counts.neutral
+    + counts.opponentSomewhat
+    + counts.opponentStrongly;
+
+  if (totalTrials === 0) {
+    return {
+      ...counts,
+      totalTrials,
+      netScore: null,
+      direction: 'neutral',
+      hasData: false,
+    };
+  }
+
+  const netScore = (
+    (2 * counts.strongly + counts.somewhat)
+    - (2 * counts.opponentStrongly + counts.opponentSomewhat)
+  ) / totalTrials;
+
+  // Threshold is inclusive (>= 0.05) so it aligns with the one-decimal label:
+  // |netScore| >= 0.05 rounds to "0.1" and should render directional, not neutral.
+  let direction: CanonicalConditionSummary['direction'] = 'neutral';
+  if (netScore >= 0.05) {
+    direction = 'self';
+  } else if (netScore <= -0.05) {
+    direction = 'opponent';
+  }
+
+  return {
+    ...counts,
+    totalTrials,
+    netScore,
+    direction,
+    hasData: true,
+  };
+}
+
+export type ConditionCellDisplay = {
+  netScore: number | null;
+  direction: 'self' | 'opponent' | 'neutral';
+  hasData: boolean;
+  label: string;
+  backgroundColor: string | undefined;
+  textColorClass: string;
+};
+
+export function getConditionCellDisplay(summary: CanonicalConditionSummary): ConditionCellDisplay {
+  if (!summary.hasData) {
+    return {
+      netScore: null,
+      direction: summary.direction,
+      hasData: false,
+      label: '—',
+      backgroundColor: undefined,
+      textColorClass: 'text-gray-500',
+    };
+  }
+
+  const netScore = summary.netScore ?? 0;
+  const magnitude = Math.abs(netScore);
+  const label = magnitude.toFixed(1);
+
+  if (summary.direction === 'neutral') {
+    return {
+      netScore: summary.netScore,
+      direction: 'neutral',
+      hasData: true,
+      label,
+      backgroundColor: undefined,
+      textColorClass: 'text-gray-500',
+    };
+  }
+
+  // Directional fill: magnitude in [0, 2] maps linearly to opacity [0, 0.5].
+  const clamped = Math.min(2, Math.max(0, magnitude));
+  const opacity = (clamped / 2) * 0.5;
+  const isOpposing = summary.direction === 'opponent';
+  const backgroundColor = isOpposing
+    ? `rgba(251, 146, 60, ${opacity})`
+    : `rgba(59, 130, 246, ${opacity})`;
+  const textColorClass = isOpposing ? 'text-orange-700' : 'text-blue-700';
+
+  return {
+    netScore: summary.netScore,
+    direction: summary.direction,
+    hasData: true,
+    label,
+    backgroundColor,
+    textColorClass,
+  };
+}
+
+ succeeded in 0ms:
+/**
+ * TranscriptList Component
+ *
+ * Displays a list of transcripts with filtering and selection.
+ */
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
+import type { Transcript } from '../../api/operations/runs';
+import type { VisualizationData } from '../../api/operations/analysis';
+import {
+  buildNormalizedScenarioDimensionsMap,
+  getScenarioDimensionsForId,
+} from '../../utils/scenarioUtils';
+import { formatDisplayLabel } from '../../utils/displayLabels';
+import type { TranscriptDecisionDisplayMode } from '../../utils/transcriptDecisionModel';
+import { SortHeaderButton } from './SortHeaderButton';
+import { TranscriptRow } from './TranscriptRow';
+import {
+  groupTranscriptsByModel,
+  resolveSortDimensionKeys,
+  getDefaultSortState,
+  isSameSortColumn,
+  buildColumnComparator,
+  buildTranscriptSorter,
+  type GroupedTranscripts,
+  type SortColumn,
+  type SortState,
+} from './transcriptListSort';
+
+type TranscriptListProps = {
+  transcripts: Transcript[];
+  onSelect: (transcript: Transcript) => void;
+  groupByModel?: boolean;
+  scenarioDimensions?: VisualizationData['scenarioDimensions'];
+  dimensionLabels?: Record<string, string>;
+  onDecisionChange?: (transcript: Transcript, decisionCode: string) => Promise<void> | void;
+  updatingTranscriptIds?: Set<string>;
+  decisionColumnLabel?: string;
+  decisionColumnTooltip?: string;
+  normalizedDecisionTranscriptIds?: Set<string>;
+  decisionDisplayMode?: TranscriptDecisionDisplayMode;
+};
+
+export function TranscriptList({
+  transcripts,
+  onSelect,
+  groupByModel = true,
+  scenarioDimensions,
+  dimensionLabels,
+  onDecisionChange,
+  updatingTranscriptIds,
+  decisionColumnLabel = 'Decision',
+  decisionColumnTooltip,
+  normalizedDecisionTranscriptIds,
+  decisionDisplayMode = 'legacy',
+}: TranscriptListProps) {
+  const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set());
+  const [filter, setFilter] = useState('');
+
+  const dimensionKeys = useMemo(() => {
+    if (!scenarioDimensions) return [];
+
+    // Use the union of keys across all scenarios so sparse/empty first
+    // entries do not drop valid columns from the table.
+    const keys = new Set<string>();
+    for (const dimensions of Object.values(scenarioDimensions)) {
+      if (!dimensions || typeof dimensions !== 'object' || Array.isArray(dimensions)) {
+        continue;
+      }
+      for (const key of Object.keys(dimensions)) {
+        keys.add(key);
+      }
+    }
+    return Array.from(keys);
+  }, [scenarioDimensions]);
+
+  const normalizedScenarioDimensions = useMemo(() => {
+    return buildNormalizedScenarioDimensionsMap(scenarioDimensions);
+  }, [scenarioDimensions]);
+
+  const getScenarioDimensions = useCallback((scenarioId: string | null) => {
+    return getScenarioDimensionsForId(
+      scenarioId,
+      scenarioDimensions,
+      normalizedScenarioDimensions
+    );
+  }, [scenarioDimensions, normalizedScenarioDimensions]);
+
+  const sortKeys = useMemo(
+    () => resolveSortDimensionKeys(dimensionKeys, dimensionLabels),
+    [dimensionKeys, dimensionLabels]
+  );
+
+  const [sortState, setSortState] = useState<SortState>(() => getDefaultSortState(sortKeys, dimensionKeys));
+  const [hasUserChosenSort, setHasUserChosenSort] = useState(false);
+
+  useEffect(() => {
+    if (!hasUserChosenSort) {
+      setSortState(getDefaultSortState(sortKeys, dimensionKeys));
+      return;
+    }
+
+    setSortState((current) => {
+      const currentDimensionExists = current.column.type !== 'dimension'
+        || dimensionKeys.includes(current.column.key);
+
+      if (currentDimensionExists) {
+        return current;
+      }
+
+      return getDefaultSortState(sortKeys, dimensionKeys);
+    });
+  }, [dimensionKeys, hasUserChosenSort, sortKeys]);
+
+  const hasDimensionKeys = dimensionKeys.length > 0;
+
+  const compareByColumn = useCallback(
+    buildColumnComparator(decisionDisplayMode, getScenarioDimensions),
+    [decisionDisplayMode, getScenarioDimensions, normalizedDecisionTranscriptIds],
+  );
+
+  const sortTranscripts = useCallback(
+    buildTranscriptSorter(sortState, sortKeys, compareByColumn),
+    [compareByColumn, sortKeys.primary, sortKeys.secondary, sortState.column, sortState.direction],
+  );
+
+  const handleSortChange = useCallback((column: SortColumn) => {
+    setHasUserChosenSort(true);
+    setSortState((current) => {
+      if (isSameSortColumn(current.column, column)) {
+        return {
+          column,
+          direction: current.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+
+      return {
+        column,
+        direction: 'asc',
+      };
+    });
+  }, []);
+
+  const groupedTranscripts = useMemo(() => {
+    const grouped = groupTranscriptsByModel(transcripts);
+    const sortedGroups: GroupedTranscripts = {};
+    for (const [modelId, modelTranscripts] of Object.entries(grouped)) {
+      sortedGroups[modelId] = sortTranscripts(modelTranscripts);
+    }
+    return sortedGroups;
+  }, [transcripts, sortTranscripts]);
+
+  // Auto-expand all model groups when dimension columns are present so users see level data.
+  useEffect(() => {
+    if (!hasDimensionKeys) return;
+    setExpandedModels((prev) => {
+      const next = new Set(Object.keys(groupedTranscripts).sort());
+      if (next.size === prev.size && [...next].every((id) => prev.has(id))) return prev;
+      return next;
+    });
+  }, [hasDimensionKeys, groupedTranscripts]);
+
+  const modelIds = Object.keys(groupedTranscripts).sort();
+
+  const toggleModel = (modelId: string) => {
+    setExpandedModels((prev) => {
+      const next = new Set(prev);
+      if (next.has(modelId)) {
+        next.delete(modelId);
+      } else {
+        next.add(modelId);
+      }
+      return next;
+    });
+  };
+
+  // Filter transcripts by model ID or scenario ID for underlying lookups.
+  const filteredTranscripts = useMemo(() => {
+    if (!filter) return sortTranscripts(transcripts);
+    const lowerFilter = filter.toLowerCase();
+    const filtered = transcripts.filter(
+      (t) =>
+        t.modelId.toLowerCase().includes(lowerFilter) ||
+        (t.scenarioId?.toLowerCase().includes(lowerFilter) ?? false)
+    );
+    return sortTranscripts(filtered);
+  }, [transcripts, filter, sortTranscripts]);
+
+  const isActiveSort = useCallback((column: SortColumn) => {
+    return isSameSortColumn(sortState.column, column);
+  }, [sortState.column]);
+
+  if (transcripts.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        No transcripts yet
+      </div>
+    );
+  }
+
+  if (!groupByModel) {
+    // Flat list view
+  const gridTemplateColumns = [
+      'minmax(160px, 1.4fr)',
+      ...dimensionKeys.map(() => 'minmax(120px, 1fr)'),
+      'minmax(220px, 1.4fr)',
+      'minmax(90px, 0.7fr)',
+    ].join(' ');
+
+    return (
+      <div className="space-y-2">
+        {/* Filter input */}
+        {transcripts.length > 5 && (
+          <input
+            type="text"
+            placeholder="Filter by model or transcript..."
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+          />
+        )}
+
+        {/* Transcript list */}
+        <div className="space-y-1">
+          <div
+            className="grid gap-3 px-3 py-2 text-xs uppercase tracking-wide text-gray-400"
+            style={{ gridTemplateColumns }}
+          >
+            <SortHeaderButton
+              label="Model"
+              ariaLabel="Model"
+              onClick={() => handleSortChange({ type: 'model' })}
+              active={isActiveSort({ type: 'model' })}
+              direction={sortState.direction}
+            />
+            {dimensionKeys.map((key) => (
+              <SortHeaderButton
+                key={key}
+                label={formatDisplayLabel(dimensionLabels?.[key] ?? key)}
+
+codex
+I found one likely mismatch already: the spec talks about “existing pages,” but the provided code shows `ConditionMatrix` as a component, not a page. I’m checking whether that’s just wording or a real routing assumption that can break the drill-down links.
+exec
+/bin/zsh -lc 'rg -n "ConditionMatrix" /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src' in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:19:import { ConditionMatrix } from '../components/domains/ConditionMatrix';
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:286:                  <ConditionMatrix
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/components/domains/ConditionMatrix.tsx:41:      return `ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" has an invalid ${name} value of ${String(value)}.`;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/components/domains/ConditionMatrix.tsx:49:    return `ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" reports totalTrials=${condition.totalTrials} and counts sum to ${expectedTotal}.`;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/components/domains/ConditionMatrix.tsx:55:    return `ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" has strongly+somewhat=${selfSum} which does not match prioritized=${condition.prioritized}.`;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/components/domains/ConditionMatrix.tsx:60:    return `ConditionMatrix requires canonical count data, but condition "${condition.conditionName}" has opponentStrongly+opponentSomewhat=${opponentSum} which does not match deprioritized=${condition.deprioritized}.`;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/components/domains/ConditionMatrix.tsx:66:type ConditionMatrixProps = {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/components/domains/ConditionMatrix.tsx:73:export function ConditionMatrix({ vignetteId, conditions, selectedConditionKey, onSelect }: ConditionMatrixProps) {
+
+exec
+/bin/zsh -lc "sed -n '1,260p' /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/components/models/stabilityDots.ts" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+export type DotState = 'full' | 'half' | 'empty' | 'muted';
+
+export type StabilityDomainContribution = {
+  evidenceWeight: number | null;
+  winRate: number;
+};
+
+function formatDomainCount(count: number): string {
+  return `${count} eligible domain${count === 1 ? '' : 's'}`;
+}
+
+function describeStability(score: number): string {
+  if (score >= 100) return 'identical';
+  if (score >= 75) return 'fairly consistent';
+  if (score >= 50) return 'moderately consistent';
+  return 'varies significantly';
+}
+
+export function computeDots(score: number | null | undefined): DotState[] {
+  if (score == null || Number.isNaN(score)) {
+    return ['muted', 'muted', 'muted', 'muted', 'muted'];
+  }
+
+  const safeScore = Math.max(0, Math.min(100, score));
+  const halfDots = Math.floor(safeScore / 10);
+  const fullDots = Math.floor(halfDots / 2);
+  const hasHalf = halfDots % 2 === 1;
+
+  return Array.from({ length: 5 }, (_, index) => {
+    if (index < fullDots) return 'full';
+    if (index === fullDots && hasHalf) return 'half';
+    return 'empty';
+  });
+}
+
+export function computeSimpleMean(domains: StabilityDomainContribution[]): number | null {
+  if (domains.length === 0) return null;
+  const sum = domains.reduce((acc, d) => acc + d.winRate, 0);
+  return sum / domains.length;
+}
+
+export function computeSimpleMad(domains: StabilityDomainContribution[]): number | null {
+  if (domains.length === 0) return null;
+  const mean = computeSimpleMean(domains);
+  if (mean == null) return null;
+  const sum = domains.reduce((acc, d) => acc + Math.abs(d.winRate - mean), 0);
+  return sum / domains.length;
+}
+
+export function formatStabilityTooltip(
+  score: number | null | undefined,
+  eligibleDomainCount: number,
+  mad: number | null | undefined,
+  mutedBySingleDomain = false,
+): string {
+  if (mutedBySingleDomain) {
+    return `Cross-domain stability is not available when viewing a single domain. Based on ${formatDomainCount(eligibleDomainCount)}.`;
+  }
+
+  if (eligibleDomainCount < 2 || score == null || Number.isNaN(score)) {
+    return `Cross-domain stability needs at least two eligible domains. Based on ${formatDomainCount(eligibleDomainCount)}.`;
+  }
+
+  const roundedScore = Math.round(Math.max(0, Math.min(100, score)));
+  const spreadText = mad != null ? ` (average spread \u2248 ${mad.toFixed(1)} points from the mean)` : '';
+  return `Cross-domain stability shows how consistent this value's win rate is across domains. Score: ${roundedScore}/100 - ${describeStability(roundedScore)}${spreadText}. Based on ${formatDomainCount(eligibleDomainCount)}.`;
+}
+
+exec
+/bin/zsh -lc 'rg -n "PairedStabilityView" /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src' in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/PairedStabilityView.tsx:2: * PairedStabilityView
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/PairedStabilityView.tsx:12:interface PairedStabilityViewProps {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/PairedStabilityView.tsx:28:export function PairedStabilityView({
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/PairedStabilityView.tsx:42:}: PairedStabilityViewProps) {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/AnalysisTranscripts.tsx:21:import { PairedStabilityView } from './PairedStabilityView';
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/AnalysisTranscripts.tsx:237:        <PairedStabilityView
+
+exec
+/bin/zsh -lc "sed -n '200,280p' /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/AnalysisTranscripts.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+exec
+/bin/zsh -lc "sed -n '240,340p' /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+          )}
+        </div>
+      )}
+
+      {!scenarioDimensions && !hasRepeatPatternParams && !hasDirectTranscriptParam && !hasPairedValueFilterParams && !hasPairedConditionFilterParams && !isPairedStabilityDrilldown && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+          Condition dimension data is not available for this run. Recompute analysis to enable pivot filtering.
+        </div>
+      )}
+
+      {!isPairedStabilityDrilldown && filteredTranscripts.length > 0 && (
+        <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-gray-900">Decision coverage</span>
+            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+              Exact {transcriptCoverage.exact}
+            </span>
+            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-800">
+              Fallback {transcriptCoverage.fallback}
+            </span>
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+              Ambiguous {transcriptCoverage.ambiguous}
+            </span>
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
+              Manual {transcriptCoverage.manual}
+            </span>
+          </div>
+          {transcriptCoverage.unresolved > 0 && (
+            <p className="mt-2 text-xs text-amber-700">
+              {transcriptCoverage.unresolved} transcript{transcriptCoverage.unresolved === 1 ? '' : 's'} in this view still do not have an analyzable canonical decision.
+              Open those transcripts to review the raw evidence.
+            </p>
+          )}
+        </div>
+      )}
+
+      {isPairedStabilityDrilldown ? (
+        <PairedStabilityView
+          repeatPattern={repeatPattern}
+          primaryRunName={run?.definition?.name}
+          companionRunName={companionRun?.definition?.name}
+          primaryTranscripts={primaryStabilityTranscripts}
+          companionTranscripts={companionStabilityTranscripts}
+          primaryScenarioDimensions={scenarioDimensions}
+          companionScenarioDimensions={companionScenarioDimensions}
+          onSelectTranscript={setSelectedTranscript}
+          onDecisionChange={handleDecisionChange}
+          updatingTranscriptIds={updatingTranscriptIds}
+          decisionColumnLabel={decisionColumnLabel}
+          decisionColumnTooltip={decisionColumnTooltip}
+          decisionDisplayMode={listDisplayMode}
+        />
+      ) : pairedConditionStateError ? (
+        <ErrorMessage message={pairedConditionStateError.message} />
+      ) : reportStateError ? (
+        <ErrorMessage message={reportStateError.message} />
+      ) : !hasDirectTranscriptParam && !hasRepeatPatternParams && !hasPairedValueFilterParams && !hasPairedConditionFilterParams && scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
+        <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
+          Missing filter parameters. Return to the pivot table and click a cell to view transcripts.
+        </div>
+      ) : filteredTranscripts.length === 0 ? (
+        <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
+          {hasRepeatPatternParams ? 'No transcripts found for these conditions.' : 'No transcripts found for this condition.'}
+        </div>
+      ) : (
+        <TranscriptList
+          transcripts={filteredTranscripts}
+          onSelect={setSelectedTranscript}
+          groupByModel={false}
+          scenarioDimensions={mergedScenarioDimensions}
+          onDecisionChange={handleDecisionChange}
+          updatingTranscriptIds={updatingTranscriptIds}
+          decisionColumnLabel={decisionColumnLabel}
+          decisionColumnTooltip={decisionColumnTooltip}
+          decisionDisplayMode={listDisplayMode}
+        />
+      )}
+
+      {selectedTranscript && (
+        <TranscriptViewer
+          transcript={selectedTranscript}
+
+ succeeded in 0ms:
+                  <li>Positive values mean favored more often; negative values mean disfavored more often.</li>
+                </ul>
+              </>
+            )}
+          </div>
+        </section>
+      )}
+
+      <section className="rounded-lg border border-gray-200 bg-white p-4">
+        <h2 className="text-base font-medium text-gray-900">Vignette Condition Tables ({label})</h2>
+        <p className="mt-1 text-sm text-gray-600">
+          Each table is one vignette containing this value, filtered to {detail.modelLabel}.
+        </p>
+        <div className="mt-4 space-y-4">
+          {detail.vignettes.length === 0 && (
+            <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              No transcript data found for this model/value in the selected domain.
+            </div>
+          )}
+          {detail.vignettes.map((vignette) => (
+            <article key={vignette.definitionId} className="rounded border border-gray-200 bg-white">
+              <header className="border-b border-gray-200 bg-gray-50 px-3 py-2">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-gray-900">
+                    {vignette.definitionName} (v{vignette.definitionVersion})
+                  </p>
+                  {vignette.aggregateRunId !== null && (
+                    <Link
+                      to={`/analysis/${vignette.aggregateRunId}?tab=scenarios`}
+                      className="text-xs font-medium text-sky-700 hover:text-sky-900 hover:underline"
+                    >
+                      Open in Vignette Analysis (Conditions)
+                    </Link>
+                  )}
+                </div>
+                <p className="text-xs text-gray-600">
+                  Pair:{' '}
+                  <strong className="font-semibold text-blue-700">{label}</strong> vs{' '}
+                  <strong className="font-semibold text-orange-700">{VALUE_LABELS[vignette.otherValueKey as ValueKey] ?? vignette.otherValueKey}</strong>{' '}
+                  · Trials: {vignette.totalTrials} · Win rate: {toPercent(vignette.selectedValueWinRate)}
+                </p>
+              </header>
+              {vignette.conditions.length === 0 ? (
+                <div className="px-3 py-3 text-center text-xs text-gray-500">No condition-level trials available.</div>
+              ) : (
+                <div className="space-y-3 px-3 py-3">
+                  <ConditionMatrix
+                    vignetteId={vignette.definitionId}
+                    conditions={vignette.conditions}
+                    selectedConditionKey={selectedConditionKey}
+                    onSelect={handleConditionClick}
+                  />
+                </div>
+              )}
+              {selectedCondition !== null && selectedCondition.definitionId === vignette.definitionId && (
+                <div className="border-t border-gray-200 bg-gray-50 px-3 py-3">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-xs font-medium text-gray-800">
+                      Transcripts for condition: {selectedCondition.conditionName}
+                    </p>
+                    <p className="text-[11px] text-gray-500">Click transcript to view full conversation</p>
+                  </div>
+                  {transcriptsFetching && <Loading size="sm" text="Loading transcripts..." />}
+                  {transcriptsError && (
+                    <ErrorMessage message={`Failed to load transcripts: ${transcriptsError.message}`} />
+                  )}
+                  {!transcriptsFetching && !transcriptsError && selectedConditionTranscriptState.transcripts.length === 0 && (
+                    <p className="text-xs text-gray-500">No transcripts found for this condition and model.</p>
+                  )}
+                  {!transcriptsFetching && !transcriptsError && selectedConditionTranscriptState.transcripts.length > 0 && (
+                    <TranscriptList
+                      transcripts={selectedConditionTranscriptState.transcripts}
+                      onSelect={setSelectedTranscript}
+                      groupByModel={false}
+                      scenarioDimensions={selectedConditionDimensions}
+                      decisionColumnLabel={decisionColumnLabel}
+                      decisionDisplayMode={reportDecisionDisplayMode}
+                    />
+                  )}
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
+      </section>
+      {selectedTranscript !== null && (
+        <TranscriptViewer
+          transcript={selectedTranscript}
+          onClose={() => setSelectedTranscript(null)}
+          decisionDisplayMode={reportDecisionDisplayMode}
+        />
+      )}
+    </div>
+  );
+}
+
+exec
+/bin/zsh -lc 'rg -n "repeatPattern|isPairedStabilityDrilldown|hasRepeatPatternParams|pairedConditionStateError" /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/AnalysisTranscripts.tsx' in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+41:    repeatPattern,
+51:    hasRepeatPatternParams,
+56:    isPairedStabilityDrilldown,
+65:    pairedConditionStateError,
+173:        repeatPattern={repeatPattern}
+175:        isPairedStabilityDrilldown={isPairedStabilityDrilldown}
+176:        hasRepeatPatternParams={hasRepeatPatternParams}
+204:      {!scenarioDimensions && !hasRepeatPatternParams && !hasDirectTranscriptParam && !hasPairedValueFilterParams && !hasPairedConditionFilterParams && !isPairedStabilityDrilldown && (
+210:      {!isPairedStabilityDrilldown && filteredTranscripts.length > 0 && (
+236:      {isPairedStabilityDrilldown ? (
+238:          repeatPattern={repeatPattern}
+252:      ) : pairedConditionStateError ? (
+253:        <ErrorMessage message={pairedConditionStateError.message} />
+256:      ) : !hasDirectTranscriptParam && !hasRepeatPatternParams && !hasPairedValueFilterParams && !hasPairedConditionFilterParams && scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
+262:          {hasRepeatPatternParams ? 'No transcripts found for these conditions.' : 'No transcripts found for this condition.'}
+
+exec
+/bin/zsh -lc "sed -n '1,140p' /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/AnalysisTranscripts.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+/**
+ * AnalysisTranscripts Page
+ *
+ * Shows filtered transcripts for a pivot cell in a full page view.
+ */
+
+import { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
+import { Button } from '../components/ui/Button';
+import { Loading } from '../components/ui/Loading';
+import { ErrorMessage } from '../components/ui/ErrorMessage';
+import { TranscriptList } from '../components/runs/TranscriptList';
+import { TranscriptViewer } from '../components/runs/TranscriptViewer';
+import { AnalysisScopeBanner } from '../components/analysis/AnalysisScopeBanner';
+import type { Transcript } from '../api/operations/runs';
+import { formatDisplayLabel } from '../utils/displayLabels';
+import { formatPairedConditionSourceLabel } from '../utils/analysisTranscriptParams';
+import { useAnalysisTranscriptsData } from '../hooks/useAnalysisTranscriptsData';
+import { AnalysisTranscriptHeader } from './AnalysisTranscriptHeader';
+import { PairedStabilityView } from './PairedStabilityView';
+
+export function AnalysisTranscripts() {
+  const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null);
+
+  const {
+    loading,
+    error,
+    run,
+    companionRun,
+    isAggregate,
+    trialSignature,
+    selectedAggregateSignature,
+    aggregateRuns,
+    searchParams,
+    row,
+    col,
+    selectedModel,
+    repeatPattern,
+    selectedTranscriptId,
+    pairedValueLabel,
+    pairView,
+    pairedConditionSource,
+    analysisMode,
+    conditionIds,
+    activeRowDim,
+    activeColDim,
+    hasCellFilterParams,
+    hasRepeatPatternParams,
+    hasDirectTranscriptParam,
+    hasBucketFilterParams,
+    hasPairedValueFilterParams,
+    hasPairedConditionFilterParams,
+    isPairedStabilityDrilldown,
+    scenarioDimensions,
+    companionScenarioDimensions,
+    mergedScenarioDimensions,
+    decisionBucketLabel,
+    filteredTranscripts,
+    primaryStabilityTranscripts,
+    companionStabilityTranscripts,
+    decisionSummary,
+    pairedConditionStateError,
+    reportStateError,
+    handleDecisionChange,
+    updatingTranscriptIds,
+  } = useAnalysisTranscriptsData(id);
+
+  useEffect(() => {
+    if (!hasDirectTranscriptParam) return;
+    const matched = filteredTranscripts.find((t) => t.id === selectedTranscriptId) ?? null;
+    setSelectedTranscript(matched);
+  }, [filteredTranscripts, hasDirectTranscriptParam, selectedTranscriptId]);
+
+  useEffect(() => {
+    if (!selectedTranscript) return;
+    const matched = filteredTranscripts.find((t) => t.id === selectedTranscript.id);
+    if (!matched || matched === selectedTranscript) return;
+    setSelectedTranscript(matched);
+  }, [filteredTranscripts, selectedTranscript]);
+
+  const transcriptCoverage = filteredTranscripts.reduce(
+    (acc, transcript) => {
+      const metadata = transcript.decisionModelV2?.raw;
+      const canonical = transcript.decisionModelV2?.canonical ?? null;
+      if (metadata?.manualOverride) acc.manual += 1;
+      if (metadata?.parseClass === 'exact') {
+        acc.exact += 1;
+      } else if (metadata?.parseClass === 'fallback_resolved') {
+        acc.fallback += 1;
+      } else if (metadata?.parseClass === 'ambiguous') {
+        acc.ambiguous += 1;
+      }
+      if (
+        canonical == null
+        || canonical.direction === 'unknown'
+        || canonical.strength === 'unknown'
+        || canonical.source === 'error'
+        || metadata?.parseClass === 'unparseable'
+      ) {
+        acc.unresolved += 1;
+      }
+      return acc;
+    },
+    { exact: 0, fallback: 0, ambiguous: 0, manual: 0, unresolved: 0 }
+  );
+
+  const listDisplayMode = 'audit' as const;
+  const viewerDisplayMode = 'audit' as const;
+  const decisionColumnLabel = 'Decision summary';
+  const decisionColumnTooltip = 'Shows the canonical decision headline and summary from the backend transcript data.';
+
+  const backButton = (
+    <div className="flex items-center gap-4">
+      <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+        <ArrowLeft className="w-4 h-4 mr-1" />
+        Back
+      </Button>
+    </div>
+  );
+
+  if (loading && !run) {
+    return (
+      <div className="space-y-6">
+        {backButton}
+        <Loading size="lg" text="Loading transcripts..." />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        {backButton}
+        <ErrorMessage message={`Failed to load transcripts: ${error.message}`} />
+      </div>
+    );
+  }
+
+codex
+I’ve narrowed this to the drill-down links and the denominator/coverage story. I’m grabbing exact line numbers now so the findings are concrete and tied to the current code path.
+exec
+/bin/zsh -lc "nl -ba /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx | sed -n '270,310p'" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+exec
+/bin/zsh -lc "nl -ba /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/AnalysisTranscripts.tsx | sed -n '1,90p'" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+   270	                    >
+   271	                      Open in Vignette Analysis (Conditions)
+   272	                    </Link>
+   273	                  )}
+   274	                </div>
+   275	                <p className="text-xs text-gray-600">
+   276	                  Pair:{' '}
+   277	                  <strong className="font-semibold text-blue-700">{label}</strong> vs{' '}
+   278	                  <strong className="font-semibold text-orange-700">{VALUE_LABELS[vignette.otherValueKey as ValueKey] ?? vignette.otherValueKey}</strong>{' '}
+   279	                  · Trials: {vignette.totalTrials} · Win rate: {toPercent(vignette.selectedValueWinRate)}
+   280	                </p>
+   281	              </header>
+   282	              {vignette.conditions.length === 0 ? (
+   283	                <div className="px-3 py-3 text-center text-xs text-gray-500">No condition-level trials available.</div>
+   284	              ) : (
+   285	                <div className="space-y-3 px-3 py-3">
+   286	                  <ConditionMatrix
+   287	                    vignetteId={vignette.definitionId}
+   288	                    conditions={vignette.conditions}
+   289	                    selectedConditionKey={selectedConditionKey}
+   290	                    onSelect={handleConditionClick}
+   291	                  />
+   292	                </div>
+   293	              )}
+   294	              {selectedCondition !== null && selectedCondition.definitionId === vignette.definitionId && (
+   295	                <div className="border-t border-gray-200 bg-gray-50 px-3 py-3">
+   296	                  <div className="mb-2 flex items-center justify-between gap-3">
+   297	                    <p className="text-xs font-medium text-gray-800">
+   298	                      Transcripts for condition: {selectedCondition.conditionName}
+   299	                    </p>
+   300	                    <p className="text-[11px] text-gray-500">Click transcript to view full conversation</p>
+   301	                  </div>
+   302	                  {transcriptsFetching && <Loading size="sm" text="Loading transcripts..." />}
+   303	                  {transcriptsError && (
+   304	                    <ErrorMessage message={`Failed to load transcripts: ${transcriptsError.message}`} />
+   305	                  )}
+   306	                  {!transcriptsFetching && !transcriptsError && selectedConditionTranscriptState.transcripts.length === 0 && (
+   307	                    <p className="text-xs text-gray-500">No transcripts found for this condition and model.</p>
+   308	                  )}
+   309	                  {!transcriptsFetching && !transcriptsError && selectedConditionTranscriptState.transcripts.length > 0 && (
+   310	                    <TranscriptList
+
+ succeeded in 0ms:
+     1	/**
+     2	 * AnalysisTranscripts Page
+     3	 *
+     4	 * Shows filtered transcripts for a pivot cell in a full page view.
+     5	 */
+     6	
+     7	import { useEffect, useState } from 'react';
+     8	import { useParams, useNavigate } from 'react-router-dom';
+     9	import { ArrowLeft } from 'lucide-react';
+    10	import { Button } from '../components/ui/Button';
+    11	import { Loading } from '../components/ui/Loading';
+    12	import { ErrorMessage } from '../components/ui/ErrorMessage';
+    13	import { TranscriptList } from '../components/runs/TranscriptList';
+    14	import { TranscriptViewer } from '../components/runs/TranscriptViewer';
+    15	import { AnalysisScopeBanner } from '../components/analysis/AnalysisScopeBanner';
+    16	import type { Transcript } from '../api/operations/runs';
+    17	import { formatDisplayLabel } from '../utils/displayLabels';
+    18	import { formatPairedConditionSourceLabel } from '../utils/analysisTranscriptParams';
+    19	import { useAnalysisTranscriptsData } from '../hooks/useAnalysisTranscriptsData';
+    20	import { AnalysisTranscriptHeader } from './AnalysisTranscriptHeader';
+    21	import { PairedStabilityView } from './PairedStabilityView';
+    22	
+    23	export function AnalysisTranscripts() {
+    24	  const navigate = useNavigate();
+    25	  const { id } = useParams<{ id: string }>();
+    26	  const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null);
+    27	
+    28	  const {
+    29	    loading,
+    30	    error,
+    31	    run,
+    32	    companionRun,
+    33	    isAggregate,
+    34	    trialSignature,
+    35	    selectedAggregateSignature,
+    36	    aggregateRuns,
+    37	    searchParams,
+    38	    row,
+    39	    col,
+    40	    selectedModel,
+    41	    repeatPattern,
+    42	    selectedTranscriptId,
+    43	    pairedValueLabel,
+    44	    pairView,
+    45	    pairedConditionSource,
+    46	    analysisMode,
+    47	    conditionIds,
+    48	    activeRowDim,
+    49	    activeColDim,
+    50	    hasCellFilterParams,
+    51	    hasRepeatPatternParams,
+    52	    hasDirectTranscriptParam,
+    53	    hasBucketFilterParams,
+    54	    hasPairedValueFilterParams,
+    55	    hasPairedConditionFilterParams,
+    56	    isPairedStabilityDrilldown,
+    57	    scenarioDimensions,
+    58	    companionScenarioDimensions,
+    59	    mergedScenarioDimensions,
+    60	    decisionBucketLabel,
+    61	    filteredTranscripts,
+    62	    primaryStabilityTranscripts,
+    63	    companionStabilityTranscripts,
+    64	    decisionSummary,
+    65	    pairedConditionStateError,
+    66	    reportStateError,
+    67	    handleDecisionChange,
+    68	    updatingTranscriptIds,
+    69	  } = useAnalysisTranscriptsData(id);
+    70	
+    71	  useEffect(() => {
+    72	    if (!hasDirectTranscriptParam) return;
+    73	    const matched = filteredTranscripts.find((t) => t.id === selectedTranscriptId) ?? null;
+    74	    setSelectedTranscript(matched);
+    75	  }, [filteredTranscripts, hasDirectTranscriptParam, selectedTranscriptId]);
+    76	
+    77	  useEffect(() => {
+    78	    if (!selectedTranscript) return;
+    79	    const matched = filteredTranscripts.find((t) => t.id === selectedTranscript.id);
+    80	    if (!matched || matched === selectedTranscript) return;
+    81	    setSelectedTranscript(matched);
+    82	  }, [filteredTranscripts, selectedTranscript]);
+    83	
+    84	  const transcriptCoverage = filteredTranscripts.reduce(
+    85	    (acc, transcript) => {
+    86	      const metadata = transcript.decisionModelV2?.raw;
+    87	      const canonical = transcript.decisionModelV2?.canonical ?? null;
+    88	      if (metadata?.manualOverride) acc.manual += 1;
+    89	      if (metadata?.parseClass === 'exact') {
+    90	        acc.exact += 1;
+
+exec
+/bin/zsh -lc "nl -ba /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/components/domains/ConditionMatrix.tsx | sed -n '70,170p'" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+    70	  onSelect: (definitionId: string, conditionName: string, scenarioId: string | null) => void;
+    71	};
+    72	
+    73	export function ConditionMatrix({ vignetteId, conditions, selectedConditionKey, onSelect }: ConditionMatrixProps) {
+    74	  const dimensions = Array.from(
+    75	    new Set(
+    76	      conditions.flatMap((condition) =>
+    77	        Object.keys(condition.dimensions ?? {}),
+    78	      ),
+    79	    ),
+    80	  ).sort();
+    81	
+    82	  if (dimensions.length < 2) {
+    83	    return (
+    84	      <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+    85	        Scenario dimensions are missing for this vignette, so pivot matrix rendering is unavailable.
+    86	      </div>
+    87	    );
+    88	  }
+    89	
+    90	  const validationError = conditions
+    91	    .map((condition) => validateMatrixCondition(condition))
+    92	    .find((message): message is string => message !== null);
+    93	  if (validationError !== undefined) {
+    94	    return (
+    95	      <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+    96	        {validationError}
+    97	      </div>
+    98	    );
+    99	  }
+   100	
+   101	  const rowDim = dimensions[0]!;
+   102	  const colDim = dimensions[1]!;
+   103	  const rows = Array.from(
+   104	    new Set(conditions.map((condition) => String(condition.dimensions?.[rowDim] ?? 'N/A'))),
+   105	  ).sort(compareConditionLevels);
+   106	  const cols = Array.from(
+   107	    new Set(conditions.map((condition) => String(condition.dimensions?.[colDim] ?? 'N/A'))),
+   108	  ).sort(compareConditionLevels);
+   109	
+   110	  const cellByKey = new Map<string, MatrixCondition>();
+   111	  for (const condition of conditions) {
+   112	    const rowValue = String(condition.dimensions?.[rowDim] ?? 'N/A');
+   113	    const colValue = String(condition.dimensions?.[colDim] ?? 'N/A');
+   114	    cellByKey.set(`${rowValue}::${colValue}`, condition);
+   115	  }
+   116	
+   117	  return (
+   118	    <div className="overflow-x-auto">
+   119	      <table className="min-w-full border-collapse text-xs">
+   120	        <thead>
+   121	          <tr>
+   122	            <th className="border border-gray-200 border-b-0 bg-gray-50 p-2" />
+   123	            <th
+   124	              colSpan={cols.length}
+   125	              className="border border-gray-200 bg-gray-100 p-2 text-center text-xs font-bold uppercase text-gray-700"
+   126	            >
+   127	              {colDim}
+   128	            </th>
+   129	          </tr>
+   130	          <tr>
+   131	            <th className="w-32 border border-gray-200 bg-gray-100 p-2 text-left text-xs font-bold uppercase text-gray-700">
+   132	              {rowDim}
+   133	            </th>
+   134	            {cols.map((col) => (
+   135	              <th
+   136	                key={col}
+   137	                className="border border-gray-200 bg-gray-50 p-2 text-center font-mono text-xs font-medium text-gray-500"
+   138	              >
+   139	                {col}
+   140	              </th>
+   141	            ))}
+   142	          </tr>
+   143	        </thead>
+   144	        <tbody>
+   145	          {rows.map((row) => (
+   146	            <tr key={row}>
+   147	              <td className="whitespace-nowrap border border-gray-200 bg-gray-50 p-2 font-mono text-sm font-bold text-gray-900">
+   148	                {row}
+   149	              </td>
+   150	              {cols.map((col) => {
+   151	                const condition = cellByKey.get(`${row}::${col}`);
+   152	                const conditionKey = condition
+   153	                  ? `${vignetteId}:${condition.scenarioId ?? '__unknown__'}`
+   154	                  : '';
+   155	                const isSelected = condition != null && selectedConditionKey === conditionKey;
+   156	                let display: ReturnType<typeof getConditionCellDisplay> | null = null;
+   157	                if (condition) {
+   158	                  const summary = summarizeCanonicalConditionCounts({
+   159	                    strongly: condition.strongly,
+   160	                    somewhat: condition.somewhat,
+   161	                    neutral: condition.neutral,
+   162	                    opponentSomewhat: condition.opponentSomewhat,
+   163	                    opponentStrongly: condition.opponentStrongly,
+   164	                  });
+   165	                  display = getConditionCellDisplay(summary);
+   166	                }
+   167	
+   168	                return (
+   169	                  <td
+   170	                    key={`${row}-${col}`}
+
+exec
+/bin/zsh -lc "nl -ba /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/AnalysisTranscripts.tsx | sed -n '228,248p'" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+   228	            <p className="mt-2 text-xs text-amber-700">
+   229	              {transcriptCoverage.unresolved} transcript{transcriptCoverage.unresolved === 1 ? '' : 's'} in this view still do not have an analyzable canonical decision.
+   230	              Open those transcripts to review the raw evidence.
+   231	            </p>
+   232	          )}
+   233	        </div>
+   234	      )}
+   235	
+   236	      {isPairedStabilityDrilldown ? (
+   237	        <PairedStabilityView
+   238	          repeatPattern={repeatPattern}
+   239	          primaryRunName={run?.definition?.name}
+   240	          companionRunName={companionRun?.definition?.name}
+   241	          primaryTranscripts={primaryStabilityTranscripts}
+   242	          companionTranscripts={companionStabilityTranscripts}
+   243	          primaryScenarioDimensions={scenarioDimensions}
+   244	          companionScenarioDimensions={companionScenarioDimensions}
+   245	          onSelectTranscript={setSelectedTranscript}
+   246	          onDecisionChange={handleDecisionChange}
+   247	          updatingTranscriptIds={updatingTranscriptIds}
+   248	          decisionColumnLabel={decisionColumnLabel}
+
+codex
+## Findings
+- **HIGH [CODE-CONFIRMED]** The spec never says what to do when more than one condition lands in the same `(row, col)` cell, but the current matrix silently overwrites earlier entries with the last one it sees. In [`ConditionMatrix.tsx`]( /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/components/domains/ConditionMatrix.tsx#L110 ) the cell map is keyed only by `rowValue::colValue`, so duplicate coordinates are collapsed with no warning. That means the “View condition matrix” drill-down can drop evidence on irregular or aggregated grids instead of surfacing the multiplicity.
+
+- **MEDIUM [CODE-CONFIRMED]** The spec leaves the axis mapping for “View condition matrix →” implicit, but the existing matrix does not preserve semantic axes. In [`ConditionMatrix.tsx`]( /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/components/domains/ConditionMatrix.tsx#L74 ) it gathers all dimension keys, sorts them alphabetically, and uses the first two as row/column dimensions. If a vignette has extra dimensions or nonstandard key names, the report can point at a matrix that is technically valid but shows the wrong pair of axes.
+
+- **MEDIUM [CODE-CONFIRMED]** The spec says a model drill-down can link to “View transcripts →”, but it does not define the route contract that the current transcript page actually needs. [`AnalysisTranscripts.tsx`]( /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/AnalysisTranscripts.tsx#L236 ) only renders `PairedStabilityView` when `isPairedStabilityDrilldown` is already true, and it is passed `repeatPattern`, primary/companion run names, and two precomputed transcript sets. A model-level summary chip by itself is not enough to derive that state, so the link target is underspecified.
+
+## Residual Risks
+- The spec still does not define the fallback behavior for `Repeatability` when a model has 0 or 1 eligible scenarios. DerSimonian-Laird pooling is degenerate there, so the implementation will need an explicit rule for “unavailable”, “raw Wilson CI”, or a collapsed random-effects CI.
+
+- The spec also leaves the displayed denominator for `Coherence` slightly ambiguous when there are indeterminate pairs. It says to exclude them from the fraction, but it does not require the report to show the indeterminate count alongside `k / n`, which could make coverage look stronger than it is.
+tokens used
+60,297
