@@ -61,20 +61,24 @@ npm run db:test:setup
 
 ---
 
-## File Size Limits
+## File Structure
 
-| File Type | Max Lines | Rationale |
-|-----------|-----------|-----------|
-| Route handlers | 400 | Single responsibility per route file |
-| Services/business logic | 400 | Split into smaller modules if growing |
-| Utilities | 400 | Pure functions, single purpose |
-| React components | 400 | Extract hooks/subcomponents if larger |
-| Test files | 400 | Can be longer due to setup/fixtures |
-| Type definitions | 400 | Split by domain if growing |
+Enforced mechanically — do not treat these as soft guidance.
 
-**When a file exceeds limits:** extract helpers, split into sub-modules, or create a folder with `index.ts` re-exporting.
+| Check | Enforced by | Thresholds |
+|-------|-------------|------------|
+| File size | `cloud/scripts/check-file-sizes.sh` (CI + pre-push), ESLint `max-lines` (editor) | prod: warn 400 / error 700 — tests: warn 800 / error 1200 |
+| Placeholder filenames | `cloud/scripts/check-filenames.sh` | bans `-helper(s).ts`, `-util(s).ts`, `-misc.ts`, `-types-detail.ts` |
+| Trivial re-export barrels | `cloud/scripts/check-barrels.sh` | rejects new `index.ts` < 15 lines that is export-only |
+| Known fragmented clusters | `cloud/scripts/check-tech-debt.sh` | informational reminders; see `docs/tech-debt/file-structure.md` |
 
-**Anti-regrowth rule:** When adding >50 lines to a file already over 400 lines, extract the new logic into its own module with typed input/output. Don't grow the file — decompose it. This applies to feature work, not just refactoring.
+Grandfathered files live in the allowlists next to each script. See
+[`docs/tech-debt/file-structure.md`](../docs/tech-debt/file-structure.md)
+for what to collapse when touching the area.
+
+Guidance when the size warning fires: do not split just to silence it. Ask
+whether the file has one responsibility. If yes, keep it. If no, split by
+responsibility and give the new module a domain-meaningful name.
 
 ---
 
@@ -270,7 +274,7 @@ Production deployments run `prisma migrate deploy` automatically on startup.
 ## Quick Reference
 
 ```
-File size:      < 400 lines
+File size:      enforced by scripts (prod warn 400/err 700, tests warn 800/err 1200)
 any types:      NEVER (use unknown if truly unknown)
 Test coverage:  80% minimum
 Console.log:    NEVER (use logger)
