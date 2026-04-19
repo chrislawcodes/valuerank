@@ -6,6 +6,7 @@ import argparse
 import concurrent.futures
 import json
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -103,6 +104,22 @@ def _stage_int(stage_state: dict, key: str) -> int:
         return int(stage_state.get(key, 0) or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _record_migration_bypass_use(slug: str, stage: str) -> None:
+    with with_locked_state(slug) as state:
+        uses = state.get("migration_bypass_uses", [])
+        if not isinstance(uses, list):
+            uses = []
+        uses = list(uses)
+        uses.append(
+            {
+                "timestamp": _now_iso8601_utc(),
+                "stage": stage,
+                "operator_id": os.environ.get("USER", "unknown") or "unknown",
+            }
+        )
+        state["migration_bypass_uses"] = uses
 
 
 def _block_verdicts(verdicts: list[dict]) -> list[dict]:
@@ -426,6 +443,18 @@ def _attempt_model_call(
     timeout_seconds: int,
 ) -> tuple[dict | None, str, str]:
     command = list(JUDGE_COMMAND_BY_LENS[lens])
+    stub_dir = os.environ.get("JUDGE_STUB_DIR")
+    if stub_dir:
+        stub_candidates = [
+            Path(stub_dir) / model,
+            Path(stub_dir) / lens,
+            Path(stub_dir) / f"judge.{model}",
+            Path(stub_dir) / f"judge.{lens}",
+        ]
+        for stub_path in stub_candidates:
+            if stub_path.exists():
+                command = [str(stub_path)]
+                break
     try:
         if command[0] == "codex":
             def _call() -> subprocess.CompletedProcess:
@@ -891,6 +920,7 @@ def run_judge(
     json_output: bool = False,
     prompt_override: Path | None = None,
     override_reason: str | None = None,
+    migration_bypass: bool = False,
 ) -> int:
     if prompt_override is not None and not override_reason:
         print("judge --prompt-override requires --override-reason", file=sys.stderr)
@@ -898,8 +928,10 @@ def run_judge(
 
     state = load_workflow_state(slug)
     stage_state = _ensure_stage_state(state, stage)
+    if migration_bypass:
+        _record_migration_bypass_use(slug, stage)
     adversarial_rounds = _stage_int(stage_state, "adversarial_rounds")
-    if adversarial_rounds < 3:
+    if adversarial_rounds < 3 and not migration_bypass:
         payload = {
             "next": "checkpoint",
             "reason": f"{stage} requires adversarial_rounds >= 3 before judge",

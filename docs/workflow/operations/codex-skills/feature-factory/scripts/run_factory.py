@@ -302,12 +302,14 @@ def build_parser() -> argparse.ArgumentParser:
     judge_parser.add_argument("--json", action="store_true")
     judge_parser.add_argument("--prompt-override", type=Path)
     judge_parser.add_argument("--override-reason")
+    judge_parser.add_argument("--migration-bypass", action="store_true")
     judge_parser.set_defaults(func=lambda args: run_judge(
         args.slug,
         args.stage,
         json_output=args.json,
         prompt_override=args.prompt_override,
         override_reason=args.override_reason,
+        migration_bypass=args.migration_bypass,
     ))
 
     discover_parser = subparsers.add_parser("discover")
@@ -370,6 +372,10 @@ def build_parser() -> argparse.ArgumentParser:
     deliver_parser.add_argument("--draft", action="store_true")
     deliver_parser.add_argument("--base")
     deliver_parser.add_argument("--title")
+    deliver_parser.add_argument("--override-judges", action="store_true")
+    deliver_parser.add_argument("--reason")
+    deliver_parser.add_argument("--refresh", action="store_true")
+    deliver_parser.add_argument("--resume-merge-wait", action="store_true")
     deliver_parser.add_argument("--watch-ci", action="store_true")
     deliver_parser.add_argument("--interval", type=int, default=10)
     deliver_parser.add_argument("--merge-when-green", action="store_true")

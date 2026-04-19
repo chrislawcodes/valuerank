@@ -544,6 +544,54 @@ class FactoryJudgeTests(unittest.TestCase):
         self.assertEqual(len(concerns), 2)
         self.assertTrue(all(concern["also_raised_in_round"] == [] for concern in concerns))
 
+    def test_judge_migration_bypass_logs_state_use(self) -> None:
+        stage_state = _stage_state(0)
+        review_specs: list[tuple[str, str, list[str]]] = []
+        _write_workflow(self._tmpdir.name, stage_state, review_specs)
+        verdicts = [
+            {
+                "judge": "completeness",
+                "model": "gpt-5.4-mini",
+                "verdict": "proceed",
+                "confidence": 4,
+                "reasoning": "completeness ok",
+                "evidence": [{"artifact": "plan.md", "section": "Findings", "quote": "complete"}],
+                "timestamp": "2026-04-19T12:00:00Z",
+            },
+            {
+                "judge": "restatement",
+                "model": "gpt-5.4",
+                "verdict": "proceed",
+                "confidence": 4,
+                "reasoning": "restatement ok",
+                "evidence": [{"artifact": "plan.md", "section": "Findings", "quote": "restated"}],
+                "timestamp": "2026-04-19T12:00:00Z",
+            },
+            {
+                "judge": "implementation-risk",
+                "model": "claude-sonnet-4-6",
+                "verdict": "proceed",
+                "confidence": 4,
+                "reasoning": "implementation risk acceptable",
+                "evidence": [{"artifact": "plan.md", "section": "Findings", "quote": "risk"}],
+                "timestamp": "2026-04-19T12:00:00Z",
+            },
+        ]
+
+        with patch.object(JUDGE, "_validate_json_output", return_value=(verdicts, "sha-current", "sha-head")), \
+            patch.object(JUDGE, "HeartbeatEmitter", return_value=contextlib.nullcontext()), \
+            patch.object(JUDGE, "recommended_next_action", return_value="done"):
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                rc = JUDGE.run_judge(SLUG, STAGE, migration_bypass=True)
+
+        self.assertEqual(rc, 0)
+        state = json.loads(FACTORY_STATE.factory_state_path(SLUG).read_text(encoding="utf-8"))
+        uses = state.get("migration_bypass_uses", [])
+        self.assertEqual(len(uses), 1)
+        self.assertEqual(uses[0]["stage"], STAGE)
+        self.assertIn("timestamp", uses[0])
+        self.assertIn("operator_id", uses[0])
+
 
 if __name__ == "__main__":
     unittest.main()

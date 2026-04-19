@@ -3,6 +3,7 @@
 import json
 import subprocess
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 import sys
 
@@ -50,7 +51,7 @@ def current_pr_payload(pr_number: int | None = None) -> dict | None:
     cmd.extend(
         [
             "--json",
-            "number,url,state,isDraft,headRefName,headRefOid,baseRefName,mergeable,mergeStateStatus,statusCheckRollup",
+            "number,url,state,isDraft,headRefName,headRefOid,baseRefName,mergeable,mergeStateStatus,statusCheckRollup,body,mergeCommit,mergedAt",
         ]
     )
     result = subprocess.run(
@@ -61,6 +62,17 @@ def current_pr_payload(pr_number: int | None = None) -> dict | None:
     if result.returncode != 0:
         return None
     return json.loads(result.stdout)
+
+
+def _normalize_iso8601_utc(value: object) -> str:
+    if not isinstance(value, str) or not value.strip():
+        return ""
+    candidate = value.strip().replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(candidate)
+    except ValueError:
+        return value.strip()
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def required_check_summary(pr_number: int | None = None, watch: bool = False, interval: int = 10) -> tuple[str, list[dict], str]:
@@ -92,6 +104,13 @@ def required_check_summary(pr_number: int | None = None, watch: bool = False, in
 
 
 def build_delivery_record(pr: dict | None, checks_summary: str, checks: list[dict], branch: str, head_sha: str) -> dict:
+    merge_commit = ""
+    if pr:
+        raw_merge_commit = pr.get("mergeCommit")
+        if isinstance(raw_merge_commit, dict):
+            merge_commit = str(raw_merge_commit.get("oid", "") or "")
+        elif isinstance(raw_merge_commit, str):
+            merge_commit = raw_merge_commit
     return {
         "branch": branch,
         "head_sha": head_sha,
@@ -107,6 +126,9 @@ def build_delivery_record(pr: dict | None, checks_summary: str, checks: list[dic
         "merge_state_status": pr.get("mergeStateStatus") if pr else "",
         "checks_summary": checks_summary,
         "required_checks": checks,
+        "merge_wait_state": "none",
+        "merged_sha": merge_commit,
+        "merged_at_iso8601": _normalize_iso8601_utc(pr.get("mergedAt") if pr else ""),
     }
 
 
@@ -144,6 +166,11 @@ def refresh_delivery_snapshot(delivery: dict) -> dict:
     refreshed["upstream"] = delivery.get("upstream", "")
     refreshed["checks_detail"] = checks_detail
     refreshed["head_mismatch"] = bool(pr.get("headRefOid")) and bool(head_sha) and pr.get("headRefOid") != head_sha
+    previous_wait_state = str(delivery.get("merge_wait_state", "none") or "none")
+    if str(pr.get("state", "")).upper() == "OPEN" and previous_wait_state == "waiting":
+        refreshed["merge_wait_state"] = previous_wait_state
+        refreshed["merged_sha"] = delivery.get("merged_sha", "")
+        refreshed["merged_at_iso8601"] = delivery.get("merged_at_iso8601", "")
     return refreshed
 
 

@@ -127,6 +127,41 @@ each item is either resolved or explicitly deferred.
 Do not start implementation until the answers are good enough to make the spec and plan stable.
 For workflow-system improvement work, treat the maintained plan as the source of truth for the next slice, and prioritize making discovery and task shaping more enforceable before deeper engine hardening.
 
+## Background Dispatch Discipline
+
+Every background dispatch — `codex exec`, long-running `checkpoint`, `judge`, `implement`, `deliver` — can die silently. The orchestrator will not notice without a heartbeat. This has happened more than once. Treat these rules as non-negotiable.
+
+**Rule 1: Pair every background dispatch with a heartbeat Monitor.** Immediately after starting a background task that may run >10 minutes, start a persistent `Monitor` that emits a line every 600 seconds reporting (a) whether the expected process is still alive, (b) the most recent git commit on the active worktree. Example:
+
+```bash
+# In Monitor's command field:
+while true; do
+  sleep 600
+  TS=$(TZ=America/Los_Angeles date +"%H:%M")
+  CODEX=$(ps aux | grep -E "codex exec" | grep -v grep | wc -l | tr -d ' ')
+  COMMIT=$(cd <worktree> && git log -1 --format="%h %s" 2>/dev/null)
+  echo "[heartbeat PT $TS] codex_procs=$CODEX last_commit=$COMMIT"
+done
+```
+
+When a monitor reports `codex_procs=0` for 2+ consecutive ticks AND no new commit has landed, assume the dispatch died silently and intervene.
+
+**Rule 2: Do not put dispatch specs in `/tmp`.** `/tmp` is garbage-collected. A dispatch spec file deleted between "orchestrator writes it" and "codex reads it" means the subagent gets an empty prompt and produces nothing useful. Instead, write specs to one of:
+- `docs/workflow/feature-runs/<slug>/codex-specs/slice-<N>.txt` (committed with the slice)
+- `.codex-slice<N>-spec.txt` in the worktree root (gitignored but survives GC)
+- Recommended long-term home: `docs/workflow/feature-runs/<slug>/codex-specs/slice-<N>.md` alongside the slice artifact PR. The `.codex-slice<N>-spec.txt` worktree-local form remains acceptable as an interim pattern.
+
+**Rule 3: Only use "I'll check back in N minutes" as a comment, not a plan.** The session has no timer that wakes Claude; between background-task notifications, Claude is idle. Any "check back later" commitment must be backed by a running Monitor or a scheduled wakeup. Promises without machinery behind them fail silently.
+
+## Judge Panel
+
+After three adversarial-review rounds on a stage, stop using the review loop and use the judge panel instead. The runner enforces the 3-round adversarial cap and routes the next action to `judge_panel`; do not rely on voluntary convergence to break the loop.
+
+- Judge prompts live under `docs/workflow/operations/codex-skills/feature-factory/judge-prompts/`.
+- The `judge` subcommand is the only supported entry point for panel voting: `judge --slug <slug> --stage <stage>`.
+- Judges are blinded to each other. Dissent escalates back to the orchestrator for edits, and the runner enforces the round cap instead of letting the loop continue forever.
+- When `judge_panel` is the recommended next action, treat that as a hard control-flow signal, not a suggestion.
+
 ## Review Policy
 
 Every checkpoint requires:
@@ -135,6 +170,8 @@ Every checkpoint requires:
 - 1 Gemini adversarial review
 
 All three are adversarial — each one is looking for ways the artifact is wrong, incomplete, or risky. Codex runs two lenses because it has codebase context and is more likely to find hard technical issues. Gemini runs one lens chosen for its different perspective — it is less likely to find hard issues but adds signal from a different angle.
+
+The judge panel also has a runner-enforced 3-round cap. Reviewers should stay rigorous, but they should not assume the loop can keep refining forever.
 
 The checkpoint runner selects the specific lenses by stage. The default lenses are configured for `spec`, `plan`, `tasks`, `diff`, and `closeout`. Sensitive or performance-critical features may swap the Codex secondary lens for `risk-adversarial`, `security-adversarial`, or `performance-adversarial`.
 
@@ -191,6 +228,14 @@ At each checkpoint:
 3. run `auto-reconcile --slug <slug> --stage <stage>` — auto-accepts reviews with no HIGH or MEDIUM findings and prints which reviews still need attention
 4. read and reconcile only the reviews listed under `needs-review` in the auto-reconcile output
 5. only then move forward
+
+### Progress Heartbeat
+
+Long-running runner activity needs a heartbeat. Follow the FR-023a cadence: emit progress every 10 minutes PT, and keep the operator-orchestrator heartbeat discipline from FR-023d in mind. If the workflow is still alive, the user should be able to tell at a glance which stage is active and whether progress is still moving.
+
+### `--json` Flag
+
+When a runner subcommand supports `--json`, treat the JSON payload as the structured control-flow contract. The human-readable `→ next: ...` string stays for compatibility, but new orchestration should prefer the JSON shape and write that same payload back into state.
 
 ### Keep Diffs Scoped
 
