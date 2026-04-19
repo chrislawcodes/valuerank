@@ -163,7 +163,6 @@ module.exports = {
       // Allowlisted operations files that still contain hand-typed shapes.
       // These are legacy files that predate codegen-backed types. Remove each
       // from this list once the file has been ported to codegen aliases.
-      // TODO(finding-3): port runs.ts to codegen-backed types and remove from allowlist
       // TODO(finding-4): port domainAnalysis.ts to codegen-backed types and remove from allowlist
       // TODO(finding-4): port modelsAnalysis.ts to codegen-backed types and remove from allowlist
       // TODO(finding-4): port scenarios.ts to codegen-backed types and remove from allowlist
@@ -183,7 +182,6 @@ module.exports = {
       // TODO(finding-5): port tags.ts to codegen-backed types and remove from allowlist
       // narrowings.ts exports functions, not type aliases — not applicable
       files: [
-        'apps/web/src/api/operations/runs.ts',
         'apps/web/src/api/operations/domainAnalysis.ts',
         'apps/web/src/api/operations/modelsAnalysis.ts',
         'apps/web/src/api/operations/scenarios.ts',

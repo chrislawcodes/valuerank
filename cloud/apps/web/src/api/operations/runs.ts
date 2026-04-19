@@ -1,4 +1,19 @@
 import type {
+  RunFieldsFragment,
+  RunWithTranscriptsFieldsFragment,
+  RunsQuery,
+  RunCountQuery,
+  AnalysisFolderCountsQuery,
+  RunQuery,
+  StartRunMutation as GeneratedStartRunMutation,
+  PauseRunMutation as GeneratedPauseRunMutation,
+  ResumeRunMutation as GeneratedResumeRunMutation,
+  CancelRunMutation as GeneratedCancelRunMutation,
+  DeleteRunMutation as GeneratedDeleteRunMutation,
+  UpdateRunMutation as GeneratedUpdateRunMutation,
+  CancelSummarizationMutation as GeneratedCancelSummarizationMutation,
+  RestartSummarizationMutation as GeneratedRestartSummarizationMutation,
+  UpdateTranscriptDecisionMutation as GeneratedUpdateTranscriptDecisionMutation,
   RunsQueryVariables as GeneratedRunsQueryVariables,
   RunCountQueryVariables as GeneratedRunCountQueryVariables,
   AnalysisFolderCountsQueryVariables as GeneratedAnalysisFolderCountsQueryVariables,
@@ -12,238 +27,23 @@ import type {
   CancelSummarizationMutationVariables as GeneratedCancelSummarizationMutationVariables,
   RestartSummarizationMutationVariables as GeneratedRestartSummarizationMutationVariables,
   UpdateTranscriptDecisionMutationVariables as GeneratedUpdateTranscriptDecisionMutationVariables,
+  StartRunInput as GeneratedStartRunInput,
+  UpdateRunInput as GeneratedUpdateRunInput,
 } from '../../generated/graphql';
 
-// ============================================================================
-// TYPES — JSON scalar fields require manual types; codegen types them as unknown
-// ============================================================================
+import type { RunConfig, TranscriptDecisionModelV2 } from '../run-json-types';
 
-export type RunStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUMMARIZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-export type RunCategory = 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION' | 'UNKNOWN_LEGACY';
-
-export type RunProgress = {
-  total: number;
-  completed: number;
-  failed: number;
-  percentComplete: number;
-  byModel?: Array<{ modelId: string; completed: number; failed: number }>;
-};
-
-export type TaskResult = {
-  scenarioId: string;
-  modelId: string;
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
-  error: string | null;
-  completedAt: string | null;
-};
-
-export type CompletionEvent = {
-  modelId: string;
-  scenarioId: string;
-  success: boolean;
-  completedAt: string;
-  durationMs: number;
-};
-
-export type ProviderExecutionMetrics = {
-  provider: string;
-  activeJobs: number;
-  queuedJobs: number;
-  maxParallel: number;
-  requestsPerMinute: number;
-  recentCompletions: CompletionEvent[];
-  activeModelIds: string[];
-};
-
-export type ExecutionMetrics = {
-  providers: ProviderExecutionMetrics[];
-  totalActive: number;
-  totalQueued: number;
-  estimatedSecondsRemaining: number | null;
-  totalRetries: number;
-};
-
-export type TranscriptDecisionModelV2RawEvidence = {
-  matchedText: string | null;
-  matchedLabel: string | null;
-  parseClass: 'exact' | 'fallback_resolved' | 'ambiguous' | 'unparseable' | null;
-  parsePath: string | null;
-  parserVersion: string | null;
-  responseExcerpt: string | null;
-  manualOverride: {
-    previousValue: string | null;
-    overriddenAt: string | null;
-    overriddenByUserId: string | null;
-  } | null;
-};
-
-export type TranscriptDecisionModelV2Canonical = {
-  favoredValueKey: string | null;
-  opposedValueKey: string | null;
-  direction: 'favor_first' | 'favor_second' | 'neutral' | 'unknown';
-  strength: 'strong' | 'lean' | 'neutral' | 'unknown';
-  normalizationApplied: boolean;
-  normalizationReason: 'orientation_flipped' | null;
-  source: 'deterministic' | 'manual' | 'error' | 'unknown';
-};
-
-export type TranscriptDecisionModelV2 = {
-  raw: TranscriptDecisionModelV2RawEvidence;
-  canonical: TranscriptDecisionModelV2Canonical;
-};
-
-export type Transcript = {
-  id: string;
-  runId: string;
-  scenarioId: string | null;
-  modelId: string;
-  modelVersion: string | null;
-  content: unknown;
-  /** @deprecated Use decisionModelV2 instead */
-  decisionCode?: string | null;
-  /** @deprecated Use decisionModelV2 instead */
-  decisionCodeSource?: string | null;
-  decisionMetadata?: unknown;
-  turnCount: number;
-  tokenCount: number;
-  durationMs: number;
-  estimatedCost: number | null;
-  createdAt: string;
-  lastAccessedAt: string | null;
-  dimensionValues?: Record<string, string | number> | null;
-  decisionModelV2?: TranscriptDecisionModelV2 | null;
-};
-
-export type RunConfig = {
-  models: string[];
-  samplePercentage?: number;
-  sampleSeed?: number;
-  temperature?: number | null;
-  priority?: string;
-  companionRunId?: string | null;
-  jobChoiceLaunchMode?: 'PAIRED_BATCH' | 'AD_HOC_BATCH' | 'STANDARD' | null;
-  jobChoiceBatchGroupId?: string | null;
-  jobChoiceValueFirst?: string | null;
-  isAggregate?: boolean;
-  sourceRunIds?: string[];
-  methodologySafe?: boolean | null;
-};
-
-export type RunDefinitionTag = {
-  id: string;
-  name: string;
-};
-
-export type AnalysisFolderTagCount = {
-  tagId: string;
-  name: string;
-  count: number;
-};
-
-export type AnalysisFolderCounts = {
-  aggregateCount: number;
-  untaggedCount: number;
-  aggregateUntaggedCount: number;
-  tagCounts: AnalysisFolderTagCount[];
-  aggregateTagCounts: AnalysisFolderTagCount[];
-};
-
-export type AnalysisFolderCountOverrides = {
-  aggregateCount: number;
-  untaggedCount: number;
-  aggregateUntaggedCount: number;
-  tagCounts: Record<string, number>;
-  aggregateTagCounts: Record<string, number>;
-};
-
-export type ActualModelCost = {
-  modelId: string;
-  inputTokens: number;
-  outputTokens: number;
-  cost: number;
-  probeCount: number;
-};
-
-export type ActualCost = {
-  total: number;
-  perModel: ActualModelCost[];
-};
-
-export type Run = {
-  id: string;
-  name: string | null;
-  definitionId: string;
-  definitionVersion: number | null;
-  experimentId: string | null;
-  companionRunId: string | null;
-  status: RunStatus;
-  runCategory: RunCategory;
-  config: RunConfig;
-  stalledModels: string[];
-  batchCount?: number;
-  pairedBatchGroupId?: string | null;
-  progress: { total: number; completed: number; failed: number } | null;
-  runProgress: RunProgress | null;
-  summarizeProgress: RunProgress | null;
-  unresolvableTranscriptCount?: { total: number; byModel: { modelId: string; count: number }[] } | null;
-  startedAt: string | null;
-  completedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  lastAccessedAt: string | null;
-  transcripts: Transcript[];
-  transcriptCount: number;
-  recentTasks: TaskResult[];
-  failedProbes?: Array<{
-    modelId: string;
-    errorCode: string | null;
-    errorMessage: string | null;
-  }>;
-  analysisStatus: 'pending' | 'computing' | 'completed' | 'failed' | null;
-  executionMetrics: ExecutionMetrics | null;
-  analysis: {
-    actualCost: ActualCost | null;
-  } | null;
-  definition: {
-    id: string;
-    name: string;
-    version: number;
-    tags: RunDefinitionTag[];
-    content: unknown;
-    domain?: {
-      name: string;
-    } | null;
-  };
-  tags: {
-    id: string;
-    name: string;
-  }[];
-};
+// Re-export JSON scalar types so existing call sites keep working.
+export type {
+  RunConfig,
+  TranscriptDecisionModelV2,
+  TranscriptDecisionModelV2Canonical,
+  TranscriptDecisionModelV2RawEvidence,
+  AnalysisFolderCountOverrides,
+} from '../run-json-types';
 
 // ============================================================================
-// INPUT TYPES
-// ============================================================================
-
-export type StartRunInput = {
-  definitionId: string;
-  models: string[];
-  samplePercentage?: number;
-  samplesPerScenario?: number;
-  temperature?: number;
-  scenarioIds?: string[];
-  sampleSeed?: number;
-  priority?: 'LOW' | 'NORMAL' | 'HIGH';
-  runCategory?: RunCategory;
-  experimentId?: string;
-  launchMode?: 'STANDARD' | 'PAIRED_BATCH' | 'AD_HOC_BATCH';
-};
-
-export type UpdateRunInput = {
-  name?: string | null;
-};
-
-// ============================================================================
-// FRAGMENTS + DOCUMENTS — re-exported from generated
+// DOCUMENTS
 // ============================================================================
 
 export {
@@ -265,97 +65,150 @@ export {
 } from '../../generated/graphql';
 
 // ============================================================================
-// QUERY VARIABLE TYPES
+// ENUM-LIKE UNION TYPES
+// Narrow the string fields from the generated fragment to their known values.
 // ============================================================================
 
+export type RunStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUMMARIZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+export type RunCategory = 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION' | 'UNKNOWN_LEGACY';
+
+// ============================================================================
+// TYPES DERIVED FROM CODEGEN FRAGMENTS
+// ============================================================================
+
+export type RunProgress = NonNullable<RunFieldsFragment['runProgress']>;
+export type RunDefinitionTag = RunFieldsFragment['tags'][number];
+
+type BaseExecutionMetrics = NonNullable<RunWithTranscriptsFieldsFragment['executionMetrics']>;
+export type ExecutionMetrics = BaseExecutionMetrics;
+export type ProviderExecutionMetrics = BaseExecutionMetrics['providers'][number];
+export type CompletionEvent = ProviderExecutionMetrics['recentCompletions'][number];
+export type TaskResult = RunWithTranscriptsFieldsFragment['recentTasks'][number];
+
+type BaseAnalysis = NonNullable<RunWithTranscriptsFieldsFragment['analysis']>;
+export type ActualCost = NonNullable<BaseAnalysis['actualCost']>;
+export type ActualModelCost = ActualCost['perModel'][number];
+
+export type AnalysisFolderCounts = AnalysisFolderCountsQuery['analysisFolderCounts'];
+export type AnalysisFolderTagCount = AnalysisFolderCounts['tagCounts'][number];
+
+// ============================================================================
+// RUN — narrows JSON scalar fields and optional-but-always-present fields
+// from RunWithTranscriptsFieldsFragment.
+//
+// The codegen marks many fields optional (?:) because GraphQL fields can be
+// absent in partial selections. We re-declare the ones that are always present
+// in our queries as required-nullable (T | null) to preserve the old contract.
+// ============================================================================
+
+export type Run = Omit<
+  RunWithTranscriptsFieldsFragment,
+  | 'config' | 'status' | 'runCategory' | 'analysisStatus' | 'progress'
+  | 'transcripts' | 'definition'
+  | 'name' | 'startedAt' | 'completedAt'
+  | 'runProgress' | 'summarizeProgress'
+> & {
+  config: RunConfig;
+  status: RunStatus;
+  runCategory: RunCategory;
+  analysisStatus: 'pending' | 'computing' | 'completed' | 'failed' | null;
+  progress: { total: number; completed: number; failed: number } | null;
+  transcripts: Transcript[];
+  definition: {
+    id: string;
+    name: string;
+    version: number;
+    content: unknown;
+    tags: RunDefinitionTag[];
+    domain?: { name: string } | null;
+  };
+  name: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  runProgress: RunProgress | null;
+  summarizeProgress: RunProgress | null;
+};
+
+// ============================================================================
+// TRANSCRIPT — narrows JSON scalar fields and optional-but-always-present
+// fields from the fragment.
+// ============================================================================
+
+type BaseTranscript = RunWithTranscriptsFieldsFragment['transcripts'][number];
+
+export type Transcript = Omit<
+  BaseTranscript,
+  'decisionModelV2' | 'dimensionValues' | 'decisionMetadata' | 'scenarioId'
+> & {
+  scenarioId: string | null;
+  /** @deprecated Use decisionModelV2 instead */
+  decisionCode?: string | null;
+  /** @deprecated Use decisionModelV2 instead */
+  decisionCodeSource?: string | null;
+  decisionMetadata?: unknown;
+  dimensionValues?: Record<string, string | number> | null;
+  decisionModelV2?: TranscriptDecisionModelV2 | null;
+};
+
+// ============================================================================
+// INPUT TYPES
+// ============================================================================
+
+export type StartRunInput = GeneratedStartRunInput;
+export type UpdateRunInput = GeneratedUpdateRunInput;
+
+// ============================================================================
+// QUERY RESULT + VARIABLE TYPES
+// ============================================================================
+
+export type RunsQueryResult = Omit<RunsQuery, 'runs'> & { runs: Run[] };
 export type RunsQueryVariables = GeneratedRunsQueryVariables;
+
+export type RunCountQueryResult = RunCountQuery;
 export type RunCountQueryVariables = GeneratedRunCountQueryVariables;
+
+export type AnalysisFolderCountsQueryResult = AnalysisFolderCountsQuery;
 export type AnalysisFolderCountsQueryVariables = GeneratedAnalysisFolderCountsQueryVariables;
+
+export type RunQueryResult = Omit<RunQuery, 'run'> & { run: Run | null };
 export type RunQueryVariables = GeneratedRunQueryVariables;
 
 // ============================================================================
-// QUERY RESULT TYPES
-// Redefine result types to use our typed Run/Transcript instead of generated unknown fields.
+// MUTATION RESULT + VARIABLE TYPES
 // ============================================================================
 
-export type RunsQueryResult = {
-  runs: Run[];
+export type StartRunMutationResult = Omit<GeneratedStartRunMutation, 'startRun'> & {
+  startRun: { run: Run; jobCount: number; pairedRunIds?: string[] | null };
 };
-
-export type RunCountQueryResult = {
-  runCount: number;
-};
-
-export type AnalysisFolderCountsQueryResult = {
-  analysisFolderCounts: AnalysisFolderCounts;
-};
-
-export type RunQueryResult = {
-  run: Run | null;
-};
-
-// ============================================================================
-// MUTATION VARIABLE TYPES
-// ============================================================================
-
 export type StartRunMutationVariables = GeneratedStartRunMutationVariables;
+
+export type PauseRunMutationResult = Omit<GeneratedPauseRunMutation, 'pauseRun'> & { pauseRun: Run };
 export type PauseRunMutationVariables = GeneratedPauseRunMutationVariables;
+
+export type ResumeRunMutationResult = Omit<GeneratedResumeRunMutation, 'resumeRun'> & { resumeRun: Run };
 export type ResumeRunMutationVariables = GeneratedResumeRunMutationVariables;
+
+export type CancelRunMutationResult = Omit<GeneratedCancelRunMutation, 'cancelRun'> & { cancelRun: Run };
 export type CancelRunMutationVariables = GeneratedCancelRunMutationVariables;
+
+export type DeleteRunMutationResult = GeneratedDeleteRunMutation;
 export type DeleteRunMutationVariables = GeneratedDeleteRunMutationVariables;
+
+export type UpdateRunMutationResult = Omit<GeneratedUpdateRunMutation, 'updateRun'> & { updateRun: Run };
 export type UpdateRunMutationVariables = GeneratedUpdateRunMutationVariables;
+
+export type CancelSummarizationMutationResult = Omit<GeneratedCancelSummarizationMutation, 'cancelSummarization'> & {
+  cancelSummarization: { run: Run; cancelledCount: number };
+};
 export type CancelSummarizationMutationVariables = GeneratedCancelSummarizationMutationVariables;
+
+export type RestartSummarizationMutationResult = Omit<GeneratedRestartSummarizationMutation, 'restartSummarization'> & {
+  restartSummarization: { run: Run; queuedCount: number };
+};
 export type RestartSummarizationMutationVariables = GeneratedRestartSummarizationMutationVariables;
-export type UpdateTranscriptDecisionMutationVariables =
-  GeneratedUpdateTranscriptDecisionMutationVariables;
 
-// ============================================================================
-// MUTATION RESULT TYPES
-// Redefine result types to use our typed Run/Transcript instead of generated unknown fields.
-// ============================================================================
-
-export type StartRunMutationResult = {
-  startRun: {
-    run: Run;
-    jobCount: number;
-    pairedRunIds?: string[] | null;
-  };
-};
-
-export type PauseRunMutationResult = {
-  pauseRun: Run;
-};
-
-export type ResumeRunMutationResult = {
-  resumeRun: Run;
-};
-
-export type CancelRunMutationResult = {
-  cancelRun: Run;
-};
-
-export type DeleteRunMutationResult = {
-  deleteRun: boolean;
-};
-
-export type UpdateRunMutationResult = {
-  updateRun: Run;
-};
-
-export type CancelSummarizationMutationResult = {
-  cancelSummarization: {
-    run: Run;
-    cancelledCount: number;
-  };
-};
-
-export type RestartSummarizationMutationResult = {
-  restartSummarization: {
-    run: Run;
-    queuedCount: number;
-  };
-};
-
-export type UpdateTranscriptDecisionMutationResult = {
-  updateTranscriptDecision: Transcript;
-};
+export type UpdateTranscriptDecisionMutationResult = Omit<
+  GeneratedUpdateTranscriptDecisionMutation,
+  'updateTranscriptDecision'
+> & { updateTranscriptDecision: Transcript };
+export type UpdateTranscriptDecisionMutationVariables = GeneratedUpdateTranscriptDecisionMutationVariables;
