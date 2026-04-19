@@ -8,7 +8,13 @@ from typing import Any
 # Words that may appear in a model's scale-label answer but are not present in
 # the canonical scale label, so they should be stripped during relaxed matching.
 #
-# - Articles/possessives (their|the|a|an): models often add or drop these.
+# - Articles (the|a|an): models often add or drop these.
+# - Possessive pronouns (their|my|your|his|her|its|our): scale labels use
+#   second-person ("your team") but models frequently answer in first person
+#   ("my team") or with an article ("the team"). Stripping possessives from
+#   both sides lets the relaxed matcher ignore the pronoun choice. Skips
+#   personal pronouns (I/you/me/we) — those carry more syntactic weight and
+#   risk false matches.
 # - Level preset words (negligible|minimal|moderate|substantial|full): the
 #   canonical scale labels are level-agnostic by design — the level word
 #   appears in the prompt sentence ("One program provides citizens with
@@ -16,10 +22,12 @@ from typing import Any
 #   ("Strongly support the program that provides citizens with freedom in
 #   how they live"). Some models echo the level back into their answer
 #   ("...with full freedom in how they live"), which broke exact match.
-#   None of the value-statement bodies across our domains contain these
-#   words, so stripping them is safe.
+#
+# None of the value-statement bodies across our four domains (job-choice,
+# neighborhood, software-approach, national-priorities) contain any of these
+# words as meaningful content, so stripping is safe.
 FILLER_WORDS_PATTERN = re.compile(
-    r"\b(?:their|the|a|an|negligible|minimal|moderate|substantial|full)\b",
+    r"\b(?:their|my|your|his|her|its|our|the|a|an|negligible|minimal|moderate|substantial|full)\b",
     re.IGNORECASE,
 )
 

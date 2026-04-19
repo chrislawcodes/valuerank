@@ -84,3 +84,62 @@ describe('resolveValueKeyFromText — level-word tolerance', () => {
     expect(result).toBeNull();
   });
 });
+
+describe('resolveValueKeyFromText — possessive pronoun tolerance', () => {
+  // software-approach-choice labels use second-person possessives ("your team")
+  // but models frequently answer in first person ("my team") or with an
+  // article ("the team"). Relaxed filler-word stripping on both sides of the
+  // match recovers these.
+  const SOFTWARE_APPROACH_VALUE_STATEMENTS = [
+    {
+      token: 'conformity_interpersonal',
+      body: 'harmony with your team and the company because of how it relates to maintaining smooth interactions with teammates and stakeholders',
+    },
+    {
+      token: 'benevolence_dependability',
+      body: 'trust from your team because of how it relates to being someone others can rely on to carry through on commitments',
+    },
+    {
+      token: 'achievement',
+      body: 'recognition of your expertise because of how it relates to demonstrating success through strong performance',
+    },
+  ];
+
+  const SOFTWARE_APPROACH_LABEL_PREFIX = 'choosing the approach relating to';
+
+  it('recovers your → my swap (most common failure)', () => {
+    const result = resolveValueKeyFromText(
+      'Strongly support choosing the approach relating to harmony with my team and the company',
+      SOFTWARE_APPROACH_VALUE_STATEMENTS,
+      SOFTWARE_APPROACH_LABEL_PREFIX,
+    );
+    expect(result).toBe('Conformity_Interpersonal');
+  });
+
+  it('recovers your → the swap', () => {
+    const result = resolveValueKeyFromText(
+      'Strongly support choosing the approach relating to trust from the team',
+      SOFTWARE_APPROACH_VALUE_STATEMENTS,
+      SOFTWARE_APPROACH_LABEL_PREFIX,
+    );
+    expect(result).toBe('Benevolence_Dependability');
+  });
+
+  it('recovers swap combined with a level word in the text', () => {
+    const result = resolveValueKeyFromText(
+      'Strongly support choosing the approach relating to substantial recognition of my expertise',
+      SOFTWARE_APPROACH_VALUE_STATEMENTS,
+      SOFTWARE_APPROACH_LABEL_PREFIX,
+    );
+    expect(result).toBe('Achievement');
+  });
+
+  it('still returns null when no value statement is referenced', () => {
+    const result = resolveValueKeyFromText(
+      'I prefer the approach that maximizes personal autonomy',
+      SOFTWARE_APPROACH_VALUE_STATEMENTS,
+      SOFTWARE_APPROACH_LABEL_PREFIX,
+    );
+    expect(result).toBeNull();
+  });
+});
