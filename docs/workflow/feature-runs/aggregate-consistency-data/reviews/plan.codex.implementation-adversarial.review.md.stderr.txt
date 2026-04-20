@@ -1,0 +1,2887 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019da839-37a0-7ba3-8411-9683ebe25210
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: spec.md
+# Spec: Aggregate Pipeline — Consistency Data Emission
+
+**Feature slug:** aggregate-consistency-data
+**Created:** 2026-04-19
+**Status:** draft
+**Path:** Feature Factory (`docs/workflow/feature-runs/aggregate-consistency-data/`)
+
+---
+
+## Background
+
+The Models / Consistency report (PRs #702, #704, #705) shipped with an external dependency: the aggregate analysis pipeline had to surface per-scenario Bernoulli counts and per-value-pair Coherence ingredients inside `reliabilitySummary.perModel[modelId]` before the report could render real numbers. Without that data, every model falls into the "Insufficient coverage" footer with reason `no-repeat-coverage`.
+
+All the underlying numbers are **already computed** in `cloud/apps/api/src/services/analysis/aggregate/variance.ts`. This feature surfaces them in the emitted JSON, adds the per-pair Coherence section, and backfills existing `AGGREGATE` rows so historical analyses pick up the new shape.
+
+---
+
+## Discovery: Assumptions Carried In
+
+Discovery complete, 10 assumptions recorded in workflow state. Summary:
+
+- Backend-only. No GraphQL SDL changes, no new DB tables, no resolver or UI code changes.
+- Consistency resolver already handles missing fields gracefully → purely additive on the pipeline side.
+- Two PRs: **PR1** (Repeatability unblock — add `matches`/`trials` per scenario) + **PR2** (Coherence unblock — add `perPair` section + run/condition IDs). Backfill ships with PR2 or immediately after.
+- Canonical net-pressure mapping `strongly:+2 / somewhat:+1 / neutral:0 / opponentSomewhat:−1 / opponentStrongly:−2`, per the Consistency feature plan Decision 4.
+- `winRate = (strongly + somewhat) / (sampleCount − neutralCount)`; falls back to 0 when denominator is 0.
+- Backfill is a CLI script, not a migration; replaces existing `CURRENT` analysis rows via standard supersede semantics; idempotent on re-run.
+
+---
+
+## Product Goal
+
+Make the Models / Consistency report populate end-to-end without any resolver or UI changes.
+
+1. After PR1 + partial backfill: Repeatability numbers and CIs render in the scatter and table.
+2. After PR2 + full backfill: Coherence chips, per-pair drill-downs, order-effect panel, and deep-link URLs all populate.
+3. No regression in any existing consumer of `reliabilitySummary.perModel` or the aggregate worker output.
+
+---
+
+## User Stories
+
+### US-1 — Repeatability populates on the Consistency report (P1)
+
+As a researcher opening `/models/consistency`, I want every model with `AGGREGATE`-eligible coverage to appear as a dot on the scatter and a row in the table with a valid Repeatability ± CI.
+
+**Independent test:** Open `/models/consistency` against a database where PR1 has been merged and the backfill script has touched at least one analysis row. Scatter plots N dots for N covered models; each table row shows a numeric Repeatability with `± X.X%` range.
+
+**Acceptance scenarios:**
+1. **Given** PR1 has merged and `aggregate-consistency-backfill` has run, **when** the resolver reads any `AGGREGATE`-CURRENT row, **then** `reliabilitySummary.perModel[modelId].perScenario[scenarioId].matches` and `.trials` are integers ≥ 0.
+2. **Given** a model has ≥ 1 scenario with `trials ≥ 2`, **when** the report renders, **then** that model appears as a dot on the scatter with a Repeatability value in (0, 1] and a CI width > 0.
+3. **Given** a model has zero repeated scenarios, **when** the report renders, **then** that model stays in the "Insufficient coverage" footer with reason `no-repeat-coverage` — not silently promoted to the scatter.
+
+### US-2 — Coherence populates on the Consistency report (P1)
+
+As a researcher opening `/models/consistency`, I want the per-pair Coherence chips and order-effect panel to show real values when I drill into a model.
+
+**Independent test:** Open the drill-down for any covered model after PR2 + backfill; chips show `ρ` and `p-value` for every value pair with enough canonical conditions; the "View condition matrix" and "View transcripts" links navigate to correct targets.
+
+**Acceptance scenarios:**
+1. **Given** PR2 has merged and backfill has run, **when** the resolver reads any `AGGREGATE`-CURRENT row, **then** `reliabilitySummary.perModel[modelId].perPair[valueKey]` exists for every value pair the model actually evaluated.
+2. **Given** a value pair has ≥ 3 canonical conditions with non-zero pressure variance, **when** the chip renders, **then** `rho` is a number in [−1, 1], `pValue` is a number in [0, 1], `coherent` is boolean, `determinate` is true.
+3. **Given** a value pair's pressure vector has zero variance (all conditions collapse to one net-pressure value), **when** the chip renders, **then** `determinate` is false and the chip shows the grey "indeterminate" style.
+4. **Given** a drill-down chip is rendered, **when** I click "View condition matrix →", **then** the URL includes `domainId`, `modelId`, `valueKey`, and `signature` matching the chip's own values and the target page loads the correct `ConditionMatrix`.
+5. **Given** a drill-down chip is rendered, **when** I click "View transcripts →", **then** the URL includes `targetAnalysisRunId`, `targetCompanionRunId`, `primaryConditionIds`, and `companionConditionIds` matching the chip's own data.
+
+### US-3 — Backfill completes reliably (P1)
+
+As an operator rolling out PR1 and PR2, I want a single command that re-runs the aggregate worker on every existing `AGGREGATE`-CURRENT row and supersedes the old rows with new ones carrying the extended shape.
+
+**Independent test:** Run the CLI against a staging database; verify row counts before/after match, `CURRENT` count is preserved, `SUPERSEDED` count grows by the backfilled count, new rows contain the new fields.
+
+**Acceptance scenarios:**
+1. **Given** N `AGGREGATE`-CURRENT rows exist, **when** `npm run backfill:aggregate-consistency` completes without errors, **then** there are still exactly N `AGGREGATE`-CURRENT rows, N old rows marked `SUPERSEDED`, and every new `CURRENT` row contains the new `matches/trials/perPair` fields.
+2. **Given** the backfill has already run once, **when** it runs again, **then** the pass is a no-op (all rows already contain the new fields) and exit is clean.
+3. **Given** the backfill encounters a row it cannot process (missing transcripts, malformed config), **when** processing that row, **then** it logs a structured error, leaves the existing row untouched, and continues with the rest.
+4. **Given** the backfill is interrupted mid-run, **when** re-started, **then** it resumes without duplicating work (rows already upgraded are skipped).
+
+### US-4 — Downstream consumers see no regression (P1)
+
+As a maintainer of the existing Models / Matrix page or the domain analysis view, I want zero behavioral change from these PRs.
+
+**Independent test:** Unit and integration tests for `modelsAnalysis`, `domainAnalysis`, and any code path reading `reliabilitySummary` pass unchanged. Existing `baselineReliability`, `directionalAgreement`, `neutralShare`, and `coverageCount` values are bit-for-bit identical before and after.
+
+**Acceptance scenarios:**
+1. **Given** a specific `AGGREGATE` row before PR1, **when** the same row is re-run under PR1, **then** every field that existed before has the same value; only new fields are added.
+2. **Given** the Models / Matrix page queries `modelsAnalysis` against an upgraded row, **when** the page renders, **then** the matrix, stability dots, and drawer show identical values to before.
+3. **Given** the domain analysis value-detail page opens, **when** it queries transcripts for an upgraded row, **then** the condition matrix and transcript lists match the pre-upgrade output.
+
+---
+
+## Edge Cases
+
+- **Scenario with zero trials for a model** — skip it entirely (don't emit `perScenario[scenarioId]` for that model on that scenario). Do not emit `{ matches: 0, trials: 0 }`, which the resolver would treat as "covered with zero data" — worse than missing.
+- **Non-canonical condition labels** (scenario uses a label outside the 5-point grid) — emit the `perCondition` entry with `netPressureRank: null`. The resolver already marks such pairs `indeterminate`.
+- **Neutral sweep** (a scenario where every trial was neutral) — `winRate` denominator is 0; emit `winRate: 0, matches: 0, trials: sampleCount`.
+- **Single-trial scenario** (`sampleCount = 1`) — resolved: do **not** emit a `perScenario` entry for this model+scenario (FR-001). A single trial has zero trial pairs by definition. If every scenario a model has is single-trial, the model has no Repeatability coverage and falls into the "Insufficient coverage" footer — correct.
+- **Pre-existing `perScenario` fields with non-numeric values** — never overwrite existing fields; add new fields alongside.
+- **Backfill row that fails the worker** — log, skip, continue. At end, print a summary listing failed row IDs so a human can re-try manually.
+- **Simultaneous aggregate worker runs during backfill** — standard CURRENT/SUPERSEDED locking should handle this, but verify. Add a `--lock` flag to the backfill CLI if race conditions appear.
+- **Partial rollout** (PR1 shipped, PR2 not yet) — Consistency report shows Repeatability but every pair is marked `indeterminate` because `perPair` is missing. Graceful degrade.
+
+---
+
+## Functional Requirements
+
+- **FR-001:** System MUST emit `reliabilitySummary.perModel[modelId].perScenario[scenarioId]` with `{ trials: Int!, matches: Int! }` **only for scenarios where the model has `sampleCount >= 2`**. Single-trial scenarios are deliberately excluded — they have no Bernoulli pair to agree about, and including them would pollute Repeatability with vacuously-matching ones. PR1 scope.
+- **FR-002:** `trials` MUST equal `sampleCount` for that scenario. `matches` MUST equal the count of trial pairs within that scenario where both trials produced the same canonical decision bucket (see FR-002a). This is a pair-agreement metric, distinct from `sameCount` / `directionalAgreement` (which counts samples matching the median direction — a different question). PR1 scope.
+- **FR-002a:** `matches` counting rule: for a scenario with `n` trials distributed across the 5 canonical decision buckets with counts `c_1 ... c_5` (where `sum(c_i) = n`), compute in O(k) time:
+  - `trials = n * (n - 1) / 2` (total ordered trial pairs)
+  - `matches = sum over each bucket i of (c_i * (c_i - 1) / 2)`
+  The O(k) closed form is equivalent to the O(n²) pair enumeration: both count the pairs whose two trials fell into the same canonical bucket. The bucket counts are the existing `directionCounts` values (`strongly`, `somewhat`, `neutral`, `opponentSomewhat`, `opponentStrongly`).
+- **FR-003:** System MUST preserve every field currently in `perScenario` with bit-identical values (`variance`, `mean`, `sd`, `direction`, `directionCounts`, `directionalAgreement`, `medianSignedDistance`, `iqr`, `neutralShare`, `orientationCorrected`, `sampleCount`). PR1 scope.
+- **FR-004:** System MUST emit `reliabilitySummary.perModel[modelId].perPair: Record<valueKey, PairSummary>` in PR2 scope, where `PairSummary` contains:
+  - `targetAnalysisRunId: String!`
+  - `targetCompanionRunId: String | null`
+  - `primaryConditionIds: [String!]!`
+  - `companionConditionIds: [String!]!`
+  - `perCondition: [PerCondition!]!`
+- **FR-005:** Each `PerCondition` MUST contain `{ scenarioId, netPressureRank: Int | null, winRate: Float, matches: Int, trials: Int }`. `netPressureRank` follows the canonical mapping `strongly:+2 / somewhat:+1 / neutral:0 / opponentSomewhat:−1 / opponentStrongly:−2` for target appeal minus opposing appeal; `null` if any label is non-canonical.
+- **FR-006:** `winRate` MUST be computed from the **orientation-normalized** canonical bucket counts already in `directionCounts`. The 5-bucket system (`strongly`, `somewhat`, `neutral`, `opponentSomewhat`, `opponentStrongly`) is already normalized against the scenario's `orientationFlipped` flag by upstream code (`resolveTranscriptDecisionModel`), so `strongly` / `somewhat` always mean "favor the target value" regardless of whether the scenario was originally `A→B` or `B→A`. Given that:
+  - `winRate = (directionCounts.strongly + directionCounts.somewhat) / denom`
+  - `denom = sampleCount - directionCounts.neutral` when that difference is > 0
+  - `denom = 1` (forced) when every trial was neutral; in that case `winRate = 0` signals "no directional signal" rather than dividing by zero
+  No re-examination of raw transcripts is required; all inputs are integer counts already on the existing `perScenario` payload.
+- **FR-007:** System MUST provide a CLI `backfill-aggregate-consistency.ts` (or similar) in `cloud/apps/api/src/cli/` that iterates every `CURRENT` + `AGGREGATE` analysis row, re-runs the aggregate worker, and writes a new analysis row replacing the existing CURRENT one via the standard supersede pathway.
+- **FR-008:** Backfill MUST be idempotent — a second run produces no new rows on rows already upgraded. Idempotency check: inspect `reliabilitySummary.perModel[<any-model-with-coverage>].perScenario[<any-scenario>].matches` — if present, the row is already upgraded and is skipped.
+- **FR-008a:** Backfill MUST serialize with live `aggregate-run-workflow` executions via the existing `CURRENT`→`SUPERSEDED` transition (a single DB transaction that atomically flips the old row's status and inserts the new one). Concurrent aggregate workers writing to the same `runId` will see one of two outcomes: either both succeed serially (newer supersedes older), or the second detects its base row is already `SUPERSEDED` and aborts cleanly. No new locking primitive is added by this feature.
+- **FR-009:** Backfill MUST log each row's outcome (upgraded, skipped, failed) with a structured logger call.
+- **FR-010:** Backfill MUST be runnable against a single definition or domain via an optional flag for staged rollouts.
+- **FR-011:** System MUST NOT change the shape of any field consumed by `modelsAnalysis`, `domainAnalysis`, `analysis`, or any other existing resolver reading `reliabilitySummary`.
+- **FR-012:** System MUST NOT introduce any changes to the GraphQL SDL or schema file (`cloud/apps/web/schema.graphql`).
+- **FR-013:** The Zod contract at `cloud/apps/api/src/services/analysis/aggregate/contracts.ts:197` MUST be extended to type the new fields; the contract MUST continue to accept historical rows missing the fields (optional with a default or `.optional()`).
+
+---
+
+## Success Criteria
+
+- **SC-001:** After PR1 + backfill, the Consistency report renders a non-empty scatter for every model with ≥ 1 repeated scenario.
+- **SC-002:** After PR2 + backfill, the drill-down panel renders per-pair Coherence chips for every determinate pair a model has evaluated.
+- **SC-003:** No `@valuerank/api`, `@valuerank/web`, or `@valuerank/shared` test regression.
+- **SC-004:** Backfill completes on the full production dataset in under 30 minutes (aspirational; confirm on staging first).
+- **SC-005:** Existing `baselineReliability`, `directionalAgreement`, `neutralShare`, and `coverageCount` values are bit-identical on rows re-processed by the backfill.
+- **SC-006:** Every row that ran through the backfill has a log line recording the outcome.
+
+---
+
+## Non-Goals
+
+- Changes to the Consistency resolver, types, Pothos shapes, or UI.
+- Changes to the GraphQL SDL.
+- New analysis types or new queue entries.
+- Recomputing decisions or changing the decision-model contract.
+- Any modification to the cross-domain Stability metric (the existing Models / Matrix signal).
+- Live re-run of the aggregate worker on transcript arrival (that's a separate pipeline concern).
+- A UI for monitoring backfill progress (logs suffice for v1).
+
+---
+
+## Open Questions
+
+*(To be resolved during plan phase unless otherwise noted.)*
+
+1. Should `perPair` be keyed by `valueKey` alone or by `{ domainId, valueKey }`? Given a single `AGGREGATE` row belongs to one definition (and hence one domain + value pair), a single valueKey key is likely sufficient. Confirm with a quick look at the worker's grouping.
+2. Which CLI entry point pattern to follow — the `cli/create-user.ts`-style standalone script or a `cli/normalize.ts`-style runner? Plan phase picks one.
+3. For the idempotency check: does a row already contain the new shape? Simplest: look at `reliabilitySummary.perModel[<first-model>].perScenario[<first-scenario>].matches`. Plan phase confirms.
+
+---
+
+## Dependencies
+
+- `cloud/apps/api/src/services/analysis/aggregate/variance.ts` must continue to expose the underlying values used by the new fields. Any refactor of `variance.ts` outside this feature must preserve the fields.
+- The aggregate worker's `variance` output shape is consumed by the resolver parser in `modelsConsistencyData.ts`. Any further worker changes should coordinate with that parser.
+- Canonical condition labels (`strongly`, `somewhat`, `neutral`, `opponentSomewhat`, `opponentStrongly`) must continue to be the canonical label set. Widening the label set is out of scope and would require a separate feature.
+- Standard `CURRENT`/`SUPERSEDED` analysis-row semantics in the DB schema.
+
+---
+
+## Glossary (terms reused from the Consistency feature)
+
+| Term | Meaning | Source |
+|---|---|---|
+| Repeatability | Per-model within-scenario test-retest agreement, aggregated via random-effects meta-analysis | Consistency feature plan Decision 1 |
+| Coherence | Per-model fraction of value pairs with a significant monotonic pressure-response (Spearman ρ ≥ 0.8, p < 0.05) | Consistency feature plan FR-003 |
+| Net pressure | `(target value appeal) − (opposing value appeal)` using canonical labels mapped to `±2 / ±1 / 0` | Consistency feature plan Decision 4 |
+| Win rate (per condition) | Orientation-normalized: `(directionCounts.strongly + directionCounts.somewhat) / max(sampleCount − directionCounts.neutral, 1)`. See FR-006 for the canonical-bucket provenance and the all-neutral edge case. | This spec FR-006 |
+| Matches / trials (per scenario) | Bernoulli pair used by Repeatability. `trials = C(n, 2)` = number of ordered trial pairs. `matches` = number of those pairs where both trials produced the same canonical decision bucket. Scenarios with n < 2 are omitted. | This spec FR-001, FR-002, FR-002a |
+| CURRENT / SUPERSEDED | Standard analysis-row statuses used throughout the aggregate pipeline | `AnalysisResult.status` column |
+
+
+Context: variance_analysis.py
+"""
+Variance analysis for multi-sample runs.
+
+Computes within-model and within-scenario variance statistics
+to measure model consistency and response stability.
+"""
+
+from typing import Any, Literal, Optional, TypedDict
+import numpy as np
+
+from stats.decision_model import SIGNED_TO_BUCKET, resolve_transcript_signed_distance
+
+
+class _VarianceStatsBase(TypedDict):
+    """Required variance statistics fields."""
+    sampleCount: int  # Number of samples (N)
+    mean: float  # Mean score across samples
+    stdDev: float  # Standard deviation (measures consistency)
+    variance: float  # Variance (stdDev^2)
+    min: float  # Minimum score
+    max: float  # Maximum score
+    range: float  # Max - Min (measures response spread)
+
+
+class _VarianceStatsOptional(TypedDict, total=False):
+    """Optional directional stability fields (populated by Waves 2 and 3)."""
+
+    directionCounts: dict[str, int]
+    direction: Optional[Literal["A", "B", "NEUTRAL"]]
+    directionalAgreement: Optional[float]
+    medianSignedDistance: Optional[float]
+    iqr: Optional[float]
+    neutralShare: Optional[float]
+    orientationCorrected: bool
+
+
+class VarianceStats(_VarianceStatsBase, _VarianceStatsOptional):
+    """Variance statistics for a model-scenario pair."""
+
+
+class ModelVarianceStats(TypedDict):
+    """Aggregated variance statistics for a model."""
+
+    totalSamples: int  # Total transcript count
+    uniqueScenarios: int  # Number of unique scenarios
+    samplesPerScenario: int  # Samples per scenario-model pair
+    avgWithinScenarioVariance: float  # Average variance within scenarios
+    maxWithinScenarioVariance: float  # Maximum variance across scenarios
+    consistencyScore: float  # 0-1 score where 1 = perfectly consistent
+    perScenario: dict[str, VarianceStats]  # Variance per scenario
+
+
+class _RunVarianceAnalysisBase(TypedDict):
+    isMultiSample: bool  # True if samplesPerScenario > 1
+    samplesPerScenario: int  # Number of samples per scenario-model pair
+    perModel: dict[str, ModelVarianceStats]  # Variance stats per model
+    mostVariableScenarios: list[dict[str, Any]]  # Scenarios with highest variance
+    leastVariableScenarios: list[dict[str, Any]]  # Scenarios with lowest variance
+
+
+class _RunVarianceAnalysisOptional(TypedDict, total=False):
+    orientationCorrectedCount: int
+
+
+class RunVarianceAnalysis(_RunVarianceAnalysisBase, _RunVarianceAnalysisOptional):
+    """Complete variance analysis for a run."""
+
+
+def _canonical_to_signed(direction: str, strength: str) -> float | None:
+    """Map canonical direction/strength to signed distance (−2 to +2)."""
+    if direction == "favor_first" and strength == "strong":
+        return 2.0
+    if direction == "favor_first" and strength == "lean":
+        return 1.0
+    if direction == "neutral":
+        return 0.0
+    if direction == "favor_second" and strength == "lean":
+        return -1.0
+    if direction == "favor_second" and strength == "strong":
+        return -2.0
+    return None
+
+
+def compute_variance_stats(scores: list[float]) -> VarianceStats:
+    """
+    Compute variance statistics for a set of scores.
+
+    Args:
+        scores: List of numeric scores
+
+    Returns:
+        VarianceStats with mean, stdDev, variance, etc.
+    """
+    if not scores:
+        return VarianceStats(
+            sampleCount=0,
+            mean=0.0,
+            stdDev=0.0,
+            variance=0.0,
+            min=0.0,
+            max=0.0,
+            range=0.0,
+        )
+
+    arr = np.array(scores)
+    n = len(arr)
+    mean = float(np.mean(arr))
+    std_dev = float(np.std(arr, ddof=1)) if n > 1 else 0.0
+
+    return VarianceStats(
+        sampleCount=n,
+        mean=round(mean, 6),
+        stdDev=round(std_dev, 6),
+        variance=round(std_dev ** 2, 6),
+        min=round(float(np.min(arr)), 6),
+        max=round(float(np.max(arr)), 6),
+        range=round(float(np.max(arr) - np.min(arr)), 6),
+    )
+
+
+def compute_consistency_score(variances: list[float], max_possible_variance: float = 4.0) -> float:
+    """
+    Compute a 0-1 consistency score from variances.
+
+    A score of 1 means perfectly consistent (zero variance).
+    A score of 0 means maximum variance.
+
+    Args:
+        variances: List of variance values
+        max_possible_variance: Maximum possible variance (default 4.0 for 1-5 scale)
+
+    Returns:
+        Consistency score between 0 and 1
+    """
+    if not variances:
+        return 1.0  # No data means consistent by default
+
+    avg_variance = float(np.mean(variances))
+    # Normalize: 0 variance = 1.0 consistency, max variance = 0.0 consistency
+    score = 1.0 - (avg_variance / max_possible_variance)
+    return round(max(0.0, min(1.0, score)), 6)
+
+
+def compute_variance_analysis(
+    transcripts: list[dict[str, Any]],
+) -> RunVarianceAnalysis:
+    """
+    Compute variance analysis for multi-sample runs.
+
+    Groups transcripts by (scenarioId, modelId) and computes
+    within-group variance to measure model consistency.
+
+    Args:
+        transcripts: List of transcript dicts with modelId, scenarioId,
+                    sampleIndex, and summary.score
+
+    Returns:
+        RunVarianceAnalysis with per-model and per-scenario variance stats
+    """
+    # Group by (scenarioId, modelId) -> list of (sampleIndex, signedDistance)
+    grouped: dict[tuple[str, str], list[tuple[int, float]]] = {}
+    scenario_names: dict[str, str] = {}
+
+    for t in transcripts:
+        scenario_id = t.get("scenarioId", "unknown")
+        model_id = t.get("modelId", "unknown")
+        sample_index = t.get("sampleIndex", 0)
+        scenario = t.get("scenario", {})
+        signed = resolve_transcript_signed_distance(t)
+        if signed is None:
+            continue
+
+        key = (scenario_id, model_id)
+        if key not in grouped:
+            grouped[key] = []
+            scenario_names[scenario_id] = scenario.get("name", scenario_id)
+
+        grouped[key].append((sample_index, signed))
+
+    # Determine if this is a multi-sample run
+    max_samples = max(len(scores) for scores in grouped.values()) if grouped else 1
+    is_multi_sample = max_samples > 1
+
+    # Compute per-model variance stats
+    per_model: dict[str, ModelVarianceStats] = {}
+
+    # First, group by model
+    model_scenarios: dict[str, dict[str, list[float]]] = {}
+    for (scenario_id, model_id), sample_scores in grouped.items():
+        if model_id not in model_scenarios:
+            model_scenarios[model_id] = {}
+        # Extract just the scores (ignore sample index)
+        scores = [s for _, s in sample_scores]
+        model_scenarios[model_id][scenario_id] = scores
+
+    # Compute stats for each model
+    for model_id, scenarios in model_scenarios.items():
+        per_scenario: dict[str, VarianceStats] = {}
+        variances: list[float] = []
+        total_samples = 0
+
+        for scenario_id, scores in scenarios.items():
+            stats = compute_variance_stats(scores)
+            if len(scores) > 0:
+                # scores are signed distances (−2 to +2)
+                median_sd = float(np.median(scores))
+
+                if median_sd > 0:
+                    direction: Optional[Literal["A", "B", "NEUTRAL"]] = "A"
+                elif median_sd < 0:
+                    direction = "B"
+                else:
+                    direction = "NEUTRAL"
+
+                if direction == "A":
+                    same_side = sum(1 for s in scores if s > 0)
+                elif direction == "B":
+                    same_side = sum(1 for s in scores if s < 0)
+                else:
+                    same_side = sum(1 for s in scores if s == 0)
+
+                n = len(scores)
+                directional_agreement = same_side / n
+                neutral_count = sum(1 for s in scores if s == 0.0)
+                neutral_share = neutral_count / n
+
+                direction_counts: dict[str, int] = {b: 0 for b in SIGNED_TO_BUCKET.values()}
+                for s in scores:
+                    bucket = SIGNED_TO_BUCKET.get(s)
+                    if bucket is not None:
+                        direction_counts[bucket] += 1
+
+                iqr_val: Optional[float] = None
+                if n >= 2:
+                    q75 = float(np.percentile(scores, 75))
+                    q25 = float(np.percentile(scores, 25))
+                    iqr_val = round(q75 - q25, 6)
+
+                stats.update({
+                    "directionCounts": direction_counts,
+                    "direction": direction,
+                    "directionalAgreement": round(directional_agreement, 6),
+                    "medianSignedDistance": round(median_sd, 6),
+                    "iqr": iqr_val,
+                    "neutralShare": round(neutral_share, 6),
+                    "orientationCorrected": False,
+                })
+
+            per_scenario[scenario_id] = stats
+            if stats["sampleCount"] > 1:
+                variances.append(stats["variance"])
+            total_samples += stats["sampleCount"]
+
+        avg_variance = float(np.mean(variances)) if variances else 0.0
+        max_variance = float(np.max(variances)) if variances else 0.0
+
+        per_model[model_id] = ModelVarianceStats(
+            totalSamples=total_samples,
+            uniqueScenarios=len(scenarios),
+            samplesPerScenario=max_samples,
+            avgWithinScenarioVariance=round(avg_variance, 6),
+            maxWithinScenarioVariance=round(max_variance, 6),
+            consistencyScore=compute_consistency_score(variances),
+            perScenario=per_scenario,
+        )
+
+    # Find most/least variable scenarios (across all models)
+    all_scenario_variances: list[dict[str, Any]] = []
+    for (scenario_id, model_id), sample_scores in grouped.items():
+        if len(sample_scores) > 1:
+            scores = [s for _, s in sample_scores]
+            stats = compute_variance_stats(scores)
+            all_scenario_variances.append({
+                "scenarioId": scenario_id,
+                "scenarioName": scenario_names.get(scenario_id, scenario_id),
+                "modelId": model_id,
+                "variance": stats["variance"],
+                "stdDev": stats["stdDev"],
+                "range": stats["range"],
+                "sampleCount": stats["sampleCount"],
+                "mean": stats["mean"],
+            })
+
+    # Sort by variance
+    all_scenario_variances.sort(key=lambda x: x["variance"], reverse=True)
+    most_variable = all_scenario_variances[:5] if all_scenario_variances else []
+    least_variable = all_scenario_variances[-5:][::-1] if len(all_scenario_variances) > 5 else []
+
+    return RunVarianceAnalysis(
+        isMultiSample=is_multi_sample,
+        samplesPerScenario=max_samples,
+        perModel=per_model,
+        mostVariableScenarios=most_variable,
+        leastVariableScenarios=least_variable,
+        orientationCorrectedCount=0,
+    )
+
+
+Context: test_analyze_basic.py
+"""
+Integration tests for analyze_basic.py worker.
+
+Tests the full analysis pipeline with realistic transcript data.
+"""
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+WORKERS_DIR = Path(__file__).parent.parent
+if str(WORKERS_DIR) not in sys.path:
+    sys.path.insert(0, str(WORKERS_DIR))
+
+from stats.preference_stats import compute_two_step_by_value as _compute_two_step_by_value
+
+
+def run_analyze_basic(input_data: dict) -> dict:
+    """Run analyze_basic.py with given input and return output."""
+    workers_dir = Path(__file__).parent.parent
+    result = subprocess.run(
+        [sys.executable, "analyze_basic.py"],
+        input=json.dumps(input_data),
+        capture_output=True,
+        text=True,
+        cwd=workers_dir,
+        env={**dict(__import__("os").environ), "PYTHONPATH": str(workers_dir)},
+    )
+    return json.loads(result.stdout)
+
+
+class TestAnalyzeBasicIntegration:
+    """Integration tests for analyze_basic worker."""
+
+    def test_single_transcript(self):
+        """Test analysis with single transcript."""
+        input_data = {
+            "runId": "test-run-1",
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "gpt-4",
+                    "scenarioId": "s1",
+                    "summary": {
+                        "values": {"Physical_Safety": "prioritized"},
+                        "score": 4,
+                    },
+                    "scenario": {"dimensions": {"stakes": "high"}},
+                }
+            ],
+        }
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        assert "analysis" in result
+        assert "perModel" in result["analysis"]
+        assert "gpt-4" in result["analysis"]["perModel"]
+        assert result["analysis"]["perModel"]["gpt-4"]["sampleSize"] == 1
+
+    def test_multiple_models(self):
+        """Test analysis with multiple models."""
+        input_data = {
+            "runId": "test-run-2",
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "gpt-4",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"Compassion": "prioritized"}, "score": 4},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}},
+                    "scenario": {"dimensions": {"stakes": "low"}},
+                },
+                {
+                    "id": "t2",
+                    "modelId": "claude-3",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"Compassion": "deprioritized"}, "score": 2},
+                    "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "lean"}},
+                    "scenario": {"dimensions": {"stakes": "low"}},
+                },
+                {
+                    "id": "t3",
+                    "modelId": "gpt-4",
+                    "scenarioId": "s2",
+                    "summary": {"values": {"Compassion": "prioritized"}, "score": 4},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}},
+                    "scenario": {"dimensions": {"stakes": "high"}},
+                },
+                {
+                    "id": "t4",
+                    "modelId": "claude-3",
+                    "scenarioId": "s2",
+                    "summary": {"values": {"Compassion": "prioritized"}, "score": 5},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
+                    "scenario": {"dimensions": {"stakes": "high"}},
+                },
+            ],
+        }
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        analysis = result["analysis"]
+
+        # Check per-model stats
+        assert "gpt-4" in analysis["perModel"]
+        assert "claude-3" in analysis["perModel"]
+        assert analysis["perModel"]["gpt-4"]["sampleSize"] == 2
+        assert analysis["perModel"]["claude-3"]["sampleSize"] == 2
+
+        # Check model agreement
+        assert "pairwise" in analysis["modelAgreement"]
+        # Should have one pairwise comparison
+        assert len(analysis["modelAgreement"]["pairwise"]) == 1
+
+        # Check dimension analysis
+        assert "dimensions" in analysis["dimensionAnalysis"]
+        assert "stakes" in analysis["dimensionAnalysis"]["dimensions"]
+
+    def test_contested_scenarios(self):
+        """Test that contested scenarios are identified."""
+        input_data = {
+            "runId": "test-run-3",
+            "transcripts": [
+                # Scenario with high disagreement
+                {"id": "t1", "modelId": "m1", "scenarioId": "contested",
+                 "summary": {"score": 1}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {"name": "Contested One"}},
+                {"id": "t2", "modelId": "m2", "scenarioId": "contested",
+                 "summary": {"score": 5}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {"name": "Contested One"}},
+                # Scenario with low disagreement
+                {"id": "t3", "modelId": "m1", "scenarioId": "agreed",
+                 "summary": {"score": 3}, "decisionModelV2": {"canonical": {"direction": "neutral", "strength": "neutral"}}, "scenario": {"name": "Agreed One"}},
+                {"id": "t4", "modelId": "m2", "scenarioId": "agreed",
+                 "summary": {"score": 3}, "decisionModelV2": {"canonical": {"direction": "neutral", "strength": "neutral"}}, "scenario": {"name": "Agreed One"}},
+            ],
+        }
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        contested = result["analysis"]["mostContestedScenarios"]
+        assert len(contested) >= 1
+        # Contested scenario should be first (higher variance)
+        assert contested[0]["scenarioId"] == "contested"
+        assert contested[0]["variance"] > 0
+
+    def test_warnings_for_small_samples(self):
+        """Test that warnings are generated for small samples."""
+        input_data = {
+            "runId": "test-run-4",
+            "transcripts": [
+                {"id": "t1", "modelId": "small-model", "scenarioId": "s1",
+                 "summary": {"values": {}, "score": 3}, "scenario": {}},
+            ],
+        }
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        warnings = result["analysis"]["warnings"]
+        # Should have small sample warning
+        warning_codes = [w["code"] for w in warnings]
+        assert "SMALL_SAMPLE" in warning_codes
+
+    def test_string_dimensions_do_not_trigger_no_dimensions_warning(self):
+        """String-valued dimensions should count as valid scenario metadata."""
+        input_data = {
+            "runId": "test-run-string-dimensions",
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {}, "score": 3},
+                    "scenario": {"dimensions": {"power": "2", "conformity": "1"}},
+                },
+            ],
+        }
+        result = run_analyze_basic(input_data)
+
+        warning_codes = [w["code"] for w in result["analysis"]["warnings"]]
+        assert "NO_DIMENSIONS" not in warning_codes
+
+    def test_partial_dimensions_warning_when_only_some_transcripts_have_metadata(self):
+        """Warn when dimension coverage is partial instead of claiming none exist."""
+        input_data = {
+            "runId": "test-run-partial-dimensions",
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {}, "score": 4},
+                    "scenario": {"dimensions": {"stakes": "high"}},
+                },
+                {
+                    "id": "t2",
+                    "modelId": "m1",
+                    "scenarioId": "s2",
+                    "summary": {"values": {}, "score": 2},
+                    "scenario": {},
+                },
+            ],
+        }
+        result = run_analyze_basic(input_data)
+
+        warning_codes = [w["code"] for w in result["analysis"]["warnings"]]
+        assert "PARTIAL_DIMENSIONS" in warning_codes
+        assert "NO_DIMENSIONS" not in warning_codes
+
+    def test_methods_documented(self):
+        """Test that statistical methods are documented in output."""
+        input_data = {
+            "runId": "test-run-5",
+            "transcripts": [
+                {"id": "t1", "modelId": "m1", "scenarioId": "s1",
+                 "summary": {"values": {}, "score": 3}, "scenario": {}},
+            ],
+        }
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        methods = result["analysis"]["methodsUsed"]
+        assert methods["modelComparison"] == "spearman_rho"
+        assert methods["pValueCorrection"] == "holm_bonferroni"
+        assert methods["effectSize"] == "cohens_d"
+        assert methods["alpha"] == 0.05
+        assert methods["codeVersion"] == "1.3.0"
+        assert methods["summaryContractVersion"] == "vignette-semantics-v1"
+
+    def test_v2_decision_model_overrides_legacy_scalar_score(self):
+        """The worker should prefer the V2 compatibility score when it is present."""
+        input_data = {
+            "runId": "test-run-v2-precedence",
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {}, "score": 1},
+                    "decisionModelV2": {
+                        "canonical": {
+                            "direction": "favor_first",
+                            "strength": "lean",
+                        },
+                    },
+                    "scenario": {"dimensions": {"stakes": "high"}},
+                },
+            ],
+        }
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        per_model = result["analysis"]["perModel"]["m1"]
+        assert per_model["overall"]["mean"] == pytest.approx(1.0, abs=0.001)
+        preference = result["analysis"]["preferenceSummary"]["perModel"]["m1"]["preferenceDirection"]["overallLean"]
+        assert preference == "A"
+
+    def test_v2_decision_model_does_not_double_flip_orientation_corrected_scores(self):
+        """Canonical V2 scores should not be flipped again by the worker."""
+        input_data = {
+            "runId": "test-run-v2-no-double-flip",
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "orientationFlipped": True,
+                    "summary": {"values": {}, "score": 1},
+                    "decisionModelV2": {
+                        "canonical": {
+                            "direction": "favor_first",
+                            "strength": "lean",
+                        },
+                    },
+                    "scenario": {"dimensions": {"stakes": "high"}},
+                },
+            ],
+        }
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        per_model = result["analysis"]["perModel"]["m1"]
+        assert per_model["overall"]["mean"] == pytest.approx(1.0, abs=0.001)
+        preference = result["analysis"]["preferenceSummary"]["perModel"]["m1"]["preferenceDirection"]["overallLean"]
+        assert preference == "A"
+
+    def test_v2_legacy_raw_score_is_orientation_corrected_for_comparison_and_contest_detection(self):
+        """Raw V2 scores should normalize before model comparison and contested-scene analysis."""
+        input_data = {
+            "runId": "test-run-v2-raw-orientation",
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {}},
+                    "decisionModelV2": {
+                        "canonical": {
+                            "direction": "favor_first",
+                            "strength": "strong",
+                        },
+                    },
+                    "scenario": {"dimensions": {"stakes": "high"}},
+                },
+                {
+                    "id": "t3",
+                    "modelId": "m1",
+                    "scenarioId": "s2",
+                    "summary": {"values": {}},
+                    "decisionModelV2": {
+                        "canonical": {
+                            "direction": "favor_first",
+                            "strength": "lean",
+                        },
+                    },
+                    "scenario": {"dimensions": {"stakes": "low"}},
+                },
+                {
+                    "id": "t5",
+                    "modelId": "m1",
+                    "scenarioId": "s3",
+                    "summary": {"values": {}},
+                    "decisionModelV2": {
+                        "canonical": {
+                            "direction": "neutral",
+                            "strength": "neutral",
+                        },
+                    },
+                    "scenario": {"dimensions": {"stakes": "medium"}},
+                },
+                {
+                    "id": "t2",
+                    "modelId": "m2",
+                    "scenarioId": "s1",
+                    "summary": {"values": {}},
+                    "decisionModelV2": {
+                        "canonical": {
+                            "direction": "favor_first",
+                            "strength": "strong",
+                        },
+                    },
+                    "scenario": {"dimensions": {"stakes": "high"}},
+                },
+                {
+                    "id": "t4",
+                    "modelId": "m2",
+                    "scenarioId": "s2",
+                    "summary": {"values": {}},
+                    "decisionModelV2": {
+                        "canonical": {
+                            "direction": "favor_first",
+                            "strength": "lean",
+                        },
+                    },
+                    "scenario": {"dimensions": {"stakes": "low"}},
+                },
+                {
+                    "id": "t6",
+                    "modelId": "m2",
+                    "scenarioId": "s3",
+                    "summary": {"values": {}},
+                    "decisionModelV2": {
+                        "canonical": {
+                            "direction": "neutral",
+                            "strength": "neutral",
+                        },
+                    },
+                    "scenario": {"dimensions": {"stakes": "medium"}},
+                },
+            ],
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        per_model = result["analysis"]["perModel"]
+        assert per_model["m1"]["overall"]["mean"] == pytest.approx(1.0, abs=0.001)
+        assert per_model["m2"]["overall"]["mean"] == pytest.approx(1.0, abs=0.001)
+        pairwise = (
+            result["analysis"]["modelAgreement"]["pairwise"].get("m1:m2")
+            or result["analysis"]["modelAgreement"]["pairwise"].get("m2:m1")
+        )
+        assert pairwise is not None
+        assert pairwise["spearmanRho"] == pytest.approx(1.0, abs=0.001)
+        contested = result["analysis"]["mostContestedScenarios"]
+        assert contested[0]["variance"] == pytest.approx(0.0, abs=0.001)
+
+    def test_legacy_mode_with_transcript_ids(self):
+        """Test backwards compatibility with transcriptIds only."""
+        input_data = {
+            "runId": "test-run-6",
+            "transcriptIds": ["id1", "id2", "id3"],
+        }
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        assert result["analysis"]["status"] == "STUB"
+        assert result["analysis"]["transcriptCount"] == 3
+
+    def test_empty_transcripts(self):
+        """Test analysis with empty transcripts array."""
+        input_data = {
+            "runId": "test-run-7",
+            "transcripts": [],
+        }
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        assert result["analysis"]["perModel"] == {}
+
+    def test_preference_summary_uses_orientation_corrected_scenario_means(self):
+        """Preference strength should use per-scenario means, not flattened repeats."""
+        input_data = {
+            "runId": "test-run-preference-summary",
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 0,
+                    "orientationFlipped": False,
+                    "summary": {"score": 5, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t2",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 1,
+                    "orientationFlipped": False,
+                    "summary": {"score": 5, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t3",
+                    "modelId": "m1",
+                    "scenarioId": "s2",
+                    "sampleIndex": 0,
+                    "orientationFlipped": True,
+                    "summary": {"score": 1, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t4",
+                    "modelId": "m1",
+                    "scenarioId": "s3",
+                    "sampleIndex": 0,
+                    "orientationFlipped": False,
+                    "summary": {"score": 3, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "neutral", "strength": "neutral"}},
+                    "scenario": {},
+                },
+            ],
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        summary = result["analysis"]["preferenceSummary"]["perModel"]["m1"]
+        direction = summary["preferenceDirection"]
+
+        assert direction["overallLean"] == "A"
+        assert direction["overallSignedCenter"] is not None
+        assert summary["preferenceStrength"] is not None
+
+    def test_reliability_summary_is_unavailable_without_repeats(self):
+        """Single-sample runs should not expose reliability from cross-scenario spread."""
+        input_data = {
+            "runId": "test-run-reliability-unavailable",
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 0,
+                    "summary": {"score": 1, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t2",
+                    "modelId": "m1",
+                    "scenarioId": "s2",
+                    "sampleIndex": 0,
+                    "summary": {"score": 5, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
+                    "scenario": {},
+                },
+            ],
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        reliability = result["analysis"]["reliabilitySummary"]["perModel"]["m1"]
+        variance = result["analysis"]["varianceAnalysis"]["perModel"]["m1"]
+
+        assert variance["consistencyScore"] == 1.0
+        assert reliability["coverageCount"] == 0
+        assert reliability["baselineNoise"] is None
+        assert reliability["baselineReliability"] is None
+        assert reliability["directionalAgreement"] is None
+        assert reliability["neutralShare"] is None
+
+    def test_reliability_summary_weights_directional_metrics_by_sample_count(self):
+        """Directional reliability rollups should be weighted by repeated sample count."""
+        input_data = {
+            "runId": "test-run-reliability-weighted",
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 0,
+                    "summary": {"score": 5, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t2",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 1,
+                    "summary": {"score": 5, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t3",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 2,
+                    "summary": {"score": 3, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "neutral", "strength": "neutral"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t4",
+                    "modelId": "m1",
+                    "scenarioId": "s2",
+                    "sampleIndex": 0,
+                    "summary": {"score": 1, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t5",
+                    "modelId": "m1",
+                    "scenarioId": "s2",
+                    "sampleIndex": 1,
+                    "summary": {"score": 1, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}},
+                    "scenario": {},
+                },
+            ],
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        reliability = result["analysis"]["reliabilitySummary"]["perModel"]["m1"]
+        variance = result["analysis"]["varianceAnalysis"]["perModel"]["m1"]
+
+        assert reliability["coverageCount"] == 2
+        assert reliability["uniqueScenarios"] == 2
+        assert reliability["baselineReliability"] == pytest.approx(
+            variance["consistencyScore"],
+            abs=1e-6,
+        )
+        assert reliability["baselineNoise"] == pytest.approx(
+            variance["avgWithinScenarioVariance"] ** 0.5,
+            abs=1e-6,
+        )
+        assert reliability["directionalAgreement"] == pytest.approx(0.8, abs=1e-6)
+        assert reliability["neutralShare"] == pytest.approx(0.2, abs=1e-6)
+
+    def test_same_signature_aggregate_keeps_preference_but_leaves_reliability_unavailable_without_within_run_repeats(self):
+        """Pooling single-sample runs should not create fake repeatability."""
+        input_data = {
+            "runId": "aggregate-run-preference-only",
+            "emitVignetteSemantics": True,
+            "aggregateSemantics": {
+                "mode": "same_signature_v1",
+                "plannedScenarioIds": ["s1", "s2", "s3"],
+                "minRepeatCoverageCount": 1,
+                "minRepeatCoverageShare": 0.1,
+                "lowCoverageCautionThreshold": 5,
+                "driftWarningThreshold": 0.25,
+            },
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "runId": "run-a",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 0,
+                    "orientationFlipped": False,
+                    "summary": {"score": 5, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t2",
+                    "runId": "run-a",
+                    "modelId": "m1",
+                    "scenarioId": "s2",
+                    "sampleIndex": 0,
+                    "orientationFlipped": False,
+                    "summary": {"score": 4, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t3",
+                    "runId": "run-b",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 0,
+                    "orientationFlipped": False,
+                    "summary": {"score": 5, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t4",
+                    "runId": "run-b",
+                    "modelId": "m1",
+                    "scenarioId": "s3",
+                    "sampleIndex": 0,
+                    "orientationFlipped": False,
+                    "summary": {"score": 1, "values": {}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}},
+                    "scenario": {},
+                },
+            ],
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        analysis = result["analysis"]
+        preference = analysis["preferenceSummary"]["perModel"]["m1"]
+        reliability = analysis["reliabilitySummary"]["perModel"]["m1"]
+        aggregate_semantics = analysis["aggregateSemantics"]
+
+        assert preference["preferenceDirection"]["overallLean"] is not None
+        assert preference["preferenceStrength"] is not None
+        assert reliability["coverageCount"] == 1
+        assert reliability["baselineReliability"] is not None
+        assert reliability["baselineNoise"] is not None
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageCount"] == 1
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageShare"] == pytest.approx(1/3, abs=1e-3)
+
+    def test_same_signature_aggregate_rolls_up_reliability_and_flags_high_drift(self):
+        """Aggregate pooling should weight within-run reliability and flag drift separately."""
+        input_data = {
+            "runId": "aggregate-run-reliability",
+            "emitVignetteSemantics": True,
+            "aggregateSemantics": {
+                "mode": "same_signature_v1",
+                "plannedScenarioIds": ["s1", "s2", "s3", "s4", "s5"],
+                "minRepeatCoverageCount": 3,
+                "minRepeatCoverageShare": 0.2,
+                "lowCoverageCautionThreshold": 5,
+                "driftWarningThreshold": 0.25,
+            },
+            "transcripts": [
+                # Run A: repeated s1, s2
+                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "a4", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "a5", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                # Run B: repeated s3, s4, s5 with different center to trigger drift
+                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "b3", "runId": "run-b", "modelId": "m1", "scenarioId": "s4", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "b4", "runId": "run-b", "modelId": "m1", "scenarioId": "s4", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 2, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "lean"}}, "scenario": {}},
+                {"id": "b5", "runId": "run-b", "modelId": "m1", "scenarioId": "s5", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "b6", "runId": "run-b", "modelId": "m1", "scenarioId": "s5", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+            ],
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        reliability = result["analysis"]["reliabilitySummary"]["perModel"]["m1"]
+        aggregate_semantics = result["analysis"]["aggregateSemantics"]
+
+        assert reliability["coverageCount"] == 5
+        assert reliability["uniqueScenarios"] == 5
+        assert reliability["baselineReliability"] is not None
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageCount"] == 5
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageShare"] == pytest.approx(1.0, abs=1e-6)
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["contributingRunCount"] == 2
+        assert aggregate_semantics["perModelDrift"]["m1"]["weightedOverallSignedCenterSd"] is not None
+        assert aggregate_semantics["perModelDrift"]["m1"]["exceedsWarningThreshold"] is True
+
+    def test_same_signature_aggregate_sums_repeat_coverage_across_runs_without_treating_runs_as_repeats(self):
+        """Pooled coverage should sum run-level repeat coverage while preserving within-run repeatability."""
+        input_data = {
+            "runId": "aggregate-run-overlapping-repeat-coverage",
+            "emitVignetteSemantics": True,
+            "aggregateSemantics": {
+                "mode": "same_signature_v1",
+                "plannedScenarioIds": ["s1", "s2", "s3", "s4", "s5"],
+                "minRepeatCoverageCount": 3,
+                "minRepeatCoverageShare": 0.2,
+                "lowCoverageCautionThreshold": 5,
+                "driftWarningThreshold": 0.25,
+            },
+            "transcripts": [
+                # Run A: repeated s1, s2
+                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 4, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}}, "scenario": {}},
+                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 2, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "lean"}}, "scenario": {}},
+                {"id": "a4", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                # Run B: repeated s1 again only
+                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+            ],
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        reliability = result["analysis"]["reliabilitySummary"]["perModel"]["m1"]
+        aggregate_semantics = result["analysis"]["aggregateSemantics"]
+
+        assert reliability["coverageCount"] == 2
+        assert reliability["uniqueScenarios"] == 2
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageCount"] == 2
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageShare"] == pytest.approx(0.4, abs=1e-6)
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["contributingRunCount"] == 2
+
+    def test_cross_run_reliability_consistent_direction(self):
+        """3 source runs x 5 conditions x 1 sample each, all consistent A-side → reliability populated with agreement 1.0."""
+        input_data = {
+            "runId": "agg-cross-run-consistent",
+            "emitVignetteSemantics": True,
+            "aggregateSemantics": {
+                "mode": "same_signature_v1",
+                "plannedScenarioIds": ["s1", "s2", "s3", "s4", "s5"],
+                "minRepeatCoverageCount": 1,
+                "minRepeatCoverageShare": 0.1,
+                "lowCoverageCautionThreshold": 5,
+                "driftWarningThreshold": 0.5,
+            },
+            "transcripts": [
+                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a4", "runId": "run-a", "modelId": "m1", "scenarioId": "s4", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a5", "runId": "run-a", "modelId": "m1", "scenarioId": "s5", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "b3", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "b4", "runId": "run-b", "modelId": "m1", "scenarioId": "s4", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "b5", "runId": "run-b", "modelId": "m1", "scenarioId": "s5", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "c1", "runId": "run-c", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "c2", "runId": "run-c", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "c3", "runId": "run-c", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "c4", "runId": "run-c", "modelId": "m1", "scenarioId": "s4", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "c5", "runId": "run-c", "modelId": "m1", "scenarioId": "s5", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+            ],
+        }
+        result = run_analyze_basic(input_data)
+        assert result["success"] is True
+        reliability = result["analysis"]["reliabilitySummary"]["perModel"]["m1"]
+        assert reliability["baselineReliability"] is not None
+        assert reliability["directionalAgreement"] == pytest.approx(1.0)
+
+    def test_cross_run_reliability_mixed_direction(self):
+        """3 source runs x 3 conditions x 1 sample, 2 runs A-side 1 run B-side → directionalAgreement approx 2/3."""
+        input_data = {
+            "runId": "agg-cross-run-mixed",
+            "emitVignetteSemantics": True,
+            "aggregateSemantics": {
+                "mode": "same_signature_v1",
+                "plannedScenarioIds": ["s1", "s2", "s3"],
+                "minRepeatCoverageCount": 1,
+                "minRepeatCoverageShare": 0.1,
+                "lowCoverageCautionThreshold": 5,
+                "driftWarningThreshold": 0.5,
+            },
+            "transcripts": [
+                # run-a: A-side
+                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                # run-b: A-side
+                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "b3", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                # run-c: B-side
+                {"id": "c1", "runId": "run-c", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "c2", "runId": "run-c", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "c3", "runId": "run-c", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+            ],
+        }
+        result = run_analyze_basic(input_data)
+        assert result["success"] is True
+        reliability = result["analysis"]["reliabilitySummary"]["perModel"]["m1"]
+        assert reliability["directionalAgreement"] is not None
+        assert reliability["directionalAgreement"] == pytest.approx(2/3, abs=0.01)
+
+    def test_cross_run_reliability_within_run_repeats_no_regression(self):
+        """Within-run repeats still produce reliability after refactor (regression guard)."""
+        input_data = {
+            "runId": "agg-within-run-regression",
+            "emitVignetteSemantics": True,
+            "aggregateSemantics": {
+                "mode": "same_signature_v1",
+                "plannedScenarioIds": ["s1", "s2", "s3"],
+                "minRepeatCoverageCount": 1,
+                "minRepeatCoverageShare": 0.1,
+                "lowCoverageCautionThreshold": 5,
+                "driftWarningThreshold": 0.5,
+            },
+            "transcripts": [
+                # Single run, 2 samples each condition, consistent A-side
+                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a4", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a5", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a6", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+            ],
+        }
+        result = run_analyze_basic(input_data)
+        assert result["success"] is True
+        reliability = result["analysis"]["reliabilitySummary"]["perModel"]["m1"]
+        assert reliability["baselineReliability"] is not None
+
+    def test_cross_run_reliability_below_threshold_stays_none(self):
+        """Cross-run coverage below minRepeatCoverageCount → reliability stays None."""
+        input_data = {
+            "runId": "agg-cross-run-below-threshold",
+            "emitVignetteSemantics": True,
+            "aggregateSemantics": {
+                "mode": "same_signature_v1",
+                "plannedScenarioIds": ["s1", "s2"],
+                "minRepeatCoverageCount": 3,
+                "minRepeatCoverageShare": 0.5,
+                "lowCoverageCautionThreshold": 5,
+                "driftWarningThreshold": 0.5,
+            },
+            "transcripts": [
+                # Only 2 runs x 1 condition: coverageCount = 1 repeated scenario, but count < 3
+                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+            ],
+        }
+        result = run_analyze_basic(input_data)
+        assert result["success"] is True
+        reliability = result["analysis"]["reliabilitySummary"]["perModel"]["m1"]
+        assert reliability["baselineReliability"] is None
+
+    def test_cross_run_drift_sd_populated(self):
+        """3 source runs with different overallSignedCenter → drift SD is not None."""
+        input_data = {
+            "runId": "agg-cross-run-drift",
+            "emitVignetteSemantics": True,
+            "aggregateSemantics": {
+                "mode": "same_signature_v1",
+                "plannedScenarioIds": ["s1", "s2", "s3"],
+                "minRepeatCoverageCount": 1,
+                "minRepeatCoverageShare": 0.1,
+                "lowCoverageCautionThreshold": 5,
+                "driftWarningThreshold": 0.25,
+            },
+            "transcripts": [
+                # run-a: strong A-side (center ~2)
+                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {}},
+                # run-b: neutral
+                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 3, "values": {}}, "decisionModelV2": {"canonical": {"direction": "neutral", "strength": "neutral"}}, "scenario": {}},
+                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 3, "values": {}}, "decisionModelV2": {"canonical": {"direction": "neutral", "strength": "neutral"}}, "scenario": {}},
+                {"id": "b3", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 3, "values": {}}, "decisionModelV2": {"canonical": {"direction": "neutral", "strength": "neutral"}}, "scenario": {}},
+                # run-c: strong B-side (center ~-2)
+                {"id": "c1", "runId": "run-c", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "c2", "runId": "run-c", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+                {"id": "c3", "runId": "run-c", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "strong"}}, "scenario": {}},
+            ],
+        }
+        result = run_analyze_basic(input_data)
+        assert result["success"] is True
+        aggregate_semantics = result["analysis"]["aggregateSemantics"]
+        assert aggregate_semantics["perModelDrift"]["m1"]["weightedOverallSignedCenterSd"] is not None
+
+    def test_summaries_are_suppressed_when_vignette_semantics_are_disabled(self):
+        """Assumption-style runs should not emit baseline semantic summaries."""
+        input_data = {
+            "runId": "test-run-assumption-suppressed",
+            "emitVignetteSemantics": False,
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 0,
+                    "summary": {"score": 5, "values": {"Value_A": "prioritized"}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t2",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 1,
+                    "summary": {"score": 4, "values": {"Value_A": "prioritized"}},
+                    "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}},
+                    "scenario": {},
+                },
+            ],
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        analysis = result["analysis"]
+        assert analysis["preferenceSummary"] is None
+        assert analysis["reliabilitySummary"] is None
+        assert analysis["perModel"]["m1"]["sampleSize"] == 2
+        assert analysis["varianceAnalysis"]["perModel"]["m1"]["uniqueScenarios"] == 1
+
+    def test_missing_run_id(self):
+        """Test error when runId is missing."""
+        input_data = {
+            "transcripts": [],
+        }
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is False
+        assert "runId" in result["error"]["message"]
+
+    def test_invalid_json(self):
+        """Test error handling for invalid JSON."""
+        workers_dir = Path(__file__).parent.parent
+        result = subprocess.run(
+            [sys.executable, "analyze_basic.py"],
+            input="not valid json",
+            capture_output=True,
+            text=True,
+            cwd=workers_dir,
+            env={**dict(__import__("os").environ), "PYTHONPATH": str(workers_dir)},
+        )
+        output = json.loads(result.stdout)
+        assert output["success"] is False
+        assert "JSON" in output["error"]["message"]
+
+    def test_win_rate_calculation(self):
+        """Test win rate is calculated correctly."""
+        input_data = {
+            "runId": "test-run-8",
+            "transcripts": [
+                {"id": "t1", "modelId": "m1", "scenarioId": "s1",
+                 "summary": {"values": {"Value_A": "prioritized"}}, "scenario": {}},
+                {"id": "t2", "modelId": "m1", "scenarioId": "s2",
+                 "summary": {"values": {"Value_A": "prioritized"}}, "scenario": {}},
+                {"id": "t3", "modelId": "m1", "scenarioId": "s3",
+                 "summary": {"values": {"Value_A": "deprioritized"}}, "scenario": {}},
+                {"id": "t4", "modelId": "m1", "scenarioId": "s4",
+                 "summary": {"values": {"Value_A": "prioritized"}}, "scenario": {}},
+            ],
+        }
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        value_stats = result["analysis"]["perModel"]["m1"]["values"]["Value_A"]
+        # 3 prioritized, 1 deprioritized, 0 neutral = 75% win rate
+        assert value_stats["winRate"] == pytest.approx(0.75, abs=0.01)
+        assert value_stats["count"]["prioritized"] == 3
+        assert value_stats["count"]["deprioritized"] == 1
+
+    def test_preference_summary_uses_two_step_by_value_averaging(self):
+        """Value win rates should average across vignettes, not pooled transcripts."""
+        input_data = {
+            "runId": "test-run-two-step-by-value",
+            "transcripts": [
+                {
+                    "id": "s1-t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "prioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s1-t2",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "prioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s1-t3",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "prioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s1-t4",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "prioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s1-t5",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "prioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s1-t6",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "prioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s1-t7",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "prioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s1-t8",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "prioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s1-t9",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "prioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s1-t10",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {"target": "deprioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "s2-t1",
+                    "modelId": "m1",
+                    "scenarioId": "s2",
+                    "summary": {"values": {"target": "deprioritized"}},
+                    "scenario": {},
+                },
+            ],
+        }
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        win_rate = result["analysis"]["preferenceSummary"]["perModel"]["m1"]["preferenceDirection"]["byValue"]["target"]["winRate"]
+        assert win_rate == pytest.approx(0.45, abs=0.000001)
+
+    def test_two_step_by_value_falls_back_to_half_without_transcript_outcomes(self):
+        """Values absent from transcript outcomes should default to a neutral win rate."""
+        result = _compute_two_step_by_value(
+            {},
+            {
+                "target": {
+                    "winRate": 0.9,
+                    "count": {
+                        "prioritized": 9,
+                        "deprioritized": 1,
+                        "neutral": 0,
+                    },
+                }
+            },
+        )
+
+        assert result["target"]["winRate"] == 0.5
+        assert result["target"]["count"]["prioritized"] == 9
+        assert result["target"]["count"]["deprioritized"] == 1
+
+    def test_dimension_impact(self):
+        """Test dimension impact analysis."""
+        input_data = {
+            "runId": "test-run-9",
+            "transcripts": [
+                {"id": "t1", "modelId": "m1", "scenarioId": "s1",
+                 "summary": {"score": 2}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "lean"}}, "scenario": {"dimensions": {"stakes": "low"}}},
+                {"id": "t2", "modelId": "m1", "scenarioId": "s2",
+                 "summary": {"score": 2}, "decisionModelV2": {"canonical": {"direction": "favor_second", "strength": "lean"}}, "scenario": {"dimensions": {"stakes": "low"}}},
+                {"id": "t3", "modelId": "m1", "scenarioId": "s3",
+                 "summary": {"score": 4}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "lean"}}, "scenario": {"dimensions": {"stakes": "high"}}},
+                {"id": "t4", "modelId": "m1", "scenarioId": "s4",
+                 "summary": {"score": 5}, "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}}, "scenario": {"dimensions": {"stakes": "high"}}},
+            ],
+        }
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        dim_analysis = result["analysis"]["dimensionAnalysis"]
+        assert "stakes" in dim_analysis["dimensions"]
+        # Stakes should have significant effect
+        assert dim_analysis["dimensions"]["stakes"]["effectSize"] > 0.5
+
+    def test_output_includes_timestamp(self):
+        """Test that output includes timestamp and duration."""
+        input_data = {
+            "runId": "test-run-10",
+            "transcripts": [],
+        }
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        assert "computedAt" in result["analysis"]
+        assert "durationMs" in result["analysis"]
+        assert result["analysis"]["durationMs"] >= 0
+
+
+class TestAnalyzeBasicEdgeCases:
+    """Edge case tests for analyze_basic worker."""
+
+    def test_missing_score_in_summary(self):
+        """Test handling of transcripts without scores."""
+        input_data = {
+            "runId": "test-edge-1",
+            "transcripts": [
+                {"id": "t1", "modelId": "m1", "scenarioId": "s1",
+                 "summary": {"values": {"V": "prioritized"}}, "scenario": {}},
+            ],
+        }
+        result = run_analyze_basic(input_data)
+        assert result["success"] is True
+
+    def test_missing_summary(self):
+        """Test handling of transcripts without summary."""
+        input_data = {
+            "runId": "test-edge-2",
+            "transcripts": [
+                {"id": "t1", "modelId": "m1", "scenarioId": "s1", "scenario": {}},
+            ],
+        }
+        result = run_analyze_basic(input_data)
+        assert result["success"] is True
+
+    def test_missing_scenario(self):
+        """Test handling of transcripts without scenario."""
+        input_data = {
+            "runId": "test-edge-3",
+            "transcripts": [
+                {"id": "t1", "modelId": "m1", "scenarioId": "s1",
+                 "summary": {"values": {}}},
+            ],
+        }
+        result = run_analyze_basic(input_data)
+        assert result["success"] is True
+
+
+Context: create-user.ts
+#!/usr/bin/env tsx
+/**
+ * CLI script for creating user accounts
+ *
+ * Usage: npm run create-user
+ *
+ * This is an interactive CLI that prompts for email, password, and optional name.
+ * Used for invite-only user creation by administrators.
+ */
+
+import { fileURLToPath } from 'url';
+
+import { db } from '@valuerank/db';
+import { createLogger, ValidationError } from '@valuerank/shared';
+
+import { hashPassword } from '../auth/index.js';
+import { promptHidden, promptLine } from './shared/prompt.js';
+
+const log = createLogger('cli:create-user');
+
+/** Minimum password length */
+export const MIN_PASSWORD_LENGTH = 8;
+
+/** Email format regex */
+export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Validate email format
+ */
+export function validateEmail(email: string): void {
+  if (email === undefined || email === '' || !EMAIL_REGEX.test(email)) {
+    throw new ValidationError('Invalid email format');
+  }
+}
+
+/**
+ * Validate password meets requirements
+ */
+export function validatePassword(password: string): void {
+  if (!password || password.length < MIN_PASSWORD_LENGTH) {
+    throw new ValidationError(
+      `Password must be at least ${MIN_PASSWORD_LENGTH} characters`
+    );
+  }
+}
+
+/**
+ * Check if email already exists in database
+ */
+export async function checkDuplicateEmail(email: string): Promise<void> {
+  const existing = await db.user.findUnique({
+    where: { email: email.toLowerCase() },
+  });
+
+  if (existing) {
+    throw new ValidationError(`User with email "${email}" already exists`);
+  }
+}
+
+/**
+ * Create a new user in the database
+ */
+export async function createUser(
+  email: string,
+  password: string,
+  name?: string
+): Promise<{ id: string; email: string }> {
+  // Normalize email to lowercase
+  const normalizedEmail = email.toLowerCase();
+
+  // Validate inputs
+  validateEmail(normalizedEmail);
+  validatePassword(password);
+
+  // Check for duplicate
+  await checkDuplicateEmail(normalizedEmail);
+
+  // Hash password
+  const passwordHash = await hashPassword(password);
+
+  // Create user
+  const user = await db.user.create({
+    data: {
+      email: normalizedEmail,
+      passwordHash,
+      name: (name !== undefined && name !== '') ? name : undefined,
+    },
+    select: {
+      id: true,
+      email: true,
+    },
+  });
+
+  log.info({ userId: user.id, email: user.email }, 'User created successfully');
+
+  return user;
+}
+
+/**
+ * Main CLI entry point
+ */
+async function main(): Promise<void> {
+  log.info('Create user');
+
+  try {
+    // Collect inputs
+    const email = await promptLine('Email: ');
+    const password = await promptHidden('Password: ');
+    const name = await promptLine('Name (optional, press Enter to skip): ');
+
+    log.info('Creating user');
+
+    const user = await createUser(email, password, name || undefined);
+
+    log.info({ userId: user.id, email: user.email }, 'User created successfully');
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      log.error({ message: err.message }, 'Validation error');
+      process.exit(1);
+    }
+
+    log.error({ err: err as Error }, 'Failed to create user');
+    process.exit(1);
+  } finally {
+    await db.$disconnect();
+  }
+}
+
+// Run CLI only when executed directly (not when imported for testing)
+const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
+if (isMainModule) {
+  main().catch((err) => {
+    log.error({ err: err as Error }, 'Fatal error');
+    process.exit(1);
+  });
+}
+
+
+Context: analyze_basic_aggregation.py
+"""Pure helper functions used by analyze_basic.py."""
+
+import math
+from typing import Any
+
+from common.errors import ValidationError
+from stats.decision_model import resolve_transcript_signed_distance
+from stats.preference_stats import compute_two_step_by_value
+
+
+def validate_input(data: dict[str, Any]) -> None:
+    """Validate analyze basic input."""
+    if "runId" not in data:
+        raise ValidationError(message="Missing required field: runId")
+
+    if "transcripts" not in data:
+        # Legacy format: transcriptIds only (for backwards compatibility)
+        if "transcriptIds" in data and isinstance(data["transcriptIds"], list):
+            # Legacy mode - return stub response
+            return
+        raise ValidationError(message="Missing required field: transcripts")
+
+    if not isinstance(data["transcripts"], list):
+        raise ValidationError(message="transcripts must be an array")
+
+    if "emitVignetteSemantics" in data and not isinstance(data["emitVignetteSemantics"], bool):
+        raise ValidationError(message="emitVignetteSemantics must be a boolean")
+
+    aggregate_semantics = data.get("aggregateSemantics")
+    if aggregate_semantics is not None:
+        if not isinstance(aggregate_semantics, dict):
+            raise ValidationError(message="aggregateSemantics must be an object")
+        if aggregate_semantics.get("mode") != "same_signature_v1":
+            raise ValidationError(message="aggregateSemantics.mode must be same_signature_v1")
+        planned_scenario_ids = aggregate_semantics.get("plannedScenarioIds")
+        if not isinstance(planned_scenario_ids, list) or not all(isinstance(item, str) for item in planned_scenario_ids):
+            raise ValidationError(message="aggregateSemantics.plannedScenarioIds must be an array of strings")
+        for field in ("minRepeatCoverageCount", "lowCoverageCautionThreshold"):
+            value = aggregate_semantics.get(field)
+            if not isinstance(value, int) or value < 0:
+                raise ValidationError(message=f"aggregateSemantics.{field} must be a non-negative integer")
+        for field in ("minRepeatCoverageShare", "driftWarningThreshold"):
+            value = aggregate_semantics.get(field)
+            if not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+                raise ValidationError(message=f"aggregateSemantics.{field} must be a finite number")
+
+        for transcript in data["transcripts"]:
+            run_id = transcript.get("runId")
+            if not isinstance(run_id, str) or run_id.strip() == "":
+                raise ValidationError(message="aggregateSemantics requires transcript.runId for every transcript")
+
+
+def extract_model_scores(transcripts: list[dict[str, Any]]) -> dict[str, list[float]]:
+    """
+    Extract aligned scores per model for comparison.
+
+    Groups transcripts by scenarioId, then collects scores per model
+    for scenarios that all models answered.
+    """
+    # Group by scenario
+    by_scenario: dict[str, dict[str, float]] = {}
+    for t in transcripts:
+        scenario_id = t.get("scenarioId", "unknown")
+        model_id = t.get("modelId", "unknown")
+        score = resolve_transcript_signed_distance(t)
+
+        if score is None:
+            continue
+
+        if scenario_id not in by_scenario:
+            by_scenario[scenario_id] = {}
+        by_scenario[scenario_id][model_id] = float(score)
+
+    # Find models that answered all scenarios
+    all_models = set()
+    for model_scores in by_scenario.values():
+        all_models.update(model_scores.keys())
+
+    # Collect aligned scores
+    result: dict[str, list[float]] = {m: [] for m in all_models}
+    for scenario_id in sorted(by_scenario.keys()):
+        scenario_scores = by_scenario[scenario_id]
+        # Only include scenarios where all models have scores
+        if set(scenario_scores.keys()) == all_models:
+            for model_id, score in scenario_scores.items():
+                result[model_id].append(score)
+
+    # Filter out models with no aligned scores
+    return {m: scores for m, scores in result.items() if scores}
+
+
+def find_contested_scenarios(
+    transcripts: list[dict[str, Any]],
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    """
+    Find scenarios with highest disagreement across models.
+
+    Disagreement is measured by variance in scores across models.
+    """
+    import numpy as np
+
+    # Group by scenario
+    by_scenario: dict[str, list[tuple[str, float]]] = {}
+    scenario_names: dict[str, str] = {}
+
+    for t in transcripts:
+        scenario_id = t.get("scenarioId", "unknown")
+        model_id = t.get("modelId", "unknown")
+        scenario = t.get("scenario", {})
+        score = resolve_transcript_signed_distance(t)
+
+        if score is None:
+            continue
+
+        if scenario_id not in by_scenario:
+            by_scenario[scenario_id] = []
+            scenario_names[scenario_id] = scenario.get("name", scenario_id)
+
+        by_scenario[scenario_id].append((model_id, float(score)))
+
+    # Calculate variance for each scenario
+    contested: list[dict[str, Any]] = []
+    for scenario_id, model_scores in by_scenario.items():
+        if len(model_scores) < 2:
+            continue
+
+        scores = [s for _, s in model_scores]
+        variance = float(np.var(scores))
+
+        contested.append({
+            "scenarioId": scenario_id,
+            "scenarioName": scenario_names[scenario_id],
+            "variance": round(variance, 6),
+            "modelScores": {m: s for m, s in model_scores},
+        })
+
+    # Sort by variance descending
+    contested.sort(key=lambda x: x["variance"], reverse=True)
+    return contested[:limit]
+
+
+def generate_warnings(
+    transcripts: list[dict[str, Any]],
+    per_model: dict[str, Any],
+) -> list[dict[str, str]]:
+    """Generate warnings for statistical assumption violations."""
+    warnings: list[dict[str, str]] = []
+
+    # Check sample sizes
+    for model_id, stats in per_model.items():
+        sample_size = stats.get("sampleSize", 0)
+        if sample_size < 10:
+            warnings.append({
+                "code": "SMALL_SAMPLE",
+                "message": f"Model {model_id} has only {sample_size} samples",
+                "recommendation": "Results may have wide confidence intervals",
+            })
+        elif sample_size < 30:
+            warnings.append({
+                "code": "MODERATE_SAMPLE",
+                "message": f"Model {model_id} has {sample_size} samples",
+                "recommendation": "Consider using bootstrap confidence intervals",
+            })
+
+    transcripts_with_dimensions = sum(
+        1
+        for t in transcripts
+        if t.get("scenario", {}).get("dimensions")
+    )
+    if transcripts_with_dimensions == 0:
+        warnings.append({
+            "code": "NO_DIMENSIONS",
+            "message": "No scenario dimensions found in transcripts",
+            "recommendation": "Variable impact analysis will be empty",
+        })
+    elif transcripts_with_dimensions < len(transcripts):
+        warnings.append({
+            "code": "PARTIAL_DIMENSIONS",
+            "message": (
+                f"Only {transcripts_with_dimensions} of {len(transcripts)} transcripts "
+                "include scenario dimensions"
+            ),
+            "recommendation": "Condition grouping and variable impact may exclude uncovered scenarios",
+        })
+
+    return warnings
+
+
+def build_preference_summary(
+    transcripts: list[dict[str, Any]],
+    per_model: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Build explicit preference semantics for vignette analysis.
+
+    Preference strength is computed from orientation-corrected per-scenario means
+    so repeated probes do not overweight a single scenario.
+    """
+    scores_by_model_scenario: dict[str, dict[str, list[float]]] = {}
+    outcomes_by_model_scenario_value: dict[str, dict[str, dict[str, list[str]]]] = {}
+    # [model_id][scenario_id][value_id] -> list of "prioritized"|"deprioritized"|"neutral"
+
+    for transcript in transcripts:
+        model_id = transcript.get("modelId", "unknown")
+        scenario_id = transcript.get("scenarioId", "unknown")
+        # Collect per-value outcomes for two-step win rate computation.
+        # Runs before the normalized_score guard so every transcript contributes
+        # value outcomes even if it has no canonical signed-distance score.
+        values_data = transcript.get("summary", {}).get("values", {})
+        for value_id, status in values_data.items():
+            if model_id not in outcomes_by_model_scenario_value:
+                outcomes_by_model_scenario_value[model_id] = {}
+            if scenario_id not in outcomes_by_model_scenario_value[model_id]:
+                outcomes_by_model_scenario_value[model_id][scenario_id] = {}
+            if value_id not in outcomes_by_model_scenario_value[model_id][scenario_id]:
+                outcomes_by_model_scenario_value[model_id][scenario_id][value_id] = []
+            outcomes_by_model_scenario_value[model_id][scenario_id][value_id].append(status)
+
+        normalized_score = resolve_transcript_signed_distance(transcript)
+        if normalized_score is None:
+            continue
+
+        if model_id not in scores_by_model_scenario:
+            scores_by_model_scenario[model_id] = {}
+        if scenario_id not in scores_by_model_scenario[model_id]:
+            scores_by_model_scenario[model_id][scenario_id] = []
+
+        scores_by_model_scenario[model_id][scenario_id].append(normalized_score)
+
+    per_model_summary: dict[str, Any] = {}
+    for model_id, model_stats in per_model.items():
+        scenario_scores = scores_by_model_scenario.get(model_id, {})
+        scenario_means = [
+            sum(scores) / len(scores)
+            for scores in scenario_scores.values()
+            if scores
+        ]
+
+        overall_signed_center: float | None = None
+        overall_lean: str | None = None
+        preference_strength: float | None = None
+
+        if scenario_means:
+            # scenario_means are already signed distances (-2 to +2)
+            signed_center = sum(scenario_means) / len(scenario_means)
+            strength = sum(abs(mean) for mean in scenario_means) / len(scenario_means)
+
+            overall_signed_center = round(float(signed_center), 6)
+            preference_strength = round(float(strength), 6)
+
+            if overall_signed_center > 0:
+                overall_lean = "A"
+            elif overall_signed_center < 0:
+                overall_lean = "B"
+            else:
+                overall_lean = "NEUTRAL"
+
+        per_model_summary[model_id] = {
+            "preferenceDirection": {
+                "byValue": compute_two_step_by_value(
+                    outcomes_by_model_scenario_value.get(model_id, {}),
+                    model_stats.get("values", {}),
+                ),
+                "overallLean": overall_lean,
+                "overallSignedCenter": overall_signed_center,
+            },
+            "preferenceStrength": preference_strength,
+        }
+
+    return {
+        "perModel": per_model_summary,
+    }
+
+
+def build_reliability_summary(variance_analysis: dict[str, Any]) -> dict[str, Any]:
+    """
+    Build baseline reliability semantics from repeated-trial variance analysis.
+
+    Reliability is unavailable without actual repeat coverage and never falls back
+    to cross-scenario spread metrics.
+    """
+    is_multi_sample = bool(variance_analysis.get("isMultiSample", False))
+    per_model_variance = variance_analysis.get("perModel", {})
+
+    per_model_summary: dict[str, Any] = {}
+    for model_id, model_stats in per_model_variance.items():
+        per_scenario = model_stats.get("perScenario", {})
+        repeated_scenarios = [
+            stats
+            for stats in per_scenario.values()
+            if stats.get("sampleCount", 0) > 1
+        ]
+        coverage_count = len(repeated_scenarios)
+
+        baseline_noise: float | None = None
+        baseline_reliability: float | None = None
+        directional_agreement: float | None = None
+        neutral_share: float | None = None
+
+        if coverage_count > 0:
+            avg_within_scenario_variance = float(model_stats.get("avgWithinScenarioVariance", 0.0))
+            baseline_noise = round(math.sqrt(max(avg_within_scenario_variance, 0.0)), 6)
+
+            if is_multi_sample:
+                consistency_score = model_stats.get("consistencyScore")
+                if consistency_score is not None:
+                    baseline_reliability = round(float(consistency_score), 6)
+
+            agreement_weight = sum(
+                int(stats.get("sampleCount", 0))
+                for stats in repeated_scenarios
+                if stats.get("directionalAgreement") is not None
+            )
+            if agreement_weight > 0:
+                directional_agreement = round(
+                    sum(
+                        float(stats["directionalAgreement"]) * int(stats.get("sampleCount", 0))
+                        for stats in repeated_scenarios
+                        if stats.get("directionalAgreement") is not None
+                    ) / agreement_weight,
+                    6,
+                )
+
+            neutral_weight = sum(
+                int(stats.get("sampleCount", 0))
+                for stats in repeated_scenarios
+                if stats.get("neutralShare") is not None
+            )
+            if neutral_weight > 0:
+                neutral_share = round(
+                    sum(
+                        float(stats["neutralShare"]) * int(stats.get("sampleCount", 0))
+                        for stats in repeated_scenarios
+                        if stats.get("neutralShare") is not None
+                    ) / neutral_weight,
+                    6,
+                )
+
+        per_model_summary[model_id] = {
+            "baselineNoise": baseline_noise,
+            "baselineReliability": baseline_reliability,
+            "directionalAgreement": directional_agreement,
+            "neutralShare": neutral_share,
+            "coverageCount": coverage_count,
+            "uniqueScenarios": int(model_stats.get("uniqueScenarios", 0)),
+        }
+
+    return {
+        "perModel": per_model_summary,
+    }
+
+
+def compute_weighted_standard_deviation(samples: list[tuple[int, float]]) -> float | None:
+    """Compute weighted standard deviation for (weight, value) samples."""
+    if not samples:
+        return None
+
+    total_weight = sum(weight for weight, _ in samples if weight > 0)
+    if total_weight <= 0:
+        return None
+
+    weighted_mean = sum(weight * value for weight, value in samples if weight > 0) / total_weight
+    weighted_variance = sum(
+        weight * ((value - weighted_mean) ** 2)
+        for weight, value in samples
+        if weight > 0
+    ) / total_weight
+    return round(math.sqrt(max(weighted_variance, 0.0)), 6)
+
+
+Context: contracts.ts
+import { z } from 'zod';
+
+export const zRunSnapshot = z.object({
+  _meta: z.object({
+    preambleVersionId: z.string().optional(),
+    definitionVersion: z.union([z.number(), z.string()]).optional(),
+  }).optional(),
+  preambleVersionId: z.string().optional(),
+  version: z.union([z.number(), z.string()]).optional(),
+});
+
+export const zRunConfig = z.object({
+  definitionSnapshot: zRunSnapshot.optional(),
+  isAggregate: z.boolean().optional(),
+  sourceRunIds: z.array(z.string()).optional(),
+  transcriptCount: z.number().optional(),
+  temperature: z.number().nullable().optional(),
+  assumptionKey: z.string().optional(),
+}).passthrough();
+
+export type RunConfig = z.infer<typeof zRunConfig>;
+
+export const zValueStats = z.object({
+  count: z.object({
+    prioritized: z.number(),
+    deprioritized: z.number(),
+    neutral: z.number(),
+  }),
+  winRate: z.number(),
+});
+
+export const zModelStats = z.object({
+  sampleSize: z.number().optional(),
+  values: z.record(zValueStats).optional(),
+  overall: z.object({
+    mean: z.number(),
+    stdDev: z.number(),
+    min: z.number(),
+    max: z.number(),
+  }).optional(),
+});
+
+const zVisualizationData = z.object({
+  decisionDistribution: z.record(z.record(z.number())).optional(),
+  modelScenarioMatrix: z.record(z.record(z.number())).optional(),
+  scenarioDimensions: z.record(z.record(z.union([z.number(), z.string()]))).optional(),
+}).passthrough();
+
+export const zVarianceStats = z.object({
+  sampleCount: z.number(),
+  mean: z.number(),
+  stdDev: z.number(),
+  variance: z.number(),
+  min: z.number(),
+  max: z.number(),
+  range: z.number(),
+  directionCounts: z.record(z.string(), z.number()).optional(),
+  direction: z.enum(['A', 'B', 'NEUTRAL']).nullable().optional(),
+  directionalAgreement: z.number().nullable().optional(),
+  medianSignedDistance: z.number().nullable().optional(),
+  iqr: z.number().nullable().optional(),
+  neutralShare: z.number().nullable().optional(),
+  orientationCorrected: z.boolean().optional(),
+});
+
+export const zModelVarianceStats = z.object({
+  totalSamples: z.number(),
+  uniqueScenarios: z.number(),
+  samplesPerScenario: z.number(),
+  avgWithinScenarioVariance: z.number(),
+  maxWithinScenarioVariance: z.number(),
+  consistencyScore: z.number(),
+  perScenario: z.record(zVarianceStats),
+});
+
+export const zContestedScenario = z.object({
+  scenarioId: z.string(),
+  variance: z.number(),
+}).passthrough();
+
+export const zScenarioVarianceStats = z.object({
+  scenarioId: z.string(),
+  scenarioName: z.string(),
+  modelId: z.string().optional(),
+  mean: z.number(),
+  stdDev: z.number(),
+  variance: z.number(),
+  range: z.number(),
+  sampleCount: z.number(),
+  directionCounts: z.record(z.string(), z.number()).optional(),
+  direction: z.enum(['A', 'B', 'NEUTRAL']).nullable().optional(),
+  directionalAgreement: z.number().nullable().optional(),
+  medianSignedDistance: z.number().nullable().optional(),
+  iqr: z.number().nullable().optional(),
+  neutralShare: z.number().nullable().optional(),
+  orientationCorrected: z.boolean().optional(),
+}).passthrough();
+
+export const zRunVarianceAnalysis = z.object({
+  isMultiSample: z.boolean(),
+  samplesPerScenario: z.number(),
+  perModel: z.record(zModelVarianceStats),
+  mostVariableScenarios: z.array(zScenarioVarianceStats).optional(),
+  leastVariableScenarios: z.array(zScenarioVarianceStats).optional(),
+  orientationCorrectedCount: z.number().optional(),
+}).passthrough();
+
+export type RunVarianceAnalysis = z.infer<typeof zRunVarianceAnalysis>;
+export type ModelVarianceStats = z.infer<typeof zModelVarianceStats>;
+export type VarianceStats = z.infer<typeof zVarianceStats>;
+export type ScenarioVarianceStats = z.infer<typeof zScenarioVarianceStats>;
+
+export const zAnalysisOutput = z.object({
+  perModel: z.record(zModelStats),
+  visualizationData: zVisualizationData.optional(),
+  mostContestedScenarios: z.array(zContestedScenario).optional(),
+  varianceAnalysis: zRunVarianceAnalysis.optional(),
+  modelAgreement: z.unknown().optional(),
+}).passthrough();
+
+export type AnalysisOutput = z.infer<typeof zAnalysisOutput>;
+export type ModelStats = z.infer<typeof zModelStats>;
+export type ContestedScenario = z.infer<typeof zContestedScenario>;
+
+export type AggregateEligibility =
+  | 'eligible_same_signature_baseline'
+  | 'ineligible_mixed_signature'
+  | 'ineligible_run_type'
+  | 'ineligible_partial_coverage'
+  | 'ineligible_missing_metadata'
+  | 'ineligible_missing_repeatability'
+  | 'ineligible_model_instability';
+
+export type AggregateMetadata = {
+  aggregateEligibility: AggregateEligibility;
+  aggregateIneligibilityReason: string | null;
+  sourceRunCount: number;
+  sourceRunIds: string[];
+  conditionCoverage: {
+    plannedConditionCount: number;
+    observedConditionCount: number;
+    complete: boolean;
+  };
+  perModelRepeatCoverage: Record<string, {
+    repeatCoverageCount: number;
+    repeatCoverageShare: number;
+    contributingRunCount: number;
+  }>;
+  perModelDrift: Record<string, {
+    weightedOverallSignedCenterSd: number | null;
+    exceedsWarningThreshold: boolean;
+  }>;
+};
+
+export type AggregateWorkerTranscript = {
+  id: string;
+  runId: string;
+  modelId: string;
+  scenarioId: string;
+  sampleIndex: number;
+  orientationFlipped: boolean;
+  summary: {
+    values?: Record<string, 'prioritized' | 'deprioritized' | 'neutral'>;
+  };
+  decisionModelV2?: {
+    canonical: {
+      direction: string;
+      strength: string;
+    };
+  } | null;
+  scenario: {
+    name: string;
+    dimensions: Record<string, number | string>;
+  };
+};
+
+export type AggregateWorkerInput = {
+  runId: string;
+  emitVignetteSemantics: true;
+  aggregateSemantics: {
+    mode: 'same_signature_v1';
+    plannedScenarioIds: string[];
+    minRepeatCoverageCount: number;
+    minRepeatCoverageShare: number;
+    lowCoverageCautionThreshold: number;
+    driftWarningThreshold: number;
+  };
+  transcripts: AggregateWorkerTranscript[];
+};
+
+export type AggregateWorkerOutput = {
+  success: true;
+  analysis: {
+    preferenceSummary?: {
+      perModel: Record<string, unknown>;
+    } | null;
+    reliabilitySummary?: {
+      perModel: Record<string, unknown>;
+    } | null;
+    aggregateSemantics?: {
+      perModelRepeatCoverage: AggregateMetadata['perModelRepeatCoverage'];
+      perModelDrift: AggregateMetadata['perModelDrift'];
+    } | null;
+  };
+} | {
+  success: false;
+  error: { message: string; code: string; retryable: boolean };
+};
+
+export interface DecisionStatsOption {
+  mean: number;
+  sd: number;
+  sem: number;
+  n: number;
+}
+
+export interface DecisionStats {
+  options: Record<number, DecisionStatsOption>;
+}
+
+export interface ValueAggregateStatsValue {
+  winRateMean: number;
+  winRateSem: number;
+  winRateSd: number;
+}
+
+export interface ValueAggregateStats {
+  values: Record<string, ValueAggregateStatsValue>;
+}
+
+export type AggregateTranscriptInput = {
+  modelId: string;
+  scenarioId: string | null;
+  decisionCode: string | null;
+  scenario: { orientationFlipped: boolean } | null;
+};
+
+export type AggregateScenarioInput = {
+  id: string;
+  name: string;
+  content: unknown;
+};
+
+export interface AggregatedResult {
+  perModel: Record<string, ModelStats>;
+  modelAgreement: unknown;
+  visualizationData: {
+    decisionDistribution: Record<string, Record<string, number>>;
+    modelScenarioMatrix: Record<string, Record<string, number>>;
+    scenarioDimensions: Record<string, Record<string, number | string>>;
+  };
+  mostContestedScenarios: ContestedScenario[];
+  varianceAnalysis: RunVarianceAnalysis | null;
+  decisionStats: Record<string, DecisionStats>;
+  valueAggregateStats: Record<string, ValueAggregateStats>;
+}
+
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function isAggregatedVisualizationData(
+  value: unknown
+): value is AggregatedResult['visualizationData'] {
+  if (!isPlainObject(value)) return false;
+  return (
+    isPlainObject(value.decisionDistribution) &&
+    isPlainObject(value.modelScenarioMatrix) &&
+    isPlainObject(value.scenarioDimensions)
+  );
+}
+
+export function isRunVarianceAnalysis(value: unknown): value is RunVarianceAnalysis {
+  if (!isPlainObject(value)) return false;
+  return (
+    typeof value.isMultiSample === 'boolean' &&
+    typeof value.samplesPerScenario === 'number' &&
+    isPlainObject(value.perModel)
+  );
+}
+
+
+Context: package.json
+{
+  "name": "@valuerank/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file=../../.env src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "typecheck": "tsc --noEmit",
+    "create-user": "tsx --env-file=../../.env src/cli/create-user.ts",
+    "normalize:aggregate-analysis": "tsx --env-file=../../.env src/cli/normalize-aggregate-analysis-output.ts",
+    "shadow:decision-model": "tsx --env-file=../../.env src/cli/decision-model-shadow-validation.ts",
+    "emit-schema": "LOG_LEVEL=silent DATABASE_URL=postgresql://x:x@localhost/x JWT_SECRET=placeholder-for-schema-emit-xxxxxxxxx npx tsx src/scripts/emit-schema.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.24.3",
+    "@pothos/core": "^3.41.0",
+    "@pothos/plugin-prisma": "^3.65.0",
+    "@pothos/plugin-validation": "^3.10.1",
+    "@valuerank/db": "*",
+    "@valuerank/shared": "*",
+    "adm-zip": "^0.5.16",
+    "bcrypt": "^5.1.1",
+    "bottleneck": "^2.19.5",
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "dataloader": "^2.2.2",
+    "dotenv": "^17.2.3",
+    "exceljs": "^4.4.0",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "graphql": "^16.8.1",
+    "graphql-yoga": "^5.1.1",
+    "jsonwebtoken": "^9.0.2",
+    "pg-boss": "^12.5.2",
+    "yaml": "^2.8.2",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
+    "@types/compression": "^1.8.1",
+    "@types/bcrypt": "^5.0.2",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/node": "^20.10.0",
+    "@types/supertest": "^2.0.16",
+    "@vitest/coverage-v8": "^2.1.0",
+    "supertest": "^6.3.3",
+    "tsx": "^4.6.2",
+    "vitest": "^2.1.0"
+  }
+}
+
+
+Artifact: plan.md
+# Implementation Plan: Aggregate Pipeline — Consistency Data Emission
+
+**Branch:** `claude/aggregate-consistency-data` | **Date:** 2026-04-19
+**Spec:** `docs/workflow/feature-runs/aggregate-consistency-data/spec.md`
+
+## Summary
+
+Extend the Python aggregate worker to emit two new sub-sections of `reliabilitySummary.perModel[modelId]`:
+1. **`perScenario[scenarioId]`** with `{ trials, matches }` — unblocks Repeatability.
+2. **`perPair[valueKey]`** with `{ targetAnalysisRunId, targetCompanionRunId, primaryConditionIds, companionConditionIds, perCondition: [...] }` — unblocks Coherence.
+
+All underlying data is already computed inside `cloud/workers/stats/variance_analysis.py`; the work is teaching `cloud/workers/analyze_basic_aggregation.py::build_reliability_summary` to surface it, extending the TypeScript Zod contract, and shipping a backfill CLI.
+
+Two PRs, three slices. Backfill ships in PR2 so existing `AGGREGATE` rows can be upgraded in one pass.
+
+## Technical Context
+
+| Aspect | Detail |
+|---|---|
+| Primary language | Python 3 (worker) + TypeScript (Zod contract, CLI) |
+| Worker entry | `cloud/workers/analyze_basic.py::analyze_basic()` → calls `build_reliability_summary` |
+| Emission site | `cloud/workers/analyze_basic_aggregation.py::build_reliability_summary` (line 276) |
+| Input data | `variance_analysis['perModel'][modelId]['perScenario']` already carries `sampleCount`, `directionCounts`, `direction`, `directionalAgreement` |
+| Zod contract | `cloud/apps/api/src/services/analysis/aggregate/contracts.ts:197` |
+| Tests | `cloud/workers/tests/test_analyze_basic.py` has existing `reliabilitySummary` assertions |
+| DB shape | `reliabilitySummary` stored as raw JSON in `AnalysisResult.output`; no DB schema change |
+| Backfill host | TypeScript CLI under `cloud/apps/api/src/cli/`, invokes the existing Node worker-dispatcher path |
+| Performance target | O(1) extra work per scenario (bucket-count math); backfill < 30 min on prod |
+
+---
+
+## Architecture Decisions
+
+### Decision 1: Emit new fields inside `build_reliability_summary`, not a new top-level key
+
+**Chosen:** Extend the existing `perModel[modelId]` dict with `perScenario` and `perPair`. No new top-level key like `consistencySummary`.
+
+**Rationale:**
+- The Consistency resolver parser already reads from `reliabilitySummary.perModel[modelId]` and expects `perScenario` and `perPair` as nested keys (see `cloud/apps/api/src/services/consistency/modelsConsistencyData.ts::readConsistencySummary`).
+- Keeps the contract surface narrow; one Zod schema extension covers both PRs.
+- Downstream readers that only consume `baselineReliability`/`directionalAgreement`/`coverageCount` continue to work — the new keys are additive and optional.
+
+### Decision 2: Single-trial scenarios are silently omitted from `perScenario`
+
+**Chosen:** Only emit `perScenario[scenarioId]` entries when `sampleCount >= 2` (spec FR-001).
+
+**Rationale:**
+- A scenario with `n = 1` has zero Bernoulli pairs (`C(1, 2) = 0`).
+- Emitting `{trials: 0, matches: 0}` would crash the resolver's Wilson CI (divide-by-zero); emitting `{trials: 1, matches: 1}` would falsely promote single-trial scenarios to the scatter (spec HIGH-F01 fix).
+- Missing entries are the unambiguous signal for "no Bernoulli coverage for this scenario."
+
+### Decision 3: `matches` via O(k) bucket-count formula
+
+**Chosen:** `matches = sum_i C(c_i, 2)` where `c_i` are the 5 canonical bucket counts.
+
+**Rationale:**
+- Mathematically equivalent to enumerating pairs (spec FR-002a).
+- O(5) per scenario instead of O(n²). Guaranteed constant-time regardless of trial count.
+- `directionCounts` already carries the 5-bucket vector — zero new computation; just read-and-sum.
+
+### Decision 4: `winRate` uses orientation-normalized `directionCounts`
+
+**Chosen:** `winRate = (directionCounts.strongly + directionCounts.somewhat) / max(sampleCount − directionCounts.neutral, 1)`.
+
+**Rationale:**
+- `directionCounts` is already orientation-normalized upstream (`resolveTranscriptDecisionModel` handles `orientationFlipped` before bucket assignment per `cloud/workers/stats/variance_analysis.py:229`).
+- `strongly` / `somewhat` always mean "favor the target value" regardless of original `A→B` vs `B→A` direction.
+- The `max(..., 1)` protects against all-neutral scenarios; the numerator is 0 in that case so `winRate = 0` correctly signals no directional signal.
+
+### Decision 5: `perPair` is keyed by `valueKey` alone (not `{domainId, valueKey}`)
+
+**Chosen:** A single `AGGREGATE` analysis row corresponds to a single definition, which is one `(domain, valueKey)` pair. So within one `reliabilitySummary`, `valueKey` alone is unique.
+
+**Rationale:**
+- Matches the resolver's expectation (`modelsConsistencyData.ts::parsePairList` keys by `valueKey`).
+- If the worker were ever changed to aggregate multiple definitions per row, we'd revisit; not a concern at current scope.
+
+### Decision 6: Backfill is a TypeScript CLI that re-enqueues aggregation jobs
+
+**Chosen:** Create `cloud/apps/api/src/cli/backfill-aggregate-consistency.ts` that:
+1. Queries every `AnalysisResult` with `status = 'CURRENT'` and `analysisType = 'AGGREGATE'`.
+2. Skips rows whose `output.reliabilitySummary.perModel[<any-model>].perScenario` is already present (idempotency).
+3. Calls the existing `triggerAggregateRun(runId)` helper, which enqueues the aggregation job via PgBoss and handles `CURRENT`→`SUPERSEDED` atomically (spec FR-008a).
+4. Logs each row's outcome (`upgraded`, `skipped`, `failed`) and prints a summary at end.
+
+**Rationale:**
+- Reuses the established `CURRENT`/`SUPERSEDED` transition logic; no new transactional code paths.
+- Pattern matches existing CLI entries like `cloud/apps/api/src/cli/create-user.ts` and `normalize.ts`.
+- Atomic CURRENT→SUPERSEDED inside the worker serializes backfill writes against any live aggregate runs that happen to race (spec FR-008a).
+
+### Decision 7: Contract change preserves backward compatibility
+
+**Chosen:** Extend `zModelReliabilitySummary` in `contracts.ts` with `perScenario` and `perPair` fields marked `.optional()` so historical rows missing those fields continue to validate.
+
+**Rationale:**
+- Pre-backfill rows won't have the new fields. The Consistency resolver already treats missing fields as "insufficient coverage" gracefully.
+- Avoids a breaking contract change that would force simultaneous backfill + deploy.
+
+---
+
+## Implementation Slices
+
+### Slice A — PR1: per-scenario matches/trials [CHECKPOINT]
+Estimated diff: ~150 lines.
+
+**Files:**
+- `cloud/workers/analyze_basic_aggregation.py` (~30 lines added, inside `build_reliability_summary`)
+- `cloud/workers/tests/test_analyze_basic.py` (~80 lines added)
+- `cloud/apps/api/src/services/analysis/aggregate/contracts.ts` (~15 lines added — extend Zod schema with optional `perScenario`)
+- `cloud/apps/api/tests/services/analysis/aggregate/contracts.test.ts` (if present; else create) — ~25 lines
+
+**Python changes in `build_reliability_summary`:**
+```python
+# After the existing per-model loop builds its summary, also build per-scenario map
+per_scenario_bernoulli: dict[str, dict[str, int]] = {}
+for scenario_id, stats in per_scenario.items():
+    sample_count = int(stats.get("sampleCount", 0))
+    if sample_count < 2:
+        continue  # FR-001: skip single-trial scenarios
+    bucket_counts = stats.get("directionCounts") or {}
+    trials = sample_count * (sample_count - 1) // 2
+    matches = sum(c * (c - 1) // 2 for c in bucket_counts.values() if isinstance(c, int))
+    per_scenario_bernoulli[scenario_id] = {"trials": trials, "matches": matches}
+
+per_model_summary[model_id]["perScenario"] = per_scenario_bernoulli
+```
+
+**Test coverage (`test_analyze_basic.py`):**
+- Scenario with 4 trials all same bucket → `trials=6, matches=6`
+- Scenario with 4 trials split 2/2 → `trials=6, matches=2`
+- Scenario with 1 trial → omitted
+- Scenario with all-neutral trials → `trials >= 1, matches = C(n,2)` (bucket still counts)
+- Existing `baselineReliability`/`directionalAgreement`/`coverageCount` values unchanged
+
+**Slice A checkpoint.** Ship as PR1. After it merges and deploys, new AGGREGATE runs start emitting the field; old rows still work through backward-compatible contract.
+
+---
+
+### Slice B — PR2: perPair with Coherence ingredients [CHECKPOINT]
+Estimated diff: ~220 lines.
+
+**Files:**
+- `cloud/workers/analyze_basic_aggregation.py` (~80 lines added — new helper `_build_per_pair_summary` + wiring)
+- `cloud/workers/tests/test_analyze_basic.py` (~100 lines added)
+- `cloud/apps/api/src/services/analysis/aggregate/contracts.ts` (~25 lines — extend Zod with optional `perPair`)
+- `cloud/apps/api/tests/services/analysis/aggregate/contracts.test.ts` — ~20 lines
+
+**Python changes:**
+
+New helper `_build_per_pair_summary(variance_analysis, run_context) -> dict`:
+
+```python
+def _build_per_pair_summary(
+    variance_analysis: dict, run_context: dict
+) -> dict[str, dict[str, Any]]:
+    """
+    Build per-value-pair Coherence ingredients keyed by valueKey.
+    run_context carries: valueKey, targetAnalysisRunId, targetCompanionRunId,
+    primaryConditionIds, companionConditionIds.
+    """
+    value_key = run_context["valueKey"]
+    per_pair: dict[str, dict[str, Any]] = {}
+
+    per_condition = []
+    for scenario_id, stats in variance_analysis.get("perModel", {}).items():
+        # ... (see full pseudocode below)
+        ...
+
+    per_pair[value_key] = {
+        "targetAnalysisRunId": run_context["targetAnalysisRunId"],
+        "targetCompanionRunId": run_context.get("targetCompanionRunId"),
+        "primaryConditionIds": run_context["primaryConditionIds"],
+        "companionConditionIds": run_context["companionConditionIds"],
+        "perCondition": per_condition,
+    }
+    return per_pair
+```
+
+Each `perCondition` entry:
+```python
+{
+    "scenarioId": scenario_id,
+    "netPressureRank": net_pressure_rank,  # target_appeal - opposing_appeal, int or None
+    "winRate": win_rate,  # per FR-006 formula
+    "matches": matches,   # reuse Slice A bucket-count math
+    "trials": trials,
+}
+```
+
+`net_pressure_rank` mapping in a small constant (spec FR-005, Decision 4):
+```python
+_CANONICAL_APPEAL_LEVEL = {
+    "strongly": 2, "somewhat": 1, "neutral": 0,
+    "opponentSomewhat": -1, "opponentStrongly": -2,
+}
+```
+
+Run context sourcing: `run_context` comes from the worker's input payload which already has the run's configuration metadata. Specifically:
+- `valueKey`, `targetAnalysisRunId`, `primaryConditionIds` — from `run_context["runId"]` + definition/scenario mapping already accessible to the worker.
+- `targetCompanionRunId`, `companionConditionIds` — from the `companionRunId` relationship on the run record, already exposed in `aggregate_semantics` input.
+
+**Test coverage:**
+- 5-condition scenario with canonical labels → correct `netPressureRank` per condition
+- Mixed canonical + non-canonical labels → non-canonical condition gets `netPressureRank: null`
+- All-neutral scenario → `winRate: 0` with `denom` forced to 1
+- Scenario with no non-neutral trials → `winRate = 0`, entry still emitted
+- Pair with zero conditions → `perPair[valueKey]` exists but `perCondition: []`
+
+### Slice C — Backfill CLI (bundled with PR2)
+Estimated diff: ~130 lines.
+
+**Files:**
+- `cloud/apps/api/src/cli/backfill-aggregate-consistency.ts` (new, ~100 lines)
+- `cloud/apps/api/tests/cli/backfill-aggregate-consistency.test.ts` (new, ~40 lines)
+- `cloud/apps/api/package.json` (1 line — add `backfill:aggregate-consistency` script entry)
+
+**CLI logic (pseudocode):**
+```typescript
+async function main() {
+  const args = parseArgs();  // --dry-run, --definition-id <id>, --domain-id <id>
+  const rows = await db.analysisResult.findMany({
+    where: {
+      status: 'CURRENT',
+      analysisType: 'AGGREGATE',
+      ...(args.definitionId ? { run: { definitionId: args.definitionId } } : {}),
+      ...(args.domainId ? { run: { definition: { domainId: args.domainId } } } : {}),
+    },
+    select: { id: true, runId: true, output: true },
+  });
+
+  for (const row of rows) {
+    const alreadyUpgraded = detectUpgraded(row.output);
+    if (alreadyUpgraded) {
+      log.info({ runId: row.runId }, 'backfill:skipped (already upgraded)');
+      continue;
+    }
+    if (args.dryRun) {
+      log.info({ runId: row.runId }, 'backfill:would-upgrade');
+      continue;
+    }
+    try {
+      await triggerAggregateRun(row.runId);  // existing helper
+      log.info({ runId: row.runId }, 'backfill:upgraded');
+    } catch (err) {
+      log.error({ runId: row.runId, err }, 'backfill:failed');
+    }
+  }
+}
+
+function detectUpgraded(output: unknown): boolean {
+  // Walk output.reliabilitySummary.perModel[<any>].perScenario existence
+  const summary = (output as any)?.reliabilitySummary?.perModel;
+  if (!summary || typeof summary !== 'object') return false;
+  const firstModel = Object.values(summary)[0] as any;
+  return firstModel?.perScenario != null || firstModel?.perPair != null;
+}
+```
+
+**Test coverage:**
+- Dry-run path lists rows without calling `triggerAggregateRun`
+- Rows already upgraded are skipped
+- `triggerAggregateRun` is called exactly once per eligible row
+- Failed runs are logged and the loop continues
+- `--definition-id` and `--domain-id` filters narrow the row set
+
+**Slice B + C checkpoint.** Ship as PR2. Once merged and deployed, run `npm run backfill:aggregate-consistency` against staging, then production. Consistency report renders end-to-end.
+
+---
+
+## Parallelization Opportunities
+
+| Opportunity | Safe? |
+|---|---|
+| Slice A Python changes + contract update | yes — disjoint files, same slice |
+| Slice B perPair logic + backfill CLI (Slice C) | yes — disjoint files, but semantic dependency: CLI needs PR2's emission shape to test against. Run CLI tests after PR2's worker tests. |
+| Slice A ↔ Slice B | no — PR2 extends the same Zod schema PR1 modifies; sequence them |
+
+---
+
+## Risks and Mitigations
+
+| Risk | Mitigation |
+|---|---|
+| `directionCounts` keys could drift from the 5-canonical set if upstream decision-model logic changes | Spec lists non-canonical label handling (`netPressureRank: null`); worker emits the entry but the resolver filters it. Unit test uses an unknown label and asserts `null`. |
+| Backfill on production might be slow if there are many rows or `triggerAggregateRun` has high latency | CLI supports `--definition-id` / `--domain-id` filters for staged rollout; run staging first with time measurement. |
+| Concurrent aggregate worker + backfill could try to supersede the same row | Existing CURRENT→SUPERSEDED transition is atomic (spec FR-008a); the later writer aborts cleanly. Verified via integration test. |
+| `triggerAggregateRun` signature could change | Plan references the helper but pins the test fixture, so schema drift surfaces in tests. |
+| Python worker tests don't run in TypeScript CI | Need a Python test job or invoke pytest in the existing workflow. Check `cloud/workers/tests/` pytest config before merging Slice A. |
+
+---
+
+## Testing Strategy
+
+**Python (`cloud/workers/tests/test_analyze_basic.py`):**
+- Extend existing fixtures to assert new `perScenario[scenarioId].trials/matches` keys.
+- Add fixtures for per-pair content once Slice B lands.
+- Keep existing `baselineReliability` assertions — they must remain bit-identical.
+
+**TypeScript — contract tests:**
+- Extend `contracts.test.ts` (create if missing) to verify the Zod schema accepts rows with new fields AND rows without them.
+
+**TypeScript — CLI tests:**
+- Mock `db.analysisResult.findMany` and `triggerAggregateRun`.
+- Cover happy path, already-upgraded skip, failure-logs-and-continues, dry-run.
+
+**Integration (optional, not v1 scope):**
+- Run the full worker end-to-end against a fixture `AnalysisResult` row and diff the emitted JSON against expected output.
+
+---
+
+## Rollout
+
+1. **PR1 (Slice A)**: merge → deploy → new AGGREGATE runs carry `perScenario`. Run backfill (from Slice B's CLI, deployed later) when PR2 lands.
+2. **PR2 (Slice B + C)**: merge → deploy → run `npm run backfill:aggregate-consistency --dry-run` on staging, inspect log, then run without `--dry-run`.
+3. Smoke-check `/models/consistency` on staging. Confirm scatter + table + drill-down render non-empty.
+4. Run backfill on production with `--domain-id` staged rollout: pick one domain, verify, repeat for the others.
+
+No feature flag needed — shapes are additive and opt-in via the resolver's existing graceful-degrade.
+
+---
+
+## Open Items Deferred to Tasks Phase
+
+1. Whether Python worker tests run in CI today or need a new job. Check first; may need a small CI config addition bundled with Slice A.
+2. Exact `run_context` threading: where does the worker currently receive `primaryConditionIds` / `companionConditionIds`? Scout during Slice B task authoring; likely via `aggregate_semantics.plannedScenarioIds` + the definition's scenario ordering.
+3. CLI argument naming — `--definition-id` vs `--definition`; match existing CLI style in `normalize.ts`.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+- HIGH [CODE-CONFIRMED]: The PR2 backfill idempotency check is too coarse. The plan says to skip any row that already has `reliabilitySummary.perModel[*].perScenario`, but PR1’s whole purpose is to add exactly that field. Because PR2 is scheduled after PR1, every row upgraded by PR1 would be treated as “already upgraded” and never receive `perPair`. The code path in `cloud/workers/analyze_basic_aggregation.py` currently has `perScenario` support only through the variance summary, and there is no `perPair` support anywhere in the shown worker pipeline.
+
+- HIGH [CODE-CONFIRMED]: The plan assumes PR2 can build `perPair` from `variance_analysis` plus a `run_context`, but the provided code does not expose the needed inputs. `cloud/workers/stats/variance_analysis.py` only computes per-scenario aggregate stats (`sampleCount`, `directionCounts`, `directionalAgreement`, `neutralShare`, etc.), `build_reliability_summary` only receives `variance_analysis`, and the visible `AggregateWorkerInput` in `contracts.ts` has no `targetAnalysisRunId`, companion run IDs, or condition ID fields. So the claim that “all underlying data is already computed” is not supported by the code and the PR2 slice is missing a required data-flow refactor.
+
+- MEDIUM [CODE-CONFIRMED]: The contract update is aimed at a schema symbol that does not exist in the provided contract file. `contracts.ts` defines `zVarianceStats`, `zModelVarianceStats`, and `zAnalysisOutput`, but there is no `zModelReliabilitySummary` or equivalent dedicated reliability schema in the visible code. As written, the plan may patch the wrong validation boundary and miss the actual shape that consumers validate against.
+
+## Residual Risks
+- The resolver and backfill enqueue helper were not provided, so the exact consumer shape for `perPair` and the real `CURRENT`→`SUPERSEDED` behavior remain unverified.
+- The plan still depends on a Python/TypeScript test split, but the provided code does not show CI wiring for the Python worker tests.
+- The backfill performance and failure-retry behavior are not demonstrated in the shown code, so the rollout timing and operational recovery path remain uncertain.
+tokens used
+60,300

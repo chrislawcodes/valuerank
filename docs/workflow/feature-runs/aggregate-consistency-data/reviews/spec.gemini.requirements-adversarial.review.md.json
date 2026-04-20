@@ -1,0 +1,57 @@
+{
+  "session_id": "20b3833b-a4ad-40e2-b6f1-f2f06974ef56",
+  "response": "## Findings\n\n| Severity | Finding | Evidence |\n| :--- | :--- | :--- |\n| HIGH | **Contradictory Specification for `trials` Metric:** The spec provides two conflicting definitions for the `trials` metric. FR-002 states `trials` MUST equal `sampleCount`, while the Glossary and FR-002a define it as the number of unique pairs of trials, calculated as `n * (n - 1) / 2`. This second definition is correct for a Bernoulli-pair based Repeatability metric. This reveals a fundamental ambiguity in a core metric and indicates the calculation is a new requirement, not the surfacing of an existing value. | `[CODE-CONFIRMED]` |\n| HIGH | **\"No Regressions\" Goal Contradicted by Functional Requirement:** The spec contains a direct conflict between its goals. US-4 and FR-011 demand \"zero behavioral change\" and \"bit-for-bit identical\" values for existing consumers. However, FR-001 explicitly requires that the system *stop* emitting the `perScenario` object for scenarios with `sampleCount < 2`. The current `variance.ts` code *does* emit this object. Removing it constitutes a breaking change that will cause any downstream consumer that relies on its presence to fail, directly violating the \"no regressions\" requirement. | `[CODE-CONFIRMED]` |\n| MEDIUM | **Metric Calculation Uses Non-Existent Bucket Names:** The `winRate` formula in FR-006 and the Glossary relies on `directionCounts.strongly` and `directionCounts.somewhat`. However, the `directionCounts` object calculated in `variance.ts` does not contain these keys. Instead, it uses `favor_first_strong`, `favor_first_lean`, `favor_second_strong`, `favor_second_lean`, and `neutral`. An implementer must infer the mapping, introducing ambiguity and a high risk of implementing the metric incorrectly. | `[CODE-CONFIRMED]` |\n| MEDIUM | **Spec Understates Required Code Changes:** The spec's \"Background\" and \"Discovery\" sections claim the work is purely additive, surfacing already-computed numbers. However, FR-001 requires adding new conditional logic to `variance.ts` to filter out single-trial scenarios, which is a modification to existing logic flow, not a simple addition. Furthermore, FR-002a defines new calculations (`matches`, `trials`) that are not currently performed in the code. This misrepresents the implementation effort and risk. | `[CODE-CONFIRMED]` |\n| LOW | **Backfill Race Condition Mitigation is Insufficient:** The spec (FR-008a) acknowledges the possibility of race conditions between the backfill script and live aggregate workers but defers mitigation, stating to \"verify\" and add a lock \"if race conditions appear.\" For a long-running, data-critical process, relying on hope and post-mortem fixes is insufficient. A robust design would specify a locking or serialization mechanism upfront to guarantee data integrity. | `[UNVERIFIED]` |\n\n## Residual Risks\n\nThe review surfaced several high-confidence, code-confirmed findings. The primary residual risks stem from assumptions about code not provided in the context, which are flagged as `[UNVERIFIED]` but should be explicitly checked before implementation.\n\n1.  **Graceful Degradation Assumption:** The entire rollout plan leans heavily on the assumption that \"The Consistency resolver already handles missing fields gracefully.\" If this is not strictly true, or if it handles missing fields by crashing, the \"partial rollout\" described in the Edge Cases section will cause the entire Consistency report to fail, not degrade.\n2.  **Normalization Logic is Unseen:** The spec's `winRate` calculation (FR-006) is critically dependent on `resolveTranscriptDecisionModel` correctly normalizing scenario orientation. The function's implementation was not provided, so this is taken on faith. If the normalization is flawed, the `winRate` metric will be incorrect.\n3.  **Backfill Error Handling:** The spec requires logging errors and continuing (US-3, AcSc 3). The risk is that if a systematic error is encountered (e.g., due to an unexpected historical data shape), the script may produce thousands of log entries but leave a large fraction of the dataset un-migrated, requiring significant manual intervention. The effectiveness of the \"continue\" strategy depends on error frequency, which is unknown.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 45325
+        },
+        "tokens": {
+          "input": 19622,
+          "prompt": 19622,
+          "candidates": 943,
+          "total": 24283,
+          "cached": 0,
+          "thoughts": 3718,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 45325,
+            "tokens": {
+              "input": 19622,
+              "prompt": 19622,
+              "candidates": 943,
+              "total": 24283,
+              "cached": 0,
+              "thoughts": 3718,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

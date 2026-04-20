@@ -1,0 +1,2212 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019da832-c386-7011-9c75-68849e352038
+--------
+user
+Review this spec artifact using a feasibility-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: variance.ts
+import type {
+  AggregateScenarioInput,
+  AggregateTranscriptInput,
+  ModelVarianceStats,
+  RunVarianceAnalysis,
+  ScenarioVarianceStats,
+  VarianceStats,
+} from './contracts.js';
+import { resolveTranscriptDecisionModel } from '../../../graphql/queries/domain/decision-model.js';
+
+type DecisionAwareAggregateTranscript = AggregateTranscriptInput & {
+  decisionMetadata?: unknown;
+  definitionSnapshot?: unknown;
+};
+
+type DirectionCountKey =
+  | 'favor_first_lean'
+  | 'favor_first_strong'
+  | 'favor_second_lean'
+  | 'favor_second_strong'
+  | 'neutral';
+
+type CanonicalVarianceMetrics = {
+  bucketKey: DirectionCountKey;
+  distance: number;
+  signedDistance: number;
+};
+
+function createDirectionCounts(): Record<DirectionCountKey, number> {
+  return {
+    favor_first_lean: 0,
+    favor_first_strong: 0,
+    favor_second_lean: 0,
+    favor_second_strong: 0,
+    neutral: 0,
+  };
+}
+
+function resolveCanonicalVarianceMetrics(
+  direction: 'favor_first' | 'favor_second' | 'neutral' | 'refusal' | 'unknown',
+  strength: 'strong' | 'lean' | 'neutral' | 'unknown'
+): CanonicalVarianceMetrics | null {
+  if (direction === 'refusal') {
+    return null;
+  }
+
+  if (direction === 'neutral') {
+    return {
+      bucketKey: 'neutral',
+      distance: 0,
+      signedDistance: 0,
+    };
+  }
+
+  if (direction === 'favor_first') {
+    if (strength === 'strong') {
+      return {
+        bucketKey: 'favor_first_strong',
+        distance: 2,
+        signedDistance: 2,
+      };
+    }
+
+    if (strength === 'lean') {
+      return {
+        bucketKey: 'favor_first_lean',
+        distance: 1,
+        signedDistance: 1,
+      };
+    }
+  }
+
+  if (direction === 'favor_second') {
+    if (strength === 'lean') {
+      return {
+        bucketKey: 'favor_second_lean',
+        distance: 1,
+        signedDistance: -1,
+      };
+    }
+
+    if (strength === 'strong') {
+      return {
+        bucketKey: 'favor_second_strong',
+        distance: 2,
+        signedDistance: -2,
+      };
+    }
+  }
+
+  return null;
+}
+
+function computeVarianceStats(scores: number[]): VarianceStats {
+  if (scores.length === 0) {
+    return {
+      sampleCount: 0,
+      mean: 0,
+      stdDev: 0,
+      variance: 0,
+      min: 0,
+      max: 0,
+      range: 0,
+    };
+  }
+
+  const n = scores.length;
+  const sum = scores.reduce((a, b) => a + b, 0);
+  const mean = sum / n;
+
+  let variance = 0;
+  if (n > 1) {
+    const sumSqDiff = scores.reduce((a, b) => a + Math.pow(b - mean, 2), 0);
+    variance = sumSqDiff / (n - 1);
+  }
+
+  const stdDev = Math.sqrt(variance);
+  const min = Math.min(...scores);
+  const max = Math.max(...scores);
+
+  return {
+    sampleCount: n,
+    mean: parseFloat(mean.toFixed(6)),
+    stdDev: parseFloat(stdDev.toFixed(6)),
+    variance: parseFloat(variance.toFixed(6)),
+    min: parseFloat(min.toFixed(6)),
+    max: parseFloat(max.toFixed(6)),
+    range: parseFloat((max - min).toFixed(6)),
+  };
+}
+
+function computeConsistencyScore(variances: number[], maxPossibleVariance = 4.0): number {
+  if (variances.length === 0) return 1.0;
+  const sum = variances.reduce((a, b) => a + b, 0);
+  const avgVariance = sum / variances.length;
+  const score = 1.0 - (avgVariance / maxPossibleVariance);
+  return parseFloat(Math.max(0.0, Math.min(1.0, score)).toFixed(6));
+}
+
+function computeMedian(sorted: number[]): number {
+  if (sorted.length === 0) return 0;
+  const arr = [...sorted].sort((a, b) => a - b);
+  const mid = Math.floor(arr.length / 2);
+  return arr.length % 2 === 0
+    ? (arr[mid - 1]! + arr[mid]!) / 2
+    : arr[mid]!;
+}
+
+function computeIQR(values: number[]): number {
+  if (values.length < 2) return 0;
+  const arr = [...values].sort((a, b) => a - b);
+  const n = arr.length;
+  const q1 = arr[Math.floor(n * 0.25)]!;
+  const q3 = arr[Math.floor(n * 0.75)]!;
+  return q3 - q1;
+}
+
+export function computeVarianceAnalysis(
+  transcripts: AggregateTranscriptInput[],
+  scenarios: AggregateScenarioInput[]
+): RunVarianceAnalysis {
+  const scenarioNames = new Map<string, string>();
+  scenarios.forEach((scenario) => {
+    const content = scenario.content as Record<string, unknown>;
+    const name = typeof content.name === 'string' ? content.name : scenario.id;
+    scenarioNames.set(scenario.id, name);
+  });
+
+  const grouped = new Map<string, number[]>();
+  const groupedCanonicalMetrics = new Map<string, CanonicalVarianceMetrics[]>();
+  const correctedScenarioIds = new Set<string>();
+
+  transcripts.forEach((rawTranscript) => {
+    const transcript = rawTranscript as DecisionAwareAggregateTranscript;
+    if (
+      transcript.scenarioId == null ||
+      transcript.scenarioId === '' ||
+      transcript.modelId == null ||
+      transcript.modelId === ''
+    ) {
+      return;
+    }
+
+    const orientationFlipped = transcript.scenario?.orientationFlipped ?? false;
+    const resolved = resolveTranscriptDecisionModel({
+      decisionCode: transcript.decisionCode ?? null,
+      decisionMetadata: transcript.decisionMetadata,
+      definitionSnapshot: transcript.definitionSnapshot,
+      orientationFlipped,
+    });
+    const canonicalMetrics = resolveCanonicalVarianceMetrics(
+      resolved.canonical.direction,
+      resolved.canonical.strength
+    );
+    if (canonicalMetrics === null) return;
+    const score = canonicalMetrics.distance;
+    if (orientationFlipped) {
+      correctedScenarioIds.add(transcript.scenarioId);
+    }
+
+    const key = `${transcript.scenarioId}||${transcript.modelId}`;
+    const current = grouped.get(key) || [];
+    current.push(score);
+    grouped.set(key, current);
+
+    const currentCanonicalMetrics = groupedCanonicalMetrics.get(key) || [];
+    currentCanonicalMetrics.push(canonicalMetrics);
+    groupedCanonicalMetrics.set(key, currentCanonicalMetrics);
+  });
+
+  let maxSamples = 1;
+  if (grouped.size > 0) {
+    maxSamples = Math.max(...Array.from(grouped.values()).map((scores) => scores.length));
+  }
+  const isMultiSample = maxSamples > 1;
+
+  const perModel: Record<string, ModelVarianceStats> = {};
+  const modelScenarioScores = new Map<string, Map<string, number[]>>();
+
+  grouped.forEach((scores, key) => {
+    const [scenarioId, modelId] = key.split('||');
+    if (modelId === undefined || modelId === '' || scenarioId === undefined || scenarioId === '') return;
+
+    let modelMap = modelScenarioScores.get(modelId);
+    if (!modelMap) {
+      modelMap = new Map<string, number[]>();
+      modelScenarioScores.set(modelId, modelMap);
+    }
+    modelMap.set(scenarioId, scores);
+  });
+
+  modelScenarioScores.forEach((scenarioMap, modelId) => {
+    const perScenario: Record<string, VarianceStats> = {};
+    const variances: number[] = [];
+    let totalSamples = 0;
+
+    scenarioMap.forEach((scores, scenarioId) => {
+      const stats = computeVarianceStats(scores);
+      const canonicalMetrics = groupedCanonicalMetrics.get(`${scenarioId}||${modelId}`) ?? [];
+
+      if (scores.length > 0 && canonicalMetrics.length > 0) {
+        const signed = canonicalMetrics.map((metric) => metric.signedDistance);
+        const medianSd = computeMedian(signed);
+
+        const direction: 'A' | 'B' | 'NEUTRAL' =
+          medianSd > 0 ? 'A' : medianSd < 0 ? 'B' : 'NEUTRAL';
+
+        const sameCount = signed.filter((score) =>
+          direction === 'A' ? score > 0 :
+            direction === 'B' ? score < 0 :
+              score === 0
+        ).length;
+
+        const n = scores.length;
+        const neutralCount = canonicalMetrics.filter((metric) => metric.bucketKey === 'neutral').length;
+        const directionCounts = createDirectionCounts();
+        canonicalMetrics.forEach((metric) => {
+          directionCounts[metric.bucketKey] += 1;
+        });
+
+        const iqrVal = n >= 2 ? computeIQR(signed) : undefined;
+
+        Object.assign(stats, {
+          directionCounts,
+          direction,
+          directionalAgreement: parseFloat((sameCount / n).toFixed(6)),
+          medianSignedDistance: parseFloat(medianSd.toFixed(6)),
+          iqr: iqrVal !== undefined ? parseFloat(iqrVal.toFixed(6)) : undefined,
+          neutralShare: parseFloat((neutralCount / n).toFixed(6)),
+          orientationCorrected: correctedScenarioIds.has(scenarioId),
+        });
+      }
+
+      perScenario[scenarioId] = stats;
+
+      if (stats.sampleCount > 1) {
+        variances.push(stats.variance);
+      }
+      totalSamples += stats.sampleCount;
+    });
+
+    const avgVariance = variances.length > 0
+      ? variances.reduce((a, b) => a + b, 0) / variances.length
+      : 0;
+
+    const maxVariance = variances.length > 0
+      ? Math.max(...variances)
+      : 0;
+
+    perModel[modelId] = {
+      totalSamples,
+      uniqueScenarios: scenarioMap.size,
+      samplesPerScenario: maxSamples,
+      avgWithinScenarioVariance: parseFloat(avgVariance.toFixed(6)),
+      maxWithinScenarioVariance: parseFloat(maxVariance.toFixed(6)),
+      consistencyScore: computeConsistencyScore(variances),
+      perScenario,
+    };
+  });
+
+  const allScenarioVariances: ScenarioVarianceStats[] = [];
+  grouped.forEach((scores, key) => {
+    const [scenarioId, modelId] = key.split('||');
+    if (typeof modelId !== 'string' || typeof scenarioId !== 'string') return;
+
+    if (scores.length > 1) {
+      const stats = computeVarianceStats(scores);
+      allScenarioVariances.push({
+        scenarioId,
+        scenarioName: scenarioNames.get(scenarioId) ?? scenarioId,
+        modelId,
+        variance: stats.variance,
+        stdDev: stats.stdDev,
+        range: stats.range,
+        sampleCount: stats.sampleCount,
+        mean: stats.mean,
+      });
+    }
+  });
+
+  allScenarioVariances.sort((a, b) => b.variance - a.variance);
+  const mostVariable = allScenarioVariances.slice(0, 5);
+  const leastVariable = allScenarioVariances.slice(-5).reverse();
+
+  return {
+    isMultiSample,
+    samplesPerScenario: maxSamples,
+    perModel,
+    mostVariableScenarios: mostVariable,
+    leastVariableScenarios: leastVariable,
+    orientationCorrectedCount: correctedScenarioIds.size,
+  };
+}
+
+
+Artifact: spec.md
+# Spec: Aggregate Pipeline — Consistency Data Emission
+
+**Feature slug:** aggregate-consistency-data
+**Created:** 2026-04-19
+**Status:** draft
+**Path:** Feature Factory (`docs/workflow/feature-runs/aggregate-consistency-data/`)
+
+---
+
+## Background
+
+The Models / Consistency report (PRs #702, #704, #705) shipped with an external dependency: the aggregate analysis pipeline had to surface per-scenario Bernoulli counts and per-value-pair Coherence ingredients inside `reliabilitySummary.perModel[modelId]` before the report could render real numbers. Without that data, every model falls into the "Insufficient coverage" footer with reason `no-repeat-coverage`.
+
+All the underlying numbers are **already computed** in `cloud/apps/api/src/services/analysis/aggregate/variance.ts`. This feature surfaces them in the emitted JSON, adds the per-pair Coherence section, and backfills existing `AGGREGATE` rows so historical analyses pick up the new shape.
+
+---
+
+## Discovery: Assumptions Carried In
+
+Discovery complete, 10 assumptions recorded in workflow state. Summary:
+
+- Backend-only. No GraphQL SDL changes, no new DB tables, no resolver or UI code changes.
+- Consistency resolver already handles missing fields gracefully → purely additive on the pipeline side.
+- Two PRs: **PR1** (Repeatability unblock — add `matches`/`trials` per scenario) + **PR2** (Coherence unblock — add `perPair` section + run/condition IDs). Backfill ships with PR2 or immediately after.
+- Canonical net-pressure mapping `strongly:+2 / somewhat:+1 / neutral:0 / opponentSomewhat:−1 / opponentStrongly:−2`, per the Consistency feature plan Decision 4.
+- `winRate = (strongly + somewhat) / (sampleCount − neutralCount)`; falls back to 0 when denominator is 0.
+- Backfill is a CLI script, not a migration; replaces existing `CURRENT` analysis rows via standard supersede semantics; idempotent on re-run.
+
+---
+
+## Product Goal
+
+Make the Models / Consistency report populate end-to-end without any resolver or UI changes.
+
+1. After PR1 + partial backfill: Repeatability numbers and CIs render in the scatter and table.
+2. After PR2 + full backfill: Coherence chips, per-pair drill-downs, order-effect panel, and deep-link URLs all populate.
+3. No regression in any existing consumer of `reliabilitySummary.perModel` or the aggregate worker output.
+
+---
+
+## User Stories
+
+### US-1 — Repeatability populates on the Consistency report (P1)
+
+As a researcher opening `/models/consistency`, I want every model with `AGGREGATE`-eligible coverage to appear as a dot on the scatter and a row in the table with a valid Repeatability ± CI.
+
+**Independent test:** Open `/models/consistency` against a database where PR1 has been merged and the backfill script has touched at least one analysis row. Scatter plots N dots for N covered models; each table row shows a numeric Repeatability with `± X.X%` range.
+
+**Acceptance scenarios:**
+1. **Given** PR1 has merged and `aggregate-consistency-backfill` has run, **when** the resolver reads any `AGGREGATE`-CURRENT row, **then** `reliabilitySummary.perModel[modelId].perScenario[scenarioId].matches` and `.trials` are integers ≥ 0.
+2. **Given** a model has ≥ 1 scenario with `trials ≥ 2`, **when** the report renders, **then** that model appears as a dot on the scatter with a Repeatability value in (0, 1] and a CI width > 0.
+3. **Given** a model has zero repeated scenarios, **when** the report renders, **then** that model stays in the "Insufficient coverage" footer with reason `no-repeat-coverage` — not silently promoted to the scatter.
+
+### US-2 — Coherence populates on the Consistency report (P1)
+
+As a researcher opening `/models/consistency`, I want the per-pair Coherence chips and order-effect panel to show real values when I drill into a model.
+
+**Independent test:** Open the drill-down for any covered model after PR2 + backfill; chips show `ρ` and `p-value` for every value pair with enough canonical conditions; the "View condition matrix" and "View transcripts" links navigate to correct targets.
+
+**Acceptance scenarios:**
+1. **Given** PR2 has merged and backfill has run, **when** the resolver reads any `AGGREGATE`-CURRENT row, **then** `reliabilitySummary.perModel[modelId].perPair[valueKey]` exists for every value pair the model actually evaluated.
+2. **Given** a value pair has ≥ 3 canonical conditions with non-zero pressure variance, **when** the chip renders, **then** `rho` is a number in [−1, 1], `pValue` is a number in [0, 1], `coherent` is boolean, `determinate` is true.
+3. **Given** a value pair's pressure vector has zero variance (all conditions collapse to one net-pressure value), **when** the chip renders, **then** `determinate` is false and the chip shows the grey "indeterminate" style.
+4. **Given** a drill-down chip is rendered, **when** I click "View condition matrix →", **then** the URL includes `domainId`, `modelId`, `valueKey`, and `signature` matching the chip's own values and the target page loads the correct `ConditionMatrix`.
+5. **Given** a drill-down chip is rendered, **when** I click "View transcripts →", **then** the URL includes `targetAnalysisRunId`, `targetCompanionRunId`, `primaryConditionIds`, and `companionConditionIds` matching the chip's own data.
+
+### US-3 — Backfill completes reliably (P1)
+
+As an operator rolling out PR1 and PR2, I want a single command that re-runs the aggregate worker on every existing `AGGREGATE`-CURRENT row and supersedes the old rows with new ones carrying the extended shape.
+
+**Independent test:** Run the CLI against a staging database; verify row counts before/after match, `CURRENT` count is preserved, `SUPERSEDED` count grows by the backfilled count, new rows contain the new fields.
+
+**Acceptance scenarios:**
+1. **Given** N `AGGREGATE`-CURRENT rows exist, **when** `npm run backfill:aggregate-consistency` completes without errors, **then** there are still exactly N `AGGREGATE`-CURRENT rows, N old rows marked `SUPERSEDED`, and every new `CURRENT` row contains the new `matches/trials/perPair` fields.
+2. **Given** the backfill has already run once, **when** it runs again, **then** the pass is a no-op (all rows already contain the new fields) and exit is clean.
+3. **Given** the backfill encounters a row it cannot process (missing transcripts, malformed config), **when** processing that row, **then** it logs a structured error, leaves the existing row untouched, and continues with the rest.
+4. **Given** the backfill is interrupted mid-run, **when** re-started, **then** it resumes without duplicating work (rows already upgraded are skipped).
+
+### US-4 — Downstream consumers see no regression (P1)
+
+As a maintainer of the existing Models / Matrix page or the domain analysis view, I want zero behavioral change from these PRs.
+
+**Independent test:** Unit and integration tests for `modelsAnalysis`, `domainAnalysis`, and any code path reading `reliabilitySummary` pass unchanged. Existing `baselineReliability`, `directionalAgreement`, `neutralShare`, and `coverageCount` values are bit-for-bit identical before and after.
+
+**Acceptance scenarios:**
+1. **Given** a specific `AGGREGATE` row before PR1, **when** the same row is re-run under PR1, **then** every field that existed before has the same value; only new fields are added.
+2. **Given** the Models / Matrix page queries `modelsAnalysis` against an upgraded row, **when** the page renders, **then** the matrix, stability dots, and drawer show identical values to before.
+3. **Given** the domain analysis value-detail page opens, **when** it queries transcripts for an upgraded row, **then** the condition matrix and transcript lists match the pre-upgrade output.
+
+---
+
+## Edge Cases
+
+- **Scenario with zero trials for a model** — skip it entirely (don't emit `perScenario[scenarioId]` for that model on that scenario). Do not emit `{ matches: 0, trials: 0 }`, which the resolver would treat as "covered with zero data" — worse than missing.
+- **Non-canonical condition labels** (scenario uses a label outside the 5-point grid) — emit the `perCondition` entry with `netPressureRank: null`. The resolver already marks such pairs `indeterminate`.
+- **Neutral sweep** (a scenario where every trial was neutral) — `winRate` denominator is 0; emit `winRate: 0, matches: 0, trials: sampleCount`.
+- **Single-trial scenario** (`sampleCount = 1`) — resolved: do **not** emit a `perScenario` entry for this model+scenario (FR-001). A single trial has zero trial pairs by definition. If every scenario a model has is single-trial, the model has no Repeatability coverage and falls into the "Insufficient coverage" footer — correct.
+- **Pre-existing `perScenario` fields with non-numeric values** — never overwrite existing fields; add new fields alongside.
+- **Backfill row that fails the worker** — log, skip, continue. At end, print a summary listing failed row IDs so a human can re-try manually.
+- **Simultaneous aggregate worker runs during backfill** — standard CURRENT/SUPERSEDED locking should handle this, but verify. Add a `--lock` flag to the backfill CLI if race conditions appear.
+- **Partial rollout** (PR1 shipped, PR2 not yet) — Consistency report shows Repeatability but every pair is marked `indeterminate` because `perPair` is missing. Graceful degrade.
+
+---
+
+## Functional Requirements
+
+- **FR-001:** System MUST emit `reliabilitySummary.perModel[modelId].perScenario[scenarioId]` with `{ trials: Int!, matches: Int! }` **only for scenarios where the model has `sampleCount >= 2`**. Single-trial scenarios are deliberately excluded — they have no Bernoulli pair to agree about, and including them would pollute Repeatability with vacuously-matching ones. PR1 scope.
+- **FR-002:** `trials` MUST equal `sampleCount` for that scenario. `matches` MUST equal the count of trial pairs within that scenario where both trials produced the same canonical decision bucket (see FR-002a). This is a pair-agreement metric, distinct from `sameCount` / `directionalAgreement` (which counts samples matching the median direction — a different question). PR1 scope.
+- **FR-002a:** `matches` counting rule: for a scenario with `n` trials distributed across the 5 canonical decision buckets with counts `c_1 ... c_5` (where `sum(c_i) = n`), compute in O(k) time:
+  - `trials = n * (n - 1) / 2` (total ordered trial pairs)
+  - `matches = sum over each bucket i of (c_i * (c_i - 1) / 2)`
+  The O(k) closed form is equivalent to the O(n²) pair enumeration: both count the pairs whose two trials fell into the same canonical bucket. The bucket counts are the existing `directionCounts` values (`strongly`, `somewhat`, `neutral`, `opponentSomewhat`, `opponentStrongly`).
+- **FR-003:** System MUST preserve every field currently in `perScenario` with bit-identical values (`variance`, `mean`, `sd`, `direction`, `directionCounts`, `directionalAgreement`, `medianSignedDistance`, `iqr`, `neutralShare`, `orientationCorrected`, `sampleCount`). PR1 scope.
+- **FR-004:** System MUST emit `reliabilitySummary.perModel[modelId].perPair: Record<valueKey, PairSummary>` in PR2 scope, where `PairSummary` contains:
+  - `targetAnalysisRunId: String!`
+  - `targetCompanionRunId: String | null`
+  - `primaryConditionIds: [String!]!`
+  - `companionConditionIds: [String!]!`
+  - `perCondition: [PerCondition!]!`
+- **FR-005:** Each `PerCondition` MUST contain `{ scenarioId, netPressureRank: Int | null, winRate: Float, matches: Int, trials: Int }`. `netPressureRank` follows the canonical mapping `strongly:+2 / somewhat:+1 / neutral:0 / opponentSomewhat:−1 / opponentStrongly:−2` for target appeal minus opposing appeal; `null` if any label is non-canonical.
+- **FR-006:** `winRate` MUST be computed from the **orientation-normalized** canonical bucket counts already in `directionCounts`. The 5-bucket system (`strongly`, `somewhat`, `neutral`, `opponentSomewhat`, `opponentStrongly`) is already normalized against the scenario's `orientationFlipped` flag by upstream code (`resolveTranscriptDecisionModel`), so `strongly` / `somewhat` always mean "favor the target value" regardless of whether the scenario was originally `A→B` or `B→A`. Given that:
+  - `winRate = (directionCounts.strongly + directionCounts.somewhat) / denom`
+  - `denom = sampleCount - directionCounts.neutral` when that difference is > 0
+  - `denom = 1` (forced) when every trial was neutral; in that case `winRate = 0` signals "no directional signal" rather than dividing by zero
+  No re-examination of raw transcripts is required; all inputs are integer counts already on the existing `perScenario` payload.
+- **FR-007:** System MUST provide a CLI `backfill-aggregate-consistency.ts` (or similar) in `cloud/apps/api/src/cli/` that iterates every `CURRENT` + `AGGREGATE` analysis row, re-runs the aggregate worker, and writes a new analysis row replacing the existing CURRENT one via the standard supersede pathway.
+- **FR-008:** Backfill MUST be idempotent — a second run produces no new rows on rows already upgraded. Idempotency check: inspect `reliabilitySummary.perModel[<any-model-with-coverage>].perScenario[<any-scenario>].matches` — if present, the row is already upgraded and is skipped.
+- **FR-008a:** Backfill MUST serialize with live `aggregate-run-workflow` executions via the existing `CURRENT`→`SUPERSEDED` transition (a single DB transaction that atomically flips the old row's status and inserts the new one). Concurrent aggregate workers writing to the same `runId` will see one of two outcomes: either both succeed serially (newer supersedes older), or the second detects its base row is already `SUPERSEDED` and aborts cleanly. No new locking primitive is added by this feature.
+- **FR-009:** Backfill MUST log each row's outcome (upgraded, skipped, failed) with a structured logger call.
+- **FR-010:** Backfill MUST be runnable against a single definition or domain via an optional flag for staged rollouts.
+- **FR-011:** System MUST NOT change the shape of any field consumed by `modelsAnalysis`, `domainAnalysis`, `analysis`, or any other existing resolver reading `reliabilitySummary`.
+- **FR-012:** System MUST NOT introduce any changes to the GraphQL SDL or schema file (`cloud/apps/web/schema.graphql`).
+- **FR-013:** The Zod contract at `cloud/apps/api/src/services/analysis/aggregate/contracts.ts:197` MUST be extended to type the new fields; the contract MUST continue to accept historical rows missing the fields (optional with a default or `.optional()`).
+
+---
+
+## Success Criteria
+
+- **SC-001:** After PR1 + backfill, the Consistency report renders a non-empty scatter for every model with ≥ 1 repeated scenario.
+- **SC-002:** After PR2 + backfill, the drill-down panel renders per-pair Coherence chips for every determinate pair a model has evaluated.
+- **SC-003:** No `@valuerank/api`, `@valuerank/web`, or `@valuerank/shared` test regression.
+- **SC-004:** Backfill completes on the full production dataset in under 30 minutes (aspirational; confirm on staging first).
+- **SC-005:** Existing `baselineReliability`, `directionalAgreement`, `neutralShare`, and `coverageCount` values are bit-identical on rows re-processed by the backfill.
+- **SC-006:** Every row that ran through the backfill has a log line recording the outcome.
+
+---
+
+## Non-Goals
+
+- Changes to the Consistency resolver, types, Pothos shapes, or UI.
+- Changes to the GraphQL SDL.
+- New analysis types or new queue entries.
+- Recomputing decisions or changing the decision-model contract.
+- Any modification to the cross-domain Stability metric (the existing Models / Matrix signal).
+- Live re-run of the aggregate worker on transcript arrival (that's a separate pipeline concern).
+- A UI for monitoring backfill progress (logs suffice for v1).
+
+---
+
+## Open Questions
+
+*(To be resolved during plan phase unless otherwise noted.)*
+
+1. Should `perPair` be keyed by `valueKey` alone or by `{ domainId, valueKey }`? Given a single `AGGREGATE` row belongs to one definition (and hence one domain + value pair), a single valueKey key is likely sufficient. Confirm with a quick look at the worker's grouping.
+2. Which CLI entry point pattern to follow — the `cli/create-user.ts`-style standalone script or a `cli/normalize.ts`-style runner? Plan phase picks one.
+3. For the idempotency check: does a row already contain the new shape? Simplest: look at `reliabilitySummary.perModel[<first-model>].perScenario[<first-scenario>].matches`. Plan phase confirms.
+
+---
+
+## Dependencies
+
+- `cloud/apps/api/src/services/analysis/aggregate/variance.ts` must continue to expose the underlying values used by the new fields. Any refactor of `variance.ts` outside this feature must preserve the fields.
+- The aggregate worker's `variance` output shape is consumed by the resolver parser in `modelsConsistencyData.ts`. Any further worker changes should coordinate with that parser.
+- Canonical condition labels (`strongly`, `somewhat`, `neutral`, `opponentSomewhat`, `opponentStrongly`) must continue to be the canonical label set. Widening the label set is out of scope and would require a separate feature.
+- Standard `CURRENT`/`SUPERSEDED` analysis-row semantics in the DB schema.
+
+---
+
+## Glossary (terms reused from the Consistency feature)
+
+| Term | Meaning | Source |
+|---|---|---|
+| Repeatability | Per-model within-scenario test-retest agreement, aggregated via random-effects meta-analysis | Consistency feature plan Decision 1 |
+| Coherence | Per-model fraction of value pairs with a significant monotonic pressure-response (Spearman ρ ≥ 0.8, p < 0.05) | Consistency feature plan FR-003 |
+| Net pressure | `(target value appeal) − (opposing value appeal)` using canonical labels mapped to `±2 / ±1 / 0` | Consistency feature plan Decision 4 |
+| Win rate (per condition) | Orientation-normalized: `(directionCounts.strongly + directionCounts.somewhat) / max(sampleCount − directionCounts.neutral, 1)`. See FR-006 for the canonical-bucket provenance and the all-neutral edge case. | This spec FR-006 |
+| Matches / trials (per scenario) | Bernoulli pair used by Repeatability. `trials = C(n, 2)` = number of ordered trial pairs. `matches` = number of those pairs where both trials produced the same canonical decision bucket. Scenarios with n < 2 are omitted. | This spec FR-001, FR-002, FR-002a |
+| CURRENT / SUPERSEDED | Standard analysis-row statuses used throughout the aggregate pipeline | `AnalysisResult.status` column |
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the spec against the only provided implementation file, `variance.ts`, and looking for places where the spec assumes behavior the code does not support. I’ll keep the review scoped to feasibility and surface only confirmed mismatches or clearly under-specified spots.
+codex
+I’ve confirmed the core analysis function only emits variance-oriented fields today. I’m checking whether the new fields the spec assumes already exist anywhere else in the backend shape, because that determines whether the spec is realistic or is papering over a larger contract change.
+exec
+/bin/zsh -lc "rg -n \"matches|trials|perPair|winRate|directionCounts|orientationCorrectedCount\" /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src -g '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:5:  matches: number;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:6:  trials: number;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:34:  winRate: number;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:35:  matches: number;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:36:  trials: number;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:59:  perPair: ConsistencyPerPairShape[];
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:105:    matches: t.exposeInt('matches'),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:106:    trials: t.exposeInt('trials'),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:140:    winRate: t.exposeFloat('winRate'),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:141:    matches: t.exposeInt('matches'),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:142:    trials: t.exposeInt('trials'),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:169:    perPair: t.expose('perPair', { type: [ConsistencyPerPairRef] }),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/utils/definition-filters.ts:52:  const matches = await db.$queryRaw<{ id: string }[]>`
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/utils/definition-filters.ts:59:  return matches.map((row) => row.id);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/queue/handlers/analyze-basic.ts:115:        // Transform to worker input format (matches CSV export structure)
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/utils/auto-pair.ts:61: * Returns null and logs a warning if more than one candidate matches (ambiguous).
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/utils/auto-pair.ts:73:  const matches = candidates.filter((candidate) => {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/utils/auto-pair.ts:84:  if (matches.length === 0) {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/utils/auto-pair.ts:88:  if (matches.length > 1) {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/utils/auto-pair.ts:90:      { targetId: target.id, matchCount: matches.length },
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/utils/auto-pair.ts:96:  return matches[0] ?? null;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/import/validation.ts:62: * Validate imported definition content matches schema requirements.
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-consistency.ts:81:      pairs.push(...parsePairList((rawEntry as { perPair?: unknown }).perPair));
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-consistency.ts:118:  const perPair = pairs.map((pair) => ({
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-consistency.ts:131:      winRate: condition.winRate,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-consistency.ts:132:      matches: condition.matches,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-consistency.ts:133:      trials: condition.trials,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-consistency.ts:138:  const determinatePairs = perPair.filter((pair) => pair.determinate).length;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-consistency.ts:139:  const coherentPairs = perPair.filter((pair) => pair.determinate && pair.coherent).length;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-consistency.ts:140:  const indeterminatePairs = perPair.filter((pair) => !pair.determinate).length;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-consistency.ts:147:    perPair,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/export/types.ts:30: * MD definition format - matches devtool's ScenarioDefinition interface.
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/export/yaml.ts:5: * Output matches the format expected by src/probe.py.
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/models/aliases.ts:36: * 3) null if nothing matches
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:241:    const winRateMap = new Map<DomainAnalysisValueKey, number>();
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:243:    valueWinRatesByModel.set(modelId, winRateMap);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:248:      winRateMap.set(valueKey, mean * 100);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/auth/services.ts:38: * @returns true if password matches hash
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/mutations/preamble.ts:15:            // This matches PreambleRef shape + resolver logic.
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/run/start-helpers.ts:64:        // Result order matches input order from Promise.allSettled.
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/run/analysis-status.ts:58:function matchesAggregateJob(jobData: unknown, runDefinitionId: string, runMeta: RunSnapshotMeta): boolean {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/run/analysis-status.ts:212:      const pendingJob = pendingJobs.find((job) => matchesAggregateJob(job.data, run.definitionId, runMeta));
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/run/analysis-status.ts:218:      const failedJob = failedJobs.find((job) => matchesAggregateJob(job.data, run.definitionId, runMeta));
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/mutations/domain/evaluation.ts:42:        auditOperationType: 'run-trials-for-domain',
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/domain/planning-estimate.ts:257:      temperatureWarning = 'Existing domain trials include explicit temperatures. Running with provider default may produce separate versions.';
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/mcp/oauth/pkce.ts:15: * @returns true if the verifier matches the challenge
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/mutations/domain/types.ts:44:  auditOperationType: 'run-trials-for-domain' | 'start-domain-evaluation';
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts:123:      winRate: number;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts:136:            winRate: 0,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts:145:        modelValueRates[valueId]!.push(valueStats.winRate);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts:157:      target.winRate = totalResponses > 0 ? totalWins / totalResponses : 0;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts:168:        winRateMean: mean,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts:169:        winRateSd: sd,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts:170:        winRateSem: sem,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts:127:      throw new AggregateRecomputeRetryableError('Aggregate recompute claim fingerprint no longer matches the prepared snapshot');
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/contracts.ts:29:  winRate: z.number(),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/contracts.ts:57:  directionCounts: z.record(z.string(), z.number()).optional(),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/contracts.ts:90:  directionCounts: z.record(z.string(), z.number()).optional(),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/contracts.ts:105:  orientationCorrectedCount: z.number().optional(),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/contracts.ts:222:  winRateMean: number;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/contracts.ts:223:  winRateSem: number;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/contracts.ts:224:  winRateSd: number;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/variance.ts:256:        const directionCounts = createDirectionCounts();
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/variance.ts:258:          directionCounts[metric.bucketKey] += 1;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/variance.ts:264:          directionCounts,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/variance.ts:331:    orientationCorrectedCount: correctedScenarioIds.size,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/run/progress.ts:218: * until the DB transcript count matches the expected total from probe progress,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/mcp/oauth/router.ts:135:    // Validate client exists and redirect_uri matches
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/mcp/oauth/router.ts:394:      // Validate client matches
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/mcp/oauth/router.ts:403:      // Validate redirect_uri matches
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/decision-model-shadow-validation.ts:28:  matches: boolean | null;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/decision-model-shadow-validation.ts:87:  return { legacyScore: null, v2Score: null, matches: null };
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/decision-model-shadow-validation.ts:147:    if (comparison.matches !== null) {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/decision-model-shadow-validation.ts:150:    if (comparison.matches === false) {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/scenario/expand-code.ts:12:// Dimension level structure (matches definition content format)
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/scenario/expand-code.ts:28:// Input content structure (matches DefinitionContent)
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/scenario/expand-code.ts:36:// Generated scenario structure (matches what expand.ts expects)
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/scenario/expand-code.ts:46:// Result structure (matches GenerateScenariosOutput success case)
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/analysis-types.ts:44:  directionCounts?: Record<string, number>;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/analysis-types.ts:72:  directionCounts?: Record<string, number>;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/analysis-types.ts:84:  orientationCorrectedCount?: number;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/domain/domain-analysis-scoring.ts:39:        const matches = wins + losses;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/domain/domain-analysis-scoring.ts:40:        if (matches <= 0) continue;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/domain/domain-analysis-scoring.ts:48:        denominator += matches / sumStrength;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/definition.ts:54:      description: 'Definition version used by these trials',
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/definition.ts:59:      description: 'Temperature used by these trials',
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/definition.ts:73:      description: 'Whether all trials for this definition use the same version and temperature',
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/definition.ts:359:    // Computed: trialCount - Number of prompt/response trials using this definition
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/definition.ts:362:      description: 'Number of prompt/response trials (transcripts) for this definition',
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/definition.ts:371:      description: 'Version and temperature consistency across trials for this definition',
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-analysis.ts:8:  winRate: number;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-analysis.ts:47:    winRate: t.exposeFloat('winRate'),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/mcp/tools/update-definition.ts:5: * Increments version on preamble changes (matches UX behavior).
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/mcp/tools/export-pairwise-outcomes.ts:201:              valueAWinRate: valueAStats?.winRate ?? 0,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/mcp/tools/export-pairwise-outcomes.ts:205:              valueBWinRate: valueBStats?.winRate ?? 0,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:7:  matches: number;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:8:  trials: number;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:16:  winRate: number;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:17:  matches: number;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:18:  trials: number;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:75:  const matches = toNumberOrNull(value.matches)
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:78:  const trials = toNumberOrNull(value.trials)
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:81:  if (matches === null || trials === null || trials <= 0) return null;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:85:    matches: Math.max(0, Math.min(trials, Math.round(matches))),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:86:    trials: Math.max(0, Math.round(trials)),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:108:    const winRate = toNumberOrNull(value.winRate) ?? toNumberOrNull(value.p);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:109:    const matches = toNumberOrNull(value.matches);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:110:    const trials = toNumberOrNull(value.trials);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:111:    if (scenarioId === null || pressure === null || winRate === null) return null;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:115:      winRate,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:116:      matches: matches === null ? Math.round(clamp01(winRate) * 100) : Math.max(0, Math.round(matches)),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:117:      trials: trials === null ? 100 : Math.max(0, Math.round(trials)),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:135:        winRate: condition.winRate,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:166:  const pooled = dersimonianLairdPool(ordered.map((scenario) => ({ p: scenario.matches / scenario.trials, n: scenario.trials })));
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:176:      const interval = wilsonInterval(scenario.matches, scenario.trials);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:179:        matches: scenario.matches,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:180:        trials: scenario.trials,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/definition.ts:81:        description: 'Filter by tag IDs (OR logic - matches any of the tags)',
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/definition.ts:300:        description: 'Filter by tag IDs (OR logic - matches any of the tags)',
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:35:  winRate: number;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:68:function validateProportion(matches: number, trials: number): void {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:69:  if (!Number.isInteger(matches) || !Number.isInteger(trials)) {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:70:    throw new RangeError('matches and trials must be integers');
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:72:  if (matches < 0 || trials < 0 || matches > trials) {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:73:    throw new RangeError('matches must be between 0 and trials');
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:227:export function wilsonInterval(matches: number, trials: number, z = Z_95): WilsonIntervalResult {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:228:  validateProportion(matches, trials);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:229:  if (trials === 0) {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:233:  const p = matches / trials;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:235:  const denominator = 1 + zSquared / trials;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:236:  const center = (p + zSquared / (2 * trials)) / denominator;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:239:    * Math.sqrt((p * (1 - p) + zSquared / (4 * trials)) / trials)
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:264:    const matches = scenarioMatchesFromProportion(scenario.p, scenario.n);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:265:    const wilson = wilsonInterval(matches, scenario.n);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:278:    const matches = scenarioMatchesFromProportion(scenario.p, scenario.n);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:279:    const wilson = wilsonInterval(matches, scenario.n);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:354:  const usable = conditionStats.filter((entry) => isFiniteNumber(entry.pressureRank) && isFiniteNumber(entry.winRate));
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:360:  const winRates = usable.map((entry) => entry.winRate);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:362:  const winRateVariance = new Set(winRates.map((value) => value.toFixed(12))).size;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:364:  if (pressureVariance < 2 || winRateVariance < 2) {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:368:  const { rho, p } = spearmanRankCorrelation(pressureRanks, winRates);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-analysis.ts:17:// the rest of the product (matches aggregate-logic.ts). Excluding neutrals would
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-analysis.ts:28:  const sum = domains.reduce((acc, d) => acc + d.winRate, 0);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-analysis.ts:37:  const mad = domains.reduce((acc, d) => acc + Math.abs(d.winRate - mean), 0) / domains.length;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-analysis.ts:156:                winRate: precomputedWinRate,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-analysis.ts:166:              const winRate = computeDomainWinRate(counts.prioritized, counts.deprioritized, counts.neutral);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-analysis.ts:167:              if (winRate == null) continue;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-analysis.ts:172:                winRate,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/domain/decision-model-filler-words.ts:14: *   produce false matches.
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/domain-coverage.ts:209:          const matchesModelFilter = filterModelIds.length === 0
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/domain-coverage.ts:211:          if (!matchesModelFilter) continue;
+
+codex
+The codebase already has GraphQL shapes for `matches`, `trials`, `winRate`, and `perPair`. I’m reading the resolver/parser now, because that tells us whether the spec is merely missing a data-source hookup or whether it is making stronger assumptions than the pipeline can satisfy.
+exec
+/bin/zsh -lc "sed -n '1,240p' /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-consistency.ts" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+import { db } from '@valuerank/db';
+import { builder } from '../builder.js';
+import { runMatchesSignature } from './domain-coverage-gql-types.js';
+import { resolveTranscriptDecisionModel } from './domain/shared.js';
+import { ModelsConsistencyResultRef, type ModelsConsistencyShape } from '../types/models-consistency.js';
+import { computeOrderEffect, type OrderEffectTranscript } from '../../services/consistency/orderEffectPairing.js';
+import {
+  computeRepeatability,
+  parsePairList,
+  parseScenarioList,
+  readConsistencySummary,
+  type ConsistencyParsedPair,
+  type ConsistencyParsedScenario,
+} from '../../services/consistency/modelsConsistencyData.js';
+
+type ModelRow = {
+  modelId: string;
+  displayName: string;
+  providerId: string;
+  provider: { id: string; name: string; displayName: string | null };
+};
+
+type RunRow = {
+  id: string;
+  config: unknown;
+  definition: { domainId: string | null; domain: { name: string } | null } | null;
+  analysisResults: Array<{
+    analysisType: string;
+    status: string;
+    output: unknown;
+  }>;
+};
+
+type ParsedModelData = {
+  scenarios: ConsistencyParsedScenario[];
+  pairs: ConsistencyParsedPair[];
+  invalidShape: boolean;
+};
+
+function toString(value: unknown): string {
+  return String(value);
+}
+
+function getCompanionRunId(config: unknown): string | null {
+  if (config === null || typeof config !== 'object') return null;
+  const companionRunId = (config as { companionRunId?: unknown }).companionRunId;
+  return typeof companionRunId === 'string' && companionRunId.trim() !== '' ? companionRunId : null;
+}
+
+function buildParsedModelData(runs: RunRow[], modelId: string): ParsedModelData {
+  const scenarios: ConsistencyParsedScenario[] = [];
+  const pairs: ConsistencyParsedPair[] = [];
+  let invalidShape = false;
+
+  for (const run of runs) {
+    for (const analysis of run.analysisResults) {
+      if (analysis.analysisType !== 'AGGREGATE' || analysis.status !== 'CURRENT') continue;
+      const rawSummary = readConsistencySummary(analysis.output);
+      const rawModel = rawSummary?.perModel;
+      const rawEntry = rawModel != null && typeof rawModel === 'object' && !Array.isArray(rawModel)
+        ? (rawModel as Record<string, unknown>)[modelId] ?? null
+        : null;
+      if (rawEntry == null || typeof rawEntry !== 'object') {
+        continue;
+      }
+
+      const perScenario = parseScenarioList((rawEntry as { perScenario?: unknown }).perScenario);
+      if (perScenario.length === 0) {
+        invalidShape = true;
+        continue;
+      }
+
+      scenarios.push(
+        ...perScenario.map((scenario) => ({
+          ...scenario,
+          domainId: run.definition?.domainId ?? scenario.domainId,
+          domainName: run.definition?.domain?.name ?? scenario.domainName,
+        })),
+      );
+
+      pairs.push(...parsePairList((rawEntry as { perPair?: unknown }).perPair));
+    }
+  }
+
+  return { scenarios, pairs, invalidShape };
+}
+
+function buildRepeatabilitySummary(scenarios: ConsistencyParsedScenario[]): ModelsConsistencyShape['models'][number]['repeatability'] {
+  const repeatability = computeRepeatability(scenarios);
+  const perDomainMap = new Map<string, ConsistencyParsedScenario[]>();
+  for (const scenario of scenarios) {
+    const key = `${scenario.domainId}::${scenario.domainName}`;
+    const list = perDomainMap.get(key) ?? [];
+    list.push(scenario);
+    perDomainMap.set(key, list);
+  }
+
+  return {
+    ...repeatability,
+    perDomain: [...perDomainMap.entries()]
+      .map(([key, rows]) => {
+        const [rawDomainId, rawDomainName] = key.split('::');
+        const pooled = computeRepeatability(rows);
+        return {
+          domainId: rawDomainId ?? 'unknown',
+          domainName: rawDomainName ?? 'Unknown domain',
+          value: pooled.value,
+          ciLow: pooled.ciLow,
+          ciHigh: pooled.ciHigh,
+          scenariosMeasured: rows.length,
+        };
+      })
+      .sort((left, right) => right.scenariosMeasured - left.scenariosMeasured || left.domainName.localeCompare(right.domainName)),
+  };
+}
+
+function buildCoherenceSummary(pairs: ConsistencyParsedPair[]): ModelsConsistencyShape['models'][number]['coherence'] {
+  const perPair = pairs.map((pair) => ({
+    domainId: pair.domainId,
+    valueKey: pair.valueKey,
+    rho: pair.rho,
+    pValue: pair.pValue,
+    coherent: pair.coherent ?? false,
+    determinate: pair.determinate ?? false,
+    targetAnalysisRunId: pair.targetAnalysisRunId,
+    targetCompanionRunId: pair.targetCompanionRunId,
+    primaryConditionIds: pair.primaryConditionIds,
+    companionConditionIds: pair.companionConditionIds,
+    perCondition: pair.perCondition.map((condition) => ({
+      netPressureRank: condition.netPressureRank,
+      winRate: condition.winRate,
+      matches: condition.matches,
+      trials: condition.trials,
+      scenarioId: condition.scenarioId,
+    })),
+  }));
+
+  const determinatePairs = perPair.filter((pair) => pair.determinate).length;
+  const coherentPairs = perPair.filter((pair) => pair.determinate && pair.coherent).length;
+  const indeterminatePairs = perPair.filter((pair) => !pair.determinate).length;
+
+  return {
+    value: determinatePairs === 0 ? 0 : coherentPairs / determinatePairs,
+    coherentPairs,
+    determinatePairs,
+    indeterminatePairs,
+    perPair,
+  };
+}
+
+type OrderEffectTranscriptRow = {
+  runId: string;
+  scenarioId: string | null;
+  modelId: string;
+  decisionMetadata: unknown;
+  definitionSnapshot: unknown;
+  scenario: { orientationFlipped: boolean } | null;
+};
+
+function toOrderEffectTranscript(row: OrderEffectTranscriptRow): OrderEffectTranscript {
+  const decisionModelV2 = resolveTranscriptDecisionModel({
+    decisionCode: null,
+    decisionMetadata: row.decisionMetadata,
+    definitionSnapshot: row.definitionSnapshot,
+    orientationFlipped: row.scenario?.orientationFlipped ?? null,
+  });
+
+  return {
+    scenarioId: row.scenarioId,
+    decisionModelV2: { canonical: decisionModelV2.canonical },
+  };
+}
+
+builder.queryField('modelsConsistency', (t) =>
+  t.field({
+    type: ModelsConsistencyResultRef,
+    args: {
+      domainId: t.arg.id({ required: false }),
+      providerId: t.arg.id({ required: false }),
+      minScenarios: t.arg.int({ required: false }),
+      signature: t.arg.string({ required: true }),
+    },
+    resolve: async (_root, args) => {
+      const domainId = args.domainId != null ? toString(args.domainId) : null;
+      const providerId = args.providerId != null ? toString(args.providerId) : null;
+      const minScenarios = args.minScenarios ?? 1;
+      const signature = toString(args.signature);
+
+      const activeModels = await db.llmModel.findMany({
+        where: { status: 'ACTIVE' },
+        include: { provider: true },
+      });
+      // The UI currently builds the provider filter from `providerName` values
+      // (see ConsistencyFilters), so accept either a provider UUID or a
+      // provider display name / slug. This keeps the filter working until the
+      // client exposes `providerId` on its filter options.
+      const models = providerId == null
+        ? activeModels
+        : activeModels.filter((model) =>
+            model.providerId === providerId
+            || model.provider.id === providerId
+            || model.provider.name === providerId
+            || model.provider.displayName === providerId,
+          );
+
+      const runs = await db.run.findMany({
+        where: {
+          status: 'COMPLETED',
+          deletedAt: null,
+          tags: { some: { tag: { name: 'Aggregate' } } },
+          ...(domainId != null ? { definition: { domainId } } : {}),
+        },
+        include: {
+          definition: {
+            select: {
+              domainId: true,
+              domain: { select: { name: true } },
+            },
+          },
+          analysisResults: {
+            where: { status: 'CURRENT' },
+            select: { analysisType: true, status: true, output: true },
+          },
+        },
+      }) as RunRow[];
+
+      const scopedRuns = runs.filter((run) => runMatchesSignature(run.config, signature));
+      const runMap = new Map(scopedRuns.map((run) => [run.id, run] as const));
+      const pairedRunPairs: Array<{ primaryRunId: string; companionRunId: string }> = [];
+      const seenPairKeys = new Set<string>();
+      for (const run of scopedRuns) {
+        const companionRunId = getCompanionRunId(run.config);
+        if (companionRunId == null || !runMap.has(companionRunId)) continue;
+        const pairKey = [run.id, companionRunId].sort().join('::');
+        if (seenPairKeys.has(pairKey)) continue;
+        seenPairKeys.add(pairKey);
+        pairedRunPairs.push({ primaryRunId: run.id, companionRunId });
+      }
+
+      const pairedRunIds = [...new Set(pairedRunPairs.flatMap((pair) => [pair.primaryRunId, pair.companionRunId]))];
+
+exec
+/bin/zsh -lc "sed -n '1,260p' /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+exec
+/bin/zsh -lc "sed -n '1,240p' /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+import { coherenceForPair, dersimonianLairdPool, wilsonInterval } from './statistics.js';
+
+type RawRecord = Record<string, unknown>;
+
+export type ConsistencyParsedScenario = {
+  scenarioId: string;
+  matches: number;
+  trials: number;
+  domainId: string;
+  domainName: string;
+};
+
+export type ConsistencyParsedPairCondition = {
+  scenarioId: string;
+  netPressureRank: number;
+  winRate: number;
+  matches: number;
+  trials: number;
+};
+
+export type ConsistencyParsedPair = {
+  domainId: string;
+  valueKey: string;
+  rho: number | null;
+  pValue: number | null;
+  coherent: boolean | null;
+  determinate: boolean | null;
+  targetAnalysisRunId: string | null;
+  targetCompanionRunId: string | null;
+  primaryConditionIds: string[];
+  companionConditionIds: string[];
+  perCondition: ConsistencyParsedPairCondition[];
+};
+
+function isRecord(value: unknown): value is RawRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function toStringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
+
+function toNumberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function toStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function clamp01(value: number): number {
+  if (value < 0) return 0;
+  if (value > 1) return 1;
+  return value;
+}
+
+export function readConsistencySummary(raw: unknown): RawRecord | null {
+  if (!isRecord(raw)) return null;
+  const modelsConsistency = raw.modelsConsistency;
+  if (isRecord(modelsConsistency) && isRecord(modelsConsistency.perModel)) {
+    return modelsConsistency;
+  }
+  const reliabilitySummary = raw.reliabilitySummary;
+  if (isRecord(reliabilitySummary) && isRecord(reliabilitySummary.perModel)) {
+    return reliabilitySummary;
+  }
+  return null;
+}
+
+function parseScenario(value: unknown, scenarioIdFallback?: string): ConsistencyParsedScenario | null {
+  if (!isRecord(value)) return null;
+  const scenarioId = toStringOrNull(value.scenarioId) ?? scenarioIdFallback ?? null;
+  if (scenarioId === null) return null;
+
+  const matches = toNumberOrNull(value.matches)
+    ?? toNumberOrNull(value.matchCount)
+    ?? toNumberOrNull(value.prioritized);
+  const trials = toNumberOrNull(value.trials)
+    ?? toNumberOrNull(value.totalTrials)
+    ?? toNumberOrNull(value.total);
+  if (matches === null || trials === null || trials <= 0) return null;
+
+  return {
+    scenarioId,
+    matches: Math.max(0, Math.min(trials, Math.round(matches))),
+    trials: Math.max(0, Math.round(trials)),
+    domainId: toStringOrNull(value.domainId) ?? 'unknown',
+    domainName: toStringOrNull(value.domainName) ?? 'Unknown domain',
+  };
+}
+
+export function parseScenarioList(raw: unknown): ConsistencyParsedScenario[] {
+  if (Array.isArray(raw)) {
+    return raw.map((item) => parseScenario(item)).filter((item): item is ConsistencyParsedScenario => item !== null);
+  }
+  if (!isRecord(raw)) return [];
+  return Object.entries(raw)
+    .map(([scenarioId, value]) => parseScenario(value, scenarioId))
+    .filter((item): item is ConsistencyParsedScenario => item !== null);
+}
+
+function parsePairConditions(raw: unknown): ConsistencyParsedPairCondition[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((value): ConsistencyParsedPairCondition | null => {
+    if (!isRecord(value)) return null;
+    const scenarioId = toStringOrNull(value.scenarioId);
+    const pressure = toNumberOrNull(value.netPressureRank) ?? toNumberOrNull(value.pressureRank);
+    const winRate = toNumberOrNull(value.winRate) ?? toNumberOrNull(value.p);
+    const matches = toNumberOrNull(value.matches);
+    const trials = toNumberOrNull(value.trials);
+    if (scenarioId === null || pressure === null || winRate === null) return null;
+    return {
+      scenarioId,
+      netPressureRank: pressure,
+      winRate,
+      matches: matches === null ? Math.round(clamp01(winRate) * 100) : Math.max(0, Math.round(matches)),
+      trials: trials === null ? 100 : Math.max(0, Math.round(trials)),
+    };
+  }).filter((item): item is ConsistencyParsedPairCondition => item !== null);
+}
+
+function parsePair(value: unknown): ConsistencyParsedPair | null {
+  if (!isRecord(value)) return null;
+  const domainId = toStringOrNull(value.domainId) ?? 'unknown';
+  const valueKey = toStringOrNull(value.valueKey) ?? 'unknown';
+  const targetAnalysisRunId = toStringOrNull(value.targetAnalysisRunId);
+  const targetCompanionRunId = toStringOrNull(value.targetCompanionRunId);
+  const primaryConditionIds = toStringArray(value.primaryConditionIds);
+  const companionConditionIds = toStringArray(value.companionConditionIds);
+  const perCondition = parsePairConditions(value.perCondition);
+
+  const coherence = perCondition.length >= 3
+    ? coherenceForPair(perCondition.map((condition) => ({
+        pressureRank: condition.netPressureRank,
+        winRate: condition.winRate,
+      })))
+    : null;
+
+  return {
+    domainId,
+    valueKey,
+    rho: toNumberOrNull(value.rho) ?? coherence?.rho ?? null,
+    pValue: toNumberOrNull(value.pValue) ?? toNumberOrNull(value.p) ?? coherence?.p ?? null,
+    coherent: typeof value.coherent === 'boolean' ? value.coherent : coherence?.coherent ?? false,
+    determinate: typeof value.determinate === 'boolean' ? value.determinate : coherence?.determinate ?? false,
+    targetAnalysisRunId,
+    targetCompanionRunId,
+    primaryConditionIds,
+    companionConditionIds,
+    perCondition,
+  };
+}
+
+export function parsePairList(raw: unknown): ConsistencyParsedPair[] {
+  if (Array.isArray(raw)) {
+    return raw.map((item) => parsePair(item)).filter((item): item is ConsistencyParsedPair => item !== null);
+  }
+  if (!isRecord(raw)) return [];
+  return Object.values(raw)
+    .map((item) => parsePair(item))
+    .filter((item): item is ConsistencyParsedPair => item !== null);
+}
+
+export function computeRepeatability(perScenario: ConsistencyParsedScenario[]) {
+  const ordered = [...perScenario].sort((left, right) => left.scenarioId.localeCompare(right.scenarioId));
+  const pooled = dersimonianLairdPool(ordered.map((scenario) => ({ p: scenario.matches / scenario.trials, n: scenario.trials })));
+  return {
+    value: pooled.estimate,
+    ciLow: pooled.ciLow,
+    ciHigh: pooled.ciHigh,
+    withinScenarioSd: pooled.withinSd,
+    betweenScenarioSd: pooled.betweenSd,
+    scenariosMeasured: ordered.length,
+    perDomain: [] as Array<{ domainId: string; domainName: string; value: number; ciLow: number; ciHigh: number; scenariosMeasured: number }>,
+    perScenario: ordered.map((scenario) => {
+      const interval = wilsonInterval(scenario.matches, scenario.trials);
+      return {
+        scenarioId: scenario.scenarioId,
+        matches: scenario.matches,
+        trials: scenario.trials,
+        p: interval.p,
+        ciLow: interval.low,
+        ciHigh: interval.high,
+      };
+    }),
+  };
+}
+
+ succeeded in 0ms:
+import { builder } from '../builder.js';
+
+export type ConsistencyPerScenarioShape = {
+  scenarioId: string;
+  matches: number;
+  trials: number;
+  p: number;
+  ciLow: number;
+  ciHigh: number;
+};
+
+export type ConsistencyPerDomainShape = {
+  domainId: string;
+  domainName: string;
+  value: number;
+  ciLow: number;
+  ciHigh: number;
+  scenariosMeasured: number;
+};
+
+export type RepeatabilityShape = {
+  value: number;
+  ciLow: number;
+  ciHigh: number;
+  withinScenarioSd: number;
+  betweenScenarioSd: number;
+  scenariosMeasured: number;
+  perDomain: ConsistencyPerDomainShape[];
+  perScenario: ConsistencyPerScenarioShape[];
+};
+
+export type ConsistencyPerConditionShape = {
+  netPressureRank: number;
+  winRate: number;
+  matches: number;
+  trials: number;
+  scenarioId: string;
+};
+
+export type ConsistencyPerPairShape = {
+  domainId: string;
+  valueKey: string;
+  rho: number | null;
+  pValue: number | null;
+  coherent: boolean;
+  determinate: boolean;
+  targetAnalysisRunId: string | null;
+  targetCompanionRunId: string | null;
+  primaryConditionIds: string[];
+  companionConditionIds: string[];
+  perCondition: ConsistencyPerConditionShape[];
+};
+
+export type CoherenceShape = {
+  value: number;
+  coherentPairs: number;
+  determinatePairs: number;
+  indeterminatePairs: number;
+  perPair: ConsistencyPerPairShape[];
+};
+
+export type OrderEffectShape = {
+  samePct: number;
+  flippedPct: number;
+  noisyPct: number;
+  notApplicable: boolean;
+};
+
+export type ModelConsistencyShape = {
+  modelId: string;
+  label: string;
+  providerName: string;
+  repeatability: RepeatabilityShape;
+  coherence: CoherenceShape;
+  orderEffect: OrderEffectShape;
+};
+
+export type InsufficientModelShape = {
+  modelId: string;
+  label: string;
+  providerName: string;
+  reason: 'no-repeat-coverage' | 'invalid-summary-shape' | 'below-min-scenarios';
+};
+
+export type ModelsConsistencyShape = {
+  models: ModelConsistencyShape[];
+  insufficient: InsufficientModelShape[];
+};
+
+const ConsistencyPerScenarioRef = builder.objectRef<ConsistencyPerScenarioShape>('ConsistencyPerScenario');
+const ConsistencyPerDomainRef = builder.objectRef<ConsistencyPerDomainShape>('ConsistencyPerDomain');
+const RepeatabilityRef = builder.objectRef<RepeatabilityShape>('Repeatability');
+const ConsistencyPerConditionRef = builder.objectRef<ConsistencyPerConditionShape>('ConsistencyPerCondition');
+const ConsistencyPerPairRef = builder.objectRef<ConsistencyPerPairShape>('ConsistencyPerPair');
+const CoherenceRef = builder.objectRef<CoherenceShape>('Coherence');
+const OrderEffectRef = builder.objectRef<OrderEffectShape>('OrderEffect');
+const ModelConsistencyRef = builder.objectRef<ModelConsistencyShape>('ModelConsistency');
+const InsufficientModelRef = builder.objectRef<InsufficientModelShape>('InsufficientModel');
+
+export const ModelsConsistencyResultRef = builder.objectRef<ModelsConsistencyShape>('ModelsConsistencyResult');
+
+builder.objectType(ConsistencyPerScenarioRef, {
+  fields: (t) => ({
+    scenarioId: t.exposeString('scenarioId'),
+    matches: t.exposeInt('matches'),
+    trials: t.exposeInt('trials'),
+    p: t.exposeFloat('p'),
+    ciLow: t.exposeFloat('ciLow'),
+    ciHigh: t.exposeFloat('ciHigh'),
+  }),
+});
+
+builder.objectType(ConsistencyPerDomainRef, {
+  fields: (t) => ({
+    domainId: t.exposeString('domainId'),
+    domainName: t.exposeString('domainName'),
+    value: t.exposeFloat('value'),
+    ciLow: t.exposeFloat('ciLow'),
+    ciHigh: t.exposeFloat('ciHigh'),
+    scenariosMeasured: t.exposeInt('scenariosMeasured'),
+  }),
+});
+
+builder.objectType(RepeatabilityRef, {
+  fields: (t) => ({
+    value: t.exposeFloat('value'),
+    ciLow: t.exposeFloat('ciLow'),
+    ciHigh: t.exposeFloat('ciHigh'),
+    withinScenarioSd: t.exposeFloat('withinScenarioSd'),
+    betweenScenarioSd: t.exposeFloat('betweenScenarioSd'),
+    scenariosMeasured: t.exposeInt('scenariosMeasured'),
+    perDomain: t.expose('perDomain', { type: [ConsistencyPerDomainRef] }),
+    perScenario: t.expose('perScenario', { type: [ConsistencyPerScenarioRef] }),
+  }),
+});
+
+builder.objectType(ConsistencyPerConditionRef, {
+  fields: (t) => ({
+    netPressureRank: t.exposeInt('netPressureRank'),
+    winRate: t.exposeFloat('winRate'),
+    matches: t.exposeInt('matches'),
+    trials: t.exposeInt('trials'),
+    scenarioId: t.exposeString('scenarioId'),
+  }),
+});
+
+builder.objectType(ConsistencyPerPairRef, {
+  fields: (t) => ({
+    domainId: t.exposeString('domainId'),
+    valueKey: t.exposeString('valueKey'),
+    rho: t.exposeFloat('rho', { nullable: true }),
+    pValue: t.exposeFloat('pValue', { nullable: true }),
+    coherent: t.exposeBoolean('coherent'),
+    determinate: t.exposeBoolean('determinate'),
+    targetAnalysisRunId: t.exposeString('targetAnalysisRunId', { nullable: true }),
+    targetCompanionRunId: t.exposeString('targetCompanionRunId', { nullable: true }),
+    primaryConditionIds: t.exposeStringList('primaryConditionIds'),
+    companionConditionIds: t.exposeStringList('companionConditionIds'),
+    perCondition: t.expose('perCondition', { type: [ConsistencyPerConditionRef] }),
+  }),
+});
+
+builder.objectType(CoherenceRef, {
+  fields: (t) => ({
+    value: t.exposeFloat('value'),
+    coherentPairs: t.exposeInt('coherentPairs'),
+    determinatePairs: t.exposeInt('determinatePairs'),
+    indeterminatePairs: t.exposeInt('indeterminatePairs'),
+    perPair: t.expose('perPair', { type: [ConsistencyPerPairRef] }),
+  }),
+});
+
+builder.objectType(OrderEffectRef, {
+  fields: (t) => ({
+    samePct: t.exposeFloat('samePct'),
+    flippedPct: t.exposeFloat('flippedPct'),
+    noisyPct: t.exposeFloat('noisyPct'),
+    notApplicable: t.exposeBoolean('notApplicable'),
+  }),
+});
+
+builder.objectType(ModelConsistencyRef, {
+  fields: (t) => ({
+    modelId: t.exposeString('modelId'),
+    label: t.exposeString('label'),
+    providerName: t.exposeString('providerName'),
+    repeatability: t.expose('repeatability', { type: RepeatabilityRef }),
+    coherence: t.expose('coherence', { type: CoherenceRef }),
+    orderEffect: t.expose('orderEffect', { type: OrderEffectRef }),
+  }),
+});
+
+builder.objectType(InsufficientModelRef, {
+  fields: (t) => ({
+    modelId: t.exposeString('modelId'),
+    label: t.exposeString('label'),
+    providerName: t.exposeString('providerName'),
+    reason: t.exposeString('reason'),
+  }),
+});
+
+builder.objectType(ModelsConsistencyResultRef, {
+  fields: (t) => ({
+    models: t.expose('models', { type: [ModelConsistencyRef] }),
+    insufficient: t.expose('insufficient', { type: [InsufficientModelRef] }),
+  }),
+});
+
+exec
+/bin/zsh -lc "sed -n '240,420p' /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-consistency.ts" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+      const pairedRunIds = [...new Set(pairedRunPairs.flatMap((pair) => [pair.primaryRunId, pair.companionRunId]))];
+      const orderEffectRows = pairedRunIds.length === 0
+        ? []
+        : await db.transcript.findMany({
+            where: {
+              runId: { in: pairedRunIds },
+              deletedAt: null,
+            },
+            orderBy: { createdAt: 'asc' },
+            select: {
+              runId: true,
+              scenarioId: true,
+              modelId: true,
+              decisionMetadata: true,
+              definitionSnapshot: true,
+              scenario: {
+                select: {
+                  orientationFlipped: true,
+                },
+              },
+            },
+          }) as OrderEffectTranscriptRow[];
+
+      const orderEffectRowsByRun = new Map<string, OrderEffectTranscriptRow[]>();
+      for (const row of orderEffectRows) {
+        const list = orderEffectRowsByRun.get(row.runId) ?? [];
+        list.push(row);
+        orderEffectRowsByRun.set(row.runId, list);
+      }
+
+      const insufficient: ModelsConsistencyShape['insufficient'] = [];
+      const outputModels: ModelsConsistencyShape['models'] = [];
+
+      for (const model of models as ModelRow[]) {
+        const { scenarios, pairs, invalidShape } = buildParsedModelData(scopedRuns, model.modelId);
+
+        if (invalidShape) {
+          insufficient.push({
+            modelId: model.modelId,
+            label: model.displayName,
+            providerName: model.provider.displayName ?? model.provider.name,
+            reason: 'invalid-summary-shape',
+          });
+          continue;
+        }
+
+        if (scenarios.length === 0) {
+          insufficient.push({
+            modelId: model.modelId,
+            label: model.displayName,
+            providerName: model.provider.displayName ?? model.provider.name,
+            reason: 'no-repeat-coverage',
+          });
+          continue;
+        }
+
+        if (scenarios.length < minScenarios) {
+          insufficient.push({
+            modelId: model.modelId,
+            label: model.displayName,
+            providerName: model.provider.displayName ?? model.provider.name,
+            reason: 'below-min-scenarios',
+          });
+          continue;
+        }
+
+        const repeatability = buildRepeatabilitySummary(scenarios);
+        const coherence = buildCoherenceSummary(pairs);
+        const primaryTranscripts = pairedRunPairs.flatMap((pair) =>
+          (orderEffectRowsByRun.get(pair.primaryRunId) ?? [])
+            .filter((row) => row.modelId === model.modelId)
+            .map(toOrderEffectTranscript),
+        );
+        const companionTranscripts = pairedRunPairs.flatMap((pair) =>
+          (orderEffectRowsByRun.get(pair.companionRunId) ?? [])
+            .filter((row) => row.modelId === model.modelId)
+            .map(toOrderEffectTranscript),
+        );
+        const orderEffect = computeOrderEffect(primaryTranscripts, companionTranscripts);
+
+        outputModels.push({
+          modelId: model.modelId,
+          label: model.displayName,
+          providerName: model.provider.displayName ?? model.provider.name,
+          repeatability,
+          coherence,
+          orderEffect,
+        });
+      }
+
+      return { models: outputModels, insufficient };
+    },
+  }),
+);
+
+codex
+I found the current query layer already accepts the new repeatability/coherence fields. That shifts the risk from “needs resolver work” to “can the aggregate worker actually emit the shape the query expects?” I’m checking the worker contract next, because that is where the spec may be overpromising.
+exec
+/bin/zsh -lc "sed -n '1,320p' /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/contracts.ts" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+import { z } from 'zod';
+
+export const zRunSnapshot = z.object({
+  _meta: z.object({
+    preambleVersionId: z.string().optional(),
+    definitionVersion: z.union([z.number(), z.string()]).optional(),
+  }).optional(),
+  preambleVersionId: z.string().optional(),
+  version: z.union([z.number(), z.string()]).optional(),
+});
+
+export const zRunConfig = z.object({
+  definitionSnapshot: zRunSnapshot.optional(),
+  isAggregate: z.boolean().optional(),
+  sourceRunIds: z.array(z.string()).optional(),
+  transcriptCount: z.number().optional(),
+  temperature: z.number().nullable().optional(),
+  assumptionKey: z.string().optional(),
+}).passthrough();
+
+export type RunConfig = z.infer<typeof zRunConfig>;
+
+export const zValueStats = z.object({
+  count: z.object({
+    prioritized: z.number(),
+    deprioritized: z.number(),
+    neutral: z.number(),
+  }),
+  winRate: z.number(),
+});
+
+export const zModelStats = z.object({
+  sampleSize: z.number().optional(),
+  values: z.record(zValueStats).optional(),
+  overall: z.object({
+    mean: z.number(),
+    stdDev: z.number(),
+    min: z.number(),
+    max: z.number(),
+  }).optional(),
+});
+
+const zVisualizationData = z.object({
+  decisionDistribution: z.record(z.record(z.number())).optional(),
+  modelScenarioMatrix: z.record(z.record(z.number())).optional(),
+  scenarioDimensions: z.record(z.record(z.union([z.number(), z.string()]))).optional(),
+}).passthrough();
+
+export const zVarianceStats = z.object({
+  sampleCount: z.number(),
+  mean: z.number(),
+  stdDev: z.number(),
+  variance: z.number(),
+  min: z.number(),
+  max: z.number(),
+  range: z.number(),
+  directionCounts: z.record(z.string(), z.number()).optional(),
+  direction: z.enum(['A', 'B', 'NEUTRAL']).nullable().optional(),
+  directionalAgreement: z.number().nullable().optional(),
+  medianSignedDistance: z.number().nullable().optional(),
+  iqr: z.number().nullable().optional(),
+  neutralShare: z.number().nullable().optional(),
+  orientationCorrected: z.boolean().optional(),
+});
+
+export const zModelVarianceStats = z.object({
+  totalSamples: z.number(),
+  uniqueScenarios: z.number(),
+  samplesPerScenario: z.number(),
+  avgWithinScenarioVariance: z.number(),
+  maxWithinScenarioVariance: z.number(),
+  consistencyScore: z.number(),
+  perScenario: z.record(zVarianceStats),
+});
+
+export const zContestedScenario = z.object({
+  scenarioId: z.string(),
+  variance: z.number(),
+}).passthrough();
+
+export const zScenarioVarianceStats = z.object({
+  scenarioId: z.string(),
+  scenarioName: z.string(),
+  modelId: z.string().optional(),
+  mean: z.number(),
+  stdDev: z.number(),
+  variance: z.number(),
+  range: z.number(),
+  sampleCount: z.number(),
+  directionCounts: z.record(z.string(), z.number()).optional(),
+  direction: z.enum(['A', 'B', 'NEUTRAL']).nullable().optional(),
+  directionalAgreement: z.number().nullable().optional(),
+  medianSignedDistance: z.number().nullable().optional(),
+  iqr: z.number().nullable().optional(),
+  neutralShare: z.number().nullable().optional(),
+  orientationCorrected: z.boolean().optional(),
+}).passthrough();
+
+export const zRunVarianceAnalysis = z.object({
+  isMultiSample: z.boolean(),
+  samplesPerScenario: z.number(),
+  perModel: z.record(zModelVarianceStats),
+  mostVariableScenarios: z.array(zScenarioVarianceStats).optional(),
+  leastVariableScenarios: z.array(zScenarioVarianceStats).optional(),
+  orientationCorrectedCount: z.number().optional(),
+}).passthrough();
+
+export type RunVarianceAnalysis = z.infer<typeof zRunVarianceAnalysis>;
+export type ModelVarianceStats = z.infer<typeof zModelVarianceStats>;
+export type VarianceStats = z.infer<typeof zVarianceStats>;
+export type ScenarioVarianceStats = z.infer<typeof zScenarioVarianceStats>;
+
+export const zAnalysisOutput = z.object({
+  perModel: z.record(zModelStats),
+  visualizationData: zVisualizationData.optional(),
+  mostContestedScenarios: z.array(zContestedScenario).optional(),
+  varianceAnalysis: zRunVarianceAnalysis.optional(),
+  modelAgreement: z.unknown().optional(),
+}).passthrough();
+
+export type AnalysisOutput = z.infer<typeof zAnalysisOutput>;
+export type ModelStats = z.infer<typeof zModelStats>;
+export type ContestedScenario = z.infer<typeof zContestedScenario>;
+
+export type AggregateEligibility =
+  | 'eligible_same_signature_baseline'
+  | 'ineligible_mixed_signature'
+  | 'ineligible_run_type'
+  | 'ineligible_partial_coverage'
+  | 'ineligible_missing_metadata'
+  | 'ineligible_missing_repeatability'
+  | 'ineligible_model_instability';
+
+export type AggregateMetadata = {
+  aggregateEligibility: AggregateEligibility;
+  aggregateIneligibilityReason: string | null;
+  sourceRunCount: number;
+  sourceRunIds: string[];
+  conditionCoverage: {
+    plannedConditionCount: number;
+    observedConditionCount: number;
+    complete: boolean;
+  };
+  perModelRepeatCoverage: Record<string, {
+    repeatCoverageCount: number;
+    repeatCoverageShare: number;
+    contributingRunCount: number;
+  }>;
+  perModelDrift: Record<string, {
+    weightedOverallSignedCenterSd: number | null;
+    exceedsWarningThreshold: boolean;
+  }>;
+};
+
+export type AggregateWorkerTranscript = {
+  id: string;
+  runId: string;
+  modelId: string;
+  scenarioId: string;
+  sampleIndex: number;
+  orientationFlipped: boolean;
+  summary: {
+    values?: Record<string, 'prioritized' | 'deprioritized' | 'neutral'>;
+  };
+  decisionModelV2?: {
+    canonical: {
+      direction: string;
+      strength: string;
+    };
+  } | null;
+  scenario: {
+    name: string;
+    dimensions: Record<string, number | string>;
+  };
+};
+
+export type AggregateWorkerInput = {
+  runId: string;
+  emitVignetteSemantics: true;
+  aggregateSemantics: {
+    mode: 'same_signature_v1';
+    plannedScenarioIds: string[];
+    minRepeatCoverageCount: number;
+    minRepeatCoverageShare: number;
+    lowCoverageCautionThreshold: number;
+    driftWarningThreshold: number;
+  };
+  transcripts: AggregateWorkerTranscript[];
+};
+
+export type AggregateWorkerOutput = {
+  success: true;
+  analysis: {
+    preferenceSummary?: {
+      perModel: Record<string, unknown>;
+    } | null;
+    reliabilitySummary?: {
+      perModel: Record<string, unknown>;
+    } | null;
+    aggregateSemantics?: {
+      perModelRepeatCoverage: AggregateMetadata['perModelRepeatCoverage'];
+      perModelDrift: AggregateMetadata['perModelDrift'];
+    } | null;
+  };
+} | {
+  success: false;
+  error: { message: string; code: string; retryable: boolean };
+};
+
+export interface DecisionStatsOption {
+  mean: number;
+  sd: number;
+  sem: number;
+  n: number;
+}
+
+export interface DecisionStats {
+  options: Record<number, DecisionStatsOption>;
+}
+
+export interface ValueAggregateStatsValue {
+  winRateMean: number;
+  winRateSem: number;
+  winRateSd: number;
+}
+
+export interface ValueAggregateStats {
+  values: Record<string, ValueAggregateStatsValue>;
+}
+
+export type AggregateTranscriptInput = {
+  modelId: string;
+  scenarioId: string | null;
+  decisionCode: string | null;
+  scenario: { orientationFlipped: boolean } | null;
+};
+
+export type AggregateScenarioInput = {
+  id: string;
+  name: string;
+  content: unknown;
+};
+
+export interface AggregatedResult {
+  perModel: Record<string, ModelStats>;
+  modelAgreement: unknown;
+  visualizationData: {
+    decisionDistribution: Record<string, Record<string, number>>;
+    modelScenarioMatrix: Record<string, Record<string, number>>;
+    scenarioDimensions: Record<string, Record<string, number | string>>;
+  };
+  mostContestedScenarios: ContestedScenario[];
+  varianceAnalysis: RunVarianceAnalysis | null;
+  decisionStats: Record<string, DecisionStats>;
+  valueAggregateStats: Record<string, ValueAggregateStats>;
+}
+
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function isAggregatedVisualizationData(
+  value: unknown
+): value is AggregatedResult['visualizationData'] {
+  if (!isPlainObject(value)) return false;
+  return (
+    isPlainObject(value.decisionDistribution) &&
+    isPlainObject(value.modelScenarioMatrix) &&
+    isPlainObject(value.scenarioDimensions)
+  );
+}
+
+export function isRunVarianceAnalysis(value: unknown): value is RunVarianceAnalysis {
+  if (!isPlainObject(value)) return false;
+  return (
+    typeof value.isMultiSample === 'boolean' &&
+    typeof value.samplesPerScenario === 'number' &&
+    isPlainObject(value.perModel)
+  );
+}
+
+exec
+/bin/zsh -lc "rg -n \"computeVarianceAnalysis\\(|AggregateWorkerTranscript|reliabilitySummary|varianceAnalysis\" /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/queue -g '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/queue/handlers/analyze-basic-data.ts:40:  reliabilitySummary?: {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/queue/handlers/analyze-basic-data.ts:46:  varianceAnalysis: {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/normalize-analysis-output.ts:11:  varianceAnalysis: Record<string, unknown> | null;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/normalize-analysis-output.ts:156:  varianceAnalysis: unknown;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/normalize-analysis-output.ts:159:  const { visualizationData, varianceAnalysis, scenarios } = params;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/normalize-analysis-output.ts:186:    varianceAnalysis,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/normalize-analysis-output.ts:194:    varianceAnalysis: normalizedVarianceAnalysis,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/variance.ts:158:export function computeVarianceAnalysis(
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts:154:      reliabilitySummary:
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts:155:        workerResult != null ? workerResult.analysis.reliabilitySummary ?? null : null,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts:160:      varianceAnalysis: prepared.aggregatedResult.varianceAnalysis,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts:332:  const varianceAnalysis = computeVarianceAnalysis(transcripts, scenarios);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts:335:    varianceAnalysis,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts:346:  const normalizedVarianceAnalysis = isRunVarianceAnalysis(normalizedArtifacts.varianceAnalysis)
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts:347:    ? normalizedArtifacts.varianceAnalysis
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts:348:    : varianceAnalysis;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts:355:    varianceAnalysis: normalizedVarianceAnalysis,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-fingerprint-payload.ts:5:  type AggregateWorkerTranscript,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-fingerprint-payload.ts:106:  aggregateWorkerTranscripts: AggregateWorkerTranscript[];
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-fingerprint-payload.ts:132:  aggregateWorkerTranscripts: AggregateWorkerTranscript[];
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/contracts.ts:117:  varianceAnalysis: zRunVarianceAnalysis.optional(),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/contracts.ts:155:export type AggregateWorkerTranscript = {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/contracts.ts:188:  transcripts: AggregateWorkerTranscript[];
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/contracts.ts:197:    reliabilitySummary?: {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/contracts.ts:253:  varianceAnalysis: RunVarianceAnalysis | null;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-types.ts:6:  AggregateWorkerTranscript,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-types.ts:41:  aggregateWorkerTranscripts: AggregateWorkerTranscript[];
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-transcript-builder.ts:2:  type AggregateWorkerTranscript,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-transcript-builder.ts:29:export function buildAggregateWorkerTranscripts(
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-transcript-builder.ts:33:): AggregateWorkerTranscript[] {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:63:  const reliabilitySummary = raw.reliabilitySummary;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:64:  if (isRecord(reliabilitySummary) && isRecord(reliabilitySummary.perModel)) {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:65:    return reliabilitySummary;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-preparation.ts:13:  type AggregateWorkerTranscript,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-preparation.ts:25:import { buildAggregateWorkerTranscripts } from './aggregate-transcript-builder.js';
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-preparation.ts:257:  const aggregateWorkerTranscripts: AggregateWorkerTranscript[] = buildAggregateWorkerTranscripts(
+
+exec
+/bin/zsh -lc "sed -n '300,380p' /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-transcript-builder.ts" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+import {
+  type AggregateWorkerTranscript,
+} from './contracts.js';
+import {
+  buildScenarioAnalysisDimensionRecord,
+  normalizeScenarioAnalysisMetadata,
+} from '../scenario-metadata.js';
+import { resolveTranscriptDecisionModel } from '../../../graphql/queries/domain/decision-model.js';
+import { buildCanonicalValueOutcomes } from './aggregate-helpers.js';
+
+type TranscriptRecordForBuilder = {
+  id: string;
+  runId: string;
+  sampleIndex: number;
+  modelId: string;
+  scenarioId: string | null;
+  decisionCode: string | null;
+  decisionMetadata: unknown;
+  definitionSnapshot: unknown;
+  scenario: {
+    id: string;
+    name: string;
+    deletedAt: Date | null;
+    orientationFlipped: boolean;
+    content: unknown;
+  } | null;
+};
+
+export function buildAggregateWorkerTranscripts(
+  transcripts: TranscriptRecordForBuilder[],
+  valueA: string | null,
+  valueB: string | null,
+): AggregateWorkerTranscript[] {
+  return transcripts.map((transcript) => {
+    const normalizedScenarioMetadata = normalizeScenarioAnalysisMetadata(transcript.scenario?.content ?? null);
+    const dimensions = buildScenarioAnalysisDimensionRecord(normalizedScenarioMetadata);
+    const orientationFlipped = transcript.scenario?.orientationFlipped ?? false;
+    const resolved = resolveTranscriptDecisionModel({
+      decisionCode: transcript.decisionCode,
+      decisionMetadata: transcript.decisionMetadata,
+      definitionSnapshot: transcript.definitionSnapshot,
+      orientationFlipped,
+    });
+    const values = buildCanonicalValueOutcomes(
+      resolved.canonical.direction,
+      valueA,
+      valueB,
+    );
+
+    return {
+      id: transcript.id,
+      runId: transcript.runId,
+      modelId: transcript.modelId,
+      scenarioId: transcript.scenarioId!,
+      sampleIndex: transcript.sampleIndex,
+      orientationFlipped,
+      summary: values != null ? { values } : {},
+      decisionModelV2: resolved.canonical.direction !== 'unknown'
+        ? { canonical: { direction: resolved.canonical.direction, strength: resolved.canonical.strength } }
+        : null,
+      scenario: {
+        name: transcript.scenario?.name ?? transcript.scenarioId ?? '',
+        dimensions,
+      },
+    };
+  });
+}
+
+ succeeded in 0ms:
+      });
+    }
+    mergedVizData.modelScenarioMatrix[modelId] = scenarioMeans;
+  });
+
+  const scenarioMap = new Map<string, { varianceSum: number; count: number; scenario: ContestedScenario }>();
+  analyses.forEach((analysis) => {
+    analysis.mostContestedScenarios?.forEach((scenario) => {
+      const existing = scenarioMap.get(scenario.scenarioId) || { varianceSum: 0, count: 0, scenario };
+      existing.varianceSum += scenario.variance;
+      existing.count += 1;
+      scenarioMap.set(scenario.scenarioId, existing);
+    });
+  });
+
+  const mergedContested = Array.from(scenarioMap.values())
+    .map((value) => ({
+      ...value.scenario,
+      variance: value.varianceSum / value.count,
+    }))
+    .sort((a, b) => b.variance - a.variance)
+    .slice(0, 20);
+
+  const dimensionsMap: Record<string, Record<string, number | string>> = {};
+  scenarios.forEach((scenario) => {
+    const normalized = normalizeScenarioAnalysisMetadata(scenario.content);
+    if (normalized) {
+      dimensionsMap[scenario.id] = normalized.groupingDimensions;
+    }
+  });
+  mergedVizData.scenarioDimensions = dimensionsMap;
+
+  const varianceAnalysis = computeVarianceAnalysis(transcripts, scenarios);
+  const normalizedArtifacts = normalizeAnalysisArtifacts({
+    visualizationData: mergedVizData,
+    varianceAnalysis,
+    scenarios: scenarios.map((scenario) => ({
+      id: scenario.id,
+      name: scenario.name,
+      content: scenario.content,
+    })),
+  });
+
+  const normalizedVisualizationData = isAggregatedVisualizationData(normalizedArtifacts.visualizationData)
+    ? normalizedArtifacts.visualizationData
+    : mergedVizData;
+  const normalizedVarianceAnalysis = isRunVarianceAnalysis(normalizedArtifacts.varianceAnalysis)
+    ? normalizedArtifacts.varianceAnalysis
+    : varianceAnalysis;
+
+  return {
+    perModel: aggregatedPerModel,
+    modelAgreement: template.modelAgreement,
+    visualizationData: normalizedVisualizationData,
+    mostContestedScenarios: mergedContested,
+    varianceAnalysis: normalizedVarianceAnalysis,
+    decisionStats: decisionStats as Record<string, DecisionStats>,
+    valueAggregateStats,
+  };
+}
+
+exec
+/bin/zsh -lc "sed -n '140,220p' /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+    delete (finalConfig as Record<string, unknown>).aggregateRecomputeClaim;
+
+    const aggregateMetadata: AggregateMetadata = {
+      ...prepared.aggregateMetadataBase,
+      perModelRepeatCoverage:
+        workerResult != null ? workerResult.analysis.aggregateSemantics?.perModelRepeatCoverage ?? {} : {},
+      perModelDrift:
+        workerResult != null ? workerResult.analysis.aggregateSemantics?.perModelDrift ?? {} : {},
+    };
+
+    const finalOutput: Record<string, unknown> = {
+      perModel: prepared.aggregatedResult.perModel,
+      preferenceSummary:
+        workerResult != null ? workerResult.analysis.preferenceSummary ?? null : null,
+      reliabilitySummary:
+        workerResult != null ? workerResult.analysis.reliabilitySummary ?? null : null,
+      aggregateMetadata,
+      modelAgreement: prepared.aggregatedResult.modelAgreement,
+      visualizationData: prepared.aggregatedResult.visualizationData,
+      mostContestedScenarios: prepared.aggregatedResult.mostContestedScenarios,
+      varianceAnalysis: prepared.aggregatedResult.varianceAnalysis,
+      decisionStats: prepared.aggregatedResult.decisionStats,
+      valueAggregateStats: prepared.aggregatedResult.valueAggregateStats,
+      sourceRunIds: prepared.sourceRunIds,
+      runCount: prepared.aggregateMetadataBase.sourceRunCount,
+      analysisCount: prepared.analysisCount,
+      methodsUsed: {
+        aggregateSemantics: 'same-signature-v1',
+        codeVersion: AGGREGATE_ANALYSIS_CODE_VERSION,
+      },
+      warnings: [],
+      computedAt: new Date().toISOString(),
+      durationMs: 0,
+    };
+
+    await tx.run.update({
+      where: { id: claim.aggregateRunId },
+      data: {
+        config: finalConfig as unknown as Prisma.InputJsonValue,
+        status: 'COMPLETED',
+        completedAt: new Date(),
+      },
+    });
+
+    await tx.analysisResult.updateMany({
+      where: { runId: claim.aggregateRunId, status: 'CURRENT' },
+      data: { status: 'SUPERSEDED' },
+    });
+
+    await tx.analysisResult.create({
+      data: {
+        runId: claim.aggregateRunId,
+        analysisType: 'AGGREGATE',
+        status: 'CURRENT',
+        codeVersion: AGGREGATE_ANALYSIS_CODE_VERSION,
+        inputHash: `aggregate-${Date.now()}`,
+        output: finalOutput as unknown as Prisma.InputJsonValue,
+      },
+    });
+  });
+}
+
+export async function releaseAggregateClaim(
+  prepared: AggregateRunPreparation,
+  claim: AggregateClaimRecord,
+): Promise<void> {
+  try {
+    await db.$transaction(async (tx: Prisma.TransactionClient) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${prepared.definitionId}))`;
+
+      const aggregateRun = await tx.run.findUnique({
+        where: { id: claim.aggregateRunId },
+      });
+
+      if (!aggregateRun) {
+        return;
+      }
+
+      const currentConfigResult = zRunConfig.safeParse(aggregateRun.config);
+      const currentConfig = currentConfigResult.success ? currentConfigResult.data : {};
+      const currentClaim = getAggregateRecomputeClaim(currentConfig);
+
+exec
+/bin/zsh -lc "rg -n \"reliabilitySummary\\s*:|perPair\\s*:|targetAnalysisRunId|targetCompanionRunId|primaryConditionIds|companionConditionIds|netPressureRank\" /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src -g '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:15:  netPressureRank: number;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:28:  targetAnalysisRunId: string | null;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:29:  targetCompanionRunId: string | null;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:30:  primaryConditionIds: string[];
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:31:  companionConditionIds: string[];
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:107:    const pressure = toNumberOrNull(value.netPressureRank) ?? toNumberOrNull(value.pressureRank);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:114:      netPressureRank: pressure,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:126:  const targetAnalysisRunId = toStringOrNull(value.targetAnalysisRunId);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:127:  const targetCompanionRunId = toStringOrNull(value.targetCompanionRunId);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:128:  const primaryConditionIds = toStringArray(value.primaryConditionIds);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:129:  const companionConditionIds = toStringArray(value.companionConditionIds);
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:134:        pressureRank: condition.netPressureRank,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:146:    targetAnalysisRunId,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:147:    targetCompanionRunId,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:148:    primaryConditionIds,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts:149:    companionConditionIds,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/statistics.ts:381:export function netPressureRank(level: CanonicalAppealLevel | string | null | undefined): number | null {
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-consistency.ts:125:    targetAnalysisRunId: pair.targetAnalysisRunId,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-consistency.ts:126:    targetCompanionRunId: pair.targetCompanionRunId,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-consistency.ts:127:    primaryConditionIds: pair.primaryConditionIds,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-consistency.ts:128:    companionConditionIds: pair.companionConditionIds,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-consistency.ts:130:      netPressureRank: condition.netPressureRank,
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts:154:      reliabilitySummary:
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:33:  netPressureRank: number;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:47:  targetAnalysisRunId: string | null;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:48:  targetCompanionRunId: string | null;
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:49:  primaryConditionIds: string[];
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:50:  companionConditionIds: string[];
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:59:  perPair: ConsistencyPerPairShape[];
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:139:    netPressureRank: t.exposeInt('netPressureRank'),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:155:    targetAnalysisRunId: t.exposeString('targetAnalysisRunId', { nullable: true }),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:156:    targetCompanionRunId: t.exposeString('targetCompanionRunId', { nullable: true }),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:157:    primaryConditionIds: t.exposeStringList('primaryConditionIds'),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:158:    companionConditionIds: t.exposeStringList('companionConditionIds'),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/models-consistency.ts:169:    perPair: t.expose('perPair', { type: [ConsistencyPerPairRef] }),
+/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/types/analysis.ts:179:    reliabilitySummary: t.field({
+
+exec
+/bin/zsh -lc "sed -n '140,230p' /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/normalize-analysis-output.ts" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+      return {
+        ...entry,
+        scenarioId: canonicalScenarioId,
+        ...(typeof scenarioName === 'string' && scenarioName !== '' ? { scenarioName } : {}),
+      };
+    });
+  };
+
+  out.mostVariableScenarios = normalizeScenarioList(out.mostVariableScenarios);
+  out.leastVariableScenarios = normalizeScenarioList(out.leastVariableScenarios);
+
+  return out;
+}
+
+export function normalizeAnalysisArtifacts(params: {
+  visualizationData: unknown;
+  varianceAnalysis: unknown;
+  scenarios: ScenarioRecord[];
+}): NormalizedArtifacts {
+  const { visualizationData, varianceAnalysis, scenarios } = params;
+  const scenarioNameToId = new Map<string, string>();
+  const scenarioIdToName = new Map<string, string>();
+  const knownScenarioIds = new Set<string>();
+
+  for (const scenario of scenarios) {
+    knownScenarioIds.add(scenario.id);
+    scenarioNameToId.set(scenario.name, scenario.id);
+    scenarioIdToName.set(scenario.id, scenario.name);
+  }
+
+  let normalizedVisualizationData: Record<string, unknown> | null = null;
+  if (isPlainObject(visualizationData)) {
+    const scenarioDimensions = normalizeScenarioDimensions(visualizationData.scenarioDimensions, scenarios);
+    const matrix = normalizeModelScenarioMatrix(
+      visualizationData.modelScenarioMatrix,
+      knownScenarioIds,
+      scenarioNameToId
+    );
+    normalizedVisualizationData = {
+      ...visualizationData,
+      scenarioDimensions,
+      ...(matrix ? { modelScenarioMatrix: matrix } : {}),
+    };
+  }
+
+  const normalizedVarianceAnalysis = normalizeVarianceAnalysis(
+    varianceAnalysis,
+    knownScenarioIds,
+    scenarioNameToId,
+    scenarioIdToName
+  );
+
+  return {
+    visualizationData: normalizedVisualizationData,
+    varianceAnalysis: normalizedVarianceAnalysis,
+  };
+}
+
+exec
+/bin/zsh -lc "rg -n \"function normalizeVarianceAnalysis|normalizeVarianceAnalysis\\(\" /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/normalize-analysis-output.ts" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+95:function normalizeVarianceAnalysis(
+185:  const normalizedVarianceAnalysis = normalizeVarianceAnalysis(
+
+exec
+/bin/zsh -lc "sed -n '95,170p' /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/normalize-analysis-output.ts" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+function normalizeVarianceAnalysis(
+  rawVariance: unknown,
+  knownScenarioIds: Set<string>,
+  scenarioNameToId: Map<string, string>,
+  scenarioIdToName: Map<string, string>
+): Record<string, unknown> | null {
+  if (!isPlainObject(rawVariance)) return null;
+
+  const out: Record<string, unknown> = { ...rawVariance };
+
+  const perModel = out.perModel;
+  if (isPlainObject(perModel)) {
+    const normalizedPerModel: Record<string, unknown> = {};
+    for (const [modelId, modelStats] of Object.entries(perModel)) {
+      if (!isPlainObject(modelStats)) {
+        normalizedPerModel[modelId] = modelStats;
+        continue;
+      }
+      const normalizedModelStats: Record<string, unknown> = { ...modelStats };
+      const perScenario = modelStats.perScenario;
+      if (isPlainObject(perScenario)) {
+        const normalizedPerScenario: Record<string, unknown> = {};
+        for (const [scenarioKey, stats] of Object.entries(perScenario)) {
+          const canonicalScenarioId = resolveScenarioId(scenarioKey, knownScenarioIds, scenarioNameToId);
+          if (canonicalScenarioId === null) continue;
+          if (scenarioKey === canonicalScenarioId || normalizedPerScenario[canonicalScenarioId] === undefined) {
+            normalizedPerScenario[canonicalScenarioId] = stats;
+          }
+        }
+        normalizedModelStats.perScenario = normalizedPerScenario;
+      }
+      normalizedPerModel[modelId] = normalizedModelStats;
+    }
+    out.perModel = normalizedPerModel;
+  }
+
+  const normalizeScenarioList = (value: unknown): unknown => {
+    if (!isUnknownArray(value)) return value;
+    return value.map((entry: unknown) => {
+      if (!isPlainObject(entry)) return entry;
+      const rawScenarioId = typeof entry.scenarioId === 'string' ? entry.scenarioId : null;
+      if (rawScenarioId === null) return entry;
+      const canonicalScenarioId = resolveScenarioId(rawScenarioId, knownScenarioIds, scenarioNameToId);
+      if (canonicalScenarioId === null) return entry;
+      const scenarioName = scenarioIdToName.get(canonicalScenarioId);
+      return {
+        ...entry,
+        scenarioId: canonicalScenarioId,
+        ...(typeof scenarioName === 'string' && scenarioName !== '' ? { scenarioName } : {}),
+      };
+    });
+  };
+
+  out.mostVariableScenarios = normalizeScenarioList(out.mostVariableScenarios);
+  out.leastVariableScenarios = normalizeScenarioList(out.leastVariableScenarios);
+
+  return out;
+}
+
+export function normalizeAnalysisArtifacts(params: {
+  visualizationData: unknown;
+  varianceAnalysis: unknown;
+  scenarios: ScenarioRecord[];
+}): NormalizedArtifacts {
+  const { visualizationData, varianceAnalysis, scenarios } = params;
+  const scenarioNameToId = new Map<string, string>();
+  const scenarioIdToName = new Map<string, string>();
+  const knownScenarioIds = new Set<string>();
+
+  for (const scenario of scenarios) {
+    knownScenarioIds.add(scenario.id);
+    scenarioNameToId.set(scenario.name, scenario.id);
+    scenarioIdToName.set(scenario.id, scenario.name);
+  }
+
+  let normalizedVisualizationData: Record<string, unknown> | null = null;
+
+exec
+/bin/zsh -lc "rg -n \"coherenceForPair|netPressureRank\\(|primaryConditionIds|companionConditionIds|targetAnalysisRunId|targetCompanionRunId|perCondition\" /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/queue -g '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ exited 1 in 0ms:
+codex
+## Findings
+1. **HIGH [CODE-CONFIRMED]**: The spec’s premise that the needed numbers are “already computed” in `variance.ts` is not supported by the code. [computeVarianceAnalysis](/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/variance.ts) currently emits only variance stats plus direction metadata, and [zVarianceStats](/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/contracts.ts) does not type `matches`, `trials`, or any `perPair` shape. This means PR1/PR2 are not a “surface existing data” change; the aggregate contract and normalization layer need broader edits than the spec implies.
+
+2. **MEDIUM [CODE-CONFIRMED]**: The partial-rollout story is wrong. [parsePairList](/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts) returns an empty list when `perPair` is missing, and [buildCoherenceSummary](/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-consistency.ts) then emits `perPair: []` with zero determinate pairs. That does not create grey “indeterminate” chips; it removes pair data entirely, so PR1-only rows will not degrade the way the spec claims.
+
+3. **MEDIUM [CODE-CONFIRMED]**: The non-canonical-condition edge case is not preserved. [parsePairConditions](/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/consistency/modelsConsistencyData.ts) drops any condition unless it can read a numeric pressure rank. The spec requires keeping these conditions with `netPressureRank: null`, so the current consumer path will silently lose them and can undercount or hide affected pairs.
+
+## Residual Risks
+- I did not verify the backfill CLI implementation or the write-path transaction/idempotency behavior, because those files were not provided here.
+- The parser is permissive about legacy shapes and even synthesizes some missing pair fields, so mixed historical rows could still mask incomplete upgrades until the backfill is fully finished.
+tokens used
+48,617

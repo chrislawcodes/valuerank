@@ -1,0 +1,272 @@
+# Tasks: Aggregate Pipeline — Consistency Data Emission
+
+Plan: `docs/workflow/feature-runs/aggregate-consistency-data/plan.md`
+Spec: `docs/workflow/feature-runs/aggregate-consistency-data/spec.md`
+
+Constraints: each slice ≤ ~300 changed lines. `[CHECKPOINT]` marks a diff-review boundary.
+
+---
+
+## Slice A — PR1: per-scenario matches / trials [CHECKPOINT]
+
+Estimated diff: ~150 lines. Python worker + TS Zod contract.
+
+### A1. Python emission in `build_reliability_summary` [P: analyze_basic_aggregation.py, test_analyze_basic.py]
+
+File: `cloud/workers/analyze_basic_aggregation.py`
+
+- [ ] Inside `build_reliability_summary` (line 276), after the existing per-scenario loop that builds `repeated_scenarios`, add a block that constructs a per-scenario Bernoulli map:
+  ```python
+  per_scenario_bernoulli: dict[str, dict[str, int]] = {}
+  for scenario_id, stats in per_scenario.items():
+      raw_sample_count = stats.get("sampleCount", 0)
+      # Defensive: skip if upstream accidentally wrote a non-integer or
+      # negative value. Do not raise — log at debug and skip the scenario.
+      if not isinstance(raw_sample_count, int) or raw_sample_count < 0:
+          continue
+      sample_count = raw_sample_count
+      if sample_count < 2:
+          continue  # FR-001: skip single-trial scenarios (zero Bernoulli pairs)
+      bucket_counts = stats.get("directionCounts") or {}
+      trials = sample_count * (sample_count - 1) // 2
+      matches = sum(
+          c * (c - 1) // 2
+          for c in bucket_counts.values()
+          if isinstance(c, int) and c >= 2
+      )
+      per_scenario_bernoulli[scenario_id] = {"trials": trials, "matches": matches}
+  ```
+- [ ] Assign onto the existing per-model summary dict: `per_model_summary[model_id]["perScenario"] = per_scenario_bernoulli`
+- [ ] Do NOT emit the key when `per_scenario_bernoulli` is empty (keep model summary tidy).
+- [ ] Preserve every existing field in `per_model_summary[model_id]`. Adding a key; not touching anything else.
+
+### A1b. Python tests [P: analyze_basic_aggregation.py, test_analyze_basic.py]
+
+File: `cloud/workers/tests/test_analyze_basic.py`
+
+- [ ] Find the existing `reliabilitySummary` test fixtures; extend with `perScenario` assertions.
+- [ ] **Test cases to add** (each as a dedicated `def test_...`):
+  - `test_per_scenario_emits_for_repeated_scenarios`: 4 trials all in the same bucket → `perScenario[sid] == {"trials": 6, "matches": 6}`
+  - `test_per_scenario_half_half_split`: 4 trials split 2/2 across buckets → `{"trials": 6, "matches": 2}` (C(2,2) + C(2,2) = 1+1=2)
+  - `test_per_scenario_omits_single_trial`: scenario with `sampleCount == 1` → `scenario_id not in per_scenario`
+  - `test_per_scenario_all_neutral`: 3 trials all neutral → `perScenario[sid] == {"trials": 3, "matches": 3}` (all three fall in the neutral bucket)
+  - `test_per_scenario_unchanged_when_no_repeats`: model with only single-trial scenarios → model still appears in `per_model_summary` but `perScenario` is absent (empty dict not emitted)
+  - `test_existing_reliability_fields_unchanged`: snapshot `baselineReliability`, `directionalAgreement`, `coverageCount`, `uniqueScenarios` before/after the new block; values bit-identical
+
+### A2. Zod contract extension
+
+File: `cloud/apps/api/src/services/analysis/aggregate/contracts.ts`
+
+- [ ] Locate `zModelReliabilitySummary` (around line 197).
+- [ ] Add an optional `perScenario` field keyed by scenarioId:
+  ```typescript
+  perScenario: z.record(z.string(), z.object({
+    trials: z.number().int().nonnegative(),
+    matches: z.number().int().nonnegative(),
+  })).optional(),
+  ```
+- [ ] Do not remove `.passthrough()` if it's already on the schema (future-proofs for Slice B additions).
+
+### A2b. Zod contract tests
+
+File: `cloud/apps/api/tests/services/analysis/aggregate/contracts.test.ts` (create if missing; otherwise extend)
+
+- [ ] If creating new: set up a minimal Vitest file importing `zModelReliabilitySummary` and `zRunVarianceAnalysis`.
+- [ ] **Test cases:**
+  - `accepts rows with perScenario present` — pass a fixture containing `perScenario`; expect `.safeParse(...).success === true`
+  - `accepts rows without perScenario` — pass a fixture missing `perScenario`; expect success (backward-compat)
+  - `rejects non-integer trials/matches` — pass `trials: 1.5`; expect failure
+
+### A3. Python CI wiring check
+
+- [ ] Before pushing PR1: verify `cloud/workers/tests/` is executed in CI. Check `cloud/.github/workflows/*.yml` or `.github/workflows/*.yml`.
+- [ ] If Python tests do not run in CI today, this is out of scope for PR1 — document as a residual risk in the PR description and open a follow-up issue. Do NOT add a new CI step as part of this feature.
+
+### A4. Preflight before push
+
+- [ ] `cd cloud && python -m pytest workers/tests/test_analyze_basic.py -k "reliability"` — all pass
+- [ ] `cd cloud && npm run lint --workspace @valuerank/api` — 0 errors
+- [ ] `cd cloud && npm run build --workspace @valuerank/api` — clean
+
+**Slice A checkpoint.** Commit as a single PR titled "feat(worker): emit per-scenario trials/matches for Repeatability" plus test additions. Reference the Consistency report feature plan (`docs/workflow/feature-runs/models-consistency-report/plan.md`) in the PR body.
+
+---
+
+## Slice B — PR2: perPair with Coherence ingredients [CHECKPOINT]
+
+Estimated diff: ~220 lines. Python worker + TS Zod contract.
+
+### B1. Python helper for perPair
+
+File: `cloud/workers/analyze_basic_aggregation.py`
+
+- [ ] Add module-level constant near the other small constants:
+  ```python
+  _CANONICAL_APPEAL_LEVEL = {
+      "strongly": 2,
+      "somewhat": 1,
+      "neutral": 0,
+      "opponentSomewhat": -1,
+      "opponentStrongly": -2,
+  }
+  ```
+- [ ] Add helper `_build_per_pair_for_model(model_stats: dict, run_context: dict) -> dict[str, dict] | None`:
+  - Input: the same `model_stats` dict used in `build_reliability_summary`; a `run_context` dict carrying `valueKey`, `targetAnalysisRunId`, `targetCompanionRunId`, `primaryConditionIds`, `companionConditionIds`.
+  - Output: `{ <valueKey>: { targetAnalysisRunId, targetCompanionRunId, primaryConditionIds, companionConditionIds, perCondition: [...] } }` OR `None` if no usable perCondition entries.
+  - Inner loop: for each `(scenarioId, stats)` in `model_stats['perScenario']`:
+    - `trials = sample_count * (sample_count - 1) // 2` (same as Slice A)
+    - `matches = sum C(c, 2)` (same as Slice A — extract both into a shared helper)
+    - `net_pressure_rank`: explicitly use `_CANONICAL_APPEAL_LEVEL.get(target_label)` and `.get(opposing_label)` — if EITHER returns `None`, set `net_pressure_rank = None` and emit the entry with that null (do not crash). If both are present, `net_pressure_rank = target_level - opposing_level`.
+    - `win_rate`: per FR-006 formula. Implement the denominator as `max(sample_count - neutral_count, 1)` — this literal `max()` call is the enforcement of "forced to 1" and prevents `ZeroDivisionError` for all-neutral scenarios.
+    - Append `{ scenarioId, netPressureRank, winRate, matches, trials }`
+  - Return the single-key dict.
+- [ ] Refactor `matches/trials` math into a small helper `_bernoulli_pair_counts(stats) -> (trials, matches)` so Slices A and B share the same computation. Keep Slice A's call site using this helper.
+
+### B2. Wire `run_context` into the worker
+
+File: `cloud/workers/analyze_basic.py` (around line 243 where `reliability_summary` is built)
+
+- [ ] Find the existing worker input parsing and confirm `targetAnalysisRunId`, `companionRunId`, `primaryConditionIds`, `companionConditionIds`, and `valueKey` are available in the payload. If they are not, scout `cloud/apps/api/src/services/analysis/aggregate/aggregate-preparation.ts` for how those IDs are assembled and have the aggregate-preparation layer forward them into the worker payload. **STOP and re-scope into a sub-slice (B0)** if the worker payload needs a schema extension, because that's a cross-cutting change larger than 60 lines.
+- [ ] Assuming payload already carries what we need, thread the new `run_context` dict into `build_reliability_summary` as an optional kwarg (default `None` to preserve call sites in tests and elsewhere).
+- [ ] Inside `build_reliability_summary`, when `run_context` is not `None`, call `_build_per_pair_for_model(model_stats, run_context)` for each model and set `per_model_summary[model_id]["perPair"] = result` when the result has entries.
+
+### B3. Python tests for perPair
+
+File: `cloud/workers/tests/test_analyze_basic.py`
+
+- [ ] **Test cases:**
+  - `test_per_pair_emits_for_canonical_conditions`: 5 canonical conditions varying from `strongly/opponentStrongly` to `opponentStrongly/strongly` → per-condition entries all have integer `netPressureRank` in [-2..2]
+  - `test_per_pair_non_canonical_label_yields_null_rank`: inject a condition with an unknown bucket name → that entry gets `netPressureRank is None`
+  - `test_per_pair_win_rate_formula`: 4 trials with counts `{strongly: 2, somewhat: 1, neutral: 0, opponentSomewhat: 1, opponentStrongly: 0}` → `winRate == (2+1) / (4-0) == 0.75`
+  - `test_per_pair_all_neutral_win_rate`: all trials neutral → `winRate == 0` (denominator forced to 1; numerator is 0)
+  - `test_per_pair_empty_when_no_scenarios`: model with no perScenario → `perPair` key absent
+  - `test_per_pair_run_context_threaded`: assert `targetAnalysisRunId`, `targetCompanionRunId`, `primaryConditionIds`, `companionConditionIds` round-trip into the output verbatim
+
+### B4. Zod contract extension
+
+File: `cloud/apps/api/src/services/analysis/aggregate/contracts.ts`
+
+- [ ] Extend `zModelReliabilitySummary` with:
+  ```typescript
+  perPair: z.record(z.string(), z.object({
+    targetAnalysisRunId: z.string(),
+    targetCompanionRunId: z.string().nullable(),
+    primaryConditionIds: z.array(z.string()),
+    companionConditionIds: z.array(z.string()),
+    perCondition: z.array(z.object({
+      scenarioId: z.string(),
+      netPressureRank: z.number().int().nullable(),
+      winRate: z.number(),
+      matches: z.number().int().nonnegative(),
+      trials: z.number().int().nonnegative(),
+    })),
+  })).optional(),
+  ```
+- [ ] `contracts.test.ts` — add cases covering **all four** compatibility states: (a) both `perScenario` and `perPair` present; (b) only `perScenario` (Slice A alone); (c) only `perPair` (forward-compat guard); (d) neither present (historical rows). All four must parse successfully.
+
+### B5. Backfill CLI
+
+File: `cloud/apps/api/src/cli/backfill-aggregate-consistency.ts` (NEW)
+
+- [ ] Follow the pattern from `cloud/apps/api/src/cli/normalize.ts` for argument parsing, logger setup, Prisma client initialization, and graceful shutdown.
+- [ ] Arguments:
+  - `--dry-run` (boolean; default false)
+  - `--definition-id <id>` (optional UUID)
+  - `--domain-id <id>` (optional UUID)
+- [ ] Main loop:
+  ```typescript
+  const rows = await db.analysisResult.findMany({
+    where: {
+      status: 'CURRENT',
+      analysisType: 'AGGREGATE',
+      ...(args.definitionId ? { run: { definitionId: args.definitionId } } : {}),
+      ...(args.domainId ? { run: { definition: { domainId: args.domainId } } } : {}),
+    },
+    select: { id: true, runId: true, output: true },
+  });
+
+  let upgraded = 0, skipped = 0, failed = 0;
+  for (const row of rows) {
+    if (detectUpgraded(row.output)) { skipped += 1; continue; }
+    if (args.dryRun) { log.info({ runId: row.runId }, 'backfill:would-upgrade'); continue; }
+    try { await triggerAggregateRun(row.runId); upgraded += 1; }
+    catch (err) { log.error({ runId: row.runId, err }, 'backfill:failed'); failed += 1; }
+  }
+
+  log.info({ upgraded, skipped, failed, total: rows.length }, 'backfill:summary');
+  ```
+- [ ] Idempotency detector — `detectUpgraded`. Check **every** model, not just the first, because a row can have one model with zero repeat coverage (no perScenario) while other models have it:
+  ```typescript
+  function detectUpgraded(output: unknown): boolean {
+    const rel = (output as Record<string, unknown> | null)?.reliabilitySummary;
+    const perModel = rel != null && typeof rel === 'object' ? (rel as Record<string, unknown>).perModel : null;
+    if (perModel == null || typeof perModel !== 'object') return false;
+    // Upgraded iff AT LEAST ONE model carries perScenario OR perPair.
+    // Single-model emptiness alone does not prove the row is un-upgraded.
+    return Object.values(perModel).some((model) => {
+      if (model == null || typeof model !== 'object') return false;
+      const m = model as Record<string, unknown>;
+      return m.perScenario != null || m.perPair != null;
+    });
+  }
+  ```
+- [ ] Register `package.json` script (under `cloud/apps/api/package.json`):
+  ```json
+  "backfill:aggregate-consistency": "tsx src/cli/backfill-aggregate-consistency.ts"
+  ```
+
+### B5b. Backfill CLI tests
+
+File: `cloud/apps/api/tests/cli/backfill-aggregate-consistency.test.ts` (NEW)
+
+- [ ] Mock `db.analysisResult.findMany` and `triggerAggregateRun` via `vi.mock`.
+- [ ] **Test cases:**
+  - `runs triggerAggregateRun for each eligible row` — 3 fresh rows → 3 calls
+  - `skips rows that already carry perScenario` — fixture output with `perScenario` present → 0 calls, skipped counter = 3
+  - `dry-run does not call triggerAggregateRun` — 3 rows + `--dry-run` → 0 calls
+  - `failure in one row does not stop the loop` — throw on row 2 → row 3 still processed; `failed = 1`
+  - `--definition-id narrows the query` — assert the Prisma where clause includes `definitionId`
+  - `--domain-id narrows the query` — assert nested `domain: { domainId }` filter
+
+### B6. Preflight before push
+
+- [ ] `cd cloud && python -m pytest workers/tests/test_analyze_basic.py -k "per_pair"` — all pass
+- [ ] `cd cloud && npm run lint --workspace @valuerank/api` — 0 errors
+- [ ] `cd cloud && npm run test --workspace @valuerank/api` — all pass (includes CLI test)
+- [ ] `cd cloud && npm run build --workspace @valuerank/api` — clean
+
+**Slice B checkpoint.** Commit as a single PR titled "feat(worker): emit perPair coherence ingredients + backfill CLI" with the backfill CLI invocation note in the PR body.
+
+---
+
+## Slice C — Backfill execution (post-merge, not a checkpoint)
+
+After PR2 merges and deploys:
+
+- [ ] Staging dry-run: `npm run backfill:aggregate-consistency -- --dry-run --domain-id <one-domain>` → inspect log, verify it lists the expected rows
+- [ ] Staging actual: `npm run backfill:aggregate-consistency -- --domain-id <one-domain>` → wait for completion, smoke-check `/models/consistency`
+- [ ] Repeat staging for all three production domains
+- [ ] Production staged rollout: one domain at a time with the same `--domain-id` filter; verify scatter + table + drill-down in the live UI between domains
+
+No code commits in Slice C. Pure operational work.
+
+---
+
+## Parallel Task Summary
+
+- A1 Python emission + A1b Python tests — `[P]`, disjoint sections of the same slice.
+- B3 Python tests + B4 Zod contract extension — `[P]`, disjoint files.
+- B5 CLI source + B5b CLI tests — `[P]`, disjoint files.
+
+Slices A and B are **not** parallelizable (B extends the schema A adds). Must sequence.
+
+---
+
+## Verification Checklist (per slice)
+
+- [ ] Python tests pass (`pytest` on touched files)
+- [ ] Preflight lint on touched workspaces
+- [ ] Build on touched workspaces (0 TS errors)
+- [ ] `git status` — no unintended files changed
+- [ ] Existing `baselineReliability`, `directionalAgreement`, `neutralShare`, `coverageCount` values remain bit-identical
+- [ ] Consistency resolver on staging can read the new shape and produce non-null values

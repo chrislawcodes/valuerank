@@ -1,0 +1,9 @@
+## Findings
+- **High:** `detectUpgraded` in Slice B5 is not a safe idempotency check. It only inspects `Object.values(perModel)[0]`, so the result depends on arbitrary object key order. It also treats the absence of `perScenario`/`perPair` as "not upgraded", but Slice A explicitly omits `perScenario` for models with no repeated scenarios. That means already-upgraded rows can be retriggered forever, or rows can be misclassified based on which model happens to be first.
+- **Medium [UNVERIFIED]:** Slice B reuses `perScenario` as the input to `_build_per_pair_for_model`, but Slice A defines `perScenario` as a reduced payload with only `trials` and `matches`. If that same shape is what the helper sees, it cannot compute `netPressureRank` or `winRate` because the bucket-level counts are gone. The plan needs a clear separation between the internal source data and the emitted summary shape.
+- **Medium:** The regression coverage in A1b does not actually protect every field the plan says must stay unchanged. The checklist names `neutralShare`, but the "existing reliability fields unchanged" test only snapshots `baselineReliability`, `directionalAgreement`, `coverageCount`, and `uniqueScenarios`. A bug in `neutralShare` could slip through while the test still passes.
+
+## Residual Risks
+- The backfill path still relies on re-running aggregate jobs rather than migrating stored results in place, so it may be expensive and slow on large datasets even when it works correctly.
+- If the worker payload does not already include the full `run_context`, Slice B will need the extra B0 schema/plumbing work, which is a broader change than the current slices account for.
+- The Python worker changes are only as safe as the CI coverage for `cloud/workers/tests/`; if those tests are not actually run in CI, the rollout still depends on manual preflight checks.

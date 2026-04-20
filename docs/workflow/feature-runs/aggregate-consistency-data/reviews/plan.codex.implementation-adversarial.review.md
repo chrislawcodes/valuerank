@@ -1,0 +1,44 @@
+---
+reviewer: "codex"
+lens: "implementation-adversarial"
+stage: "plan"
+artifact_path: "docs/workflow/feature-runs/aggregate-consistency-data/plan.md"
+artifact_sha256: "8ad25757bf51b7520e8605675347b859867b3550a0f9aa521f0a3f3e7626a957"
+repo_root: "."
+git_head_sha: "8edda6e6bea3bf9235b54f8991650f5c8bf673f5"
+git_base_ref: "origin/main"
+git_base_sha: "8edda6e6bea3bf9235b54f8991650f5c8bf673f5"
+generation_method: "codex-runner"
+resolution_status: "accepted"
+resolution_note: "No actionable findings detected — auto-accepted"
+raw_output_path: "docs/workflow/feature-runs/aggregate-consistency-data/reviews/plan.codex.implementation-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: plan implementation-adversarial
+
+## Findings
+
+- HIGH [CODE-CONFIRMED]: The PR2 backfill idempotency check is too coarse. The plan says to skip any row that already has `reliabilitySummary.perModel[*].perScenario`, but PR1’s whole purpose is to add exactly that field. Because PR2 is scheduled after PR1, every row upgraded by PR1 would be treated as “already upgraded” and never receive `perPair`. The code path in `cloud/workers/analyze_basic_aggregation.py` currently has `perScenario` support only through the variance summary, and there is no `perPair` support anywhere in the shown worker pipeline.
+
+- HIGH [CODE-CONFIRMED]: The plan assumes PR2 can build `perPair` from `variance_analysis` plus a `run_context`, but the provided code does not expose the needed inputs. `cloud/workers/stats/variance_analysis.py` only computes per-scenario aggregate stats (`sampleCount`, `directionCounts`, `directionalAgreement`, `neutralShare`, etc.), `build_reliability_summary` only receives `variance_analysis`, and the visible `AggregateWorkerInput` in `contracts.ts` has no `targetAnalysisRunId`, companion run IDs, or condition ID fields. So the claim that “all underlying data is already computed” is not supported by the code and the PR2 slice is missing a required data-flow refactor.
+
+- MEDIUM [CODE-CONFIRMED]: The contract update is aimed at a schema symbol that does not exist in the provided contract file. `contracts.ts` defines `zVarianceStats`, `zModelVarianceStats`, and `zAnalysisOutput`, but there is no `zModelReliabilitySummary` or equivalent dedicated reliability schema in the visible code. As written, the plan may patch the wrong validation boundary and miss the actual shape that consumers validate against.
+
+## Residual Risks
+
+- The resolver and backfill enqueue helper were not provided, so the exact consumer shape for `perPair` and the real `CURRENT`→`SUPERSEDED` behavior remain unverified.
+- The plan still depends on a Python/TypeScript test split, but the provided code does not show CI wiring for the Python worker tests.
+- The backfill performance and failure-retry behavior are not demonstrated in the shown code, so the rollout timing and operational recovery path remain uncertain.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: accepted
+- note: No actionable findings detected — auto-accepted
