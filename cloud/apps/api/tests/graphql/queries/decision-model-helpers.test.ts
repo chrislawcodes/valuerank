@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveValueKeyFromText } from '../../../src/graphql/queries/domain/decision-model-helpers.js';
+import { resolveValueKeyFromText, isCachedWinnerFirstDecision } from '../../../src/graphql/queries/domain/decision-model-helpers.js';
 
 /**
  * Regression tests for {@link resolveValueKeyFromText}.
@@ -141,5 +141,103 @@ describe('resolveValueKeyFromText — possessive pronoun tolerance', () => {
       SOFTWARE_APPROACH_LABEL_PREFIX,
     );
     expect(result).toBeNull();
+  });
+});
+
+describe('isCachedWinnerFirstDecision — cacheVersion 2 + refusal acceptance', () => {
+  // These tests exercise the validator widening landing in this PR. The
+  // prior validator accepted only cacheVersion: 1 and decisionState ∈
+  // {resolved, neutral, unknown}. The widened validator also accepts
+  // cacheVersion: 2 and decisionState: "refusal" so that migrated rows
+  // read correctly through existing callers.
+
+  it('accepts cacheVersion 1 + resolved strong (baseline unchanged)', () => {
+    const result = isCachedWinnerFirstDecision({
+      cacheVersion: 1,
+      decisionState: 'resolved',
+      strength: 'strong',
+      favoredValueKey: 'Self_Direction_Action',
+    });
+    expect(result).toBe(true);
+  });
+
+  it('accepts cacheVersion 2 + resolved strong', () => {
+    const result = isCachedWinnerFirstDecision({
+      cacheVersion: 2,
+      decisionState: 'resolved',
+      strength: 'strong',
+      favoredValueKey: 'Self_Direction_Action',
+    });
+    expect(result).toBe(true);
+  });
+
+  it('accepts cacheVersion 2 + refusal (the new semantic state)', () => {
+    const result = isCachedWinnerFirstDecision({
+      cacheVersion: 2,
+      decisionState: 'refusal',
+      strength: 'unknown',
+      favoredValueKey: null,
+    });
+    expect(result).toBe(true);
+  });
+
+  it('accepts cacheVersion 1 + refusal (backward-tolerant — no caller produces this today but validator should not gate on it)', () => {
+    const result = isCachedWinnerFirstDecision({
+      cacheVersion: 1,
+      decisionState: 'refusal',
+      strength: 'unknown',
+      favoredValueKey: null,
+    });
+    expect(result).toBe(true);
+  });
+
+  it('rejects cacheVersion 3 (future version protection)', () => {
+    const result = isCachedWinnerFirstDecision({
+      cacheVersion: 3,
+      decisionState: 'resolved',
+      strength: 'strong',
+      favoredValueKey: 'Self_Direction_Action',
+    });
+    expect(result).toBe(false);
+  });
+
+  it('rejects invalid decisionState even on cacheVersion 2', () => {
+    const result = isCachedWinnerFirstDecision({
+      cacheVersion: 2,
+      decisionState: 'bogus',
+      strength: 'unknown',
+      favoredValueKey: null,
+    });
+    expect(result).toBe(false);
+  });
+
+  it('rejects refusal with a non-null favoredValueKey', () => {
+    const result = isCachedWinnerFirstDecision({
+      cacheVersion: 2,
+      decisionState: 'refusal',
+      strength: 'unknown',
+      favoredValueKey: 'Self_Direction_Action',
+    });
+    expect(result).toBe(false);
+  });
+
+  it('rejects refusal with strength other than unknown', () => {
+    const result = isCachedWinnerFirstDecision({
+      cacheVersion: 2,
+      decisionState: 'refusal',
+      strength: 'strong',
+      favoredValueKey: null,
+    });
+    expect(result).toBe(false);
+  });
+
+  it('rejects resolved with null favoredValueKey (existing invariant preserved)', () => {
+    const result = isCachedWinnerFirstDecision({
+      cacheVersion: 2,
+      decisionState: 'resolved',
+      strength: 'strong',
+      favoredValueKey: null,
+    });
+    expect(result).toBe(false);
   });
 });
