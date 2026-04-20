@@ -306,6 +306,11 @@ builder.objectType(RunRef, {
         // The decision_code column was dropped in the remove-decisionCode follow-up.
         // Completed counts only successful summaries (failed transcripts also
         // have summarizedAt set, so we explicitly exclude them).
+        // SQL three-valued logic note: decision_text LIKE 'pattern' is NULL
+        // (not false) when decision_text is NULL, so we coalesce to false
+        // before AND-ing. Otherwise the FILTER predicate evaluates to NULL
+        // for non-failed transcripts (where decision_text IS NULL) and they
+        // are excluded from the completed count.
         const byModelResults = await db.$queryRaw<
           Array<{ model_id: string; completed: bigint; failed: bigint }>
         >`
@@ -313,12 +318,15 @@ builder.objectType(RunRef, {
             model_id,
             COUNT(*) FILTER (
               WHERE summarized_at IS NOT NULL
-                AND NOT (decision_metadata IS NULL AND decision_text LIKE 'Summary failed%')
+                AND NOT (
+                  decision_metadata IS NULL
+                  AND COALESCE(decision_text LIKE 'Summary failed%', false)
+                )
             ) as completed,
             COUNT(*) FILTER (
               WHERE summarized_at IS NOT NULL
                 AND decision_metadata IS NULL
-                AND decision_text LIKE 'Summary failed%'
+                AND COALESCE(decision_text LIKE 'Summary failed%', false)
             ) as failed
           FROM transcripts
           WHERE run_id = ${run.id}
