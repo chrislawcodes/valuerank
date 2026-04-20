@@ -124,7 +124,7 @@ class TestReliabilityConsistencyEmission:
                     "orientationFlipped": False,
                     "summary": {"score": 3, "values": {}},
                     "decisionModelV2": {"canonical": {"direction": "neutral", "strength": "neutral"}},
-                    "scenario": {"dimensions": {"ValueA": "strongly", "ValueB": "somewhat"}},
+                    "scenario": {"content": {"dimension_values": {"ValueA": "minimal", "ValueB": "negligible"}}},
                 },
             ],
         }
@@ -174,7 +174,7 @@ class TestReliabilityConsistencyEmission:
                     "orientationFlipped": False,
                     "summary": {"score": 5, "values": {}},
                     "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
-                    "scenario": {"dimensions": {"ValueA": "strongly", "ValueB": "mystery"}},
+                    "scenario": {"content": {"dimension_values": {"ValueA": "moderate", "ValueB": "mystery"}}},
                 },
                 {
                     "id": "t2",
@@ -185,7 +185,7 @@ class TestReliabilityConsistencyEmission:
                     "orientationFlipped": False,
                     "summary": {"score": 5, "values": {}},
                     "decisionModelV2": {"canonical": {"direction": "favor_first", "strength": "strong"}},
-                    "scenario": {"dimensions": {"ValueA": "strongly", "ValueB": "mystery"}},
+                    "scenario": {"content": {"dimension_values": {"ValueA": "moderate", "ValueB": "mystery"}}},
                 },
             ],
         }

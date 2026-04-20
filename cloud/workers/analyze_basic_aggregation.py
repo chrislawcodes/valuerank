@@ -8,11 +8,14 @@ from stats.decision_model import SIGNED_TO_BUCKET, resolve_transcript_signed_dis
 from stats.preference_stats import compute_two_step_by_value
 
 _CANONICAL_APPEAL_RANK: dict[str, int] = {
-    "strongly": 2,
-    "somewhat": 1,
-    "neutral": 0,
-    "opponentSomewhat": -1,
-    "opponentStrongly": -2,
+    # Vocabulary used by Definition.content.dimension_values (see scenario
+    # content schema). 1-indexed so the full vocabulary has positive ranks and
+    # differences produce a clean signed "net pressure" (target - opposing).
+    "negligible": 1,
+    "minimal": 2,
+    "moderate": 3,
+    "substantial": 4,
+    "full": 5,
 }
 _POSITIVE_DIRECTION_BUCKETS: tuple[str, str] = (
     SIGNED_TO_BUCKET[2.0],

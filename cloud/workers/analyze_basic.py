@@ -243,12 +243,25 @@ def run_analysis(data: dict[str, Any]) -> dict[str, Any]:
     # Compute variance analysis (for multi-sample runs)
     variance_analysis = compute_variance_analysis(transcripts)
 
+    # Scenario dimension values live at scenario.content.dimension_values in
+    # the transcript payload (see Definition.content schema v1). The legacy
+    # fallback to scenario.dimensions is kept so older payloads still work.
     scenario_dimensions_by_id: dict[str, dict[str, Any]] = {}
     for transcript in transcripts:
         scenario_id = transcript.get("scenarioId")
-        scenario = transcript.get("scenario")
-        dimensions = scenario.get("dimensions") if isinstance(scenario, dict) else None
-        if isinstance(scenario_id, str) and scenario_id not in scenario_dimensions_by_id and isinstance(dimensions, dict):
+        scenario = transcript.get("scenario") if isinstance(transcript.get("scenario"), dict) else None
+        dimensions: dict[str, Any] | None = None
+        if scenario is not None:
+            content = scenario.get("content")
+            if isinstance(content, dict):
+                raw = content.get("dimension_values")
+                if isinstance(raw, dict):
+                    dimensions = raw
+            if dimensions is None:
+                legacy = scenario.get("dimensions")
+                if isinstance(legacy, dict):
+                    dimensions = legacy
+        if isinstance(scenario_id, str) and scenario_id not in scenario_dimensions_by_id and dimensions is not None:
             scenario_dimensions_by_id[scenario_id] = dimensions
 
     run_context: dict[str, Any] | None = None

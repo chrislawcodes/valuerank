@@ -39,8 +39,18 @@ describe('backfill aggregate consistency cli', () => {
       parseOptions(['--dry-run', '--definition-id', 'definition-1', '--domain-id=domain-2']),
     ).toEqual({
       dryRun: true,
+      force: false,
       definitionId: 'definition-1',
       domainId: 'domain-2',
+    });
+  });
+
+  it('parses --force', () => {
+    expect(parseOptions(['--force'])).toEqual({
+      dryRun: false,
+      force: true,
+      definitionId: null,
+      domainId: null,
     });
   });
 

@@ -11,6 +11,7 @@ const BATCH_SIZE = 100;
 
 type CliOptions = {
   dryRun: boolean;
+  force: boolean;
   definitionId: string | null;
   domainId: string | null;
 };
@@ -45,6 +46,7 @@ function readOptionValue(argv: string[], flag: string): string | null {
 export function parseOptions(argv: string[]): CliOptions {
   return {
     dryRun: argv.includes('--dry-run'),
+    force: argv.includes('--force'),
     definitionId: readOptionValue(argv, '--definition-id'),
     domainId: readOptionValue(argv, '--domain-id'),
   };
@@ -161,7 +163,7 @@ export async function runBackfill(options: CliOptions): Promise<{
     for (const row of rows) {
       inspected += 1;
 
-      if (hasUpgradedReliabilityShape(row.output)) {
+      if (!options.force && hasUpgradedReliabilityShape(row.output)) {
         skipped += 1;
         log.info({ analysisId: row.id, runId: row.runId }, 'backfill:skipped');
         continue;
