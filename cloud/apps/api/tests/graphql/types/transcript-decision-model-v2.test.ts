@@ -227,7 +227,7 @@ describe('Transcript decisionModelV2 GraphQL field', () => {
                 responseExcerpt: 'Achievement',
               },
               canonicalDecision: {
-                cacheVersion: 1,
+                cacheVersion: 2,
                 decisionState: 'resolved',
                 favoredValueKey: 'Achievement',
                 strength: 'strong',

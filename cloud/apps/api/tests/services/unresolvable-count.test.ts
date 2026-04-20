@@ -19,7 +19,7 @@ const STALE_UNKNOWN_CACHE = {
   summaryCache: {
     summary: {
       canonicalDecision: {
-        cacheVersion: 1,
+        cacheVersion: 2,
         decisionState: 'unknown',
         favoredValueKey: null,
         strength: 'none',

@@ -302,13 +302,16 @@ builder.objectType(RunRef, {
 
         // Query per-model counts from Transcript
         // Use raw query for efficient COUNT with FILTER
+        // Failure signal: persistSummarizeFailure writes
+        // decisionMetadata = null AND decisionText starts with "Summary failed".
+        // The decision_code column was dropped in the remove-decisionCode follow-up.
         const byModelResults = await db.$queryRaw<
           Array<{ model_id: string; completed: bigint; failed: bigint }>
         >`
           SELECT
             model_id,
             COUNT(*) FILTER (WHERE summarized_at IS NOT NULL) as completed,
-            COUNT(*) FILTER (WHERE decision_code = 'error') as failed
+            COUNT(*) FILTER (WHERE summarized_at IS NOT NULL AND decision_metadata IS NULL AND decision_text LIKE 'Summary failed%') as failed
           FROM transcripts
           WHERE run_id = ${run.id}
           GROUP BY model_id
