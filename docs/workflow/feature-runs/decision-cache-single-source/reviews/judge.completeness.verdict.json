@@ -1,0 +1,30 @@
+{
+  "judge": "completeness",
+  "model": "gpt-5.2",
+  "verdict": "proceed",
+  "confidence": 5,
+  "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is addressed in SPEC / Functional Requirements (FR-019) and FR-005: the rollout-window compat branch says to inspect `summaryCache.summary.decisionCode` when `cacheVersion === 1` and treat `decisionCode = \"refusal\"` as `decisionState = \"refusal\"`. That is a specific mitigation for the refusal regression during the read-before-migration window, and it is specific enough to implement. spec.codex.edge-cases-adversarial.review#high-2 is addressed in SPEC / Functional Requirements (FR-012): the migration must process every transcript whose `decision_metadata.summaryCache` is not null, regardless of whether `decisionCode` is present, and it must write `canonicalDecision.cacheVersion: 2`. That fixes the version invariant mismatch and is specific enough to implement. spec.gemini.requirements-adversarial.review#high-1 is explicitly acknowledged as an accepted limitation in SPEC / Scope Boundaries / Non-Goals and Assumptions Carried In: the top-level `transcripts.decision_code` column is a separate follow-up PR, and this PR does not touch it. That is a clear out-of-scope acknowledgement, even though it is not a mitigation. spec.gemini.requirements-adversarial.review#high-2 is addressed in SPEC / Functional Requirements (FR-012) by per-row atomic migration writes: one UPDATE per transcript using the primary-key row lock, with no global lock required. That is specific enough to implement.",
+  "evidence": [
+    {
+      "artifact": "SPEC",
+      "section": "Functional Requirements (FR-019)",
+      "quote": "inspect summaryCache.summary.decisionCode if present and treat decisionCode = \"refusal\" as if decisionState = \"refusal\""
+    },
+    {
+      "artifact": "SPEC",
+      "section": "Functional Requirements (FR-012)",
+      "quote": "The migration MUST process every transcript whose decision_metadata.summaryCache is not null, regardless of whether decisionCode is present"
+    },
+    {
+      "artifact": "SPEC",
+      "section": "Scope Boundaries / Non-Goals and Assumptions Carried In",
+      "quote": "Removing the top-level transcripts.decision_code column. Separate follow-up PR after this one lands"
+    },
+    {
+      "artifact": "SPEC",
+      "section": "Functional Requirements (FR-012)",
+      "quote": "Migration writes are per-row atomic (one UPDATE per transcript, using the primary-key row lock); no global lock is required"
+    }
+  ],
+  "timestamp": "2026-04-19T00:00:00Z"
+}

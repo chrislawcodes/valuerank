@@ -1,0 +1,3686 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019da867-f318-7ab1-855a-0ebb57baa691
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: decision-model-types.ts
+import type { DomainAnalysisValueKey, DomainAnalysisValuePair } from '../domain-analysis-values.js';
+
+export type DecisionDirection = 'favor_first' | 'favor_second' | 'neutral' | 'refusal' | 'unknown';
+export type DecisionStrength = 'strong' | 'lean' | 'neutral' | 'unknown';
+export type DecisionSource = 'deterministic' | 'manual' | 'error' | 'unknown';
+
+export type CanonicalAppliedDecision = {
+  favoredValueKey: DomainAnalysisValueKey | null;
+  opposedValueKey: DomainAnalysisValueKey | null;
+  direction: DecisionDirection;
+  strength: DecisionStrength;
+};
+
+export type RawDecisionEvidence = {
+  matchedText: string | null;
+  matchedLabel: string | null;
+  parseClass: 'exact' | 'fallback_resolved' | 'ambiguous' | 'unparseable' | null;
+  parsePath: string | null;
+  parserVersion: string | null;
+  responseExcerpt: string | null;
+  manualOverride: {
+    previousValue: string | null;
+    overriddenAt: string | null;
+    overriddenByUserId: string | null;
+  } | null;
+};
+
+export type CanonicalDecision = {
+  favoredValueKey: DomainAnalysisValueKey | null;
+  opposedValueKey: DomainAnalysisValueKey | null;
+  direction: DecisionDirection;
+  strength: DecisionStrength;
+  normalizationApplied: boolean;
+  normalizationReason: 'orientation_flipped' | null;
+  source: DecisionSource;
+};
+
+export type DecisionReadSurface = 'api' | 'web' | 'worker' | 'export';
+export type DecisionReadMode = 'v1' | 'v2';
+export type DecisionReadRule = {
+  surface: DecisionReadSurface;
+  defaultMode: DecisionReadMode;
+  fallbackLayer: 'server_adapter' | 'none';
+};
+
+export const DECISION_MODEL_READ_RULES: Record<DecisionReadSurface, DecisionReadRule> = {
+  api: {
+    surface: 'api',
+    defaultMode: 'v1',
+    fallbackLayer: 'server_adapter',
+  },
+  web: {
+    surface: 'web',
+    defaultMode: 'v1',
+    fallbackLayer: 'none',
+  },
+  worker: {
+    surface: 'worker',
+    defaultMode: 'v1',
+    fallbackLayer: 'server_adapter',
+  },
+  export: {
+    surface: 'export',
+    defaultMode: 'v1',
+    fallbackLayer: 'server_adapter',
+  },
+} as const;
+
+export type DecisionPair = {
+  valueA: DomainAnalysisValueKey;
+  valueB: DomainAnalysisValueKey;
+};
+
+export type ValueStatementEntry = { token: string; body: string };
+
+export type DecisionModelInput = {
+  pair: DecisionPair | null;
+  orientationFlipped: boolean | null | undefined;
+  raw: RawDecisionEvidence;
+  manualOverridePresent?: boolean;
+  manualOverrideDecision?: CanonicalAppliedDecision | null;
+  cachedDecision?: CachedWinnerFirstDecision | null;
+  valueStatements?: readonly ValueStatementEntry[];
+  labelPrefix?: string | null;
+};
+
+export type DecisionModelResult = {
+  raw: RawDecisionEvidence;
+  canonical: CanonicalDecision;
+};
+
+export type TranscriptDecisionModelInput = {
+  decisionCode: string | null;
+  decisionMetadata: unknown;
+  /** Supply definitionSnapshot OR pairOverride — pairOverride takes precedence if both provided */
+  definitionSnapshot?: unknown;
+  orientationFlipped: boolean | null | undefined;
+  /** Pre-resolved value pair; avoids fetching definitionSnapshot from DB when pair is already known */
+  pairOverride?: DomainAnalysisValuePair | null;
+};
+
+export type TranscriptDecisionModelResult = DecisionModelResult;
+
+export type ParsedDecisionPath = {
+  branch: 'exact' | 'fallback' | 'manual';
+  direction: DecisionDirection;
+  strength: DecisionStrength;
+};
+
+export type CachedWinnerFirstDecision = {
+  cacheVersion: 1;
+  decisionState: 'resolved' | 'neutral' | 'unknown';
+  favoredValueKey: DomainAnalysisValueKey | null;
+  strength: DecisionStrength;
+};
+
+
+Context: decision-model-helpers.ts
+00001: import { DOMAIN_ANALYSIS_VALUE_KEYS, toPascalCaseKey, type DomainAnalysisValueKey } from '../domain-analysis-values.js';
+00002: import { JOB_CHOICE_VALUE_STATEMENTS, labelFromBody } from '@valuerank/shared';
+00003: import { stripFillerWords } from './decision-model-filler-words.js';
+00004: import type {
+00005:   DecisionDirection,
+00006:   DecisionStrength,
+00007:   DecisionSource,
+00008:   CanonicalAppliedDecision,
+00009:   CanonicalDecision,
+00010:   DecisionPair,
+00011:   ValueStatementEntry,
+00012:   ParsedDecisionPath,
+00013:   CachedWinnerFirstDecision,
+00014: } from './decision-model-types.js';
+00015: 
+00016: export { JOB_CHOICE_VALUE_STATEMENTS };
+00017: 
+00018: export function isValueKey(value: string): value is DomainAnalysisValueKey {
+00019:   return (DOMAIN_ANALYSIS_VALUE_KEYS as readonly string[]).includes(value);
+00020: }
+00021: 
+00022: export function isDecisionDirection(value: unknown): value is DecisionDirection {
+00023:   return value === 'favor_first' || value === 'favor_second' || value === 'neutral' || value === 'refusal' || value === 'unknown';
+00024: }
+00025: 
+00026: export function isDecisionStrength(value: unknown): value is DecisionStrength {
+00027:   return value === 'strong' || value === 'lean' || value === 'neutral' || value === 'unknown';
+00028: }
+00029: 
+00030: export function isCanonicalAppliedDecision(value: unknown): value is CanonicalAppliedDecision {
+00031:   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+00032:     return false;
+00033:   }
+00034: 
+00035:   const decision = value as CanonicalAppliedDecision;
+00036:   return (
+00037:     isDecisionDirection(decision.direction) &&
+00038:     isDecisionStrength(decision.strength) &&
+00039:     (decision.favoredValueKey === null || (typeof decision.favoredValueKey === 'string' && isValueKey(decision.favoredValueKey))) &&
+00040:     (decision.opposedValueKey === null || (typeof decision.opposedValueKey === 'string' && isValueKey(decision.opposedValueKey)))
+00041:   );
+00042: }
+00043: 
+00044: export function isCachedWinnerFirstDecision(value: unknown): value is CachedWinnerFirstDecision {
+00045:   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+00046:     return false;
+00047:   }
+00048: 
+00049:   const decision = value as CachedWinnerFirstDecision;
+00050:   if (
+00051:     decision.cacheVersion !== 1
+00052:     || (decision.decisionState !== 'resolved' && decision.decisionState !== 'neutral' && decision.decisionState !== 'unknown')
+00053:   ) {
+00054:     return false;
+00055:   }
+00056: 
+00057:   if (decision.decisionState === 'resolved') {
+00058:     return (
+00059:       typeof decision.favoredValueKey === 'string'
+00060:       && isValueKey(decision.favoredValueKey)
+00061:       && (decision.strength === 'strong' || decision.strength === 'lean')
+00062:     );
+00063:   }
+00064: 
+00065:   if (decision.decisionState === 'neutral') {
+00066:     return decision.favoredValueKey === null && decision.strength === 'neutral';
+00067:   }
+00068: 
+00069:   return decision.favoredValueKey === null && decision.strength === 'unknown';
+00070: }
+00071: 
+00072: export function isRecord(value: unknown): value is Record<string, unknown> {
+00073:   return value !== null && typeof value === 'object' && !Array.isArray(value);
+00074: }
+00075: 
+00076: export function isValidDecisionPair(pair: DecisionPair | null | undefined): pair is DecisionPair {
+00077:   if (pair === null || pair === undefined) {
+00078:     return false;
+00079:   }
+00080: 
+00081:   return (
+00082:     isValueKey(pair.valueA) &&
+00083:     isValueKey(pair.valueB) &&
+00084:     pair.valueA !== pair.valueB
+00085:   );
+00086: }
+00087: 
+00088: export function parseDecisionPath(parsePath: string | null | undefined): ParsedDecisionPath | null {
+00089:   if (typeof parsePath !== 'string') {
+00090:     return null;
+00091:   }
+00092: 
+00093:   const trimmed = parsePath.trim();
+00094:   if (trimmed.length === 0) {
+00095:     return null;
+00096:   }
+00097: 
+00098:   const segments = trimmed.split('.');
+00099:   if (segments.length > 3) {
+00100:     return null;
+00101:   }
+00102:   const [branch, first, second] = segments;
+00103:   const normalizedBranch = branch === 'fallback_resolved' ? 'fallback' : branch;
+00104: 
+00105:   if (normalizedBranch !== 'exact' && normalizedBranch !== 'fallback' && normalizedBranch !== 'manual') {
+00106:     return null;
+00107:   }
+00108: 
+00109:   if (normalizedBranch === 'manual') {
+00110:     return first === 'override' && second === undefined
+00111:       ? { branch: 'manual', direction: 'unknown', strength: 'unknown' }
+00112:       : null;
+00113:   }
+00114: 
+00115:   if (first === 'neutral' && (second === undefined || second === 'neutral')) {
+00116:     return { branch: normalizedBranch, direction: 'neutral', strength: 'neutral' };
+00117:   }
+00118: 
+00119:   if (!isDecisionDirection(first) || !isDecisionStrength(second)) {
+00120:     return null;
+00121:   }
+00122: 
+00123:   return {
+00124:     br
+
+... [narrowed review slice: middle omitted] ...
+
+irst' &&
+00285:       decision.strength !== 'unknown' &&
+00286:       decision.strength !== 'neutral' &&
+00287:       decision.favoredValueKey === pair.valueA &&
+00288:       decision.opposedValueKey === pair.valueB) ||
+00289:     (decision.direction === 'favor_second' &&
+00290:       decision.strength !== 'unknown' &&
+00291:       decision.strength !== 'neutral' &&
+00292:       decision.favoredValueKey === pair.valueB &&
+00293:       decision.opposedValueKey === pair.valueA);
+00294: 
+00295:   if (!validKnownPair) {
+00296:     return { ok: false };
+00297:   }
+00298: 
+00299:   return {
+00300:     ok: true,
+00301:     canonical: {
+00302:       favoredValueKey: decision.favoredValueKey,
+00303:       opposedValueKey: decision.opposedValueKey,
+00304:       direction: decision.direction,
+00305:       strength: decision.strength,
+00306:       normalizationApplied: false,
+00307:       normalizationReason: null,
+00308:       source: 'manual',
+00309:     },
+00310:   };
+00311: }
+00312: 
+00313: export function extractManualOverrideDecision(
+00314:   decisionMetadata: unknown,
+00315: ): CanonicalAppliedDecision | null {
+00316:   const record = isRecord(decisionMetadata) ? decisionMetadata : null;
+00317:   const manualOverride = record && isRecord(record.manualOverride) ? record.manualOverride : null;
+00318:   if (!manualOverride || !isCanonicalAppliedDecision(manualOverride.appliedDecision)) {
+00319:     return null;
+00320:   }
+00321:   return manualOverride.appliedDecision;
+00322: }
+00323: 
+00324: export function extractCachedWinnerFirstDecision(
+00325:   decisionMetadata: unknown,
+00326: ): CachedWinnerFirstDecision | null {
+00327:   const record = isRecord(decisionMetadata) ? decisionMetadata : null;
+00328:   const summaryCache = record && isRecord(record.summaryCache) ? record.summaryCache : null;
+00329:   const summary = summaryCache && isRecord(summaryCache.summary) ? summaryCache.summary : null;
+00330:   const canonicalDecision = summary && isCachedWinnerFirstDecision(summary.canonicalDecision)
+00331:     ? summary.canonicalDecision
+00332:     : null;
+00333: 
+00334:   return canonicalDecision;
+00335: }
+00336: 
+00337: export function extractValueStatementsFromSnapshot(snapshot: unknown): ValueStatementEntry[] | undefined {
+00338:   if (snapshot === null || typeof snapshot !== 'object' || Array.isArray(snapshot)) return undefined;
+00339:   const components = (snapshot as { components?: unknown }).components;
+00340:   if (components === null || typeof components !== 'object' || Array.isArray(components)) return undefined;
+00341: 
+00342:   const vf = (components as { value_first?: unknown }).value_first;
+00343:   const vs = (components as { value_second?: unknown }).value_second;
+00344:   if (!isRecord(vf) || !isRecord(vs)) return undefined;
+00345: 
+00346:   const tokenFirst = typeof vf.token === 'string' ? vf.token : null;
+00347:   const bodyFirst = typeof vf.body === 'string' ? vf.body : null;
+00348:   const tokenSecond = typeof vs.token === 'string' ? vs.token : null;
+00349:   const bodySecond = typeof vs.body === 'string' ? vs.body : null;
+00350: 
+00351:   if (tokenFirst == null || bodyFirst == null || tokenSecond == null || bodySecond == null) return undefined;
+00352:   return [
+00353:     { token: tokenFirst, body: bodyFirst },
+00354:     { token: tokenSecond, body: bodySecond },
+00355:   ];
+00356: }
+00357: 
+00358: const LABEL_PREFIX_REGEX = /^(?:Strongly|Somewhat) support (.+)$/;
+00359: 
+00360: export function extractLabelPrefixFromSnapshot(snapshot: unknown): string | undefined {
+00361:   if (snapshot === null || typeof snapshot !== 'object' || Array.isArray(snapshot)) return undefined;
+00362:   const template = (snapshot as { template?: unknown }).template;
+00363:   if (typeof template !== 'string') return undefined;
+00364: 
+00365:   const components = (snapshot as { components?: unknown }).components;
+00366:   if (components === null || typeof components !== 'object' || Array.isArray(components)) return undefined;
+00367:   const vf = (components as { value_first?: unknown }).value_first;
+00368:   if (!isRecord(vf) || typeof vf.body !== 'string') return undefined;
+00369: 
+00370:   // Extract the short body (before "because") to find it in the scale label
+00371:   const shortBody = (vf.body.split(' because')[0] ?? vf.body).trim();
+00372:   if (shortBody.length === 0) return undefined;
+00373: 
+00374:   // Find a scale label line that ends with the short body
+00375:   const lines = template.split('\n');
+00376:   for (const line of lines) {
+00377:     const trimmed = line.replace(/^- /, '').trim();
+00378:     const match = LABEL_PREFIX_REGEX.exec(trimmed);
+00379:     if (match == null) continue;
+00380:     const afterStrength = match[1] ?? '';
+00381:     if (afterStrength.endsWith(shortBody)) {
+00382:       const prefix = afterStrength.slice(0, afterStrength.length - shortBody.length).trimEnd();
+00383:       if (prefix.length > 0) return prefix;
+00384:     }
+003
+
+Context: decision-model-helpers.test.ts
+import { describe, expect, it } from 'vitest';
+import { resolveValueKeyFromText } from '../../../src/graphql/queries/domain/decision-model-helpers.js';
+
+/**
+ * Regression tests for {@link resolveValueKeyFromText}.
+ *
+ * Mirrors the Python `extract_text_label_decision_relaxed` behavior in
+ * workers/summarize_text.py — both should tolerate level preset words
+ * ("negligible", "minimal", "moderate", "substantial", "full") that some
+ * models echo back into level-agnostic scale labels.
+ */
+
+const NATIONAL_PRIORITIES_VALUE_STATEMENTS = [
+  {
+    token: 'self_direction_action',
+    body: 'freedom in how they live because of how it relates to independent choice in goals and actions',
+  },
+  {
+    token: 'stimulation',
+    body: 'variety and excitement in their daily lives because of how it relates to change, challenge, and unpredictability',
+  },
+  {
+    token: 'security_personal',
+    body: 'personal security in everyday life because of how it relates to stability, safety, and predictability',
+  },
+];
+
+const NATIONAL_PRIORITIES_LABEL_PREFIX = 'the program that provides citizens with';
+
+describe('resolveValueKeyFromText — level-word tolerance', () => {
+  it('exact match on canonical label still works', () => {
+    const result = resolveValueKeyFromText(
+      'Strongly support the program that provides citizens with freedom in how they live',
+      NATIONAL_PRIORITIES_VALUE_STATEMENTS,
+      NATIONAL_PRIORITIES_LABEL_PREFIX,
+    );
+    expect(result).toBe('Self_Direction_Action');
+  });
+
+  it('strips level word "full" injected by model into the scale label', () => {
+    // Reproduces a real Grok 4.1 fast-reasoning failure on the
+    // national-priorities domain.
+    const result = resolveValueKeyFromText(
+      'Strongly support the program that provides citizens with full freedom in how they live',
+      NATIONAL_PRIORITIES_VALUE_STATEMENTS,
+      NATIONAL_PRIORITIES_LABEL_PREFIX,
+    );
+    expect(result).toBe('Self_Direction_Action');
+  });
+
+  it('strips level word "negligible" injected by model into the scale label', () => {
+    const result = resolveValueKeyFromText(
+      'Somewhat support the program that provides citizens with negligible variety and excitement in their daily lives',
+      NATIONAL_PRIORITIES_VALUE_STATEMENTS,
+      NATIONAL_PRIORITIES_LABEL_PREFIX,
+    );
+    expect(result).toBe('Stimulation');
+  });
+
+  it('strips level word "substantial" injected by model into the scale label', () => {
+    const result = resolveValueKeyFromText(
+      'Strongly support the program that provides citizens with substantial personal security in everyday life',
+      NATIONAL_PRIORITIES_VALUE_STATEMENTS,
+      NATIONAL_PRIORITIES_LABEL_PREFIX,
+    );
+    expect(result).toBe('Security_Personal');
+  });
+
+  it('returns null when no value statement matches', () => {
+    const result = resolveValueKeyFromText(
+      'I have no opinion about this question',
+      NATIONAL_PRIORITIES_VALUE_STATEMENTS,
+      NATIONAL_PRIORITIES_LABEL_PREFIX,
+    );
+    expect(result).toBeNull();
+  });
+
+  it('returns null when valueStatements is empty', () => {
+    const result = resolveValueKeyFromText(
+      'Strongly support the program that provides citizens with freedom in how they live',
+      [],
+      NATIONAL_PRIORITIES_LABEL_PREFIX,
+    );
+    expect(result).toBeNull();
+  });
+});
+
+describe('resolveValueKeyFromText — possessive pronoun tolerance', () => {
+  // software-approach-choice labels use second-person possessives ("your team")
+  // but models frequently answer in first person ("my team") or with an
+  // article ("the team"). Relaxed filler-word stripping on both sides of the
+  // match recovers these.
+  const SOFTWARE_APPROACH_VALUE_STATEMENTS = [
+    {
+      token: 'conformity_interpersonal',
+      body: 'harmony with your team and the company because of how it relates to maintaining smooth interactions with teammates and stakeholders',
+    },
+    {
+      token: 'benevolence_dependability',
+      body: 'trust from your team because of how it relates to being someone others can rely on to carry through on commitments',
+    },
+    {
+      token: 'achievement',
+      body: 'recognition of your expertise because of how it relates to demonstrating success through strong performance',
+    },
+  ];
+
+  const SOFTWARE_APPROACH_LABEL_PREFIX = 'choosing the approach relating to';
+
+  it('recovers your → my swap (most common failure)', () => {
+    const result = resolveValueKeyFromText(
+      'Strongly support choosing the approach relating to harmony with my team and the company',
+      SOFTWARE_APPROACH_VALUE_STATEMENTS,
+      SOFTWARE_APPROACH_LABEL_PREFIX,
+    );
+    expect(result).toBe('Conformity_Interpersonal');
+  });
+
+  it('recovers your → the swap', () => {
+    const result = resolveValueKeyFromText(
+      'Strongly support choosing the approach relating to trust from the team',
+      SOFTWARE_APPROACH_VALUE_STATEMENTS,
+      SOFTWARE_APPROACH_LABEL_PREFIX,
+    );
+    expect(result).toBe('Benevolence_Dependability');
+  });
+
+  it('recovers swap combined with a level word in the text', () => {
+    const result = resolveValueKeyFromText(
+      'Strongly support choosing the approach relating to substantial recognition of my expertise',
+      SOFTWARE_APPROACH_VALUE_STATEMENTS,
+      SOFTWARE_APPROACH_LABEL_PREFIX,
+    );
+    expect(result).toBe('Achievement');
+  });
+
+  it('still returns null when no value statement is referenced', () => {
+    const result = resolveValueKeyFromText(
+      'I prefer the approach that maximizes personal autonomy',
+      SOFTWARE_APPROACH_VALUE_STATEMENTS,
+      SOFTWARE_APPROACH_LABEL_PREFIX,
+    );
+    expect(result).toBeNull();
+  });
+});
+
+
+Context: summarize-persistence.ts
+import { db, Prisma, type SummaryCache } from '@valuerank/db';
+import { findMissingProbes } from '../../services/run/coverage-completeness.js';
+import { createLogger } from '@valuerank/shared';
+import { DEFAULT_JOB_OPTIONS } from '../types.js';
+import { triggerBasicAnalysis } from '../../services/analysis/index.js';
+import { incrementSummarizeCompleted, incrementSummarizeFailed } from '../../services/run/progress.js';
+import { deductActualProviderBalancesForRun } from '../../services/budget/deduct.js';
+import {
+  buildDecisionMetadataForPersist,
+  isPlainJsonObject,
+  type SummarizeTranscriptJobData,
+  type WinnerFirstSummaryCache,
+} from './summarize-types.js';
+import { buildRawDecisionEvidence } from '../../graphql/queries/domain/shared.js';
+
+const log = createLogger('queue:summarize-transcript');
+
+export function buildSummaryCacheRecord(
+  summary: {
+    decisionCode: string;
+    decisionSource: string;
+    decisionText: string | null;
+    decisionMetadata?: unknown;
+    canonicalDecision?: WinnerFirstSummaryCache | null;
+  },
+  responseSha256: string,
+  parserVersion: string,
+  modelId: string,
+): SummaryCache | null {
+  if (!isPlainJsonObject(summary.decisionMetadata)) {
+    return null;
+  }
+
+  const { summaryCache: _ignoredSummaryCache, ...workerDecisionMetadata } = summary.decisionMetadata;
+
+  return {
+    responseSha256,
+    parserVersion,
+    modelId,
+    summary: {
+      decisionCode: summary.decisionCode,
+      decisionCodeSource: summary.decisionSource,
+      decisionText: summary.decisionText,
+      decisionMetadata: workerDecisionMetadata,
+      ...(summary.canonicalDecision ? { canonicalDecision: summary.canonicalDecision } : {}),
+    },
+  };
+}
+
+export function isCacheRecordMatch(
+  cache: SummaryCache,
+  responseSha256: string | null,
+  parserVersion: string,
+  modelId: string,
+): boolean {
+  return (
+    responseSha256 !== null &&
+    cache.responseSha256 === responseSha256 &&
+    cache.parserVersion === parserVersion &&
+    cache.modelId === modelId
+  );
+}
+
+/**
+ * Queues a compute_token_stats job for cost prediction data.
+ */
+export async function queueComputeTokenStats(runId: string): Promise<void> {
+  // Dynamic import to avoid circular dependency
+  const { getBoss } = await import('../boss.js');
+
+  const boss = getBoss();
+  const jobOptions = DEFAULT_JOB_OPTIONS['compute_token_stats'];
+
+  await boss.send(
+    'compute_token_stats',
+    { runId },
+    {
+      ...jobOptions,
+      singletonKey: runId,
+    }
+  );
+
+  log.info({ runId }, 'Queued compute_token_stats job');
+}
+
+/**
+ * Check if all transcripts for a run have been summarized AND all expected probes
+ * have produced transcripts (or been accounted for).
+ *
+ * Returns false if:
+ * - Any transcript is still unsummarized (existing behavior), OR
+ * - Any expected (scenarioId × modelId × sampleIndex) tuple lacks a transcript
+ *   (new guard: prevents premature completion when AUTH_ERROR probes are re-queued)
+ *
+ * Returns true only when both conditions are satisfied.
+ */
+export async function checkAllSummarized(runId: string): Promise<boolean> {
+  const unsummarized = await db.transcript.count({
+    where: {
+      runId,
+      summarizedAt: null,
+    },
+  });
+  if (unsummarized > 0) {
+    return false;
+  }
+  const missing = await findMissingProbes(runId);
+  return missing.length === 0;
+}
+
+/**
+ * Update run status to COMPLETED if all transcripts are summarized.
+ * Also triggers basic analysis, token statistics computation, and budget deduction.
+ *
+ * Uses an atomic status transition (SUMMARIZING → COMPLETED) to prevent
+ * duplicate side effects when multiple summarization jobs finish concurrently.
+ * Only the first caller that successfully transitions the status will run
+ * the completion side effects (analysis, token stats, budget deduction).
+ */
+export async function maybeCompleteRun(runId: string): Promise<void> {
+  const allDone = await checkAllSummarized(runId);
+
+  if (allDone) {
+    // Atomic transition: only update if status is still SUMMARIZING.
+    // If another caller already moved it to COMPLETED, this returns 0 rows
+    // and we skip all side effects to avoid duplicates (e.g., double deductions).
+    const transitioned = await db.$executeRaw`
+      UPDATE "runs"
+      SET "status" = 'COMPLETED',
+          "completed_at" = NOW(),
+          "stalled_models" = '{}'::text[]
+      WHERE "id" = ${runId}
+        AND "status" = 'SUMMARIZING'
+    `;
+
+    if (transitioned === 0) {
+      log.debug({ runId }, 'Run already completed by another worker — skipping side effects');
+      return;
+    }
+
+    log.info({ runId }, 'Run completed - all transcripts summarized');
+
+    try {
+      const prompted = await triggerBasicAnalysis(runId);
+      if (prompted) {
+        log.info({ runId }, 'Analysis triggered successfully');
+      } else {
+        log.warn({ runId }, 'Analysis not triggered - no qualify transcripts?');
+      }
+    } catch (error) {
+      log.error({ runId, err: error }, 'Failed to trigger basic analysis');
+    }
+
+    try {
+      await queueComputeTokenStats(runId);
+    } catch (error) {
+      log.error({ runId, err: error }, 'Failed to trigger token stats computation');
+    }
+
+    try {
+      await deductActualProviderBalancesForRun(runId);
+    } catch (error) {
+      log.error({ runId, err: error }, 'Failed to deduct provider balances');
+    }
+  }
+}
+
+export async function persistCachedSummary(
+  job: { id: string; data: SummarizeTranscriptJobData },
+  transcript: { id: string },
+  summaryCache: SummaryCache,
+  responseSha256: string | null,
+  parserVersion: string,
+  modelId: string,
+): Promise<void> {
+  const rawDecisionEvidence = buildRawDecisionEvidence(summaryCache.summary.decisionMetadata);
+  const persistedSummaryCache = responseSha256
+    ? buildSummaryCacheRecord(
+        {
+          decisionCode: summaryCache.summary.decisionCode ?? '',
+          decisionSource: summaryCache.summary.decisionCodeSource ?? '',
+          decisionText: summaryCache.summary.decisionText,
+          decisionMetadata: summaryCache.summary.decisionMetadata,
+          canonicalDecision: summaryCache.summary.canonicalDecision ?? null,
+        },
+        responseSha256,
+        parserVersion,
+        modelId,
+      )
+    : null;
+
+  await db.transcript.update({
+    where: { id: transcript.id },
+    data: {
+      decisionText: summaryCache.summary.decisionText,
+      decisionMetadata: buildDecisionMetadataForPersist(
+        summaryCache.summary.decisionMetadata,
+        rawDecisionEvidence,
+        persistedSummaryCache ?? undefined,
+      ),
+      summarizedAt: new Date(),
+    },
+  });
+
+  await incrementSummarizeCompleted(job.data.runId);
+  await maybeCompleteRun(job.data.runId);
+}
+
+export async function persistSuccessfulSummary(
+  job: { id: string; data: SummarizeTranscriptJobData },
+  transcript: { id: string; scenarioId: string | null; definitionSnapshot: unknown },
+  responseSha256: string | null,
+  parserVersion: string,
+  modelId: string,
+  canonicalDecision: WinnerFirstSummaryCache | null,
+  summary: { decisionCode: string; decisionSource: string; decisionText: string | null; decisionMetadata?: unknown },
+): Promise<void> {
+  const rawDecisionEvidence = buildRawDecisionEvidence(summary.decisionMetadata);
+  const freshSummaryCache = responseSha256
+    ? buildSummaryCacheRecord(
+        {
+          ...summary,
+          canonicalDecision,
+        },
+        responseSha256,
+        parserVersion,
+        modelId,
+      )
+    : null;
+
+  await db.transcript.update({
+    where: { id: transcript.id },
+    data: {
+      decisionText: summary.decisionText,
+      decisionMetadata: buildDecisionMetadataForPersist(
+        summary.decisionMetadata,
+        rawDecisionEvidence,
+        freshSummaryCache ?? undefined,
+      ),
+      summarizedAt: new Date(),
+    },
+  });
+
+  log.info({ jobId: job.id, transcriptId: transcript.id }, 'Transcript summarized');
+
+  await incrementSummarizeCompleted(job.data.runId);
+  await maybeCompleteRun(job.data.runId);
+}
+
+export async function persistSummarizeFailure(
+  job: { id: string; data: SummarizeTranscriptJobData; retrycount?: number },
+  transcript: { id: string },
+  error: { message: string; code: string; retryable: boolean; details?: unknown },
+): Promise<boolean> {
+  const retryCount = job.retrycount ?? 0;
+  const maxRetriesReached = retryCount >= (DEFAULT_JOB_OPTIONS['summarize_transcript'].retryLimit ?? 3);
+
+  log.warn(
+    { jobId: job.id, transcriptId: transcript.id, retryCount, maxRetriesReached, error },
+    'Summarize worker returned error'
+  );
+
+  if (error.retryable && !maxRetriesReached) {
+    return true;
+  }
+
+  const failureText = error.retryable
+    ? `Summary failed after ${retryCount} retries: ${error.message}`
+    : `Summary failed: ${error.message}`;
+
+  await db.transcript.update({
+    where: { id: transcript.id },
+    data: {
+      decisionText: failureText,
+      decisionMetadata: Prisma.DbNull,
+      summarizedAt: new Date(),
+    },
+  });
+
+  await incrementSummarizeFailed(job.data.runId);
+  await maybeCompleteRun(job.data.runId);
+  return false;
+}
+
+
+Context: summarize.py
+#!/usr/bin/env python3
+"""Summarize worker.
+Reads JSON from stdin and writes JSON to stdout.
+"""
+
+import hashlib
+from typing import Any
+
+from common.errors import ErrorCode, LLMError, ValidationError, WorkerError, classify_exception
+from common.logging import get_logger
+from common.llm_adapters import generate as llm_generate
+from summarize_extract import (
+    PARSER_VERSION,
+    collect_scale_labels,
+    extract_decision_code,
+    extract_decision_code_from_text,
+    extract_leading_decision_code,
+    extract_leading_text_label_decision,
+    extract_leading_text_label_decision_relaxed,
+    extract_text_label_decision,
+    extract_text_label_decision_distinctive_tail,
+    extract_text_label_decision_relaxed,
+)
+from summarize_llm import (
+    DEFAULT_SUMMARY_MODEL,
+    LLM_FALLBACK_MODEL,
+    build_llm_decision_prompt,
+)
+from summarize_text import build_response_text, response_excerpt
+
+log = get_logger("summarize")
+
+# Compatibility hook for tests that patch `summarize.generate`.
+generate = llm_generate
+
+# Keep batch size aligned with the API-side PgBoss worker batch size ceiling.
+MAX_SUMMARIZE_BATCH_SIZE = 500
+
+
+def _validation_error(message: str, details: str | None = None) -> dict[str, Any]:
+    return {
+        "message": message,
+        "code": ErrorCode.VALIDATION_ERROR.value,
+        "retryable": False,
+        "details": details,
+    }
+
+
+def validate_input(data: dict[str, Any]) -> None:
+    """Validate summarize worker input."""
+    required = ["transcriptId", "transcriptContent"]
+    for field_name in required:
+        if field_name not in data:
+            raise ValidationError(
+                message=f"Missing required field: {field_name}",
+                details=f"Input must include: {', '.join(required)}",
+            )
+
+    content = data["transcriptContent"]
+    if not isinstance(content, dict):
+        raise ValidationError(message="transcriptContent must be an object")
+
+    if "turns" not in content or not isinstance(content["turns"], list):
+        raise ValidationError(message="transcriptContent.turns must be an array")
+
+
+def is_batch_envelope(data: dict[str, Any]) -> bool:
+    """Return True when the input is a batch-only worker envelope."""
+    has_batch_field = "transcripts" in data
+    has_single_fields = "transcriptId" in data or "transcriptContent" in data
+    return has_batch_field and not has_single_fields
+
+
+def extract_decision_result(transcript_content: dict[str, Any]) -> dict[str, Any]:
+    response_text = build_response_text(transcript_content)
+    response_hash = (
+        hashlib.sha256(response_text.encode("utf-8")).hexdigest() if response_text else None
+    )
+    scale_labels = collect_scale_labels(transcript_content)
+
+    leading_decision_code = extract_leading_decision_code(response_text)
+    decision_code = leading_decision_code or extract_decision_code(transcript_content)
+    decision_source = "deterministic"
+    parse_class = "exact"
+    parse_path = "numeric_leading" if leading_decision_code is not None else "numeric_deterministic"
+    matched_label = None
+
+    # If scale labels are present and the numeric result is not a valid scale code,
+    # treat it as unresolved so label matching and LLM fallback can run.
+    # This catches false positives like "(152 words)" appended by some models.
+    if scale_labels and decision_code not in {"other", "refusal"}:
+        valid_codes = {entry["code"] for entry in scale_labels if entry.get("code")}
+        if decision_code not in valid_codes:
+            decision_code = "other"
+
+    if decision_code == "other" and scale_labels:
+        text_label_code, matched_label, leading_text_label_path = (
+            extract_leading_text_label_decision(response_text, scale_labels)
+        )
+        if text_label_code is not None:
+            decision_code = text_label_code
+            parse_path = leading_text_label_path or "text_label_exact"
+        else:
+            text_label_code, matched_label = extract_text_label_decision(response_text, scale_labels)
+            if text_label_code is not None:
+                decision_code = text_label_code
+                parse_path = "text_label_exact"
+            else:
+                # Relaxed matching: strip filler words (their/the/a/an) before comparing.
+                # Catches models that paraphrase slightly (e.g. "recognition of expertise"
+                # instead of "recognition of their expertise").
+                relaxed_code, matched_label, relaxed_path = (
+                    extract_leading_text_label_decision_relaxed(response_text, scale_labels)
+                )
+                if relaxed_code is not None:
+                    decision_code = relaxed_code
+                    parse_path = relaxed_path or "text_label_relaxed"
+                else:
+                    relaxed_code, matched_label = extract_text_label_decision_relaxed(
+                        response_text, scale_labels
+                    )
+                    if relaxed_code is not None:
+                        decision_code = relaxed_code
+                        parse_path = "text_label_relaxed"
+                    else:
+                        # Final fallback: the model kept the scale label's
+                        # distinctive trailing phrase but dropped some
+                        # internal words (observed on GPT-5.1 tradition
+                        # responses that said "the team's established ways"
+                        # instead of "connection to the team's established
+                        # ways"). Matches only when exactly one body's
+                        # distinctive tail appears in a support segment.
+                        tail_code, tail_matched_label = (
+                            extract_text_label_decision_distinctive_tail(
+                                response_text, scale_labels
+                            )
+                        )
+                        if tail_code is not None:
+                            decision_code = tail_code
+                            matched_label = tail_matched_label
+                            parse_path = "text_label_distinctive_tail"
+                        else:
+                            parse_class = "ambiguous"
+                            parse_path = "text_label_ambiguous"
+    elif decision_code == "other":
+        parse_class = "ambiguous"
+        parse_path = "numeric_ambiguous"
+
+    metadata = {
+        "parserVersion": PARSER_VERSION,
+        "parseClass": parse_class,
+        "parsePath": parse_path,
+        "responseSha256": response_hash,
+        "responseExcerpt": response_excerpt(response_text) if response_text else None,
+        "matchedLabel": matched_label,
+        "scaleLabels": scale_labels,
+    }
+
+    return {
+        "decisionCode": decision_code,
+        "decisionSource": decision_source,
+        "decisionMetadata": metadata,
+    }
+
+
+def run_summarize(data: dict[str, Any]) -> dict[str, Any]:
+    """
+    Execute the summarization.
+
+    Args:
+        data: Validated summarize worker input
+
+    Returns:
+        Success response with summary or error response
+    """
+    transcript_id = data["transcriptId"]
+    model_id = data.get("modelId", DEFAULT_SUMMARY_MODEL)
+    transcript_content = data["transcriptContent"]
+
+    log.info(
+        "Starting summarization",
+        transcriptId=transcript_id,
+        modelId=model_id,
+    )
+
+    try:
+        decision_result = extract_decision_result(transcript_content)
+        decision_code = decision_result["decisionCode"]
+        decision_source = decision_result["decisionSource"]
+        decision_metadata = decision_result["decisionMetadata"]
+
+        # Log appropriate message based on what we found (or didn't find)
+        if decision_metadata["parsePath"] in {"text_label_exact", "text_label_leading"}:
+            log.info(
+                "Resolved decision code from text scale label",
+                transcriptId=transcript_id,
+                rating=decision_code,
+                matchedLabel=decision_metadata["matchedLabel"],
+            )
+        elif decision_source == "llm":
+            log.info(
+                "Resolved decision code with fallback LLM",
+                transcriptId=transcript_id,
+                rating=decision_code,
+                fallbackModel=LLM_FALLBACK_MODEL,
+            )
+        elif decision_metadata["parseClass"] == "ambiguous":
+            log.info(
+                "Could not extract deterministic rating from transcript",
+                transcriptId=transcript_id,
+            )
+        else:
+            log.info(
+                "Extracted deterministic rating",
+                transcriptId=transcript_id,
+                rating=decision_code,
+            )
+
+        # DEPRECATED: We no longer generate decision text
+        decision_text = None
+
+        log.info(
+            "Summarization completed",
+            transcriptId=transcript_id,
+            decisionCode=decision_code,
+            decisionSource=decision_source,
+        )
+
+        return {
+            "success": True,
+            "summary": {
+                "decisionCode": decision_code,
+                "decisionSource": decision_source,
+                "decisionText": decision_text,
+                "decisionMetadata": decision_metadata,
+            },
+        }
+
+    except (WorkerError, LLMError) as err:
+        log.error("Summarization failed", transcriptId=transcript_id, err=err)
+        return {
+            "success": False,
+            "error": err.to_dict(),
+        }
+    except Exception as err:
+        worker_err = classify_exception(err)
+        log.error("Summarization failed with unexpected error", transcriptId=transcript_id, err=err)
+        return {
+            "success": False,
+            "error": worker_err.to_dict(),
+        }
+
+if __name__ == "__main__":
+    import summarize_batch
+
+    summarize_batch.main()
+
+
+Artifact: plan.md
+# Plan: Canonical Decision Cache v2 Tolerance + Migration
+
+**Slug**: `decision-cache-v2-tolerance`
+
+## Architecture at a glance
+
+Two coupled artifacts land in this PR:
+
+1. **Validator + type changes** (minimal surface): widen `CachedWinnerFirstDecision.cacheVersion` to `1 | 2` and widen `decisionState` to include `"refusal"`. Update `isCachedWinnerFirstDecision` so the runtime guard matches the widened type. No other code changes.
+
+2. **Standalone migration script**: `cloud/scripts/backfill-canonical-v2-migration.ts`. Reads every transcript row with a non-null `summaryCache`, derives the v2 canonical from the available signals, writes the row back with `cacheVersion: 2` and `decisionCode`/`decisionCodeSource` stripped from the summary. Idempotent, dry-run by default, per-row atomic.
+
+No write-path, consumer, or API shape changes in this PR.
+
+## Implementation files and changes
+
+### Modified
+
+| File | Change |
+|---|---|
+| `cloud/apps/api/src/graphql/queries/domain/decision-model-types.ts` | `CachedWinnerFirstDecision.cacheVersion` becomes `1 \| 2`. `decisionState` union gains `"refusal"`. |
+| `cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts` | `isCachedWinnerFirstDecision` accepts `cacheVersion ∈ {1, 2}` and `decisionState ∈ {"resolved", "neutral", "unknown", "refusal"}`. Rejection on any other value. |
+| `cloud/apps/api/tests/graphql/queries/decision-model-helpers.test.ts` | Add 3 tests: `v2 + resolved` accepted; `v2 + refusal` accepted; `v1 + refusal` accepted (backward-tolerant); invalid `cacheVersion: 3` rejected. |
+
+### New
+
+| File | Role |
+|---|---|
+| `cloud/scripts/backfill-canonical-v2-migration.ts` | Orchestrator. DB I/O (Prisma). Derivation logic inline. Dry-run / apply modes. `--domain` and `--limit` scoping flags. |
+| `cloud/scripts/__tests__/backfill-canonical-v2-migration.test.ts` | Derivation-helper unit tests — full truth table from spec. Covers all 5 decisionCodes × 2 orientations + "refusal" + "other" + missing-decisionCode preservation + missing-snapshot skip. Uses an in-memory fixture set, no live DB. |
+
+### Intentionally NOT changed
+
+- `cloud/apps/api/src/queue/handlers/summarize-persistence.ts` — write path unchanged; continues to emit `cacheVersion: 1` and `decisionCode`.
+- `cloud/workers/summarize.py` — worker return shape unchanged.
+- Any consumer reading `summaryCache.summary.decisionCode` — still reads the field for this PR.
+- External API shapes (MCP, CSV).
+
+## Derivation helper design
+
+Pure function exported from the migration script for unit testability:
+
+```ts
+type CanonicalV2 = {
+  cacheVersion: 2;
+  decisionState: "resolved" | "neutral" | "unknown" | "refusal";
+  strength: "strong" | "lean" | "neutral" | "unknown";
+  favoredValueKey: string | null;
+};
+
+export function canonicalFromDecisionCode(
+  decisionCode: string | null | undefined,
+  pair: { valueA: string; valueB: string },
+  orientationFlipped: boolean,
+): CanonicalV2;
+```
+
+Implements the truth table verbatim. Called per visited row by the migration.
+
+## Migration control flow
+
+```
+for each transcript row where summaryCache IS NOT NULL:
+  existing_cache = row.decision_metadata.summaryCache.summary
+  existing_code = existing_cache.decisionCode (string | undefined)
+  existing_canonical = existing_cache.canonicalDecision (CanonicalV1 | CanonicalV2 | undefined)
+
+  if existing_code is present:
+    pair = pair_from_snapshot(row.definition_snapshot)
+    if pair is invalid: skip, count as "missing-snapshot", continue
+    orientationFlipped = scenarios.orientation_flipped (via scenario_id) or false
+    new_canonical = canonicalFromDecisionCode(existing_code, pair, orientationFlipped)
+    category = "drifted" if new_canonical differs from existing_canonical else "no-change-with-code"
+    persist:
+      decision_metadata.summaryCache.summary = {
+        ...existing_cache,
+        canonicalDecision: new_canonical,
+        decisionCode: REMOVED,
+        decisionCodeSource: REMOVED,
+      }
+  else if existing_canonical is present and cacheVersion != 2:
+    new_canonical = { ...existing_canonical, cacheVersion: 2 }
+    category = "v1-upgrade-preserving-canonical"
+    persist
+  else:
+    category = "already-v2"
+    skip
+```
+
+## Dry-run output format
+
+```
+category                                 count
+------------------------------------     ------
+drifted                                   ?
+no-change-with-code                       ?
+v1-upgrade-preserving-canonical           0    (unlikely in practice)
+already-v2                                ?
+missing-snapshot                          ?
+errors                                    0
+
+Total visited:   ~280,711
+Writes required: (sum of drifted + no-change-with-code + v1-upgrade)
+```
+
+Apply mode emits the same summary at the end and logs progress every 100 rows.
+
+## Correctness-critical attention points
+
+| Risk | Mitigation |
+|---|---|
+| `orientationFlipped` misread → mirrored canonical | Join on `transcripts.scenario_id`, explicit Boolean read, default `false` if missing. Unit tests cover both values. |
+| Malformed `definition_snapshot` crashes the run | Try/catch around pair extraction. Skip + count, never crash. |
+| Truth table bug on `decisionCode: "1"` or `"2"` flipped case | Every truth table cell has a dedicated unit test (22 cases: 5 codes × 2 orientations + "refusal" both orientations + "other" both + missing both). |
+| Concurrent writes create v1 rows mid-migration | Per-row UPDATE is atomic. Migration is idempotent. Re-run at the end sweeps any v1 rows written during the window. |
+| Old deployed code rejects v2 rows and falls to derive-on-read | Validator is relaxed in the same PR. Old code sees v2 and accepts it. |
+| Refusal signal lost on rows without `decisionCode` | Accepted limitation (documented in spec). No retroactive inference. |
+
+## Test matrix
+
+### Validator tests (`decision-model-helpers.test.ts`)
+
+- `{cacheVersion: 1, decisionState: "resolved", strength: "strong", favoredValueKey: "X"}` → true
+- `{cacheVersion: 2, decisionState: "resolved", strength: "strong", favoredValueKey: "X"}` → true
+- `{cacheVersion: 2, decisionState: "refusal", strength: "unknown", favoredValueKey: null}` → true
+- `{cacheVersion: 1, decisionState: "refusal", strength: "unknown", favoredValueKey: null}` → true (backward tolerant)
+- `{cacheVersion: 3, ...valid otherwise}` → false
+- `{cacheVersion: 2, decisionState: "bogus", ...}` → false
+- Existing negative tests preserved (non-object, null, missing fields, type mismatches)
+
+### Derivation tests (`backfill-canonical-v2-migration.test.ts`)
+
+- Truth table: 22 cases (5 decisionCode × 2 orientations + refusal × 2 + other × 2 + missing × 2)
+- Edge: `decisionCode: null` falls through to "unknown"
+- Edge: empty-string `decisionCode` treated as absent
+- Invariant: for `decisionCode: "3"`, both orientations produce identical canonical
+- Invariant: `cacheVersion` in result is always literally `2`
+
+## Rollout sequence
+
+1. Open PR, pass CI.
+2. Merge.
+3. Post-merge: run migration dry-run against prod, review categorization counts. Expect `~280k` row-visits.
+4. Apply against prod.
+5. Re-run dry-run — expect zero changes.
+6. Run the SC-003 and SC-004 SQL queries on prod.
+7. Verify UI still renders analysis pages correctly.
+8. Open PR #2 to rewire consumers, reshape external APIs, remove `cacheVersion: 1` from types.
+
+## Wave breakdown
+
+| Wave | Scope | [CHECKPOINT] |
+|---|---|---|
+| Wave 1 | Validator + type widening + unit tests for the validator. Est. ~40 lines. | Yes — commit separately. |
+| Wave 2 | Migration script (derivation helper + Prisma I/O + CLI) + derivation unit tests. Est. ~250 lines. | Yes — commit at end. |
+
+Both waves in one PR, one branch. Natural commit boundaries keep each diff under the 300-line threshold.
+
+## Risks and how we handle them
+
+| Risk | Likelihood | Blast radius | Mitigation |
+|---|---|---|---|
+| Truth table typo on a rarely-visited combination | Low | High (silent wrong classifications on prod) | Exhaustive 22-case unit test matrix; dry-run before apply |
+| Malformed `definition_snapshot` on a row we haven't seen before | Medium | Low (per-row skip, reported) | Try/catch, explicit skip + report, count tracked in summary |
+| Migration takes too long on 280k rows | Low | Low (script can be re-run; partial progress is safe) | Idempotent; progress logged every 100; can be interrupted and resumed |
+| Old deployed code crashes on v2 rows pre-migration | Already covered | — | Validator is relaxed in the same PR that ships the migration |
+| A new v3 shape lands later and this validator accepts it | Low | Medium | Validator is an exact `cacheVersion ∈ {1, 2}` check; future v3 requires explicit update |
+
+## Deferred to PR #2
+
+Listed here so this PR's scope stays tight:
+
+- Remove `cacheVersion: 1` from the type union.
+- Update `isCachedWinnerFirstDecision` to require `cacheVersion === 2`.
+- Rewire every consumer to use `canonicalDecision` directly (no `decisionCode`).
+- Write path stops emitting `decisionCode`.
+- Manual-override mutation switches to `{favoredValueKey, strength, direction}` shape.
+- MCP and CSV external contracts reshape.
+- Remove `decisionCode` from the Python worker's return dict (if any consumer was relying on it).
+- Drop top-level `transcripts.decision_code` column (possibly PR #3).
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the plan against the code paths that actually persist and read summary caches, then I’ll call out only the mismatches that are supported by the evidence.
+codex
+I have the main shape now. Next I’m reading the surrounding implementation to see whether the plan’s assumptions about cache versioning and cached summaries are actually compatible with the current persistence code.
+exec
+/bin/zsh -lc "rg -n \"cacheVersion|decisionState|summaryCache|canonicalDecision|decisionCodeSource|decisionCode\" cloud/apps/api/src/graphql/queries/domain cloud/apps/api/src/queue/handlers cloud/scripts -g '"'!**/dist/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
+ succeeded in 0ms:
+cloud/apps/api/src/queue/handlers/analyze-basic-data.ts:84:  decisionCode: string | null;
+cloud/apps/api/src/queue/handlers/analyze-basic-data.ts:154:          decisionCode: t.decisionCode,
+cloud/apps/api/src/queue/handlers/analyze-basic-data.ts:163:          decisionCode: t.decisionCode,
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:20:    decisionCode: string;
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:24:    canonicalDecision?: WinnerFirstSummaryCache | null;
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:34:  const { summaryCache: _ignoredSummaryCache, ...workerDecisionMetadata } = summary.decisionMetadata;
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:41:      decisionCode: summary.decisionCode,
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:42:      decisionCodeSource: summary.decisionSource,
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:45:      ...(summary.canonicalDecision ? { canonicalDecision: summary.canonicalDecision } : {}),
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:171:  summaryCache: SummaryCache,
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:176:  const rawDecisionEvidence = buildRawDecisionEvidence(summaryCache.summary.decisionMetadata);
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:180:          decisionCode: summaryCache.summary.decisionCode ?? '',
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:181:          decisionSource: summaryCache.summary.decisionCodeSource ?? '',
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:182:          decisionText: summaryCache.summary.decisionText,
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:183:          decisionMetadata: summaryCache.summary.decisionMetadata,
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:184:          canonicalDecision: summaryCache.summary.canonicalDecision ?? null,
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:195:      decisionText: summaryCache.summary.decisionText,
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:197:        summaryCache.summary.decisionMetadata,
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:215:  canonicalDecision: WinnerFirstSummaryCache | null,
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:216:  summary: { decisionCode: string; decisionSource: string; decisionText: string | null; decisionMetadata?: unknown },
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:223:          canonicalDecision,
+cloud/apps/api/src/queue/handlers/summarize-types.ts:6:export type WinnerFirstSummaryCache = NonNullable<SummaryCache['summary']['canonicalDecision']>;
+cloud/apps/api/src/queue/handlers/summarize-types.ts:16:  summaryCache?: SummaryCache,
+cloud/apps/api/src/queue/handlers/summarize-types.ts:26:  const { summaryCache: _ignoredSummaryCache, ...persistedDecisionMetadata } = decisionMetadata;
+cloud/apps/api/src/queue/handlers/summarize-types.ts:31:    ...(summaryCache ? { summaryCache } : {}),
+cloud/apps/api/src/queue/handlers/summarize-types.ts:75:    value.cacheVersion !== 1
+cloud/apps/api/src/queue/handlers/summarize-types.ts:76:    || (value.decisionState !== 'resolved' && value.decisionState !== 'neutral' && value.decisionState !== 'unknown')
+cloud/apps/api/src/queue/handlers/summarize-types.ts:81:  if (value.decisionState === 'resolved') {
+cloud/apps/api/src/queue/handlers/summarize-types.ts:89:  if (value.decisionState === 'neutral') {
+cloud/apps/api/src/queue/handlers/summarize-types.ts:102:    typeof value.decisionCode === 'string' &&
+cloud/apps/api/src/queue/handlers/summarize-types.ts:103:    value.decisionCode !== 'error' &&
+cloud/apps/api/src/queue/handlers/summarize-types.ts:104:    typeof value.decisionCodeSource === 'string' &&
+cloud/apps/api/src/queue/handlers/summarize-types.ts:107:    (!('canonicalDecision' in value) || isWinnerFirstSummaryCache(value.canonicalDecision)) &&
+cloud/apps/api/src/queue/handlers/summarize-types.ts:108:    !('summaryCache' in value)
+cloud/scripts/job-choice-bridge-report.ts:232:          decisionCode: transcript.decisionCode,
+cloud/scripts/job-choice-bridge-report.ts:233:          decisionCodeSource: transcript.decisionCodeSource,
+cloud/apps/api/src/graphql/queries/domain/domain-analysis-aggregation.ts:37:    decisionCode: string | null;
+cloud/apps/api/src/graphql/queries/domain/domain-analysis-aggregation.ts:59:      decisionCode: transcript.decisionCode,
+cloud/scripts/job-choice-bridge-report-lib.ts:25:  decisionCode: string | null;
+cloud/scripts/job-choice-bridge-report-lib.ts:26:  decisionCodeSource: string | null;
+cloud/scripts/job-choice-bridge-report-lib.ts:86:  decisionCode: string | null;
+cloud/scripts/job-choice-bridge-report-lib.ts:87:  decisionCodeSource: string | null;
+cloud/scripts/job-choice-bridge-report-lib.ts:134:function isScored(decisionCode: string | null): boolean {
+cloud/scripts/job-choice-bridge-report-lib.ts:135:  return decisionCode === '1' || decisionCode === '2' || decisionCode === '3' || decisionCode === '4' || decisionCode === '5';
+cloud/scripts/job-choice-bridge-report-lib.ts:153:  const manual = transcript.decisionCodeSource === 'manual';
+cloud/scripts/job-choice-bridge-report-lib.ts:154:  const scored = isScored(transcript.decisionCode);
+cloud/scripts/job-choice-bridge-report-lib.ts:265:          decisionCode: transcript.decisionCode,
+cloud/scripts/job-choice-bridge-report-lib.ts:266:          decisionCodeSource: transcript.decisionCodeSource,
+cloud/scripts/backfill-reparse-decisions.ts:3: * (`decisionCode = 'other'`, `strength = 'unknown'`) before the
+cloud/scripts/backfill-reparse-decisions.ts:10: *      transcript's `decisionMetadata.summaryCache.summary.decisionCode`
+cloud/scripts/backfill-reparse-decisions.ts:41:  decisionCode: string;
+cloud/scripts/backfill-reparse-decisions.ts:82:  // Find candidate transcripts: decision_metadata cache says decisionCode='other'
+cloud/scripts/backfill-reparse-decisions.ts:95:    WHERE t.decision_metadata->'summaryCache'->'summary'->>'decisionCode' = 'other'
+cloud/scripts/backfill-reparse-decisions.ts:131:      const newCode = parsed.decisionCode;
+cloud/scripts/backfill-reparse-decisions.ts:143:      // Build the new decision_metadata by updating the summaryCache block.
+cloud/scripts/backfill-reparse-decisions.ts:145:      const summaryCache = (existing.summaryCache as Record<string, unknown> | undefined) ?? {};
+cloud/scripts/backfill-reparse-decisions.ts:146:      const summary = (summaryCache.summary as Record<string, unknown> | undefined) ?? {};
+cloud/scripts/backfill-reparse-decisions.ts:150:        decisionCode: parsed.decisionCode,
+cloud/scripts/backfill-reparse-decisions.ts:151:        decisionCodeSource: parsed.decisionSource,
+cloud/scripts/backfill-reparse-decisions.ts:156:        ...summaryCache,
+cloud/scripts/backfill-reparse-decisions.ts:166:        summaryCache: updatedCache,
+cloud/apps/api/src/graphql/queries/domain/types-detail.ts:45:  decisionCode: string | null;
+cloud/apps/api/src/graphql/queries/domain/types-detail.ts:46:  decisionCodeSource: string | null;
+cloud/apps/api/src/graphql/queries/domain/types-detail.ts:106:    decisionCode: t.exposeString('decisionCode', { nullable: true }),
+cloud/apps/api/src/graphql/queries/domain/types-detail.ts:107:    decisionCodeSource: t.exposeString('decisionCodeSource', { nullable: true }),
+cloud/apps/api/src/graphql/queries/domain/types-detail.ts:122:          decisionCode: transcript.decisionCode,
+cloud/apps/api/src/graphql/queries/domain/decision-model-types.ts:93:  decisionCode: string | null;
+cloud/apps/api/src/graphql/queries/domain/decision-model-types.ts:111:  cacheVersion: 1;
+cloud/apps/api/src/graphql/queries/domain/decision-model-types.ts:112:  decisionState: 'resolved' | 'neutral' | 'unknown';
+cloud/scripts/analysis/fetch-all-transcripts.js:132:      return `r${j}: run(id: "${run.id}") { id transcripts(limit: 300) { modelId decisionCode } }`;
+cloud/scripts/analysis/fetch-all-transcripts.js:156:        const dc = t.decisionCode;
+cloud/scripts/analysis/fetch-all-transcripts.js:165:        const decisionCode = Number(dc);
+cloud/scripts/analysis/fetch-all-transcripts.js:168:        if (decisionCode === 4 || decisionCode === 5) {
+cloud/scripts/analysis/fetch-all-transcripts.js:171:        } else if (decisionCode === 1 || decisionCode === 2) {
+cloud/scripts/analysis/fetch-all-transcripts.js:174:        } else if (decisionCode === 3) {
+cloud/scripts/analysis/fetch-all-transcripts.js:192:          decisionCode,
+cloud/scripts/reparse-decision-stdin.py:7:previously tagged as ambiguous (decisionCode='other', strength='unknown')
+cloud/scripts/reparse-decision-stdin.py:11:Writes a JSON object with `decisionCode`, `decisionSource`, and
+cloud/scripts/__tests__/job-choice-bridge-report.test.ts:30:        decisionCode: '5',
+cloud/scripts/__tests__/job-choice-bridge-report.test.ts:31:        decisionCodeSource: 'summary',
+cloud/scripts/__tests__/job-choice-bridge-report.test.ts:42:        decisionCode: '4',
+cloud/scripts/__tests__/job-choice-bridge-report.test.ts:43:        decisionCodeSource: 'summary',
+cloud/scripts/__tests__/job-choice-bridge-report.test.ts:71:        decisionCode: null,
+cloud/scripts/__tests__/job-choice-bridge-report.test.ts:72:        decisionCodeSource: null,
+cloud/scripts/__tests__/job-choice-bridge-report.test.ts:83:        decisionCode: '2',
+cloud/scripts/__tests__/job-choice-bridge-report.test.ts:84:        decisionCodeSource: 'manual',
+cloud/scripts/analysis/process_transcripts.py:12:  "transcripts": [{"modelId": "...", "decisionCode": "..."}, ...]
+cloud/scripts/analysis/process_transcripts.py:35:        dc = t.get("decisionCode")
+cloud/scripts/analysis/extract_cross_model_data.py:101:                                id modelId scenarioId decisionCode sampleIndex
+cloud/scripts/analysis/extract_cross_model_data.py:208:            dc = t["decisionCode"]
+cloud/scripts/analysis/extract_cross_model_data.py:226:                "decision_code": int(t["decisionCode"]),
+cloud/scripts/analysis/build-csv.js:38:    const dc = t.decisionCode;
+cloud/scripts/analysis/build-csv.js:47:    const decisionCode = Number(dc);
+cloud/scripts/analysis/build-csv.js:50:    if (decisionCode === 4 || decisionCode === 5) {
+cloud/scripts/analysis/build-csv.js:53:    } else if (decisionCode === 1 || decisionCode === 2) {
+cloud/scripts/analysis/build-csv.js:56:    } else if (decisionCode === 3) {
+cloud/scripts/analysis/build-csv.js:82:      decisionCode,
+cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts:51:    decision.cacheVersion !== 1
+cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts:52:    || (decision.decisionState !== 'resolved' && decision.decisionState !== 'neutral' && decision.decisionState !== 'unknown')
+cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts:57:  if (decision.decisionState === 'resolved') {
+cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts:65:  if (decision.decisionState === 'neutral') {
+cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts:328:  const summaryCache = record && isRecord(record.summaryCache) ? record.summaryCache : null;
+cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts:329:  const summary = summaryCache && isRecord(summaryCache.summary) ? summaryCache.summary : null;
+cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts:330:  const canonicalDecision = summary && isCachedWinnerFirstDecision(summary.canonicalDecision)
+cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts:331:    ? summary.canonicalDecision
+cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts:334:  return canonicalDecision;
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:50:        decisionCode: string;
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:129:    decisionCode: summary.decisionCode,
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:139:      cacheVersion: 1,
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:140:      decisionState: 'unknown',
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:148:      cacheVersion: 1,
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:149:      decisionState: 'neutral',
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:160:    cacheVersion: 1,
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:161:    decisionState: 'resolved',
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:195:  const hasSummaryCacheField = transcriptDecisionMetadata !== null && 'summaryCache' in transcriptDecisionMetadata;
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:196:  const summaryCache = hasSummaryCacheField && isSummaryCache(transcriptDecisionMetadata.summaryCache)
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:197:    ? transcriptDecisionMetadata.summaryCache
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:202:  if (!forceSummarize && summaryCache && isCacheRecordMatch(summaryCache, responseSha256, parserVersion, modelId)) {
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:206:      await persistCachedSummary(job, transcript, summaryCache, responseSha256, parserVersion, modelId);
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:382:      const canonicalDecision = await buildWinnerFirstSummaryCache(
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:392:        canonicalDecision,
+cloud/apps/api/src/graphql/queries/domain/analysis/value-detail.ts:198:            decisionCode: true,
+cloud/apps/api/src/graphql/queries/domain/analysis/value-detail.ts:241:            decisionCode: transcript.decisionCode,
+cloud/apps/api/src/graphql/queries/domain/analysis/condition-transcripts.ts:76:          decisionCode: true,
+cloud/apps/api/src/graphql/queries/domain/analysis/condition-transcripts.ts:77:          decisionCodeSource: true,
+cloud/apps/api/src/graphql/queries/domain/decision-model.ts:141:  if (cachedDecision && cachedDecision.decisionState !== 'unknown') {
+cloud/apps/api/src/graphql/queries/domain/decision-model.ts:142:    // When cachedDecision.decisionState is 'unknown', skip the cache and
+cloud/apps/api/src/graphql/queries/domain/decision-model.ts:147:    if (cachedDecision.decisionState === 'neutral') {
+
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/api/src/queue/handlers/summarize-types.ts
+sed -n '120,240p' cloud/apps/api/src/queue/handlers/summarize-transcript.ts
+sed -n '130,220p' cloud/apps/api/src/graphql/queries/domain/decision-model.ts" in /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
+ succeeded in 0ms:
+import crypto from 'crypto';
+import { Prisma, type SummaryCache } from '@valuerank/db';
+
+export type { SummarizeTranscriptJobData } from '../types.js';
+
+export type WinnerFirstSummaryCache = NonNullable<SummaryCache['summary']['canonicalDecision']>;
+export type SummaryCacheRecord = SummaryCache;
+
+export function isPlainJsonObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function buildDecisionMetadataForPersist(
+  decisionMetadata: unknown,
+  rawDecisionEvidence: unknown,
+  summaryCache?: SummaryCache,
+): Prisma.InputJsonValue | typeof Prisma.DbNull {
+  if (decisionMetadata == null) {
+    return Prisma.DbNull;
+  }
+
+  if (!isPlainJsonObject(decisionMetadata)) {
+    return decisionMetadata as Prisma.InputJsonValue;
+  }
+
+  const { summaryCache: _ignoredSummaryCache, ...persistedDecisionMetadata } = decisionMetadata;
+
+  return {
+    ...persistedDecisionMetadata,
+    rawDecisionEvidence,
+    ...(summaryCache ? { summaryCache } : {}),
+  } as Prisma.InputJsonValue;
+}
+
+export function getTranscriptResponseText(transcriptContent: unknown): string {
+  if (!isPlainJsonObject(transcriptContent)) {
+    return '';
+  }
+
+  const turns = transcriptContent.turns;
+  if (!Array.isArray(turns)) {
+    return '';
+  }
+
+  const responses: string[] = [];
+  for (const turn of turns) {
+    if (!isPlainJsonObject(turn)) {
+      continue;
+    }
+
+    const response = turn.targetResponse;
+    if (typeof response === 'string' && response.length > 0) {
+      responses.push(response);
+    }
+  }
+
+  return responses.join('\n').trim();
+}
+
+export function computeTranscriptResponseSha256(transcriptContent: unknown): string | null {
+  const responseText = getTranscriptResponseText(transcriptContent);
+  if (responseText.length === 0) {
+    return null;
+  }
+
+  return crypto.createHash('sha256').update(responseText, 'utf8').digest('hex');
+}
+
+export function isWinnerFirstSummaryCache(value: unknown): value is WinnerFirstSummaryCache {
+  if (!isPlainJsonObject(value)) {
+    return false;
+  }
+
+  if (
+    value.cacheVersion !== 1
+    || (value.decisionState !== 'resolved' && value.decisionState !== 'neutral' && value.decisionState !== 'unknown')
+  ) {
+    return false;
+  }
+
+  if (value.decisionState === 'resolved') {
+    return (
+      typeof value.favoredValueKey === 'string'
+      && value.favoredValueKey.length > 0
+      && (value.strength === 'strong' || value.strength === 'lean')
+    );
+  }
+
+  if (value.decisionState === 'neutral') {
+    return value.favoredValueKey === null && value.strength === 'neutral';
+  }
+
+  return value.favoredValueKey === null && value.strength === 'unknown';
+}
+
+export function isSummaryCacheSummary(value: unknown): value is SummaryCache['summary'] {
+  if (!isPlainJsonObject(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.decisionCode === 'string' &&
+    value.decisionCode !== 'error' &&
+    typeof value.decisionCodeSource === 'string' &&
+    (typeof value.decisionText === 'string' || value.decisionText === null) &&
+    isPlainJsonObject(value.decisionMetadata) &&
+    (!('canonicalDecision' in value) || isWinnerFirstSummaryCache(value.canonicalDecision)) &&
+    !('summaryCache' in value)
+  );
+}
+
+export function isSummaryCache(value: unknown): value is SummaryCache {
+  if (!isPlainJsonObject(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.responseSha256 === 'string' &&
+    value.responseSha256.length > 0 &&
+    typeof value.parserVersion === 'string' &&
+    value.parserVersion.length > 0 &&
+    typeof value.modelId === 'string' &&
+    value.modelId.length > 0 &&
+    isSummaryCacheSummary(value.summary)
+  );
+}
+  const scenarioId = transcript.scenarioId;
+  const scenario = scenarioId == null
+    ? null
+    : await db.scenario.findUnique({
+        where: { id: scenarioId },
+        select: { orientationFlipped: true },
+      });
+
+  const result = resolveTranscriptDecisionModel({
+    decisionCode: summary.decisionCode,
+    decisionMetadata: summary.decisionMetadata,
+    definitionSnapshot: transcript.definitionSnapshot,
+    orientationFlipped: scenario?.orientationFlipped ?? null,
+  });
+
+  const canonical = result.canonical;
+
+  if (canonical.direction === 'unknown' || canonical.strength === 'unknown') {
+    return {
+      cacheVersion: 1,
+      decisionState: 'unknown',
+      favoredValueKey: null,
+      strength: 'unknown',
+    };
+  }
+
+  if (canonical.direction === 'neutral' && canonical.strength === 'neutral') {
+    return {
+      cacheVersion: 1,
+      decisionState: 'neutral',
+      favoredValueKey: null,
+      strength: 'neutral',
+    };
+  }
+
+  if (canonical.favoredValueKey == null) {
+    return null;
+  }
+
+  return {
+    cacheVersion: 1,
+    decisionState: 'resolved',
+    favoredValueKey: canonical.favoredValueKey,
+    strength: canonical.strength,
+  };
+}
+
+async function resolveSummarizeJob(
+  job: PgBoss.Job<SummarizeTranscriptJobData>,
+  infraModel: InfraModelConfig,
+): Promise<ResolveSummarizeJobResult> {
+  const { db } = await import('@valuerank/db');
+  const { transcriptId, summaryModelId } = job.data;
+  const modelId = summaryModelId ?? `${infraModel.providerName}:${infraModel.modelId}`;
+  const providerName = getProviderNameFromModelId(modelId, infraModel.providerName);
+
+  log.info(
+    { jobId: job.id, runId: job.data.runId, transcriptId, modelId },
+    'Processing summarize_transcript job'
+  );
+
+  const transcript = await db.transcript.findUnique({
+    where: { id: transcriptId },
+  });
+
+  if (!transcript) {
+    log.error({ jobId: job.id, transcriptId }, 'Transcript not found');
+    return { kind: 'missing' };
+  }
+
+  const wasAlreadySummarized = transcript.summarizedAt !== null;
+  const responseSha256 = computeTranscriptResponseSha256(transcript.content);
+  const transcriptDecisionMetadata = isPlainJsonObject(transcript.decisionMetadata)
+    ? transcript.decisionMetadata
+    : null;
+  const hasSummaryCacheField = transcriptDecisionMetadata !== null && 'summaryCache' in transcriptDecisionMetadata;
+  const summaryCache = hasSummaryCacheField && isSummaryCache(transcriptDecisionMetadata.summaryCache)
+    ? transcriptDecisionMetadata.summaryCache
+    : null;
+  const parserVersion = config.SUMMARIZE_PARSER_VERSION;
+  const forceSummarize = job.data.forceSummarize === true;
+
+  if (!forceSummarize && summaryCache && isCacheRecordMatch(summaryCache, responseSha256, parserVersion, modelId)) {
+    log.info({ jobId: job.id, transcriptId, modelId }, 'Transcript summary cache hit');
+
+    if (!wasAlreadySummarized) {
+      await persistCachedSummary(job, transcript, summaryCache, responseSha256, parserVersion, modelId);
+    }
+
+    return { kind: 'cache-hit' };
+  }
+
+  if (!forceSummarize && !hasSummaryCacheField && wasAlreadySummarized) {
+    log.info({ jobId: job.id, transcriptId }, 'Transcript already summarized, skipping');
+    return { kind: 'skipped' };
+  }
+
+  if (!forceSummarize && hasSummaryCacheField) {
+    log.info({ jobId: job.id, transcriptId, modelId }, 'Transcript summary cache miss, re-summarizing');
+  }
+
+  return {
+    kind: 'pending',
+    job: {
+      job,
+      transcript,
+      transcriptId,
+      modelId,
+      providerName,
+      responseSha256,
+      parserVersion,
+    },
+  };
+}
+
+async function processSummarizeBatchGroup(
+  batchId: number,
+  groupIndex: number,
+  pendingJobs: PreparedSummarizeJob[],
+  scheduleOptions: ScheduleOptions,
+): Promise<Error | null> {
+    }
+    return validated.canonical;
+  }
+
+  const parseClass = input.raw.parseClass;
+  if (parseClass !== 'exact' && parseClass !== 'fallback_resolved') {
+    return buildUnknownCanonicalDecision('unknown');
+  }
+
+  const parsedPath = parseDecisionPath(input.raw.parsePath);
+  const cachedDecision = input.cachedDecision ?? null;
+  if (cachedDecision && cachedDecision.decisionState !== 'unknown') {
+    // When cachedDecision.decisionState is 'unknown', skip the cache and
+    // fall through to re-resolve from raw evidence. This handles cases where
+    // the cache was built with incorrect config (e.g. wrong value statements
+    // or label prefix for the domain family).
+
+    if (cachedDecision.decisionState === 'neutral') {
+      return buildCanonicalDecisionFromPair(
+        pair,
+        'neutral',
+        'neutral',
+        false,
+        'deterministic',
+      );
+    }
+
+    if (
+      cachedDecision.favoredValueKey == null
+      || (cachedDecision.favoredValueKey !== pair.valueA && cachedDecision.favoredValueKey !== pair.valueB)
+      || cachedDecision.strength === 'unknown'
+      || cachedDecision.strength === 'neutral'
+    ) {
+      return buildUnknownCanonicalDecision('unknown');
+    }
+
+    const direction: DecisionDirection = cachedDecision.favoredValueKey === pair.valueA ? 'favor_first' : 'favor_second';
+    const opposedValueKey = cachedDecision.favoredValueKey === pair.valueA ? pair.valueB : pair.valueA;
+
+    return {
+      favoredValueKey: cachedDecision.favoredValueKey,
+      opposedValueKey,
+      direction,
+      strength: cachedDecision.strength,
+      normalizationApplied: false,
+      normalizationReason: null,
+      source: 'deterministic',
+    };
+  }
+
+  if (
+    (input.raw.parserVersion === 'job-choice-v2' || input.raw.parserVersion === 'paired-v2')
+    && isJobChoiceDecisionPath(input.raw.parsePath)
+  ) {
+    const candidateText = input.raw.matchedLabel ?? input.raw.matchedText ?? input.raw.responseExcerpt;
+    if (typeof candidateText !== 'string') {
+      return buildUnknownCanonicalDecision('unknown');
+    }
+
+    const strength = parseJobChoiceStrengthFromText(candidateText);
+    if (strength === null) {
+      return buildUnknownCanonicalDecision('unknown');
+    }
+    if (strength === 'neutral') {
+      return buildCanonicalDecisionFromPair(
+        pair,
+        'neutral',
+        'neutral',
+        false,
+        'deterministic',
+      );
+    }
+
+    // When the caller supplies pairOverride without a definitionSnapshot (e.g. domain-analysis
+    // aggregation paths), valueStatements is undefined. For job-choice-v2 transcripts, fall back
+    // to the global JOB_CHOICE_VALUE_STATEMENTS so all 10 values resolve correctly.
+    const effectiveValueStatements = (input.valueStatements != null && input.valueStatements.length > 0)
+      ? input.valueStatements
+      : (input.raw.parserVersion === 'job-choice-v2' ? JOB_CHOICE_VALUE_STATEMENTS : undefined);
+    const favoredValueKey = resolveValueKeyFromText(candidateText, effectiveValueStatements, input.labelPrefix ?? null);
+    if (favoredValueKey === null) {
+      return buildUnknownCanonicalDecision('unknown');
+    }
+    if (favoredValueKey !== pair.valueA && favoredValueKey !== pair.valueB) {
+      return buildUnknownCanonicalDecision('unknown');
+    }
+
+    const direction: DecisionDirection = favoredValueKey === pair.valueA ? 'favor_first' : 'favor_second';
+    const opposedValueKey = favoredValueKey === pair.valueA ? pair.valueB : pair.valueA;
+
+    return {
+
+codex
+The persistence code confirms the current cache shape is still treated as v1 end-to-end. I’m now checking whether the plan’s proposed “v2” data shape has any hidden compatibility issue with the existing cache validator and read paths.
+exec
+/bin/zsh -lc "sed -n '1,140p' cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts
+sed -n '140,360p' cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts
+sed -n '360,520p' cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts" in /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
+ succeeded in 0ms:
+import { DOMAIN_ANALYSIS_VALUE_KEYS, toPascalCaseKey, type DomainAnalysisValueKey } from '../domain-analysis-values.js';
+import { JOB_CHOICE_VALUE_STATEMENTS, labelFromBody } from '@valuerank/shared';
+import { stripFillerWords } from './decision-model-filler-words.js';
+import type {
+  DecisionDirection,
+  DecisionStrength,
+  DecisionSource,
+  CanonicalAppliedDecision,
+  CanonicalDecision,
+  DecisionPair,
+  ValueStatementEntry,
+  ParsedDecisionPath,
+  CachedWinnerFirstDecision,
+} from './decision-model-types.js';
+
+export { JOB_CHOICE_VALUE_STATEMENTS };
+
+export function isValueKey(value: string): value is DomainAnalysisValueKey {
+  return (DOMAIN_ANALYSIS_VALUE_KEYS as readonly string[]).includes(value);
+}
+
+export function isDecisionDirection(value: unknown): value is DecisionDirection {
+  return value === 'favor_first' || value === 'favor_second' || value === 'neutral' || value === 'refusal' || value === 'unknown';
+}
+
+export function isDecisionStrength(value: unknown): value is DecisionStrength {
+  return value === 'strong' || value === 'lean' || value === 'neutral' || value === 'unknown';
+}
+
+export function isCanonicalAppliedDecision(value: unknown): value is CanonicalAppliedDecision {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const decision = value as CanonicalAppliedDecision;
+  return (
+    isDecisionDirection(decision.direction) &&
+    isDecisionStrength(decision.strength) &&
+    (decision.favoredValueKey === null || (typeof decision.favoredValueKey === 'string' && isValueKey(decision.favoredValueKey))) &&
+    (decision.opposedValueKey === null || (typeof decision.opposedValueKey === 'string' && isValueKey(decision.opposedValueKey)))
+  );
+}
+
+export function isCachedWinnerFirstDecision(value: unknown): value is CachedWinnerFirstDecision {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const decision = value as CachedWinnerFirstDecision;
+  if (
+    decision.cacheVersion !== 1
+    || (decision.decisionState !== 'resolved' && decision.decisionState !== 'neutral' && decision.decisionState !== 'unknown')
+  ) {
+    return false;
+  }
+
+  if (decision.decisionState === 'resolved') {
+    return (
+      typeof decision.favoredValueKey === 'string'
+      && isValueKey(decision.favoredValueKey)
+      && (decision.strength === 'strong' || decision.strength === 'lean')
+    );
+  }
+
+  if (decision.decisionState === 'neutral') {
+    return decision.favoredValueKey === null && decision.strength === 'neutral';
+  }
+
+  return decision.favoredValueKey === null && decision.strength === 'unknown';
+}
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function isValidDecisionPair(pair: DecisionPair | null | undefined): pair is DecisionPair {
+  if (pair === null || pair === undefined) {
+    return false;
+  }
+
+  return (
+    isValueKey(pair.valueA) &&
+    isValueKey(pair.valueB) &&
+    pair.valueA !== pair.valueB
+  );
+}
+
+export function parseDecisionPath(parsePath: string | null | undefined): ParsedDecisionPath | null {
+  if (typeof parsePath !== 'string') {
+    return null;
+  }
+
+  const trimmed = parsePath.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const segments = trimmed.split('.');
+  if (segments.length > 3) {
+    return null;
+  }
+  const [branch, first, second] = segments;
+  const normalizedBranch = branch === 'fallback_resolved' ? 'fallback' : branch;
+
+  if (normalizedBranch !== 'exact' && normalizedBranch !== 'fallback' && normalizedBranch !== 'manual') {
+    return null;
+  }
+
+  if (normalizedBranch === 'manual') {
+    return first === 'override' && second === undefined
+      ? { branch: 'manual', direction: 'unknown', strength: 'unknown' }
+      : null;
+  }
+
+  if (first === 'neutral' && (second === undefined || second === 'neutral')) {
+    return { branch: normalizedBranch, direction: 'neutral', strength: 'neutral' };
+  }
+
+  if (!isDecisionDirection(first) || !isDecisionStrength(second)) {
+    return null;
+  }
+
+  return {
+    branch: normalizedBranch,
+    direction: first,
+    strength: second,
+  };
+}
+
+export function isJobChoiceDecisionPath(parsePath: string | null | undefined): boolean {
+  return typeof parsePath === 'string' && (
+    parsePath.startsWith('numeric_')
+    || parsePath.startsWith('text_label_')
+  );
+}
+
+export function flipDirection(direction: DecisionDirection): DecisionDirection {
+  if (direction === 'favor_first') return 'favor_second';
+  if (direction === 'favor_second') return 'favor_first';
+  return direction;
+  return direction;
+}
+
+export function normalizeJobChoiceLabelText(text: string): string {
+  const stripped = text
+    .replace(/[*_`]+/g, ' ')
+    .replace(/^level of support\s*:\s*/i, '')
+    .replace(/^(?:my\s+)?(?:final\s+|overall\s+)?(?:judg(?:e)?ment|answer|response|decision|choice|rating|score)(?:\s+on\s+the\s+scale)?\s*(?:(?:is)\s*[:=]?|[:=])?\s*/i, '')
+    .trim();
+
+  return stripped
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function parseJobChoiceStrengthFromText(text: string): DecisionStrength | null {
+  const normalized = normalizeJobChoiceLabelText(text);
+  if (normalized.startsWith('strongly support')) return 'strong';
+  if (normalized.startsWith('somewhat support')) return 'lean';
+  if (normalized.startsWith('neutral')) return 'neutral';
+  return null;
+}
+
+export function resolveValueKeyFromText(
+  text: string,
+  valueStatements: readonly ValueStatementEntry[] | undefined,
+  labelPrefix: string | null,
+): DomainAnalysisValueKey | null {
+  if (valueStatements == null || valueStatements.length === 0) {
+    return null;
+  }
+
+  const normalized = normalizeJobChoiceLabelText(text);
+  if (normalized.length === 0) {
+    return null;
+  }
+  const normalizedStripped = stripFillerWords(normalized);
+
+  const prefix = labelPrefix ?? '';
+  let resolved: DomainAnalysisValueKey | null = null;
+  for (const entry of valueStatements) {
+    const valueKey = toPascalCaseKey(entry.token) as DomainAnalysisValueKey;
+    const label = normalizeJobChoiceLabelText(labelFromBody(entry.body, prefix));
+    if (!label) {
+      continue;
+    }
+    // Try exact substring first; fall back to a filler-word-stripped match on
+    // BOTH sides so responses that swap articles/possessives ("with my team"
+    // vs label "with your team") or echo a level word ("with full freedom"
+    // vs label "with freedom") still resolve correctly.
+    const labelStripped = stripFillerWords(label);
+    const matched =
+      normalized.includes(label)
+      || (labelStripped.length > 0 && normalizedStripped.includes(labelStripped));
+    if (!matched) {
+      continue;
+    }
+    if (resolved !== null && resolved !== valueKey) {
+      return null;
+    }
+    resolved = valueKey;
+  }
+
+  return resolved;
+}
+
+export function buildUnknownCanonicalDecision(source: DecisionSource): CanonicalDecision {
+  return {
+    favoredValueKey: null,
+    opposedValueKey: null,
+    direction: 'unknown',
+    strength: 'unknown',
+    normalizationApplied: false,
+    normalizationReason: null,
+    source,
+  };
+}
+
+export function buildCanonicalDecisionFromPair(
+  pair: DecisionPair,
+  direction: DecisionDirection,
+  strength: DecisionStrength,
+  normalizationApplied: boolean,
+  source: DecisionSource,
+): CanonicalDecision {
+  if (direction === 'neutral') {
+    return {
+      favoredValueKey: null,
+      opposedValueKey: null,
+      direction,
+      strength,
+      normalizationApplied,
+      normalizationReason: normalizationApplied ? 'orientation_flipped' : null,
+      source,
+    };
+  }
+
+  if (direction === 'favor_first') {
+    return {
+      favoredValueKey: pair.valueA,
+      opposedValueKey: pair.valueB,
+      direction,
+      strength,
+      normalizationApplied,
+      normalizationReason: normalizationApplied ? 'orientation_flipped' : null,
+      source,
+    };
+  }
+
+  if (direction === 'favor_second') {
+    return {
+      favoredValueKey: pair.valueB,
+      opposedValueKey: pair.valueA,
+      direction,
+      strength,
+      normalizationApplied,
+      normalizationReason: normalizationApplied ? 'orientation_flipped' : null,
+      source,
+    };
+  }
+
+  return buildUnknownCanonicalDecision(source);
+}
+
+export function validateManualAppliedDecision(
+  pair: DecisionPair,
+  appliedDecision: unknown,
+): { ok: true; canonical: CanonicalDecision } | { ok: false } {
+  if (!isCanonicalAppliedDecision(appliedDecision)) {
+    return { ok: false };
+  }
+
+  const decision = appliedDecision;
+  const validKnownPair =
+    (decision.direction === 'neutral' &&
+      decision.strength === 'neutral' &&
+      decision.favoredValueKey === null &&
+      decision.opposedValueKey === null) ||
+    (decision.direction === 'unknown' &&
+      decision.strength === 'unknown' &&
+      decision.favoredValueKey === null &&
+      decision.opposedValueKey === null) ||
+    (decision.direction === 'favor_first' &&
+      decision.strength !== 'unknown' &&
+      decision.strength !== 'neutral' &&
+      decision.favoredValueKey === pair.valueA &&
+      decision.opposedValueKey === pair.valueB) ||
+    (decision.direction === 'favor_second' &&
+      decision.strength !== 'unknown' &&
+      decision.strength !== 'neutral' &&
+      decision.favoredValueKey === pair.valueB &&
+      decision.opposedValueKey === pair.valueA);
+
+  if (!validKnownPair) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    canonical: {
+      favoredValueKey: decision.favoredValueKey,
+      opposedValueKey: decision.opposedValueKey,
+      direction: decision.direction,
+      strength: decision.strength,
+      normalizationApplied: false,
+      normalizationReason: null,
+      source: 'manual',
+    },
+  };
+}
+
+export function extractManualOverrideDecision(
+  decisionMetadata: unknown,
+): CanonicalAppliedDecision | null {
+  const record = isRecord(decisionMetadata) ? decisionMetadata : null;
+  const manualOverride = record && isRecord(record.manualOverride) ? record.manualOverride : null;
+  if (!manualOverride || !isCanonicalAppliedDecision(manualOverride.appliedDecision)) {
+    return null;
+  }
+  return manualOverride.appliedDecision;
+}
+
+export function extractCachedWinnerFirstDecision(
+  decisionMetadata: unknown,
+): CachedWinnerFirstDecision | null {
+  const record = isRecord(decisionMetadata) ? decisionMetadata : null;
+  const summaryCache = record && isRecord(record.summaryCache) ? record.summaryCache : null;
+  const summary = summaryCache && isRecord(summaryCache.summary) ? summaryCache.summary : null;
+  const canonicalDecision = summary && isCachedWinnerFirstDecision(summary.canonicalDecision)
+    ? summary.canonicalDecision
+    : null;
+
+  return canonicalDecision;
+}
+
+export function extractValueStatementsFromSnapshot(snapshot: unknown): ValueStatementEntry[] | undefined {
+  if (snapshot === null || typeof snapshot !== 'object' || Array.isArray(snapshot)) return undefined;
+  const components = (snapshot as { components?: unknown }).components;
+  if (components === null || typeof components !== 'object' || Array.isArray(components)) return undefined;
+
+  const vf = (components as { value_first?: unknown }).value_first;
+  const vs = (components as { value_second?: unknown }).value_second;
+  if (!isRecord(vf) || !isRecord(vs)) return undefined;
+
+  const tokenFirst = typeof vf.token === 'string' ? vf.token : null;
+  const bodyFirst = typeof vf.body === 'string' ? vf.body : null;
+  const tokenSecond = typeof vs.token === 'string' ? vs.token : null;
+  const bodySecond = typeof vs.body === 'string' ? vs.body : null;
+
+  if (tokenFirst == null || bodyFirst == null || tokenSecond == null || bodySecond == null) return undefined;
+  return [
+    { token: tokenFirst, body: bodyFirst },
+    { token: tokenSecond, body: bodySecond },
+  ];
+}
+
+const LABEL_PREFIX_REGEX = /^(?:Strongly|Somewhat) support (.+)$/;
+
+export function extractLabelPrefixFromSnapshot(snapshot: unknown): string | undefined {
+export function extractLabelPrefixFromSnapshot(snapshot: unknown): string | undefined {
+  if (snapshot === null || typeof snapshot !== 'object' || Array.isArray(snapshot)) return undefined;
+  const template = (snapshot as { template?: unknown }).template;
+  if (typeof template !== 'string') return undefined;
+
+  const components = (snapshot as { components?: unknown }).components;
+  if (components === null || typeof components !== 'object' || Array.isArray(components)) return undefined;
+  const vf = (components as { value_first?: unknown }).value_first;
+  if (!isRecord(vf) || typeof vf.body !== 'string') return undefined;
+
+  // Extract the short body (before "because") to find it in the scale label
+  const shortBody = (vf.body.split(' because')[0] ?? vf.body).trim();
+  if (shortBody.length === 0) return undefined;
+
+  // Find a scale label line that ends with the short body
+  const lines = template.split('\n');
+  for (const line of lines) {
+    const trimmed = line.replace(/^- /, '').trim();
+    const match = LABEL_PREFIX_REGEX.exec(trimmed);
+    if (match == null) continue;
+    const afterStrength = match[1] ?? '';
+    if (afterStrength.endsWith(shortBody)) {
+      const prefix = afterStrength.slice(0, afterStrength.length - shortBody.length).trimEnd();
+      if (prefix.length > 0) return prefix;
+    }
+  }
+
+  return undefined;
+}
+
+exec
+/bin/zsh -lc "rg -n \"decisionState === 'refusal'|decisionState: 'refusal'|\\brefusal\\b\" cloud/apps/api/src cloud/scripts cloud/workers -g '"'!**/dist/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
+ succeeded in 0ms:
+cloud/scripts/backfill-reparse-decisions.ts:133:      if (newCode === 'other' || newCode === 'refusal') {
+cloud/workers/summarize_extract.py:399:            return "refusal"
+cloud/workers/summarize_extract.py:458:        return "refusal"
+cloud/workers/summarize_extract.py:470:    Returns "other" if no clear rating/refusal found.
+cloud/apps/api/src/services/export/decision-display.ts:3:export type DecisionDirection = 'favor_first' | 'favor_second' | 'neutral' | 'refusal' | 'unknown';
+cloud/apps/api/src/services/export/decision-display.ts:134:  if (canonicalDirection === 'refusal') {
+cloud/workers/summarize.py:91:    if scale_labels and decision_code not in {"other", "refusal"}:
+cloud/workers/tests/test_summarize.py:244:        """Test explicit refusal responses are marked as refusal."""
+cloud/workers/tests/test_summarize.py:249:        ) == "refusal"
+cloud/workers/tests/test_summarize.py:252:        ) == "refusal"
+cloud/workers/tests/test_summarize.py:530:        """Test explicit refusal parsing."""
+cloud/workers/tests/test_summarize.py:534:            content="refusal",
+cloud/workers/tests/test_summarize.py:539:        assert result == "refusal"
+cloud/workers/summarize_llm.py:36:        "- refusal\n"
+cloud/workers/summarize_llm.py:64:    Returns decision code string, "refusal", or "other".
+cloud/workers/summarize_llm.py:80:        if normalized == "refusal":
+cloud/workers/summarize_llm.py:81:            return "refusal"
+cloud/apps/api/src/services/analysis/aggregate/aggregate-helpers.ts:43:  direction: 'favor_first' | 'favor_second' | 'neutral' | 'refusal' | 'unknown',
+cloud/apps/api/src/services/analysis/aggregate/aggregate-helpers.ts:47:  if (valueA == null || valueB == null || direction === 'unknown' || direction === 'refusal') {
+cloud/apps/api/src/services/analysis/aggregate/variance.ts:40:  direction: 'favor_first' | 'favor_second' | 'neutral' | 'refusal' | 'unknown',
+cloud/apps/api/src/services/analysis/aggregate/variance.ts:43:  if (direction === 'refusal') {
+cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts:23:  return value === 'favor_first' || value === 'favor_second' || value === 'neutral' || value === 'refusal' || value === 'unknown';
+cloud/apps/api/src/graphql/queries/domain/decision-model-types.ts:3:export type DecisionDirection = 'favor_first' | 'favor_second' | 'neutral' | 'refusal' | 'unknown';
+
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/api/src/services/export/decision-display.ts
+sed -n '1,120p' cloud/apps/api/src/services/analysis/aggregate/aggregate-helpers.ts" in /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
+ succeeded in 0ms:
+import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/shared.js';
+
+export type DecisionDirection = 'favor_first' | 'favor_second' | 'neutral' | 'refusal' | 'unknown';
+export type DecisionStrength = 'strong' | 'lean' | 'neutral' | 'unknown';
+export type DecisionReason = 'rendered' | 'parse_failed' | 'missing_metadata' | 'invalid_pair' | 'empty_input';
+export type DecisionBucketLabel =
+  | 'First side strong'
+  | 'First side lean'
+  | 'Neutral'
+  | 'Second side lean'
+  | 'Second side strong'
+  | 'Unknown';
+
+export type ExportDecisionDisplay = {
+  direction: DecisionDirection;
+  strength: DecisionStrength;
+  reason: DecisionReason;
+  bucketLabel: DecisionBucketLabel;
+  preferenceScore: number | null;
+  decisionSource: string;
+  parseClass: string;
+  parsePath: string;
+  matchedLabel: string;
+  favoredValueKey: string | null;
+};
+
+export const DECISION_BUCKET_LABELS: readonly DecisionBucketLabel[] = [
+  'First side strong',
+  'First side lean',
+  'Neutral',
+  'Second side lean',
+  'Second side strong',
+  'Unknown',
+] as const;
+
+export type DecisionDisplayTranscript = {
+  decisionCode?: string | null;
+  decisionMetadata?: unknown;
+  definitionSnapshot?: unknown;
+  scenario?: {
+    orientationFlipped?: boolean | null;
+    content?: unknown;
+  } | null;
+  content?: unknown;
+};
+
+export type DimensionColumnMap = {
+  headers: string[];
+  rawKeyToHeader: Map<string, string>;
+};
+
+type TranscriptDimensionSource = {
+  scenario?: {
+    content?: unknown;
+  } | null;
+};
+
+function normalizeVisibleHeader(label: string): string {
+  const trimmed = label.trim();
+  return trimmed.length === 0 ? 'Unnamed Dimension' : trimmed;
+}
+
+export function collectVisibleDimensionColumns(
+  transcripts: TranscriptDimensionSource[],
+  reservedHeaders: Iterable<string> = [],
+): DimensionColumnMap {
+  const rawKeys = new Set<string>();
+
+  for (const transcript of transcripts) {
+    const scenarioContent = transcript.scenario?.content as
+      | { dimensions?: Record<string, unknown> }
+      | null
+      | undefined;
+    const dimensions = scenarioContent?.dimensions;
+    if (!dimensions || typeof dimensions !== 'object') {
+      continue;
+    }
+
+    for (const [key, value] of Object.entries(dimensions)) {
+      if (typeof value === 'number') {
+        rawKeys.add(key);
+      }
+    }
+  }
+
+  const sortedKeys = Array.from(rawKeys)
+    .map((rawKey) => ({ rawKey, visible: normalizeVisibleHeader(rawKey) }))
+    .sort((left, right) => {
+      const visibleCompare = left.visible.localeCompare(right.visible);
+      if (visibleCompare !== 0) {
+        return visibleCompare;
+      }
+      return left.rawKey.localeCompare(right.rawKey);
+    });
+
+  const headers: string[] = [];
+  const rawKeyToHeader = new Map<string, string>();
+  const usedHeaders = new Set(Array.from(reservedHeaders, normalizeVisibleHeader));
+
+  for (const entry of sortedKeys) {
+    let candidate = entry.visible;
+    let suffix = 2;
+    while (usedHeaders.has(candidate)) {
+      candidate = `${entry.visible} (${suffix})`;
+      suffix += 1;
+    }
+
+    usedHeaders.add(candidate);
+    headers.push(candidate);
+    rawKeyToHeader.set(entry.rawKey, candidate);
+  }
+
+  return { headers, rawKeyToHeader };
+}
+
+function getDecisionReason(
+  transcript: DecisionDisplayTranscript,
+  parseClass: string,
+  canonicalDirection: DecisionDirection,
+  canonicalStrength: DecisionStrength,
+): DecisionReason {
+  const hasMeaningfulInput = (
+    transcript.decisionCode !== null && transcript.decisionCode !== undefined
+  ) || (
+    transcript.decisionMetadata !== null && transcript.decisionMetadata !== undefined
+  ) || (
+    transcript.definitionSnapshot !== null && transcript.definitionSnapshot !== undefined
+  );
+
+  if (!hasMeaningfulInput) {
+    return 'empty_input';
+  }
+
+  if (canonicalDirection === 'refusal') {
+    return 'rendered';
+  }
+
+  if (canonicalDirection !== 'unknown' && canonicalStrength !== 'unknown') {
+    return 'rendered';
+  }
+
+  const orientationKnown = transcript.scenario?.orientationFlipped !== null && transcript.scenario?.orientationFlipped !== undefined;
+  if (!orientationKnown) {
+    return 'missing_metadata';
+  }
+
+  if (parseClass === 'exact' || parseClass === 'fallback_resolved') {
+    return 'invalid_pair';
+  }
+
+  return 'parse_failed';
+}
+
+export function formatDecisionDisplay(transcript: DecisionDisplayTranscript): ExportDecisionDisplay {
+  const model = resolveTranscriptDecisionModel({
+    decisionCode: transcript.decisionCode ?? null,
+    decisionMetadata: transcript.decisionMetadata,
+    definitionSnapshot: transcript.definitionSnapshot,
+    orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+  });
+
+  const canonical = model.canonical;
+  const raw = model.raw;
+  const parseClass = raw.parseClass ?? '';
+  const direction = canonical.direction;
+  const strength = canonical.strength;
+  const reason = getDecisionReason(transcript, parseClass, direction, strength);
+  const bucketLabel = getDecisionBucketLabel({
+    direction,
+    strength,
+    reason,
+    bucketLabel: 'Unknown',
+    preferenceScore: null,
+    decisionSource: canonical.source,
+    parseClass,
+    parsePath: raw.parsePath ?? '',
+    matchedLabel: raw.matchedLabel ?? '',
+    favoredValueKey: null,
+  });
+  const preferenceScore = getDecisionPreferenceScore({
+    direction,
+    strength,
+    reason,
+    bucketLabel,
+    preferenceScore: null,
+    decisionSource: canonical.source,
+    parseClass,
+    parsePath: raw.parsePath ?? '',
+    matchedLabel: raw.matchedLabel ?? '',
+    favoredValueKey: null,
+  });
+
+  return {
+    direction,
+    strength,
+    reason,
+    bucketLabel,
+    preferenceScore,
+    decisionSource: canonical.source,
+    parseClass,
+    parsePath: raw.parsePath ?? '',
+    matchedLabel: raw.matchedLabel ?? '',
+    favoredValueKey: canonical.favoredValueKey,
+  };
+}
+
+export function getDecisionBucketLabel(display: ExportDecisionDisplay): (typeof DECISION_BUCKET_LABELS)[number] {
+  if (display.direction === 'favor_first' && display.strength === 'strong') {
+    return 'First side strong';
+  }
+  if (display.direction === 'favor_first' && display.strength === 'lean') {
+    return 'First side lean';
+  }
+  if (display.direction === 'neutral' && display.strength === 'neutral') {
+    return 'Neutral';
+  }
+  if (display.direction === 'favor_second' && display.strength === 'lean') {
+    return 'Second side lean';
+  }
+  if (display.direction === 'favor_second' && display.strength === 'strong') {
+import { createHash } from 'crypto';
+import { zRunConfig, type RunConfig } from './contracts.js';
+import { getSnapshotMeta, getConfigTemperature } from './config.js';
+import { prepareAggregateRunSnapshot } from './aggregate-run-workflow.js';
+import { AggregateRecomputeRetryableError } from './aggregate-types.js';
+import type {
+  AggregateRecomputeClaim,
+  AggregateRunConfig,
+  AggregateRunPreparation,
+  AggregateRunSelection,
+} from './aggregate-types.js';
+
+type AggregateSourceRunRecord = { id: string; config: unknown } & Record<string, unknown>;
+
+export function buildValueOutcomes(
+  score: number | null,
+  orientationFlipped: boolean,
+  valueA: string | null,
+  valueB: string | null
+): Record<string, 'prioritized' | 'deprioritized' | 'neutral'> | undefined {
+  if (score == null || valueA == null || valueB == null) return undefined;
+  const normalizedScore = orientationFlipped ? 6 - score : score;
+
+  if (normalizedScore >= 4) {
+    return {
+      [valueA]: 'prioritized',
+      [valueB]: 'deprioritized',
+    };
+  }
+  if (normalizedScore <= 2) {
+    return {
+      [valueA]: 'deprioritized',
+      [valueB]: 'prioritized',
+    };
+  }
+  return {
+    [valueA]: 'neutral',
+    [valueB]: 'neutral',
+  };
+}
+
+export function buildCanonicalValueOutcomes(
+  direction: 'favor_first' | 'favor_second' | 'neutral' | 'refusal' | 'unknown',
+  valueA: string | null,
+  valueB: string | null,
+): Record<string, 'prioritized' | 'deprioritized' | 'neutral'> | undefined {
+  if (valueA == null || valueB == null || direction === 'unknown' || direction === 'refusal') {
+    return undefined;
+  }
+
+  if (direction === 'neutral') {
+    return {
+      [valueA]: 'neutral',
+      [valueB]: 'neutral',
+    };
+  }
+
+  if (direction === 'favor_first') {
+    return {
+      [valueA]: 'prioritized',
+      [valueB]: 'deprioritized',
+    };
+  }
+
+  return {
+    [valueA]: 'deprioritized',
+    [valueB]: 'prioritized',
+  };
+}
+
+export function buildClaimConfig(
+  prepared: AggregateRunPreparation,
+  existingConfig: RunConfig | null
+): AggregateRunConfig {
+  const nextConfig: Record<string, unknown> = {
+    ...(existingConfig ?? {}),
+    ...prepared.finalRunConfig,
+    aggregateRecomputeClaim: prepared.claim,
+    aggregateSourceFingerprint: prepared.sourceFingerprint,
+  };
+  return nextConfig as AggregateRunConfig;
+}
+
+export function getAggregateRecomputeClaim(config: RunConfig): AggregateRecomputeClaim | null {
+  const claim = (config as RunConfig & { aggregateRecomputeClaim?: unknown }).aggregateRecomputeClaim;
+  if (claim == null || typeof claim !== 'object') return null;
+
+  const token = (claim as Record<string, unknown>).token;
+  const sourceFingerprint = (claim as Record<string, unknown>).sourceFingerprint;
+  const leaseExpiresAt = (claim as Record<string, unknown>).leaseExpiresAt;
+
+  if (
+    typeof token !== 'string' ||
+    token.trim() === '' ||
+    typeof sourceFingerprint !== 'string' ||
+    sourceFingerprint.trim() === '' ||
+    typeof leaseExpiresAt !== 'string' ||
+    leaseExpiresAt.trim() === ''
+  ) {
+    return null;
+  }
+
+  return {
+    token,
+    sourceFingerprint,
+    leaseExpiresAt,
+  };
+}
+
+export function findMatchingAggregateRun(
+  runs: AggregateSourceRunRecord[],
+  selection: AggregateRunSelection
+): AggregateSourceRunRecord | null {
+  return runs.find((run) => {
+    const parseResult = zRunConfig.safeParse(run.config);
+    if (!parseResult.success) return false;
+
+    const config = parseResult.data;
+    const runMeta = getSnapshotMeta(config);
+    const runTemperature = getConfigTemperature(config);
+
+exec
+/bin/zsh -lc "rg -n \"orientationFlipped == null|orientationFlipped === null|orientationFlipped \\?\\?|orientationKnown|buildUnknownCanonicalDecision\\('unknown'\\)\" cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts cloud/apps/api/src/graphql/queries/domain/shared.ts" in /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
+ exited 1 in 0ms:
+exec
+/bin/zsh -lc "sed -n '1,240p' cloud/apps/api/src/graphql/queries/domain/shared.ts" in /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
+ succeeded in 0ms:
+import { db, resolveDefinitionContent } from '@valuerank/db';
+import { formatVnewLabel, formatVnewSignature } from '@valuerank/shared/trial-signature';
+import { type DomainAnalysisValueKey, extractValuePair } from '../domain-analysis-values.js';
+import type { DomainAnalysisVignetteDetail } from './types-detail.js';
+import { runMatchesSignature, selectDefaultVnewSignature } from './planning-utils.js';
+export { selectLatestDefinitionPerLineage, hydrateDefinitionAncestors } from '../../../services/definition-lineage.js';
+export type { LineageDefinitionRow } from '../../../services/definition-lineage.js';
+export {
+  buildRawDecisionEvidence,
+  DECISION_MODEL_READ_RULES,
+  resolveCanonicalDecision,
+  resolveDecisionModel,
+  resolveTranscriptDecisionModel,
+} from './decision-model.js';
+export type {
+  CanonicalDecision,
+  DecisionDirection,
+  DecisionReadMode,
+  DecisionReadRule,
+  DecisionReadSurface,
+  DecisionModelInput,
+  DecisionModelResult,
+  DecisionPair,
+  DecisionSource,
+  DecisionStrength,
+  RawDecisionEvidence,
+  TranscriptDecisionModelInput,
+  TranscriptDecisionModelResult,
+  ValueStatementEntry,
+} from './decision-model.js';
+
+export { formatVnewLabel, formatVnewSignature };
+export { aggregateValueCountsFromTranscripts, incrementPairwiseWin, isDomainAnalysisValueKey } from './domain-analysis-aggregation.js';
+export { computeFullBTScores, computeSmoothedLogOddsScore } from './domain-analysis-scoring.js';
+export type {
+  DomainAnalysisConditionDetail,
+  DomainAnalysisConditionTranscript,
+  DomainAnalysisVignetteDetail,
+} from './types-detail.js';
+
+export const MAX_LIMIT = 500;
+export const DEFAULT_LIMIT = 50;
+const VALUE_PAIR_RESOLVE_CHUNK_SIZE = 20;
+export type DomainAnalysisScoreMethod = 'LOG_ODDS' | 'FULL_BT';
+
+export type DefinitionRow = {
+  id: string;
+  name?: string;
+  parentId: string | null;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type DomainAnalysisValueCounts = {
+  prioritized: number;
+  deprioritized: number;
+  neutral: number;
+};
+
+export type DomainAnalysisValuePair = {
+  valueA: DomainAnalysisValueKey;
+  valueB: DomainAnalysisValueKey;
+};
+
+export type DomainAnalysisValueScore = {
+  valueKey: DomainAnalysisValueKey;
+  score: number;
+  prioritized: number;
+  deprioritized: number;
+  neutral: number;
+  totalComparisons: number;
+};
+
+export type DomainAnalysisUnavailableModel = {
+  model: string;
+  label: string;
+  reason: string;
+};
+
+export type DomainAnalysisMissingDefinition = {
+  definitionId: string;
+  definitionName: string;
+  reasonCode: DomainAnalysisMissingReasonCode;
+  reasonLabel: string;
+  missingAllModels: boolean;
+  missingModelIds: string[];
+  missingModelLabels: string[];
+};
+
+export type DomainAnalysisValueDetailResult = {
+  domainId: string;
+  domainName: string;
+  modelId: string;
+  modelLabel: string;
+  valueKey: DomainAnalysisValueKey;
+  score: number;
+  prioritized: number;
+  deprioritized: number;
+  neutral: number;
+  totalTrials: number;
+  targetedDefinitions: number;
+  coveredDefinitions: number;
+  missingDefinitionIds: string[];
+  vignettes: DomainAnalysisVignetteDetail[];
+  generatedAt: Date;
+};
+
+export type DomainAvailableSignature = {
+  signature: string;
+  label: string;
+  isVirtual: boolean;
+  temperature: number | null;
+};
+
+export type DomainTrialPlanModel = {
+  modelId: string;
+  label: string;
+  isDefault: boolean;
+  supportsTemperature: boolean;
+};
+
+export type DomainTrialPlanVignette = {
+  definitionId: string;
+  definitionName: string;
+  definitionVersion: number;
+  signature: string;
+  scenarioCount: number;
+  existingBatchCount: number;
+};
+
+export type DomainTrialPlanCellEstimate = {
+  definitionId: string;
+  modelId: string;
+  estimatedCost: number;
+};
+
+export type DomainEvaluationEstimateConfidence = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export type DomainEvaluationEstimateModel = {
+  modelId: string;
+  label: string;
+  isDefault: boolean;
+  supportsTemperature: boolean;
+  estimatedCost: number;
+  basedOnSampleCount: number;
+  isUsingFallback: boolean;
+};
+
+export type DomainEvaluationEstimateDefinition = {
+  definitionId: string;
+  definitionName: string;
+  definitionVersion: number;
+  signature: string;
+  scenarioCount: number;
+  estimatedCost: number;
+  basedOnSampleCount: number;
+  isUsingFallback: boolean;
+};
+
+export type DomainEvaluationCostEstimate = {
+  domainId: string;
+  domainName: string;
+  scopeCategory: string;
+  targetedDefinitions: number;
+  totalScenarioCount: number;
+  totalEstimatedCost: number;
+  basedOnSampleCount: number;
+  isUsingFallback: boolean;
+  fallbackReason: string | null;
+  estimateConfidence: DomainEvaluationEstimateConfidence;
+  knownExclusions: string[];
+  models: DomainEvaluationEstimateModel[];
+  definitions: DomainEvaluationEstimateDefinition[];
+  existingTemperatures: number[];
+  defaultTemperature: number | null;
+  temperatureWarning: string | null;
+};
+
+export type DomainTrialPlanResult = {
+  domainId: string;
+  domainName: string;
+  vignettes: DomainTrialPlanVignette[];
+  models: DomainTrialPlanModel[];
+  cellEstimates: DomainTrialPlanCellEstimate[];
+  totalEstimatedCost: number;
+  existingTemperatures: number[];
+  defaultTemperature: number | null;
+  temperatureWarning: string | null;
+};
+
+export type DomainTrialModelStatus = {
+  modelId: string;
+  generationCompleted: number;
+  generationFailed: number;
+  generationTotal: number;
+  summarizationCompleted: number;
+  summarizationFailed: number;
+  summarizationTotal: number;
+  latestErrorMessage: string | null;
+};
+
+export type DomainTrialRunStatus = {
+  runId: string;
+  definitionId: string;
+  status: string;
+  updatedAt: Date;
+  stalledModels: string[];
+  analysisStatus: string | null;
+  modelStatuses: DomainTrialModelStatus[];
+};
+
+export type DomainAnalysisMissingReasonCode =
+  | 'NO_COMPLETED_RUNS'
+  | 'NO_SIGNATURE_MATCH'
+  | 'NO_TRANSCRIPTS'
+  | 'NO_ANALYSIS';
+
+type SignatureResolutionResult = {
+  selectedSignature: string | null;
+  filteredSourceRunIds: string[];
+  filteredSourceRunDefinitionById: Map<string, string>;
+  coveredDefinitionIds: Set<string>;
+  missingReasonByDefinitionId: Map<string, DomainAnalysisMissingReasonCode>;
+};
+
+export function runModelsContainAll(config: unknown, defaultModelIds: string[]): boolean {
+  if (defaultModelIds.length === 0) return true;
+  const models = (config as { models?: unknown } | null)?.models;
+  if (!Array.isArray(models)) return false;
+  return defaultModelIds.every((id) => (models as unknown[]).includes(id));
+}
+
+
+export function parseDomainAnalysisScoreMethod(value: string | null | undefined): DomainAnalysisScoreMethod {
+  return value === 'FULL_BT' ? 'FULL_BT' : 'LOG_ODDS';
+}
+
+export function getMissingReasonLabel(reasonCode: DomainAnalysisMissingReasonCode): string {
+  switch (reasonCode) {
+
+exec
+/bin/zsh -lc "rg -n \"summaryCache\\.summary\\.decisionCode|summaryCache\\..*decisionCodeSource|canonicalDecision\" cloud/apps/api/src cloud/scripts | sed -n '1,220p'" in /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
+ succeeded in 0ms:
+cloud/scripts/backfill-reparse-decisions.ts:10: *      transcript's `decisionMetadata.summaryCache.summary.decisionCode`
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:24:    canonicalDecision?: WinnerFirstSummaryCache | null;
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:45:      ...(summary.canonicalDecision ? { canonicalDecision: summary.canonicalDecision } : {}),
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:180:          decisionCode: summaryCache.summary.decisionCode ?? '',
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:181:          decisionSource: summaryCache.summary.decisionCodeSource ?? '',
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:184:          canonicalDecision: summaryCache.summary.canonicalDecision ?? null,
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:215:  canonicalDecision: WinnerFirstSummaryCache | null,
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:223:          canonicalDecision,
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:382:      const canonicalDecision = await buildWinnerFirstSummaryCache(
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:392:        canonicalDecision,
+cloud/apps/api/src/queue/handlers/summarize-types.ts:6:export type WinnerFirstSummaryCache = NonNullable<SummaryCache['summary']['canonicalDecision']>;
+cloud/apps/api/src/queue/handlers/summarize-types.ts:107:    (!('canonicalDecision' in value) || isWinnerFirstSummaryCache(value.canonicalDecision)) &&
+cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts:330:  const canonicalDecision = summary && isCachedWinnerFirstDecision(summary.canonicalDecision)
+cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts:331:    ? summary.canonicalDecision
+cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts:334:  return canonicalDecision;
+
+exec
+/bin/zsh -lc "rg -n \"decisionState\" cloud/apps/api/src cloud/scripts cloud/workers | sed -n '1,220p'" in /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
+ succeeded in 0ms:
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:140:      decisionState: 'unknown',
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:149:      decisionState: 'neutral',
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:161:    decisionState: 'resolved',
+cloud/workers/temp_zero_report.py:215:                decision_state = normalize_text(canonical.get("decisionState"))
+cloud/apps/api/src/queue/handlers/summarize-types.ts:76:    || (value.decisionState !== 'resolved' && value.decisionState !== 'neutral' && value.decisionState !== 'unknown')
+cloud/apps/api/src/queue/handlers/summarize-types.ts:81:  if (value.decisionState === 'resolved') {
+cloud/apps/api/src/queue/handlers/summarize-types.ts:89:  if (value.decisionState === 'neutral') {
+cloud/apps/api/src/graphql/queries/domain/decision-model-types.ts:112:  decisionState: 'resolved' | 'neutral' | 'unknown';
+cloud/apps/api/src/graphql/queries/domain/decision-model.ts:141:  if (cachedDecision && cachedDecision.decisionState !== 'unknown') {
+cloud/apps/api/src/graphql/queries/domain/decision-model.ts:142:    // When cachedDecision.decisionState is 'unknown', skip the cache and
+cloud/apps/api/src/graphql/queries/domain/decision-model.ts:147:    if (cachedDecision.decisionState === 'neutral') {
+cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts:52:    || (decision.decisionState !== 'resolved' && decision.decisionState !== 'neutral' && decision.decisionState !== 'unknown')
+cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts:57:  if (decision.decisionState === 'resolved') {
+cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts:65:  if (decision.decisionState === 'neutral') {
+
+exec
+/bin/zsh -lc "sed -n '320,430p' cloud/apps/api/src/queue/handlers/summarize-transcript.ts" in /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
+ succeeded in 0ms:
+  }
+
+  if (!result.success) {
+    log.error({ batchId, groupIndex, modelId, providerName, error: result.error, stderr: result.stderr }, 'Python spawn failed');
+    return handleBatchFailure(new Error(`Python worker failed: ${result.error}`));
+  }
+
+  const output = result.data;
+  let summaries: SummarizeWorkerBatchItemOutput[] | null = null;
+
+  if ('summaries' in output && Array.isArray(output.summaries)) {
+    summaries = output.summaries;
+  } else if (pendingJobs.length === 1 && 'summary' in output && output.success) {
+    summaries = [
+      {
+        transcriptId: firstJob.transcriptId,
+        batchIndex: 0,
+        success: true,
+        summary: output.summary,
+      },
+    ];
+  } else if (pendingJobs.length === 1 && !output.success && 'error' in output) {
+    summaries = [
+      {
+        transcriptId: firstJob.transcriptId,
+        batchIndex: 0,
+        success: false,
+        error: output.error,
+      },
+    ];
+  } else if (!output.success) {
+    const err = output.error;
+    return handleBatchFailure(new Error(`Python worker failed: ${err.code}: ${err.message}`));
+  }
+
+  if (!summaries) {
+    return handleBatchFailure(new Error('Python worker batch returned no summaries'));
+  }
+
+  if (summaries.length !== pendingJobs.length) {
+    return handleBatchFailure(
+      new Error(`Python worker batch returned ${summaries.length} summaries for ${pendingJobs.length} transcripts`)
+    );
+  }
+
+  let retryableError: Error | null = null;
+
+  for (const summaryResult of summaries) {
+    const pendingJob = pendingJobs[summaryResult.batchIndex];
+    if (!pendingJob) {
+      return handleBatchFailure(new Error(`Python worker batch returned invalid batchIndex ${summaryResult.batchIndex}`));
+    }
+
+    if (summaryResult.transcriptId !== null && summaryResult.transcriptId !== pendingJob.transcriptId) {
+      return handleBatchFailure(
+        new Error(
+          `Python worker batch returned transcriptId ${summaryResult.transcriptId} for ${pendingJob.transcriptId}`
+        )
+      );
+    }
+
+    if (summaryResult.success) {
+      const canonicalDecision = await buildWinnerFirstSummaryCache(
+        pendingJob.transcript,
+        summaryResult.summary,
+      );
+      await persistSuccessfulSummary(
+        pendingJob.job,
+        pendingJob.transcript,
+        pendingJob.responseSha256,
+        pendingJob.parserVersion,
+        pendingJob.modelId,
+        canonicalDecision,
+        summaryResult.summary,
+      );
+      continue;
+    }
+
+    const shouldRetry = await persistSummarizeFailure(
+      pendingJob.job,
+      pendingJob.transcript,
+      summaryResult.error,
+    );
+
+    if (shouldRetry && retryableError === null) {
+      retryableError = new Error(`${summaryResult.error.code}: ${summaryResult.error.message}`);
+    }
+  }
+
+  return retryableError;
+}
+
+export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<SummarizeTranscriptJobData> {
+  return async (jobs: PgBoss.Job<SummarizeTranscriptJobData>[]) => {
+    if (jobs.length === 0) {
+      return;
+    }
+
+    const batchId = ++batchCounter;
+    const batchStartTime = Date.now();
+
+    const infraModel = await getSummarizerModel();
+    const providerName = infraModel.providerName;
+    const summarizationParallelism = await getMaxParallelSummarizations();
+    const scheduleOptions: ScheduleOptions = {
+      concurrencyOverride: summarizationParallelism,
+    };
+
+    const limiterStatsBefore = getLimiterStats(providerName);
+    const runIds = [...new Set(jobs.map((j) => j.data.runId))];
+
+
+exec
+/bin/zsh -lc "rg -n \"buildWinnerFirstSummaryCache\" -n cloud/apps/api/src/queue/handlers/summarize-transcript.ts && sed -n '100,190p' cloud/apps/api/src/queue/handlers/summarize-transcript.ts" in /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
+ succeeded in 0ms:
+116:async function buildWinnerFirstSummaryCache(
+382:      const canonicalDecision = await buildWinnerFirstSummaryCache(
+};
+
+type ResolveSummarizeJobResult =
+  | { kind: 'missing' }
+  | { kind: 'cache-hit' }
+  | { kind: 'skipped' }
+  | { kind: 'pending'; job: PreparedSummarizeJob };
+
+function getProviderNameFromModelId(modelId: string, fallbackProvider: string): string {
+  if (!modelId.includes(':')) {
+    return fallbackProvider;
+  }
+
+  return modelId.split(':', 1)[0] ?? fallbackProvider;
+}
+
+async function buildWinnerFirstSummaryCache(
+  transcript: TranscriptRecord,
+  summary: SuccessfulSummarizeWorkerSummary,
+): Promise<WinnerFirstSummaryCache | null> {
+  const scenarioId = transcript.scenarioId;
+  const scenario = scenarioId == null
+    ? null
+    : await db.scenario.findUnique({
+        where: { id: scenarioId },
+        select: { orientationFlipped: true },
+      });
+
+  const result = resolveTranscriptDecisionModel({
+    decisionCode: summary.decisionCode,
+    decisionMetadata: summary.decisionMetadata,
+    definitionSnapshot: transcript.definitionSnapshot,
+    orientationFlipped: scenario?.orientationFlipped ?? null,
+  });
+
+  const canonical = result.canonical;
+
+  if (canonical.direction === 'unknown' || canonical.strength === 'unknown') {
+    return {
+      cacheVersion: 1,
+      decisionState: 'unknown',
+      favoredValueKey: null,
+      strength: 'unknown',
+    };
+  }
+
+  if (canonical.direction === 'neutral' && canonical.strength === 'neutral') {
+    return {
+      cacheVersion: 1,
+      decisionState: 'neutral',
+      favoredValueKey: null,
+      strength: 'neutral',
+    };
+  }
+
+  if (canonical.favoredValueKey == null) {
+    return null;
+  }
+
+  return {
+    cacheVersion: 1,
+    decisionState: 'resolved',
+    favoredValueKey: canonical.favoredValueKey,
+    strength: canonical.strength,
+  };
+}
+
+async function resolveSummarizeJob(
+  job: PgBoss.Job<SummarizeTranscriptJobData>,
+  infraModel: InfraModelConfig,
+): Promise<ResolveSummarizeJobResult> {
+  const { db } = await import('@valuerank/db');
+  const { transcriptId, summaryModelId } = job.data;
+  const modelId = summaryModelId ?? `${infraModel.providerName}:${infraModel.modelId}`;
+  const providerName = getProviderNameFromModelId(modelId, infraModel.providerName);
+
+  log.info(
+    { jobId: job.id, runId: job.data.runId, transcriptId, modelId },
+    'Processing summarize_transcript job'
+  );
+
+  const transcript = await db.transcript.findUnique({
+    where: { id: transcriptId },
+  });
+
+  if (!transcript) {
+    log.error({ jobId: job.id, transcriptId }, 'Transcript not found');
+    return { kind: 'missing' };
+  }
+
+  const wasAlreadySummarized = transcript.summarizedAt !== null;
+
+exec
+/bin/zsh -lc "sed -n '1,240p' cloud/scripts/backfill-reparse-decisions.ts" in /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
+ succeeded in 0ms:
+/**
+ * Backfill: re-parse transcripts that were tagged as ambiguous
+ * (`decisionCode = 'other'`, `strength = 'unknown'`) before the
+ * level-word-tolerance fix landed in PR #694.
+ *
+ * For each affected transcript:
+ *   1. Run the updated Python worker parser against the cached transcript
+ *      content (no LLM calls — the probe already happened).
+ *   2. If the new parse produced a valid scale code (1-5), update the
+ *      transcript's `decisionMetadata.summaryCache.summary.decisionCode`
+ *      and related fields in-place.
+ *   3. Leave transcripts that still can't be parsed untouched.
+ *
+ * Usage (from cloud/apps/api/):
+ *   npx tsx --env-file=../../.env ../../scripts/backfill-reparse-decisions.ts
+ *   npx tsx --env-file=../../.env ../../scripts/backfill-reparse-decisions.ts --apply
+ *
+ * Against prod (from cloud/):
+ *   DATABASE_URL="$DATABASE_URL" npx tsx scripts/backfill-reparse-decisions.ts
+ *   DATABASE_URL="$DATABASE_URL" npx tsx scripts/backfill-reparse-decisions.ts --apply
+ *
+ * Optional flags:
+ *   --domain=<normalizedName>  Limit to one domain (e.g. national-priorities)
+ *   --limit=<n>                Only process the first N affected transcripts
+ *
+ * Dry-run by default. Pass `--apply` to write updates.
+ */
+import { spawnSync } from 'node:child_process';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { db, Prisma } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+
+const log = createLogger('scripts:backfill-reparse-decisions');
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const HELPER_PY = path.resolve(__dirname, 'reparse-decision-stdin.py');
+
+type ReparseResult = {
+  decisionCode: string;
+  decisionSource: string;
+  decisionMetadata: {
+    parserVersion: string;
+    parseClass: string;
+    parsePath: string;
+    responseSha256: string | null;
+    responseExcerpt: string | null;
+    matchedLabel: string | null;
+    scaleLabels: Array<{ code: string; label: string }>;
+  };
+};
+
+function runReparse(transcriptContent: unknown): ReparseResult {
+  const payload = JSON.stringify({ transcriptContent });
+  const result = spawnSync('python3', [HELPER_PY], {
+    input: payload,
+    encoding: 'utf-8',
+    maxBuffer: 20 * 1024 * 1024,
+  });
+  if (result.status !== 0) {
+    throw new Error(`Python parser failed: exit=${result.status} stderr=${result.stderr}`);
+  }
+  return JSON.parse(result.stdout) as ReparseResult;
+}
+
+function parseArgs(): { apply: boolean; domain: string | null; limit: number | null } {
+  const args = process.argv.slice(2);
+  const apply = args.includes('--apply');
+  const domainArg = args.find((a) => a.startsWith('--domain='));
+  const limitArg = args.find((a) => a.startsWith('--limit='));
+  const domain = domainArg ? domainArg.split('=')[1] ?? null : null;
+  const limit = limitArg ? Number(limitArg.split('=')[1] ?? 'NaN') : null;
+  return { apply, domain, limit: limit != null && Number.isFinite(limit) ? limit : null };
+}
+
+async function main(): Promise<void> {
+  const { apply, domain, limit } = parseArgs();
+
+  log.info({ apply, domain, limit }, apply ? 'APPLY mode — will write updates' : 'DRY RUN — pass --apply to write');
+
+  // Find candidate transcripts: decision_metadata cache says decisionCode='other'
+  // (ambiguous parse) AND we have cached response text to re-parse.
+  let domainId: string | null = null;
+  if (domain != null) {
+    const d = await db.domain.findUnique({ where: { normalizedName: domain }, select: { id: true } });
+    if (d == null) throw new Error(`Domain "${domain}" not found`);
+    domainId = d.id;
+  }
+
+  const candidateIds = await db.$queryRawUnsafe<{ id: string }[]>(
+    `
+    SELECT t.id FROM transcripts t
+    ${domainId != null ? 'JOIN runs r ON r.id = t.run_id JOIN definitions def ON def.id = r.definition_id' : ''}
+    WHERE t.decision_metadata->'summaryCache'->'summary'->>'decisionCode' = 'other'
+      ${domainId != null ? 'AND def.domain_id = $1' : ''}
+    ORDER BY t.created_at ASC
+    ${limit != null ? `LIMIT ${limit}` : ''}
+    `,
+    ...(domainId != null ? [domainId] : []),
+  );
+
+  log.info({ candidateCount: candidateIds.length }, 'Found candidate transcripts');
+  if (candidateIds.length === 0) {
+    log.info('Nothing to do');
+    return;
+  }
+
+  let reclassified = 0;
+  let stillUnknown = 0;
+  let errors = 0;
+  const newCodeCounts = new Map<string, number>();
+
+  for (let i = 0; i < candidateIds.length; i += 1) {
+    const { id } = candidateIds[i]!;
+    try {
+      const t = await db.transcript.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          content: true,
+          decisionMetadata: true,
+        },
+      });
+      if (t == null) {
+        log.warn({ id }, 'Transcript missing — skipping');
+        continue;
+      }
+
+      const parsed = runReparse(t.content);
+      const newCode = parsed.decisionCode;
+
+      if (newCode === 'other' || newCode === 'refusal') {
+        stillUnknown += 1;
+        continue;
+      }
+
+      newCodeCounts.set(newCode, (newCodeCounts.get(newCode) ?? 0) + 1);
+      reclassified += 1;
+
+      if (!apply) continue;
+
+      // Build the new decision_metadata by updating the summaryCache block.
+      const existing = (t.decisionMetadata as Record<string, unknown> | null) ?? {};
+      const summaryCache = (existing.summaryCache as Record<string, unknown> | undefined) ?? {};
+      const summary = (summaryCache.summary as Record<string, unknown> | undefined) ?? {};
+
+      const updatedSummary = {
+        ...summary,
+        decisionCode: parsed.decisionCode,
+        decisionCodeSource: parsed.decisionSource,
+        decisionMetadata: parsed.decisionMetadata,
+      };
+
+      const updatedCache = {
+        ...summaryCache,
+        summary: updatedSummary,
+      };
+
+      const updatedMetadata = {
+        ...existing,
+        parseClass: parsed.decisionMetadata.parseClass,
+        parsePath: parsed.decisionMetadata.parsePath,
+        matchedLabel: parsed.decisionMetadata.matchedLabel,
+        scaleLabels: parsed.decisionMetadata.scaleLabels,
+        summaryCache: updatedCache,
+      };
+
+      await db.transcript.update({
+        where: { id },
+        data: {
+          decisionMetadata: updatedMetadata as unknown as Prisma.InputJsonValue,
+        },
+      });
+    } catch (err) {
+      errors += 1;
+      log.error({ id, err: String(err) }, 'Re-parse failed');
+    }
+
+    if ((i + 1) % 25 === 0) {
+      log.info(
+        { progress: `${i + 1}/${candidateIds.length}`, reclassified, stillUnknown, errors },
+        'Progress',
+      );
+    }
+  }
+
+  log.info(
+    {
+      apply,
+      total: candidateIds.length,
+      reclassified,
+      stillUnknown,
+      errors,
+      newCodeCounts: Object.fromEntries(newCodeCounts),
+    },
+    apply ? 'Done' : 'Dry-run complete',
+  );
+}
+
+main()
+  .catch((err) => {
+    log.error({ err: String(err) }, 'Backfill failed');
+    process.exitCode = 1;
+  })
+  .finally(() => db.$disconnect());
+
+codex
+I’ve confirmed one serious breakage already: the plan would write summary cache rows that the current validator rejects. I’m checking whether there’s a second issue in the actual read path, because the plan also introduces a new `refusal` state without updating the code that consumes cached decisions.
+exec
+/bin/zsh -lc "rg -n \"type TranscriptRecord|scenarioId: string \\| null|scenarioId\\?:|definitionSnapshot\" cloud/apps/api/src/queue/handlers/summarize-transcript.ts cloud/apps/api/src -g '"'!**/dist/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
+ succeeded in 0ms:
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:59:type TranscriptRecord = NonNullable<Awaited<ReturnType<typeof db.transcript.findUnique>>>;
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:131:    definitionSnapshot: transcript.definitionSnapshot,
+cloud/apps/api/src/services/consistency/orderEffectPairing.ts:14:  scenarioId: string | null;
+cloud/apps/api/src/services/export/decision-display.ts:39:  definitionSnapshot?: unknown;
+cloud/apps/api/src/services/export/decision-display.ts:127:    transcript.definitionSnapshot !== null && transcript.definitionSnapshot !== undefined
+cloud/apps/api/src/services/export/decision-display.ts:158:    definitionSnapshot: transcript.definitionSnapshot,
+cloud/apps/api/src/services/decision-model-shadow-validation.ts:22:  scenarioId: string | null;
+cloud/apps/api/src/services/decision-model-shadow-validation.ts:35:  scenarioId: string | null;
+cloud/apps/api/src/routes/odata.ts:257:      type OrderByClause = { modelId?: 'asc' | 'desc'; scenarioId?: 'asc' | 'desc'; createdAt?: 'asc' | 'desc'; sampleIndex?: 'asc' | 'desc' };
+cloud/apps/api/src/queue/handlers/analyze-basic.ts:201:                definitionSnapshot?: {
+cloud/apps/api/src/queue/handlers/analyze-basic.ts:209:                config.definitionSnapshot?._meta?.preambleVersionId ??
+cloud/apps/api/src/queue/handlers/analyze-basic.ts:210:                config.definitionSnapshot?.preambleVersionId ??
+cloud/apps/api/src/queue/handlers/analyze-basic.ts:213:                config.definitionSnapshot?._meta?.definitionVersion ??
+cloud/apps/api/src/queue/handlers/analyze-basic.ts:214:                config.definitionSnapshot?.version ??
+cloud/apps/api/src/queue/handlers/analyze-basic.ts:253:                  definitionSnapshot?: {
+cloud/apps/api/src/queue/handlers/analyze-basic.ts:257:                } | null)?.definitionSnapshot?._meta?.definitionVersion)
+cloud/apps/api/src/queue/handlers/analyze-basic.ts:259:                  definitionSnapshot?: {
+cloud/apps/api/src/queue/handlers/analyze-basic.ts:263:                } | null)?.definitionSnapshot?.version);
+cloud/apps/api/src/services/export/domain-csv.ts:56:  definitionSnapshot: unknown,
+cloud/apps/api/src/services/export/domain-csv.ts:58:  if (definitionSnapshot == null || typeof definitionSnapshot !== 'object' || Array.isArray(definitionSnapshot)) {
+cloud/apps/api/src/services/export/domain-csv.ts:62:  const snapshot = definitionSnapshot as { components?: DefinitionSnapshotComponents };
+cloud/apps/api/src/services/export/domain-csv.ts:121:    transcript.definitionSnapshot,
+cloud/apps/api/src/routes/export/runs.ts:288:            definitionSnapshot: t.definitionSnapshot,
+cloud/apps/api/src/services/export/xlsx/types.ts:21:  definitionSnapshot?: unknown;
+cloud/apps/api/src/routes/export/parse-analysis.ts:53:    scenarioId?: string;
+cloud/apps/api/src/services/unresolvable-count.ts:25:      definitionSnapshot: true,
+cloud/apps/api/src/services/unresolvable-count.ts:38:      definitionSnapshot: t.definitionSnapshot,
+cloud/apps/api/src/queue/handlers/aggregate-analysis.ts:28:    definitionSnapshot: zRunSnapshot.optional(),
+cloud/apps/api/src/queue/handlers/aggregate-analysis.ts:63:        const snapshot = parseResult.data.definitionSnapshot;
+cloud/apps/api/src/queue/handlers/analyze-basic-data.ts:82:  scenarioId: string | null;
+cloud/apps/api/src/queue/handlers/analyze-basic-data.ts:86:  definitionSnapshot: unknown;
+cloud/apps/api/src/queue/handlers/analyze-basic-data.ts:156:          definitionSnapshot: t.definitionSnapshot,
+cloud/apps/api/src/queue/handlers/analyze-basic-data.ts:165:          definitionSnapshot: t.definitionSnapshot,
+cloud/apps/api/src/services/run/analysis-status.ts:21:  definitionSnapshot?: unknown;
+cloud/apps/api/src/services/run/analysis-status.ts:43:  const snapshot = (config?.definitionSnapshot ?? null) as
+cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts:267:        definitionSnapshot: scenario.definition.content as Prisma.InputJsonValue,
+cloud/apps/api/src/services/run/start.ts:200:  const definitionSnapshot = {
+cloud/apps/api/src/services/run/start.ts:235:    definitionSnapshot,
+cloud/apps/api/src/services/mcp/formatters.ts:129:    definitionSnapshot: transcript.definitionSnapshot,
+cloud/apps/api/src/services/analysis/aggregate/contracts.ts:13:  definitionSnapshot: zRunSnapshot.optional(),
+cloud/apps/api/src/services/analysis/aggregate/contracts.ts:233:  scenarioId: string | null;
+cloud/apps/api/src/services/analysis/aggregate/config.ts:13:  const snapshot = config.definitionSnapshot;
+cloud/apps/api/src/services/export/csv.ts:217:    definitionSnapshot?: { _meta?: { definitionVersion?: unknown }, version?: unknown };
+cloud/apps/api/src/services/export/csv.ts:223:    : typeof typedConfig.definitionSnapshot?._meta?.definitionVersion === 'number'
+cloud/apps/api/src/services/export/csv.ts:224:      ? typedConfig.definitionSnapshot._meta.definitionVersion
+cloud/apps/api/src/services/export/csv.ts:225:      : typeof typedConfig.definitionSnapshot?.version === 'number'
+cloud/apps/api/src/services/export/csv.ts:226:        ? typedConfig.definitionSnapshot.version
+cloud/apps/api/src/services/analysis/aggregate/aggregate-transcript-builder.ts:11:type TranscriptRecordForBuilder = {
+cloud/apps/api/src/services/analysis/aggregate/aggregate-transcript-builder.ts:16:  scenarioId: string | null;
+cloud/apps/api/src/services/analysis/aggregate/aggregate-transcript-builder.ts:19:  definitionSnapshot: unknown;
+cloud/apps/api/src/services/analysis/aggregate/aggregate-transcript-builder.ts:41:      definitionSnapshot: transcript.definitionSnapshot,
+cloud/apps/api/src/services/run/types.ts:30:  scenarioId?: string;
+cloud/apps/api/src/services/analysis/aggregate/aggregate-fingerprint-payload.ts:43:  scenarioId: string | null;
+cloud/apps/api/src/services/analysis/aggregate/aggregate-fingerprint-payload.ts:46:  definitionSnapshot: unknown;
+cloud/apps/api/src/services/analysis/aggregate/aggregate-fingerprint-payload.ts:93:    scenarioId: string | null;
+cloud/apps/api/src/services/analysis/aggregate/aggregate-fingerprint-payload.ts:185:        definitionSnapshot: transcript.definitionSnapshot,
+cloud/apps/api/src/queue/handlers/summarize-persistence.ts:211:  transcript: { id: string; scenarioId: string | null; definitionSnapshot: unknown },
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:59:type TranscriptRecord = NonNullable<Awaited<ReturnType<typeof db.transcript.findUnique>>>;
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:131:    definitionSnapshot: transcript.definitionSnapshot,
+cloud/apps/api/src/services/analysis/aggregate/aggregate-preparation.ts:54:  scenarioId: string | null;
+cloud/apps/api/src/services/analysis/aggregate/aggregate-preparation.ts:57:  definitionSnapshot: unknown;
+cloud/apps/api/src/services/analysis/aggregate/aggregate-preparation.ts:218:      definitionSnapshot: true,
+cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts:22:  definitionSnapshot?: unknown;
+cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts:255:      definitionSnapshot: transcript.definitionSnapshot,
+cloud/apps/api/src/cli/decision-model-shadow-validation.ts:57:      definitionSnapshot: true,
+cloud/apps/api/src/cli/decision-model-shadow-validation.ts:77:      definitionSnapshot: transcript.definitionSnapshot,
+cloud/apps/api/src/graphql/queries/models-consistency.ts:153:  scenarioId: string | null;
+cloud/apps/api/src/graphql/queries/models-consistency.ts:156:  definitionSnapshot: unknown;
+cloud/apps/api/src/graphql/queries/models-consistency.ts:164:    definitionSnapshot: row.definitionSnapshot,
+cloud/apps/api/src/graphql/queries/models-consistency.ts:254:              definitionSnapshot: true,
+cloud/apps/api/src/services/analysis/aggregate/variance.ts:13:  definitionSnapshot?: unknown;
+cloud/apps/api/src/services/analysis/aggregate/variance.ts:188:      definitionSnapshot: transcript.definitionSnapshot,
+cloud/apps/api/src/services/transcript/create.ts:69:  definitionSnapshot?: Prisma.InputJsonValue;
+cloud/apps/api/src/services/transcript/create.ts:77:  const { runId, scenarioId, modelId, sampleIndex = 0, transcript, definitionSnapshot, costSnapshot } = input;
+cloud/apps/api/src/services/transcript/create.ts:118:      definitionSnapshot: definitionSnapshot ?? Prisma.JsonNull,
+cloud/apps/api/src/services/analysis/aggregate/aggregate-eligibility.ts:6:  scenarioId: string | null;
+cloud/apps/api/src/mcp/tools/get-run-results.ts:219:              definitionSnapshot: true,
+cloud/apps/api/src/mcp/tools/get-run-results.ts:247:                  definitionSnapshot: transcript.definitionSnapshot,
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:116:          definitionSnapshot?: {
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:123:          parseDefinitionVersion(config?.definitionSnapshot?._meta?.definitionVersion) ??
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:124:          parseDefinitionVersion(config?.definitionSnapshot?.version);
+cloud/apps/api/src/mcp/tools/get-transcript-summary.ts:129:    definitionSnapshot: unknown;
+cloud/apps/api/src/mcp/tools/get-transcript-summary.ts:148:    definitionSnapshot: transcript.definitionSnapshot,
+cloud/apps/api/src/mcp/tools/get-transcript-summary.ts:216:            definitionSnapshot: true,
+cloud/apps/api/src/graphql/types/transcript.ts:23:    definitionSnapshot: t.expose('definitionSnapshot', { type: 'JSON', nullable: true }),
+cloud/apps/api/src/graphql/types/transcript.ts:50:          definitionSnapshot: transcript.definitionSnapshot,
+cloud/apps/api/src/graphql/queries/domain/types-detail.ts:11:  scenarioId: string | null;
+cloud/apps/api/src/graphql/queries/domain/types-detail.ts:43:  scenarioId: string | null;
+cloud/apps/api/src/graphql/queries/domain/types-detail.ts:48:  definitionSnapshot?: unknown;
+cloud/apps/api/src/graphql/queries/domain/types-detail.ts:124:          definitionSnapshot: transcript.definitionSnapshot,
+cloud/apps/api/src/graphql/types/run.ts:31:  definitionSnapshot?: unknown;
+cloud/apps/api/src/graphql/types/run.ts:127:          definitionSnapshot?: {
+cloud/apps/api/src/graphql/types/run.ts:132:        const versionRaw = config.definitionSnapshot?._meta?.definitionVersion ?? config.definitionSnapshot?.version;
+cloud/apps/api/src/graphql/types/run.ts:204:    definitionSnapshot: t.field({
+cloud/apps/api/src/graphql/types/run.ts:210:        return config?.definitionSnapshot ?? null;
+cloud/apps/api/src/graphql/queries/domain/planning-utils.ts:69:    definitionSnapshot?: {
+cloud/apps/api/src/graphql/queries/domain/planning-utils.ts:76:    parseDefinitionVersion(runConfig?.definitionSnapshot?._meta?.definitionVersion) ??
+cloud/apps/api/src/graphql/queries/domain/planning-utils.ts:77:    parseDefinitionVersion(runConfig?.definitionSnapshot?.version);
+cloud/apps/api/src/graphql/mutations/analysis.ts:71:        definitionSnapshot?: {
+cloud/apps/api/src/graphql/mutations/analysis.ts:82:          runConfig.definitionSnapshot?._meta?.preambleVersionId ??
+cloud/apps/api/src/graphql/mutations/analysis.ts:83:          runConfig.definitionSnapshot?.preambleVersionId ??
+cloud/apps/api/src/graphql/mutations/analysis.ts:86:          runConfig.definitionSnapshot?._meta?.definitionVersion ??
+cloud/apps/api/src/graphql/mutations/analysis.ts:87:          runConfig.definitionSnapshot?.version ??
+cloud/apps/api/src/graphql/queries/domain/decision-model-types.ts:95:  /** Supply definitionSnapshot OR pairOverride — pairOverride takes precedence if both provided */
+cloud/apps/api/src/graphql/queries/domain/decision-model-types.ts:96:  definitionSnapshot?: unknown;
+cloud/apps/api/src/graphql/queries/domain/decision-model-types.ts:98:  /** Pre-resolved value pair; avoids fetching definitionSnapshot from DB when pair is already known */
+cloud/apps/api/src/graphql/mutations/run/maintenance.ts:178:          definitionSnapshot: true,
+cloud/apps/api/src/graphql/mutations/run/maintenance.ts:192:        definitionSnapshot: transcript.definitionSnapshot,
+cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts:110:    definitionSnapshot?: {
+cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts:117:    parseDefinitionVersion(runConfig?.definitionSnapshot?._meta?.definitionVersion) ??
+cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts:118:    parseDefinitionVersion(runConfig?.definitionSnapshot?.version);
+cloud/apps/api/src/graphql/queries/domain/decision-model.ts:98:  const pair = input.pairOverride !== undefined ? input.pairOverride : extractValuePair(input.definitionSnapshot);
+cloud/apps/api/src/graphql/queries/domain/decision-model.ts:103:  const valueStatements = extractValueStatementsFromSnapshot(input.definitionSnapshot);
+cloud/apps/api/src/graphql/queries/domain/decision-model.ts:104:  const labelPrefix = extractLabelPrefixFromSnapshot(input.definitionSnapshot) ?? null;
+cloud/apps/api/src/graphql/queries/domain/decision-model.ts:203:    // When the caller supplies pairOverride without a definitionSnapshot (e.g. domain-analysis
+cloud/apps/api/src/graphql/queries/domain/analysis/value-detail-types.ts:5:  scenarioId: string | null;
+
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/queue/handlers/summarize-types.ts | sed -n '68,116p'
+nl -ba cloud/apps/api/src/graphql/queries/domain/decision-model.ts | sed -n '136,172p'" in /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
+ succeeded in 0ms:
+    68	
+    69	export function isWinnerFirstSummaryCache(value: unknown): value is WinnerFirstSummaryCache {
+    70	  if (!isPlainJsonObject(value)) {
+    71	    return false;
+    72	  }
+    73	
+    74	  if (
+    75	    value.cacheVersion !== 1
+    76	    || (value.decisionState !== 'resolved' && value.decisionState !== 'neutral' && value.decisionState !== 'unknown')
+    77	  ) {
+    78	    return false;
+    79	  }
+    80	
+    81	  if (value.decisionState === 'resolved') {
+    82	    return (
+    83	      typeof value.favoredValueKey === 'string'
+    84	      && value.favoredValueKey.length > 0
+    85	      && (value.strength === 'strong' || value.strength === 'lean')
+    86	    );
+    87	  }
+    88	
+    89	  if (value.decisionState === 'neutral') {
+    90	    return value.favoredValueKey === null && value.strength === 'neutral';
+    91	  }
+    92	
+    93	  return value.favoredValueKey === null && value.strength === 'unknown';
+    94	}
+    95	
+    96	export function isSummaryCacheSummary(value: unknown): value is SummaryCache['summary'] {
+    97	  if (!isPlainJsonObject(value)) {
+    98	    return false;
+    99	  }
+   100	
+   101	  return (
+   102	    typeof value.decisionCode === 'string' &&
+   103	    value.decisionCode !== 'error' &&
+   104	    typeof value.decisionCodeSource === 'string' &&
+   105	    (typeof value.decisionText === 'string' || value.decisionText === null) &&
+   106	    isPlainJsonObject(value.decisionMetadata) &&
+   107	    (!('canonicalDecision' in value) || isWinnerFirstSummaryCache(value.canonicalDecision)) &&
+   108	    !('summaryCache' in value)
+   109	  );
+   110	}
+   111	
+   112	export function isSummaryCache(value: unknown): value is SummaryCache {
+   113	  if (!isPlainJsonObject(value)) {
+   114	    return false;
+   115	  }
+   116	
+   136	    return buildUnknownCanonicalDecision('unknown');
+   137	  }
+   138	
+   139	  const parsedPath = parseDecisionPath(input.raw.parsePath);
+   140	  const cachedDecision = input.cachedDecision ?? null;
+   141	  if (cachedDecision && cachedDecision.decisionState !== 'unknown') {
+   142	    // When cachedDecision.decisionState is 'unknown', skip the cache and
+   143	    // fall through to re-resolve from raw evidence. This handles cases where
+   144	    // the cache was built with incorrect config (e.g. wrong value statements
+   145	    // or label prefix for the domain family).
+   146	
+   147	    if (cachedDecision.decisionState === 'neutral') {
+   148	      return buildCanonicalDecisionFromPair(
+   149	        pair,
+   150	        'neutral',
+   151	        'neutral',
+   152	        false,
+   153	        'deterministic',
+   154	      );
+   155	    }
+   156	
+   157	    if (
+   158	      cachedDecision.favoredValueKey == null
+   159	      || (cachedDecision.favoredValueKey !== pair.valueA && cachedDecision.favoredValueKey !== pair.valueB)
+   160	      || cachedDecision.strength === 'unknown'
+   161	      || cachedDecision.strength === 'neutral'
+   162	    ) {
+   163	      return buildUnknownCanonicalDecision('unknown');
+   164	    }
+   165	
+   166	    const direction: DecisionDirection = cachedDecision.favoredValueKey === pair.valueA ? 'favor_first' : 'favor_second';
+   167	    const opposedValueKey = cachedDecision.favoredValueKey === pair.valueA ? pair.valueB : pair.valueA;
+   168	
+   169	    return {
+   170	      favoredValueKey: cachedDecision.favoredValueKey,
+   171	      opposedValueKey,
+   172	      direction,
+
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/graphql/queries/domain/decision-model.ts | sed -n '1,120p'
+" in /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
+ succeeded in 0ms:
+     1	import { extractValuePair } from '../domain-analysis-values.js';
+     2	import {
+     3	  isValidDecisionPair,
+     4	  isRecord,
+     5	  isValueKey,
+     6	  parseDecisionPath,
+     7	  isJobChoiceDecisionPath,
+     8	  flipDirection,
+     9	  parseJobChoiceStrengthFromText,
+    10	  resolveValueKeyFromText,
+    11	  buildUnknownCanonicalDecision,
+    12	  buildCanonicalDecisionFromPair,
+    13	  validateManualAppliedDecision,
+    14	  extractManualOverrideDecision,
+    15	  extractCachedWinnerFirstDecision,
+    16	  extractValueStatementsFromSnapshot,
+    17	  extractLabelPrefixFromSnapshot,
+    18	  JOB_CHOICE_VALUE_STATEMENTS,
+    19	} from './decision-model-helpers.js';
+    20	
+    21	// Re-export all types for backward compatibility
+    22	export type {
+    23	  DecisionDirection,
+    24	  DecisionStrength,
+    25	  DecisionSource,
+    26	  CanonicalAppliedDecision,
+    27	  RawDecisionEvidence,
+    28	  CanonicalDecision,
+    29	  DecisionReadSurface,
+    30	  DecisionReadMode,
+    31	  DecisionReadRule,
+    32	  DecisionPair,
+    33	  ValueStatementEntry,
+    34	  DecisionModelInput,
+    35	  DecisionModelResult,
+    36	  TranscriptDecisionModelInput,
+    37	  TranscriptDecisionModelResult,
+    38	} from './decision-model-types.js';
+    39	export { DECISION_MODEL_READ_RULES } from './decision-model-types.js';
+    40	
+    41	import type {
+    42	  RawDecisionEvidence,
+    43	  CanonicalDecision,
+    44	  DecisionDirection,
+    45	  DecisionModelInput,
+    46	  DecisionModelResult,
+    47	  TranscriptDecisionModelInput,
+    48	  TranscriptDecisionModelResult,
+    49	} from './decision-model-types.js';
+    50	
+    51	export function buildRawDecisionEvidence(
+    52	  decisionMetadata: unknown,
+    53	): RawDecisionEvidence {
+    54	  const record = isRecord(decisionMetadata) ? decisionMetadata : null;
+    55	  const manualOverride = record && isRecord(record.manualOverride) ? record.manualOverride : null;
+    56	  return {
+    57	    matchedText:
+    58	      record && typeof record.matchedText === 'string'
+    59	        ? record.matchedText
+    60	        : record && typeof record.matchedLabel === 'string'
+    61	          ? record.matchedLabel
+    62	          : record && typeof record.responseExcerpt === 'string'
+    63	            ? record.responseExcerpt
+    64	            : null,
+    65	    matchedLabel: record && typeof record.matchedLabel === 'string' ? record.matchedLabel : null,
+    66	    parseClass:
+    67	      record && (record.parseClass === 'exact' || record.parseClass === 'fallback_resolved' || record.parseClass === 'ambiguous' || record.parseClass === 'unparseable')
+    68	        ? record.parseClass
+    69	        : null,
+    70	    parsePath: record && typeof record.parsePath === 'string' ? record.parsePath : null,
+    71	    parserVersion: record && typeof record.parserVersion === 'string' ? record.parserVersion : null,
+    72	    responseExcerpt: record && typeof record.responseExcerpt === 'string' ? record.responseExcerpt : null,
+    73	    manualOverride:
+    74	      manualOverride === null
+    75	        ? null
+    76	        : {
+    77	            previousValue:
+    78	              typeof manualOverride.previousValue === 'string'
+    79	                ? manualOverride.previousValue
+    80	                : typeof manualOverride.previousDecisionCode === 'string'
+    81	                  ? manualOverride.previousDecisionCode
+    82	                : null,
+    83	            overriddenAt:
+    84	              typeof manualOverride.overriddenAt === 'string'
+    85	                ? manualOverride.overriddenAt
+    86	                : null,
+    87	            overriddenByUserId:
+    88	              typeof manualOverride.overriddenByUserId === 'string'
+    89	                ? manualOverride.overriddenByUserId
+    90	                : null,
+    91	          },
+    92	  };
+    93	}
+    94	
+    95	export function resolveTranscriptDecisionModel(
+    96	  input: TranscriptDecisionModelInput,
+    97	): TranscriptDecisionModelResult {
+    98	  const pair = input.pairOverride !== undefined ? input.pairOverride : extractValuePair(input.definitionSnapshot);
+    99	  const raw = buildRawDecisionEvidence(input.decisionMetadata);
+   100	  const manualOverrideDecision = extractManualOverrideDecision(input.decisionMetadata);
+   101	  const cachedDecision = extractCachedWinnerFirstDecision(input.decisionMetadata);
+   102	
+   103	  const valueStatements = extractValueStatementsFromSnapshot(input.definitionSnapshot);
+   104	  const labelPrefix = extractLabelPrefixFromSnapshot(input.definitionSnapshot) ?? null;
+   105	
+   106	  const resolved = resolveDecisionModel({
+   107	    pair,
+   108	    orientationFlipped: input.orientationFlipped,
+   109	    raw,
+   110	    manualOverridePresent: manualOverrideDecision !== null,
+   111	    manualOverrideDecision,
+   112	    cachedDecision,
+   113	    valueStatements,
+   114	    labelPrefix,
+   115	  });
+   116	
+   117	  return resolved;
+   118	}
+   119	
+   120	export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDecision {
+
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/graphql/queries/domain/decision-model.ts | sed -n '120,240p'" in /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
+ succeeded in 0ms:
+   120	export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDecision {
+   121	  const pair = isValidDecisionPair(input.pair) ? input.pair : null;
+   122	  if (!pair) {
+   123	    return input.pair == null ? buildUnknownCanonicalDecision('unknown') : buildUnknownCanonicalDecision('error');
+   124	  }
+   125	
+   126	  if (input.manualOverridePresent) {
+   127	    const validated = validateManualAppliedDecision(pair, input.manualOverrideDecision);
+   128	    if (!validated.ok) {
+   129	      return buildUnknownCanonicalDecision('error');
+   130	    }
+   131	    return validated.canonical;
+   132	  }
+   133	
+   134	  const parseClass = input.raw.parseClass;
+   135	  if (parseClass !== 'exact' && parseClass !== 'fallback_resolved') {
+   136	    return buildUnknownCanonicalDecision('unknown');
+   137	  }
+   138	
+   139	  const parsedPath = parseDecisionPath(input.raw.parsePath);
+   140	  const cachedDecision = input.cachedDecision ?? null;
+   141	  if (cachedDecision && cachedDecision.decisionState !== 'unknown') {
+   142	    // When cachedDecision.decisionState is 'unknown', skip the cache and
+   143	    // fall through to re-resolve from raw evidence. This handles cases where
+   144	    // the cache was built with incorrect config (e.g. wrong value statements
+   145	    // or label prefix for the domain family).
+   146	
+   147	    if (cachedDecision.decisionState === 'neutral') {
+   148	      return buildCanonicalDecisionFromPair(
+   149	        pair,
+   150	        'neutral',
+   151	        'neutral',
+   152	        false,
+   153	        'deterministic',
+   154	      );
+   155	    }
+   156	
+   157	    if (
+   158	      cachedDecision.favoredValueKey == null
+   159	      || (cachedDecision.favoredValueKey !== pair.valueA && cachedDecision.favoredValueKey !== pair.valueB)
+   160	      || cachedDecision.strength === 'unknown'
+   161	      || cachedDecision.strength === 'neutral'
+   162	    ) {
+   163	      return buildUnknownCanonicalDecision('unknown');
+   164	    }
+   165	
+   166	    const direction: DecisionDirection = cachedDecision.favoredValueKey === pair.valueA ? 'favor_first' : 'favor_second';
+   167	    const opposedValueKey = cachedDecision.favoredValueKey === pair.valueA ? pair.valueB : pair.valueA;
+   168	
+   169	    return {
+   170	      favoredValueKey: cachedDecision.favoredValueKey,
+   171	      opposedValueKey,
+   172	      direction,
+   173	      strength: cachedDecision.strength,
+   174	      normalizationApplied: false,
+   175	      normalizationReason: null,
+   176	      source: 'deterministic',
+   177	    };
+   178	  }
+   179	
+   180	  if (
+   181	    (input.raw.parserVersion === 'job-choice-v2' || input.raw.parserVersion === 'paired-v2')
+   182	    && isJobChoiceDecisionPath(input.raw.parsePath)
+   183	  ) {
+   184	    const candidateText = input.raw.matchedLabel ?? input.raw.matchedText ?? input.raw.responseExcerpt;
+   185	    if (typeof candidateText !== 'string') {
+   186	      return buildUnknownCanonicalDecision('unknown');
+   187	    }
+   188	
+   189	    const strength = parseJobChoiceStrengthFromText(candidateText);
+   190	    if (strength === null) {
+   191	      return buildUnknownCanonicalDecision('unknown');
+   192	    }
+   193	    if (strength === 'neutral') {
+   194	      return buildCanonicalDecisionFromPair(
+   195	        pair,
+   196	        'neutral',
+   197	        'neutral',
+   198	        false,
+   199	        'deterministic',
+   200	      );
+   201	    }
+   202	
+   203	    // When the caller supplies pairOverride without a definitionSnapshot (e.g. domain-analysis
+   204	    // aggregation paths), valueStatements is undefined. For job-choice-v2 transcripts, fall back
+   205	    // to the global JOB_CHOICE_VALUE_STATEMENTS so all 10 values resolve correctly.
+   206	    const effectiveValueStatements = (input.valueStatements != null && input.valueStatements.length > 0)
+   207	      ? input.valueStatements
+   208	      : (input.raw.parserVersion === 'job-choice-v2' ? JOB_CHOICE_VALUE_STATEMENTS : undefined);
+   209	    const favoredValueKey = resolveValueKeyFromText(candidateText, effectiveValueStatements, input.labelPrefix ?? null);
+   210	    if (favoredValueKey === null) {
+   211	      return buildUnknownCanonicalDecision('unknown');
+   212	    }
+   213	    if (favoredValueKey !== pair.valueA && favoredValueKey !== pair.valueB) {
+   214	      return buildUnknownCanonicalDecision('unknown');
+   215	    }
+   216	
+   217	    const direction: DecisionDirection = favoredValueKey === pair.valueA ? 'favor_first' : 'favor_second';
+   218	    const opposedValueKey = favoredValueKey === pair.valueA ? pair.valueB : pair.valueA;
+   219	
+   220	    return {
+   221	      favoredValueKey,
+   222	      opposedValueKey,
+   223	      direction,
+   224	      strength,
+   225	      normalizationApplied: false,
+   226	      normalizationReason: null,
+   227	      source: 'deterministic',
+   228	    };
+   229	  }
+   230	
+   231	  if (input.orientationFlipped == null) {
+   232	    return buildUnknownCanonicalDecision('unknown');
+   233	  }
+   234	
+   235	  if (!parsedPath || parsedPath.branch === 'manual') {
+   236	    return buildUnknownCanonicalDecision('unknown');
+   237	  }
+   238	
+   239	  if (parsedPath.direction === 'unknown' || parsedPath.strength === 'unknown') {
+   240	    return buildUnknownCanonicalDecision('unknown');
+
+codex
+## Findings
+- [CODE-CONFIRMED] High: The migration would write cache rows that the current reader still rejects. [`isSummaryCacheSummary`](=/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-types.ts#L96) still requires both `decisionCode` and `decisionCodeSource`, and [`isWinnerFirstSummaryCache`](=/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-types.ts#L69) still hard-codes `cacheVersion === 1`. The plan strips `decisionCode`/`decisionCodeSource` and does not change `summarize-types.ts`, so migrated rows will fail `isSummaryCache(...)` and be treated as invalid cache misses.
+- [CODE-CONFIRMED] Medium: Adding `decisionState: "refusal"` only in the helper/type layer is not enough. [`resolveCanonicalDecision`](=/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/decision-model.ts#L141) only fast-paths `neutral`, then requires a non-null `favoredValueKey` for anything else. A cached refusal entry with `favoredValueKey: null` falls through to `unknown`, so the new state would be persisted but never actually used on read paths.
+- [CODE-CONFIRMED] Medium: The plan’s `orientationFlipped` fallback to `false` changes current semantics. [`resolveCanonicalDecision`](=/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/decision-model.ts#L231) explicitly returns `unknown` when `orientationFlipped` is null, and [`buildWinnerFirstSummaryCache`](=/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-transcript.ts#L116) forwards `scenario?.orientationFlipped ?? null`. Defaulting missing orientation to `false` will silently canonicalize rows the current code leaves unresolved.
+
+## Residual Risks
+- Rows with malformed `definitionSnapshot` or missing pair data still need explicit skip-and-count handling so the backfill does not abort partway through.
+- The write path in [`summarize-transcript.ts`](=/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-transcript.ts#L116) still emits v1 cache records, so any one-time backfill will need a clear compatibility window or a follow-up pass.
+tokens used
+54,099

@@ -1,0 +1,17 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts",
+    "cloud/apps/api/src/graphql/queries/domain/decision-model-types.ts",
+    "cloud/apps/api/tests/graphql/queries/decision-model-helpers.test.ts",
+    "cloud/scripts/backfill-canonical-v2-migration.ts",
+    "cloud/scripts/reparse-decision-stdin.py"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts",
+    "cloud/apps/api/src/graphql/queries/domain/decision-model-types.ts",
+    "cloud/apps/api/tests/graphql/queries/decision-model-helpers.test.ts",
+    "cloud/scripts/backfill-canonical-v2-migration.ts",
+    "cloud/scripts/reparse-decision-stdin.py",
+    "docs/workflow/feature-runs/decision-cache-v2-tolerance"
+  ]
+}

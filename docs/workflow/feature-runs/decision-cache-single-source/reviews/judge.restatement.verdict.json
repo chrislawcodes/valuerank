@@ -1,0 +1,70 @@
+{
+  "judge": "restatement",
+  "model": "gpt-5",
+  "verdict": "block",
+  "confidence": 5,
+  "reasoning": "There are no earlier rounds to compare against: the record says \"No prior findings yet.\" That means every latest finding is NEW, not a RESTATEMENT, because there is no earlier finding and no orchestrator response that could have already addressed the same concern. Per finding: spec.codex.edge-cases-adversarial.review#high-1 = NEW, failure mode: rollout order makes legacy refusal rows read as \"unknown\" before migration and creates a user-visible regression; #high-2 = NEW, failure mode: migration scope only upgrades rows with decisionCode, so the claimed invariant that all cached rows become cacheVersion 2 cannot hold; #medium-3 = NEW, failure mode: unresolved outward decisionCode mapping is not pinned down, so API/export compatibility is ambiguous; #medium-4 = NEW, failure mode: manual overrides do not define how favor_first/favor_second behave when orientationFlipped=true, so flipped transcripts can be validated or stored incorrectly; spec.codex.feasibility-adversarial.review#medium-1 = NEW, failure mode: migration exclusions conflict with post-migration zero-legacy-shape claims, leaving final cache-version state ambiguous; #medium-2 = NEW, failure mode: override validation still allows invalid neutral+non-neutral-strength combinations and does not require canonicalDecision.cacheVersion=2 on writes; #medium-3 = NEW, failure mode: grep-based consumer discovery can miss dynamic or wrapped read paths, so the all-consumers guarantee is not actually proven; spec.gemini.requirements-adversarial.review#high-1 = NEW, but the supplied excerpt only exposes severity and not the underlying failure mode; #high-2 = NEW, same limitation; #medium-3 = NEW, same limitation; #medium-4 = NEW, same limitation. Because 100% of the latest round's findings are new relative to the stated history, the loop is still producing signal and should be blocked from proceeding.",
+  "evidence": [
+    {
+      "artifact": "earlier-rounds",
+      "section": "history",
+      "quote": "No prior findings yet."
+    },
+    {
+      "artifact": "spec.codex.edge-cases-adversarial.review.md",
+      "section": "high-1",
+      "quote": "The rollout order creates a user-visible regression for legacy refusal rows."
+    },
+    {
+      "artifact": "spec.codex.edge-cases-adversarial.review.md",
+      "section": "high-2",
+      "quote": "FR-012 only migrates rows where `summaryCache.summary.decisionCode` exists, but Measurement D and the edge-case note claim that after migration all cached rows should be `cacheVersion = 2`."
+    },
+    {
+      "artifact": "spec.codex.edge-cases-adversarial.review.md",
+      "section": "medium-3",
+      "quote": "The outward `decisionCode` mapping for unresolved decisions is underspecified."
+    },
+    {
+      "artifact": "spec.codex.edge-cases-adversarial.review.md",
+      "section": "medium-4",
+      "quote": "Manual-override validation omits explicit flipped-order semantics."
+    },
+    {
+      "artifact": "spec.codex.feasibility-adversarial.review.md",
+      "section": "medium-1",
+      "quote": "The migration scope and the post-migration invariants conflict."
+    },
+    {
+      "artifact": "spec.codex.feasibility-adversarial.review.md",
+      "section": "medium-2",
+      "quote": "The manual-override contract is under-specified enough to admit invalid canonical states."
+    },
+    {
+      "artifact": "spec.codex.feasibility-adversarial.review.md",
+      "section": "medium-3",
+      "quote": "The required consumer-discovery process is not strong enough to prove that all read paths are covered."
+    },
+    {
+      "artifact": "spec.gemini.requirements-adversarial.review.md",
+      "section": "high-1",
+      "quote": "Severity**: HIGH"
+    },
+    {
+      "artifact": "spec.gemini.requirements-adversarial.review.md",
+      "section": "high-2",
+      "quote": "Severity**: HIGH"
+    },
+    {
+      "artifact": "spec.gemini.requirements-adversarial.review.md",
+      "section": "medium-3",
+      "quote": "Severity**: MEDIUM"
+    },
+    {
+      "artifact": "spec.gemini.requirements-adversarial.review.md",
+      "section": "medium-4",
+      "quote": "Severity**: MEDIUM"
+    }
+  ],
+  "timestamp": "2026-04-19T00:00:00-07:00"
+}

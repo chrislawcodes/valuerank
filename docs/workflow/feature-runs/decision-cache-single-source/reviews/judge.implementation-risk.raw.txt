@@ -1,0 +1,38 @@
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "judge": "implementation-risk",
+  "model": "claude-sonnet-4-5",
+  "verdict": "proceed-with-annotation",
+  "confidence": 3,
+  "reasoning": "The spec is thorough enough that a senior implementer could build from it alone, but four concrete gaps will cause guessing or inconsistency: (1) both the Plan and Tasks artifacts are empty, leaving no sequenced work breakdown; (2) the shared TS/Python parity fixture file has no path or schema, so the two test suites will invent incompatible formats; (3) the 'Known Consumers list' referenced in FR-006 as a 'starting point' never appears in any artifact; and (4) the FR-019 rollout-window compat branch has a removal condition ('only after the migration has run') but no mechanism, commit step, or follow-up ticket — it will silently persist. None of these alone is fatal for a senior engineer, but items 2 and 3 will produce subtly wrong implementations without a re-review.",
+  "evidence": [
+    {
+      "artifact": "TASKS",
+      "section": "Tasks",
+      "quote": "# Tasks"
+    },
+    {
+      "artifact": "SPEC",
+      "section": "FR-005",
+      "quote": "unit tests must exercise both helpers against a shared fixture set (JSON file checked into the repo) to guarantee parity"
+    },
+    {
+      "artifact": "SPEC",
+      "section": "FR-006",
+      "quote": "The Known Consumers list in the spec brief is a starting point, not an exhaustive inventory. The plan phase MUST include a repo-wide grep step"
+    },
+    {
+      "artifact": "SPEC",
+      "section": "FR-019",
+      "quote": "This backward-compat branch is removed only after the migration has run and all rows are cacheVersion: 2 with the new decisionState."
+    },
+    {
+      "artifact": "SPEC",
+      "section": "Assumptions Carried In",
+      "quote": "Rollout order is one feature branch with sequenced internal commits: (1) add helper + rollout-window compat branch (FR-005 + FR-019), (2) rewire read consumers, (3) rewire manual-override mutation, (4) rewire write path, (5) land migration script + tests."
+    }
+  ],
+  "timestamp": "2026-04-19T00:00:00Z"
+}
+```
