@@ -673,8 +673,6 @@ type DomainAnalysisConditionDetail {
 type DomainAnalysisConditionTranscript {
   content: JSON!
   createdAt: DateTime!
-  decisionCode: String
-  decisionCodeSource: String
   decisionModelV2: JSON
   durationMs: Int!
   id: ID!
