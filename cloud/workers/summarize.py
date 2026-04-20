@@ -154,8 +154,18 @@ def extract_decision_result(transcript_content: dict[str, Any]) -> dict[str, Any
         "responseExcerpt": response_excerpt(response_text) if response_text else None,
         "matchedLabel": matched_label,
         "scaleLabels": scale_labels,
+        # First-class refusal signal. The TS resolver reads this via
+        # RawDecisionEvidence.refusal and returns a refusal canonical.
+        # Replaces the legacy decisionCode == "refusal" encoding.
+        "refusal": decision_code == "refusal",
     }
 
+    # `decisionCode` and `decisionSource` are kept here for internal use by
+    # test assertions and parser debugging only. They are NOT forwarded into
+    # `run_summarize`'s output dict — the TS write path explicitly ignores
+    # them. The authoritative decision signal that reaches TS is
+    # `decisionMetadata` (including `refusal`), from which TS builds the
+    # canonical decision via `resolveCanonicalDecision`.
     return {
         "decisionCode": decision_code,
         "decisionSource": decision_source,
@@ -185,35 +195,31 @@ def run_summarize(data: dict[str, Any]) -> dict[str, Any]:
 
     try:
         decision_result = extract_decision_result(transcript_content)
-        decision_code = decision_result["decisionCode"]
-        decision_source = decision_result["decisionSource"]
         decision_metadata = decision_result["decisionMetadata"]
 
         # Log appropriate message based on what we found (or didn't find)
         if decision_metadata["parsePath"] in {"text_label_exact", "text_label_leading"}:
             log.info(
-                "Resolved decision code from text scale label",
+                "Resolved decision from text scale label",
                 transcriptId=transcript_id,
-                rating=decision_code,
                 matchedLabel=decision_metadata["matchedLabel"],
-            )
-        elif decision_source == "llm":
-            log.info(
-                "Resolved decision code with fallback LLM",
-                transcriptId=transcript_id,
-                rating=decision_code,
-                fallbackModel=LLM_FALLBACK_MODEL,
+                parsePath=decision_metadata["parsePath"],
             )
         elif decision_metadata["parseClass"] == "ambiguous":
             log.info(
                 "Could not extract deterministic rating from transcript",
                 transcriptId=transcript_id,
             )
+        elif decision_metadata.get("refusal"):
+            log.info(
+                "Detected refusal response",
+                transcriptId=transcript_id,
+            )
         else:
             log.info(
                 "Extracted deterministic rating",
                 transcriptId=transcript_id,
-                rating=decision_code,
+                parsePath=decision_metadata["parsePath"],
             )
 
         # DEPRECATED: We no longer generate decision text
@@ -222,15 +228,12 @@ def run_summarize(data: dict[str, Any]) -> dict[str, Any]:
         log.info(
             "Summarization completed",
             transcriptId=transcript_id,
-            decisionCode=decision_code,
-            decisionSource=decision_source,
+            parsePath=decision_metadata["parsePath"],
         )
 
         return {
             "success": True,
             "summary": {
-                "decisionCode": decision_code,
-                "decisionSource": decision_source,
                 "decisionText": decision_text,
                 "decisionMetadata": decision_metadata,
             },

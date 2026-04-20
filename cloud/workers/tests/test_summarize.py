@@ -598,8 +598,11 @@ class TestRunSummarize:
         result = run_summarize(data)
 
         assert result["success"] is True
-        assert result["summary"]["decisionCode"] == "4"
-        assert result["summary"]["decisionSource"] == "deterministic"
+        # decisionCode / decisionSource are intentionally absent from the output
+        # shape the TS write path reads. The authoritative signal is
+        # decisionMetadata (including parsePath, matchedLabel, refusal).
+        assert "decisionCode" not in result["summary"]
+        assert "decisionSource" not in result["summary"]
         assert result["summary"]["decisionMetadata"]["parseClass"] == "exact"
         assert result["summary"]["decisionText"] is None
 
@@ -621,8 +624,8 @@ class TestRunSummarize:
         result = run_summarize(data)
 
         assert result["success"] is True
-        assert result["summary"]["decisionCode"] == "2"
-        assert result["summary"]["decisionSource"] == "deterministic"
+        assert "decisionCode" not in result["summary"]
+        assert "decisionSource" not in result["summary"]
         assert result["summary"]["decisionMetadata"]["parsePath"] == "numeric_deterministic"
         assert result["summary"]["decisionText"] is None
 
@@ -644,8 +647,8 @@ class TestRunSummarize:
         result = run_summarize(data)
 
         assert result["success"] is True
-        assert result["summary"]["decisionCode"] == "other"
-        assert result["summary"]["decisionSource"] == "deterministic"
+        assert "decisionCode" not in result["summary"]
+        assert "decisionSource" not in result["summary"]
         assert result["summary"]["decisionMetadata"]["parseClass"] == "ambiguous"
         assert result["summary"]["decisionMetadata"]["parsePath"] == "numeric_ambiguous"
 
@@ -667,10 +670,53 @@ class TestRunSummarize:
         result = run_summarize(data)
 
         assert result["success"] is True
-        assert result["summary"]["decisionCode"] == "other"
-        assert result["summary"]["decisionSource"] == "deterministic"
+        assert "decisionCode" not in result["summary"]
+        assert "decisionSource" not in result["summary"]
         assert result["summary"]["decisionMetadata"]["parseClass"] == "ambiguous"
         assert result["summary"]["decisionText"] is None
+
+    @patch("summarize.extract_decision_code")
+    def test_refusal_sets_metadata_flag(self, mock_extract: MagicMock) -> None:
+        """Refusal detection sets decisionMetadata.refusal = True (A9).
+
+        This replaces the legacy decisionCode == "refusal" encoding. The TS
+        resolver reads this flag via RawDecisionEvidence.refusal and returns
+        a refusal canonical.
+        """
+        from summarize import run_summarize
+
+        mock_extract.return_value = "refusal"
+
+        data = {
+            "transcriptId": "transcript-refusal-1",
+            "modelId": "anthropic:claude-3.5-sonnet",
+            "transcriptContent": {"turns": []},
+        }
+
+        result = run_summarize(data)
+
+        assert result["success"] is True
+        assert result["summary"]["decisionMetadata"]["refusal"] is True
+        assert "decisionCode" not in result["summary"]
+        assert "decisionSource" not in result["summary"]
+
+    @patch("summarize.extract_decision_code")
+    def test_non_refusal_sets_metadata_flag_false(self, mock_extract: MagicMock) -> None:
+        """Non-refusal responses set decisionMetadata.refusal = False."""
+        from summarize import run_summarize
+
+        mock_extract.return_value = "4"
+
+        data = {
+            "transcriptId": "transcript-non-refusal",
+            "modelId": "anthropic:claude-3.5-sonnet",
+            "transcriptContent": {"turns": []},
+        }
+
+        result = run_summarize(data)
+
+        assert result["success"] is True
+        assert result["summary"]["decisionMetadata"]["refusal"] is False
 
     def test_parser_version_defaults_to_current_value(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test parser version defaults to the current worker value."""
