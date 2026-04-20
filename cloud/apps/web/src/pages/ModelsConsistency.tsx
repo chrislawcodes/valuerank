@@ -8,6 +8,7 @@ import {
   DOMAIN_AVAILABLE_SIGNATURES_QUERY,
   type DomainAvailableSignaturesQueryResult,
 } from '../api/operations/domainAnalysis';
+import { formatSignatureOptionLabel } from '../utils/domainAnalysisUtils';
 import {
   MODELS_CONSISTENCY_QUERY,
   type ModelsConsistencyQueryResult,
@@ -47,14 +48,33 @@ export function ModelsConsistency() {
     requestPolicy: 'cache-and-network',
   });
 
-  const signatureChoice = signatureParam
-    ?? (hasDomainParam && domainParam === 'all'
-      ? DEFAULT_SIGNATURE
-      : signatureError != null
-        ? DEFAULT_SIGNATURE
-      : signatureData != null
-        ? signatureData.domainAvailableSignatures[0]?.signature ?? DEFAULT_SIGNATURE
-        : null);
+  const availableSignatures = useMemo(
+    () => signatureData?.domainAvailableSignatures ?? [],
+    [signatureData],
+  );
+
+  const signatureOptions = useMemo(
+    () => availableSignatures.map((option) => ({
+      value: option.signature,
+      label: formatSignatureOptionLabel(option),
+    })),
+    [availableSignatures],
+  );
+
+  // Default picker: honor ?signature URL param first. Otherwise prefer the
+  // canonical "vnewest @ default temperature" signature if it is actually
+  // offered for this domain; fall back to the first available signature;
+  // fall back to DEFAULT_SIGNATURE constant only when nothing is loaded yet.
+  const signatureChoice = (() => {
+    if (signatureParam != null) return signatureParam;
+    if (hasDomainParam && domainParam === 'all') return DEFAULT_SIGNATURE;
+    if (signatureError != null) return DEFAULT_SIGNATURE;
+    if (signatureData == null) return null;
+    if (availableSignatures.some((option) => option.signature === DEFAULT_SIGNATURE)) {
+      return DEFAULT_SIGNATURE;
+    }
+    return availableSignatures[0]?.signature ?? DEFAULT_SIGNATURE;
+  })();
   const selectedSignature = signatureChoice ?? DEFAULT_SIGNATURE;
 
   useEffect(() => {
@@ -134,6 +154,12 @@ export function ModelsConsistency() {
     setMinScenarios(value);
   };
 
+  const handleSignatureChange = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('signature', value);
+    setSearchParams(next, { replace: true });
+  };
+
   // Order matters: surface errors and empty-domain state BEFORE the loading
   // spinner so a failed useDomains() or an empty domain list does not leave
   // the page stuck on an infinite loading state.
@@ -159,11 +185,14 @@ export function ModelsConsistency() {
       <ConsistencyFilters
         domainId={urlDomainId}
         providerId={providerId}
+        signature={selectedSignature}
         minScenarios={minScenarios}
         domainOptions={buildDomainOptions(domains)}
         providerOptions={providerOptions}
+        signatureOptions={signatureOptions}
         onDomainChange={handleDomainChange}
         onProviderChange={handleProviderChange}
+        onSignatureChange={handleSignatureChange}
         onMinScenariosChange={handleMinScenariosChange}
       />
 
