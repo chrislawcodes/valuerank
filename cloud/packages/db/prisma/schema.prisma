@@ -507,9 +507,10 @@ model Transcript {
   lastAccessedAt     DateTime? @map("last_accessed_at")
   // Retention (NULL = permanent, default)
   contentExpiresAt   DateTime? @map("content_expires_at")
-  // Summary fields (populated after run completes)
-  decisionCode       String?   @map("decision_code")     // 1-5 rating or "other"
-  decisionCodeSource String?   @map("decision_code_source") // deterministic | llm | manual | error
+  // Summary fields (populated after run completes).
+  // decision_code and decision_code_source columns were dropped after the
+  // remove-decisionCode PR migrated all transcripts to canonicalDecision as
+  // the single source of truth (PR #713, commit f86c2579).
   decisionText       String?   @map("decision_text")     // LLM-generated summary
   decisionMetadata   Json?     @map("decision_metadata") @db.JsonB
   summarizedAt       DateTime? @map("summarized_at")     // When summary was generated

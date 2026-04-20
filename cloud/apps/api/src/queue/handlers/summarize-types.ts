@@ -71,10 +71,10 @@ export function isWinnerFirstSummaryCache(value: unknown): value is WinnerFirstS
     return false;
   }
 
-  // Accept both cacheVersion 1 (legacy pre-migration) and 2 (post-migration).
-  // A follow-up mini-PR tightens this to literal 2 after the migration --apply
-  // verifies zero v1 rows remain.
-  if (value.cacheVersion !== 1 && value.cacheVersion !== 2) {
+  // cacheVersion 2 is the only accepted shape. The remove-decisionCode
+  // migration migrated every v1 row to v2; the tolerance bridge has been
+  // removed.
+  if (value.cacheVersion !== 2) {
     return false;
   }
 

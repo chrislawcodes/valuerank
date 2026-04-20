@@ -113,12 +113,10 @@ export type ParsedDecisionPath = {
 /**
  * Cached canonical decision attached to a summarize cache entry.
  *
- * `cacheVersion`:
- * - `2` — the current shape. Fresh writes always emit v2.
- * - `1` — legacy rows written before the single-source-of-truth migration.
- *   Accepted by the validator as a deploy-window tolerance bridge; a
- *   follow-up mini-PR tightens the union to literal `2` after the
- *   migration's --apply step verifies zero v1 rows remain.
+ * `cacheVersion: 2` is the only accepted version. The prior `1 | 2` union
+ * existed as a deploy-window tolerance bridge for the remove-decisionCode
+ * migration; after --apply verified zero v1 rows remain in prod, the union
+ * tightens to literal `2`.
  *
  * `decisionState`:
  * - `"resolved"`: parser chose a value (favoredValueKey + strength populated).
@@ -128,7 +126,7 @@ export type ParsedDecisionPath = {
  *   worker setting `decisionMetadata.refusal = true`.
  */
 export type CachedWinnerFirstDecision = {
-  cacheVersion: 1 | 2;
+  cacheVersion: 2;
   decisionState: 'resolved' | 'neutral' | 'unknown' | 'refusal';
   favoredValueKey: DomainAnalysisValueKey | null;
   strength: DecisionStrength;

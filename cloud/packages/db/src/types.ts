@@ -179,7 +179,7 @@ export type SummaryCacheSummary = {
   decisionText: string | null;
   decisionMetadata: Record<string, unknown> | null;
   canonicalDecision?: {
-    cacheVersion: 1 | 2;
+    cacheVersion: 2;
     decisionState: 'resolved' | 'neutral' | 'unknown' | 'refusal';
     favoredValueKey: string | null;
     strength: 'strong' | 'lean' | 'neutral' | 'unknown';

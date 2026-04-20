@@ -201,7 +201,7 @@ function makeValidSummaryCache(content: { turns: Array<{ targetResponse?: string
         responseExcerpt: 'Achievement',
       },
       canonicalDecision: {
-        cacheVersion: 1,
+        cacheVersion: 2,
         decisionState: 'resolved',
         favoredValueKey: 'Achievement',
         strength: 'strong',
