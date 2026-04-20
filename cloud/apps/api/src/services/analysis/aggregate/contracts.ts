@@ -96,6 +96,42 @@ export const zScenarioVarianceStats = z.object({
   orientationCorrected: z.boolean().optional(),
 }).passthrough();
 
+export const zBernoulliScenarioSummary = z.object({
+  matches: z.number().int().nonnegative(),
+  trials: z.number().int().nonnegative(),
+}).passthrough();
+
+export const zPerConditionSummary = z.object({
+  scenarioId: z.string(),
+  netPressureRank: z.number().int().nullable(),
+  winRate: z.number(),
+  matches: z.number().int().nonnegative(),
+  trials: z.number().int().nonnegative(),
+}).passthrough();
+
+export const zPairSummary = z.object({
+  targetAnalysisRunId: z.string(),
+  targetCompanionRunId: z.string().nullable(),
+  primaryConditionIds: z.array(z.string()),
+  companionConditionIds: z.array(z.string()),
+  perCondition: z.array(zPerConditionSummary),
+}).passthrough();
+
+export const zModelReliabilitySummary = z.object({
+  baselineNoise: z.number().nullable().optional(),
+  baselineReliability: z.number().nullable().optional(),
+  directionalAgreement: z.number().nullable().optional(),
+  neutralShare: z.number().nullable().optional(),
+  coverageCount: z.number().optional(),
+  uniqueScenarios: z.number().optional(),
+  perScenario: z.record(zBernoulliScenarioSummary).optional(),
+  perPair: z.record(zPairSummary).optional(),
+}).passthrough();
+
+export const zReliabilitySummary = z.object({
+  perModel: z.record(zModelReliabilitySummary),
+}).passthrough();
+
 export const zRunVarianceAnalysis = z.object({
   isMultiSample: z.boolean(),
   samplesPerScenario: z.number(),
@@ -109,12 +145,18 @@ export type RunVarianceAnalysis = z.infer<typeof zRunVarianceAnalysis>;
 export type ModelVarianceStats = z.infer<typeof zModelVarianceStats>;
 export type VarianceStats = z.infer<typeof zVarianceStats>;
 export type ScenarioVarianceStats = z.infer<typeof zScenarioVarianceStats>;
+export type BernoulliScenarioSummary = z.infer<typeof zBernoulliScenarioSummary>;
+export type PerConditionSummary = z.infer<typeof zPerConditionSummary>;
+export type PairSummary = z.infer<typeof zPairSummary>;
+export type ModelReliabilitySummary = z.infer<typeof zModelReliabilitySummary>;
+export type ReliabilitySummary = z.infer<typeof zReliabilitySummary>;
 
 export const zAnalysisOutput = z.object({
   perModel: z.record(zModelStats),
   visualizationData: zVisualizationData.optional(),
   mostContestedScenarios: z.array(zContestedScenario).optional(),
   varianceAnalysis: zRunVarianceAnalysis.optional(),
+  reliabilitySummary: zReliabilitySummary.nullable().optional(),
   modelAgreement: z.unknown().optional(),
 }).passthrough();
 
@@ -185,6 +227,11 @@ export type AggregateWorkerInput = {
     lowCoverageCautionThreshold: number;
     driftWarningThreshold: number;
   };
+  valuePair?: {
+    valueA: string | null;
+    valueB: string | null;
+  };
+  targetCompanionRunId?: string | null;
   transcripts: AggregateWorkerTranscript[];
 };
 

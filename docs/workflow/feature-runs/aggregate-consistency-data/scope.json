@@ -1,0 +1,13 @@
+{
+  "paths": [
+    "cloud/apps/api/src/cli",
+    "cloud/apps/api/src/services/analysis/aggregate",
+    "cloud/apps/api/src/services/consistency"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/cli",
+    "cloud/apps/api/src/services/analysis/aggregate",
+    "cloud/apps/api/src/services/consistency",
+    "docs/workflow/feature-runs/aggregate-consistency-data"
+  ]
+}

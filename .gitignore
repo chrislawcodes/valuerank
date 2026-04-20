@@ -58,3 +58,6 @@ yarn-error.log*
 !scenarios/**
 .agents/tmp/
 .codex-slice*-spec.txt
+
+# Local-only scheduler artifacts
+.claude/scheduled_tasks.lock

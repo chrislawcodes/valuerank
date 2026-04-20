@@ -1,0 +1,57 @@
+MCP issues detected. Run /mcp list for status.{
+  "session_id": "74f1fc00-8ec0-42b7-9023-2fc60b2cda0b",
+  "response": "## Findings\n\n| Severity | ID | Finding |\n| :--- | :--- | :--- |\n| **HIGH** | F-01 | **Potential `ZeroDivisionError` in `win_rate` calculation.** The formula for `win_rate` is described as `(strongly + somewhat) / (sample_count - neutral_count)`. If a scenario consists entirely of neutral responses, `sample_count` will equal `neutral_count`, leading to a `ZeroDivisionError`. While a test case `test_per_pair_all_neutral_win_rate` is specified to handle this, it claims the denominator is \"forced to 1\" without specifying *how*. The implementation must explicitly handle this case to avoid crashing the worker. |\n| **HIGH** | F-02 | **Potential `ValueError` from unclean data in `build_reliability_summary`.** The Python code in Slice A `int(stats.get(\"sampleCount\", 0))` is not robust against non-numeric values. If `stats.get(\"sampleCount\")` returns a non-numeric string (e.g., `\"N/A\"`), the `int()` cast will raise a `ValueError`, crashing the worker. The code should defensively handle or sanitize this input. |\n| **MEDIUM** | F-03 | **[UNVERIFIED] Backfill idempotency check is fragile.** The `detectUpgraded` function in the backfill script only checks the first model in the `perModel` object. If a run produced an empty `perModel` object, or if the first model happened to have no repeating scenarios (and thus no `perScenario` key), the check would fail. This could cause the script to re-trigger runs that were already processed but yielded no data, creating unnecessary work and potential confusion. A more robust check would iterate through all models to confirm none have the new keys. |\n| **MEDIUM** | F-04 | **[UNVERIFIED] Ambiguity in `net_pressure_rank` calculation.** The task for Slice B states that `net_pressure_rank` is derived from `_CANONICAL_APPEAL_LEVEL` but does not specify the aggregation logic. More critically, it states a test case should verify that a \"non-canonical label yields `null` rank,\" but the implementation note suggests this is merely \"defense-in-depth\" and relies on an unspecified \"invariant\" 5-bucket check. This assumption is risky; the `_build_per_pair_for_model` helper should explicitly handle non-canonical labels (e.g., using `.get()` with a default when accessing the map) rather than assuming clean inputs. |\n| **LOW** | F-05 | **CI verification is a potential blind spot.** Task A3 correctly identifies that Python tests may not be running in CI. However, it defers this to a follow-up issue. If the tests are not running, all Python test additions in this plan (A1b, B3) provide a false sense of security until that separate issue is resolved. The risk is that broken worker logic could be merged and deployed. |\n| **LOW** | F-06 | **Missing Zod test for `perPair` backward compatibility.** Task B4b specifies testing that rows with `perScenario` (from Slice A) and rows with neither key can still be parsed. This correctly ensures backward compatibility. However, it omits the inverse case for forward compatibility: ensuring a payload containing *only* `perPair` (and not `perScenario`) would also parse successfully. This is a possible, if unlikely, state. |\n\n## Residual Risks\n\n| Severity | ID | Risk |\n| :--- | :--- | :--- |\n| **MEDIUM** | R-01 | **[UNVERIFIED] Data availability for Slice B is a major assumption.** Task B2 correctly identifies that `run_context` data may not be available in the worker payload and specifies a \"STOP and re-scope\" check. This remains the most significant risk to the timeline for Slice B. If the required IDs are not present, a \"sub-slice B0\" would be needed, delaying the feature and increasing complexity, as this is noted to be a cross-cutting change. |\n| **LOW** | R-02 | **Operational risk in backfill.** Slice C is purely operational. The plan relies on a manual, staged rollout. This carries inherent operational risks, such as running the script with incorrect parameters, misinterpreting logs, or encountering environment-specific issues (staging vs. production) that were not anticipated. The lack of an automated rollback plan means any failure during the production backfill will require manual intervention. |\n| **LOW** | R-03 | **Mismatched dependencies in `package.json`.** The plan involves adding a new `tsx` script to `cloud/apps/api/package.json`. There is a risk that the `tsx` dependency (or other required packages like `zod`) is not pinned to a version compatible with the rest of the monorepo, potentially causing build or runtime failures after merge. The preflight steps do not include running `npm install` to verify dependency resolution. |",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 25671
+        },
+        "tokens": {
+          "input": 4226,
+          "prompt": 16303,
+          "candidates": 1103,
+          "total": 19153,
+          "cached": 12077,
+          "thoughts": 1747,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 25671,
+            "tokens": {
+              "input": 4226,
+              "prompt": 16303,
+              "candidates": 1103,
+              "total": 19153,
+              "cached": 12077,
+              "thoughts": 1747,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

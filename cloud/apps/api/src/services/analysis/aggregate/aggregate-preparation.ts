@@ -260,24 +260,6 @@ export async function prepareAggregateRunSnapshot(
     valueB,
   );
 
-  let aggregateWorkerInput: AggregateWorkerInput | null = null;
-
-  if (aggregateEligibility === 'eligible_same_signature_baseline') {
-    aggregateWorkerInput = {
-      runId: `aggregate:${definitionId}:${preambleVersionId ?? 'none'}:${definitionVersion ?? 'none'}:${temperature ?? 'default'}`,
-      emitVignetteSemantics: true,
-      aggregateSemantics: {
-        mode: 'same_signature_v1',
-        plannedScenarioIds,
-        minRepeatCoverageCount: MIN_REPEAT_COVERAGE_COUNT,
-        minRepeatCoverageShare: MIN_REPEAT_COVERAGE_SHARE,
-        lowCoverageCautionThreshold: LOW_COVERAGE_CAUTION_THRESHOLD,
-        driftWarningThreshold: DRIFT_WARNING_THRESHOLD,
-      },
-      transcripts: aggregateWorkerTranscripts,
-    };
-  }
-
   const aggregateMetadataBase = {
     aggregateEligibility,
     aggregateIneligibilityReason,
@@ -301,6 +283,35 @@ export async function prepareAggregateRunSnapshot(
 
   const templateConfigResult = zRunConfig.safeParse(templateRun.config);
   const templateConfig = templateConfigResult.success ? templateConfigResult.data : {};
+  const templateConfigWithCompanion = templateConfig as { companionRunId?: unknown };
+  const targetCompanionRunId =
+    typeof templateConfigWithCompanion.companionRunId === 'string'
+      && templateConfigWithCompanion.companionRunId.trim() !== ''
+      ? templateConfigWithCompanion.companionRunId
+      : null;
+
+  let aggregateWorkerInput: AggregateWorkerInput | null = null;
+
+  if (aggregateEligibility === 'eligible_same_signature_baseline') {
+    aggregateWorkerInput = {
+      runId: `aggregate:${definitionId}:${preambleVersionId ?? 'none'}:${definitionVersion ?? 'none'}:${temperature ?? 'default'}`,
+      emitVignetteSemantics: true,
+      aggregateSemantics: {
+        mode: 'same_signature_v1',
+        plannedScenarioIds,
+        minRepeatCoverageCount: MIN_REPEAT_COVERAGE_COUNT,
+        minRepeatCoverageShare: MIN_REPEAT_COVERAGE_SHARE,
+        lowCoverageCautionThreshold: LOW_COVERAGE_CAUTION_THRESHOLD,
+        driftWarningThreshold: DRIFT_WARNING_THRESHOLD,
+      },
+      valuePair: {
+        valueA,
+        valueB,
+      },
+      targetCompanionRunId,
+      transcripts: aggregateWorkerTranscripts,
+    };
+  }
 
   const finalRunConfig: AggregateRunConfig = {
     ...templateConfig,

@@ -1,0 +1,204 @@
+YOLO mode is enabled. All tool calls will be automatically approved.
+Keychain initialization encountered an error: UNIX[Operation not permitted]
+Using FileKeychain fallback for secure storage.
+Loaded cached credentials.
+YOLO mode is enabled. All tool calls will be automatically approved.
+[MCP error] Error during discovery for MCP server 'agentchattr': SSE error: TypeError: fetch failed: connect ECONNREFUSED 127.0.0.1:8201 SseError: SSE error: TypeError: fetch failed: connect ECONNREFUSED 127.0.0.1:8201
+    at _eventSource.onerror (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/bundle/chunk-QVTX2M5J.js:335643:25)
+    at EventSource.scheduleReconnect_fn (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/bundle/chunk-QVTX2M5J.js:335538:56)
+    at file:///opt/homebrew/lib/node_modules/@google/gemini-cli/bundle/chunk-QVTX2M5J.js:335388:178
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {
+  code: undefined,
+  event: {
+    type: 'error',
+    message: 'TypeError: fetch failed: connect ECONNREFUSED 127.0.0.1:8201',
+    code: undefined,
+    defaultPrevented: false,
+    cancelable: false,
+    timeStamp: 1961.048209
+  }
+}
+Scheduling MCP context refresh...
+Executing MCP context refresh...
+MCP context refresh complete.
+Error stating path modelcontextprotocol/sdk": "^1.24.3",
+    "@pothos/core": "^3.41.0",
+    "@pothos/plugin-prisma": "^3.65.0",
+    "@pothos/plugin-validation": "^3.10.1",
+    "@valuerank/db": "*",
+    "@valuerank/shared": "*",
+    "adm-zip": "^0.5.16",
+    "bcrypt": "^5.1.1",
+    "bottleneck": "^2.19.5",
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "dataloader": "^2.2.2",
+    "dotenv": "^17.2.3",
+    "exceljs": "^4.4.0",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "graphql": "^16.8.1",
+    "graphql-yoga": "^5.1.1",
+    "jsonwebtoken": "^9.0.2",
+    "pg-boss": "^12.5.2",
+    "yaml": "^2.8.2",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
+    "@types/compression": "^1.8.1",
+    "@types/bcrypt": "^5.0.2",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/node": "^20.10.0",
+    "@types/supertest": "^2.0.16",
+    "@vitest/coverage-v8": "^2.1.0",
+    "supertest": "^6.3.3",
+    "tsx": "^4.6.2",
+    "vitest": "^2.1.0"
+  }
+}
+
+
+Artifact: plan.md
+# Implementation Plan: Aggregate Pipeline — Consistency Data Emission
+
+**Branch:** `claude/aggregate-consistency-data` | **Date:** 2026-04-19
+**Spec:** `docs/workflow/feature-runs/aggregate-consistency-data/spec.md`
+
+## Summary
+
+Extend the Python aggregate worker to emit two new sub-sections of `reliabilitySummary.perModel[modelId]`:
+1. **`perScenario[scenarioId]`** with `{ trials, matches }` — unblocks Repeatability.
+2. **`perPair[valueKey]`** with `{ targetAnalysisRunId, targetCompanionRunId, primaryConditionIds, companionConditionIds, perCondition: [...] }` — unblocks Coherence.
+
+All underlying data is already computed inside `cloud/workers/stats/variance_analysis.py`; the work is teaching `cloud/workers/analyze_basic_aggregation.py::build_reliability_summary` to surface it, extending the TypeScript Zod contract, and shipping a backfill CLI.
+
+Two PRs, three slices. Backfill ships in PR2 so existing `AGGREGATE` rows can be upgraded in one pass.
+
+## Technical Context
+
+| Aspect | Detail |
+|---|---|
+| Primary language | Python 3 (worker) + TypeScript (Zod contract, CLI) |
+| Worker entry | `cloud/workers/analyze_basic.py::analyze_basic()` → calls `build_reliability_summary` |
+| Emission site | `cloud/workers/analyze_basic_aggregation.py::build_reliability_summary` (line 276) |
+| Input data | `variance_analysis['perModel'][modelId]['perScenario']` already carries `sampleCount`, `directionCounts`, `direction`, `directionalAgreement` |
+| Zod contract | `cloud/apps/api/src/services/analysis/aggregate/contracts.ts:197` |
+| Tests | `cloud/workers/tests/test_analyze_basic.py` has existing `reliabilitySummary` assertions |
+| DB shape | `reliabilitySummary` stored as raw JSON in `AnalysisResult.output`; no DB schema change |
+| Backfill host | TypeScript CLI under `cloud/apps/api/src/cli/`, invokes the existing Node worker-dispatcher path |
+| Performance target | O(1) extra work per scenario (bucket-count math); backfill < 30 min on prod |
+
+---
+
+## Architecture Decisions
+
+### Decision 1: Emit new fields inside `build_reliability_summary`, not a new top-level key
+
+**Chosen:** Extend the existing `perModel[modelId]` dict with `perScenario` and `perPair`. No new top-level key like `consistencySummary`.
+
+**Rationale:**
+- The Consistency resolver parser already reads from `reliabilitySummary.perModel[modelId]` and expects `perScenario` and `perPair` as nested keys (see `cloud/apps/api/src/services/consistency/modelsConsistencyData.ts::readConsistencySummary`).
+- Keeps the contract surface narrow; one Zod schema extension covers both PRs.
+- Downstream readers that only consume `baselineReliability`/`directionalAgreement`/`coverageCount` continue to work — the new keys are additive and optional.
+
+### Decision 2: Single-trial scenarios are silently omitted from `perScenario`
+
+**Chosen:** Only emit `perScenario[scenarioId]` entries when `sampleCount >= 2` (spec FR-001).
+
+**Rationale:**
+- A scenario with `n = 1` has zero Bernoulli pairs (`C(1, 2) = 0`).
+- Emitting `{trials: 0, matches: 0}` would crash the resolver's Wilson CI (divide-by-zero); emitting `{trials: 1, matches: 1}` would falsely promote single-trial scenarios to the scatter (spec HIGH-F01 fix).
+- Missing entries are the unambiguous signal for "no: ENAMETOOLONG: name too long, stat '/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/modelcontextprotocol/sdk": "^1.24.3",
+    "@pothos/core": "^3.41.0",
+    "@pothos/plugin-prisma": "^3.65.0",
+    "@pothos/plugin-validation": "^3.10.1",
+    "@valuerank/db": "*",
+    "@valuerank/shared": "*",
+    "adm-zip": "^0.5.16",
+    "bcrypt": "^5.1.1",
+    "bottleneck": "^2.19.5",
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "dataloader": "^2.2.2",
+    "dotenv": "^17.2.3",
+    "exceljs": "^4.4.0",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "graphql": "^16.8.1",
+    "graphql-yoga": "^5.1.1",
+    "jsonwebtoken": "^9.0.2",
+    "pg-boss": "^12.5.2",
+    "yaml": "^2.8.2",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
+    "@types/compression": "^1.8.1",
+    "@types/bcrypt": "^5.0.2",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/node": "^20.10.0",
+    "@types/supertest": "^2.0.16",
+    "@vitest/coverage-v8": "^2.1.0",
+    "supertest": "^6.3.3",
+    "tsx": "^4.6.2",
+    "vitest": "^2.1.0"
+  }
+}
+
+
+Artifact: plan.md
+# Implementation Plan: Aggregate Pipeline — Consistency Data Emission
+
+**Branch:** `claude/aggregate-consistency-data` | **Date:** 2026-04-19
+**Spec:** `docs/workflow/feature-runs/aggregate-consistency-data/spec.md`
+
+## Summary
+
+Extend the Python aggregate worker to emit two new sub-sections of `reliabilitySummary.perModel[modelId]`:
+1. **`perScenario[scenarioId]`** with `{ trials, matches }` — unblocks Repeatability.
+2. **`perPair[valueKey]`** with `{ targetAnalysisRunId, targetCompanionRunId, primaryConditionIds, companionConditionIds, perCondition: [...] }` — unblocks Coherence.
+
+All underlying data is already computed inside `cloud/workers/stats/variance_analysis.py`; the work is teaching `cloud/workers/analyze_basic_aggregation.py::build_reliability_summary` to surface it, extending the TypeScript Zod contract, and shipping a backfill CLI.
+
+Two PRs, three slices. Backfill ships in PR2 so existing `AGGREGATE` rows can be upgraded in one pass.
+
+## Technical Context
+
+| Aspect | Detail |
+|---|---|
+| Primary language | Python 3 (worker) + TypeScript (Zod contract, CLI) |
+| Worker entry | `cloud/workers/analyze_basic.py::analyze_basic()` → calls `build_reliability_summary` |
+| Emission site | `cloud/workers/analyze_basic_aggregation.py::build_reliability_summary` (line 276) |
+| Input data | `variance_analysis['perModel'][modelId]['perScenario']` already carries `sampleCount`, `directionCounts`, `direction`, `directionalAgreement` |
+| Zod contract | `cloud/apps/api/src/services/analysis/aggregate/contracts.ts:197` |
+| Tests | `cloud/workers/tests/test_analyze_basic.py` has existing `reliabilitySummary` assertions |
+| DB shape | `reliabilitySummary` stored as raw JSON in `AnalysisResult.output`; no DB schema change |
+| Backfill host | TypeScript CLI under `cloud/apps/api/src/cli/`, invokes the existing Node worker-dispatcher path |
+| Performance target | O(1) extra work per scenario (bucket-count math); backfill < 30 min on prod |
+
+---
+
+## Architecture Decisions
+
+### Decision 1: Emit new fields inside `build_reliability_summary`, not a new top-level key
+
+**Chosen:** Extend the existing `perModel[modelId]` dict with `perScenario` and `perPair`. No new top-level key like `consistencySummary`.
+
+**Rationale:**
+- The Consistency resolver parser already reads from `reliabilitySummary.perModel[modelId]` and expects `perScenario` and `perPair` as nested keys (see `cloud/apps/api/src/services/consistency/modelsConsistencyData.ts::readConsistencySummary`).
+- Keeps the contract surface narrow; one Zod schema extension covers both PRs.
+- Downstream readers that only consume `baselineReliability`/`directionalAgreement`/`coverageCount` continue to work — the new keys are additive and optional.
+
+### Decision 2: Single-trial scenarios are silently omitted from `perScenario`
+
+**Chosen:** Only emit `perScenario[scenarioId]` entries when `sampleCount >= 2` (spec FR-001).
+
+**Rationale:**
+- A scenario with `n = 1` has zero Bernoulli pairs (`C(1, 2) = 0`).
+- Emitting `{trials: 0, matches: 0}` would crash the resolver's Wilson CI (divide-by-zero); emitting `{trials: 1, matches: 1}` would falsely promote single-trial scenarios to the scatter (spec HIGH-F01 fix).
+- Missing entries are the unambiguous signal for "no'
