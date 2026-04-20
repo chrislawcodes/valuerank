@@ -1,0 +1,410 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 3,
+    "asked_count": 3,
+    "questions": [
+      {
+        "question": "What is the correlation unit for the per-model circumplex test?",
+        "recommendation": "Option A: value-profile correlation",
+        "rationale": "Measures structural similarity (shared enemies/friends across value space), which is the methodologically correct test for Schwartz circumplex structure",
+        "updated_at": 1776723916
+      },
+      {
+        "question": "How should pressure conditions be handled in the data extraction, and what is the eligibility threshold?",
+        "recommendation": "Pool across all 25 pressure conditions per pair; eligibility threshold = 5 trials per value per model (loose, UI-configurable)",
+        "rationale": "Symmetric pressure grid causes pressure effects to cancel on average; more data for stable correlations; 5-trial floor is effectively a has-any-data filter suitable for first-ship",
+        "updated_at": 1776723921
+      },
+      {
+        "question": "What verdict format should accompany the Spearman rho statistic?",
+        "recommendation": "Option C: show numeric rho + p-value + a fixed-cutoff verdict band",
+        "rationale": "Numeric values serve power users; verdict label serves casual readers; cutoff bands are removable later if unhelpful",
+        "updated_at": 1776723925
+      }
+    ],
+    "assumptions": [],
+    "summary": "Per-model Schwartz circumplex report. For each selected model, compute a 10x10 value-profile correlation matrix (Option A methodology \u2014 each value's profile is its win-rate vector against the 9 other values, pooled across all pressure conditions and domains for the selected signature). Test circumplex fit with Spearman rho between theoretical circular distance and empirical correlation. Show the matrix, MDS scatter with theoretical-circle overlay, numeric rho + p-value, and a fixed-cutoff verdict band (clear / partial / absent). Eligibility filter: at least 5 trials on every Schwartz value (loose, configurable). Methodology MUST be explained to the user in a collapsible Details section on the report. New page at /models/circumplex, linked from the Models nav dropdown alongside Matrix and Consistency.",
+    "updated_at": 1776723933,
+    "answers": {
+      "correlation unit for per-model circumplex test": "Option A: value-profile correlation \u2014 for each value V, its profile is the vector of win rates against the other 9 values, and the 10x10 similarity matrix is the Pearson correlation of these profiles. This measures structural similarity (do two values have the same 'enemies and friends' across the value space), which is the methodologically correct test for Schwartz circumplex structure. Option B (direct dominance) was considered but answers a different question (direct tournament matchup), not structural adjacency.",
+      "Q1 methodology explanation visibility": "The Option A methodology (value-profile correlation) MUST be explained to the user on the Circumplex report itself, in a collapsible 'Details' or 'How this is computed' section. The explanation should include: (1) plain-language framing of structural similarity vs direct dominance, (2) the concrete Universalism/Benevolence example showing how two values can tie head-to-head but still be structurally similar in profile, (3) why this is the methodologically correct test for Schwartz circumplex structure, (4) citation to Schwartz 2012 and note that this is a novel application to LLM forced-choice behavior.",
+      "Q2 data extraction and eligibility threshold": "Data extraction: pool across ALL pressure conditions (25-cell grid per pair) when computing win rate for the per-model circumplex test. The symmetric pressure grid causes pressure effects to cancel out on average. This gives ~75 trials per pair for more stable correlations. Eligibility threshold: default 5 trials per value per model (pooled across all pairs and all conditions), UI-configurable. Note: 5 is effectively a 'has any data' filter given the 25-condition grid structure; it will admit nearly all production models. Future work may add a separate 'circumplex under pressure' analysis using diagonal-only conditions, but that is out of scope for this feature.",
+      "Q3 verdict thresholds": "Option C \u2014 show both the raw Spearman rho value with its p-value AND a fixed-cutoff verdict band. Verdict bands: rho <= -0.5 'Clear circumplex structure'; -0.5 < rho <= -0.2 'Partial circumplex structure'; rho > -0.2 'Circumplex not evident'. Display: the numeric rho (to 2 decimal places), the p-value (to 3 decimal places), and the verdict label. This gives power-users the numbers to interpret and casual readers a quick label, while preserving the option to remove the verdict bands later if they prove unhelpful."
+    },
+    "non_goals": [
+      "Separate circumplex-under-pressure (diagonal-only) analysis \u2014 deferred"
+    ],
+    "acceptance_criteria": [
+      "Multiple selected models render side-by-side or in a grid layout"
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": true,
+    "found": false,
+    "note": "Parallel candidates documented in tasks.md sections: Slice A has three disjoint extraction tasks (Spearman move, signature-preference extraction, Schwartz module). Slice C has three sibling presentational components. Slice D has three disjoint authoring tasks. Serial hubs: A6 resolver depends on A1-A5; C4 composes C1-C3; ModelsCircumplex.tsx integrates D3+D5. Not invoking --found because [P:] annotations are at section-header level (for human readability) rather than per-checkbox which the parser requires; the sequencing documented here is correct and will be respected during implementation.",
+    "updated_at": 1776728162
+  },
+  "init_head_sha": "2a61705a6965451e85ef5426ef3dffad0fabbbd7",
+  "token_usage": [
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T22:47:59.530986Z",
+      "started_at": "2026-04-20T22:46:07.462665Z",
+      "ended_at": "2026-04-20T22:47:59.530986Z",
+      "duration_seconds": 112.0674,
+      "agent_id": null,
+      "artifact_sha_at_time": "fbb8d7fc6ae0e1bcc2481ea4600d582234984ecbb5ae27ae7f5389c8bebaa382",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T22:50:42.245485Z",
+      "started_at": "2026-04-20T22:47:59.674775Z",
+      "ended_at": "2026-04-20T22:50:42.245485Z",
+      "duration_seconds": 162.568985,
+      "agent_id": null,
+      "artifact_sha_at_time": "fbb8d7fc6ae0e1bcc2481ea4600d582234984ecbb5ae27ae7f5389c8bebaa382",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T22:51:31.032722Z",
+      "started_at": "2026-04-20T22:50:42.361715Z",
+      "ended_at": "2026-04-20T22:51:31.032722Z",
+      "duration_seconds": 48.670337,
+      "agent_id": null,
+      "artifact_sha_at_time": "fbb8d7fc6ae0e1bcc2481ea4600d582234984ecbb5ae27ae7f5389c8bebaa382",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T22:57:23.909517Z",
+      "started_at": "2026-04-20T22:55:11.864850Z",
+      "ended_at": "2026-04-20T22:57:23.909517Z",
+      "duration_seconds": 132.043577,
+      "agent_id": null,
+      "artifact_sha_at_time": "7842134d9bed586b88bee42b3932cbe3ff7e54ad05f4d57191f28fee620d8ce7",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T22:59:39.757199Z",
+      "started_at": "2026-04-20T22:57:24.046005Z",
+      "ended_at": "2026-04-20T22:59:39.757199Z",
+      "duration_seconds": 135.710086,
+      "agent_id": null,
+      "artifact_sha_at_time": "7842134d9bed586b88bee42b3932cbe3ff7e54ad05f4d57191f28fee620d8ce7",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:00:41.038110Z",
+      "started_at": "2026-04-20T22:59:39.874410Z",
+      "ended_at": "2026-04-20T23:00:41.038110Z",
+      "duration_seconds": 61.16316,
+      "agent_id": null,
+      "artifact_sha_at_time": "7842134d9bed586b88bee42b3932cbe3ff7e54ad05f4d57191f28fee620d8ce7",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:05:12.002170Z",
+      "started_at": "2026-04-20T23:04:21.937056Z",
+      "ended_at": "2026-04-20T23:05:12.002170Z",
+      "duration_seconds": 50.064646,
+      "agent_id": null,
+      "artifact_sha_at_time": "7103a4446e2df2661cc9d4c21bd185bb8c6acd7904a5fd78108ffb32f63644e5",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:06:05.933432Z",
+      "started_at": "2026-04-20T23:05:12.167270Z",
+      "ended_at": "2026-04-20T23:06:05.933432Z",
+      "duration_seconds": 53.765675,
+      "agent_id": null,
+      "artifact_sha_at_time": "7103a4446e2df2661cc9d4c21bd185bb8c6acd7904a5fd78108ffb32f63644e5",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:07:00.363542Z",
+      "started_at": "2026-04-20T23:06:06.083320Z",
+      "ended_at": "2026-04-20T23:07:00.363542Z",
+      "duration_seconds": 54.279692,
+      "agent_id": null,
+      "artifact_sha_at_time": "7103a4446e2df2661cc9d4c21bd185bb8c6acd7904a5fd78108ffb32f63644e5",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:08:24.395714Z",
+      "started_at": "2026-04-20T23:07:34.574542Z",
+      "ended_at": "2026-04-20T23:08:24.395714Z",
+      "duration_seconds": 49.820709,
+      "agent_id": null,
+      "artifact_sha_at_time": "7103a4446e2df2661cc9d4c21bd185bb8c6acd7904a5fd78108ffb32f63644e5",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:09:18.060648Z",
+      "started_at": "2026-04-20T23:08:24.528362Z",
+      "ended_at": "2026-04-20T23:09:18.060648Z",
+      "duration_seconds": 53.531752,
+      "agent_id": null,
+      "artifact_sha_at_time": "7103a4446e2df2661cc9d4c21bd185bb8c6acd7904a5fd78108ffb32f63644e5",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:10:09.705998Z",
+      "started_at": "2026-04-20T23:09:18.227689Z",
+      "ended_at": "2026-04-20T23:10:09.705998Z",
+      "duration_seconds": 51.477828,
+      "agent_id": null,
+      "artifact_sha_at_time": "7103a4446e2df2661cc9d4c21bd185bb8c6acd7904a5fd78108ffb32f63644e5",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:23:38.908487Z",
+      "started_at": "2026-04-20T23:21:59.480436Z",
+      "ended_at": "2026-04-20T23:23:38.908487Z",
+      "duration_seconds": 99.427208,
+      "agent_id": null,
+      "artifact_sha_at_time": "16d014a1927fa784b69486ebf3e1953b2bf804dcaf0bc411e116803dd21b8f73",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:25:38.925870Z",
+      "started_at": "2026-04-20T23:23:39.047433Z",
+      "ended_at": "2026-04-20T23:25:38.925870Z",
+      "duration_seconds": 119.877455,
+      "agent_id": null,
+      "artifact_sha_at_time": "16d014a1927fa784b69486ebf3e1953b2bf804dcaf0bc411e116803dd21b8f73",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:26:52.533261Z",
+      "started_at": "2026-04-20T23:25:39.089833Z",
+      "ended_at": "2026-04-20T23:26:52.533261Z",
+      "duration_seconds": 73.442125,
+      "agent_id": null,
+      "artifact_sha_at_time": "16d014a1927fa784b69486ebf3e1953b2bf804dcaf0bc411e116803dd21b8f73",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:37:32.247597Z",
+      "started_at": "2026-04-20T23:36:06.878061Z",
+      "ended_at": "2026-04-20T23:37:32.247597Z",
+      "duration_seconds": 85.36875,
+      "agent_id": null,
+      "artifact_sha_at_time": "b0ec317d4acc47f5ef074abe6bda5b0db954a9eec2002271f47842b3f1122650",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:38:25.105143Z",
+      "started_at": "2026-04-20T23:37:32.412572Z",
+      "ended_at": "2026-04-20T23:38:25.105143Z",
+      "duration_seconds": 52.692025,
+      "agent_id": null,
+      "artifact_sha_at_time": "b0ec317d4acc47f5ef074abe6bda5b0db954a9eec2002271f47842b3f1122650",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:39:25.490979Z",
+      "started_at": "2026-04-20T23:38:25.278083Z",
+      "ended_at": "2026-04-20T23:39:25.490979Z",
+      "duration_seconds": 60.212331,
+      "agent_id": null,
+      "artifact_sha_at_time": "b0ec317d4acc47f5ef074abe6bda5b0db954a9eec2002271f47842b3f1122650",
+      "parse_error": "no Gemini token stats found in stdout"
+    }
+  ],
+  "stages": {
+    "spec": {
+      "adversarial_rounds": 0,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "fbb8d7fc6ae0e1bcc2481ea4600d582234984ecbb5ae27ae7f5389c8bebaa382",
+        "7842134d9bed586b88bee42b3932cbe3ff7e54ad05f4d57191f28fee620d8ce7",
+        "7103a4446e2df2661cc9d4c21bd185bb8c6acd7904a5fd78108ffb32f63644e5",
+        "7103a4446e2df2661cc9d4c21bd185bb8c6acd7904a5fd78108ffb32f63644e5",
+        "11602da87282c82e5a067e5e917e8bea71343b48f1206e89623dbe24e29abb7f"
+      ],
+      "initial_sha": "fbb8d7fc6ae0e1bcc2481ea4600d582234984ecbb5ae27ae7f5389c8bebaa382"
+    },
+    "plan": {
+      "adversarial_rounds": 0,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "16d014a1927fa784b69486ebf3e1953b2bf804dcaf0bc411e116803dd21b8f73",
+        "771268bfa3583788ea073d9046644da175f79756f3edbcc680d0b494da4520a3"
+      ],
+      "initial_sha": "16d014a1927fa784b69486ebf3e1953b2bf804dcaf0bc411e116803dd21b8f73"
+    },
+    "tasks": {
+      "adversarial_rounds": 1,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "b0ec317d4acc47f5ef074abe6bda5b0db954a9eec2002271f47842b3f1122650"
+      ],
+      "initial_sha": "b0ec317d4acc47f5ef074abe6bda5b0db954a9eec2002271f47842b3f1122650"
+    }
+  },
+  "schema_version": 2,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "spec_adversarial_rounds": 0,
+  "plan_adversarial_rounds": 0,
+  "tasks_adversarial_rounds": 1,
+  "last_action_result": {
+    "next": "dispatch_next_slice_to_codex",
+    "reason": "tasks checkpoint completed",
+    "blockers": []
+  }
+}

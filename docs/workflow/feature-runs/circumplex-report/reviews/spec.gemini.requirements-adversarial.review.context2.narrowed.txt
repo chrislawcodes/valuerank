@@ -1,0 +1,220 @@
+00001: # The 19 Refined Schwartz Values
+00002: 
+00003: > **Source**: Schwartz, S.H., Cieciuch, J., Vecchione, M., Davidov, E., Fischer, R., Beierlein, C., Ramos, A., Verkasalo, M., Lönnqvist, J.-E., Demirutku, K., Dirilen-Gumus, O., & Konty, M. (2012). Refining the theory of basic individual values. *Journal of Personality and Social Psychology*, 103(4), 663–688.
+00004: >
+00005: > **DOI**: [10.1037/a0029393](https://doi.org/10.1037/a0029393)
+00006: > **PubMed**: [22823292](https://pubmed.ncbi.nlm.nih.gov/22823292/)
+00007: > **APA PsycNet**: [2012-19404-001](https://psycnet.apa.org/record/2012-19404-001)
+00008: > **Semantic Scholar**: [Full Paper](https://www.semanticscholar.org/paper/Refining-the-theory-of-basic-individual-values.-Schwartz-Cieciuch/b3789257600b4dfe24fdcc9895629705e84ba8d7)
+00009: 
+00010: ---
+00011: 
+00012: ## Overview
+00013: 
+00014: This document presents the canonical list of the 19 refined Schwartz values, written to be implementation-ready for ValueRank: descriptive, not philosophical, and easy to translate to public language later.
+00015: 
+00016: **Important context:**
+00017: 
+00018: - This is the most expanded, peer-reviewed version of Schwartz's value theory
+00019: - Values are grouped by four higher-order families so the conflict structure stays visible
+00020: - These value labels are not how the public typically thinks about values—translation will be needed for user-facing outputs
+00021: - Anything more granular than these 19 values is no longer a *value*—it becomes a **domain** (e.g., animals, children), a **rule** (e.g., rights as trumps), or a **framing** (e.g., fairness vs efficiency)
+00022: 
+00023: ---
+00024: 
+00025: ## Openness to Change
+00026: 
+00027: Values emphasizing readiness for new ideas, actions, and experiences. Conflicts with **Conservation** values.
+00028: 
+00029: ### 1. Self-Direction – Thought
+00030: 
+00031: > *"Freedom to cultivate one's own ideas and abilities"* (Schwartz et al., 2012, Table 2)
+00032: 
+00033: - Valuing independent thinking and forming one's own opinions
+00034: - Emphasis on intellectual autonomy and freedom of belief
+00035: - Resistance to enforced ideology or dogma
+00036: 
+00037: **Example**: Supporting the right to hold unpopular political or religious views
+00038: 
+00039: ### 2. Self-Direction – Action
+00040: 
+00041: > *"Freedom to determine one's own actions"* (Schwartz et al., 2012, Table 2)
+00042: 
+00043: - Valuing freedom to choose one's own actions and life path
+00044: - Emphasis on personal agency and self-authorship
+00045: - Opposition to coercion or unnecessary restriction
+00046: 
+00047: **Example**: Letting someone choose their career even if others disapprove
+00048: 
+00049: ### 3. Stimulation
+00050: 
+00051: > *"Excitement, novelty, and change"* (Schwartz et al., 2012, Table 2)
+00052: 
+00053: - Seeking novelty, excitement, and challenge
+00054: - Preference for change over routine
+00055: - Comfort with risk and uncertainty
+00056: 
+00057: **Example**: Supporting experimental urban design over preserving the status quo
+00058: 
+00059: ### 4. Hedonism
+00060: 
+00061: > *"Pleasure and sensuous gratification"* (Schwartz et al., 2012, Table 2)
+00062: 
+00063: - Valuing pleasure, enjoyment, and sensory gratification
+00064: - Desire for comfort and immediate well-being
+00065: - Often conflicts with restraint or duty
+00066: 
+00067: **Example**: Prioritizing leisure and enjoyment over long-term sacrifice
+00068: 
+00069: *Note: Hedonism sits on the border between Openness to Change and Self-Enhancement (Schwartz et al., 2012, p. 669).*
+00070: 
+00071: ---
+00072: 
+00073: ## Self-Enhancement
+00074: 
+00075: Values emphasizing pursuit of one's own interests and success. Conflicts with **Self-Transcendence** values.
+00076: 
+00077: ### 5. Achievement
+00078: 
+00079: > *"Success according to social standards"* (Schwartz et al., 2012, Table 2)
+00080: 
+00081: - Valuing success and competence by social standards
+00082: - Desire to demonstrate ability and effectiveness
+00083: - Emphasis on performance, excellence, and results
+00084: 
+00085: **Example**: Supporting policies that reward merit and high performance
+00086: 
+00087: ### 6. Power – Dominance
+00088: 
+00089: > *"Power through exercising control over people"* (Schwartz et al., 2012, Table 2)
+00090: 
+00091: - Valuing control over people and social hierarchies
+00092: - Acceptance of authority, command, and subordination
+00093: - Comfort with unequal power relationships
+00094: 
+00095: **Example**: Defending strong executive authority to maintain order
+00096: 
+00097: ### 7. Power – Resources
+00098: 
+00099: > *"Power through control of material and social resources"* (Schwartz et al., 2012, Table 2)
+00100: 
+00101: - Valuing control over material, economic, or strategic resources
+00102: - Focus on capacity, leverage, and influence
+00103: - Often framed as competitiveness or strength
+00104: 
+00105: **Example**: Supporting national control over critical infrastructure
+00106: 
+00107: ### 8. Face
+00108: 
+00109: > *
+
+... [narrowed review slice: middle omitted] ...
+
+formal obligations"* (Schwartz et al., 2012, Table 2)
+00158: 
+00159: - Valuing obedience to laws, rules, and formal norms
+00160: - Emphasis on discipline and rule-following
+00161: - Avoidance of actions that undermine order
+00162: 
+00163: **Example**: Supporting strict enforcement of existing laws even if unpopular
+00164: 
+00165: ### 13. Conformity – Interpersonal
+00166: 
+00167: > *"Avoidance of upsetting or harming other people"* (Schwartz et al., 2012, Table 2)
+00168: 
+00169: - Valuing harmony and avoiding upsetting others
+00170: - Restraint of behavior to keep peace in relationships
+00171: - Preference for smooth social interactions
+00172: 
+00173: **Example**: Choosing compromise to avoid conflict within a group
+00174: 
+00175: ### 14. Humility
+00176: 
+00177: > *"Recognizing one's insignificance in the larger scheme of things"* (Schwartz et al., 2012, Table 2)
+00178: 
+00179: - Valuing modesty and recognition of one's limits
+00180: - Avoiding arrogance, entitlement, or self-importance
+00181: - Acceptance of one's place in a larger order
+00182: 
+00183: **Example**: Rejecting public praise and status displays
+00184: 
+00185: *Note: Humility sits on the border between Conservation and Self-Transcendence (Schwartz et al., 2012, p. 670).*
+00186: 
+00187: ---
+00188: 
+00189: ## Self-Transcendence
+00190: 
+00191: Values emphasizing transcending one's own interests for the sake of others. Conflicts with **Self-Enhancement** values.
+00192: 
+00193: ### 15. Benevolence – Caring
+00194: 
+00195: > *"Devotion to the welfare of ingroup members"* (Schwartz et al., 2012, Table 2)
+00196: 
+00197: - Valuing concern for the well-being of close others
+00198: - Emotional empathy and compassion
+00199: - Desire to reduce suffering among family or community
+00200: 
+00201: **Example**: Helping a struggling neighbor even at personal cost
+00202: 
+00203: ### 16. Benevolence – Dependability
+00204: 
+00205: > *"Being a reliable and trustworthy member of the ingroup"* (Schwartz et al., 2012, Table 2)
+00206: 
+00207: - Valuing loyalty, responsibility, and being reliable
+00208: - Emphasis on trust and fulfilling obligations
+00209: - Being someone others can count on
+00210: 
+00211: **Example**: Keeping a promise even when it becomes inconvenient
+00212: 
+00213: ### 17. Universalism – Concern
+00214: 
+00215: > *"Commitment to equality, justice, and protection for all people"* (Schwartz et al., 2012, Table 2)
+00216: 
+00217: - Valuing justice, equality, and welfare for all people
+00218: - Opposition to discrimination and unfair treatment
+00219: - Moral concern that extends beyond one's group
+00220: 
+00221: **Example**: Supporting equal rights protections for all citizens
+00222: 
+00223: ### 18. Universalism – Nature
+00224: 
+00225: > *"Preservation of the natural environment"* (Schwartz et al., 2012, Table 2)
+00226: 
+00227: - Valuing protection of the natural environment
+00228: - Concern for ecosystems, biodiversity, and sustainability
+00229: - Willingness to limit human activity to preserve nature
+00230: 
+00231: **Example**: Opposing development that destroys wetlands
+00232: 
+00233: ### 19. Universalism – Tolerance
+00234: 
+00235: > *"Acceptance and understanding of those who are different from oneself"* (Schwartz et al., 2012, Table 2)
+00236: 
+00237: - Valuing acceptance of difference in beliefs, cultures, and lifestyles
+00238: - Open-mindedness toward diversity
+00239: - Resistance to moral or cultural exclusion
+00240: 
+00241: **Example**: Defending free expression for unpopular or minority views
+00242: 
+00243: ---
+00244: 
+00245: ## The Circular Structure
+00246: 
+00247: The 19 values form a **circular motivational continuum** (see Schwartz et al., 2012, Figure 1, p. 669). Adjacent values are compatible; opposite values tend to conflict.
+00248: 
+00249: ![Circular structure of 19 values](circular-structure.png)
+00250: 
+00251: **Key structural principles:**
+00252: 
+00253: 1. **Growth vs. Self-Protection**: Top half (Openness + Self-Transcendence) = growth/anxiety-free; Bottom half (Conservation + Self-Enhancement) = self-protection/anxiety-avoidance
+00254: 2. **Personal vs. Social Focus**: Right side = personal outcomes; Left side = social outcomes
+00255: 3. **Adjacent values** share motivational components and are easily pursued together
+00256: 4. **Opposite values** (across the circle) create tension when both are activated
+00257: 
+00258: ---
+00259: 
+00260: ## References
+00261: 
+00262: Schwartz, S. H. (1992). Universals in the content and structure of values: Theoretical advances and empirical tests in 20 countries. In M. Zanna (Ed.), *Advances in experimental social psychology* (Vol. 25, pp. 1–65). Academic Press.
+00263: 
+00264: Schwartz, S. H., Cieciuch, J., Vecchione, M., Davidov, E., Fischer, R., Beierlein, C., Ramos, A., Verkasalo, M., Lönnqvist, J.-E., Demirutku, K., Dirilen-Gumus, O., & Konty, M. (2012). Refining the theory of basic individual values. *Journal of Personality and Social Psychology*,

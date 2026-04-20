@@ -1,0 +1,57 @@
+MCP issues detected. Run /mcp list for status.{
+  "session_id": "2ef12c9b-5bd8-4728-b9dc-7f53d2ba6c2f",
+  "response": "## Findings\n\n### 1. HIGH: Inconsistent Value Labels\n**Finding:** The spec mandates using a short-label set from an existing file but provides examples that contradict the file's contents, effectively inventing a new label set while forbidding it. `FR-021` requires using the `VALUE_LABELS` map from `cloud/apps/web/src/data/domainAnalysisData.ts` for tight spaces and explicitly states \"This spec SHOULD NOT introduce a competing short-label set.\" However, the examples it provides (e.g., \"Universalism (Nature)\", \"Power/Dominance\") do not match the actual values in the `VALUE_LABELS` map (e.g., `'Universalism'`, `'Power'`). This creates a direct conflict where the implementation cannot satisfy the requirement without modifying a file the spec treats as a fixed dependency, thereby violating the spirit of the rule.\n\n**Evidence:** [CODE-CONFIRMED] The file `domainAnalysisData.ts` contains `VALUE_LABELS` which maps `Universalism_Nature` to `'Universalism'` and `Power_Dominance` to `'Power'`. The spec's examples in `FR-021` are different.\n\n### 2. HIGH: Dependency on Temporary Data Source\n**Finding:** The spec builds a foundational requirement on a file that is explicitly marked as a temporary, static snapshot. `FR-002` and `FR-021` designate `cloud/apps/web/src/data/domainAnalysisData.ts` as the canonical source for the 10-value list and their labels. However, a comment at the top of this file states: `// Static snapshot... TODO: Replace with domain-scoped API-backed data.` By hard-coding a dependency on this file, the new feature becomes vulnerable to breakage when the `TODO` is eventually addressed. The spec does not account for this planned deprecation.\n\n**Evidence:** [CODE-CONFIRMED] The header comment in `domainAnalysisData.ts` directly states its temporary nature and includes a `TODO` for its replacement.\n\n### 3. MEDIUM: Ambiguous Filtering Logic\n**Finding:** The spec is contradictory regarding which layer is responsible for filtering models and counting those hidden. `FR-005` states, \"The client is the single source of truth for applying the eligibility filter\". However, the `CircumplexAnalysisResult` entity in the `Key Entities` section includes a `totalHiddenModels` field, implying the resolver performs this calculation. For the resolver to calculate this count accurately, it would need to fetch and process data for all models, not just those requested by the client, which is inefficient. This indicates a confused and poorly defined boundary of responsibility between the client and server for eligibility logic.\n\n**Evidence:** [UNVERIFIED] While the full backend schema isn't provided, the logical contradiction exists entirely within the `spec.md` file between `FR-005` and the definition of the `CircumplexAnalysisResult` entity.\n\n### 4. MEDIUM: Statistically Weak Handling of Sparse Data\n**Finding:** The spec's criteria for data inclusion are statistically weak and may lead to unstable, misleading results. `FR-011b` only excludes a value from correlation analysis if it has \"fewer than 3 determinate pair cells.\" A 9-element vector with only 3 data points is insufficient for a stable Pearson correlation calculation. The spec lacks a more robust guardrail, such as requiring a minimum number of *valid pairs* for a value's profile to be included in the correlation matrix, or at least flagging the statistical uncertainty of results derived from such sparse data.\n\n**Evidence:** [UNVERIFIED] This is a flaw in the statistical methodology described in the spec, not something refutable by the provided code context.\n\n## Residual Risks\n\n### 1. Unspecified Resolver Performance Risk\nThe spec, in `FR-001`, explicitly defers the critical implementation decision for how the `circumplexAnalysis` resolver will source its data. The choice between querying raw transcripts (potentially slow and expensive) and creating a new materialized aggregate view (a significant backend dependency) is a major architectural decision. Punting this to the \"plan phase\" introduces significant risk to the feature's performance and delivery timeline.\n\n### 2. URL State Complexity\nThe requirement to preserve UI state in URL parameters (`US-2`, `FR-016`, `Edge Cases`) for features like selected models and methodology visibility can lead to excessively long and complex URLs. This creates a poor user experience for sharing links and introduces technical risk, as long URLs can be truncated by some clients or hit server limits.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 46568
+        },
+        "tokens": {
+          "input": 30441,
+          "prompt": 30441,
+          "candidates": 987,
+          "total": 35081,
+          "cached": 0,
+          "thoughts": 3653,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 46568,
+            "tokens": {
+              "input": 30441,
+              "prompt": 30441,
+              "candidates": 987,
+              "total": 35081,
+              "cached": 0,
+              "thoughts": 3653,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

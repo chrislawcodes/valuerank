@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "docs/workflow/feature-runs/circumplex-report/spec.md",
+  "source_artifact_sha256": "11602da87282c82e5a067e5e917e8bea71343b48f1206e89623dbe24e29abb7f",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/circumplex-report/reviews/plan.codex.implementation-adversarial.review.context0.narrowed.txt",
+  "narrowed_artifact_sha256": "870857b40137e89be06451ceb44c819643d245a16d318ce0a61057c2b995257f",
+  "strategy": "head-tail-numbered-lines"
+}

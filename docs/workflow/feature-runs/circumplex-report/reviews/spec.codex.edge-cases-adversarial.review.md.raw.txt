@@ -1,0 +1,15 @@
+## Findings
+1. MEDIUM [CODE-CONFIRMED] `FR-018` requires each card to show the model provider, but `CircumplexResult` does not include `providerName`, and the top-level payload does not define any alternate source for it. That leaves the UI contract incomplete, because the page cannot render what the spec demands from the query shape alone.
+
+2. MEDIUM [UNVERIFIED] The eligibility gate is per-value only (`minTrialsPerValue` on each of the 10 values), but the actual circumplex math depends on 45 pairwise profile cells. The spec never says what to do when a model passes the value-level gate yet one or more pair cells have zero or missing support, so the matrix, profile correlations, and MDS input can still be undefined.
+
+3. LOW [CODE-CONFIRMED] `FR-011a` says to auto-select “the first eligible model” when the selected set becomes empty, but the spec never defines a stable sort order for eligible models. That makes selection recovery and URL-backed navigation nondeterministic if the backend order changes.
+
+4. LOW [CODE-CONFIRMED] `FR-021` points to the shipped `VALUE_LABELS` map, but the examples in the spec do not match the actual constants in `domainAnalysisData.ts`. If someone follows the prose examples literally, the report will drift from the rest of the app’s short-label conventions even though they think they are obeying the spec.
+
+5. LOW [UNVERIFIED] The spec never defines an error state for a failed `circumplexAnalysis` query or a malformed response payload. Existing report pages surface errors explicitly; without the same contract here, a real API failure can leave the page with no defined recovery path.
+
+## Residual Risks
+1. The circumplex statistic is still exploratory, not validated psychometrics. Even if implemented cleanly, the `ρ` cutoff bands and p-values should be read as directional signals, not proof.
+
+2. Borderline models can still look noisy even after the eligibility filter. The threshold only blocks obviously sparse cases; it does not guarantee that the remaining pairwise structure is statistically stable.

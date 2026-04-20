@@ -1,0 +1,15 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/queries",
+    "cloud/apps/api/src/services",
+    "cloud/apps/web/src/components/models",
+    "cloud/apps/web/src/pages"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/queries",
+    "cloud/apps/api/src/services",
+    "cloud/apps/web/src/components/models",
+    "cloud/apps/web/src/pages",
+    "docs/workflow/feature-runs/circumplex-report"
+  ]
+}
