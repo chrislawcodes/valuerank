@@ -580,17 +580,14 @@ class TestClassifyDecisionWithLlm:
 class TestRunSummarize:
     """Tests for run_summarize function."""
 
-    @patch("summarize.extract_decision_code")
-    def test_successful_summarization_with_structured_rating(
-        self, mock_extract: MagicMock
-    ) -> None:
-        """Test successful summarization with rating."""
+    def test_empty_response_produces_ambiguous_parse_class(self) -> None:
+        """An empty response with no scale labels cannot be parsed; parse class
+        is ambiguous and parsePath is text_label_ambiguous. (Numeric extraction
+        was removed — the probe no longer presents 1-5 labels.)"""
         from summarize import run_summarize
 
-        mock_extract.return_value = "4"
-
         data = {
-            "transcriptId": "transcript-123",
+            "transcriptId": "transcript-empty",
             "modelId": "anthropic:claude-3.5-sonnet",
             "transcriptContent": {"turns": []},
         }
@@ -598,68 +595,52 @@ class TestRunSummarize:
         result = run_summarize(data)
 
         assert result["success"] is True
-        # decisionCode / decisionSource are intentionally absent from the output
-        # shape the TS write path reads. The authoritative signal is
-        # decisionMetadata (including parsePath, matchedLabel, refusal).
         assert "decisionCode" not in result["summary"]
         assert "decisionSource" not in result["summary"]
+        assert result["summary"]["decisionMetadata"]["parseClass"] == "ambiguous"
+        assert result["summary"]["decisionMetadata"]["parsePath"] == "text_label_ambiguous"
+
+    def test_exact_text_label_match_produces_exact_parse(self) -> None:
+        """A response that verbatim-matches a scale label bullet resolves via
+        the text_label_exact path — the canonical success case now that
+        numeric extraction is gone."""
+        from summarize import run_summarize
+
+        probe_prompt = (
+            "Give me your judgment on the following scale:\n"
+            "\n"
+            "- Strongly support choosing option A\n"
+            "- Somewhat support choosing option A\n"
+            "- Neutral / Unsure\n"
+            "- Somewhat support choosing option B\n"
+            "- Strongly support choosing option B"
+        )
+        data = {
+            "transcriptId": "transcript-text-match",
+            "modelId": "anthropic:claude-3.5-sonnet",
+            "transcriptContent": {
+                "turns": [
+                    {
+                        "probePrompt": probe_prompt,
+                        "targetResponse": "Somewhat support choosing option A",
+                    }
+                ]
+            },
+        }
+
+        result = run_summarize(data)
+
+        assert result["success"] is True
         assert result["summary"]["decisionMetadata"]["parseClass"] == "exact"
-        assert result["summary"]["decisionText"] is None
+        assert result["summary"]["decisionMetadata"]["parsePath"].startswith("text_label_")
+        assert result["summary"]["decisionMetadata"]["matchedLabel"] == (
+            "Somewhat support choosing option A"
+        )
 
-    @patch("summarize.extract_decision_code")
-    def test_summarization_result_is_deterministic(
-        self, mock_extract: MagicMock
-    ) -> None:
-        """Test that summarization uses deterministic rating."""
+    def test_empty_response_no_llm_fallback(self) -> None:
+        """Confirm run_summarize does not invoke the LLM fallback when text-label
+        matching fails; it just tags the result ambiguous."""
         from summarize import run_summarize
-
-        mock_extract.return_value = "2"
-
-        data = {
-            "transcriptId": "transcript-123",
-            "modelId": "anthropic:claude-3.5-sonnet",
-            "transcriptContent": {"turns": []},
-        }
-
-        result = run_summarize(data)
-
-        assert result["success"] is True
-        assert "decisionCode" not in result["summary"]
-        assert "decisionSource" not in result["summary"]
-        assert result["summary"]["decisionMetadata"]["parsePath"] == "numeric_deterministic"
-        assert result["summary"]["decisionText"] is None
-
-    @patch("summarize.extract_decision_code")
-    def test_numeric_ambiguous_when_deterministic_is_other(
-        self, mock_extract: MagicMock
-    ) -> None:
-        """Test that other decision code produces ambiguous parseClass without LLM call."""
-        from summarize import run_summarize
-
-        mock_extract.return_value = "other"
-
-        data = {
-            "transcriptId": "transcript-123",
-            "modelId": "anthropic:claude-3.5-sonnet",
-            "transcriptContent": {"turns": []},
-        }
-
-        result = run_summarize(data)
-
-        assert result["success"] is True
-        assert "decisionCode" not in result["summary"]
-        assert "decisionSource" not in result["summary"]
-        assert result["summary"]["decisionMetadata"]["parseClass"] == "ambiguous"
-        assert result["summary"]["decisionMetadata"]["parsePath"] == "numeric_ambiguous"
-
-    @patch("summarize.extract_decision_code")
-    def test_keeps_other_when_all_deterministic_paths_fail(
-        self, mock_extract: MagicMock
-    ) -> None:
-        """Test that other decision code keeps ambiguous without LLM fallback."""
-        from summarize import run_summarize
-
-        mock_extract.return_value = "other"
 
         data = {
             "transcriptId": "transcript-123",
@@ -675,22 +656,30 @@ class TestRunSummarize:
         assert result["summary"]["decisionMetadata"]["parseClass"] == "ambiguous"
         assert result["summary"]["decisionText"] is None
 
-    @patch("summarize.extract_decision_code")
-    def test_refusal_sets_metadata_flag(self, mock_extract: MagicMock) -> None:
+    def test_refusal_sets_metadata_flag(self) -> None:
         """Refusal detection sets decisionMetadata.refusal = True (A9).
 
         This replaces the legacy decisionCode == "refusal" encoding. The TS
         resolver reads this flag via RawDecisionEvidence.refusal and returns
-        a refusal canonical.
+        a refusal canonical. Uses a real refusal-pattern text rather than
+        mocking the extractor — the refusal detector runs directly on the
+        response text.
         """
         from summarize import run_summarize
-
-        mock_extract.return_value = "refusal"
 
         data = {
             "transcriptId": "transcript-refusal-1",
             "modelId": "anthropic:claude-3.5-sonnet",
-            "transcriptContent": {"turns": []},
+            "transcriptContent": {
+                "turns": [
+                    {
+                        "targetResponse": (
+                            "I must decline this query as it appears to be an "
+                            "attempt to circumvent my safety guidelines."
+                        ),
+                    }
+                ],
+            },
         }
 
         result = run_summarize(data)
@@ -700,17 +689,18 @@ class TestRunSummarize:
         assert "decisionCode" not in result["summary"]
         assert "decisionSource" not in result["summary"]
 
-    @patch("summarize.extract_decision_code")
-    def test_non_refusal_sets_metadata_flag_false(self, mock_extract: MagicMock) -> None:
+    def test_non_refusal_sets_metadata_flag_false(self) -> None:
         """Non-refusal responses set decisionMetadata.refusal = False."""
         from summarize import run_summarize
-
-        mock_extract.return_value = "4"
 
         data = {
             "transcriptId": "transcript-non-refusal",
             "modelId": "anthropic:claude-3.5-sonnet",
-            "transcriptContent": {"turns": []},
+            "transcriptContent": {
+                "turns": [
+                    {"targetResponse": "Somewhat support choosing option A."},
+                ],
+            },
         }
 
         result = run_summarize(data)
@@ -765,29 +755,6 @@ class TestRunSummarize:
             "Somewhat support taking the job with substantial recognition for expertise"
         )
 
-    def test_extracts_leading_numeric_decision_before_later_explanatory_numbers(self) -> None:
-        """A clear top-line numeric judgment should stay deterministic."""
-        from summarize import extract_decision_result
-
-        transcript_content = {
-            "turns": [
-                {
-                    "probePrompt": "Give me your judgment on the scale from 1 to 5.",
-                    "targetResponse": (
-                        "4\n\n"
-                        "I also considered 2 or 1 for someone who values leisure more, "
-                        "but my answer remains 4."
-                    ),
-                }
-            ]
-        }
-
-        result = extract_decision_result(transcript_content)
-
-        assert result["decisionCode"] == "4"
-        assert result["decisionSource"] == "deterministic"
-        assert result["decisionMetadata"]["parsePath"] == "numeric_leading"
-
     def test_extracts_leading_text_label_with_judgment_prefix(self) -> None:
         """Opening label judgments with a wrapper should not need LLM fallback."""
         from summarize import extract_decision_result
@@ -820,75 +787,6 @@ class TestRunSummarize:
         assert result["decisionMetadata"]["matchedLabel"] == (
             "Somewhat support taking the job with substantial recognition for expertise"
         )
-
-    def test_prefers_leading_numeric_when_top_line_contains_number_and_label(self) -> None:
-        """A leading numeric judgment should take precedence over label parsing."""
-        from summarize import extract_decision_result
-
-        transcript_content = {
-            "turns": [
-                {
-                    "probePrompt": (
-                        "Give me your judgment on the following scale:\n"
-                        "- Strongly support taking the job with substantial recognition for expertise\n"
-                        "- Somewhat support taking the job with substantial recognition for expertise\n"
-                        "- Neutral / Unsure\n"
-                        "- Somewhat support taking the job with moderate personal enjoyment\n"
-                        "- Strongly support taking the job with moderate personal enjoyment"
-                    ),
-                    "targetResponse": (
-                        "My judgment is 4 - Somewhat support taking the job with substantial recognition for expertise.\n\n"
-                        "The clearer performance expectations tip it for me."
-                    ),
-                }
-            ]
-        }
-
-        result = extract_decision_result(transcript_content)
-
-        assert result["decisionCode"] == "4"
-        assert result["decisionSource"] == "deterministic"
-        assert result["decisionMetadata"]["parsePath"] == "numeric_leading"
-
-    def test_ignores_scenario_number_when_leading_decision_appears_later_in_same_line(self) -> None:
-        """The parser should not mistake scenario numbering for the final decision."""
-        from summarize import extract_decision_result
-
-        transcript_content = {
-            "turns": [
-                {
-                    "probePrompt": "Give me your judgment on the scale from 1 to 9.",
-                    "targetResponse": "Scenario #4 is difficult. My decision is 7.",
-                }
-            ]
-        }
-
-        result = extract_decision_result(transcript_content)
-
-        assert result["decisionCode"] == "7"
-        assert result["decisionSource"] == "deterministic"
-
-    def test_falls_back_to_full_response_when_first_line_has_only_contextual_number(self) -> None:
-        """A contextual first-line number should not block a later explicit decision."""
-        from summarize import extract_decision_result
-
-        transcript_content = {
-            "turns": [
-                {
-                    "probePrompt": "Give me your judgment on the scale from 1 to 9.",
-                    "targetResponse": (
-                        "This scenario is similar to the last 2 I saw today.\n"
-                        "My decision is 4."
-                    ),
-                }
-            ]
-        }
-
-        result = extract_decision_result(transcript_content)
-
-        assert result["decisionCode"] == "4"
-        assert result["decisionSource"] == "deterministic"
-        assert result["decisionMetadata"]["parsePath"] == "numeric_deterministic"
 
     def test_text_label_ambiguous_when_quoted_scale_not_matched(self) -> None:
         """Quoted scale language inside the explanation produces ambiguous, not a score."""
@@ -1455,11 +1353,13 @@ class TestRunSummarize:
 
         run_summarize(data)
 
-    @patch("summarize.extract_decision_code")
+    @patch("summarize.extract_decision_result")
     def test_handles_worker_error(
         self, mock_extract: MagicMock
     ) -> None:
-        """Test handling of WorkerError."""
+        """Test handling of WorkerError. Mocks the top-level extractor that
+        run_summarize actually calls (previously mocked the now-unused
+        extract_decision_code primitive)."""
         from summarize import run_summarize
 
         mock_extract.side_effect = WorkerError(
@@ -1477,7 +1377,7 @@ class TestRunSummarize:
         assert result["success"] is False
         assert "error" in result
 
-    @patch("summarize.extract_decision_code")
+    @patch("summarize.extract_decision_result")
     def test_handles_unexpected_error(
         self, mock_extract: MagicMock
     ) -> None:
