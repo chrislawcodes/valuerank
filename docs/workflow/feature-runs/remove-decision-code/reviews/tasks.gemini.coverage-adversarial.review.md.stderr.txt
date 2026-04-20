@@ -15,7 +15,7 @@ YOLO mode is enabled. All tool calls will be automatically approved.
     code: undefined,
     defaultPrevented: false,
     cancelable: false,
-    timeStamp: 3485.132208
+    timeStamp: 1821.799209
   }
 }
 Scheduling MCP context refresh...

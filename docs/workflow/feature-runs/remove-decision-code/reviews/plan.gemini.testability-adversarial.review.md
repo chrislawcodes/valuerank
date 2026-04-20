@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "testability-adversarial"
 stage: "plan"
 artifact_path: "docs/workflow/feature-runs/remove-decision-code/plan.md"
-artifact_sha256: "33c221a08db543266041458aac83cebff45766767edd25e104475fa7e8af712f"
+artifact_sha256: "95a4b183debafbf474ac7e0cb80546daa2329ab587ed1dca476a9063a04e1d09"
 repo_root: "."
-git_head_sha: "a50a4b6e54d0816f0ff99be3defba99d0315f4ad"
+git_head_sha: "fe2d375f349891708ea81efa9f6958fbcc592998"
 git_base_ref: "origin/main"
 git_base_sha: "bd742f04a07dd015aa976e30754c675d915b3903"
 generation_method: "gemini-cli"
 resolution_status: "accepted"
-resolution_note: "Plan round 4 accepted. HIGH Python-TS numeric-only contract concern -> resolver body verified to NOT consume decisionCode for any derivation path; decisionCode on TranscriptDecisionModelInput is vestigial. Numeric parser branches identify a number internally for matchedLabel resolution but the final derivation goes through parsePath plus matchedLabel, not the raw number. Safe to remove without breaking numeric-only paths. HIGH migration script duplicates production logic -> ACCEPTED and MAJOR architectural improvement: A2 rewritten to delegate to production resolveCanonicalDecision; W9 and T9 rewritten to import and call it directly. Zero logic duplication. MEDIUM manual override test plan -> T8.5 expanded in a follow-up task to enumerate invalid-payload cases explicitly."
+resolution_note: "Plan round 6 accepted. HIGH TEST-H-01 Python rewrite complexity -> already addressed in T3.3 with semantic preservation mapping examples. HIGH TEST-H-02 migration using resolver -> confirming positive recognition of A2. MEDIUM TEST-M-01 W4 test strategy -> per-file test updates are standard; each rewired consumer has existing tests that will catch misses. MEDIUM TEST-M-02 reparse negative tests -> W10 implementation will add explicit negative assertions (resolved/neutral/refusal transcripts NOT selected). LOW TEST-L-01 allowlist convention -> accepted tradeoff. LOW TEST-L-02 invalid favoredValueKey rejection -> T8.5 already lists mismatched key as a validation case; will make it explicit."
 raw_output_path: "docs/workflow/feature-runs/remove-decision-code/reviews/plan.gemini.testability-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,56 +22,30 @@ coverage_note: ""
 
 ## Findings
 
-### 1. HIGH: Flawed Python-TypeScript Contract Change
-
-The plan to have the Python worker stop emitting `decisionCode` (Wave 3) will break the summarization process for any transcript that uses numeric-only parsing. The downstream TypeScript layer relies on this value to derive the canonical decision.
-
--   **Description:** The plan for W3 is to remove `decisionCode` from the Python worker's output. The plan for W4 is to remove `decisionCode` from the input to the TypeScript resolver (`resolveTranscriptDecisionModel`). However, for scenarios without text-based scale labels, the Python parser identifies a number (e.g., "4") and returns it as `decisionCode`. The TypeScript resolver uses this number to determine the final `canonicalDecision`. If the Python worker stops sending this number, the TypeScript layer has no way to know *which* number was chosen, as `parsePath: 'numeric_deterministic'` does not contain the value itself.
--   **Evidence:** `[CODE-CONFIRMED]`
-    -   `summarize_extract.py` contains numerous regex patterns like `STRUCTURED_RATING_PATTERN` specifically to find a numeric code.
-    -   `summarize.py`'s `extract_decision_result` function returns this value as `decisionCode` in its result dictionary.
-    -   `summarize-transcript.test.ts`'s test helper `buildSuccessfulWorkerSummary` shows that the TypeScript side expects `decisionCode` in the worker's payload.
-    -   `decision-model-types.ts` shows `TranscriptDecisionModelInput` includes `decisionCode`, which the plan intends to remove, leaving no path for numeric decisions to be communicated.
-
-### 2. HIGH: Migration Script Duplicates Production Logic
-
-The plan for the migration script (Wave 9) involves re-implementing complex business logic for deriving a canonical decision, rather than reusing the existing production resolver. This creates a significant testing and maintenance risk.
-
--   **Description:** Architecture Decision A2 and Wave 9 describe a "four-case processor" to be built inside the migration script. This processor would replicate the logic of the production `resolveTranscriptDecisionModel` function. This is risky because any discrepancy between the two implementations, now or in the future, will lead to data corruption. The script becomes a second, untested source of truth for business logic. A much safer approach is for the migration script to import and call the single, production-grade, and well-tested resolver function.
--   **Evidence:** `[UNVERIFIED]`
-    -   The plan explicitly states in W9: "This slice is a complete rewrite" and "Implement the four-case processor from spec".
-    -   The existence of `resolveTranscriptDecisionModel` in `summarize-transcript.test.ts` confirms there is a production resolver that could be reused. Duplicating its logic in `backfill-canonical-v2-migration.ts` is an unnecessary risk.
-
-### 3. MEDIUM: Incomplete Test Plan for Manual Override Mutation
-
-The plan for reshaping the manual override mutation (Wave 8) correctly identifies the need for a new input shape but does not specify the need to test for invalid input combinations, which is critical for ensuring the API is robust.
-
--   **Description:** Wave 8 proposes a new input shape `{decisionState, favoredValueKey?, strength?}` and defines the behavior for valid combinations. However, it does not mention testing the failure modes. For example, a robust test suite must assert that the mutation correctly rejects a request where `decisionState` is `"resolved"` but `strength` or `favoredValueKey` is missing, or where `strength` is `"neutral"`. Without these negative tests, the validation logic is not fully verified.
--   **Evidence:** `[UNVERIFIED]`
-    -   The plan in W8 presents a table of valid inputs and expected outputs but omits a discussion of how invalid combinations should be handled and tested. This is an assumption that the implementation will include correct validation without explicit test planning.
-
-### 4. LOW: Implicit Test Case for Key Helper Function
-
-The plan correctly identifies a single-use case for the new `scaleCodeFromCanonical` helper but does not explicitly state that its usage will be verified in tests.
-
--   **Description:** Architecture Decision A3 and Wave 10 identify that `job-choice-bridge-report-lib.ts` will be the sole user of the `scaleCodeFromCanonical` helper. The plan should explicitly state that the tests for W10 will assert that this specific file is indeed using the new helper and that its JSDoc allowlist is correctly updated. Making this test requirement explicit ensures the architectural constraint is verified.
--   **Evidence:** `[CODE-CONFIRMED]`
-    -   The plan for W10 lists `job-choice-bridge-report-lib.ts` as a file to be modified. A3 establishes the "allowlist" concept for the helper. The finding is that the test plan should connect these two points explicitly.
+| Severity | ID | Finding | Evidence |
+| --- | --- | --- | --- |
+| HIGH | TEST-H-01 | The plan correctly identifies that the Python worker tests in `test_summarize.py` require a major semantic rewrite, not a simple mechanical change. The current tests are heavily coupled to the `decisionCode` value, and a failure to properly adapt them would leave critical parsing logic (exact, leading, relaxed, distinctive-tail) without coverage. | [CODE-CONFIRMED] |
+| HIGH | TEST-H-02 | The plan's decision (A2) to rewrite the migration script (W9) to use the production `resolveCanonicalDecision` resolver instead of a local truth table (`canonicalFromDecisionCode`) is a critical improvement for testability and correctness. It avoids logic duplication and ensures the migration reflects the single source of truth. The existing `backfill-canonical-v2-migration.ts` implementation is flawed, as confirmed by the `inspect-canonical-drift.ts` script's purpose. | [CODE-CONFIRMED] |
+| MEDIUM | TEST-M-01 | Wave 4 (`W4`) proposes a broad "Replace every read of `decisionCode`" across ~15+ files. The test strategy is not explicitly defined beyond "update...test files." This creates a risk that some read paths, especially in complex logic like `variance.ts`, could be missed. A more robust testing strategy, such as temporarily breaking the legacy DB column in a test environment and verifying all tests still pass, would provide higher confidence. | [UNVERIFIED] |
+| MEDIUM | TEST-M-02 | The test plan for the refactored `backfill-reparse-decisions.ts` script (W10) is insufficient. The plan states it will filter on `decisionState === "unknown"`, correctly noting this is now unambiguous. However, it does not specify that tests must verify that transcripts with `decisionState` of `"refusal"`, `"neutral"`, or `"resolved"` are explicitly *ignored* by the script. Without these negative test cases, we can't be sure the script isn't over-selecting transcripts to reparse. | [UNVERIFIED] |
+| LOW | TEST-L-01 | The plan for `scaleCodeFromCanonical` (A3, W1) relies on a JSDoc "allowlist" to control its usage. This is not programmatically enforceable and therefore untestable. Unauthorized use of this helper to re-introduce the legacy `decisionCode` concept into new code could occur without being caught by tests. | [UNVERIFIED] |
+| LOW | TEST-L-02 | The test plan for the manual override mutation (W8) correctly specifies the new input shape `{decisionState, favoredValueKey?, strength?}`. It also correctly states the server will derive direction. However, it omits a key negative test case: asserting that the mutation *rejects* an input where `favoredValueKey` is provided but does not match either `valueA` or `valueB` from the pair. | [UNVERIFIED] |
 
 ## Residual Risks
 
-The plan correctly identifies the major risks (R1-R6), including the potential for the GraphQL resolver to bypass helpers (R1), the Python/TS deploy race (R2), and the breaking change to external APIs (R6). Assuming the findings above are addressed, the primary residual risks are operational:
-
-1.  **Migration-Induced Errors:** The Wave 9 migration script, even if it reuses production logic as recommended, is a high-stakes operation. An unforeseen bug in the script could corrupt `decisionMetadata` for thousands of transcripts. The planned dry run is a good mitigation, but the risk of subtle data corruption remains.
-2.  **Incomplete Test Fixture Rewiring:** As noted in R5, the project has a large test fixture sprawl. It is highly probable that some obscure test fixture or mock is missed during the refactoring waves, leading to a test that passes for the wrong reasons (e.g., using a stale mock) or becomes a "change detector" test that fails on every unrelated change.
+| ID | Risk | Mitigation |
+| --- | --- | --- |
+| RISK-01 | **Silent Cache Invalidation.** The plan for W2 correctly identifies that `isSummaryCacheSummary` must be updated to not require `decisionCode`. If this update is flawed, the cache-hit path will silently fail for all new and migrated transcripts, causing every summary job to re-run, increasing costs and latency. | The test cases for W2 must explicitly include a test where a valid v2 summary cache record (without `decisionCode`) is presented to the handler and `mockPersistCached` is successfully called, confirming the cache-hit path was taken. |
+| RISK-02 | **Incomplete Test Fixture Migration.** The plan notes the test fixture sprawl (R5) across ~45 files. While individual waves will update their own tests, there is a risk that shared fixtures or helpers used by multiple test suites are missed, leading to failures in unrelated tests or, worse, tests that continue passing but with stale, non-representative data. | A dedicated, one-time audit of all test fixtures related to `Transcript` or `Summary` objects should be performed as part of W10. A global search-and-replace is risky, but a systematic check is necessary to ensure all test data reflects the new `canonicalDecision`-centric world. |
+| RISK-03 | **Deployment Race Condition.** The plan acknowledges the deploy race (R2, R4). Even with tolerant readers, if a new Python worker (W3, no longer emits `decisionCode`) is picked up by an old TS handler (pre-deploy, still requires `decisionCode` in its cache validator `isSummaryCacheSummary`), the job will fail validation. The plan states "if Python stops emitting first but TS still requires the fields, summarize jobs break", but relies on deploy ordering to prevent this. | The TS change in W2 should be deployed first, or the change should be made even more tolerant. Specifically, the `isSummaryCacheSummary` validator should be changed to make `decisionCode` and `decisionCodeSource` optional *before* the Python worker change is deployed, ensuring forward compatibility. The plan implies this ordering but does not enforce it. |
 
 ## Token Stats
 
-- total_input=62554
-- total_output=1297
-- total_tokens=68244
-- `gemini-2.5-pro`: input=62554, output=1297, total=68244
+- total_input=8890
+- total_output=1146
+- total_tokens=66765
+- `gemini-2.5-pro`: input=8890, output=1146, total=66765
 
 ## Resolution
 - status: accepted
-- note: Plan round 4 accepted. HIGH Python-TS numeric-only contract concern -> resolver body verified to NOT consume decisionCode for any derivation path; decisionCode on TranscriptDecisionModelInput is vestigial. Numeric parser branches identify a number internally for matchedLabel resolution but the final derivation goes through parsePath plus matchedLabel, not the raw number. Safe to remove without breaking numeric-only paths. HIGH migration script duplicates production logic -> ACCEPTED and MAJOR architectural improvement: A2 rewritten to delegate to production resolveCanonicalDecision; W9 and T9 rewritten to import and call it directly. Zero logic duplication. MEDIUM manual override test plan -> T8.5 expanded in a follow-up task to enumerate invalid-payload cases explicitly.
+- note: Plan round 6 accepted. HIGH TEST-H-01 Python rewrite complexity -> already addressed in T3.3 with semantic preservation mapping examples. HIGH TEST-H-02 migration using resolver -> confirming positive recognition of A2. MEDIUM TEST-M-01 W4 test strategy -> per-file test updates are standard; each rewired consumer has existing tests that will catch misses. MEDIUM TEST-M-02 reparse negative tests -> W10 implementation will add explicit negative assertions (resolved/neutral/refusal transcripts NOT selected). LOW TEST-L-01 allowlist convention -> accepted tradeoff. LOW TEST-L-02 invalid favoredValueKey rejection -> T8.5 already lists mismatched key as a validation case; will make it explicit.

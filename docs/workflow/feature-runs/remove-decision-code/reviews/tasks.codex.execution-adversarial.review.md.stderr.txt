@@ -1,3 +1,27 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019da947-1381-73d2-9762-044b49c9bd39
+--------
+user
+Review this tasks artifact using a execution-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: tasks.md
 # Tasks: Remove `decisionCode` From the Codebase
 
 **Slug:** `remove-decision-code`
@@ -70,8 +94,8 @@ Per `plan.md`, 10 waves. Each ends with a `[CHECKPOINT]` so the factory review t
 **Estimated diff:** ~300 lines.
 **Files** (per plan.md W4, comprehensive list): `apps/api/src/services/unresolvable-count.ts`, `services/analysis/aggregate/*`, `services/run/summarization.ts`, `queue/handlers/analyze-basic-data.ts`, `graphql/queries/domain/analysis/value-detail.ts`, `condition-transcripts.ts`, `domain-analysis-aggregation.ts`, `types-detail.ts`, `graphql/queries/models-consistency.ts`, `graphql/queries/domain/decision-model.ts`, `decision-model-types.ts`, `services/decision-model-shadow-validation.ts`, `cli/decision-model-shadow-validation.ts`, plus their test files.
 
-- [ ] **T4.1** Remove `decisionCode` field from `TranscriptDecisionModelInput` type in `decision-model-types.ts`. **Note the two resolvers:** `resolveTranscriptDecisionModel` (the public wrapper at `decision-model.ts:95`, used by GraphQL resolvers and analysis) takes `TranscriptDecisionModelInput` and calls the internal `resolveCanonicalDecision` (at `decision-model.ts:120`). We remove `decisionCode` from the wrapper's input type. The inner function's input type (`DecisionModelInput`) does not have `decisionCode`.
-- [ ] **T4.2** Update every call site that passes `decisionCode` into `resolveTranscriptDecisionModel`. Grep pattern: `resolveTranscriptDecisionModel\(` (the wrapper, not the inner). Known hits include `types-detail.ts:122`, both shadow-validation files (`services/decision-model-shadow-validation.ts`, `cli/decision-model-shadow-validation.ts`).
+- [ ] **T4.1** Remove `decisionCode` field from `TranscriptDecisionModelInput` type in `decision-model-types.ts`.
+- [ ] **T4.2** Update every call site that passes `decisionCode` into `resolveTranscriptDecisionModel` (grep `resolveTranscriptDecisionModel\(`). Notably `types-detail.ts:122`, both shadow-validation files.
 - [ ] **T4.2a** Teach `resolveCanonicalDecision` the refusal signal: early-check `decisionMetadata.refusal === true` before parseClass gate; return refusal canonical (`decisionState: "refusal"`, `direction: "refusal"`, `strength: "unknown"`, keys null). Add `buildRefusalCanonicalDecision` helper or extend `buildUnknownCanonicalDecision`. Write a dedicated test.
 - [ ] **T4.3** Rewire `unresolvable-count.ts`: replace `decisionCodeSource` filter with `canonicalDecision.decisionState`.
 - [ ] **T4.4** Rewire analysis aggregation: replace `decisionCode` groupings with `canonicalDecision.decisionState` + `.strength`. Files: `aggregate-logic.ts`, `aggregate-preparation.ts`, `aggregate-transcript-builder.ts`, `aggregate-fingerprint-payload.ts`, `aggregate-helpers.ts`, `variance.ts`, `contracts.ts`.
@@ -94,7 +118,7 @@ Per `plan.md`, 10 waves. Each ends with a `[CHECKPOINT]` so the factory review t
 
 - [ ] **T5.1** MCP tools: remove `decisionCode` field from response payloads. Internal filter logic rewires to `canonicalDecision.*`.
 - [ ] **T5.2** `get-unsummarized-transcripts`: replace `decisionCode` filter with `canonicalDecision.decisionState === 'unknown'`.
-- [ ] **T5.3** CSV export: remove `decisionCode` column from column list. DO NOT add any replacement scale-code column — the CSV export is NOT on the `scaleCodeFromCanonical` allowlist (FR-008). Consumers migrate to reading `canonicalDecision.favoredValueKey` / `.strength` / `.decisionState`.
+- [ ] **T5.3** CSV export: remove `decisionCode` column from column list. If users need a scale number, add a `scaleCode` column derived via `scaleCodeFromCanonical` (optional; discuss with product if worth keeping).
 - [ ] **T5.4** OData `$metadata`: remove `decisionCode` field from the transcript entity schema.
 - [ ] **T5.5** Tests: assert each response / export shape does NOT contain `decisionCode`. Negation assertions. File fixtures updated to match.
 - [ ] **T5.6** Preflight passes.
@@ -162,18 +186,15 @@ Per `plan.md`, 10 waves. Each ends with a `[CHECKPOINT]` so the factory review t
 **Files:** `cloud/scripts/backfill-canonical-v2-migration.ts` (complete rewrite), `cloud/scripts/__tests__/backfill-canonical-v2-migration.test.ts` (complete rewrite).
 
 - [ ] **T9.1** Delete the old `canonicalFromDecisionCode` function and its tests. No truth-table derivation.
-- [ ] **T9.2** Import `resolveCanonicalDecision`, `buildRawDecisionEvidence`, `extractValuePair`, `extractCachedWinnerFirstDecision`, `extractValueStatementsFromSnapshot`, `extractLabelPrefixFromSnapshot` via relative path: `import { … } from '../apps/api/src/graphql/queries/domain/decision-model.js'` and `'../apps/api/src/graphql/queries/domain/decision-model-helpers.js'`. This matches the relative-path pattern used by other cross-workspace scripts (e.g. `cloud/scripts/job-choice-bridge-report.ts` if it already does this, otherwise set the precedent). Do NOT import via `@valuerank/api` — that package alias is not published.
-- [ ] **T9.3** Per-row **classification** (addresses round 6 HIGH: resolver preserves stale-but-resolved rows otherwise):
-  - Compute `hasGoodCanonical` = `existingCanonical != null` AND `decisionState ∈ {"resolved", "neutral", "refusal"}` AND `strength !== "unknown"` AND `direction !== "unknown"`.
-  - If `hasGoodCanonical` → **preserve branch**: keep canonical verbatim; tag `preserved`.
-  - Else → **re-derive branch**: build `DecisionModelInput` with `cachedDecision: null` (force raw re-derivation); call `resolveCanonicalDecision(input)`; use its return value. Tag `resolver-recovered` if the resolver produced a resolved/neutral/refusal canonical, else `synthesized-unknown` if it returned unknown.
-- [ ] **T9.4** Refusal override: if `summary.decisionCode === "refusal"` AND resolver returned `decisionState === "unknown"` (historical rows pre-A9), override to refusal canonical. Tag `refusal-tagged`.
+- [ ] **T9.2** Import `resolveCanonicalDecision`, `buildRawDecisionEvidence`, `extractValuePair`, `extractCachedWinnerFirstDecision`, `extractValueStatementsFromSnapshot`, `extractLabelPrefixFromSnapshot` from the API workspace (via the existing cross-workspace import path used by other scripts).
+- [ ] **T9.3** Per-row: build `DecisionModelInput` matching production read path (pair from snapshot, orientationFlipped from scenario, raw evidence via `buildRawDecisionEvidence`, cachedDecision via `extractCachedWinnerFirstDecision`, valueStatements + labelPrefix from snapshot). Call `resolveCanonicalDecision(input)`. Use its returned canonical.
+- [ ] **T9.4** Refusal override: if `summary.decisionCode === "refusal"` and the resolver returned `decisionState === "unknown"`, override resolver output's `decisionState` to `"refusal"`, keep other fields (favored keys stay null).
 - [ ] **T9.5** Strip `decisionCode` + `decisionCodeSource` from summary. Write `cacheVersion: 2` on the resulting canonical.
-- [ ] **T9.6** Edge cases: (a) `pairFromSnapshot` null → strip + bump + synthesize unknown canonical; tag `missing-snapshot-stripped`. (b) All preflight preservation guards fail AND resolver returns unknown AND no decisionCode refusal → tag `synthesized-unknown`.
-- [ ] **T9.7** Categorized counts report: `preserved`, `resolver-recovered`, `refusal-tagged`, `synthesized-unknown`, `missing-snapshot-stripped`, `already-v2`, `errors`.
-- [ ] **T9.8** Tests: (a) preserve branch — good canonical round-trips unchanged; (b) re-derive branch — stale `strength: "unknown"` becomes resolved via raw evidence; (c) refusal override — historical refusal row ends up `decisionState: "refusal"`; (d) missing-snapshot — stripped but no canonical recovery; (e) fresh post-A9 row with `decisionMetadata.refusal: true` round-trips correctly via the resolver (integration test that actually invokes `resolveCanonicalDecision`).
+- [ ] **T9.6** Edge cases: (a) pair null → strip + bump + synthesize unknown canonical, tag `missing-snapshot-stripped`; (b) no existing canonical + resolver also returns unknown → synthesize unknown canonical, tag `synthesized-unknown`.
+- [ ] **T9.7** Categorized counts report: `refusal-tagged`, `resolver-recovered` (resolver returned a different canonical than what was stored), `preserved` (resolver returned same canonical that was stored), `already-v2`, `synthesized-unknown`, `missing-snapshot-stripped`, `errors`.
+- [ ] **T9.8** Tests: mock `resolveCanonicalDecision` and assert we pass the right input. Integration test with a real resolver for end-to-end confidence. Cover all 6 categories.
 - [ ] **T9.9** Preflight: vitest runs green.
-- [ ] **T9.10** Commit: `feat(decision-cache): migration classifies then delegates to resolver`.
+- [ ] **T9.10** Commit: `feat(decision-cache): migration delegates to production resolver`.
 
 **[CHECKPOINT W9]**
 
@@ -209,8 +230,20 @@ These happen after the PR merges and deploys, not during implementation:
 
 ---
 
-## Review Reconciliation
 
-- review: reviews/tasks.codex.execution-adversarial.review.md | status: pending | note: pending tasks checkpoint
-- review: reviews/tasks.codex.dependency-order-adversarial.review.md | status: pending | note: pending tasks checkpoint
-- review: reviews/tasks.gemini.coverage-adversarial.review.md | status: pending | note: pending tasks checkpoint
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+- Medium: W8 under-specifies manual override validation. It only rejects `resolved` payloads that are missing `favoredValueKey` and `strength`, but it does not reject those fields when `decisionState` is `unknown`, `refusal`, or any other non-resolved state. The task also leaves the five UI-option-to-payload mappings implicit. That makes it easy to accept malformed overrides and persist inconsistent decisions.
+- Medium [UNVERIFIED]: W2/W3 remove `decisionCode` from the write path before W4/W9 describe a complete compatibility fallback for older records. If any existing summaries still encode refusal only through `decisionCode`, the new reader will classify them as `unknown` until the migration runs. That would change counts, exports, and UI state during the transition.
+- Low [UNVERIFIED]: The final SC-001 check in W10 is too narrow to prove the codebase is clean. It only greps a subset of directories and excludes the migration file, so stale `decisionCode` references in tests, generated files, or other repo paths can survive while the verification still passes.
+
+## Residual Risks
+- The legacy `transcripts.decision_code` column remains until the follow-up mini-PR, so there is still a temporary second source of truth.
+- Removing `decisionCode` from GraphQL, CSV, MCP, and OData is a breaking change for any downstream consumer that is not updated in lockstep.
+- The migration now depends on `resolveCanonicalDecision` matching historical behavior closely enough that any divergence shows up as semantic drift, not just a mechanical backfill issue.
+tokens used
+34,268

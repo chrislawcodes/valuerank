@@ -8,7 +8,7 @@ approval: never
 sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
 reasoning effort: high
 reasoning summaries: none
-session id: 019da92e-3aa1-7182-bec9-75541770a92a
+session id: 019da943-0f8b-7b50-8339-6d73070908b3
 --------
 user
 Review this plan artifact using a implementation-adversarial lens.
@@ -4689,11 +4689,13 @@ Artifact: plan.md
 
 After this PR, `canonicalDecision` is the only stored representation of a transcript's decision. Every internal consumer reads from it directly. Consumers that need the 1–5 scale position derive it on demand via an internal helper (see A3). No consumer reads `decisionCode`.
 
-### A2 — Four-case migration processor (not truth-table derivation)
+### A2 — Migration uses the production resolver (single source of truth)
 
-Rejected: deriving canonical from `decisionCode + orientationFlipped` via a truth table. A dry-run showed ~123k false-positive "drifts" because the truth table is wrong for paired-v2 / job-choice-v2 probes. Those probes derive canonical from `matchedLabel` text, not scale position.
+Rejected: deriving canonical from `decisionCode + orientationFlipped` via a truth table. A dry-run showed ~123k false-positive "drifts" because the truth table is wrong for paired-v2 / job-choice-v2 probes.
 
-Chosen: a **four-case processor** that (1) always strips `decisionCode`, (2) tags refusals as `decisionState: "refusal"`, (3) re-derives ONLY when all preconditions hold (parser evidence is exact/fallback_resolved + matchedLabel resolves to a pair value + strength parse succeeds), (4) otherwise preserves canonical verbatim. Falls through to preserve on any partial failure — partial upgrades are forbidden.
+Rejected: re-implementing the canonical derivation inside the migration script. That creates a second untested copy of production logic.
+
+**Chosen:** the migration imports and calls the production `resolveCanonicalDecision` from `cloud/apps/api/src/graphql/queries/domain/decision-model.ts`, the exact function that serves live reads. The migration's wrapper adds: (1) always strip `decisionCode` + `decisionCodeSource` from summary regardless, (2) tag refusals as `decisionState: "refusal"` if the resolver doesn't already, (3) bump `cacheVersion: 2`, (4) synthesize unknown canonicals for the edge case of no canonical + insufficient evidence. The actual canonical derivation is delegated to the production resolver. Zero logic duplication. Any future change to derivation lands automatically in migrations.
 
 ### A3 — `scaleCodeFromCanonical` helper with allowlist
 
@@ -4719,6 +4721,14 @@ Verified in production code at `decision-model.ts` line 217: `favoredValueKey ==
 
 `matchedLabel`, `parseClass`, `parsePath`, `parserVersion` live on `transcripts.decision_metadata` top-level, NOT inside `summaryCache.summary`. The unknown-recovery case must fetch from the right location.
 
+### A9 — Refusal signal moves from `decisionCode` to a first-class `decisionMetadata.refusal` flag
+
+Today the refusal signal is encoded only as `summary.decisionCode === "refusal"`. No other field on `decisionMetadata` or canonical preserves that bit. If we strip `decisionCode` without a replacement, fresh summaries that refuse post-deploy would land as `decisionState: "unknown"` and be indistinguishable from parser failures forever.
+
+**Chosen:** Python worker writes a boolean `decisionMetadata.refusal` (top-level on the decisionMetadata JSON) when it detects refusal via `extract_decision_code_from_text`. The TS resolver reads this flag and, when true, returns a canonical with `decisionState: "refusal"`, `direction: "refusal"`, `strength: "unknown"`, and both value keys null. Existing behavior for non-refusal paths is unchanged.
+
+**Migration consequence:** for historical rows, the migration detects refusal via the legacy `summary.decisionCode === "refusal"` (still present before migration runs) and writes the correct canonical. For fresh rows written between deploy and `--apply`, the worker's new `decisionMetadata.refusal` flag is already set, the resolver already builds the right canonical, and the migration's refusal-override branch is effectively a no-op on those rows (canonical already correct). Zero information loss.
+
 ## Wave Breakdown (Slices)
 
 Each slice is a `[CHECKPOINT]`-bounded unit, roughly ≤ 300 lines changed, and is independently verifiable. Slices are ordered so that each wave's tests pass without depending on later waves.
@@ -4737,7 +4747,7 @@ Each slice is a `[CHECKPOINT]`-bounded unit, roughly ≤ 300 lines changed, and 
 
 **What:**
 
-1. **`SummaryCacheSummary` type**: drop `decisionCode` and `decisionCodeSource` keys from the written shape.
+1. **`SummaryCacheSummary` type**: drop `decisionCode` and `decisionCodeSource` keys from the written shape. Also drop them from `buildSummaryCacheRecord()` at `summarize-persistence.ts:18-46` — that function hardcodes both fields into every persisted summaryCache record.
 2. **`isSummaryCacheSummary` validator** (critical): today at `summarize-types.ts:102-104` it requires both `decisionCode` AND `decisionCodeSource` to be present strings for a cache row to be considered valid. Update to NOT require these fields. Otherwise every post-migration row will be rejected as malformed and the cache-hit path will silently miss on every transcript.
 3. **`isWinnerFirstSummaryCache` validator**: today it only accepts `cacheVersion: 1`. Update to accept both `1` and `2` so migrated rows read correctly.
 4. **`buildWinnerFirstSummaryCache` writer** (critical): today at `summarize-transcript.ts:116` it hard-codes `cacheVersion: 1` on every fresh write. If we leave this, every summarize job after the migration reintroduces a v1 row and the migration never converges. Change to write `cacheVersion: 2` on all fresh caches. Also write `canonicalDecision` without `decisionCode` / `decisionCodeSource` siblings.
@@ -4754,7 +4764,16 @@ Each slice is a `[CHECKPOINT]`-bounded unit, roughly ≤ 300 lines changed, and 
 
 **Files:** `cloud/workers/summarize.py`, `cloud/workers/summarize_extract.py`, `cloud/workers/stats/decision_model.py`, `cloud/workers/tests/test_summarize.py`.
 
-**What:** Remove `decisionCode` and `decisionSource` keys from the worker's output dict (note: worker field is `decisionSource`, not `decisionCodeSource`). Keep internal scale-position detection — the parser still needs it to pick the best candidate label for `matchedLabel`. Python tests that previously asserted on `decisionCode` rewire to assert on `matchedLabel` / `parsePath` / `canonicalDecision` shape. **Risk call-out per Gemini's testability review:** `test_summarize.py` has dozens of edge-case tests keyed on `decisionCode`; those need careful rewriting. Budget time for this — not a pure mechanical rename. A sanity test for every parser branch (exact/leading/relaxed/distinctive-tail) must still exist and cover the same formats.
+**What:**
+
+1. **Remove `decisionCode` and `decisionSource` keys** from the worker's output dict (note: worker field is `decisionSource`, not `decisionCodeSource`). Keep internal scale-position detection — the parser still needs it to pick the best candidate label for `matchedLabel`.
+2. **Emit `refusal: true`** at the top level of the returned `decisionMetadata` dict whenever `extract_decision_code_from_text()` returns the refusal sentinel. This is the new first-class refusal signal (A9). Non-refusal rows get `refusal: false` or omit the field.
+3. **Test rewrite — semantic preservation, not mechanical rename** (Gemini HIGH finding repeated across rounds): `test_summarize.py` has dozens of edge-case tests keyed on `decisionCode`. Each test must be re-evaluated for the semantic it's testing, not just the field. Examples:
+   - A test asserting `decisionCode == "5"` on a "Strongly support X" response → becomes assertion that `matchedLabel` contains the X label text AND (after TS derivation) `canonicalDecision.strength == "strong"` + `canonicalDecision.favoredValueKey == X`.
+   - A test asserting `decisionCode == "refusal"` → becomes assertion that `decisionMetadata.refusal == true`.
+   - A test asserting `decisionCode == "other"` or `decisionCode == None` → becomes assertion that `parseClass == "unparseable"` or `decisionMetadata.refusal` is absent.
+   - Every parser branch (exact / leading / relaxed / distinctive-tail / refusal / unparseable) MUST have at least one surviving test.
+4. **No parser logic changes.** The regex patterns and internal `extract_decision_code_from_text` function stay as-is — only their callers and the output dict shape change.
 
 **Estimated diff:** ~200 lines.
 
@@ -4765,6 +4784,7 @@ Each slice is a `[CHECKPOINT]`-bounded unit, roughly ≤ 300 lines changed, and 
 **What:**
 
 1. **Remove `decisionCode` from the shared resolver signature.** `TranscriptDecisionModelInput` (at `decision-model-types.ts:93`) currently has a `decisionCode: string | null` field that the resolver body does NOT use. Remove the field from the type. Update every call site that passes it (most notably `types-detail.ts:122` which passes `transcript.decisionCode`). This is a single-source-of-truth fix — the resolver derives canonical from parser evidence, not from the redundant code.
+1a. **Teach the resolver the refusal flag.** Update `resolveCanonicalDecision` to check `decisionMetadata.refusal === true` early (before the parseClass gate). If true, return `{decisionState: "refusal", direction: "refusal", strength: "unknown", favoredValueKey: null, opposedValueKey: null, source: "deterministic", ...}`. Update `buildUnknownCanonicalDecision` or add a `buildRefusalCanonicalDecision` helper. Add a dedicated test.
 2. **Replace every read of `decisionCode` / `decisionCodeSource`** with reads against `canonicalDecision.decisionState` / `.strength` / `.favoredValueKey`. Aggregation keys group by canonical, not scale position.
 3. **Update `services/run/summarization.ts`** (the reprocess path at line 234) to stop writing `decisionCode: null` to the legacy top-level column. This is another write-site to that column beyond manual override; removing the read of the column is not enough — we also need to stop writing stale clears. The actual column drop still defers to the follow-up PR.
 
@@ -4811,15 +4831,18 @@ Server derives direction from `favoredValueKey` vs definition's value pair (`dir
 
 **Estimated diff:** ~220 lines.
 
-### W9 — Migration script (COMPLETE REWRITE: naive truth-table → four-case processor)
+### W9 — Migration script (COMPLETE REWRITE: delegate to production resolver)
 
 **Files:** `cloud/scripts/backfill-canonical-v2-migration.ts` (**rewrite — replace existing contents**), `cloud/scripts/__tests__/backfill-canonical-v2-migration.test.ts` (**rewrite — replace existing contents**).
 
 **What:** The existing script on this branch uses `canonicalFromDecisionCode(decisionCode, pair, orientationFlipped)` — a naive truth table. That approach is **rejected** per architecture decision A2. This slice is a complete rewrite:
-- Delete the old `canonicalFromDecisionCode` export entirely.
-- Delete the old test cases that asserted on the truth table.
-- Implement the four-case processor from spec §Scope §Migration.
-- Write fresh unit tests covering every case and every precondition branch.
+- Delete the old `canonicalFromDecisionCode` export entirely and its tests.
+- **Import** `resolveCanonicalDecision` (and `buildRawDecisionEvidence`, `extractValuePair`, `extractCachedWinnerFirstDecision`) from `@valuerank/api` (via relative path resolution at the workspace level, since scripts sit outside the api workspace).
+- For each row: build the same `DecisionModelInput` the live resolver receives at read time, call `resolveCanonicalDecision`, and write the returned canonical back to `summaryCache.summary`. Bump `cacheVersion: 2`. Strip `decisionCode` + `decisionCodeSource`.
+- If the resolver returns `decisionState: "unknown"` for a row whose existing `summary.decisionCode === "refusal"`, override the returned canonical's `decisionState` to `"refusal"` (strength unchanged, favored keys nulled) — this is the only extra step beyond the resolver output, because the resolver doesn't know about the legacy refusal signal.
+- For rows with no existing canonical AND the resolver also returns unknown, synthesize `{cacheVersion: 2, decisionState: "unknown", strength: "unknown", favoredValueKey: null, opposedValueKey: null, direction: "unknown"}`.
+- For rows where `pairFromSnapshot` returns null (malformed): still strip + bump; write synthesized unknown canonical.
+- Write fresh unit tests: (a) happy-path recovery via resolver, (b) refusal tagging override, (c) preserve-when-resolved (resolver returns same canonical), (d) missing-snapshot stripping, (e) malformed canonical synthesis. The tests should mock the resolver to verify we call through to it correctly — NOT re-test the resolver's logic (which has its own tests).
 
 **Data source mapping** (explicit, addresses architecture review's Medium finding):
 - The migration reads `matchedLabel`, `matchedText`, `responseExcerpt`, `parseClass`, `parsePath`, `parserVersion` from `transcripts.decision_metadata` **top-level** (not from `summaryCache.summary`). For the unknown-recovery case 3, the text candidate for `resolveValueKeyFromText` follows the same fallback chain as the production resolver at `decision-model.ts:184`: `matchedLabel ?? matchedText ?? responseExcerpt`. Using only `matchedLabel` would miss rows that have other evidence.
@@ -4909,189 +4932,16 @@ Return only markdown with exactly these sections:
 ## Residual Risks
 Do not include any other sections.
 codex
-I’m checking the plan against the current code paths first, then I’ll call out only the places where the plan’s assumptions are shaky or leave a real gap.
-codex
-I’ve got the main shape now. I’m checking for places where the plan assumes a clean cutover but the current code still has live reads or writes that would keep the old shape alive.
-exec
-/bin/zsh -lc "rg -n \"decisionCode|decisionCodeSource|decisionSource|canonicalDecision\" /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers | sed -n '1,220p'" in /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
- succeeded in 0ms:
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/stats/decision_model.py:33:    The TypeScript resolver has already handled legacy decisionCode → canonical
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/summarize.py:160:        "decisionCode": decision_code,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/summarize.py:161:        "decisionSource": decision_source,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/summarize.py:188:        decision_code = decision_result["decisionCode"]
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/summarize.py:189:        decision_source = decision_result["decisionSource"]
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/summarize.py:225:            decisionCode=decision_code,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/summarize.py:226:            decisionSource=decision_source,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/summarize.py:232:                "decisionCode": decision_code,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/summarize.py:233:                "decisionSource": decision_source,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/export/decision-display.ts:20:  decisionSource: string;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/export/decision-display.ts:37:  decisionCode?: string | null;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/export/decision-display.ts:123:    transcript.decisionCode !== null && transcript.decisionCode !== undefined
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/export/decision-display.ts:156:    decisionCode: transcript.decisionCode ?? null,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/export/decision-display.ts:174:    decisionSource: canonical.source,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/export/decision-display.ts:186:    decisionSource: canonical.source,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/export/decision-display.ts:199:    decisionSource: canonical.source,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:601:        assert result["summary"]["decisionCode"] == "4"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:602:        assert result["summary"]["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:624:        assert result["summary"]["decisionCode"] == "2"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:625:        assert result["summary"]["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:647:        assert result["summary"]["decisionCode"] == "other"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:648:        assert result["summary"]["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:670:        assert result["summary"]["decisionCode"] == "other"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:671:        assert result["summary"]["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:715:        assert result["decisionCode"] == "4"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:716:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:741:        assert result["decisionCode"] == "4"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:742:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:771:        assert result["decisionCode"] == "4"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:772:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:803:        assert result["decisionCode"] == "4"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:804:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:822:        assert result["decisionCode"] == "7"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:823:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:843:        assert result["decisionCode"] == "4"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:844:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:872:        assert result["decisionCode"] == "other"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:873:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:899:        assert result["decisionCode"] == "other"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:900:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:936:        assert result["decisionCode"] == "1"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:937:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:970:        assert result["decisionCode"] == "4"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:971:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:973:        assert result["decisionCode"] != "152"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1005:        assert result["decisionCode"] == "2"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1006:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1007:        assert result["decisionCode"] != "5"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1034:        assert result["decisionCode"] == "5"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1035:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1063:        assert result["decisionCode"] == "5"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1064:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1092:        assert result["decisionCode"] == "5"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1093:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1121:        assert result["decisionCode"] == "4"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1122:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1160:        assert result["decisionCode"] == "5"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1161:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1189:        assert result["decisionCode"] == "2"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1190:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1223:        assert result["decisionCode"] == "5"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1224:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1256:        assert result["decisionCode"] == "1"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1257:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1295:        assert result["decisionCode"] == "5"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1296:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1325:        assert result["decisionCode"] == "4"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1326:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1360:        assert result["decisionCode"] == "other"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1392:        assert result["decisionCode"] == "5"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1393:        assert result["decisionSource"] == "deterministic"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1483:                        "decisionCode": "4",
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1484:                        "decisionSource": "deterministic",
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1507:        assert result["summaries"][0]["summary"]["decisionCode"] == "4"
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1536:                    "decisionCode": "4",
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1537:                    "decisionSource": "deterministic",
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1610:            "summary": {"decisionCode": "4", "decisionText": "Summary"},
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1699:                        "decisionCode": "4",
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1700:                        "decisionSource": "deterministic",
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1709:                        "decisionCode": "2",
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/tests/test_summarize.py:1710:                        "decisionSource": "deterministic",
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/unresolvable-count.ts:19:      decisionCodeSource: { not: 'manual' },
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/unresolvable-count.ts:23:      decisionCode: true,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/unresolvable-count.ts:36:      decisionCode: t.decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/export/xlsx/types.ts:154:  decisionCode: string;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-transcript.ts:50:        decisionCode: string;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-transcript.ts:51:        decisionSource: string;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-transcript.ts:129:    decisionCode: summary.decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-transcript.ts:382:      const canonicalDecision = await buildWinnerFirstSummaryCache(
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-transcript.ts:392:        canonicalDecision,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/mcp/formatters.ts:102: * Uses the transcript's summary fields (decisionCode, decisionText)
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/mcp/formatters.ts:127:    decisionCode: transcript.decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-persistence.ts:20:    decisionCode: string;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-persistence.ts:21:    decisionSource: string;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-persistence.ts:24:    canonicalDecision?: WinnerFirstSummaryCache | null;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-persistence.ts:41:      decisionCode: summary.decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-persistence.ts:42:      decisionCodeSource: summary.decisionSource,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-persistence.ts:45:      ...(summary.canonicalDecision ? { canonicalDecision: summary.canonicalDecision } : {}),
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-persistence.ts:180:          decisionCode: summaryCache.summary.decisionCode ?? '',
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-persistence.ts:181:          decisionSource: summaryCache.summary.decisionCodeSource ?? '',
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-persistence.ts:184:          canonicalDecision: summaryCache.summary.canonicalDecision ?? null,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-persistence.ts:215:  canonicalDecision: WinnerFirstSummaryCache | null,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-persistence.ts:216:  summary: { decisionCode: string; decisionSource: string; decisionText: string | null; decisionMetadata?: unknown },
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-persistence.ts:223:          canonicalDecision,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-types.ts:6:export type WinnerFirstSummaryCache = NonNullable<SummaryCache['summary']['canonicalDecision']>;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-types.ts:102:    typeof value.decisionCode === 'string' &&
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-types.ts:103:    value.decisionCode !== 'error' &&
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-types.ts:104:    typeof value.decisionCodeSource === 'string' &&
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-types.ts:107:    (!('canonicalDecision' in value) || isWinnerFirstSummaryCache(value.canonicalDecision)) &&
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/analyze-basic-data.ts:84:  decisionCode: string | null;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/analyze-basic-data.ts:154:          decisionCode: t.decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/analyze-basic-data.ts:163:          decisionCode: t.decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/routes/export/runs.ts:286:            decisionCode: t.decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/export/csv.ts:36:  decisionSource: string;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/export/csv.ts:273:    decisionSource: decisionDisplay.decisionSource,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/export/csv.ts:318:      escapeCSV(row.decisionSource),
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/workers/temp_zero_report.py:213:            canonical = summary.get("canonicalDecision")
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/analysis/aggregate/aggregate-fingerprint-payload.ts:44:  decisionCode: string | null;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/analysis/aggregate/aggregate-fingerprint-payload.ts:183:        decisionCode: transcript.decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/models-consistency.ts:162:    decisionCode: null,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/run/summarization.ts:234:      decisionCode: null,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/export/xlsx/worksheets/raw-data.ts:58:    { header: 'Decision Source', key: 'decisionSource', width: 16 },
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/export/xlsx/worksheets/raw-data.ts:84:      decisionSource: row.decisionSource,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts:253:      decisionCode: transcript.decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/analysis/aggregate/variance.ts:186:      decisionCode: transcript.decisionCode ?? null,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/analysis/aggregate/aggregate-transcript-builder.ts:17:  decisionCode: string | null;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/analysis/aggregate/aggregate-transcript-builder.ts:39:      decisionCode: transcript.decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/analysis/aggregate/contracts.ts:234:  decisionCode: string | null;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/domain-analysis-aggregation.ts:37:    decisionCode: string | null;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/domain-analysis-aggregation.ts:59:      decisionCode: transcript.decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/analysis/aggregate/aggregate-preparation.ts:55:  decisionCode: string | null;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/services/analysis/aggregate/aggregate-preparation.ts:216:      decisionCode: true,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/types-detail.ts:45:  decisionCode: string | null;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/types-detail.ts:46:  decisionCodeSource: string | null;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/types-detail.ts:106:    decisionCode: t.exposeString('decisionCode', { nullable: true }),
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/types-detail.ts:107:    decisionCodeSource: t.exposeString('decisionCodeSource', { nullable: true }),
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/types-detail.ts:122:          decisionCode: transcript.decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/decision-model-types.ts:93:  decisionCode: string | null;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/decision-model-types.ts:116: *   lives only in the sibling `summaryCache.summary.decisionCode = "refusal"`
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/decision-model-types.ts:125: * - `"neutral"`: decisionCode 3 — model explicitly picked the neutral option.
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/decision-model-types.ts:126: * - `"unknown"`: parser could not resolve (decisionCode "other" or absent).
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/mcp/tools/get-transcript-summary.ts:127:    decisionCode: string | null;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/mcp/tools/get-transcript-summary.ts:146:    decisionCode: transcript.decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/mcp/tools/get-transcript-summary.ts:214:            decisionCode: true,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/mcp/tools/get-run-results.ts:217:              decisionCode: true,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/mcp/tools/get-run-results.ts:245:                  decisionCode: transcript.decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts:350:  const canonicalDecision = summary && isCachedWinnerFirstDecision(summary.canonicalDecision)
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts:351:    ? summary.canonicalDecision
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts:354:  return canonicalDecision;
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/analysis/value-detail.ts:198:            decisionCode: true,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/analysis/value-detail.ts:241:            decisionCode: transcript.decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/analysis/condition-transcripts.ts:76:          decisionCode: true,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/analysis/condition-transcripts.ts:77:          decisionCodeSource: true,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/cli/decision-model-shadow-validation.ts:55:      decisionCode: true,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/cli/decision-model-shadow-validation.ts:75:      decisionCode: transcript.decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/mutations/run/maintenance.ts:154:      decisionCode: t.arg.string({
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/mutations/run/maintenance.ts:165:      const decisionCode = args.decisionCode.trim();
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/mutations/run/maintenance.ts:167:      if (!isValidManualDecisionCode(decisionCode)) {
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/mutations/run/maintenance.ts:168:        throw new ValidationError('decisionCode must be a positive integer');
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/mutations/run/maintenance.ts:176:          decisionCode: true,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/mutations/run/maintenance.ts:190:        decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/mutations/run/maintenance.ts:212:          previousValue: transcript.decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/mutations/run/maintenance.ts:221:          decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/mutations/run/maintenance.ts:222:          decisionCodeSource: 'manual',
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/mutations/run/maintenance.ts:252:          previousDecisionCode: transcript.decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/mutations/run/maintenance.ts:253:          decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/mutations/run/maintenance.ts:266:          previousDecisionCode: transcript.decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/mutations/run/maintenance.ts:267:          decisionCode,
-/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/types/transcript.ts:48:          decisionCode: transcript.decisionCode,
-
+I’m checking the plan against the current resolver, worker, and migration code to separate real gaps from claims the code does not support. Then I’ll call out only the concrete problems that survive that check.
 codex
 ## Findings
-- Medium [CODE-CONFIRMED]: W8’s manual-override reshape is incomplete. The current contract in [decision-model-types.ts](/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/decision-model-types.ts) requires `opposedValueKey` in `CanonicalAppliedDecision`, and the existing override path in [maintenance.ts](/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/mutations/run/maintenance.ts) persists manual provenance with `decisionCodeSource: 'manual'`. The proposed `{decisionState, favoredValueKey?, strength?}` input cannot round-trip a full override without extra hidden derivation, so the plan would drop information the current code treats as part of the canonical/manual decision contract.
-- Medium [CODE-CONFIRMED]: The plan never actually retires `decisionCodeSource` outside the summary-cache shape. The code still reads and writes it in [summarize-persistence.ts](/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-persistence.ts), [types-detail.ts](/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/types-detail.ts), and [maintenance.ts](/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/mutations/run/maintenance.ts). That leaves a live legacy source field in the read/write path, so the claimed “canonicalDecision only” cutover is not actually complete.
+- **Medium [CODE-CONFIRMED]** W3’s test-rewrite guidance maps current `"other"`/`None` cases to `"unparseable"`, but the worker code does not do that. In [summarize.py], unresolved cases from `extract_decision_result()` are returned with `parseClass: "ambiguous"` when `decision_code == "other"`; that behavior is also covered by the existing tests in [test_summarize.py]. If the rewrite only checks for `unparseable` or `refusal` absence, it will stop protecting the ambiguity paths that actually exist today.
+- **Medium [CODE-CONFIRMED]** W10 assumes `canonicalDecision.decisionState === "unknown"` means “pure parser failure,” but the current code explicitly says v1 rows conflate refusal and unknown. The comment in [decision-model-types.ts] and the backfill logic in [backfill-canonical-v2-migration.ts] both document that `cacheVersion: 1` does not distinguish those states. That means any retained `backfill-reparse-decisions.ts` run before the `--apply` migration finishes can still mis-target refusal rows as parse failures.
+- **Low [UNVERIFIED]** W9 depends on importing the live resolver into a standalone script, but the provided code only shows the current migration as a self-contained module with local helpers. The plan does not show the workspace/bootstrap path needed for a `cloud/scripts` entrypoint to safely import application resolver code, so the migration’s execution path is not yet proven.
 
 ## Residual Risks
-- [UNVERIFIED] W9’s migration logic depends on parser-evidence fields being stored exactly where the plan says. The provided worker code shows `matchedLabel`, `parseClass`, `parsePath`, `parserVersion`, and `responseExcerpt`, but not `matchedText`, so the recovery path should be checked against real rows before `--apply`.
-- The change still touches many consumers that currently read `decisionCode` or `decisionCodeSource` through exports, analysis, and GraphQL. Any missed call site will likely fail at runtime, especially where values are passed through loose JSON boundaries.
+- The plan’s central claim in A2, that the truth-table migration is wrong for paired-v2/job-choice-v2 probes, is not demonstrated by the provided code. The current repo artifacts still implement and test that truth table, so the real source of drift is still uncertain.
+- I did not review the missing resolver/mutation/validator files referenced by the plan, so the exact impact of removing `decisionCode` from persistence and API paths remains partly unverified.
+- The plan relies on a clean deploy order plus a later `--apply` backfill. Any operator action or background job that runs before that backfill completes still needs careful handling of mixed v1/v2 rows.
 tokens used
-75,159
+57,655

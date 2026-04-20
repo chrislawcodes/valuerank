@@ -3,14 +3,14 @@ reviewer: "codex"
 lens: "implementation-adversarial"
 stage: "plan"
 artifact_path: "docs/workflow/feature-runs/remove-decision-code/plan.md"
-artifact_sha256: "33c221a08db543266041458aac83cebff45766767edd25e104475fa7e8af712f"
+artifact_sha256: "95a4b183debafbf474ac7e0cb80546daa2329ab587ed1dca476a9063a04e1d09"
 repo_root: "."
-git_head_sha: "a50a4b6e54d0816f0ff99be3defba99d0315f4ad"
+git_head_sha: "fe2d375f349891708ea81efa9f6958fbcc592998"
 git_base_ref: "origin/main"
 git_base_sha: "bd742f04a07dd015aa976e30754c675d915b3903"
 generation_method: "codex-runner"
 resolution_status: "accepted"
-resolution_note: "Plan round 4 accepted. MEDIUM W8 opposedValueKey + manualOverride provenance -> server derives opposedValueKey too (spec Key Entities section covers it); manual override provenance stays in decisionMetadata.manualOverride object which is untouched by this PR. MEDIUM decisionCodeSource broader retirement -> W2 step 1 extended to buildSummaryCacheRecord explicitly; W4 reads from types-detail.ts covered via the GraphQL type removal in W6; W8 drops the decisionCodeSource=manual write in favor of the existing manualOverride provenance object."
+resolution_note: "Plan round 6 accepted. MEDIUM other maps to ambiguous not unparseable -> will update T3.3 example mapping (decisionCode other -> parseClass ambiguous, not unparseable). MEDIUM W10 refusal conflation before apply finishes -> acknowledged: backfill-reparse-decisions should only run AFTER migration --apply has tagged all refusals. P-steps in tasks.md operational section already have this ordering. LOW W9 workspace import path -> acknowledged; implementation will use the existing cross-workspace tsx import pattern used by other scripts (e.g. via @valuerank/api package alias or direct relative import)."
 raw_output_path: "docs/workflow/feature-runs/remove-decision-code/reviews/plan.codex.implementation-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,13 +22,15 @@ coverage_note: ""
 
 ## Findings
 
-- Medium [CODE-CONFIRMED]: W8’s manual-override reshape is incomplete. The current contract in [decision-model-types.ts](/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/decision-model-types.ts) requires `opposedValueKey` in `CanonicalAppliedDecision`, and the existing override path in [maintenance.ts](/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/mutations/run/maintenance.ts) persists manual provenance with `decisionCodeSource: 'manual'`. The proposed `{decisionState, favoredValueKey?, strength?}` input cannot round-trip a full override without extra hidden derivation, so the plan would drop information the current code treats as part of the canonical/manual decision contract.
-- Medium [CODE-CONFIRMED]: The plan never actually retires `decisionCodeSource` outside the summary-cache shape. The code still reads and writes it in [summarize-persistence.ts](/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-persistence.ts), [types-detail.ts](/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/types-detail.ts), and [maintenance.ts](/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/mutations/run/maintenance.ts). That leaves a live legacy source field in the read/write path, so the claimed “canonicalDecision only” cutover is not actually complete.
+- **Medium [CODE-CONFIRMED]** W3’s test-rewrite guidance maps current `"other"`/`None` cases to `"unparseable"`, but the worker code does not do that. In [summarize.py], unresolved cases from `extract_decision_result()` are returned with `parseClass: "ambiguous"` when `decision_code == "other"`; that behavior is also covered by the existing tests in [test_summarize.py]. If the rewrite only checks for `unparseable` or `refusal` absence, it will stop protecting the ambiguity paths that actually exist today.
+- **Medium [CODE-CONFIRMED]** W10 assumes `canonicalDecision.decisionState === "unknown"` means “pure parser failure,” but the current code explicitly says v1 rows conflate refusal and unknown. The comment in [decision-model-types.ts] and the backfill logic in [backfill-canonical-v2-migration.ts] both document that `cacheVersion: 1` does not distinguish those states. That means any retained `backfill-reparse-decisions.ts` run before the `--apply` migration finishes can still mis-target refusal rows as parse failures.
+- **Low [UNVERIFIED]** W9 depends on importing the live resolver into a standalone script, but the provided code only shows the current migration as a self-contained module with local helpers. The plan does not show the workspace/bootstrap path needed for a `cloud/scripts` entrypoint to safely import application resolver code, so the migration’s execution path is not yet proven.
 
 ## Residual Risks
 
-- [UNVERIFIED] W9’s migration logic depends on parser-evidence fields being stored exactly where the plan says. The provided worker code shows `matchedLabel`, `parseClass`, `parsePath`, `parserVersion`, and `responseExcerpt`, but not `matchedText`, so the recovery path should be checked against real rows before `--apply`.
-- The change still touches many consumers that currently read `decisionCode` or `decisionCodeSource` through exports, analysis, and GraphQL. Any missed call site will likely fail at runtime, especially where values are passed through loose JSON boundaries.
+- The plan’s central claim in A2, that the truth-table migration is wrong for paired-v2/job-choice-v2 probes, is not demonstrated by the provided code. The current repo artifacts still implement and test that truth table, so the real source of drift is still uncertain.
+- I did not review the missing resolver/mutation/validator files referenced by the plan, so the exact impact of removing `decisionCode` from persistence and API paths remains partly unverified.
+- The plan relies on a clean deploy order plus a later `--apply` backfill. Any operator action or background job that runs before that backfill completes still needs careful handling of mixed v1/v2 rows.
 
 ## Runner Stats
 - total_input=0
@@ -37,4 +39,4 @@ coverage_note: ""
 
 ## Resolution
 - status: accepted
-- note: Plan round 4 accepted. MEDIUM W8 opposedValueKey + manualOverride provenance -> server derives opposedValueKey too (spec Key Entities section covers it); manual override provenance stays in decisionMetadata.manualOverride object which is untouched by this PR. MEDIUM decisionCodeSource broader retirement -> W2 step 1 extended to buildSummaryCacheRecord explicitly; W4 reads from types-detail.ts covered via the GraphQL type removal in W6; W8 drops the decisionCodeSource=manual write in favor of the existing manualOverride provenance object.
+- note: Plan round 6 accepted. MEDIUM other maps to ambiguous not unparseable -> will update T3.3 example mapping (decisionCode other -> parseClass ambiguous, not unparseable). MEDIUM W10 refusal conflation before apply finishes -> acknowledged: backfill-reparse-decisions should only run AFTER migration --apply has tagged all refusals. P-steps in tasks.md operational section already have this ordering. LOW W9 workspace import path -> acknowledged; implementation will use the existing cross-workspace tsx import pattern used by other scripts (e.g. via @valuerank/api package alias or direct relative import).
