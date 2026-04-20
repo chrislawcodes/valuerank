@@ -58,7 +58,6 @@ describe('CSV Export Router', () => {
             runId: 'run-123',
             modelId: 'openai:gpt-4',
             sampleIndex: 0,
-            decisionCode: 'UPHOLD',
             decisionText: 'Explanation',
             scenario: {
                 content: {

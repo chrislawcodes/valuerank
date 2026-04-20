@@ -88,7 +88,6 @@ describe('OData Endpoints', () => {
         turnCount: 2,
         tokenCount: 100,
         durationMs: 1000,
-        decisionCode: '3',
         decisionText: 'Test decision',
         summarizedAt: new Date(),
       },

@@ -77,7 +77,6 @@ describe('CSV Export Endpoint', () => {
           turnCount: 3,
           tokenCount: 150,
           durationMs: 1500,
-          decisionCode: '1',
           decisionText: 'AI chose option A, prioritizing safety',
           summarizedAt: new Date(),
         },
@@ -90,7 +89,6 @@ describe('CSV Export Endpoint', () => {
           turnCount: 4,
           tokenCount: 200,
           durationMs: 2000,
-          decisionCode: '2',
           decisionText: 'AI chose option B, prioritizing efficiency',
           summarizedAt: new Date(),
         },
@@ -249,7 +247,6 @@ describe('CSV Export Endpoint', () => {
         turnCount: 1,
         tokenCount: 10,
         durationMs: 100,
-        decisionCode: '3',
         decisionText: 'Decision with, comma and "quotes"',
         summarizedAt: new Date(),
       },
@@ -300,7 +297,6 @@ describe('CSV Serialization Helper', () => {
         definition: { version: 1 },
         config: { temperature: 0.5 }
       },
-      decisionCode: '1',
       decisionText: 'AI chose safety',
       summarizedAt: new Date('2024-01-01T12:05:00Z'),
       scenario: {
@@ -340,7 +336,6 @@ describe('CSV Serialization Helper', () => {
         name: 'Child wants to skip bat mitzvah',
         content: { dimensions: { Freedom: 1, Tradition: 2, Harmony: 3 } },
       },
-      decisionCode: '5',
       decisionText: 'Test',
     };
 
@@ -367,7 +362,6 @@ describe('CSV Serialization Helper', () => {
         name: 'Some description',
         content: { dimensions: { Stakes: 1, Certainty: 2 } },
       },
-      decisionCode: '2',
       decisionText: 'Test decision',
     };
 
@@ -389,7 +383,6 @@ describe('CSV Serialization Helper', () => {
       sampleIndex: 0,
       content: { turns: [] },
       scenario: { id: 'scenario-456', name: 'Test', content: {} },
-      decisionCode: null,
       decisionText: null,
     };
 
@@ -416,7 +409,6 @@ describe('CSV Serialization Helper', () => {
       sampleIndex: 0,
       content: { turns: [] },
       scenario: { id: 'test', name: 'scenario_001', content: { dimensions: { Freedom: 3 } } },
-      decisionCode: '1',
       decisionText: 'Test',
     };
 
@@ -435,7 +427,6 @@ describe('CSV Serialization Helper', () => {
       sampleIndex: 0,
       content: { turns: [] },
       scenario: { id: 'test', name: 'Simple description', content: {} },
-      decisionCode: '1',
       decisionText: 'Test',
     };
 
@@ -464,7 +455,6 @@ describe('CSV Serialization Helper', () => {
         name: 'Test',
         content: { dimensions: { Freedom: 1, OldFormat: 'text value', Harmony: 3 } },
       },
-      decisionCode: '1',
       decisionText: 'Test',
     };
 
@@ -489,7 +479,6 @@ describe('CSV Serialization Helper', () => {
         ],
       },
       scenario: { id: 'test', name: 'Test', content: {} },
-      decisionCode: '1',
       decisionText: 'Test',
     };
 
@@ -514,7 +503,6 @@ describe('CSV Serialization Helper', () => {
         ],
       },
       scenario: { id: 'test', name: 'Test', content: {} },
-      decisionCode: '1',
       decisionText: 'Test',
     };
 
@@ -538,7 +526,6 @@ describe('CSV Serialization Helper', () => {
       sampleIndex: 3,
       content: { turns: [] },
       scenario: { id: 'test', name: 'Test', content: { dimensions: { Stakes: 2 } } },
-      decisionCode: '1',
       decisionText: 'Test',
     };
 
@@ -598,7 +585,6 @@ describe('Domain Transcript CSV Export Endpoint', () => {
           turnCount: 2,
           tokenCount: 100,
           durationMs: 1000,
-          decisionCode: '1',
         },
         {
           runId: testRunId,
@@ -609,7 +595,6 @@ describe('Domain Transcript CSV Export Endpoint', () => {
           turnCount: 2,
           tokenCount: 100,
           durationMs: 1000,
-          decisionCode: '3',
         },
         // This transcript has decisionCode '0' — should be excluded
         {
@@ -621,7 +606,6 @@ describe('Domain Transcript CSV Export Endpoint', () => {
           turnCount: 1,
           tokenCount: 50,
           durationMs: 500,
-          decisionCode: '0',
         },
       ],
     });
@@ -758,7 +742,6 @@ describe('Domain Transcript CSV Export Endpoint', () => {
         turnCount: 1,
         tokenCount: 50,
         durationMs: 500,
-        decisionCode: '2',
       },
     });
 

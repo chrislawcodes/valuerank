@@ -117,8 +117,6 @@ type TranscriptShape = {
   turnCount: number;
   tokenCount: number;
   durationMs: number;
-  decisionCode: string | null;
-  decisionCodeSource: string | null;
   decisionText: string | null;
   decisionMetadata: unknown;
   definitionSnapshot: unknown;
@@ -137,8 +135,6 @@ function makeTranscript(overrides: Partial<TranscriptShape> = {}): TranscriptSha
     turnCount: 1,
     tokenCount: 50,
     durationMs: 1000,
-    decisionCode: null,
-    decisionCodeSource: null,
     decisionText: null,
     decisionMetadata: null,
     definitionSnapshot: null,
@@ -159,8 +155,6 @@ function computeResponseSha256(content: { turns: Array<{ targetResponse?: string
 function buildSuccessfulWorkerSummary(
   content: { turns: Array<{ targetResponse?: string }> },
   options?: {
-    decisionCode?: string;
-    decisionSource?: string;
     decisionText?: string | null;
     decisionMetadata?: Record<string, unknown>;
     parserVersion?: string;
@@ -168,14 +162,12 @@ function buildSuccessfulWorkerSummary(
 ) {
   const responseSha256 = computeResponseSha256(content);
   return {
-    decisionCode: options?.decisionCode ?? '4',
-    decisionSource: options?.decisionSource ?? 'deterministic',
     decisionText: options?.decisionText ?? 'AI prioritized safety over efficiency',
     decisionMetadata: options?.decisionMetadata ?? {
       matchedText: 'Achievement',
       matchedLabel: 'Achievement',
       parseClass: 'exact',
-      parsePath: 'numeric_deterministic',
+      parsePath: 'text_label_exact',
       parserVersion: options?.parserVersion ?? config.SUMMARIZE_PARSER_VERSION,
       responseSha256,
       responseExcerpt: 'Achievement',
