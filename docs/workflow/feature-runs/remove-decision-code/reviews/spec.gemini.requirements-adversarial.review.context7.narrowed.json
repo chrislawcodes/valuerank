@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/scripts/job-choice-bridge-report-lib.ts",
+  "source_artifact_sha256": "1eed41dcd1eb2156e5f94fce452682f2d58f968e68cdcb62bc91242b77021c24",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/remove-decision-code/reviews/spec.gemini.requirements-adversarial.review.context7.narrowed.txt",
+  "narrowed_artifact_sha256": "3816f299d5827ae5a9484d49da18677a3a494e688b5356a4d6dacdfe21f62064",
+  "strategy": "head-tail-numbered-lines"
+}

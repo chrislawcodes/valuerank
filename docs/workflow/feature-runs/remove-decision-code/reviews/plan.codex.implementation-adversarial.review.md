@@ -1,0 +1,40 @@
+---
+reviewer: "codex"
+lens: "implementation-adversarial"
+stage: "plan"
+artifact_path: "docs/workflow/feature-runs/remove-decision-code/plan.md"
+artifact_sha256: "33c221a08db543266041458aac83cebff45766767edd25e104475fa7e8af712f"
+repo_root: "."
+git_head_sha: "a50a4b6e54d0816f0ff99be3defba99d0315f4ad"
+git_base_ref: "origin/main"
+git_base_sha: "bd742f04a07dd015aa976e30754c675d915b3903"
+generation_method: "codex-runner"
+resolution_status: "accepted"
+resolution_note: "Plan round 4 accepted. MEDIUM W8 opposedValueKey + manualOverride provenance -> server derives opposedValueKey too (spec Key Entities section covers it); manual override provenance stays in decisionMetadata.manualOverride object which is untouched by this PR. MEDIUM decisionCodeSource broader retirement -> W2 step 1 extended to buildSummaryCacheRecord explicitly; W4 reads from types-detail.ts covered via the GraphQL type removal in W6; W8 drops the decisionCodeSource=manual write in favor of the existing manualOverride provenance object."
+raw_output_path: "docs/workflow/feature-runs/remove-decision-code/reviews/plan.codex.implementation-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: plan implementation-adversarial
+
+## Findings
+
+- Medium [CODE-CONFIRMED]: W8’s manual-override reshape is incomplete. The current contract in [decision-model-types.ts](/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/decision-model-types.ts) requires `opposedValueKey` in `CanonicalAppliedDecision`, and the existing override path in [maintenance.ts](/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/mutations/run/maintenance.ts) persists manual provenance with `decisionCodeSource: 'manual'`. The proposed `{decisionState, favoredValueKey?, strength?}` input cannot round-trip a full override without extra hidden derivation, so the plan would drop information the current code treats as part of the canonical/manual decision contract.
+- Medium [CODE-CONFIRMED]: The plan never actually retires `decisionCodeSource` outside the summary-cache shape. The code still reads and writes it in [summarize-persistence.ts](/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/queue/handlers/summarize-persistence.ts), [types-detail.ts](/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/queries/domain/types-detail.ts), and [maintenance.ts](/Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c/cloud/apps/api/src/graphql/mutations/run/maintenance.ts). That leaves a live legacy source field in the read/write path, so the claimed “canonicalDecision only” cutover is not actually complete.
+
+## Residual Risks
+
+- [UNVERIFIED] W9’s migration logic depends on parser-evidence fields being stored exactly where the plan says. The provided worker code shows `matchedLabel`, `parseClass`, `parsePath`, `parserVersion`, and `responseExcerpt`, but not `matchedText`, so the recovery path should be checked against real rows before `--apply`.
+- The change still touches many consumers that currently read `decisionCode` or `decisionCodeSource` through exports, analysis, and GraphQL. Any missed call site will likely fail at runtime, especially where values are passed through loose JSON boundaries.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: accepted
+- note: Plan round 4 accepted. MEDIUM W8 opposedValueKey + manualOverride provenance -> server derives opposedValueKey too (spec Key Entities section covers it); manual override provenance stays in decisionMetadata.manualOverride object which is untouched by this PR. MEDIUM decisionCodeSource broader retirement -> W2 step 1 extended to buildSummaryCacheRecord explicitly; W4 reads from types-detail.ts covered via the GraphQL type removal in W6; W8 drops the decisionCodeSource=manual write in favor of the existing manualOverride provenance object.

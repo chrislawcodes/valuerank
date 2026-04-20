@@ -211,112 +211,128 @@ async function main(): Promise<void> {
     errors: 0,
   };
 
-  for (let i = 0; i < candidateIds.length; i += 1) {
-    const { id } = candidateIds[i]!;
-    try {
-      const t = await db.transcript.findUnique({
-        where: { id },
-        select: {
-          id: true,
-          scenarioId: true,
-          definitionSnapshot: true,
-          decisionMetadata: true,
-        },
+  // Batch fetches to avoid per-row round-trips over the public proxy.
+  const BATCH_SIZE = 500;
+  const started = Date.now();
+
+  for (let batchStart = 0; batchStart < candidateIds.length; batchStart += BATCH_SIZE) {
+    const batch = candidateIds.slice(batchStart, batchStart + BATCH_SIZE).map((r) => r.id);
+
+    // One query for all transcripts in this batch.
+    const transcripts = await db.transcript.findMany({
+      where: { id: { in: batch } },
+      select: {
+        id: true,
+        scenarioId: true,
+        definitionSnapshot: true,
+        decisionMetadata: true,
+      },
+    });
+
+    // Collect unique scenarioIds and fetch orientationFlipped for all at once.
+    const scenarioIds = Array.from(
+      new Set(transcripts.map((t) => t.scenarioId).filter((id): id is string => id != null)),
+    );
+    const scenarioMap = new Map<string, boolean>();
+    if (scenarioIds.length > 0) {
+      const scenarios = await db.scenario.findMany({
+        where: { id: { in: scenarioIds } },
+        select: { id: true, orientationFlipped: true },
       });
-      if (t == null) {
-        log.warn({ id }, 'Transcript missing — skipping');
-        continue;
-      }
-
-      const existingMeta = (t.decisionMetadata as Record<string, unknown> | null) ?? {};
-      const summaryCache = (existingMeta.summaryCache as Record<string, unknown> | undefined) ?? null;
-      if (summaryCache == null) continue;
-      const summary = (summaryCache.summary as Record<string, unknown> | undefined) ?? {};
-      const existingCode = typeof summary.decisionCode === 'string' ? summary.decisionCode : null;
-      const existingCanonical = summary.canonicalDecision as Record<string, unknown> | undefined;
-      const existingCacheVersion = existingCanonical?.cacheVersion;
-
-      // Case 3: already at target.
-      if (existingCode == null && existingCacheVersion === 2) {
-        counts['already-v2'] += 1;
-        continue;
-      }
-
-      let updatedSummary: Record<string, unknown>;
-      let category: Category;
-
-      if (existingCode != null) {
-        // Case 1: derive from decisionCode + pair + orientationFlipped.
-        const pair = pairFromSnapshot(t.definitionSnapshot);
-        if (pair == null) {
-          counts['missing-snapshot'] += 1;
-          continue;
-        }
-        let orientationFlipped = false;
-        if (t.scenarioId != null) {
-          const scenario = await db.scenario.findUnique({
-            where: { id: t.scenarioId },
-            select: { orientationFlipped: true },
-          });
-          orientationFlipped = scenario?.orientationFlipped ?? false;
-        }
-        const newCanonical = canonicalFromDecisionCode(existingCode, pair, orientationFlipped);
-        const drifted = !canonicalEquals(existingCanonical, newCanonical);
-        category = drifted ? 'drifted' : 'no-change-with-code';
-
-        // Strip decisionCode and decisionCodeSource; write new canonical.
-        const { decisionCode: _dropCode, decisionCodeSource: _dropSource, ...restSummary } = summary;
-        void _dropCode;
-        void _dropSource;
-        updatedSummary = {
-          ...restSummary,
-          canonicalDecision: newCanonical,
-        };
-      } else {
-        // Case 2: no decisionCode, cacheVersion != 2 — preserve canonical verbatim, bump.
-        if (existingCanonical == null) {
-          // Degenerate state: summaryCache exists but no decisionCode AND no
-          // canonicalDecision. Tag as missing-snapshot-equivalent and skip.
-          counts['missing-snapshot'] += 1;
-          continue;
-        }
-        const preserved: CanonicalV2 = {
-          cacheVersion: 2,
-          decisionState: (existingCanonical.decisionState as CanonicalV2['decisionState']) ?? 'unknown',
-          strength: (existingCanonical.strength as CanonicalV2['strength']) ?? 'unknown',
-          favoredValueKey: (existingCanonical.favoredValueKey as string | null) ?? null,
-        };
-        updatedSummary = {
-          ...summary,
-          canonicalDecision: preserved,
-        };
-        category = 'v1-upgrade-preserving-canonical';
-      }
-
-      counts[category] += 1;
-
-      if (!apply) continue;
-
-      const updatedMetadata = {
-        ...existingMeta,
-        summaryCache: {
-          ...summaryCache,
-          summary: updatedSummary,
-        },
-      };
-
-      await db.transcript.update({
-        where: { id },
-        data: { decisionMetadata: updatedMetadata as unknown as Prisma.InputJsonValue },
-      });
-    } catch (err) {
-      counts.errors += 1;
-      log.error({ id, err: String(err) }, 'Migration failed for transcript');
+      for (const s of scenarios) scenarioMap.set(s.id, s.orientationFlipped ?? false);
     }
 
-    if ((i + 1) % 100 === 0) {
-      log.info({ progress: `${i + 1}/${candidateIds.length}`, counts }, 'Progress');
+    // Per-row process in memory; writes still atomic per row.
+    for (const t of transcripts) {
+      try {
+        const existingMeta = (t.decisionMetadata as Record<string, unknown> | null) ?? {};
+        const summaryCache = (existingMeta.summaryCache as Record<string, unknown> | undefined) ?? null;
+        if (summaryCache == null) continue;
+        const summary = (summaryCache.summary as Record<string, unknown> | undefined) ?? {};
+        const existingCode = typeof summary.decisionCode === 'string' ? summary.decisionCode : null;
+        const existingCanonical = summary.canonicalDecision as Record<string, unknown> | undefined;
+        const existingCacheVersion = existingCanonical?.cacheVersion;
+
+        // Case 3: already at target.
+        if (existingCode == null && existingCacheVersion === 2) {
+          counts['already-v2'] += 1;
+          continue;
+        }
+
+        let updatedSummary: Record<string, unknown>;
+        let category: Category;
+
+        if (existingCode != null) {
+          // Case 1: derive from decisionCode + pair + orientationFlipped.
+          const pair = pairFromSnapshot(t.definitionSnapshot);
+          if (pair == null) {
+            counts['missing-snapshot'] += 1;
+            continue;
+          }
+          const orientationFlipped = t.scenarioId != null
+            ? (scenarioMap.get(t.scenarioId) ?? false)
+            : false;
+          const newCanonical = canonicalFromDecisionCode(existingCode, pair, orientationFlipped);
+          const drifted = !canonicalEquals(existingCanonical, newCanonical);
+          category = drifted ? 'drifted' : 'no-change-with-code';
+
+          // Strip decisionCode and decisionCodeSource; write new canonical.
+          const { decisionCode: _dropCode, decisionCodeSource: _dropSource, ...restSummary } = summary;
+          void _dropCode;
+          void _dropSource;
+          updatedSummary = {
+            ...restSummary,
+            canonicalDecision: newCanonical,
+          };
+        } else {
+          // Case 2: no decisionCode, cacheVersion != 2 — preserve canonical verbatim, bump.
+          if (existingCanonical == null) {
+            counts['missing-snapshot'] += 1;
+            continue;
+          }
+          const preserved: CanonicalV2 = {
+            cacheVersion: 2,
+            decisionState: (existingCanonical.decisionState as CanonicalV2['decisionState']) ?? 'unknown',
+            strength: (existingCanonical.strength as CanonicalV2['strength']) ?? 'unknown',
+            favoredValueKey: (existingCanonical.favoredValueKey as string | null) ?? null,
+          };
+          updatedSummary = {
+            ...summary,
+            canonicalDecision: preserved,
+          };
+          category = 'v1-upgrade-preserving-canonical';
+        }
+
+        counts[category] += 1;
+
+        if (!apply) continue;
+
+        const updatedMetadata = {
+          ...existingMeta,
+          summaryCache: {
+            ...summaryCache,
+            summary: updatedSummary,
+          },
+        };
+
+        await db.transcript.update({
+          where: { id: t.id },
+          data: { decisionMetadata: updatedMetadata as unknown as Prisma.InputJsonValue },
+        });
+      } catch (err) {
+        counts.errors += 1;
+        log.error({ id: t.id, err: String(err) }, 'Migration failed for transcript');
+      }
     }
+
+    const visited = batchStart + transcripts.length;
+    const elapsedSec = Math.round((Date.now() - started) / 1000);
+    const rate = elapsedSec > 0 ? Math.round(visited / elapsedSec) : 0;
+    const remainingSec = rate > 0 ? Math.round((candidateIds.length - visited) / rate) : 0;
+    log.info(
+      { progress: `${visited}/${candidateIds.length}`, rate: `${rate}/s`, etaSec: remainingSec, counts },
+      'Batch complete',
+    );
   }
 
   log.info(

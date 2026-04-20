@@ -1,0 +1,57 @@
+MCP issues detected. Run /mcp list for status.{
+  "session_id": "a191ae2a-269a-4c0f-a096-c49f6088adf1",
+  "response": "## Findings\n\n| Severity | Finding | Evidence |\n| --- | --- | --- |\n| HIGH | `resolveCanonicalDecision` mishandles the new `refusal` state | `[CODE-CONFIRMED]` |\n| HIGH | Contradictory definition of the manual override payload | `[CODE-CONFIRMED]` |\n| MEDIUM | Migration's \"unknown recovery\" logic diverges from original parser | `[UNVERIFIED]` |\n| LOW | JSDoc allowlist is a weak guardrail for `scaleCodeFromCanonical` | `[UNVERIFIED]` |\n\n---\n\n### HIGH: `resolveCanonicalDecision` mishandles the new `refusal` state\nThe migration script is designed to write `canonicalDecision` objects with `decisionState: \"refusal\"`. However, the primary read-path helper, `resolveCanonicalDecision` in `decision-model.ts`, does not have a case to handle this new state. When it encounters a `cachedDecision` where `decisionState` is `'refusal'`, it will fail to produce a corresponding `CanonicalDecision`, falling through to one of the `buildUnknownCanonicalDecision` paths at the end of the function. This means that refusal data correctly written by the migration will be incorrectly interpreted as \"unknown\" by the API and UI, undermining a key goal of the spec (distinguishing parser failure from model refusal).\n\n**Evidence:** `[CODE-CONFIRMED]`\nThe function `resolveCanonicalDecision` in `cloud/apps/api/src/graphql/queries/domain/decision-model.ts` checks for `cachedDecision.decisionState === 'neutral'` and `cachedDecision.decisionState !== 'unknown'`, but has no explicit branch for `cachedDecision.decisionState === 'refusal'`. The `isCachedWinnerFirstDecision` helper in `cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts` is updated to allow this state, but the downstream consumer is not.\n\n### HIGH: Contradictory definition of the manual override payload\nThe spec contains a direct contradiction regarding the fields in the manual override mutation payload.\n-   **Assumption #2:** `Manual override mutation will be reshaped to accept {favoredValueKey, strength, direction}`.\n-   **FR-007 and Key Entities:** State that the payload is `{favoredValueKey, strength}` and the server will derive the `direction`.\n\nThis ambiguity creates implementation risk. The intended and more robust design is to derive `direction` on the server to prevent inconsistent client submissions, meaning the assumption is likely a stale artifact that was not updated.\n\n**Evidence:** `[CODE-CONFIRMED]`\nThe contradiction exists entirely within the provided `spec.md` artifact.\n\n### MEDIUM: Migration's \"unknown recovery\" logic diverges from original parser\nThe migration's \"unknown-recovery\" case (Case 3) specifies using TypeScript helpers (`resolveValueKeyFromText`, `parseJobChoiceStrengthFromText`) to re-interpret `matchedLabel` and recover a canonical decision. This logic appears to be a re-implementation of functionality that lives within the Python-based parser. This introduces a significant risk of divergence; the TS recovery logic may not perfectly match the Python parser's original logic, leading to incorrect recoveries. The project already has a pattern for this type of work in `backfill-reparse-decisions.ts`, which calls the Python parser directly to ensure consistency. The migration should follow this safer pattern.\n\n**Evidence:** `[UNVERIFIED]`\nThe spec explicitly names the TS helpers to be used. The risk is architectural and based on the principle of not having two implementations of the same business logic. The code for the Python parser itself was not provided to confirm divergence, but the risk is inherent in the specified design.\n\n### LOW: JSDoc allowlist is a weak guardrail for `scaleCodeFromCanonical`\n`FR-008` proposes creating a shared helper `scaleCodeFromCanonical` to derive the legacy 1-5 number, but restricts its usage via a JSDoc allowlist comment. This is a convention-based control, not a technical one. It is easily bypassed by developers who are unaware of the convention or under time pressure, creating a pathway for the legacy `decisionCode` logic to creep back into the codebase outside of its intended narrow use case.\n\n**Evidence:** `[UNVERIFIED]`\nThis finding is based on the design described in `spec.md`. An unenforced comment is a well-known weak guardrail in software engineering.\n\n## Residual Risks\n\n-   **Data Model Complexity:** The `decisionMetadata` JSONB blob stores parser evidence in multiple locations (top-level keys and nested within `summaryCache.summary.decisionMetadata`). The `backfill-reparse-decisions.ts` script even writes to both locations simultaneously. The spec works within this existing complexity but does not address it. This creates ongoing maintenance risks, as developers may read from a stale source of truth, and increases the cognitive load required to work with transcript data.\n\n-   **Unmitigated Client Breakage:** Per `US3`, the spec mandates a \"scorched-earth\" removal of `decisionCode` from all external APIs to force clients to migrate. While this is intentional, it carries the risk that unknown or forgotten external dependencies (e.g., non-maintained scripts, third-party integrations) will break with no warning. The project may not have a full inventory of all consumers, leading to potential operational incidents post-deployment.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 54225
+        },
+        "tokens": {
+          "input": 27094,
+          "prompt": 40424,
+          "candidates": 1170,
+          "total": 46178,
+          "cached": 13330,
+          "thoughts": 4584,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 54225,
+            "tokens": {
+              "input": 27094,
+              "prompt": 40424,
+              "candidates": 1170,
+              "total": 46178,
+              "cached": 13330,
+              "thoughts": 4584,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}
