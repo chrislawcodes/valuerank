@@ -114,21 +114,18 @@ export type ParsedDecisionPath = {
  * Cached canonical decision attached to a summarize cache entry.
  *
  * `cacheVersion`:
- * - `1` — original shape. `decisionState = "unknown"` is used both for
- *   genuine parser failures and for model refusals (the refusal signal
- *   lives only in the sibling `summaryCache.summary.decisionCode = "refusal"`
- *   field). Produced by the current write path.
- * - `2` — extended shape. `decisionState = "refusal"` is tagged directly
- *   here, distinct from `"unknown"` (parser failure). Produced by the
- *   migration in this PR; PR #2 will switch the write path to emit v2
- *   natively and remove `cacheVersion: 1` from this union.
+ * - `2` — the current shape. Fresh writes always emit v2.
+ * - `1` — legacy rows written before the single-source-of-truth migration.
+ *   Accepted by the validator as a deploy-window tolerance bridge; a
+ *   follow-up mini-PR tightens the union to literal `2` after the
+ *   migration's --apply step verifies zero v1 rows remain.
  *
  * `decisionState`:
  * - `"resolved"`: parser chose a value (favoredValueKey + strength populated).
- * - `"neutral"`: decisionCode 3 — model explicitly picked the neutral option.
- * - `"unknown"`: parser could not resolve (decisionCode "other" or absent).
- * - `"refusal"`: model explicitly refused. v2 only; v1 rows conflate this
- *   with `"unknown"`.
+ * - `"neutral"`: model explicitly picked the middle / "neutral" scale option.
+ * - `"unknown"`: parser could not resolve.
+ * - `"refusal"`: model explicitly refused to answer. Signalled by the Python
+ *   worker setting `decisionMetadata.refusal = true`.
  */
 export type CachedWinnerFirstDecision = {
   cacheVersion: 1 | 2;
