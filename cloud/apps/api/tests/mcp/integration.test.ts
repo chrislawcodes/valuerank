@@ -220,7 +220,6 @@ describe('MCP Integration', () => {
           modelId: true,
           turnCount: true,
           tokenCount: true,
-          decisionCode: true,
           decisionText: true,
         },
       });

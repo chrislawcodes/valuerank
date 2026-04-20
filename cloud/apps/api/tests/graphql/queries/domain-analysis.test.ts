@@ -171,8 +171,6 @@ describe('GraphQL domain analysis', () => {
         modelId: 'job-choice-analysis-model',
         content: { messages: [] },
         summarizedAt: new Date(),
-        decisionCode: '5',
-        decisionCodeSource: 'manual',
         decisionMetadata: {
           ...manualOverrideDecision,
           parseClass: 'exact',
@@ -232,8 +230,6 @@ describe('GraphQL domain analysis', () => {
         modelId: 'job-choice-analysis-model',
         content: { messages: [] },
         summarizedAt: new Date(),
-        decisionCode: '5',
-        decisionCodeSource: 'manual',
         decisionMetadata: {
           ...manualOverrideDecision,
           parseClass: 'exact',

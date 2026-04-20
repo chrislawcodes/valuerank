@@ -95,8 +95,6 @@ describe('Transcript decisionModelV2 GraphQL field', () => {
         runId: run.id,
         scenarioId: scenario.id,
         modelId: 'test-model',
-        decisionCode: '5',
-        decisionCodeSource: 'deterministic',
         decisionMetadata: {
           matchedLabel: 'Strongly support taking the job with trust from other people',
           parseClass: 'exact',
@@ -209,8 +207,6 @@ describe('Transcript decisionModelV2 GraphQL field', () => {
         runId: run.id,
         scenarioId: scenario.id,
         modelId: 'test-model',
-        decisionCode: '5',
-        decisionCodeSource: 'deterministic',
         decisionMetadata: {
           matchedLabel: 'Achievement',
           parseClass: 'exact',
@@ -222,8 +218,6 @@ describe('Transcript decisionModelV2 GraphQL field', () => {
             parserVersion: 'job-choice-v2',
             modelId: 'test-model',
             summary: {
-              decisionCode: '5',
-              decisionCodeSource: 'deterministic',
               decisionText: 'AI strongly preferred the first option',
               decisionMetadata: {
                 matchedLabel: 'Achievement',

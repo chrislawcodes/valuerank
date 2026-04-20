@@ -89,7 +89,6 @@ describe('job-choice-v2 resolves via pairOverride (no definitionSnapshot)', () =
     'resolves $token via pairOverride without definitionSnapshot',
     ({ matchedLabel, pair, expectedFavored }) => {
       const result = resolveTranscriptDecisionModel({
-        decisionCode: null,
         decisionMetadata: {
           parseClass: 'exact',
           parsePath: 'text_label_leading',

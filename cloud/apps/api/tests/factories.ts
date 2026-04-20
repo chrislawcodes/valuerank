@@ -145,8 +145,6 @@ export function buildTranscript(overrides: Partial<Transcript> = {}): Transcript
     createdAt: newCreatedAt(),
     lastAccessedAt: null,
     contentExpiresAt: null,
-    decisionCode: null,
-    decisionCodeSource: null,
     decisionText: null,
     decisionMetadata: null,
     summarizedAt: null,

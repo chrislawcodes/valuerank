@@ -469,7 +469,6 @@ describe('Run Progress byModel field [T024]', () => {
         tokenCount: 100,
         durationMs: 1000,
         summarizedAt: options?.summarized ? new Date() : null,
-        decisionCode: options?.failed ? 'error' : options?.summarized ? '3' : null,
       },
     });
     createdTranscriptIds.push(transcript.id);
