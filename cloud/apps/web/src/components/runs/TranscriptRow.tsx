@@ -124,9 +124,12 @@ function extractSubjectFromLabel(
 
 
 function extractDecision(content: unknown): string {
+  // Legacy fallback for ancient transcripts that stored the raw scale
+  // position in content.decision / .score. decisionCode is no longer
+  // the source of truth — canonical fields supply the display elsewhere.
   if (!isRecord(content)) return '-';
 
-  const directCandidates = [content.decisionCode, content.decision, content.score];
+  const directCandidates = [content.decision, content.score];
   for (const candidate of directCandidates) {
     if (typeof candidate === 'number' || typeof candidate === 'string') {
       return String(candidate);
@@ -135,7 +138,7 @@ function extractDecision(content: unknown): string {
 
   const summary = content.summary;
   if (isRecord(summary)) {
-    const summaryCandidates = [summary.decisionCode, summary.decision, summary.score];
+    const summaryCandidates = [summary.decision, summary.score];
     for (const candidate of summaryCandidates) {
       if (typeof candidate === 'number' || typeof candidate === 'string') {
         return String(candidate);
@@ -186,7 +189,7 @@ export function TranscriptRow({
 }: TranscriptRowProps) {
   const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
   const showGrid = !compact && Boolean(gridTemplateColumns);
-  const rawDecision = transcript.decisionCode ?? extractDecision(transcript.content);
+  const rawDecision = extractDecision(transcript.content);
   const decisionScaleLabels = decisionMetadata?.scaleLabels ?? [];
   const rowDecisionDisplayMode = decisionDisplayMode ?? (
     hasRenderableTranscriptDecisionModelV2(transcript) ? 'audit' : 'legacy'

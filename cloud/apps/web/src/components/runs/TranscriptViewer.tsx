@@ -115,7 +115,9 @@ export function TranscriptViewer({
 }: TranscriptViewerProps) {
   const content = parseTranscriptContent(transcript.content);
   const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
-  const rawDecision = transcript.decisionCode ?? '-';
+  // Legacy mode no longer has a 1-5 to show; we fall back to '-'. Audit mode
+  // (the default when canonical is present) supplies its own display.
+  const rawDecision: string = '-';
   const legacyDecision = String(rawDecision);
   const viewMode = decisionDisplayMode ?? (
     hasRenderableTranscriptDecisionModelV2(transcript) ? 'audit' : 'legacy'

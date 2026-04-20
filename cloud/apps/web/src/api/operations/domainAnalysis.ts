@@ -241,8 +241,6 @@ export type DomainAnalysisConditionTranscript = {
   runId: string;
   scenarioId: string | null;
   modelId: string;
-  decisionCode: string | null;
-  decisionCodeSource: string | null;
   decisionModelV2?: TranscriptDecisionModelV2 | null;
   turnCount: number;
   tokenCount: number;
