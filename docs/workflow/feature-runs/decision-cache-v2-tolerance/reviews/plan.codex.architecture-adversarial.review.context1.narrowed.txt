@@ -1,0 +1,229 @@
+00001: import { DOMAIN_ANALYSIS_VALUE_KEYS, toPascalCaseKey, type DomainAnalysisValueKey } from '../domain-analysis-values.js';
+00002: import { JOB_CHOICE_VALUE_STATEMENTS, labelFromBody } from '@valuerank/shared';
+00003: import { stripFillerWords } from './decision-model-filler-words.js';
+00004: import type {
+00005:   DecisionDirection,
+00006:   DecisionStrength,
+00007:   DecisionSource,
+00008:   CanonicalAppliedDecision,
+00009:   CanonicalDecision,
+00010:   DecisionPair,
+00011:   ValueStatementEntry,
+00012:   ParsedDecisionPath,
+00013:   CachedWinnerFirstDecision,
+00014: } from './decision-model-types.js';
+00015: 
+00016: export { JOB_CHOICE_VALUE_STATEMENTS };
+00017: 
+00018: export function isValueKey(value: string): value is DomainAnalysisValueKey {
+00019:   return (DOMAIN_ANALYSIS_VALUE_KEYS as readonly string[]).includes(value);
+00020: }
+00021: 
+00022: export function isDecisionDirection(value: unknown): value is DecisionDirection {
+00023:   return value === 'favor_first' || value === 'favor_second' || value === 'neutral' || value === 'refusal' || value === 'unknown';
+00024: }
+00025: 
+00026: export function isDecisionStrength(value: unknown): value is DecisionStrength {
+00027:   return value === 'strong' || value === 'lean' || value === 'neutral' || value === 'unknown';
+00028: }
+00029: 
+00030: export function isCanonicalAppliedDecision(value: unknown): value is CanonicalAppliedDecision {
+00031:   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+00032:     return false;
+00033:   }
+00034: 
+00035:   const decision = value as CanonicalAppliedDecision;
+00036:   return (
+00037:     isDecisionDirection(decision.direction) &&
+00038:     isDecisionStrength(decision.strength) &&
+00039:     (decision.favoredValueKey === null || (typeof decision.favoredValueKey === 'string' && isValueKey(decision.favoredValueKey))) &&
+00040:     (decision.opposedValueKey === null || (typeof decision.opposedValueKey === 'string' && isValueKey(decision.opposedValueKey)))
+00041:   );
+00042: }
+00043: 
+00044: export function isCachedWinnerFirstDecision(value: unknown): value is CachedWinnerFirstDecision {
+00045:   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+00046:     return false;
+00047:   }
+00048: 
+00049:   const decision = value as CachedWinnerFirstDecision;
+00050:   if (
+00051:     decision.cacheVersion !== 1
+00052:     || (decision.decisionState !== 'resolved' && decision.decisionState !== 'neutral' && decision.decisionState !== 'unknown')
+00053:   ) {
+00054:     return false;
+00055:   }
+00056: 
+00057:   if (decision.decisionState === 'resolved') {
+00058:     return (
+00059:       typeof decision.favoredValueKey === 'string'
+00060:       && isValueKey(decision.favoredValueKey)
+00061:       && (decision.strength === 'strong' || decision.strength === 'lean')
+00062:     );
+00063:   }
+00064: 
+00065:   if (decision.decisionState === 'neutral') {
+00066:     return decision.favoredValueKey === null && decision.strength === 'neutral';
+00067:   }
+00068: 
+00069:   return decision.favoredValueKey === null && decision.strength === 'unknown';
+00070: }
+00071: 
+00072: export function isRecord(value: unknown): value is Record<string, unknown> {
+00073:   return value !== null && typeof value === 'object' && !Array.isArray(value);
+00074: }
+00075: 
+00076: export function isValidDecisionPair(pair: DecisionPair | null | undefined): pair is DecisionPair {
+00077:   if (pair === null || pair === undefined) {
+00078:     return false;
+00079:   }
+00080: 
+00081:   return (
+00082:     isValueKey(pair.valueA) &&
+00083:     isValueKey(pair.valueB) &&
+00084:     pair.valueA !== pair.valueB
+00085:   );
+00086: }
+00087: 
+00088: export function parseDecisionPath(parsePath: string | null | undefined): ParsedDecisionPath | null {
+00089:   if (typeof parsePath !== 'string') {
+00090:     return null;
+00091:   }
+00092: 
+00093:   const trimmed = parsePath.trim();
+00094:   if (trimmed.length === 0) {
+00095:     return null;
+00096:   }
+00097: 
+00098:   const segments = trimmed.split('.');
+00099:   if (segments.length > 3) {
+00100:     return null;
+00101:   }
+00102:   const [branch, first, second] = segments;
+00103:   const normalizedBranch = branch === 'fallback_resolved' ? 'fallback' : branch;
+00104: 
+00105:   if (normalizedBranch !== 'exact' && normalizedBranch !== 'fallback' && normalizedBranch !== 'manual') {
+00106:     return null;
+00107:   }
+00108: 
+00109:   if (normalizedBranch === 'manual') {
+00110:     return first === 'override' && second === undefined
+00111:       ? { branch: 'manual', direction: 'unknown', strength: 'unknown' }
+00112:       : null;
+00113:   }
+00114: 
+00115:   if (first === 'neutral' && (second === undefined || second === 'neutral')) {
+00116:     return { branch: normalizedBranch, direction: 'neutral', strength: 'neutral' };
+00117:   }
+00118: 
+00119:   if (!isDecisionDirection(first) || !isDecisionStrength(second)) {
+00120:     return null;
+00121:   }
+00122: 
+00123:   return {
+00124:     br
+
+... [narrowed review slice: middle omitted] ...
+
+irst' &&
+00285:       decision.strength !== 'unknown' &&
+00286:       decision.strength !== 'neutral' &&
+00287:       decision.favoredValueKey === pair.valueA &&
+00288:       decision.opposedValueKey === pair.valueB) ||
+00289:     (decision.direction === 'favor_second' &&
+00290:       decision.strength !== 'unknown' &&
+00291:       decision.strength !== 'neutral' &&
+00292:       decision.favoredValueKey === pair.valueB &&
+00293:       decision.opposedValueKey === pair.valueA);
+00294: 
+00295:   if (!validKnownPair) {
+00296:     return { ok: false };
+00297:   }
+00298: 
+00299:   return {
+00300:     ok: true,
+00301:     canonical: {
+00302:       favoredValueKey: decision.favoredValueKey,
+00303:       opposedValueKey: decision.opposedValueKey,
+00304:       direction: decision.direction,
+00305:       strength: decision.strength,
+00306:       normalizationApplied: false,
+00307:       normalizationReason: null,
+00308:       source: 'manual',
+00309:     },
+00310:   };
+00311: }
+00312: 
+00313: export function extractManualOverrideDecision(
+00314:   decisionMetadata: unknown,
+00315: ): CanonicalAppliedDecision | null {
+00316:   const record = isRecord(decisionMetadata) ? decisionMetadata : null;
+00317:   const manualOverride = record && isRecord(record.manualOverride) ? record.manualOverride : null;
+00318:   if (!manualOverride || !isCanonicalAppliedDecision(manualOverride.appliedDecision)) {
+00319:     return null;
+00320:   }
+00321:   return manualOverride.appliedDecision;
+00322: }
+00323: 
+00324: export function extractCachedWinnerFirstDecision(
+00325:   decisionMetadata: unknown,
+00326: ): CachedWinnerFirstDecision | null {
+00327:   const record = isRecord(decisionMetadata) ? decisionMetadata : null;
+00328:   const summaryCache = record && isRecord(record.summaryCache) ? record.summaryCache : null;
+00329:   const summary = summaryCache && isRecord(summaryCache.summary) ? summaryCache.summary : null;
+00330:   const canonicalDecision = summary && isCachedWinnerFirstDecision(summary.canonicalDecision)
+00331:     ? summary.canonicalDecision
+00332:     : null;
+00333: 
+00334:   return canonicalDecision;
+00335: }
+00336: 
+00337: export function extractValueStatementsFromSnapshot(snapshot: unknown): ValueStatementEntry[] | undefined {
+00338:   if (snapshot === null || typeof snapshot !== 'object' || Array.isArray(snapshot)) return undefined;
+00339:   const components = (snapshot as { components?: unknown }).components;
+00340:   if (components === null || typeof components !== 'object' || Array.isArray(components)) return undefined;
+00341: 
+00342:   const vf = (components as { value_first?: unknown }).value_first;
+00343:   const vs = (components as { value_second?: unknown }).value_second;
+00344:   if (!isRecord(vf) || !isRecord(vs)) return undefined;
+00345: 
+00346:   const tokenFirst = typeof vf.token === 'string' ? vf.token : null;
+00347:   const bodyFirst = typeof vf.body === 'string' ? vf.body : null;
+00348:   const tokenSecond = typeof vs.token === 'string' ? vs.token : null;
+00349:   const bodySecond = typeof vs.body === 'string' ? vs.body : null;
+00350: 
+00351:   if (tokenFirst == null || bodyFirst == null || tokenSecond == null || bodySecond == null) return undefined;
+00352:   return [
+00353:     { token: tokenFirst, body: bodyFirst },
+00354:     { token: tokenSecond, body: bodySecond },
+00355:   ];
+00356: }
+00357: 
+00358: const LABEL_PREFIX_REGEX = /^(?:Strongly|Somewhat) support (.+)$/;
+00359: 
+00360: export function extractLabelPrefixFromSnapshot(snapshot: unknown): string | undefined {
+00361:   if (snapshot === null || typeof snapshot !== 'object' || Array.isArray(snapshot)) return undefined;
+00362:   const template = (snapshot as { template?: unknown }).template;
+00363:   if (typeof template !== 'string') return undefined;
+00364: 
+00365:   const components = (snapshot as { components?: unknown }).components;
+00366:   if (components === null || typeof components !== 'object' || Array.isArray(components)) return undefined;
+00367:   const vf = (components as { value_first?: unknown }).value_first;
+00368:   if (!isRecord(vf) || typeof vf.body !== 'string') return undefined;
+00369: 
+00370:   // Extract the short body (before "because") to find it in the scale label
+00371:   const shortBody = (vf.body.split(' because')[0] ?? vf.body).trim();
+00372:   if (shortBody.length === 0) return undefined;
+00373: 
+00374:   // Find a scale label line that ends with the short body
+00375:   const lines = template.split('\n');
+00376:   for (const line of lines) {
+00377:     const trimmed = line.replace(/^- /, '').trim();
+00378:     const match = LABEL_PREFIX_REGEX.exec(trimmed);
+00379:     if (match == null) continue;
+00380:     const afterStrength = match[1] ?? '';
+00381:     if (afterStrength.endsWith(shortBody)) {
+00382:       const prefix = afterStrength.slice(0, afterStrength.length - shortBody.length).trimEnd();
+00383:       if (prefix.length > 0) return prefix;
+00384:     }
+003

@@ -1,0 +1,57 @@
+MCP issues detected. Run /mcp list for status.{
+  "session_id": "7fb657ee-42e1-456f-b927-1e339cd26bdb",
+  "response": "## Findings\n\n### 1. Contradictory Migration Logic (Severity: HIGH)\n\nThe spec is fundamentally inconsistent about the core migration strategy.\n\n-   `FR-008` and the `Correctness-critical mapping` table specify a direct, deterministic transformation of existing structured data from the database (e.g., `decisionCode`, `orientationFlipped`).\n-   `Assumption #8`, however, suggests reusing the `reparse-decision-stdin.py` script. This script does not perform a simple mapping; it re-runs the full, original `extract_decision_result` parser against raw transcript content.\n\nThese are two different migration strategies. A simple mapping preserves the previously determined `decisionCode` and transforms it. A re-parse executes new logic that could yield a completely different decision from what's currently stored, especially given recent parser fixes. The migration could unintentionally change decisions it was only meant to reformat.\n\n**Evidence**: `[CODE-CONFIRMED]` — The provided code for `cloud/scripts/reparse-decision-stdin.py` confirms it calls `extract_decision_result(payload[\"transcriptContent\"])`, which is a full re-parse from raw text, not a mapping of structured fields as described in `FR-008` and the truth table.\n\n### 2. Ambiguous Consumer Tolerance for New \"refusal\" State (Severity: MEDIUM)\n\nThe spec claims existing read paths will tolerate the new `decisionState: \"refusal\"` without changes, but this assumption is not sufficiently justified.\n\n-   `US2, Acceptance #4` states, \"Callers that see `refusal` receive it as an unknown decisionState — not a crash.\" This implies a transformation layer or a tolerant consumer.\n-   However, the spec does not detail *how* this is guaranteed. If a downstream consumer uses a `switch` statement on `decisionState` without a `default` case, or validates against a strict enum, introducing the `\"refusal\"` value could cause a runtime crash.\n\nThe assertion \"No consumer needs to change in this PR\" is a high bar that seems inadequately verified. Simply passing a new, unexpected enum value to existing code is not guaranteed to be safe.\n\n**Evidence**: `[UNVERIFIED]` — The relevant consumer code (e.g., `resolveTranscriptDecisionModel`, analysis UI components) was not provided to confirm its tolerance.\n\n### 3. Incomplete Acceptance Criteria for Data Preservation (Severity: LOW)\n\nThe acceptance criteria for data preservation are incomplete.\n\n-   `US1, Acceptance #4` covers the case where `decisionCode = \"other\"` or is missing, stating the `v1` canonical is preserved.\n-   However, it omits the common case from `FR-008`: a row with a valid `decisionCode` (e.g., `\"5\"`) AND an existing `v1` canonical. The spec states the migration will re-derive from `decisionCode`, potentially overwriting the existing canonical.\n\nThis \"drift\" case (where `decisionCode` and the `v1` canonical may disagree) is a critical transformation pathway but is not explicitly listed for verification in the acceptance criteria.\n\n**Evidence**: `[UNVERIFIED]` — This is a logical omission within the `spec.md` artifact itself.\n\n## Residual Risks\n\n1.  **Race Conditions Will Leave v1 Data**: The spec correctly identifies that concurrent `summarize` writes will create new `v1` cache entries during the migration. It proposes that a subsequent re-run will \"sweep them up.\" This means that after the initial migration completes, the system will be in a mixed state of `v1` and `v2` entries, potentially violating the post-migration success criteria (`SC-003`, `SC-004`). This complicates the rollout of PR #2, which depends on a clean, `v2-only` state. The operational cost of needing multiple, indeterminate migration runs should be acknowledged.\n\n2.  **Unverified `orientationFlipped` Default**: `FR-009` specifies that for legacy transcripts with a null `scenario_id`, `orientationFlipped` should default to `false`. This is an assumption about the state of legacy data. If this assumption is incorrect, the migration will silently corrupt `favoredValueKey` for any affected transcript where the orientation was actually flipped, by assigning the decision to the wrong value in the pair.\n\n3.  **Migration May Silently Fail on Scale**: `FR-011` states writes are per-row atomic, which is good for avoiding locks. However, for a large dataset, a script that performs millions of individual `UPDATE` statements can be slow and operationally difficult to manage if it fails midway. The spec does not mention any provision for batching, resumability, or performance testing, creating a risk that the migration as-designed is not viable for the production dataset.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 33684
+        },
+        "tokens": {
+          "input": 16608,
+          "prompt": 16608,
+          "candidates": 1045,
+          "total": 19981,
+          "cached": 0,
+          "thoughts": 2328,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 33684,
+            "tokens": {
+              "input": 16608,
+              "prompt": 16608,
+              "candidates": 1045,
+              "total": 19981,
+              "cached": 0,
+              "thoughts": 2328,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

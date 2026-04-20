@@ -1,0 +1,51 @@
+---
+reviewer: "gemini"
+lens: "requirements-adversarial"
+stage: "spec"
+artifact_path: "docs/workflow/feature-runs/decision-cache-single-source/spec.md"
+artifact_sha256: "f47924c7cbf0a1cb6990765d3874d0e032bac77eab8f7d53c509a8dd9ee13350"
+repo_root: "."
+git_head_sha: "4201294766a93a21d6bc5c872aee243032e60b58"
+git_base_ref: "origin/main"
+git_base_sha: "4201294766a93a21d6bc5c872aee243032e60b58"
+generation_method: "gemini-cli"
+resolution_status: "open"
+resolution_note: ""
+raw_output_path: "docs/workflow/feature-runs/decision-cache-single-source/reviews/spec.gemini.requirements-adversarial.review.md.json"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: spec requirements-adversarial
+
+## Findings
+
+| Severity | Finding |
+| --- | --- |
+| **HIGH** | **Lingering `decision_code` Column Creates Future Drift Risk:** The spec explicitly defers removing the top-level `transcripts.decision_code` column to a follow-up PR. This creates a high risk of re-introducing data drift. A future developer, unaware of the deprecation, could easily write code that reads from or writes to this stale column, undermining the entire goal of creating a single source of truth. The manual override mutation is being updated in this work; the write to the legacy column should be removed as part of the same change to minimize the surface area of the deprecated field. |
+| **MEDIUM** | **Migration May Miss Race Conditions:** The spec assumes that new jobs running post-deploy will create correctly shaped data that the migration can safely skip. However, if a worker running old code writes a `v1` cache to a row *after* the migration script has already processed it, that row will remain in a stale `v1` state. While the migration's idempotency allows for re-running, this race condition is not explicitly addressed, potentially leaving stale data in production until a cleanup is manually triggered. |
+| **MEDIUM** | **[UNVERIFIED] Manual Override API is Redundant and Error-Prone:** The proposed API for manual overrides (`FR-007`, `FR-008`) requires clients to send `{favoredValueKey, strength, direction}`. The `direction` field is entirely redundant; it can be derived from `favoredValueKey` and the definition's value pair. Forcing the client to provide both invites client-side bugs and necessitates complex server-side validation to detect inconsistencies. A simpler, safer API would only require `{favoredValueKey, strength}`, reducing the potential for invalid state transitions. |
+| **MEDIUM** | **Rollout Compatibility Logic is Fragile:** The `FR-019` requirement for a backward-compatibility branch in the shared helper function is complex and introduces temporary logic that can easily become permanent technical debt. Its correctness is critical to prevent a user-facing regression where refusals are displayed as parse failures. The success of the entire rollout window hinges on this single, temporary piece of logic working perfectly. The process for ensuring its removal post-migration is not defined. |
+| **LOW** | **[UNVERIFIED] Incomplete Migration for `decisionCode`-less Rows:** Per `FR-012`, the migration will not attempt to re-classify rows that already lack a `decisionCode`. It will just bump the `cacheVersion`. This is a missed opportunity. If a transcript was a refusal but was cached before the `decisionCode="refusal"` logic existed, it may have a `v1` canonical with `decisionState="unknown"`. The migration explicitly accepts leaving this data in a permanently incorrect state. While re-parsing is out of scope, this decision knowingly accepts a lower final data quality. |
+| **LOW** | **[UNVERIFIED] Potential for Helper Function Drift:** `FR-005` requires creating two separate helper functions (Python and TS) that must have identical logic, verified by a shared fixture. This creates a maintenance burden and a risk of future drift. If a developer updates one implementation or the test fixtures without updating the other, the migration logic (Python) could diverge from the read-path logic (TS), causing subtle inconsistencies. |
+| **LOW** | **[UNVERIFIED] Assumption on Legacy `orientationFlipped` Behavior:** The migration (`FR-013`) defaults to `orientationFlipped = false` for legacy transcripts that lack a scenario reference. This assumes that no legacy probes were ever flipped. If this assumption is wrong, the migration will silently corrupt the canonical decision for those specific transcripts by mapping their `decisionCode` to the incorrect `favoredValueKey`. |
+| **LOW** | **[UNVERIFIED] Information Loss from `decisionCode="other"`:** The mapping table in "Critical Correctness Risk" collapses `decisionCode="other"` into the same `unknown` state as a missing code. This assumes `"other"` carries no unique information. If this value represents a specific, non-standard but parsable state from the Python worker, that information will be lost. The origin and meaning of `"other"` are not explored. |
+
+## Residual Risks
+
+- **Data Quality Debt:** The decision to not re-parse or re-classify older `v1` caches (`FR-012`) means the project will carry known data quality issues forward. The "unknown" state will be overloaded, representing both genuine parse failures and legacy unclassified refusals.
+- **Maintenance Overhead:** The deferred removal of `transcripts.decision_code` and the temporary compatibility logic in `FR-019` create immediate technical debt that requires disciplined follow-up. There is a significant risk that these "temporary" measures become permanent fixtures in the codebase.
+- **Incomplete Search for Consumers:** `FR-006` relies on `grep` to find all consumers of the old field. This method is imperfect and can miss dynamic or indirect usages. It's possible a niche consumer will be missed, which would break after the migration removes the `decisionCode` field from `summaryCache`.
+
+## Token Stats
+
+- total_input=18550
+- total_output=1117
+- total_tokens=21014
+- `gemini-2.5-pro`: input=18550, output=1117, total=21014
+
+## Resolution
+- status: open
+- note:
