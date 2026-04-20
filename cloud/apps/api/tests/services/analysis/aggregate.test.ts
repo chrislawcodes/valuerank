@@ -119,13 +119,11 @@ async function createSourceRun({
       modelId,
       scenarioId,
       sampleIndex: index,
-      decisionCode: '5',
       summarizedAt: new Date(),
       content: {},
       turnCount: 1,
       tokenCount: 10,
       durationMs: 100,
-      decisionCodeSource: 'deterministic',
       decisionMetadata: {
         matchedLabel: 'Achievement',
         parseClass: 'exact',
@@ -135,7 +133,7 @@ async function createSourceRun({
         summaryCache: {
           summary: {
             canonicalDecision: {
-              cacheVersion: 1,
+              cacheVersion: 2,
               decisionState: 'resolved',
               favoredValueKey: 'Achievement',
               strength: 'strong',
@@ -813,7 +811,6 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
     ) => ({
       modelId: 'gpt-4',
       scenarioId,
-      decisionCode: '5',
       scenario: { orientationFlipped: false },
       decisionMetadata: {
         manualOverride: {

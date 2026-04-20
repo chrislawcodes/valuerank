@@ -117,8 +117,6 @@ type TranscriptShape = {
   turnCount: number;
   tokenCount: number;
   durationMs: number;
-  decisionCode: string | null;
-  decisionCodeSource: string | null;
   decisionText: string | null;
   decisionMetadata: unknown;
   definitionSnapshot: unknown;
@@ -137,8 +135,6 @@ function makeTranscript(overrides: Partial<TranscriptShape> = {}): TranscriptSha
     turnCount: 1,
     tokenCount: 50,
     durationMs: 1000,
-    decisionCode: null,
-    decisionCodeSource: null,
     decisionText: null,
     decisionMetadata: null,
     definitionSnapshot: null,
@@ -159,8 +155,6 @@ function computeResponseSha256(content: { turns: Array<{ targetResponse?: string
 function buildSuccessfulWorkerSummary(
   content: { turns: Array<{ targetResponse?: string }> },
   options?: {
-    decisionCode?: string;
-    decisionSource?: string;
     decisionText?: string | null;
     decisionMetadata?: Record<string, unknown>;
     parserVersion?: string;
@@ -168,14 +162,12 @@ function buildSuccessfulWorkerSummary(
 ) {
   const responseSha256 = computeResponseSha256(content);
   return {
-    decisionCode: options?.decisionCode ?? '4',
-    decisionSource: options?.decisionSource ?? 'deterministic',
     decisionText: options?.decisionText ?? 'AI prioritized safety over efficiency',
     decisionMetadata: options?.decisionMetadata ?? {
       matchedText: 'Achievement',
       matchedLabel: 'Achievement',
       parseClass: 'exact',
-      parsePath: 'numeric_deterministic',
+      parsePath: 'text_label_exact',
       parserVersion: options?.parserVersion ?? config.SUMMARIZE_PARSER_VERSION,
       responseSha256,
       responseExcerpt: 'Achievement',
@@ -189,8 +181,6 @@ function makeValidSummaryCache(content: { turns: Array<{ targetResponse?: string
     parserVersion: config.SUMMARIZE_PARSER_VERSION,
     modelId: 'anthropic:test-summary-model',
     summary: {
-      decisionCode: '4',
-      decisionCodeSource: 'deterministic',
       decisionText: 'Cached decision',
       decisionMetadata: {
         matchedText: 'Achievement',
@@ -201,7 +191,7 @@ function makeValidSummaryCache(content: { turns: Array<{ targetResponse?: string
         responseExcerpt: 'Achievement',
       },
       canonicalDecision: {
-        cacheVersion: 1,
+        cacheVersion: 2,
         decisionState: 'resolved',
         favoredValueKey: 'Achievement',
         strength: 'strong',
@@ -241,7 +231,6 @@ describe('summarize-transcript handler', () => {
         data: {
           success: true,
           summary: {
-            decisionCode: '1',
             decisionSource: 'deterministic',
             decisionText: 'AI prioritized safety over efficiency',
             decisionMetadata: {
@@ -300,7 +289,6 @@ describe('summarize-transcript handler', () => {
           summary: buildSuccessfulWorkerSummary(
             { turns: [{ probePrompt: 'Test prompt', targetResponse: 'Test response' }] },
             {
-              decisionCode: '1',
               decisionText: 'AI strongly preferred the first option',
               decisionMetadata: {
                 matchedText: 'Achievement',
@@ -364,7 +352,7 @@ describe('summarize-transcript handler', () => {
               success: true,
               summary: buildSuccessfulWorkerSummary(
                 first.content as { turns: Array<{ targetResponse?: string }> },
-                { decisionCode: '1' },
+                {},
               ),
             },
             {
@@ -373,7 +361,7 @@ describe('summarize-transcript handler', () => {
               success: true,
               summary: buildSuccessfulWorkerSummary(
                 second.content as { turns: Array<{ targetResponse?: string }> },
-                { decisionCode: '2' },
+                {},
               ),
             },
           ],
@@ -425,7 +413,6 @@ describe('summarize-transcript handler', () => {
         data: {
           success: true,
           summary: {
-            decisionCode: '1',
             decisionSource: 'deterministic',
             decisionText: 'AI prioritized safety over efficiency',
             decisionMetadata: legacyMetadata,
@@ -459,7 +446,6 @@ describe('summarize-transcript handler', () => {
         data: {
           success: true,
           summary: {
-            decisionCode: '2',
             decisionSource: 'deterministic',
             decisionText: 'AI chose balanced approach',
           },
@@ -480,7 +466,6 @@ describe('summarize-transcript handler', () => {
 
     it('skips already-summarized transcripts with no cache field', async () => {
       const transcript = makeTranscript({
-        decisionCode: '3',
         decisionText: 'Already done',
         summarizedAt: new Date(),
       });
@@ -554,7 +539,6 @@ describe('summarize-transcript handler', () => {
         data: {
           success: true,
           summary: buildSuccessfulWorkerSummary(oldContent, {
-            decisionCode: '2',
             decisionText: 'AI chose balanced approach',
           }),
         },
@@ -584,7 +568,6 @@ describe('summarize-transcript handler', () => {
         data: {
           success: true,
           summary: buildSuccessfulWorkerSummary(content, {
-            decisionCode: '3',
             decisionText: 'AI chose a middle path',
           }),
         },
@@ -612,7 +595,6 @@ describe('summarize-transcript handler', () => {
         data: {
           success: true,
           summary: buildSuccessfulWorkerSummary(content, {
-            decisionCode: '1',
             decisionText: 'AI chose the opposite side',
           }),
         },
@@ -647,7 +629,6 @@ describe('summarize-transcript handler', () => {
         data: {
           success: true,
           summary: buildSuccessfulWorkerSummary(content, {
-            decisionCode: '1',
             decisionText: 'AI chose the opposite side',
           }),
         },
@@ -678,7 +659,6 @@ describe('summarize-transcript handler', () => {
         data: {
           success: true,
           summary: buildSuccessfulWorkerSummary(content, {
-            decisionCode: '5',
             decisionText: 'AI strongly preferred the first option',
           }),
         },
@@ -693,20 +673,22 @@ describe('summarize-transcript handler', () => {
 
     it.each([
       'missing summary payload',
-      'error summary payload',
+      'invalid canonical cacheVersion',
     ])('falls back to the worker when the cache is malformed (%s)', async (caseName) => {
       const content = { turns: [{ probePrompt: 'Test prompt', targetResponse: 'Test response' }] };
       const summaryCache = makeValidSummaryCache(content);
       const malformed = JSON.parse(JSON.stringify(summaryCache)) as Record<string, unknown> & {
-        summary: { decisionCode: string };
+        summary: { canonicalDecision?: { cacheVersion: number } };
       };
 
       if (caseName === 'missing summary payload') {
         // Drop the `summary` field entirely — isSummaryCache requires it.
         delete (malformed as { summary?: unknown }).summary;
       } else {
-        // decisionCode === 'error' is explicitly rejected by isSummaryCacheSummary.
-        malformed.summary.decisionCode = 'error';
+        // cacheVersion 1 is no longer accepted by isWinnerFirstSummaryCache.
+        if (malformed.summary.canonicalDecision != null) {
+          malformed.summary.canonicalDecision.cacheVersion = 1;
+        }
       }
 
       const transcript = makeTranscript({
@@ -721,7 +703,6 @@ describe('summarize-transcript handler', () => {
         data: {
           success: true,
           summary: buildSuccessfulWorkerSummary(content, {
-            decisionCode: '4',
             decisionText: 'AI prioritized safety over efficiency',
           }),
         },

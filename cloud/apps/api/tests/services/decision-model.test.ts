@@ -6,7 +6,6 @@ import {
 
 describe('analysis decision model helper', () => {
   const input = {
-    decisionCode: 'manual',
     decisionMetadata: {
       matchedLabel: 'Achievement',
       parseClass: 'exact',

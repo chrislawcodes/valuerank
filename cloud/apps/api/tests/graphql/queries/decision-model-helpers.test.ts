@@ -144,21 +144,18 @@ describe('resolveValueKeyFromText — possessive pronoun tolerance', () => {
   });
 });
 
-describe('isCachedWinnerFirstDecision — cacheVersion 2 + refusal acceptance', () => {
-  // These tests exercise the validator widening landing in this PR. The
-  // prior validator accepted only cacheVersion: 1 and decisionState ∈
-  // {resolved, neutral, unknown}. The widened validator also accepts
-  // cacheVersion: 2 and decisionState: "refusal" so that migrated rows
-  // read correctly through existing callers.
+describe('isCachedWinnerFirstDecision — cacheVersion 2 only', () => {
+  // The remove-decisionCode migration migrated every v1 row to v2; the
+  // tolerance bridge has been removed and the validator now rejects v1.
 
-  it('accepts cacheVersion 1 + resolved strong (baseline unchanged)', () => {
+  it('rejects cacheVersion 1 + resolved strong (legacy shape no longer accepted)', () => {
     const result = isCachedWinnerFirstDecision({
       cacheVersion: 1,
       decisionState: 'resolved',
       strength: 'strong',
       favoredValueKey: 'Self_Direction_Action',
     });
-    expect(result).toBe(true);
+    expect(result).toBe(false);
   });
 
   it('accepts cacheVersion 2 + resolved strong', () => {
@@ -181,14 +178,14 @@ describe('isCachedWinnerFirstDecision — cacheVersion 2 + refusal acceptance', 
     expect(result).toBe(true);
   });
 
-  it('accepts cacheVersion 1 + refusal (backward-tolerant — no caller produces this today but validator should not gate on it)', () => {
+  it('rejects cacheVersion 1 + refusal (legacy shape no longer accepted)', () => {
     const result = isCachedWinnerFirstDecision({
       cacheVersion: 1,
       decisionState: 'refusal',
       strength: 'unknown',
       favoredValueKey: null,
     });
-    expect(result).toBe(true);
+    expect(result).toBe(false);
   });
 
   it('rejects cacheVersion 3 (future version protection)', () => {

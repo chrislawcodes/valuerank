@@ -16,7 +16,6 @@ function makeTranscript(overrides: Record<string, unknown>) {
     runId: 'run-1',
     modelId: 'model-1',
     scenarioId: 'scenario-1',
-    decisionCode: '5',
     decisionMetadata: {
       matchedLabel: 'Achievement',
       parseClass: 'exact',
@@ -39,7 +38,6 @@ describe('buildDecisionModelShadowValidationReport', () => {
         }),
         makeTranscript({
           transcriptId: 'fallback-match',
-          decisionCode: '4',
           decisionMetadata: {
             matchedLabel: 'Achievement',
             parseClass: 'fallback_resolved',
@@ -50,7 +48,6 @@ describe('buildDecisionModelShadowValidationReport', () => {
         }),
         makeTranscript({
           transcriptId: 'ambiguous',
-          decisionCode: '3',
           decisionMetadata: {
             matchedLabel: 'Achievement',
             parseClass: 'ambiguous',
@@ -61,7 +58,6 @@ describe('buildDecisionModelShadowValidationReport', () => {
         }),
         makeTranscript({
           transcriptId: 'unparseable',
-          decisionCode: null,
           decisionMetadata: {
             matchedLabel: null,
             parseClass: 'unparseable',
@@ -76,7 +72,6 @@ describe('buildDecisionModelShadowValidationReport', () => {
         }),
         makeTranscript({
           transcriptId: 'mismatch',
-          decisionCode: '1',
         }),
       ],
       new Date('2026-03-23T12:00:00.000Z'),
@@ -110,7 +105,6 @@ describe('buildDecisionModelShadowValidationReport', () => {
       [
         makeTranscript({
           transcriptId: 'non-comparable',
-          decisionCode: null,
           decisionMetadata: {
             matchedLabel: 'Achievement',
             parseClass: 'unparseable',

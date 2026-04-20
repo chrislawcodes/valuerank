@@ -46,21 +46,17 @@ export function isCachedWinnerFirstDecision(value: unknown): value is CachedWinn
     return false;
   }
 
-  const decision = value as CachedWinnerFirstDecision;
+  const decision = value as { cacheVersion?: unknown } & CachedWinnerFirstDecision;
 
-  // Accept cacheVersion 1 (current write-path shape) and cacheVersion 2
-  // (extended shape with decisionState='refusal', produced by the migration
-  // landing in this PR and by PR #2's new write path). Any other value is
-  // an unknown future schema and MUST be rejected so callers fall back to
-  // derive-on-read.
-  if (decision.cacheVersion !== 1 && decision.cacheVersion !== 2) {
+  // cacheVersion 2 is the only accepted shape. The remove-decisionCode
+  // migration migrated every v1 row to v2; the tolerance bridge has been
+  // removed. Cast the unknown input to a looser shape for the check because
+  // the narrowed CachedWinnerFirstDecision type now has cacheVersion: 2
+  // only.
+  if (decision.cacheVersion !== 2) {
     return false;
   }
 
-  // Accept the legacy 3-state decisionState union PLUS 'refusal'. 'refusal'
-  // is semantically valid on both cacheVersion 1 (if any caller produces it
-  // — none do today, but the validator should not gate on that) and
-  // cacheVersion 2 (the new canonical home for refusal signals).
   if (
     decision.decisionState !== 'resolved'
     && decision.decisionState !== 'neutral'

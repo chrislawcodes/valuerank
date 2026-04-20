@@ -175,7 +175,6 @@ describe('decision model', () => {
 
   it('resolves the current job-choice numeric metadata shape behind the shared boundary', () => {
     const result = resolveTranscriptDecisionModel({
-      decisionCode: null,
       decisionMetadata: {
         parseClass: 'exact',
         parsePath: 'numeric_deterministic',
@@ -206,7 +205,6 @@ describe('decision model', () => {
 
   it('resolves the current job-choice text-label metadata shape behind the shared boundary', () => {
     const result = resolveTranscriptDecisionModel({
-      decisionCode: null,
       decisionMetadata: {
         parseClass: 'exact',
         parsePath: 'text_label_leading',
@@ -237,7 +235,6 @@ describe('decision model', () => {
 
   it('resolves the current job-choice neutral metadata shape behind the shared boundary', () => {
     const result = resolveTranscriptDecisionModel({
-      decisionCode: null,
       decisionMetadata: {
         parseClass: 'exact',
         parsePath: 'text_label_exact',
@@ -595,7 +592,6 @@ describe('decision model', () => {
     const achievementLabel = 'Strongly support taking the job with recognition of their expertise';
 
     const aFirstResult = resolveTranscriptDecisionModel({
-      decisionCode: null,
       decisionMetadata: {
         parseClass: 'exact',
         parsePath: 'text_label_leading',
@@ -608,7 +604,6 @@ describe('decision model', () => {
     });
 
     const bFirstResult = resolveTranscriptDecisionModel({
-      decisionCode: null,
       decisionMetadata: {
         parseClass: 'exact',
         parsePath: 'text_label_leading',

@@ -16,7 +16,6 @@ describe('get_transcript_summary tool', () => {
   function buildResolvedTranscript(overrides: Record<string, unknown> = {}) {
     return {
       content: { turns: [] },
-      decisionCode: null,
       decisionMetadata: {
         manualOverride: {
           appliedDecision: {
@@ -83,7 +82,6 @@ describe('get_transcript_summary tool', () => {
             { role: 'assistant', content: 'Answer 2' },
           ],
         },
-        decisionCode: null,
         decisionMetadata: null,
         definitionSnapshot: null,
         decisionText: null,
@@ -109,7 +107,6 @@ describe('get_transcript_summary tool', () => {
             { role: 'assistant', content: 'I would prioritize safety while considering ethical implications.' },
           ],
         },
-        decisionCode: null,
         decisionMetadata: null,
         definitionSnapshot: null,
         decisionText: null,
@@ -167,7 +164,6 @@ describe('get_transcript_summary tool', () => {
     it('includes ISO timestamp', () => {
       const transcript = {
         content: { turns: [] },
-        decisionCode: null,
         decisionMetadata: null,
         definitionSnapshot: null,
         decisionText: null,
@@ -200,7 +196,6 @@ describe('get_transcript_summary tool', () => {
     it('handles missing decision gracefully', () => {
       const transcript = {
         content: { turns: [] },
-        decisionCode: null,
         decisionMetadata: null,
         definitionSnapshot: null,
         decisionText: null,
@@ -246,7 +241,6 @@ describe('get_transcript_summary tool', () => {
             { role: 'assistant', text: 'Hi how can I help' },
           ],
         },
-        decisionCode: null,
         decisionMetadata: null,
         definitionSnapshot: null,
         decisionText: null,
@@ -268,7 +262,6 @@ describe('get_transcript_summary tool', () => {
     it('handles empty content gracefully', () => {
       const transcript = {
         content: {},
-        decisionCode: null,
         decisionText: null,
         keyReasoning: [],
         createdAt: new Date(),

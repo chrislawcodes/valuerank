@@ -139,8 +139,6 @@ describe('factories', () => {
         estimatedCost: null,
         lastAccessedAt: null,
         contentExpiresAt: null,
-        decisionCode: null,
-        decisionCodeSource: null,
         decisionText: null,
         decisionMetadata: null,
         summarizedAt: null,

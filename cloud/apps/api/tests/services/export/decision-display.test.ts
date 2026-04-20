@@ -40,7 +40,6 @@ function createTranscript(overrides: Partial<ExportTranscript> = {}): ExportTran
     tokenCount: 100,
     durationMs: 1000,
     estimatedCost: null,
-    decisionCode: null,
     decisionText: null,
     costSnapshotId: null,
     createdAt: new Date(),
@@ -79,7 +78,6 @@ describe('decision display export helper', () => {
   it('returns the controlled decision reasons', () => {
     const rendered = formatDecisionDisplay(
       createTranscript({
-        decisionCode: '5',
         decisionMetadata: {
           parseClass: 'exact',
           parsePath: 'exact.favor_first.strong',
@@ -97,7 +95,6 @@ describe('decision display export helper', () => {
 
     const missingMetadata = formatDecisionDisplay(
       createTranscript({
-        decisionCode: '5',
         decisionMetadata: {
           parseClass: 'exact',
           parsePath: 'exact.favor_first.strong',
@@ -119,7 +116,6 @@ describe('decision display export helper', () => {
 
     const invalidPair = formatDecisionDisplay(
       createTranscript({
-        decisionCode: '5',
         decisionMetadata: {
           parseClass: 'exact',
           parsePath: 'exact.favor_first.strong',
@@ -137,7 +133,6 @@ describe('decision display export helper', () => {
 
     const parseFailed = formatDecisionDisplay(
       createTranscript({
-        decisionCode: '5',
         decisionMetadata: {
           parseClass: 'ambiguous',
           parsePath: 'exact.favor_first.strong',
@@ -155,7 +150,6 @@ describe('decision display export helper', () => {
 
     const emptyInput = formatDecisionDisplay(
       createTranscript({
-        decisionCode: null,
         decisionMetadata: null,
         definitionSnapshot: null,
         scenario: {
@@ -215,7 +209,6 @@ describe('decision display export helper', () => {
   it('preserves identity fields when the transcript renders as unknown', () => {
     const row = transcriptToCSVRow(
       createTranscript({
-        decisionCode: null,
         decisionMetadata: null,
         definitionSnapshot: null,
       }),
