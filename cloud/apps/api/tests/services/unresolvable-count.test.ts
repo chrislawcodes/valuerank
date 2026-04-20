@@ -39,7 +39,6 @@ describe('getUnresolvableCount', () => {
     // clear favor_first outcome — the resolver recovers it.
     mockFindMany.mockResolvedValue([{
       modelId: 'claude-sonnet-4-5',
-      decisionCode: null,
       decisionMetadata: {
         parsePath: 'exact.favor_first.strong',
         parseClass: 'exact',
@@ -61,7 +60,6 @@ describe('getUnresolvableCount', () => {
   it('counts a transcript where the live resolver genuinely cannot resolve', async () => {
     mockFindMany.mockResolvedValue([{
       modelId: 'model-a',
-      decisionCode: null,
       decisionMetadata: null,
       definitionSnapshot: SNAPSHOT_WITH_PAIR,
       scenario: { orientationFlipped: false },

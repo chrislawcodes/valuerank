@@ -44,7 +44,6 @@ function createMockTranscript(overrides: Partial<TranscriptWithScenario> = {}): 
     tokenCount: 100,
     durationMs: 1000,
     estimatedCost: null,
-    decisionCode: '3',
     decisionText: 'Balanced approach',
     costSnapshotId: null,
     createdAt: new Date(),
@@ -186,7 +185,6 @@ describe('buildModelSummarySheet', () => {
     const transcripts = [
       createMockTranscript({
         modelId: 'model-a',
-        decisionCode: '5',
         decisionMetadata: {
           parseClass: 'exact',
           parsePath: 'exact.favor_first.strong',
@@ -203,7 +201,6 @@ describe('buildModelSummarySheet', () => {
       }),
       createMockTranscript({
         modelId: 'model-a',
-        decisionCode: '4',
         decisionMetadata: {
           parseClass: 'exact',
           parsePath: 'exact.favor_first.lean',
@@ -220,7 +217,6 @@ describe('buildModelSummarySheet', () => {
       }),
       createMockTranscript({
         modelId: 'model-b',
-        decisionCode: null,
         decisionMetadata: null,
         definitionSnapshot: null,
       }),
@@ -236,7 +232,6 @@ describe('buildModelSummarySheet', () => {
     const transcripts = [
       createMockTranscript({
         modelId: 'model-a',
-        decisionCode: '5',
         decisionMetadata: {
           parseClass: 'exact',
           parsePath: 'exact.favor_first.strong',
@@ -253,7 +248,6 @@ describe('buildModelSummarySheet', () => {
       }),
       createMockTranscript({
         modelId: 'model-a',
-        decisionCode: '4',
         decisionMetadata: {
           parseClass: 'exact',
           parsePath: 'exact.favor_first.lean',
@@ -270,7 +264,6 @@ describe('buildModelSummarySheet', () => {
       }),
       createMockTranscript({
         modelId: 'model-a',
-        decisionCode: null,
         decisionMetadata: null,
         definitionSnapshot: null,
       }),
@@ -290,13 +283,11 @@ describe('buildModelSummarySheet', () => {
     const transcripts = [
       createMockTranscript({
         modelId: 'z-model',
-        decisionCode: null,
         decisionMetadata: null,
         definitionSnapshot: null,
       }),
       createMockTranscript({
         modelId: 'a-model',
-        decisionCode: null,
         decisionMetadata: null,
         definitionSnapshot: null,
       }),
@@ -310,13 +301,11 @@ describe('buildModelSummarySheet', () => {
     const transcripts = [
       createMockTranscript({
         modelId: 'model-a',
-        decisionCode: null,
         decisionMetadata: null,
         definitionSnapshot: null,
       }),
       createMockTranscript({
         modelId: 'model-a',
-        decisionCode: 'pending',
         decisionMetadata: null,
         definitionSnapshot: null,
       }),

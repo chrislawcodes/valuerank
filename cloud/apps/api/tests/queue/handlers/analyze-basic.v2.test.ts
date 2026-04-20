@@ -93,8 +93,6 @@ describe('analyze-basic handler with decision-model v2 enabled', () => {
         runId: run.id,
         modelId: 'test-model',
         scenarioId: scenario.id,
-        decisionCode: 'manual',
-        decisionCodeSource: 'deterministic',
         decisionMetadata: {
           matchedLabel: 'Achievement',
           parseClass: 'exact',
