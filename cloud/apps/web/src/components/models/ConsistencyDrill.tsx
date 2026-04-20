@@ -32,6 +32,107 @@ function conditionMatrixUrl(args: { domainId: string; modelId: string; valueKey:
 
 type PerPair = ModelsConsistencyModel['coherence']['perPair'][number];
 
+const COHERENT_RHO_THRESHOLD = 0.8;
+
+type RhoDistribution = {
+  values: number[];
+  determinateCount: number;
+  totalCount: number;
+  median: number | null;
+  q1: number | null;
+  q3: number | null;
+  min: number | null;
+  max: number | null;
+};
+
+function quantile(sorted: number[], fraction: number): number | null {
+  if (sorted.length === 0) return null;
+  if (sorted.length === 1) return sorted[0] ?? null;
+  const position = fraction * (sorted.length - 1);
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  const lowerValue = sorted[lower];
+  const upperValue = sorted[upper];
+  if (lowerValue == null || upperValue == null) return null;
+  if (lower === upper) return lowerValue;
+  const weight = position - lower;
+  return lowerValue * (1 - weight) + upperValue * weight;
+}
+
+function summarizeRhoDistribution(perPair: PerPair[]): RhoDistribution {
+  const values: number[] = [];
+  for (const pair of perPair) {
+    if (pair.determinate && pair.rho != null) {
+      values.push(pair.rho);
+    }
+  }
+  const sorted = [...values].sort((a, b) => a - b);
+  return {
+    values,
+    determinateCount: values.length,
+    totalCount: perPair.length,
+    median: quantile(sorted, 0.5),
+    q1: quantile(sorted, 0.25),
+    q3: quantile(sorted, 0.75),
+    min: sorted[0] ?? null,
+    max: sorted[sorted.length - 1] ?? null,
+  };
+}
+
+function formatRho(value: number | null): string {
+  return value == null ? '—' : value.toFixed(2);
+}
+
+function rhoToPercent(value: number): number {
+  // ρ is in [-1, 1]; map to [0, 100]% horizontal position
+  return ((Math.max(-1, Math.min(1, value)) + 1) / 2) * 100;
+}
+
+function RhoDistributionPanel({ distribution }: { distribution: RhoDistribution }) {
+  if (distribution.determinateCount === 0) {
+    return (
+      <div className="mt-3 rounded-md border border-gray-200 bg-white p-2 text-xs text-gray-600">
+        <span className="font-medium">ρ distribution:</span> no determinate pairs yet.
+      </div>
+    );
+  }
+
+  const thresholdPct = rhoToPercent(COHERENT_RHO_THRESHOLD);
+
+  return (
+    <div className="mt-3 rounded-md border border-gray-200 bg-white p-2 text-xs text-gray-700">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-medium text-gray-900">ρ distribution</span>
+        <span className="text-gray-500">
+          median {formatRho(distribution.median)} · IQR {formatRho(distribution.q1)}–{formatRho(distribution.q3)} · range {formatRho(distribution.min)}–{formatRho(distribution.max)} (N={distribution.determinateCount} / {distribution.totalCount})
+        </span>
+      </div>
+      <div className="relative mt-2 h-3 w-full rounded bg-gray-100">
+        {/* Coherent threshold marker */}
+        <div
+          className="absolute top-0 h-3 w-[2px] bg-emerald-500"
+          style={{ left: `${thresholdPct}%` }}
+          aria-hidden
+        />
+        {distribution.values.map((value, index) => (
+          <div
+            key={index}
+            className={`absolute top-0 h-3 w-[4px] -translate-x-[2px] rounded-sm ${value >= COHERENT_RHO_THRESHOLD ? 'bg-emerald-500' : value >= 0 ? 'bg-amber-400/70' : 'bg-gray-400/70'}`}
+            style={{ left: `${rhoToPercent(value)}%` }}
+            aria-label={`rho ${formatRho(value)}`}
+          />
+        ))}
+      </div>
+      <div className="mt-1 flex justify-between text-[10px] text-gray-400">
+        <span>-1</span>
+        <span>0</span>
+        <span className="font-medium text-emerald-600">0.8 threshold</span>
+        <span>1</span>
+      </div>
+    </div>
+  );
+}
+
 function transcriptsUrlForPair(modelId: string, pair: PerPair): string | null {
   if (pair.targetAnalysisRunId == null || pair.targetCompanionRunId == null) {
     return null;
@@ -74,7 +175,13 @@ export function ConsistencyDrill({ model, domainId, signature }: Props) {
           </div>
         </div>
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 md:col-span-2">
-          <div className="text-sm font-medium text-gray-900">Coherence chips</div>
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="text-sm font-medium text-gray-900">Coherence chips</div>
+            <div className="text-xs text-gray-500">
+              {model.coherence.coherentPairs} / {model.coherence.determinatePairs} coherent · {model.coherence.indeterminatePairs} indeterminate
+            </div>
+          </div>
+          <RhoDistributionPanel distribution={summarizeRhoDistribution(model.coherence.perPair)} />
           <div className="mt-3 flex flex-wrap gap-2">
             {model.coherence.perPair.map((pair) => {
               const pairTranscriptsUrl = transcriptsUrlForPair(model.modelId, pair);
