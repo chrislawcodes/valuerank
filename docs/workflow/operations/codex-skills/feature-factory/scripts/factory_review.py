@@ -228,6 +228,9 @@ def repair_checkpoint_args(slug: str, stage: str, state: dict[str, object]) -> a
         repair_timeout_seconds=300,
         allow_large_diff_rerun=bool(diff_budget.get("artifact_changed_since_codex")),
         fallback=False,
+        json=False,
+        no_auto_context=False,
+        fast=False,
     )
 
 

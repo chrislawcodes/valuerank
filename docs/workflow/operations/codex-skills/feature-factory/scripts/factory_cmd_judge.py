@@ -980,12 +980,16 @@ def run_judge(
         return 2
 
     if _stage_int(stage_state, "judge_rounds") >= 3:
-        payload = state.get("last_action_result")
-        if not isinstance(payload, dict) or not payload.get("next"):
-            payload = _build_exhausted_payload(slug, stage, state, stage_state)
-            with with_locked_state(slug) as locked_state:
-                _ensure_stage_state(locked_state, stage)
-                locked_state["last_action_result"] = payload
+        # Always recompute the exhausted payload when the judge cap is hit.
+        # An earlier loop iteration may have stored last_action_result["next"]
+        # as "judge_panel" (the call the orchestrator was told to run again
+        # after the spec was edited). After the 3-round cap, the correct next
+        # action is whatever the workflow recommends for the exhausted state
+        # (usually the next stage's authoring), not another judge round.
+        payload = _build_exhausted_payload(slug, stage, state, stage_state)
+        with with_locked_state(slug) as locked_state:
+            _ensure_stage_state(locked_state, stage)
+            locked_state["last_action_result"] = payload
         if json_output:
             print(json.dumps(payload, indent=2))
         else:

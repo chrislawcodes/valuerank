@@ -37,7 +37,15 @@ def resolve_stored_path(raw: str, repo_root: Path, stored_repo_root: str = "") -
 
 def normalized_artifact_text(stage: str, path: Path) -> str:
     text = path.read_text(encoding="utf-8")
-    if stage != "plan" or "## Review Reconciliation" not in text:
+    # Strip the Review Reconciliation section from the hash computation for
+    # every artifact stage, not just plan. Previously this stripping was
+    # plan-only, which caused spec (and tasks, and closeout) adversarial
+    # reviews to be marked "stale" every time the orchestrator added a
+    # reconciliation entry — creating an infinite loop where the reviews
+    # could never converge. The Review Reconciliation section is
+    # orchestrator-added metadata and its content has no bearing on whether
+    # a review of the artifact's substantive content is still valid.
+    if "## Review Reconciliation" not in text:
         return text
     before, remainder = text.split("## Review Reconciliation", 1)
     trailing = remainder.split("\n## ", 1)
