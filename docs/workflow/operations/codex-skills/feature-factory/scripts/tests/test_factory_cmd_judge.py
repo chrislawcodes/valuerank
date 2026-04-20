@@ -197,6 +197,79 @@ class FactoryJudgeTests(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertEqual(stdout.getvalue().strip(), "→ next: checkpoint")
 
+    def test_judge_at_cap_recomputes_fresh_next_action(self) -> None:
+        """After judge_rounds >= 3, subsequent judge calls must recompute the
+        exhausted-payload next_action instead of returning a stale value left
+        over from an earlier loop iteration.
+
+        Regression test for the infinite-loop bug where
+        `last_action_result["next"] == "judge_panel"` (set by an earlier
+        checkpoint at the cap) was returned verbatim by judge, causing the
+        orchestrator to be told "run judge_panel" forever.
+        """
+        stage_state = _stage_state(3, 3)
+        stage_state["judge_verdicts"] = [
+            [
+                {
+                    "judge": "completeness",
+                    "model": "gpt-5.4-mini",
+                    "verdict": "block",
+                    "confidence": 4,
+                    "reasoning": "Round 3 block example.",
+                    "evidence": [],
+                    "timestamp": "2026-04-18T10:00:00Z",
+                },
+                {
+                    "judge": "restatement",
+                    "model": "gpt-5.4",
+                    "verdict": "block",
+                    "confidence": 4,
+                    "reasoning": "Round 3 block example.",
+                    "evidence": [],
+                    "timestamp": "2026-04-18T10:00:00Z",
+                },
+                {
+                    "judge": "implementation-risk",
+                    "model": "claude-sonnet-4-6",
+                    "verdict": "proceed",
+                    "confidence": 4,
+                    "reasoning": "Round 3 proceed example.",
+                    "evidence": [],
+                    "timestamp": "2026-04-18T10:00:00Z",
+                },
+            ]
+        ]
+        _write_workflow(self._tmpdir.name, stage_state, [])
+
+        # Simulate the stale state the prior buggy flow would leave behind.
+        state_path = FACTORY_STATE.factory_state_path(SLUG)
+        workflow_state = json.loads(state_path.read_text(encoding="utf-8"))
+        workflow_state["last_action_result"] = {
+            "next": "judge_panel",
+            "reason": "stale remnant from earlier loop",
+            "blockers": [],
+            "outcome": "rejudge",
+        }
+        FACTORY_STATE.atomic_json_write(state_path, workflow_state)
+
+        def _side_effect(cmd, *args, **kwargs):
+            if cmd[0] == "git":
+                return _make_git_response(cmd, Path(self._tmpdir.name))
+            raise AssertionError("judge must not call any model when at cap")
+
+        with patch.object(JUDGE.subprocess, "run", side_effect=_side_effect), \
+            patch.object(JUDGE, "stage_manifest_state", side_effect=_fake_stage_manifest_state):
+            with contextlib.redirect_stdout(io.StringIO()) as stdout, contextlib.redirect_stderr(io.StringIO()):
+                rc = JUDGE.run_judge(SLUG, STAGE)
+
+        self.assertEqual(rc, 0)
+        # The runner must advance rather than regurgitate the stale
+        # "judge_panel" next action. "repair_plan_checkpoint" or similar
+        # forward-progressing action is expected here.
+        self.assertNotEqual(stdout.getvalue().strip(), "→ next: judge_panel")
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        self.assertNotEqual(state["last_action_result"]["next"], "judge_panel")
+
     def test_judge_dispatches_three_parallel(self) -> None:
         stage_state = _stage_state(3)
         review_specs = [
