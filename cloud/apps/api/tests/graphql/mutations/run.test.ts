@@ -776,25 +776,16 @@ describe('GraphQL Run Mutations', () => {
               { name: 'Achievement' },
               { name: 'Benevolence_Dependability' },
             ],
+            components: {
+              value_first: { token: 'Achievement' },
+              value_second: { token: 'Benevolence_Dependability' },
+            },
             methodology: {
               presentation_order: 'A_first',
             },
           },
-          decisionMetadata: {
-            manualOverride: {
-              appliedDecision: {
-                favoredValueKey: 'Achievement',
-                opposedValueKey: 'Benevolence_Dependability',
-                direction: 'favor_first',
-                strength: 'strong',
-              },
-              previousValue: 'other',
-              overriddenAt: '2026-03-29T00:00:00.000Z',
-              overriddenByUserId: TEST_USER.id,
-            },
-          },
+          decisionMetadata: {},
           content: { turns: [] },
-          decisionCode: 'other',
           turnCount: 1,
           tokenCount: 25,
           durationMs: 100,
@@ -803,8 +794,18 @@ describe('GraphQL Run Mutations', () => {
       });
 
       const mutation = `
-        mutation UpdateTranscriptDecision($transcriptId: ID!, $decisionCode: String!) {
-          updateTranscriptDecision(transcriptId: $transcriptId, decisionCode: $decisionCode) {
+        mutation UpdateTranscriptDecision(
+          $transcriptId: ID!
+          $decisionState: String!
+          $favoredValueKey: String
+          $strength: String
+        ) {
+          updateTranscriptDecision(
+            transcriptId: $transcriptId
+            decisionState: $decisionState
+            favoredValueKey: $favoredValueKey
+            strength: $strength
+          ) {
             id
             decisionMetadata
             runId
@@ -819,7 +820,9 @@ describe('GraphQL Run Mutations', () => {
           query: mutation,
           variables: {
             transcriptId: transcript.id,
-            decisionCode: '4',
+            decisionState: 'resolved',
+            favoredValueKey: 'Achievement',
+            strength: 'strong',
           },
         });
 
@@ -827,7 +830,6 @@ describe('GraphQL Run Mutations', () => {
       expect(response.body.errors).toBeUndefined();
       expect(response.body.data.updateTranscriptDecision.decisionMetadata).toMatchObject({
         manualOverride: {
-          previousValue: 'other',
           overriddenByUserId: expect.any(String),
           appliedDecision: {
             favoredValueKey: 'Achievement',
@@ -844,7 +846,6 @@ describe('GraphQL Run Mutations', () => {
       });
       expect(updated?.decisionMetadata).toMatchObject({
         manualOverride: {
-          previousValue: 'other',
           appliedDecision: {
             favoredValueKey: 'Achievement',
             opposedValueKey: 'Benevolence_Dependability',
@@ -855,10 +856,10 @@ describe('GraphQL Run Mutations', () => {
       });
     });
 
-    it('returns validation error for unsupported decision code', async () => {
+    it('returns validation error for invalid decisionState', async () => {
       const mutation = `
-        mutation UpdateTranscriptDecision($transcriptId: ID!, $decisionCode: String!) {
-          updateTranscriptDecision(transcriptId: $transcriptId, decisionCode: $decisionCode) {
+        mutation UpdateTranscriptDecision($transcriptId: ID!, $decisionState: String!) {
+          updateTranscriptDecision(transcriptId: $transcriptId, decisionState: $decisionState) {
             id
           }
         }
@@ -871,13 +872,13 @@ describe('GraphQL Run Mutations', () => {
           query: mutation,
           variables: {
             transcriptId: 'non-existent-transcript',
-            decisionCode: 'other',
+            decisionState: 'bogus-state',
           },
         });
 
       expect(response.status).toBe(200);
       expect(response.body.errors).toBeDefined();
-      expect(response.body.errors[0].message).toContain('decisionCode must be a positive integer');
+      expect(response.body.errors[0].message).toContain('decisionState must be one of');
     });
   });
 });
