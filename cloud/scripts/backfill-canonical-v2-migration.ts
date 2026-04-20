@@ -1,29 +1,34 @@
 /**
- * Migration: upgrade every cached canonicalDecision to cacheVersion 2.
+ * Migration: upgrade every cached canonicalDecision to cacheVersion 2, strip
+ * the legacy decisionCode + decisionCodeSource fields, and re-derive
+ * canonicals for rows where the existing one is suspicious.
  *
- * For each transcript whose `decision_metadata.summaryCache` is not null:
- *   - If `summaryCache.summary.decisionCode` is present, derive a fresh
- *     canonicalDecision from {decisionCode, value pair, orientationFlipped}
- *     using the truth table in `canonicalFromDecisionCode` below. Strip
- *     decisionCode and decisionCodeSource from the summary. Write
- *     cacheVersion: 2.
- *   - If decisionCode is absent and cacheVersion is not yet 2, preserve
- *     the existing canonical values verbatim and only bump cacheVersion
- *     to 2. No retroactive refusal inference.
- *   - If decisionCode is absent and cacheVersion is already 2, no-op.
+ * Classification per row (A2):
+ *   1. Good existing canonical — decisionState in {resolved, neutral, refusal}
+ *      AND strength !== unknown AND direction !== unknown. Preserve verbatim,
+ *      bump cacheVersion to 2. Tag as `preserved`.
+ *   2. Suspicious OR missing canonical — force re-derivation by calling the
+ *      production `resolveCanonicalDecision` with cachedDecision: null.
+ *      Uses the same code path the live reader uses. Tag as
+ *      `resolver-recovered` if the resolver produced a resolved/neutral/refusal
+ *      canonical, else `synthesized-unknown`.
+ *   3. Refusal override (historical-row compat) — if `summary.decisionCode ===
+ *      "refusal"` and the resolver returned `decisionState: "unknown"`,
+ *      override to refusal. Tag as `refusal-tagged`.
+ *   4. Missing snapshot — if `pairFromSnapshot` returns null, still strip +
+ *      bump + synthesize unknown canonical. Tag as `missing-snapshot-stripped`.
  *
- * Rows with a malformed `definition_snapshot` (missing or non-string
- * value pair tokens) are skipped and reported under `missing-snapshot`.
+ * All cases strip `decisionCode` + `decisionCodeSource` and write
+ * `cacheVersion: 2`.
  *
  * Idempotent. Per-row atomic. Dry-run by default.
  *
- * Usage (from cloud/apps/api/):
- *   npx tsx --env-file=../../.env ../../scripts/backfill-canonical-v2-migration.ts
- *   npx tsx --env-file=../../.env ../../scripts/backfill-canonical-v2-migration.ts --apply
+ * Usage (from cloud/):
+ *   npx tsx scripts/backfill-canonical-v2-migration.ts              # dry run
+ *   npx tsx scripts/backfill-canonical-v2-migration.ts --apply      # writes
  *
- * Against prod (from cloud/):
+ * Against prod:
  *   DATABASE_URL="$PROD_URL" npx tsx scripts/backfill-canonical-v2-migration.ts
- *   DATABASE_URL="$PROD_URL" npx tsx scripts/backfill-canonical-v2-migration.ts --apply
  *
  * Flags:
  *   --apply                         Write mode (default: dry-run).
@@ -36,10 +41,20 @@ import { db } from '@valuerank/db';
 import type { Prisma } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 
+import { resolveCanonicalDecision } from '../apps/api/src/graphql/queries/domain/decision-model.js';
+import {
+  buildRawDecisionEvidence,
+  extractCachedWinnerFirstDecision,
+  extractLabelPrefixFromSnapshot,
+  extractManualOverrideDecision,
+  extractValueStatementsFromSnapshot,
+} from '../apps/api/src/graphql/queries/domain/decision-model-helpers.js';
+import { extractValuePair } from '../apps/api/src/graphql/queries/domain-analysis-values.js';
+
 const log = createLogger('scripts:backfill-canonical-v2-migration');
 
 // -------------------------------------------------------------------
-// Truth table
+// Public pure helpers (tested)
 // -------------------------------------------------------------------
 
 export type CanonicalV2 = {
@@ -52,77 +67,8 @@ export type CanonicalV2 = {
 export type ValuePair = { valueA: string; valueB: string };
 
 /**
- * Pure derivation of the v2 canonical from {decisionCode, pair, orientationFlipped}.
- *
- * Mapping:
- *   "5" + !flipped  -> favor_first  strong    (favoredValueKey = valueA)
- *   "5" + flipped   -> favor_second strong    (favoredValueKey = valueB)
- *   "4" + !flipped  -> favor_first  lean      (favoredValueKey = valueA)
- *   "4" + flipped   -> favor_second lean      (favoredValueKey = valueB)
- *   "3"             -> neutral (both orientations identical)
- *   "2" + !flipped  -> favor_second lean      (favoredValueKey = valueB)
- *   "2" + flipped   -> favor_first  lean      (favoredValueKey = valueA)
- *   "1" + !flipped  -> favor_second strong    (favoredValueKey = valueB)
- *   "1" + flipped   -> favor_first  strong    (favoredValueKey = valueA)
- *   "refusal"       -> {refusal, unknown, null}
- *   "other" / null  -> {unknown, unknown, null}
- */
-export function canonicalFromDecisionCode(
-  decisionCode: string | null | undefined,
-  pair: ValuePair,
-  orientationFlipped: boolean,
-): CanonicalV2 {
-  if (decisionCode === 'refusal') {
-    return { cacheVersion: 2, decisionState: 'refusal', strength: 'unknown', favoredValueKey: null };
-  }
-  if (decisionCode == null || decisionCode === '' || decisionCode === 'other') {
-    return { cacheVersion: 2, decisionState: 'unknown', strength: 'unknown', favoredValueKey: null };
-  }
-  if (decisionCode === '3') {
-    return { cacheVersion: 2, decisionState: 'neutral', strength: 'neutral', favoredValueKey: null };
-  }
-  if (decisionCode === '5') {
-    return {
-      cacheVersion: 2,
-      decisionState: 'resolved',
-      strength: 'strong',
-      favoredValueKey: orientationFlipped ? pair.valueB : pair.valueA,
-    };
-  }
-  if (decisionCode === '4') {
-    return {
-      cacheVersion: 2,
-      decisionState: 'resolved',
-      strength: 'lean',
-      favoredValueKey: orientationFlipped ? pair.valueB : pair.valueA,
-    };
-  }
-  if (decisionCode === '2') {
-    return {
-      cacheVersion: 2,
-      decisionState: 'resolved',
-      strength: 'lean',
-      favoredValueKey: orientationFlipped ? pair.valueA : pair.valueB,
-    };
-  }
-  if (decisionCode === '1') {
-    return {
-      cacheVersion: 2,
-      decisionState: 'resolved',
-      strength: 'strong',
-      favoredValueKey: orientationFlipped ? pair.valueA : pair.valueB,
-    };
-  }
-  // Unexpected decisionCode — treat as unknown to avoid misclassification.
-  return { cacheVersion: 2, decisionState: 'unknown', strength: 'unknown', favoredValueKey: null };
-}
-
-/**
  * Extract the value pair from a transcript's definition_snapshot JSON.
- * Returns null if the snapshot is malformed in any way — the migration
- * treats null as "skip this row and report as missing-snapshot".
- *
- * Must not throw on any input.
+ * Returns null if malformed. Must not throw.
  */
 export function pairFromSnapshot(snapshot: unknown): ValuePair | null {
   if (snapshot == null || typeof snapshot !== 'object' || Array.isArray(snapshot)) return null;
@@ -139,16 +85,47 @@ export function pairFromSnapshot(snapshot: unknown): ValuePair | null {
   return { valueA, valueB };
 }
 
+/**
+ * Determine whether an existing canonicalDecision is trustworthy enough to
+ * preserve verbatim. A "good" canonical has a non-unknown decisionState AND
+ * non-unknown strength AND non-unknown direction. Suspicious canonicals get
+ * re-derived via the production resolver.
+ */
+export function isGoodCanonical(canonical: unknown): boolean {
+  if (canonical == null || typeof canonical !== 'object' || Array.isArray(canonical)) return false;
+  const rec = canonical as Record<string, unknown>;
+  const state = rec.decisionState;
+  const strength = rec.strength;
+  if (typeof state !== 'string' || typeof strength !== 'string') return false;
+  if (state === 'unknown') return false;
+  if (strength === 'unknown') return false;
+  if (state === 'resolved') {
+    return (
+      typeof rec.favoredValueKey === 'string'
+      && (rec.favoredValueKey as string).length > 0
+      && (strength === 'strong' || strength === 'lean')
+    );
+  }
+  if (state === 'neutral') {
+    return rec.favoredValueKey === null && strength === 'neutral';
+  }
+  if (state === 'refusal') {
+    return rec.favoredValueKey === null;
+  }
+  return false;
+}
+
 // -------------------------------------------------------------------
 // CLI + orchestration
 // -------------------------------------------------------------------
 
 type Category =
-  | 'drifted'
-  | 'no-change-with-code'
-  | 'v1-upgrade-preserving-canonical'
+  | 'preserved'
+  | 'resolver-recovered'
+  | 'refusal-tagged'
+  | 'synthesized-unknown'
+  | 'missing-snapshot-stripped'
   | 'already-v2'
-  | 'missing-snapshot'
   | 'errors';
 
 function parseArgs(): { apply: boolean; domain: string | null; limit: number | null } {
@@ -159,17 +136,6 @@ function parseArgs(): { apply: boolean; domain: string | null; limit: number | n
   const domain = domainArg != null ? (domainArg.split('=')[1] ?? null) : null;
   const limit = limitArg != null ? Number(limitArg.split('=')[1] ?? 'NaN') : null;
   return { apply, domain, limit: limit != null && Number.isFinite(limit) ? limit : null };
-}
-
-function canonicalEquals(a: unknown, b: CanonicalV2): boolean {
-  if (a == null || typeof a !== 'object' || Array.isArray(a)) return false;
-  const rec = a as Record<string, unknown>;
-  return (
-    rec.cacheVersion === b.cacheVersion
-    && rec.decisionState === b.decisionState
-    && rec.strength === b.strength
-    && (rec.favoredValueKey ?? null) === b.favoredValueKey
-  );
 }
 
 async function main(): Promise<void> {
@@ -183,7 +149,6 @@ async function main(): Promise<void> {
     domainId = d.id;
   }
 
-  // Row IDs first, then per-row fetch+update. Avoids loading everything into memory.
   const candidateIds = await db.$queryRawUnsafe<{ id: string }[]>(
     `
     SELECT t.id FROM transcripts t
@@ -203,22 +168,21 @@ async function main(): Promise<void> {
   }
 
   const counts: Record<Category, number> = {
-    drifted: 0,
-    'no-change-with-code': 0,
-    'v1-upgrade-preserving-canonical': 0,
+    preserved: 0,
+    'resolver-recovered': 0,
+    'refusal-tagged': 0,
+    'synthesized-unknown': 0,
+    'missing-snapshot-stripped': 0,
     'already-v2': 0,
-    'missing-snapshot': 0,
     errors: 0,
   };
 
-  // Batch fetches to avoid per-row round-trips over the public proxy.
   const BATCH_SIZE = 500;
   const started = Date.now();
 
   for (let batchStart = 0; batchStart < candidateIds.length; batchStart += BATCH_SIZE) {
     const batch = candidateIds.slice(batchStart, batchStart + BATCH_SIZE).map((r) => r.id);
 
-    // One query for all transcripts in this batch.
     const transcripts = await db.transcript.findMany({
       where: { id: { in: batch } },
       select: {
@@ -229,7 +193,6 @@ async function main(): Promise<void> {
       },
     });
 
-    // Collect unique scenarioIds and fetch orientationFlipped for all at once.
     const scenarioIds = Array.from(
       new Set(transcripts.map((t) => t.scenarioId).filter((id): id is string => id != null)),
     );
@@ -242,7 +205,6 @@ async function main(): Promise<void> {
       for (const s of scenarios) scenarioMap.set(s.id, s.orientationFlipped ?? false);
     }
 
-    // Per-row process in memory; writes still atomic per row.
     for (const t of transcripts) {
       try {
         const existingMeta = (t.decisionMetadata as Record<string, unknown> | null) ?? {};
@@ -253,59 +215,124 @@ async function main(): Promise<void> {
         const existingCanonical = summary.canonicalDecision as Record<string, unknown> | undefined;
         const existingCacheVersion = existingCanonical?.cacheVersion;
 
-        // Case 3: already at target.
+        // Case "already-v2": no decisionCode AND canonical already at v2.
         if (existingCode == null && existingCacheVersion === 2) {
           counts['already-v2'] += 1;
           continue;
         }
 
-        let updatedSummary: Record<string, unknown>;
+        const orientationFlipped = t.scenarioId != null
+          ? (scenarioMap.get(t.scenarioId) ?? false)
+          : false;
+        const pair = pairFromSnapshot(t.definitionSnapshot);
+
+        let newCanonical: CanonicalV2;
         let category: Category;
 
-        if (existingCode != null) {
-          // Case 1: derive from decisionCode + pair + orientationFlipped.
-          const pair = pairFromSnapshot(t.definitionSnapshot);
-          if (pair == null) {
-            counts['missing-snapshot'] += 1;
-            continue;
-          }
-          const orientationFlipped = t.scenarioId != null
-            ? (scenarioMap.get(t.scenarioId) ?? false)
-            : false;
-          const newCanonical = canonicalFromDecisionCode(existingCode, pair, orientationFlipped);
-          const drifted = !canonicalEquals(existingCanonical, newCanonical);
-          category = drifted ? 'drifted' : 'no-change-with-code';
-
-          // Strip decisionCode and decisionCodeSource; write new canonical.
-          const { decisionCode: _dropCode, decisionCodeSource: _dropSource, ...restSummary } = summary;
-          void _dropCode;
-          void _dropSource;
-          updatedSummary = {
-            ...restSummary,
-            canonicalDecision: newCanonical,
-          };
-        } else {
-          // Case 2: no decisionCode, cacheVersion != 2 — preserve canonical verbatim, bump.
-          if (existingCanonical == null) {
-            counts['missing-snapshot'] += 1;
-            continue;
-          }
-          const preserved: CanonicalV2 = {
+        if (pair == null) {
+          // Case 4: Missing snapshot — synthesize unknown but still strip.
+          newCanonical = {
             cacheVersion: 2,
-            decisionState: (existingCanonical.decisionState as CanonicalV2['decisionState']) ?? 'unknown',
-            strength: (existingCanonical.strength as CanonicalV2['strength']) ?? 'unknown',
-            favoredValueKey: (existingCanonical.favoredValueKey as string | null) ?? null,
+            decisionState: 'unknown',
+            strength: 'unknown',
+            favoredValueKey: null,
           };
-          updatedSummary = {
-            ...summary,
-            canonicalDecision: preserved,
+          category = 'missing-snapshot-stripped';
+        } else if (isGoodCanonical(existingCanonical)) {
+          // Case 1: Preserve verbatim, bump cacheVersion.
+          newCanonical = {
+            cacheVersion: 2,
+            decisionState: existingCanonical!.decisionState as CanonicalV2['decisionState'],
+            strength: existingCanonical!.strength as CanonicalV2['strength'],
+            favoredValueKey: (existingCanonical!.favoredValueKey as string | null) ?? null,
           };
-          category = 'v1-upgrade-preserving-canonical';
+          category = 'preserved';
+        } else {
+          // Case 2/3: Force re-derivation via production resolver.
+          const raw = buildRawDecisionEvidence(existingMeta);
+          const manualOverrideDecision = extractManualOverrideDecision(existingMeta);
+          const valueStatements = extractValueStatementsFromSnapshot(t.definitionSnapshot);
+          const labelPrefix = extractLabelPrefixFromSnapshot(t.definitionSnapshot) ?? null;
+          const resolvedPair = extractValuePair(t.definitionSnapshot);
+
+          const resolved = resolveCanonicalDecision({
+            pair: resolvedPair,
+            orientationFlipped,
+            raw,
+            manualOverridePresent: manualOverrideDecision !== null,
+            manualOverrideDecision,
+            cachedDecision: null, // force re-derivation from raw evidence
+            valueStatements,
+            labelPrefix,
+          });
+
+          // Refusal override for historical rows where decisionCode carried
+          // the refusal signal pre-A9.
+          if (resolved.direction === 'unknown' && existingCode === 'refusal') {
+            newCanonical = {
+              cacheVersion: 2,
+              decisionState: 'refusal',
+              strength: 'unknown',
+              favoredValueKey: null,
+            };
+            category = 'refusal-tagged';
+          } else if (resolved.direction === 'refusal') {
+            newCanonical = {
+              cacheVersion: 2,
+              decisionState: 'refusal',
+              strength: 'unknown',
+              favoredValueKey: null,
+            };
+            category = 'resolver-recovered';
+          } else if (resolved.direction === 'neutral') {
+            newCanonical = {
+              cacheVersion: 2,
+              decisionState: 'neutral',
+              strength: 'neutral',
+              favoredValueKey: null,
+            };
+            category = 'resolver-recovered';
+          } else if (
+            resolved.direction !== 'unknown'
+            && resolved.strength !== 'unknown'
+            && resolved.favoredValueKey != null
+          ) {
+            newCanonical = {
+              cacheVersion: 2,
+              decisionState: 'resolved',
+              strength: resolved.strength,
+              favoredValueKey: resolved.favoredValueKey,
+            };
+            category = 'resolver-recovered';
+          } else {
+            // Resolver returned unknown and no legacy refusal flag. Best we
+            // can do is write a v2 unknown canonical.
+            newCanonical = {
+              cacheVersion: 2,
+              decisionState: 'unknown',
+              strength: 'unknown',
+              favoredValueKey: null,
+            };
+            category = 'synthesized-unknown';
+          }
         }
 
         counts[category] += 1;
 
         if (!apply) continue;
+
+        // Strip decisionCode + decisionCodeSource; write new canonical.
+        const {
+          decisionCode: _dropCode,
+          decisionCodeSource: _dropSource,
+          ...restSummary
+        } = summary;
+        void _dropCode;
+        void _dropSource;
+        const updatedSummary = {
+          ...restSummary,
+          canonicalDecision: newCanonical,
+        };
 
         const updatedMetadata = {
           ...existingMeta,
