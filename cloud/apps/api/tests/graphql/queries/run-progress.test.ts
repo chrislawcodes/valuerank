@@ -460,9 +460,11 @@ describe('Run Progress byModel field [T024]', () => {
     options?: { summarized?: boolean; failed?: boolean }
   ) {
     // Failure signal mirrors production write path (persistSummarizeFailure):
-    // failed transcripts have summarizedAt set, decisionMetadata null, and
-    // decisionText starting with "Summary failed". The byModel query groups
-    // on those fields since the legacy decision_code column was dropped.
+    // failed transcripts have summarizedAt set, decisionMetadata SQL NULL
+    // (Prisma.DbNull, NOT JsonNull), and decisionText starting with
+    // "Summary failed". The byModel query groups on those fields since the
+    // legacy decision_code column was dropped.
+    const { Prisma } = await import('@valuerank/db');
     const failed = options?.failed === true;
     const transcript = await db.transcript.create({
       data: {
@@ -475,7 +477,9 @@ describe('Run Progress byModel field [T024]', () => {
         durationMs: 1000,
         summarizedAt: failed || options?.summarized ? new Date() : null,
         decisionText: failed ? 'Summary failed: test failure' : null,
-        decisionMetadata: failed ? null : undefined,
+        // For nullable JSON fields Prisma needs Prisma.DbNull to write SQL NULL.
+        // Plain `null` writes JSON null which `IS NULL` does not match.
+        decisionMetadata: failed ? Prisma.DbNull : Prisma.DbNull,
       },
     });
     createdTranscriptIds.push(transcript.id);
