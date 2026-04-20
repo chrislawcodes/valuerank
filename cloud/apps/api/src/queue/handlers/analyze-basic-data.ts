@@ -81,7 +81,6 @@ type TranscriptForAnalysis = {
   modelId: string;
   scenarioId: string | null;
   sampleIndex: number;
-  decisionCode: string | null;
   decisionMetadata: unknown;
   definitionSnapshot: unknown;
   scenario: {

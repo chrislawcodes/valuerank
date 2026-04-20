@@ -52,7 +52,6 @@ async function main(): Promise<void> {
       runId: true,
       modelId: true,
       scenarioId: true,
-      decisionCode: true,
       decisionMetadata: true,
       definitionSnapshot: true,
       scenario: {
@@ -72,7 +71,6 @@ async function main(): Promise<void> {
       runId: transcript.runId,
       modelId: transcript.modelId,
       scenarioId: transcript.scenarioId,
-      decisionCode: transcript.decisionCode,
       decisionMetadata: transcript.decisionMetadata,
       definitionSnapshot: transcript.definitionSnapshot,
       orientationFlipped: transcript.scenario?.orientationFlipped,

@@ -34,7 +34,6 @@ export function aggregateValueCountsFromTranscripts(
   transcripts: Array<{
     runId: string;
     modelId: string;
-    decisionCode: string | null;
     decisionMetadata: unknown;
     scenario: { orientationFlipped: boolean | null } | null;
   }>,

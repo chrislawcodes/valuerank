@@ -231,8 +231,11 @@ export async function restartSummarization(
     where: { id: { in: transcriptIds } },
     data: {
       summarizedAt: null,
-      decisionCode: null,
       decisionText: null,
+      // The legacy transcripts.decision_code column drop is deferred to a
+      // follow-up PR (spec out-of-scope). We stop writing to it here so the
+      // canonicalDecision in summaryCache.summary is the only source of truth
+      // going forward. Reads of the legacy column are already rewired (W4).
     },
   });
   log.info({ runId, count: transcriptIds.length }, 'Cleared summarizedAt for transcripts');

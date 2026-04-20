@@ -14,7 +14,6 @@ type TranscriptRecordForBuilder = {
   sampleIndex: number;
   modelId: string;
   scenarioId: string | null;
-  decisionCode: string | null;
   decisionMetadata: unknown;
   definitionSnapshot: unknown;
   scenario: {

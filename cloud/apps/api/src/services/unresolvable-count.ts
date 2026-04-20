@@ -16,7 +16,6 @@ export async function getUnresolvableCount(runId: string): Promise<UnresolvableC
     where: {
       runId,
       summarizedAt: { not: null },
-      decisionCodeSource: { not: 'manual' },
     },
     select: {
       modelId: true,

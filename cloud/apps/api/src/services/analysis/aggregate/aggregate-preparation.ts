@@ -52,7 +52,6 @@ type AggregateTranscriptRecord = {
   sampleIndex: number;
   modelId: string;
   scenarioId: string | null;
-  decisionCode: string | null;
   decisionMetadata: unknown;
   definitionSnapshot: unknown;
   summarizedAt: Date | null;
@@ -213,7 +212,6 @@ export async function prepareAggregateRunSnapshot(
       sampleIndex: true,
       modelId: true,
       scenarioId: true,
-      decisionCode: true,
       decisionMetadata: true,
       definitionSnapshot: true,
       summarizedAt: true,
