@@ -1,0 +1,15 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "b3aceda3817c90a8aa89e55c83957b990b11ee1d",
+  "git_base_ref": "1ea4d9fb",
+  "git_base_sha": "1ea4d9fb384b6e587924d977f53c10820546f58b",
+  "paths": [
+    "cloud/apps/api/src/cli",
+    "cloud/apps/api/src/services/analysis/aggregate",
+    "cloud/apps/api/src/services/consistency"
+  ],
+  "allowed_dirty_paths": [],
+  "untracked_files_included": [],
+  "artifact_path": "docs/workflow/feature-runs/aggregate-consistency-data/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}
