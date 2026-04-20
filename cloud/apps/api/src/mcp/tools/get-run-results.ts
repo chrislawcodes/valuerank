@@ -214,7 +214,6 @@ Limited to 8KB token budget.`,
             },
             select: {
               id: true,
-              decisionCode: true,
               decisionMetadata: true,
               definitionSnapshot: true,
               decisionText: true,
@@ -242,7 +241,6 @@ Limited to 8KB token budget.`,
               ? null
               : (() => {
                 const resolved = resolveTranscriptDecisionModel({
-                  decisionCode: transcript.decisionCode,
                   decisionMetadata: transcript.decisionMetadata,
                   definitionSnapshot: transcript.definitionSnapshot,
                   orientationFlipped: transcript.scenario?.orientationFlipped ?? null,

@@ -14,8 +14,6 @@ function createTranscript(overrides: Partial<Transcript>): Transcript {
     modelId: 'openai:gpt-4.1',
     modelVersion: null,
     content: null,
-    decisionCode: null,
-    decisionCodeSource: null,
     decisionMetadata: null,
     turnCount: 0,
     tokenCount: 0,
@@ -32,17 +30,17 @@ describe('analysisCoverage', () => {
     const coverage = summarizeDecisionCoverage([
       createTranscript({
         id: 'exact',
-        decisionCode: '5',
+        content: { decision: '5' },
         decisionMetadata: { parseClass: 'exact' },
       }),
       createTranscript({
         id: 'fallback',
-        decisionCode: '4',
+        content: { decision: '4' },
         decisionMetadata: { parseClass: 'fallback_resolved' },
       }),
       createTranscript({
         id: 'manual',
-        decisionCode: '2',
+        content: { decision: '2' },
         decisionMetadata: {
           parseClass: 'ambiguous',
           manualOverride: { previousDecisionCode: null, overriddenAt: '2026-03-13T12:05:00Z' },
@@ -50,12 +48,11 @@ describe('analysisCoverage', () => {
       }),
       createTranscript({
         id: 'unresolved',
-        decisionCode: null,
         decisionMetadata: { parseClass: 'ambiguous' },
       }),
       createTranscript({
         id: 'legacy',
-        decisionCode: '3',
+        content: { decision: '3' },
       }),
     ]);
 
@@ -76,7 +73,7 @@ describe('analysisCoverage', () => {
     const coverage = summarizeDecisionCoverage([
       createTranscript({
         modelId: 'gpt-4.1',
-        decisionCode: '5',
+        content: { decision: '5' },
         decisionMetadata: { parseClass: 'exact' },
       }),
     ]);
@@ -88,8 +85,8 @@ describe('analysisCoverage', () => {
 
   it('stays hidden for pure legacy numeric coverage with no unresolved transcripts', () => {
     const coverage = summarizeDecisionCoverage([
-      createTranscript({ decisionCode: '1' }),
-      createTranscript({ id: 'legacy-2', decisionCode: '5' }),
+      createTranscript({ content: { decision: '1' } }),
+      createTranscript({ id: 'legacy-2', content: { decision: '5' } }),
     ]);
 
     expect(coverage.hasMethodologySignals).toBe(false);

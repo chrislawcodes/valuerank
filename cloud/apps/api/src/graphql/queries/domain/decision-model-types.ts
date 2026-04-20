@@ -18,6 +18,10 @@ export type RawDecisionEvidence = {
   parsePath: string | null;
   parserVersion: string | null;
   responseExcerpt: string | null;
+  /** First-class refusal signal from the Python worker. When true, the model
+   * refused to answer. Replaces the legacy `summary.decisionCode === "refusal"`
+   * encoding. */
+  refusal: boolean;
   manualOverride: {
     previousValue: string | null;
     overriddenAt: string | null;
@@ -90,7 +94,6 @@ export type DecisionModelResult = {
 };
 
 export type TranscriptDecisionModelInput = {
-  decisionCode: string | null;
   decisionMetadata: unknown;
   /** Supply definitionSnapshot OR pairOverride — pairOverride takes precedence if both provided */
   definitionSnapshot?: unknown;
@@ -107,9 +110,26 @@ export type ParsedDecisionPath = {
   strength: DecisionStrength;
 };
 
+/**
+ * Cached canonical decision attached to a summarize cache entry.
+ *
+ * `cacheVersion`:
+ * - `2` — the current shape. Fresh writes always emit v2.
+ * - `1` — legacy rows written before the single-source-of-truth migration.
+ *   Accepted by the validator as a deploy-window tolerance bridge; a
+ *   follow-up mini-PR tightens the union to literal `2` after the
+ *   migration's --apply step verifies zero v1 rows remain.
+ *
+ * `decisionState`:
+ * - `"resolved"`: parser chose a value (favoredValueKey + strength populated).
+ * - `"neutral"`: model explicitly picked the middle / "neutral" scale option.
+ * - `"unknown"`: parser could not resolve.
+ * - `"refusal"`: model explicitly refused to answer. Signalled by the Python
+ *   worker setting `decisionMetadata.refusal = true`.
+ */
 export type CachedWinnerFirstDecision = {
-  cacheVersion: 1;
-  decisionState: 'resolved' | 'neutral' | 'unknown';
+  cacheVersion: 1 | 2;
+  decisionState: 'resolved' | 'neutral' | 'unknown' | 'refusal';
   favoredValueKey: DomainAnalysisValueKey | null;
   strength: DecisionStrength;
 };

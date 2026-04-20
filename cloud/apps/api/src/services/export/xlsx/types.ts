@@ -151,8 +151,6 @@ export type ChartConfig = {
 export type RawDataRow = {
   modelName: string;
   sampleIndex: number;
-  decisionCode: string;
-  decisionText: string;
   transcriptId: string;
   fullResponse: string;
   variables: Record<string, number>;

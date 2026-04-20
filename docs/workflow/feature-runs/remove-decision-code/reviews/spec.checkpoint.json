@@ -1,0 +1,66 @@
+{
+  "feature_slug": "remove-decision-code",
+  "stage": "spec",
+  "artifact_path": "docs/workflow/feature-runs/remove-decision-code/spec.md",
+  "git_base_ref": "",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "feasibility-adversarial",
+      "stage": "spec",
+      "path": "docs/workflow/feature-runs/remove-decision-code/reviews/spec.codex.feasibility-adversarial.review.md",
+      "context_paths": [
+        "cloud/scripts/backfill-canonical-v2-migration.ts",
+        "cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts",
+        "cloud/scripts/inspect-canonical-drift.ts",
+        "cloud/scripts/backfill-reparse-decisions.ts",
+        "cloud/scripts/reparse-decision-stdin.py",
+        "cloud/scripts/job-choice-bridge-report.ts",
+        "cloud/scripts/__tests__/job-choice-bridge-report.test.ts",
+        "cloud/scripts/job-choice-bridge-report-lib.ts",
+        "cloud/apps/api/src/graphql/queries/domain/decision-model.ts"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "edge-cases-adversarial",
+      "stage": "spec",
+      "path": "docs/workflow/feature-runs/remove-decision-code/reviews/spec.codex.edge-cases-adversarial.review.md",
+      "context_paths": [
+        "cloud/scripts/backfill-canonical-v2-migration.ts",
+        "cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts",
+        "cloud/scripts/inspect-canonical-drift.ts",
+        "cloud/scripts/backfill-reparse-decisions.ts",
+        "cloud/scripts/reparse-decision-stdin.py",
+        "cloud/scripts/job-choice-bridge-report.ts",
+        "cloud/scripts/__tests__/job-choice-bridge-report.test.ts",
+        "cloud/scripts/job-choice-bridge-report-lib.ts",
+        "cloud/apps/api/src/graphql/queries/domain/decision-model.ts"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "requirements-adversarial",
+      "stage": "spec",
+      "path": "docs/workflow/feature-runs/remove-decision-code/reviews/spec.gemini.requirements-adversarial.review.md",
+      "context_paths": [
+        "cloud/scripts/backfill-canonical-v2-migration.ts",
+        "cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts",
+        "cloud/scripts/inspect-canonical-drift.ts",
+        "cloud/scripts/backfill-reparse-decisions.ts",
+        "cloud/scripts/reparse-decision-stdin.py",
+        "cloud/scripts/job-choice-bridge-report.ts",
+        "cloud/scripts/__tests__/job-choice-bridge-report.test.ts",
+        "cloud/scripts/job-choice-bridge-report-lib.ts",
+        "cloud/apps/api/src/graphql/queries/domain/decision-model.ts"
+      ],
+      "model": "gemini-2.5-pro"
+    }
+  ],
+  "max_artifact_chars": 250000,
+  "max_context_chars": 120000,
+  "max_total_chars": 400000
+}

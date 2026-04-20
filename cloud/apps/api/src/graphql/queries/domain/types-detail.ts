@@ -42,8 +42,6 @@ export type DomainAnalysisConditionTranscript = {
   runId: string;
   scenarioId: string | null;
   modelId: string;
-  decisionCode: string | null;
-  decisionCodeSource: string | null;
   decisionMetadata: unknown;
   definitionSnapshot?: unknown;
   pairOverride?: DomainAnalysisValuePair | null;
@@ -103,8 +101,6 @@ builder.objectType(DomainAnalysisConditionTranscriptRef, {
     runId: t.exposeID('runId'),
     scenarioId: t.exposeID('scenarioId', { nullable: true }),
     modelId: t.exposeString('modelId'),
-    decisionCode: t.exposeString('decisionCode', { nullable: true }),
-    decisionCodeSource: t.exposeString('decisionCodeSource', { nullable: true }),
     decisionModelV2: t.field({
       type: 'JSON',
       nullable: true,
@@ -119,7 +115,6 @@ builder.objectType(DomainAnalysisConditionTranscriptRef, {
             : await ctx.loaders.scenario.load(transcript.scenarioId);
 
         return resolveTranscriptDecisionModel({
-          decisionCode: transcript.decisionCode,
           decisionMetadata: transcript.decisionMetadata,
           definitionSnapshot: transcript.definitionSnapshot,
           orientationFlipped: scenario?.orientationFlipped ?? null,

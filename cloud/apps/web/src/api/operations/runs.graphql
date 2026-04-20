@@ -271,8 +271,18 @@ mutation RestartSummarization($runId: ID!, $force: Boolean) {
   }
 }
 
-mutation UpdateTranscriptDecision($transcriptId: ID!, $decisionCode: String!) {
-  updateTranscriptDecision(transcriptId: $transcriptId, decisionCode: $decisionCode) {
+mutation UpdateTranscriptDecision(
+  $transcriptId: ID!
+  $decisionState: String!
+  $favoredValueKey: String
+  $strength: String
+) {
+  updateTranscriptDecision(
+    transcriptId: $transcriptId
+    decisionState: $decisionState
+    favoredValueKey: $favoredValueKey
+    strength: $strength
+  ) {
     id
     runId
     scenarioId

@@ -59,7 +59,14 @@ type UseRunMutationsResult = {
   updateRun: (runId: string, input: UpdateRunInput) => Promise<Run>;
   cancelSummarization: (runId: string) => Promise<CancelSummarizationResult>;
   restartSummarization: (runId: string, force?: boolean) => Promise<RestartSummarizationResult>;
-  updateTranscriptDecision: (transcriptId: string, decisionCode: string) => Promise<Transcript>;
+  updateTranscriptDecision: (
+    transcriptId: string,
+    input: {
+      decisionState: 'resolved' | 'neutral' | 'unknown' | 'refusal';
+      favoredValueKey?: string | null;
+      strength?: 'strong' | 'lean' | null;
+    },
+  ) => Promise<Transcript>;
   loading: boolean;
   error: Error | null;
 };
@@ -225,8 +232,20 @@ export function useRunMutations(): UseRunMutationsResult {
   );
 
   const updateTranscriptDecision = useCallback(
-    async (transcriptId: string, decisionCode: string): Promise<Transcript> => {
-      const result = await executeUpdateTranscriptDecision({ transcriptId, decisionCode });
+    async (
+      transcriptId: string,
+      input: {
+        decisionState: 'resolved' | 'neutral' | 'unknown' | 'refusal';
+        favoredValueKey?: string | null;
+        strength?: 'strong' | 'lean' | null;
+      },
+    ): Promise<Transcript> => {
+      const result = await executeUpdateTranscriptDecision({
+        transcriptId,
+        decisionState: input.decisionState,
+        favoredValueKey: input.favoredValueKey ?? null,
+        strength: input.strength ?? null,
+      });
       if (result.error) {
         throw new Error(result.error.message);
       }

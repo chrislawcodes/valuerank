@@ -87,7 +87,7 @@ describe('getUnresolvableCount', () => {
     expect(result.byModel).toContainEqual({ modelId: 'model-b', count: 1 });
   });
 
-  it('queries only summarized non-manual transcripts', async () => {
+  it('queries only summarized transcripts', async () => {
     mockFindMany.mockResolvedValue([]);
 
     await getUnresolvableCount('run-abc');
@@ -97,9 +97,14 @@ describe('getUnresolvableCount', () => {
         where: expect.objectContaining({
           runId: 'run-abc',
           summarizedAt: { not: null },
-          decisionCodeSource: { not: 'manual' },
         }),
       })
     );
+    // The legacy decisionCodeSource: { not: 'manual' } filter was dropped in W4
+    // of remove-decision-code. Manual overrides are now naturally excluded
+    // because resolveTranscriptDecisionModel returns a resolved canonical for
+    // them, so they do not count as unknown.
+    const callArg = mockFindMany.mock.calls[0]?.[0] as { where: Record<string, unknown> } | undefined;
+    expect(callArg?.where).not.toHaveProperty('decisionCodeSource');
   });
 });

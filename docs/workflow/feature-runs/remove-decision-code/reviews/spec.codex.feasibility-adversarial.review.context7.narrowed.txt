@@ -1,0 +1,247 @@
+00001: type ParseClass = 'exact' | 'fallback_resolved' | 'ambiguous' | 'legacy_numeric';
+00002: 
+00003: export type BridgeRunInput = {
+00004:   runId: string;
+00005:   runName: string | null;
+00006:   definitionId: string;
+00007:   definitionName: string;
+00008:   definitionVersion: number | null;
+00009:   scenarioCount: number;
+00010:   launchMode: string | null;
+00011:   methodologySafe: boolean | null;
+00012:   responseScale: string | null;
+00013:   family: string | null;
+00014:   pairKey: string | null;
+00015:   valueFirst: string | null;
+00016:   trialSignature: string;
+00017:   transcripts: BridgeTranscriptInput[];
+00018: };
+00019: 
+00020: export type BridgeTranscriptInput = {
+00021:   transcriptId: string;
+00022:   scenarioId: string | null;
+00023:   scenarioName: string | null;
+00024:   modelId: string;
+00025:   decisionCode: string | null;
+00026:   decisionCodeSource: string | null;
+00027:   parseClass: 'exact' | 'fallback_resolved' | 'ambiguous' | null;
+00028:   matchedLabel: string | null;
+00029:   responseExcerpt: string | null;
+00030:   parsePath: string | null;
+00031: };
+00032: 
+00033: export type BridgeCountSummary = {
+00034:   totalTranscripts: number;
+00035:   scoredTranscripts: number;
+00036:   unresolvedTranscripts: number;
+00037:   exactCount: number;
+00038:   fallbackCount: number;
+00039:   ambiguousCount: number;
+00040:   manualCount: number;
+00041:   legacyNumericCount: number;
+00042: };
+00043: 
+00044: export type BridgeRunSummary = BridgeCountSummary & {
+00045:   runId: string;
+00046:   runName: string | null;
+00047:   definitionId: string;
+00048:   definitionName: string;
+00049:   vignetteKey: string;
+00050:   responseScale: string | null;
+00051:   family: string | null;
+00052:   pairKey: string | null;
+00053:   valueFirst: string | null;
+00054:   launchMode: string | null;
+00055:   methodologySafe: boolean | null;
+00056:   trialSignature: string;
+00057:   models: string[];
+00058: };
+00059: 
+00060: export type BridgeVignetteSummary = BridgeCountSummary & {
+00061:   vignetteKey: string;
+00062:   pairKey: string | null;
+00063:   definitionIds: string[];
+00064:   definitionNames: string[];
+00065:   runIds: string[];
+00066:   responseScales: string[];
+00067:   models: string[];
+00068: };
+00069: 
+00070: export type BridgeModelVignetteSummary = BridgeCountSummary & {
+00071:   vignetteKey: string;
+00072:   modelId: string;
+00073:   runIds: string[];
+00074:   responseScales: string[];
+00075: };
+00076: 
+00077: export type BridgeExemplar = {
+00078:   transcriptId: string;
+00079:   runId: string;
+00080:   definitionName: string;
+00081:   vignetteKey: string;
+00082:   modelId: string;
+00083:   scenarioId: string | null;
+00084:   scenarioName: string | null;
+00085:   parseClass: Exclude<ParseClass, 'legacy_numeric'>;
+00086:   decisionCode: string | null;
+00087:   decisionCodeSource: string | null;
+00088:   matchedLabel: string | null;
+00089:   responseExcerpt: string | null;
+00090:   parsePath: string | null;
+00091:   runUrl: string;
+00092:   transcriptUrl: string;
+00093: };
+00094: 
+00095: export type JobChoiceBridgeReport = {
+00096:   generatedAt: string;
+00097:   descriptiveOnly: true;
+00098:   totalRuns: number;
+00099:   totalTranscripts: number;
+00100:   runSummaries: BridgeRunSummary[];
+00101:   vignetteSummaries: BridgeVignetteSummary[];
+00102:   modelVignetteSummaries: BridgeModelVignetteSummary[];
+00103:   exemplars: {
+00104:     fallback_resolved: BridgeExemplar[];
+00105:     ambiguous: BridgeExemplar[];
+00106:   };
+00107: };
+00108: 
+00109: function createEmptyCounts(): BridgeCountSummary {
+00110:   return {
+00111:     totalTranscripts: 0,
+00112:     scoredTranscripts: 0,
+00113:     unresolvedTranscripts: 0,
+00114:     exactCount: 0,
+00115:     fallbackCount: 0,
+00116:     ambiguousCount: 0,
+00117:     manualCount: 0,
+00118:     legacyNumericCount: 0,
+00119:   };
+00120: }
+00121: 
+00122: function toVignetteKey(run: BridgeRunInput): string {
+00123:   if (run.pairKey) {
+00124:     return run.pairKey;
+00125:   }
+00126: 
+00127:   return run.definitionId;
+00128: }
+00129: 
+00130: function normalizeBaseUrl(baseUrl: string): string {
+00131:   return baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+00132: }
+00133: 
+00134: function isScored(decisionCode: string | null): boolean {
+00135:   return decisionCode === '1' || decisionCode === '2' || decisionCode === '3' || decisionCode === '4' || decisionCode === '5';
+00136: }
+00137: 
+00138: function getTranscriptParseClass(transcript: BridgeTranscriptInput): ParseClass {
+00139:   if (transcript.parseClass === 'exact') {
+00140:     return 'exact';
+00141:   }
+00142:   if (transcript.parseClass === 'fallback_resolved') {
+00143:     return 'fallback_resolved';
+00144:   }
+00145:   if (transcript.parseClass === 'ambiguous') {
+00146:     return 'ambiguous';
+00147:   }
+00148:   return 'legacy_numeric';
+00149: }
+00150: 
+00151: function applyTranscriptCounts(summary: BridgeCountSummary, transcript: BridgeTranscriptInput): void {
+00152:   const parseClass =
+
+... [narrowed review slice: middle omitted] ...
+
+const rightKey = right.definitionName ?? `${right.vignetteKey ?? ''}${right.modelId ?? ''}`;
+00283:     return leftKey.localeCompare(rightKey);
+00284:   };
+00285: 
+00286:   return {
+00287:     generatedAt: new Date().toISOString(),
+00288:     descriptiveOnly: true,
+00289:     totalRuns: runs.length,
+00290:     totalTranscripts: runSummaries.reduce((sum, summary) => sum + summary.totalTranscripts, 0),
+00291:     runSummaries: runSummaries.sort(sortByName),
+00292:     vignetteSummaries: [...vignetteMap.values()].sort(sortByName),
+00293:     modelVignetteSummaries: [...modelVignetteMap.values()].sort((left, right) => {
+00294:       if (left.vignetteKey === right.vignetteKey) {
+00295:         return left.modelId.localeCompare(right.modelId);
+00296:       }
+00297:       return left.vignetteKey.localeCompare(right.vignetteKey);
+00298:     }),
+00299:     exemplars: {
+00300:       fallback_resolved: exemplars.fallback_resolved,
+00301:       ambiguous: exemplars.ambiguous,
+00302:     },
+00303:   };
+00304: }
+00305: 
+00306: function formatCountCell(value: number, total: number): string {
+00307:   if (total === 0) return '0';
+00308:   const share = ((value / total) * 100).toFixed(1);
+00309:   return `${value} (${share}%)`;
+00310: }
+00311: 
+00312: export function renderJobChoiceBridgeMarkdown(report: JobChoiceBridgeReport): string {
+00313:   const lines: string[] = [];
+00314:   lines.push('# Job Choice Bridge Report');
+00315:   lines.push('');
+00316:   lines.push('This report is descriptive only. It does not claim cross-family equivalence.');
+00317:   lines.push('');
+00318:   lines.push(`Generated: ${report.generatedAt}`);
+00319:   lines.push(`Runs: ${report.totalRuns}`);
+00320:   lines.push(`Transcripts: ${report.totalTranscripts}`);
+00321:   lines.push('');
+00322: 
+00323:   lines.push('## Per-Run Summary');
+00324:   lines.push('');
+00325:   lines.push('| Run | Vignette | Signature | Models | Exact | Fallback | Ambiguous | Manual | Unresolved |');
+00326:   lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+00327:   for (const run of report.runSummaries) {
+00328:     lines.push(
+00329:       `| ${run.runId} | ${run.definitionName} | ${run.trialSignature} | ${run.models.length} | ${run.exactCount} | ${run.fallbackCount} | ${run.ambiguousCount} | ${run.manualCount} | ${run.unresolvedTranscripts} |`,
+00330:     );
+00331:   }
+00332:   lines.push('');
+00333: 
+00334:   lines.push('## Per-Vignette Summary');
+00335:   lines.push('');
+00336:   lines.push('| Vignette | Runs | Models | Exact | Fallback | Ambiguous | Manual | Unresolved |');
+00337:   lines.push('| --- | --- | --- | --- | --- | --- | --- | --- |');
+00338:   for (const vignette of report.vignetteSummaries) {
+00339:     lines.push(
+00340:       `| ${vignette.definitionNames.join('<br/>')} | ${vignette.runIds.length} | ${vignette.models.length} | ${formatCountCell(vignette.exactCount, vignette.totalTranscripts)} | ${formatCountCell(vignette.fallbackCount, vignette.totalTranscripts)} | ${formatCountCell(vignette.ambiguousCount, vignette.totalTranscripts)} | ${formatCountCell(vignette.manualCount, vignette.totalTranscripts)} | ${formatCountCell(vignette.unresolvedTranscripts, vignette.totalTranscripts)} |`,
+00341:     );
+00342:   }
+00343:   lines.push('');
+00344: 
+00345:   lines.push('## Per-Model / Per-Vignette Summary');
+00346:   lines.push('');
+00347:   lines.push('| Vignette | Model | Total | Exact | Fallback | Ambiguous | Manual | Unresolved |');
+00348:   lines.push('| --- | --- | --- | --- | --- | --- | --- | --- |');
+00349:   for (const summary of report.modelVignetteSummaries) {
+00350:     lines.push(
+00351:       `| ${summary.vignetteKey} | ${summary.modelId} | ${summary.totalTranscripts} | ${summary.exactCount} | ${summary.fallbackCount} | ${summary.ambiguousCount} | ${summary.manualCount} | ${summary.unresolvedTranscripts} |`,
+00352:     );
+00353:   }
+00354:   lines.push('');
+00355: 
+00356:   for (const bucket of ['fallback_resolved', 'ambiguous'] as const) {
+00357:     lines.push(`## ${bucket === 'fallback_resolved' ? 'Fallback Exemplars' : 'Ambiguous Exemplars'}`);
+00358:     lines.push('');
+00359:     if (report.exemplars[bucket].length === 0) {
+00360:       lines.push('No exemplars in this bucket.');
+00361:       lines.push('');
+00362:       continue;
+00363:     }
+00364:     lines.push('| Transcript | Run | Vignette | Model | Scenario | Parse Path | Matched Label | Transcript Link |');
+00365:     lines.push('| --- | --- | --- | --- | --- | --- | --- | --- |');
+00366:     for (const exemplar of report.exemplars[bucket]) {
+00367:       lines.push(
+00368:         `| ${exemplar.transcriptId} | ${exemplar.runId} | ${exemplar.definitionName} | ${exemplar.modelId} | ${exemplar.scenarioName ?? exemplar.scenarioId ?? '—'} | ${exemplar.parsePath ?? '—'} | ${exemplar.matchedLabel ?? '—'} | [open](${exemplar.transcriptUrl}) |`,
+00369:       );
+00370:     }
+00371:     lines.push('');
+00372:   }
+0037

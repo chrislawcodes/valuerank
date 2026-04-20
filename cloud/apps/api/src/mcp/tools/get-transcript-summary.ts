@@ -124,7 +124,6 @@ function formatTranscriptSummary(
   model: string,
   transcript: {
     content: unknown;
-    decisionCode: string | null;
     decisionMetadata: unknown;
     definitionSnapshot: unknown;
     scenario: { orientationFlipped: boolean | null } | null;
@@ -143,7 +142,6 @@ function formatTranscriptSummary(
   }
 
   const resolved = resolveTranscriptDecisionModel({
-    decisionCode: transcript.decisionCode,
     decisionMetadata: transcript.decisionMetadata,
     definitionSnapshot: transcript.definitionSnapshot,
     orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
@@ -211,7 +209,6 @@ Limited to 1KB token budget.`,
           },
           select: {
             content: true,
-            decisionCode: true,
             decisionMetadata: true,
             definitionSnapshot: true,
             scenario: {

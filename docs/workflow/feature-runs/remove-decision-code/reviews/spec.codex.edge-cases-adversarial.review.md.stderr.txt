@@ -1,0 +1,2435 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/serene-lamarr-4f056c
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019da912-9c2f-7442-94fe-faf23faf9671
+--------
+user
+Review this spec artifact using a edge-cases-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: backfill-canonical-v2-migration.ts
+/**
+ * Migration: upgrade every cached canonicalDecision to cacheVersion 2.
+ *
+ * For each transcript whose `decision_metadata.summaryCache` is not null:
+ *   - If `summaryCache.summary.decisionCode` is present, derive a fresh
+ *     canonicalDecision from {decisionCode, value pair, orientationFlipped}
+ *     using the truth table in `canonicalFromDecisionCode` below. Strip
+ *     decisionCode and decisionCodeSource from the summary. Write
+ *     cacheVersion: 2.
+ *   - If decisionCode is absent and cacheVersion is not yet 2, preserve
+ *     the existing canonical values verbatim and only bump cacheVersion
+ *     to 2. No retroactive refusal inference.
+ *   - If decisionCode is absent and cacheVersion is already 2, no-op.
+ *
+ * Rows with a malformed `definition_snapshot` (missing or non-string
+ * value pair tokens) are skipped and reported under `missing-snapshot`.
+ *
+ * Idempotent. Per-row atomic. Dry-run by default.
+ *
+ * Usage (from cloud/apps/api/):
+ *   npx tsx --env-file=../../.env ../../scripts/backfill-canonical-v2-migration.ts
+ *   npx tsx --env-file=../../.env ../../scripts/backfill-canonical-v2-migration.ts --apply
+ *
+ * Against prod (from cloud/):
+ *   DATABASE_URL="$PROD_URL" npx tsx scripts/backfill-canonical-v2-migration.ts
+ *   DATABASE_URL="$PROD_URL" npx tsx scripts/backfill-canonical-v2-migration.ts --apply
+ *
+ * Flags:
+ *   --apply                         Write mode (default: dry-run).
+ *   --domain=<normalizedName>       Scope to one domain.
+ *   --limit=<n>                     Cap the number of rows visited.
+ */
+import { pathToFileURL } from 'node:url';
+
+import { db } from '@valuerank/db';
+import type { Prisma } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+
+const log = createLogger('scripts:backfill-canonical-v2-migration');
+
+// -------------------------------------------------------------------
+// Truth table
+// -------------------------------------------------------------------
+
+export type CanonicalV2 = {
+  cacheVersion: 2;
+  decisionState: 'resolved' | 'neutral' | 'unknown' | 'refusal';
+  strength: 'strong' | 'lean' | 'neutral' | 'unknown';
+  favoredValueKey: string | null;
+};
+
+export type ValuePair = { valueA: string; valueB: string };
+
+/**
+ * Pure derivation of the v2 canonical from {decisionCode, pair, orientationFlipped}.
+ *
+ * Mapping:
+ *   "5" + !flipped  -> favor_first  strong    (favoredValueKey = valueA)
+ *   "5" + flipped   -> favor_second strong    (favoredValueKey = valueB)
+ *   "4" + !flipped  -> favor_first  lean      (favoredValueKey = valueA)
+ *   "4" + flipped   -> favor_second lean      (favoredValueKey = valueB)
+ *   "3"             -> neutral (both orientations identical)
+ *   "2" + !flipped  -> favor_second lean      (favoredValueKey = valueB)
+ *   "2" + flipped   -> favor_first  lean      (favoredValueKey = valueA)
+ *   "1" + !flipped  -> favor_second strong    (favoredValueKey = valueB)
+ *   "1" + flipped   -> favor_first  strong    (favoredValueKey = valueA)
+ *   "refusal"       -> {refusal, unknown, null}
+ *   "other" / null  -> {unknown, unknown, null}
+ */
+export function canonicalFromDecisionCode(
+  decisionCode: string | null | undefined,
+  pair: ValuePair,
+  orientationFlipped: boolean,
+): CanonicalV2 {
+  if (decisionCode === 'refusal') {
+    return { cacheVersion: 2, decisionState: 'refusal', strength: 'unknown', favoredValueKey: null };
+  }
+  if (decisionCode == null || decisionCode === '' || decisionCode === 'other') {
+    return { cacheVersion: 2, decisionState: 'unknown', strength: 'unknown', favoredValueKey: null };
+  }
+  if (decisionCode === '3') {
+    return { cacheVersion: 2, decisionState: 'neutral', strength: 'neutral', favoredValueKey: null };
+  }
+  if (decisionCode === '5') {
+    return {
+      cacheVersion: 2,
+      decisionState: 'resolved',
+      strength: 'strong',
+      favoredValueKey: orientationFlipped ? pair.valueB : pair.valueA,
+    };
+  }
+  if (decisionCode === '4') {
+    return {
+      cacheVersion: 2,
+      decisionState: 'resolved',
+      strength: 'lean',
+      favoredValueKey: orientationFlipped ? pair.valueB : pair.valueA,
+    };
+  }
+  if (decisionCode === '2') {
+    return {
+      cacheVersion: 2,
+      decisionState: 'resolved',
+      strength: 'lean',
+      favoredValueKey: orientationFlipped ? pair.valueA : pair.valueB,
+    };
+  }
+  if (decisionCode === '1') {
+    return {
+      cacheVersion: 2,
+      decisionState: 'resolved',
+      strength: 'strong',
+      favoredValueKey: orientationFlipped ? pair.valueA : pair.valueB,
+    };
+  }
+  // Unexpected decisionCode — treat as unknown to avoid misclassification.
+  return { cacheVersion: 2, decisionState: 'unknown', strength: 'unknown', favoredValueKey: null };
+}
+
+/**
+ * Extract the value pair from a transcript's definition_snapshot JSON.
+ * Returns null if the snapshot is malformed in any way — the migration
+ * treats null as "skip this row and report as missing-snapshot".
+ *
+ * Must not throw on any input.
+ */
+export function pairFromSnapshot(snapshot: unknown): ValuePair | null {
+  if (snapshot == null || typeof snapshot !== 'object' || Array.isArray(snapshot)) return null;
+  const components = (snapshot as { components?: unknown }).components;
+  if (components == null || typeof components !== 'object' || Array.isArray(components)) return null;
+  const valueFirst = (components as { value_first?: unknown }).value_first;
+  const valueSecond = (components as { value_second?: unknown }).value_second;
+  if (valueFirst == null || typeof valueFirst !== 'object' || Array.isArray(valueFirst)) return null;
+  if (valueSecond == null || typeof valueSecond !== 'object' || Array.isArray(valueSecond)) return null;
+  const valueA = (valueFirst as { token?: unknown }).token;
+  const valueB = (valueSecond as { token?: unknown }).token;
+  if (typeof valueA !== 'string' || typeof valueB !== 'string') return null;
+  if (!valueA || !valueB) return null;
+  return { valueA, valueB };
+}
+
+// -------------------------------------------------------------------
+// CLI + orchestration
+// -------------------------------------------------------------------
+
+type Category =
+  | 'drifted'
+  | 'no-change-with-code'
+  | 'v1-upgrade-preserving-canonical'
+  | 'already-v2'
+  | 'missing-snapshot'
+  | 'errors';
+
+function parseArgs(): { apply: boolean; domain: string | null; limit: number | null } {
+  const args = process.argv.slice(2);
+  const apply = args.includes('--apply');
+  const domainArg = args.find((a) => a.startsWith('--domain='));
+  const limitArg = args.find((a) => a.startsWith('--limit='));
+  const domain = domainArg != null ? (domainArg.split('=')[1] ?? null) : null;
+  const limit = limitArg != null ? Number(limitArg.split('=')[1] ?? 'NaN') : null;
+  return { apply, domain, limit: limit != null && Number.isFinite(limit) ? limit : null };
+}
+
+function canonicalEquals(a: unknown, b: CanonicalV2): boolean {
+  if (a == null || typeof a !== 'object' || Array.isArray(a)) return false;
+  const rec = a as Record<string, unknown>;
+  return (
+    rec.cacheVersion === b.cacheVersion
+    && rec.decisionState === b.decisionState
+    && rec.strength === b.strength
+    && (rec.favoredValueKey ?? null) === b.favoredValueKey
+  );
+}
+
+async function main(): Promise<void> {
+  const { apply, domain, limit } = parseArgs();
+  log.info({ apply, domain, limit }, apply ? 'APPLY mode — will write' : 'DRY RUN — pass --apply to write');
+
+  let domainId: string | null = null;
+  if (domain != null) {
+    const d = await db.domain.findUnique({ where: { normalizedName: domain }, select: { id: true } });
+    if (d == null) throw new Error(`Domain "${domain}" not found`);
+    domainId = d.id;
+  }
+
+  // Row IDs first, then per-row fetch+update. Avoids loading everything into memory.
+  const candidateIds = await db.$queryRawUnsafe<{ id: string }[]>(
+    `
+    SELECT t.id FROM transcripts t
+    ${domainId != null ? 'JOIN runs r ON r.id = t.run_id JOIN definitions def ON def.id = r.definition_id' : ''}
+    WHERE t.decision_metadata->'summaryCache' IS NOT NULL
+      ${domainId != null ? 'AND def.domain_id = $1' : ''}
+    ORDER BY t.created_at ASC
+    ${limit != null ? `LIMIT ${limit}` : ''}
+    `,
+    ...(domainId != null ? [domainId] : []),
+  );
+
+  log.info({ candidateCount: candidateIds.length }, 'Visiting transcripts');
+  if (candidateIds.length === 0) {
+    log.info('Nothing to do');
+    return;
+  }
+
+  const counts: Record<Category, number> = {
+    drifted: 0,
+    'no-change-with-code': 0,
+    'v1-upgrade-preserving-canonical': 0,
+    'already-v2': 0,
+    'missing-snapshot': 0,
+    errors: 0,
+  };
+
+  // Batch fetches to avoid per-row round-trips over the public proxy.
+  const BATCH_SIZE = 500;
+  const started = Date.now();
+
+  for (let batchStart = 0; batchStart < candidateIds.length; batchStart += BATCH_SIZE) {
+    const batch = candidateIds.slice(batchStart, batchStart + BATCH_SIZE).map((r) => r.id);
+
+    // One query for all transcripts in this batch.
+    const transcripts = await db.transcript.findMany({
+      where: { id: { in: batch } },
+      select: {
+        id: true,
+        scenarioId: true,
+        definitionSnapshot: true,
+        decisionMetadata: true,
+      },
+    });
+
+    // Collect unique scenarioIds and fetch orientationFlipped for all at once.
+    const scenarioIds = Array.from(
+      new Set(transcripts.map((t) => t.scenarioId).filter((id): id is string => id != null)),
+    );
+    const scenarioMap = new Map<string, boolean>();
+    if (scenarioIds.length > 0) {
+      const scenarios = await db.scenario.findMany({
+        where: { id: { in: scenarioIds } },
+        select: { id: true, orientationFlipped: true },
+      });
+      for (const s of scenarios) scenarioMap.set(s.id, s.orientationFlipped ?? false);
+    }
+
+    // Per-row process in memory; writes still atomic per row.
+    for (const t of transcripts) {
+      try {
+        const existingMeta = (t.decisionMetadata as Record<string, unknown> | null) ?? {};
+        const summaryCache = (existingMeta.summaryCache as Record<string, unknown> | undefined) ?? null;
+        if (summaryCache == null) continue;
+        const summary = (summaryCache.summary as Record<string, unknown> | undefined) ?? {};
+        const existingCode = typeof summary.decisionCode === 'string' ? summary.decisionCode : null;
+        const existingCanonical = summary.canonicalDecision as Record<string, unknown> | undefined;
+        const existingCacheVersion = existingCanonical?.cacheVersion;
+
+        // Case 3: already at target.
+        if (existingCode == null && existingCacheVersion === 2) {
+          counts['already-v2'] += 1;
+          continue;
+        }
+
+        let updatedSummary: Record<string, unknown>;
+        let category: Category;
+
+        if (existingCode != null) {
+          // Case 1: derive from decisionCode + pair + orientationFlipped.
+          const pair = pairFromSnapshot(t.definitionSnapshot);
+          if (pair == null) {
+            counts['missing-snapshot'] += 1;
+            continue;
+          }
+          const orientationFlipped = t.scenarioId != null
+            ? (scenarioMap.get(t.scenarioId) ?? false)
+            : false;
+          const newCanonical = canonicalFromDecisionCode(existingCode, pair, orientationFlipped);
+          const drifted = !canonicalEquals(existingCanonical, newCanonical);
+          category = drifted ? 'drifted' : 'no-change-with-code';
+
+          // Strip decisionCode and decisionCodeSource; write new canonical.
+          const { decisionCode: _dropCode, decisionCodeSource: _dropSource, ...restSummary } = summary;
+          void _dropCode;
+          void _dropSource;
+          updatedSummary = {
+            ...restSummary,
+            canonicalDecision: newCanonical,
+          };
+        } else {
+          // Case 2: no decisionCode, cacheVersion != 2 — preserve canonical verbatim, bump.
+          if (existingCanonical == null) {
+            counts['missing-snapshot'] += 1;
+            continue;
+          }
+          const preserved: CanonicalV2 = {
+            cacheVersion: 2,
+            decisionState: (existingCanonical.decisionState as CanonicalV2['decisionState']) ?? 'unknown',
+            strength: (existingCanonical.strength as CanonicalV2['strength']) ?? 'unknown',
+            favoredValueKey: (existingCanonical.favoredValueKey as string | null) ?? null,
+          };
+          updatedSummary = {
+            ...summary,
+            canonicalDecision: preserved,
+          };
+          category = 'v1-upgrade-preserving-canonical';
+        }
+
+        counts[category] += 1;
+
+        if (!apply) continue;
+
+        const updatedMetadata = {
+          ...existingMeta,
+          summaryCache: {
+            ...summaryCache,
+            summary: updatedSummary,
+          },
+        };
+
+        await db.transcript.update({
+          where: { id: t.id },
+          data: { decisionMetadata: updatedMetadata as unknown as Prisma.InputJsonValue },
+        });
+      } catch (err) {
+        counts.errors += 1;
+        log.error({ id: t.id, err: String(err) }, 'Migration failed for transcript');
+      }
+    }
+
+    const visited = batchStart + transcripts.length;
+    const elapsedSec = Math.round((Date.now() - started) / 1000);
+    const rate = elapsedSec > 0 ? Math.round(visited / elapsedSec) : 0;
+    const remainingSec = rate > 0 ? Math.round((candidateIds.length - visited) / rate) : 0;
+    log.info(
+      { progress: `${visited}/${candidateIds.length}`, rate: `${rate}/s`, etaSec: remainingSec, counts },
+      'Batch complete',
+    );
+  }
+
+  log.info(
+    { apply, total: candidateIds.length, counts },
+    apply ? 'Migration complete' : 'Dry-run complete — pass --apply to write',
+  );
+}
+
+// Only run when executed directly, not when imported by tests.
+const isDirectRun = import.meta.url === pathToFileURL(process.argv[1] ?? '').href;
+if (isDirectRun) {
+  main()
+    .catch((err) => {
+      log.error({ err: String(err) }, 'Migration failed');
+      process.exitCode = 1;
+    })
+    .finally(() => {
+      void db.$disconnect();
+    });
+}
+
+
+Context: decision-model-helpers.ts
+import { DOMAIN_ANALYSIS_VALUE_KEYS, toPascalCaseKey, type DomainAnalysisValueKey } from '../domain-analysis-values.js';
+import { JOB_CHOICE_VALUE_STATEMENTS, labelFromBody } from '@valuerank/shared';
+import { stripFillerWords } from './decision-model-filler-words.js';
+import type {
+  DecisionDirection,
+  DecisionStrength,
+  DecisionSource,
+  CanonicalAppliedDecision,
+  CanonicalDecision,
+  DecisionPair,
+  ValueStatementEntry,
+  ParsedDecisionPath,
+  CachedWinnerFirstDecision,
+} from './decision-model-types.js';
+
+export { JOB_CHOICE_VALUE_STATEMENTS };
+
+export function isValueKey(value: string): value is DomainAnalysisValueKey {
+  return (DOMAIN_ANALYSIS_VALUE_KEYS as readonly string[]).includes(value);
+}
+
+export function isDecisionDirection(value: unknown): value is DecisionDirection {
+  return value === 'favor_first' || value === 'favor_second' || value === 'neutral' || value === 'refusal' || value === 'unknown';
+}
+
+export function isDecisionStrength(value: unknown): value is DecisionStrength {
+  return value === 'strong' || value === 'lean' || value === 'neutral' || value === 'unknown';
+}
+
+export function isCanonicalAppliedDecision(value: unknown): value is CanonicalAppliedDecision {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const decision = value as CanonicalAppliedDecision;
+  return (
+    isDecisionDirection(decision.direction) &&
+    isDecisionStrength(decision.strength) &&
+    (decision.favoredValueKey === null || (typeof decision.favoredValueKey === 'string' && isValueKey(decision.favoredValueKey))) &&
+    (decision.opposedValueKey === null || (typeof decision.opposedValueKey === 'string' && isValueKey(decision.opposedValueKey)))
+  );
+}
+
+export function isCachedWinnerFirstDecision(value: unknown): value is CachedWinnerFirstDecision {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const decision = value as CachedWinnerFirstDecision;
+
+  // Accept cacheVersion 1 (current write-path shape) and cacheVersion 2
+  // (extended shape with decisionState='refusal', produced by the migration
+  // landing in this PR and by PR #2's new write path). Any other value is
+  // an unknown future schema and MUST be rejected so callers fall back to
+  // derive-on-read.
+  if (decision.cacheVersion !== 1 && decision.cacheVersion !== 2) {
+    return false;
+  }
+
+  // Accept the legacy 3-state decisionState union PLUS 'refusal'. 'refusal'
+  // is semantically valid on both cacheVersion 1 (if any caller produces it
+  // — none do today, but the validator should not gate on that) and
+  // cacheVersion 2 (the new canonical home for refusal signals).
+  if (
+    decision.decisionState !== 'resolved'
+    && decision.decisionState !== 'neutral'
+    && decision.decisionState !== 'unknown'
+    && decision.decisionState !== 'refusal'
+  ) {
+    return false;
+  }
+
+  if (decision.decisionState === 'resolved') {
+    return (
+      typeof decision.favoredValueKey === 'string'
+      && isValueKey(decision.favoredValueKey)
+      && (decision.strength === 'strong' || decision.strength === 'lean')
+    );
+  }
+
+  if (decision.decisionState === 'neutral') {
+    return decision.favoredValueKey === null && decision.strength === 'neutral';
+  }
+
+  // 'unknown' and 'refusal' share the same field shape: no favored value,
+  // strength reported as 'unknown'. Keeping them separate decisionStates
+  // preserves the semantic signal (parser failure vs model refusal) without
+  // requiring any other field to differ.
+  return decision.favoredValueKey === null && decision.strength === 'unknown';
+}
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function isValidDecisionPair(pair: DecisionPair | null | undefined): pair is DecisionPair {
+  if (pair === null || pair === undefined) {
+    return false;
+  }
+
+  return (
+    isValueKey(pair.valueA) &&
+    isValueKey(pair.valueB) &&
+    pair.valueA !== pair.valueB
+  );
+}
+
+export function parseDecisionPath(parsePath: string | null | undefined): ParsedDecisionPath | null {
+  if (typeof parsePath !== 'string') {
+    return null;
+  }
+
+  const trimmed = parsePath.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const segments = trimmed.split('.');
+  if (segments.length > 3) {
+    return null;
+  }
+  const [branch, first, second] = segments;
+  const normalizedBranch = branch === 'fallback_resolved' ? 'fallback' : branch;
+
+  if (normalizedBranch !== 'exact' && normalizedBranch !== 'fallback' && normalizedBranch !== 'manual') {
+    return null;
+  }
+
+  if (normalizedBranch === 'manual') {
+    return first === 'override' && second === undefined
+      ? { branch: 'manual', direction: 'unknown', strength: 'unknown' }
+      : null;
+  }
+
+  if (first === 'neutral' && (second === undefined || second === 'neutral')) {
+    return { branch: normalizedBranch, direction: 'neutral', strength: 'neutral' };
+  }
+
+  if (!isDecisionDirection(first) || !isDecisionStrength(second)) {
+    return null;
+  }
+
+  return {
+    branch: normalizedBranch,
+    direction: first,
+    strength: second,
+  };
+}
+
+export function isJobChoiceDecisionPath(parsePath: string | null | undefined): boolean {
+  return typeof parsePath === 'string' && (
+    parsePath.startsWith('numeric_')
+    || parsePath.startsWith('text_label_')
+  );
+}
+
+export function flipDirection(direction: DecisionDirection): DecisionDirection {
+  if (direction === 'favor_first') return 'favor_second';
+  if (direction === 'favor_second') return 'favor_first';
+  return direction;
+}
+
+export function normalizeJobChoiceLabelText(text: string): string {
+  const stripped = text
+    .replace(/[*_`]+/g, ' ')
+    .replace(/^level of support\s*:\s*/i, '')
+    .replace(/^(?:my\s+)?(?:final\s+|overall\s+)?(?:judg(?:e)?ment|answer|response|decision|choice|rating|score)(?:\s+on\s+the\s+scale)?\s*(?:(?:is)\s*[:=]?|[:=])?\s*/i, '')
+    .trim();
+
+  return stripped
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function parseJobChoiceStrengthFromText(text: string): DecisionStrength | null {
+  const normalized = normalizeJobChoiceLabelText(text);
+  if (normalized.startsWith('strongly support')) return 'strong';
+  if (normalized.startsWith('somewhat support')) return 'lean';
+  if (normalized.startsWith('neutral')) return 'neutral';
+  return null;
+}
+
+export function resolveValueKeyFromText(
+  text: string,
+  valueStatements: readonly ValueStatementEntry[] | undefined,
+  labelPrefix: string | null,
+): DomainAnalysisValueKey | null {
+  if (valueStatements == null || valueStatements.length === 0) {
+    return null;
+  }
+
+  const normalized = normalizeJobChoiceLabelText(text);
+  if (normalized.length === 0) {
+    return null;
+  }
+  const normalizedStripped = stripFillerWords(normalized);
+
+  const prefix = labelPrefix ?? '';
+  let resolved: DomainAnalysisValueKey | null = null;
+  for (const entry of valueStatements) {
+    const valueKey = toPascalCaseKey(entry.token) as DomainAnalysisValueKey;
+    const label = normalizeJobChoiceLabelText(labelFromBody(entry.body, prefix));
+    if (!label) {
+      continue;
+    }
+    // Try exact substring first; fall back to a filler-word-stripped match on
+    // BOTH sides so responses that swap articles/possessives ("with my team"
+    // vs label "with your team") or echo a level word ("with full freedom"
+    // vs label "with freedom") still resolve correctly.
+    const labelStripped = stripFillerWords(label);
+    const matched =
+      normalized.includes(label)
+      || (labelStripped.length > 0 && normalizedStripped.includes(labelStripped));
+    if (!matched) {
+      continue;
+    }
+    if (resolved !== null && resolved !== valueKey) {
+      return null;
+    }
+    resolved = valueKey;
+  }
+
+  return resolved;
+}
+
+export function buildUnknownCanonicalDecision(source: DecisionSource): CanonicalDecision {
+  return {
+    favoredValueKey: null,
+    opposedValueKey: null,
+    direction: 'unknown',
+    strength: 'unknown',
+    normalizationApplied: false,
+    normalizationReason: null,
+    source,
+  };
+}
+
+export function buildCanonicalDecisionFromPair(
+  pair: DecisionPair,
+  direction: DecisionDirection,
+  strength: DecisionStrength,
+  normalizationApplied: boolean,
+  source: DecisionSource,
+): CanonicalDecision {
+  if (direction === 'neutral') {
+    return {
+      favoredValueKey: null,
+      opposedValueKey: null,
+      direction,
+      strength,
+      normalizationApplied,
+      normalizationReason: normalizationApplied ? 'orientation_flipped' : null,
+      source,
+    };
+  }
+
+  if (direction === 'favor_first') {
+    return {
+      favoredValueKey: pair.valueA,
+      opposedValueKey: pair.valueB,
+      direction,
+      strength,
+      normalizationApplied,
+      normalizationReason: normalizationApplied ? 'orientation_flipped' : null,
+      source,
+    };
+  }
+
+  if (direction === 'favor_second') {
+    return {
+      favoredValueKey: pair.valueB,
+      opposedValueKey: pair.valueA,
+      direction,
+      strength,
+      normalizationApplied,
+      normalizationReason: normalizationApplied ? 'orientation_flipped' : null,
+      source,
+    };
+  }
+
+  return buildUnknownCanonicalDecision(source);
+}
+
+export function validateManualAppliedDecision(
+  pair: DecisionPair,
+  appliedDecision: unknown,
+): { ok: true; canonical: CanonicalDecision } | { ok: false } {
+  if (!isCanonicalAppliedDecision(appliedDecision)) {
+    return { ok: false };
+  }
+
+  const decision = appliedDecision;
+  const validKnownPair =
+    (decision.direction === 'neutral' &&
+      decision.strength === 'neutral' &&
+      decision.favoredValueKey === null &&
+      decision.opposedValueKey === null) ||
+    (decision.direction === 'unknown' &&
+      decision.strength === 'unknown' &&
+      decision.favoredValueKey === null &&
+      decision.opposedValueKey === null) ||
+    (decision.direction === 'favor_first' &&
+      decision.strength !== 'unknown' &&
+      decision.strength !== 'neutral' &&
+      decision.favoredValueKey === pair.valueA &&
+      decision.opposedValueKey === pair.valueB) ||
+    (decision.direction === 'favor_second' &&
+      decision.strength !== 'unknown' &&
+      decision.strength !== 'neutral' &&
+      decision.favoredValueKey === pair.valueB &&
+      decision.opposedValueKey === pair.valueA);
+
+  if (!validKnownPair) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    canonical: {
+      favoredValueKey: decision.favoredValueKey,
+      opposedValueKey: decision.opposedValueKey,
+      direction: decision.direction,
+      strength: decision.strength,
+      normalizationApplied: false,
+      normalizationReason: null,
+      source: 'manual',
+    },
+  };
+}
+
+export function extractManualOverrideDecision(
+  decisionMetadata: unknown,
+): CanonicalAppliedDecision | null {
+  const record = isRecord(decisionMetadata) ? decisionMetadata : null;
+  const manualOverride = record && isRecord(record.manualOverride) ? record.manualOverride : null;
+  if (!manualOverride || !isCanonicalAppliedDecision(manualOverride.appliedDecision)) {
+    return null;
+  }
+  return manualOverride.appliedDecision;
+}
+
+export function extractCachedWinnerFirstDecision(
+  decisionMetadata: unknown,
+): CachedWinnerFirstDecision | null {
+  const record = isRecord(decisionMetadata) ? decisionMetadata : null;
+  const summaryCache = record && isRecord(record.summaryCache) ? record.summaryCache : null;
+  const summary = summaryCache && isRecord(summaryCache.summary) ? summaryCache.summary : null;
+  const canonicalDecision = summary && isCachedWinnerFirstDecision(summary.canonicalDecision)
+    ? summary.canonicalDecision
+    : null;
+
+  return canonicalDecision;
+}
+
+export function extractValueStatementsFromSnapshot(snapshot: unknown): ValueStatementEntry[] | undefined {
+  if (snapshot === null || typeof snapshot !== 'object' || Array.isArray(snapshot)) return undefined;
+  const components = (snapshot as { components?: unknown }).components;
+  if (components === null || typeof components !== 'object' || Array.isArray(components)) return undefined;
+
+  const vf = (components as { value_first?: unknown }).value_first;
+  const vs = (components as { value_second?: unknown }).value_second;
+  if (!isRecord(vf) || !isRecord(vs)) return undefined;
+
+  const tokenFirst = typeof vf.token === 'string' ? vf.token : null;
+  const bodyFirst = typeof vf.body === 'string' ? vf.body : null;
+  const tokenSecond = typeof vs.token === 'string' ? vs.token : null;
+  const bodySecond = typeof vs.body === 'string' ? vs.body : null;
+
+  if (tokenFirst == null || bodyFirst == null || tokenSecond == null || bodySecond == null) return undefined;
+  return [
+    { token: tokenFirst, body: bodyFirst },
+    { token: tokenSecond, body: bodySecond },
+  ];
+}
+
+const LABEL_PREFIX_REGEX = /^(?:Strongly|Somewhat) support (.+)$/;
+
+export function extractLabelPrefixFromSnapshot(snapshot: unknown): string | undefined {
+  if (snapshot === null || typeof snapshot !== 'object' || Array.isArray(snapshot)) return undefined;
+  const template = (snapshot as { template?: unknown }).template;
+  if (typeof template !== 'string') return undefined;
+
+  const components = (snapshot as { components?: unknown }).components;
+  if (components === null || typeof components !== 'object' || Array.isArray(components)) return undefined;
+  const vf = (components as { value_first?: unknown }).value_first;
+  if (!isRecord(vf) || typeof vf.body !== 'string') return undefined;
+
+  // Extract the short body (before "because") to find it in the scale label
+  const shortBody = (vf.body.split(' because')[0] ?? vf.body).trim();
+  if (shortBody.length === 0) return undefined;
+
+  // Find a scale label line that ends with the short body
+  const lines = template.split('\n');
+  for (const line of lines) {
+    const trimmed = line.replace(/^- /, '').trim();
+    const match = LABEL_PREFIX_REGEX.exec(trimmed);
+    if (match == null) continue;
+    const afterStrength = match[1] ?? '';
+    if (afterStrength.endsWith(shortBody)) {
+      const prefix = afterStrength.slice(0, afterStrength.length - shortBody.length).trimEnd();
+      if (prefix.length > 0) return prefix;
+    }
+  }
+
+  return undefined;
+}
+
+
+Context: inspect-canonical-drift.ts
+/**
+ * Pull a few transcripts where my truth-table-derived v2 canonical disagrees
+ * with the existing v1 canonical in prod. Print both side-by-side so we can
+ * diagnose which side is wrong.
+ */
+import { pathToFileURL } from 'node:url';
+
+import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+
+import { canonicalFromDecisionCode, pairFromSnapshot } from './backfill-canonical-v2-migration.js';
+
+const log = createLogger('scripts:inspect-canonical-drift');
+
+const LIMIT = 20;
+
+async function main(): Promise<void> {
+  const ids = await db.$queryRawUnsafe<{ id: string }[]>(
+    `
+    SELECT t.id FROM transcripts t
+    WHERE t.decision_metadata->'summaryCache'->'summary'->>'decisionCode' IS NOT NULL
+    ORDER BY random()
+    LIMIT ${LIMIT}
+    `,
+  );
+
+  log.info({ sampled: ids.length }, 'Sampled random candidates');
+
+  for (const { id } of ids) {
+    const t = await db.transcript.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        scenarioId: true,
+        definitionSnapshot: true,
+        decisionMetadata: true,
+      },
+    });
+    if (t == null) continue;
+    const meta = (t.decisionMetadata as Record<string, unknown> | null) ?? {};
+    const sc = meta.summaryCache as Record<string, unknown> | undefined;
+    const summary = sc?.summary as Record<string, unknown> | undefined;
+    if (summary == null) continue;
+    const decisionCode = summary.decisionCode as string | undefined;
+    const existingCanonical = summary.canonicalDecision as Record<string, unknown> | undefined;
+    const pair = pairFromSnapshot(t.definitionSnapshot);
+    if (pair == null) continue;
+    let orientationFlipped = false;
+    if (t.scenarioId != null) {
+      const s = await db.scenario.findUnique({
+        where: { id: t.scenarioId },
+        select: { orientationFlipped: true },
+      });
+      orientationFlipped = s?.orientationFlipped ?? false;
+    }
+    if (decisionCode == null) continue;
+    const computed = canonicalFromDecisionCode(decisionCode, pair, orientationFlipped);
+    const drifted = (existingCanonical?.favoredValueKey ?? null) !== computed.favoredValueKey
+      || existingCanonical?.strength !== computed.strength
+      || existingCanonical?.decisionState !== computed.decisionState;
+    if (!drifted) continue;
+
+    // Only include the parser-evidence fields we care about, not the whole dump.
+    const parserEvidence = {
+      matchedLabel: meta.matchedLabel ?? null,
+      parseClass: meta.parseClass ?? null,
+      parsePath: meta.parsePath ?? null,
+      parserVersion: meta.parserVersion ?? null,
+    };
+
+    log.info(
+      {
+        id: t.id,
+        orientationFlipped,
+        pair,
+        decisionCode,
+        existing: {
+          favoredValueKey: existingCanonical?.favoredValueKey,
+          strength: existingCanonical?.strength,
+          direction: existingCanonical?.direction,
+          decisionState: existingCanonical?.decisionState,
+          cacheVersion: existingCanonical?.cacheVersion,
+        },
+        computed,
+        parserEvidence,
+      },
+      'DRIFT',
+    );
+  }
+}
+
+const isDirectRun = import.meta.url === pathToFileURL(process.argv[1] ?? '').href;
+if (isDirectRun) {
+  main()
+    .catch((err) => {
+      log.error({ err: String(err) }, 'Inspect failed');
+      process.exitCode = 1;
+    })
+    .finally(() => {
+      void db.$disconnect();
+    });
+}
+
+
+Context: backfill-reparse-decisions.ts
+/**
+ * Backfill: re-parse transcripts that were tagged as ambiguous
+ * (`decisionCode = 'other'`, `strength = 'unknown'`) before the
+ * level-word-tolerance fix landed in PR #694.
+ *
+ * For each affected transcript:
+ *   1. Run the updated Python worker parser against the cached transcript
+ *      content (no LLM calls — the probe already happened).
+ *   2. If the new parse produced a valid scale code (1-5), update the
+ *      transcript's `decisionMetadata.summaryCache.summary.decisionCode`
+ *      and related fields in-place.
+ *   3. Leave transcripts that still can't be parsed untouched.
+ *
+ * Usage (from cloud/apps/api/):
+ *   npx tsx --env-file=../../.env ../../scripts/backfill-reparse-decisions.ts
+ *   npx tsx --env-file=../../.env ../../scripts/backfill-reparse-decisions.ts --apply
+ *
+ * Against prod (from cloud/):
+ *   DATABASE_URL="$DATABASE_URL" npx tsx scripts/backfill-reparse-decisions.ts
+ *   DATABASE_URL="$DATABASE_URL" npx tsx scripts/backfill-reparse-decisions.ts --apply
+ *
+ * Optional flags:
+ *   --domain=<normalizedName>  Limit to one domain (e.g. national-priorities)
+ *   --limit=<n>                Only process the first N affected transcripts
+ *
+ * Dry-run by default. Pass `--apply` to write updates.
+ */
+import { spawnSync } from 'node:child_process';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { db, Prisma } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+
+const log = createLogger('scripts:backfill-reparse-decisions');
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const HELPER_PY = path.resolve(__dirname, 'reparse-decision-stdin.py');
+
+type ReparseResult = {
+  decisionCode: string;
+  decisionSource: string;
+  decisionMetadata: {
+    parserVersion: string;
+    parseClass: string;
+    parsePath: string;
+    responseSha256: string | null;
+    responseExcerpt: string | null;
+    matchedLabel: string | null;
+    scaleLabels: Array<{ code: string; label: string }>;
+  };
+};
+
+function runReparse(transcriptContent: unknown): ReparseResult {
+  const payload = JSON.stringify({ transcriptContent });
+  const result = spawnSync('python3', [HELPER_PY], {
+    input: payload,
+    encoding: 'utf-8',
+    maxBuffer: 20 * 1024 * 1024,
+  });
+  if (result.status !== 0) {
+    throw new Error(`Python parser failed: exit=${result.status} stderr=${result.stderr}`);
+  }
+  return JSON.parse(result.stdout) as ReparseResult;
+}
+
+function parseArgs(): { apply: boolean; domain: string | null; limit: number | null } {
+  const args = process.argv.slice(2);
+  const apply = args.includes('--apply');
+  const domainArg = args.find((a) => a.startsWith('--domain='));
+  const limitArg = args.find((a) => a.startsWith('--limit='));
+  const domain = domainArg ? domainArg.split('=')[1] ?? null : null;
+  const limit = limitArg ? Number(limitArg.split('=')[1] ?? 'NaN') : null;
+  return { apply, domain, limit: limit != null && Number.isFinite(limit) ? limit : null };
+}
+
+async function main(): Promise<void> {
+  const { apply, domain, limit } = parseArgs();
+
+  log.info({ apply, domain, limit }, apply ? 'APPLY mode — will write updates' : 'DRY RUN — pass --apply to write');
+
+  // Find candidate transcripts: decision_metadata cache says decisionCode='other'
+  // (ambiguous parse) AND we have cached response text to re-parse.
+  let domainId: string | null = null;
+  if (domain != null) {
+    const d = await db.domain.findUnique({ where: { normalizedName: domain }, select: { id: true } });
+    if (d == null) throw new Error(`Domain "${domain}" not found`);
+    domainId = d.id;
+  }
+
+  const candidateIds = await db.$queryRawUnsafe<{ id: string }[]>(
+    `
+    SELECT t.id FROM transcripts t
+    ${domainId != null ? 'JOIN runs r ON r.id = t.run_id JOIN definitions def ON def.id = r.definition_id' : ''}
+    WHERE t.decision_metadata->'summaryCache'->'summary'->>'decisionCode' = 'other'
+      ${domainId != null ? 'AND def.domain_id = $1' : ''}
+    ORDER BY t.created_at ASC
+    ${limit != null ? `LIMIT ${limit}` : ''}
+    `,
+    ...(domainId != null ? [domainId] : []),
+  );
+
+  log.info({ candidateCount: candidateIds.length }, 'Found candidate transcripts');
+  if (candidateIds.length === 0) {
+    log.info('Nothing to do');
+    return;
+  }
+
+  let reclassified = 0;
+  let stillUnknown = 0;
+  let errors = 0;
+  const newCodeCounts = new Map<string, number>();
+
+  for (let i = 0; i < candidateIds.length; i += 1) {
+    const { id } = candidateIds[i]!;
+    try {
+      const t = await db.transcript.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          content: true,
+          decisionMetadata: true,
+        },
+      });
+      if (t == null) {
+        log.warn({ id }, 'Transcript missing — skipping');
+        continue;
+      }
+
+      const parsed = runReparse(t.content);
+      const newCode = parsed.decisionCode;
+
+      if (newCode === 'other' || newCode === 'refusal') {
+        stillUnknown += 1;
+        continue;
+      }
+
+      newCodeCounts.set(newCode, (newCodeCounts.get(newCode) ?? 0) + 1);
+      reclassified += 1;
+
+      if (!apply) continue;
+
+      // Build the new decision_metadata by updating the summaryCache block.
+      const existing = (t.decisionMetadata as Record<string, unknown> | null) ?? {};
+      const summaryCache = (existing.summaryCache as Record<string, unknown> | undefined) ?? {};
+      const summary = (summaryCache.summary as Record<string, unknown> | undefined) ?? {};
+
+      const updatedSummary = {
+        ...summary,
+        decisionCode: parsed.decisionCode,
+        decisionCodeSource: parsed.decisionSource,
+        decisionMetadata: parsed.decisionMetadata,
+      };
+
+      const updatedCache = {
+        ...summaryCache,
+        summary: updatedSummary,
+      };
+
+      const updatedMetadata = {
+        ...existing,
+        parseClass: parsed.decisionMetadata.parseClass,
+        parsePath: parsed.decisionMetadata.parsePath,
+        matchedLabel: parsed.decisionMetadata.matchedLabel,
+        scaleLabels: parsed.decisionMetadata.scaleLabels,
+        summaryCache: updatedCache,
+      };
+
+      await db.transcript.update({
+        where: { id },
+        data: {
+          decisionMetadata: updatedMetadata as unknown as Prisma.InputJsonValue,
+        },
+      });
+    } catch (err) {
+      errors += 1;
+      log.error({ id, err: String(err) }, 'Re-parse failed');
+    }
+
+    if ((i + 1) % 25 === 0) {
+      log.info(
+        { progress: `${i + 1}/${candidateIds.length}`, reclassified, stillUnknown, errors },
+        'Progress',
+      );
+    }
+  }
+
+  log.info(
+    {
+      apply,
+      total: candidateIds.length,
+      reclassified,
+      stillUnknown,
+      errors,
+      newCodeCounts: Object.fromEntries(newCodeCounts),
+    },
+    apply ? 'Done' : 'Dry-run complete',
+  );
+}
+
+main()
+  .catch((err) => {
+    log.error({ err: String(err) }, 'Backfill failed');
+    process.exitCode = 1;
+  })
+  .finally(() => db.$disconnect());
+
+
+Context: reparse-decision-stdin.py
+#!/usr/bin/env python3
+"""
+Re-run the summarize worker's decision parser against a transcript's content
+and print the result as JSON.
+
+Used by `backfill-reparse-decisions.ts` to recover decisions that were
+previously tagged as ambiguous (decisionCode='other', strength='unknown')
+before the level-word-tolerance fix landed (PR #694).
+
+Reads a JSON object with a single `transcriptContent` field from stdin.
+Writes a JSON object with `decisionCode`, `decisionSource`, and
+`decisionMetadata` to stdout.
+"""
+
+import json
+import os
+import sys
+
+# Put the workers directory on sys.path so we can import the parser directly.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_WORKERS = os.path.abspath(os.path.join(_HERE, "..", "workers"))
+if _WORKERS not in sys.path:
+    sys.path.insert(0, _WORKERS)
+
+# Import AFTER sys.path is fixed. Note: summarize.py imports common.* which
+# requires workers/ on the path; that's why we set sys.path above.
+from summarize import extract_decision_result  # noqa: E402
+
+
+def main() -> None:
+    payload = json.load(sys.stdin)
+    content = payload["transcriptContent"]
+    result = extract_decision_result(content)
+    json.dump(result, sys.stdout)
+
+
+if __name__ == "__main__":
+    main()
+
+
+Context: job-choice-bridge-report.ts
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+
+import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+
+import {
+  buildJobChoiceBridgeReport,
+  renderJobChoiceBridgeMarkdown,
+  type BridgeRunInput,
+} from './job-choice-bridge-report-lib.js';
+
+const log = createLogger('scripts:job-choice-bridge-report');
+
+type ParsedArgs = {
+  runIds: string[];
+  runIdsFile: string | null;
+  outputDir: string;
+  baseUrl: string;
+};
+
+function parseArgs(argv: string[]): ParsedArgs {
+  const runIds: string[] = [];
+  let runIdsFile: string | null = null;
+  let outputDir = path.resolve('output/bridge-report');
+  let baseUrl = 'http://localhost:3030';
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === '--run-id') {
+      const next = argv[index + 1];
+      if (!next) throw new Error('--run-id requires a value');
+      runIds.push(next);
+      index += 1;
+      continue;
+    }
+    if (arg === '--run-ids-file') {
+      const next = argv[index + 1];
+      if (!next) throw new Error('--run-ids-file requires a path');
+      runIdsFile = next;
+      index += 1;
+      continue;
+    }
+    if (arg === '--output-dir') {
+      const next = argv[index + 1];
+      if (!next) throw new Error('--output-dir requires a path');
+      outputDir = path.resolve(next);
+      index += 1;
+      continue;
+    }
+    if (arg === '--base-url') {
+      const next = argv[index + 1];
+      if (!next) throw new Error('--base-url requires a value');
+      baseUrl = next;
+      index += 1;
+      continue;
+    }
+    throw new Error(`Unknown argument: ${arg}`);
+  }
+
+  return { runIds, runIdsFile, outputDir, baseUrl };
+}
+
+async function loadRunIds(args: ParsedArgs): Promise<string[]> {
+  const ids = new Set(args.runIds);
+
+  if (args.runIdsFile) {
+    const fileContent = await fs.readFile(args.runIdsFile, 'utf8');
+    for (const line of fileContent.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (trimmed.length > 0) {
+        ids.add(trimmed);
+      }
+    }
+  }
+
+  return [...ids];
+}
+
+function getMethodology(content: unknown): {
+  family: string | null;
+  responseScale: string | null;
+  pairKey: string | null;
+  valueFirst: string | null;
+} {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) {
+    return { family: null, responseScale: null, pairKey: null, valueFirst: null };
+  }
+
+  const record = content as Record<string, unknown>;
+  const methodology = record.methodology;
+  if (!methodology || typeof methodology !== 'object' || Array.isArray(methodology)) {
+    return { family: null, responseScale: null, pairKey: null, valueFirst: null };
+  }
+
+  const parsed = methodology as Record<string, unknown>;
+  const components = record.components;
+  const valueFirst = components && typeof components === 'object' && !Array.isArray(components)
+    ? (components as Record<string, unknown>).value_first
+    : null;
+  const valueFirstToken = valueFirst && typeof valueFirst === 'object' && !Array.isArray(valueFirst)
+    ? (valueFirst as Record<string, unknown>).token
+    : null;
+
+  return {
+    family: typeof parsed.family === 'string' ? parsed.family : null,
+    responseScale: typeof parsed.response_scale === 'string' ? parsed.response_scale : null,
+    pairKey: typeof parsed.pair_key === 'string' ? parsed.pair_key : null,
+    valueFirst: typeof valueFirstToken === 'string' ? valueFirstToken : null,
+  };
+}
+
+function extractTrialSignature(run: {
+  definitionVersion: number | null;
+  definition?: { version: number | null } | null;
+  config: unknown;
+}): string {
+  const config = run.config as {
+    definitionSnapshot?: { _meta?: { definitionVersion?: unknown }; version?: unknown };
+    temperature?: unknown;
+  } | null;
+
+  const version = typeof run.definitionVersion === 'number'
+    ? run.definitionVersion
+    : typeof run.definition?.version === 'number'
+      ? run.definition.version
+      : typeof config?.definitionSnapshot?._meta?.definitionVersion === 'number'
+        ? config.definitionSnapshot._meta.definitionVersion
+        : typeof config?.definitionSnapshot?.version === 'number'
+          ? config.definitionSnapshot.version
+          : null;
+
+  const temperature = typeof config?.temperature === 'number' ? config.temperature : null;
+  const versionToken = version === null ? '?' : String(version);
+  const tempToken = temperature === null ? 'd' : temperature.toFixed(3).replace(/\.?0+$/, '');
+  return `v${versionToken}t${tempToken}`;
+}
+
+function extractResponseExcerpt(content: unknown): string | null {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) {
+    return null;
+  }
+
+  const record = content as Record<string, unknown>;
+  const turns = Array.isArray(record.turns) ? record.turns : [];
+  for (const turn of turns) {
+    if (!turn || typeof turn !== 'object' || Array.isArray(turn)) continue;
+    const turnRecord = turn as Record<string, unknown>;
+    if (typeof turnRecord.targetResponse === 'string' && turnRecord.targetResponse.trim().length > 0) {
+      return turnRecord.targetResponse.slice(0, 240);
+    }
+    if (turnRecord.role === 'assistant' && typeof turnRecord.content === 'string' && turnRecord.content.trim().length > 0) {
+      return turnRecord.content.slice(0, 240);
+    }
+  }
+
+  return null;
+}
+
+function getDecisionMetadata(decisionMetadata: unknown): {
+  parseClass: 'exact' | 'fallback_resolved' | 'ambiguous' | null;
+  matchedLabel: string | null;
+  responseExcerpt: string | null;
+  parsePath: string | null;
+} {
+  if (!decisionMetadata || typeof decisionMetadata !== 'object' || Array.isArray(decisionMetadata)) {
+    return { parseClass: null, matchedLabel: null, responseExcerpt: null, parsePath: null };
+  }
+
+  const record = decisionMetadata as Record<string, unknown>;
+  return {
+    parseClass:
+      record.parseClass === 'exact' || record.parseClass === 'fallback_resolved' || record.parseClass === 'ambiguous'
+        ? record.parseClass
+        : null,
+    matchedLabel: typeof record.matchedLabel === 'string' ? record.matchedLabel : null,
+    responseExcerpt: typeof record.responseExcerpt === 'string' ? record.responseExcerpt : null,
+    parsePath: typeof record.parsePath === 'string' ? record.parsePath : null,
+  };
+}
+
+async function loadRuns(runIds: string[]): Promise<BridgeRunInput[]> {
+  const runs = await db.run.findMany({
+    where: {
+      id: { in: runIds },
+    },
+    include: {
+      definition: true,
+      transcripts: {
+        include: {
+          scenario: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: {
+      createdAt: 'asc',
+    },
+  });
+
+  return runs.map((run) => {
+    const methodology = getMethodology(run.definition.content);
+    const config = run.config as { jobChoiceLaunchMode?: unknown; methodologySafe?: unknown } | null;
+    return {
+      runId: run.id,
+      runName: run.name,
+      definitionId: run.definitionId,
+      definitionName: run.definition.name,
+      definitionVersion: run.definitionVersion,
+      scenarioCount: run.transcripts.reduce((unique, transcript) => {
+        if (transcript.scenarioId) unique.add(transcript.scenarioId);
+        return unique;
+      }, new Set<string>()).size,
+      launchMode: typeof config?.jobChoiceLaunchMode === 'string' ? config.jobChoiceLaunchMode : null,
+      methodologySafe: typeof config?.methodologySafe === 'boolean' ? config.methodologySafe : null,
+      responseScale: methodology.responseScale,
+      family: methodology.family,
+      pairKey: methodology.pairKey,
+      valueFirst: methodology.valueFirst,
+      trialSignature: extractTrialSignature(run),
+      transcripts: run.transcripts.map((transcript) => {
+        const metadata = getDecisionMetadata(transcript.decisionMetadata);
+        return {
+          transcriptId: transcript.id,
+          scenarioId: transcript.scenarioId,
+          scenarioName: transcript.scenario?.name ?? null,
+          modelId: transcript.modelId,
+          decisionCode: transcript.decisionCode,
+          decisionCodeSource: transcript.decisionCodeSource,
+          parseClass: metadata.parseClass,
+          matchedLabel: metadata.matchedLabel,
+          responseExcerpt: metadata.responseExcerpt ?? extractResponseExcerpt(transcript.content),
+          parsePath: metadata.parsePath,
+        };
+      }),
+    };
+  });
+}
+
+async function main(): Promise<void> {
+  const args = parseArgs(process.argv.slice(2));
+  const runIds = await loadRunIds(args);
+  if (runIds.length === 0) {
+    throw new Error('Provide at least one --run-id or --run-ids-file');
+  }
+
+  const runs = await loadRuns(runIds);
+  const report = buildJobChoiceBridgeReport(runs, args.baseUrl);
+
+  await fs.mkdir(args.outputDir, { recursive: true });
+  const jsonPath = path.join(args.outputDir, 'job-choice-bridge-report.json');
+  const markdownPath = path.join(args.outputDir, 'job-choice-bridge-report.md');
+
+  await fs.writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+  await fs.writeFile(markdownPath, `${renderJobChoiceBridgeMarkdown(report)}\n`, 'utf8');
+
+  log.info(
+    {
+      runCount: report.totalRuns,
+      transcriptCount: report.totalTranscripts,
+      jsonPath,
+      markdownPath,
+    },
+    'Wrote Job Choice bridge report',
+  );
+}
+
+main()
+  .catch((error) => {
+    log.error({ err: error }, 'Failed to build Job Choice bridge report');
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await db.$disconnect();
+  });
+
+
+Context: job-choice-bridge-report.test.ts
+import { describe, expect, it } from 'vitest';
+
+import {
+  buildJobChoiceBridgeReport,
+  renderJobChoiceBridgeMarkdown,
+  type BridgeRunInput,
+} from '../job-choice-bridge-report-lib.js';
+
+const sampleRuns: BridgeRunInput[] = [
+  {
+    runId: 'run-a',
+    runName: 'Bridge A',
+    definitionId: 'def-a',
+    definitionName: 'Jobs (Achievement vs Hedonism) [Job Choice A First]',
+    definitionVersion: 1,
+    scenarioCount: 2,
+    launchMode: 'PAIRED_BATCH',
+    methodologySafe: true,
+    responseScale: 'option_text',
+    family: 'job-choice',
+    pairKey: 'job-choice:def-a',
+    valueFirst: 'achievement',
+    trialSignature: 'v1t0',
+    transcripts: [
+      {
+        transcriptId: 'tx-1',
+        scenarioId: 's-1',
+        scenarioName: 'Scenario 1',
+        modelId: 'model-1',
+        decisionCode: '5',
+        decisionCodeSource: 'summary',
+        parseClass: 'exact',
+        matchedLabel: 'Strongly support taking the job with substantial recognition for expertise',
+        responseExcerpt: 'Strongly support taking the job with substantial recognition for expertise.',
+        parsePath: 'deterministic_exact',
+      },
+      {
+        transcriptId: 'tx-2',
+        scenarioId: 's-2',
+        scenarioName: 'Scenario 2',
+        modelId: 'model-1',
+        decisionCode: '4',
+        decisionCodeSource: 'summary',
+        parseClass: 'fallback_resolved',
+        matchedLabel: 'Somewhat support taking the job with moderate personal enjoyment',
+        responseExcerpt: 'I somewhat support the second job.',
+        parsePath: 'fallback_semantic',
+      },
+    ],
+  },
+  {
+    runId: 'run-b',
+    runName: 'Bridge B',
+    definitionId: 'def-b',
+    definitionName: 'Jobs (Achievement vs Hedonism) [Job Choice B First]',
+    definitionVersion: 1,
+    scenarioCount: 2,
+    launchMode: 'PAIRED_BATCH',
+    methodologySafe: true,
+    responseScale: 'option_text',
+    family: 'job-choice',
+    pairKey: 'job-choice:def-a',
+    valueFirst: 'hedonism',
+    trialSignature: 'v1t0',
+    transcripts: [
+      {
+        transcriptId: 'tx-3',
+        scenarioId: 's-1',
+        scenarioName: 'Scenario 1',
+        modelId: 'model-2',
+        decisionCode: null,
+        decisionCodeSource: null,
+        parseClass: 'ambiguous',
+        matchedLabel: null,
+        responseExcerpt: 'I can see both sides here.',
+        parsePath: 'ambiguous_conflict',
+      },
+      {
+        transcriptId: 'tx-4',
+        scenarioId: 's-2',
+        scenarioName: 'Scenario 2',
+        modelId: 'model-2',
+        decisionCode: '2',
+        decisionCodeSource: 'manual',
+        parseClass: 'ambiguous',
+        matchedLabel: null,
+        responseExcerpt: 'Leaning to the second role.',
+        parsePath: 'ambiguous_conflict',
+      },
+    ],
+  },
+];
+
+describe('buildJobChoiceBridgeReport', () => {
+  it('rolls up run, vignette, model, and exemplar data across bridge runs', () => {
+    const report = buildJobChoiceBridgeReport(sampleRuns, 'http://localhost:3030');
+
+    expect(report.descriptiveOnly).toBe(true);
+    expect(report.totalRuns).toBe(2);
+    expect(report.totalTranscripts).toBe(4);
+    expect(report.vignetteSummaries).toHaveLength(1);
+    expect(report.vignetteSummaries[0]).toMatchObject({
+      vignetteKey: 'job-choice:def-a',
+      fallbackCount: 1,
+      ambiguousCount: 2,
+      manualCount: 1,
+      unresolvedTranscripts: 1,
+    });
+    expect(report.modelVignetteSummaries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          vignetteKey: 'job-choice:def-a',
+          modelId: 'model-1',
+          exactCount: 1,
+          fallbackCount: 1,
+        }),
+        expect.objectContaining({
+          vignetteKey: 'job-choice:def-a',
+          modelId: 'model-2',
+          ambiguousCount: 2,
+          manualCount: 1,
+        }),
+      ]),
+    );
+    expect(report.exemplars.fallback_resolved[0]?.transcriptUrl).toBe(
+      'http://localhost:3030/analysis/run-a/transcripts?transcriptId=tx-2',
+    );
+    expect(report.exemplars.ambiguous[0]?.runUrl).toBe('http://localhost:3030/runs/run-b');
+  });
+
+  it('renders descriptive markdown with exemplar links', () => {
+    const report = buildJobChoiceBridgeReport(sampleRuns, 'http://localhost:3030');
+    const markdown = renderJobChoiceBridgeMarkdown(report);
+
+    expect(markdown).toContain('This report is descriptive only. It does not claim cross-family equivalence.');
+    expect(markdown).toContain('## Per-Vignette Summary');
+    expect(markdown).toContain('## Fallback Exemplars');
+    expect(markdown).toContain('[open](http://localhost:3030/analysis/run-a/transcripts?transcriptId=tx-2)');
+  });
+});
+
+
+Context: job-choice-bridge-report-lib.ts
+type ParseClass = 'exact' | 'fallback_resolved' | 'ambiguous' | 'legacy_numeric';
+
+export type BridgeRunInput = {
+  runId: string;
+  runName: string | null;
+  definitionId: string;
+  definitionName: string;
+  definitionVersion: number | null;
+  scenarioCount: number;
+  launchMode: string | null;
+  methodologySafe: boolean | null;
+  responseScale: string | null;
+  family: string | null;
+  pairKey: string | null;
+  valueFirst: string | null;
+  trialSignature: string;
+  transcripts: BridgeTranscriptInput[];
+};
+
+export type BridgeTranscriptInput = {
+  transcriptId: string;
+  scenarioId: string | null;
+  scenarioName: string | null;
+  modelId: string;
+  decisionCode: string | null;
+  decisionCodeSource: string | null;
+  parseClass: 'exact' | 'fallback_resolved' | 'ambiguous' | null;
+  matchedLabel: string | null;
+  responseExcerpt: string | null;
+  parsePath: string | null;
+};
+
+export type BridgeCountSummary = {
+  totalTranscripts: number;
+  scoredTranscripts: number;
+  unresolvedTranscripts: number;
+  exactCount: number;
+  fallbackCount: number;
+  ambiguousCount: number;
+  manualCount: number;
+  legacyNumericCount: number;
+};
+
+export type BridgeRunSummary = BridgeCountSummary & {
+  runId: string;
+  runName: string | null;
+  definitionId: string;
+  definitionName: string;
+  vignetteKey: string;
+  responseScale: string | null;
+  family: string | null;
+  pairKey: string | null;
+  valueFirst: string | null;
+  launchMode: string | null;
+  methodologySafe: boolean | null;
+  trialSignature: string;
+  models: string[];
+};
+
+export type BridgeVignetteSummary = BridgeCountSummary & {
+  vignetteKey: string;
+  pairKey: string | null;
+  definitionIds: string[];
+  definitionNames: string[];
+  runIds: string[];
+  responseScales: string[];
+  models: string[];
+};
+
+export type BridgeModelVignetteSummary = BridgeCountSummary & {
+  vignetteKey: string;
+  modelId: string;
+  runIds: string[];
+  responseScales: string[];
+};
+
+export type BridgeExemplar = {
+  transcriptId: string;
+  runId: string;
+  definitionName: string;
+  vignetteKey: string;
+  modelId: string;
+  scenarioId: string | null;
+  scenarioName: string | null;
+  parseClass: Exclude<ParseClass, 'legacy_numeric'>;
+  decisionCode: string | null;
+  decisionCodeSource: string | null;
+  matchedLabel: string | null;
+  responseExcerpt: string | null;
+  parsePath: string | null;
+  runUrl: string;
+  transcriptUrl: string;
+};
+
+export type JobChoiceBridgeReport = {
+  generatedAt: string;
+  descriptiveOnly: true;
+  totalRuns: number;
+  totalTranscripts: number;
+  runSummaries: BridgeRunSummary[];
+  vignetteSummaries: BridgeVignetteSummary[];
+  modelVignetteSummaries: BridgeModelVignetteSummary[];
+  exemplars: {
+    fallback_resolved: BridgeExemplar[];
+    ambiguous: BridgeExemplar[];
+  };
+};
+
+function createEmptyCounts(): BridgeCountSummary {
+  return {
+    totalTranscripts: 0,
+    scoredTranscripts: 0,
+    unresolvedTranscripts: 0,
+    exactCount: 0,
+    fallbackCount: 0,
+    ambiguousCount: 0,
+    manualCount: 0,
+    legacyNumericCount: 0,
+  };
+}
+
+function toVignetteKey(run: BridgeRunInput): string {
+  if (run.pairKey) {
+    return run.pairKey;
+  }
+
+  return run.definitionId;
+}
+
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+}
+
+function isScored(decisionCode: string | null): boolean {
+  return decisionCode === '1' || decisionCode === '2' || decisionCode === '3' || decisionCode === '4' || decisionCode === '5';
+}
+
+function getTranscriptParseClass(transcript: BridgeTranscriptInput): ParseClass {
+  if (transcript.parseClass === 'exact') {
+    return 'exact';
+  }
+  if (transcript.parseClass === 'fallback_resolved') {
+    return 'fallback_resolved';
+  }
+  if (transcript.parseClass === 'ambiguous') {
+    return 'ambiguous';
+  }
+  return 'legacy_numeric';
+}
+
+function applyTranscriptCounts(summary: BridgeCountSummary, transcript: BridgeTranscriptInput): void {
+  const parseClass = getTranscriptParseClass(transcript);
+  const manual = transcript.decisionCodeSource === 'manual';
+  const scored = isScored(transcript.decisionCode);
+
+  summary.totalTranscripts += 1;
+  if (scored) {
+    summary.scoredTranscripts += 1;
+  } else {
+    summary.unresolvedTranscripts += 1;
+  }
+
+  if (manual) {
+    summary.manualCount += 1;
+  }
+
+  if (parseClass === 'exact') {
+    summary.exactCount += 1;
+  } else if (parseClass === 'fallback_resolved') {
+    summary.fallbackCount += 1;
+  } else if (parseClass === 'ambiguous') {
+    summary.ambiguousCount += 1;
+  } else if (scored) {
+    summary.legacyNumericCount += 1;
+  }
+}
+
+function addUnique(values: string[], next: string | null | undefined): void {
+  if (!next) return;
+  if (!values.includes(next)) {
+    values.push(next);
+  }
+}
+
+export function buildJobChoiceBridgeReport(
+  runs: BridgeRunInput[],
+  baseUrl = '',
+): JobChoiceBridgeReport {
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl || '');
+  const runSummaries: BridgeRunSummary[] = [];
+  const vignetteMap = new Map<string, BridgeVignetteSummary>();
+  const modelVignetteMap = new Map<string, BridgeModelVignetteSummary>();
+  const exemplars: JobChoiceBridgeReport['exemplars'] = {
+    fallback_resolved: [],
+    ambiguous: [],
+  };
+
+  for (const run of runs) {
+    const vignetteKey = toVignetteKey(run);
+    const runSummary: BridgeRunSummary = {
+      ...createEmptyCounts(),
+      runId: run.runId,
+      runName: run.runName,
+      definitionId: run.definitionId,
+      definitionName: run.definitionName,
+      vignetteKey,
+      responseScale: run.responseScale,
+      family: run.family,
+      pairKey: run.pairKey,
+      valueFirst: run.valueFirst,
+      launchMode: run.launchMode,
+      methodologySafe: run.methodologySafe,
+      trialSignature: run.trialSignature,
+      models: [],
+    };
+
+    const vignetteSummary = vignetteMap.get(vignetteKey) ?? {
+      ...createEmptyCounts(),
+      vignetteKey,
+      pairKey: run.pairKey,
+      definitionIds: [],
+      definitionNames: [],
+      runIds: [],
+      responseScales: [],
+      models: [],
+    };
+
+    addUnique(vignetteSummary.definitionIds, run.definitionId);
+    addUnique(vignetteSummary.definitionNames, run.definitionName);
+    addUnique(vignetteSummary.runIds, run.runId);
+    addUnique(vignetteSummary.responseScales, run.responseScale);
+
+    for (const transcript of run.transcripts) {
+      applyTranscriptCounts(runSummary, transcript);
+      applyTranscriptCounts(vignetteSummary, transcript);
+      addUnique(runSummary.models, transcript.modelId);
+      addUnique(vignetteSummary.models, transcript.modelId);
+
+      const modelVignetteKey = `${vignetteKey}::${transcript.modelId}`;
+      const modelVignetteSummary = modelVignetteMap.get(modelVignetteKey) ?? {
+        ...createEmptyCounts(),
+        vignetteKey,
+        modelId: transcript.modelId,
+        runIds: [],
+        responseScales: [],
+      };
+      addUnique(modelVignetteSummary.runIds, run.runId);
+      addUnique(modelVignetteSummary.responseScales, run.responseScale);
+      applyTranscriptCounts(modelVignetteSummary, transcript);
+      modelVignetteMap.set(modelVignetteKey, modelVignetteSummary);
+
+      const parseClass = getTranscriptParseClass(transcript);
+      if (parseClass === 'fallback_resolved' || parseClass === 'ambiguous') {
+        const transcriptUrlBase = `${normalizedBaseUrl}/analysis/${run.runId}/transcripts`;
+        const transcriptUrl = `${transcriptUrlBase}?transcriptId=${encodeURIComponent(transcript.transcriptId)}`;
+        exemplars[parseClass].push({
+          transcriptId: transcript.transcriptId,
+          runId: run.runId,
+          definitionName: run.definitionName,
+          vignetteKey,
+          modelId: transcript.modelId,
+          scenarioId: transcript.scenarioId,
+          scenarioName: transcript.scenarioName,
+          parseClass,
+          decisionCode: transcript.decisionCode,
+          decisionCodeSource: transcript.decisionCodeSource,
+          matchedLabel: transcript.matchedLabel,
+          responseExcerpt: transcript.responseExcerpt,
+          parsePath: transcript.parsePath,
+          runUrl: `${normalizedBaseUrl}/runs/${run.runId}`,
+          transcriptUrl,
+        });
+      }
+    }
+
+    vignetteMap.set(vignetteKey, vignetteSummary);
+    runSummaries.push(runSummary);
+  }
+
+  const sortByName = <T extends { definitionName?: string; vignetteKey?: string; modelId?: string }>(left: T, right: T) => {
+    const leftKey = left.definitionName ?? `${left.vignetteKey ?? ''}${left.modelId ?? ''}`;
+    const rightKey = right.definitionName ?? `${right.vignetteKey ?? ''}${right.modelId ?? ''}`;
+    return leftKey.localeCompare(rightKey);
+  };
+
+  return {
+    generatedAt: new Date().toISOString(),
+    descriptiveOnly: true,
+    totalRuns: runs.length,
+    totalTranscripts: runSummaries.reduce((sum, summary) => sum + summary.totalTranscripts, 0),
+    runSummaries: runSummaries.sort(sortByName),
+    vignetteSummaries: [...vignetteMap.values()].sort(sortByName),
+    modelVignetteSummaries: [...modelVignetteMap.values()].sort((left, right) => {
+      if (left.vignetteKey === right.vignetteKey) {
+        return left.modelId.localeCompare(right.modelId);
+      }
+      return left.vignetteKey.localeCompare(right.vignetteKey);
+    }),
+    exemplars: {
+      fallback_resolved: exemplars.fallback_resolved,
+      ambiguous: exemplars.ambiguous,
+    },
+  };
+}
+
+function formatCountCell(value: number, total: number): string {
+  if (total === 0) return '0';
+  const share = ((value / total) * 100).toFixed(1);
+  return `${value} (${share}%)`;
+}
+
+export function renderJobChoiceBridgeMarkdown(report: JobChoiceBridgeReport): string {
+  const lines: string[] = [];
+  lines.push('# Job Choice Bridge Report');
+  lines.push('');
+  lines.push('This report is descriptive only. It does not claim cross-family equivalence.');
+  lines.push('');
+  lines.push(`Generated: ${report.generatedAt}`);
+  lines.push(`Runs: ${report.totalRuns}`);
+  lines.push(`Transcripts: ${report.totalTranscripts}`);
+  lines.push('');
+
+  lines.push('## Per-Run Summary');
+  lines.push('');
+  lines.push('| Run | Vignette | Signature | Models | Exact | Fallback | Ambiguous | Manual | Unresolved |');
+  lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+  for (const run of report.runSummaries) {
+    lines.push(
+      `| ${run.runId} | ${run.definitionName} | ${run.trialSignature} | ${run.models.length} | ${run.exactCount} | ${run.fallbackCount} | ${run.ambiguousCount} | ${run.manualCount} | ${run.unresolvedTranscripts} |`,
+    );
+  }
+  lines.push('');
+
+  lines.push('## Per-Vignette Summary');
+  lines.push('');
+  lines.push('| Vignette | Runs | Models | Exact | Fallback | Ambiguous | Manual | Unresolved |');
+  lines.push('| --- | --- | --- | --- | --- | --- | --- | --- |');
+  for (const vignette of report.vignetteSummaries) {
+    lines.push(
+      `| ${vignette.definitionNames.join('<br/>')} | ${vignette.runIds.length} | ${vignette.models.length} | ${formatCountCell(vignette.exactCount, vignette.totalTranscripts)} | ${formatCountCell(vignette.fallbackCount, vignette.totalTranscripts)} | ${formatCountCell(vignette.ambiguousCount, vignette.totalTranscripts)} | ${formatCountCell(vignette.manualCount, vignette.totalTranscripts)} | ${formatCountCell(vignette.unresolvedTranscripts, vignette.totalTranscripts)} |`,
+    );
+  }
+  lines.push('');
+
+  lines.push('## Per-Model / Per-Vignette Summary');
+  lines.push('');
+  lines.push('| Vignette | Model | Total | Exact | Fallback | Ambiguous | Manual | Unresolved |');
+  lines.push('| --- | --- | --- | --- | --- | --- | --- | --- |');
+  for (const summary of report.modelVignetteSummaries) {
+    lines.push(
+      `| ${summary.vignetteKey} | ${summary.modelId} | ${summary.totalTranscripts} | ${summary.exactCount} | ${summary.fallbackCount} | ${summary.ambiguousCount} | ${summary.manualCount} | ${summary.unresolvedTranscripts} |`,
+    );
+  }
+  lines.push('');
+
+  for (const bucket of ['fallback_resolved', 'ambiguous'] as const) {
+    lines.push(`## ${bucket === 'fallback_resolved' ? 'Fallback Exemplars' : 'Ambiguous Exemplars'}`);
+    lines.push('');
+    if (report.exemplars[bucket].length === 0) {
+      lines.push('No exemplars in this bucket.');
+      lines.push('');
+      continue;
+    }
+    lines.push('| Transcript | Run | Vignette | Model | Scenario | Parse Path | Matched Label | Transcript Link |');
+    lines.push('| --- | --- | --- | --- | --- | --- | --- | --- |');
+    for (const exemplar of report.exemplars[bucket]) {
+      lines.push(
+        `| ${exemplar.transcriptId} | ${exemplar.runId} | ${exemplar.definitionName} | ${exemplar.modelId} | ${exemplar.scenarioName ?? exemplar.scenarioId ?? '—'} | ${exemplar.parsePath ?? '—'} | ${exemplar.matchedLabel ?? '—'} | [open](${exemplar.transcriptUrl}) |`,
+      );
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+
+Context: decision-model.ts
+import { extractValuePair } from '../domain-analysis-values.js';
+import {
+  isValidDecisionPair,
+  isRecord,
+  isValueKey,
+  parseDecisionPath,
+  isJobChoiceDecisionPath,
+  flipDirection,
+  parseJobChoiceStrengthFromText,
+  resolveValueKeyFromText,
+  buildUnknownCanonicalDecision,
+  buildCanonicalDecisionFromPair,
+  validateManualAppliedDecision,
+  extractManualOverrideDecision,
+  extractCachedWinnerFirstDecision,
+  extractValueStatementsFromSnapshot,
+  extractLabelPrefixFromSnapshot,
+  JOB_CHOICE_VALUE_STATEMENTS,
+} from './decision-model-helpers.js';
+
+// Re-export all types for backward compatibility
+export type {
+  DecisionDirection,
+  DecisionStrength,
+  DecisionSource,
+  CanonicalAppliedDecision,
+  RawDecisionEvidence,
+  CanonicalDecision,
+  DecisionReadSurface,
+  DecisionReadMode,
+  DecisionReadRule,
+  DecisionPair,
+  ValueStatementEntry,
+  DecisionModelInput,
+  DecisionModelResult,
+  TranscriptDecisionModelInput,
+  TranscriptDecisionModelResult,
+} from './decision-model-types.js';
+export { DECISION_MODEL_READ_RULES } from './decision-model-types.js';
+
+import type {
+  RawDecisionEvidence,
+  CanonicalDecision,
+  DecisionDirection,
+  DecisionModelInput,
+  DecisionModelResult,
+  TranscriptDecisionModelInput,
+  TranscriptDecisionModelResult,
+} from './decision-model-types.js';
+
+export function buildRawDecisionEvidence(
+  decisionMetadata: unknown,
+): RawDecisionEvidence {
+  const record = isRecord(decisionMetadata) ? decisionMetadata : null;
+  const manualOverride = record && isRecord(record.manualOverride) ? record.manualOverride : null;
+  return {
+    matchedText:
+      record && typeof record.matchedText === 'string'
+        ? record.matchedText
+        : record && typeof record.matchedLabel === 'string'
+          ? record.matchedLabel
+          : record && typeof record.responseExcerpt === 'string'
+            ? record.responseExcerpt
+            : null,
+    matchedLabel: record && typeof record.matchedLabel === 'string' ? record.matchedLabel : null,
+    parseClass:
+      record && (record.parseClass === 'exact' || record.parseClass === 'fallback_resolved' || record.parseClass === 'ambiguous' || record.parseClass === 'unparseable')
+        ? record.parseClass
+        : null,
+    parsePath: record && typeof record.parsePath === 'string' ? record.parsePath : null,
+    parserVersion: record && typeof record.parserVersion === 'string' ? record.parserVersion : null,
+    responseExcerpt: record && typeof record.responseExcerpt === 'string' ? record.responseExcerpt : null,
+    manualOverride:
+      manualOverride === null
+        ? null
+        : {
+            previousValue:
+              typeof manualOverride.previousValue === 'string'
+                ? manualOverride.previousValue
+                : typeof manualOverride.previousDecisionCode === 'string'
+                  ? manualOverride.previousDecisionCode
+                : null,
+            overriddenAt:
+              typeof manualOverride.overriddenAt === 'string'
+                ? manualOverride.overriddenAt
+                : null,
+            overriddenByUserId:
+              typeof manualOverride.overriddenByUserId === 'string'
+                ? manualOverride.overriddenByUserId
+                : null,
+          },
+  };
+}
+
+export function resolveTranscriptDecisionModel(
+  input: TranscriptDecisionModelInput,
+): TranscriptDecisionModelResult {
+  const pair = input.pairOverride !== undefined ? input.pairOverride : extractValuePair(input.definitionSnapshot);
+  const raw = buildRawDecisionEvidence(input.decisionMetadata);
+  const manualOverrideDecision = extractManualOverrideDecision(input.decisionMetadata);
+  const cachedDecision = extractCachedWinnerFirstDecision(input.decisionMetadata);
+
+  const valueStatements = extractValueStatementsFromSnapshot(input.definitionSnapshot);
+  const labelPrefix = extractLabelPrefixFromSnapshot(input.definitionSnapshot) ?? null;
+
+  const resolved = resolveDecisionModel({
+    pair,
+    orientationFlipped: input.orientationFlipped,
+    raw,
+    manualOverridePresent: manualOverrideDecision !== null,
+    manualOverrideDecision,
+    cachedDecision,
+    valueStatements,
+    labelPrefix,
+  });
+
+  return resolved;
+}
+
+export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDecision {
+  const pair = isValidDecisionPair(input.pair) ? input.pair : null;
+  if (!pair) {
+    return input.pair == null ? buildUnknownCanonicalDecision('unknown') : buildUnknownCanonicalDecision('error');
+  }
+
+  if (input.manualOverridePresent) {
+    const validated = validateManualAppliedDecision(pair, input.manualOverrideDecision);
+    if (!validated.ok) {
+      return buildUnknownCanonicalDecision('error');
+    }
+    return validated.canonical;
+  }
+
+  const parseClass = input.raw.parseClass;
+  if (parseClass !== 'exact' && parseClass !== 'fallback_resolved') {
+    return buildUnknownCanonicalDecision('unknown');
+  }
+
+  const parsedPath = parseDecisionPath(input.raw.parsePath);
+  const cachedDecision = input.cachedDecision ?? null;
+  if (cachedDecision && cachedDecision.decisionState !== 'unknown') {
+    // When cachedDecision.decisionState is 'unknown', skip the cache and
+    // fall through to re-resolve from raw evidence. This handles cases where
+    // the cache was built with incorrect config (e.g. wrong value statements
+    // or label prefix for the domain family).
+
+    if (cachedDecision.decisionState === 'neutral') {
+      return buildCanonicalDecisionFromPair(
+        pair,
+        'neutral',
+        'neutral',
+        false,
+        'deterministic',
+      );
+    }
+
+    if (
+      cachedDecision.favoredValueKey == null
+      || (cachedDecision.favoredValueKey !== pair.valueA && cachedDecision.favoredValueKey !== pair.valueB)
+      || cachedDecision.strength === 'unknown'
+      || cachedDecision.strength === 'neutral'
+    ) {
+      return buildUnknownCanonicalDecision('unknown');
+    }
+
+    const direction: DecisionDirection = cachedDecision.favoredValueKey === pair.valueA ? 'favor_first' : 'favor_second';
+    const opposedValueKey = cachedDecision.favoredValueKey === pair.valueA ? pair.valueB : pair.valueA;
+
+    return {
+      favoredValueKey: cachedDecision.favoredValueKey,
+      opposedValueKey,
+      direction,
+      strength: cachedDecision.strength,
+      normalizationApplied: false,
+      normalizationReason: null,
+      source: 'deterministic',
+    };
+  }
+
+  if (
+    (input.raw.parserVersion === 'job-choice-v2' || input.raw.parserVersion === 'paired-v2')
+    && isJobChoiceDecisionPath(input.raw.parsePath)
+  ) {
+    const candidateText = input.raw.matchedLabel ?? input.raw.matchedText ?? input.raw.responseExcerpt;
+    if (typeof candidateText !== 'string') {
+      return buildUnknownCanonicalDecision('unknown');
+    }
+
+    const strength = parseJobChoiceStrengthFromText(candidateText);
+    if (strength === null) {
+      return buildUnknownCanonicalDecision('unknown');
+    }
+    if (strength === 'neutral') {
+      return buildCanonicalDecisionFromPair(
+        pair,
+        'neutral',
+        'neutral',
+        false,
+        'deterministic',
+      );
+    }
+
+    // When the caller supplies pairOverride without a definitionSnapshot (e.g. domain-analysis
+    // aggregation paths), valueStatements is undefined. For job-choice-v2 transcripts, fall back
+    // to the global JOB_CHOICE_VALUE_STATEMENTS so all 10 values resolve correctly.
+    const effectiveValueStatements = (input.valueStatements != null && input.valueStatements.length > 0)
+      ? input.valueStatements
+      : (input.raw.parserVersion === 'job-choice-v2' ? JOB_CHOICE_VALUE_STATEMENTS : undefined);
+    const favoredValueKey = resolveValueKeyFromText(candidateText, effectiveValueStatements, input.labelPrefix ?? null);
+    if (favoredValueKey === null) {
+      return buildUnknownCanonicalDecision('unknown');
+    }
+    if (favoredValueKey !== pair.valueA && favoredValueKey !== pair.valueB) {
+      return buildUnknownCanonicalDecision('unknown');
+    }
+
+    const direction: DecisionDirection = favoredValueKey === pair.valueA ? 'favor_first' : 'favor_second';
+    const opposedValueKey = favoredValueKey === pair.valueA ? pair.valueB : pair.valueA;
+
+    return {
+      favoredValueKey,
+      opposedValueKey,
+      direction,
+      strength,
+      normalizationApplied: false,
+      normalizationReason: null,
+      source: 'deterministic',
+    };
+  }
+
+  if (input.orientationFlipped == null) {
+    return buildUnknownCanonicalDecision('unknown');
+  }
+
+  if (!parsedPath || parsedPath.branch === 'manual') {
+    return buildUnknownCanonicalDecision('unknown');
+  }
+
+  if (parsedPath.direction === 'unknown' || parsedPath.strength === 'unknown') {
+    return buildUnknownCanonicalDecision('unknown');
+  }
+
+  const matchedLabel = input.raw.matchedLabel;
+  if (typeof matchedLabel !== 'string' || !isValueKey(matchedLabel)) {
+    return buildUnknownCanonicalDecision('unknown');
+  }
+  if (matchedLabel !== pair.valueA && matchedLabel !== pair.valueB) {
+    return buildUnknownCanonicalDecision('unknown');
+  }
+
+  const normalizedDirection = input.orientationFlipped ? flipDirection(parsedPath.direction) : parsedPath.direction;
+  const normalizationApplied = Boolean(input.orientationFlipped && normalizedDirection !== parsedPath.direction);
+
+  return buildCanonicalDecisionFromPair(
+    pair,
+    normalizedDirection,
+    parsedPath.strength,
+    normalizationApplied,
+    'deterministic',
+  );
+}
+
+export function resolveDecisionModel(input: DecisionModelInput): DecisionModelResult {
+  const canonical = resolveCanonicalDecision(input);
+  return {
+    raw: input.raw,
+    canonical,
+  };
+}
+
+
+
+Artifact: spec.md
+# Spec: Remove `decisionCode` From the Codebase
+
+**Slug:** `remove-decision-code`
+**Status:** Authored — awaiting spec checkpoint
+
+## Problem
+
+Transcript decisions are currently stored in two overlapping, derivable-from-each-other formats inside `transcripts.decision_metadata.summaryCache.summary`:
+
+- **Legacy `decisionCode`** — a string `"1" | "2" | "3" | "4" | "5" | "other" | "refusal"`, representing the scale position the model picked in the probe's 5-line support scale.
+- **`canonicalDecision`** — `{favoredValueKey, strength, decisionState, cacheVersion}`, an order-independent canonical interpretation derived from the matched value label.
+
+`canonicalDecision` is the authoritative interpretation (derived from `matchedLabel`, not from the 5-line position). `decisionCode` is **probe-format leakage** — it encodes the probe's scale layout rather than a semantic fact about the decision.
+
+Writing both persistently creates a drift invariant that is easy to violate. A dry-run migration against prod revealed **123,726 transcripts** where the cached `canonicalDecision` appears to disagree with what a naive `decisionCode`-based derivation would produce. **Root cause analysis showed this "drift" was a false positive** — the naive truth table `decisionCode + orientationFlipped → value` is wrong for paired-v2 / job-choice-v2 probes. Those probes derive canonical from `matchedLabel` (the value text the model actually wrote), not from the 5-line scale position. So for those ~123k rows, the existing `canonicalDecision` is correct and the truth-table guess was wrong. The **actual** drift affects a much smaller set: the ~1,537 rows where recent backfill PRs updated `decisionCode` but left `canonicalDecision.strength = "unknown"` stale, and the `decisionCode = "refusal"` rows where the canonical never got the refusal tag. These are the only classes the migration must recover. Every past attempt at this collapse has failed, most recently stalling on exactly this false-positive drift signal. The only way out is to remove `decisionCode` entirely so nobody can derive from it, reference it, or drift against it again.
+
+## Goal
+
+Collapse transcript decisions to a single source of truth: `canonicalDecision`. Remove `decisionCode` from the entire codebase — write path, read path, external APIs, types, worker emission, tests — and from the DB (stripped by migration from `summaryCache.summary`). Break every dependency on the 1–5 string so no new one creeps in.
+
+`canonicalDecision.cacheVersion` bumps from `1` to `2`. `decisionState` gains a `"refusal"` value, distinct from `"unknown"` (parser failure). After this PR, only `cacheVersion: 2` exists in code; `cacheVersion: 1` types are deleted.
+
+## Scope Boundaries
+
+### In Scope
+
+- **Write path — TS.** `summarize-persistence.ts`, `summarize-transcript.ts`, `summarize-types.ts`: stop writing `decisionCode` / `decisionCodeSource` to `summaryCache.summary`.
+- **Write path — Python.** `workers/summarize.py`, `workers/summarize_extract.py`, `workers/stats/decision_model.py`: stop emitting `decisionCode` / `decisionCodeSource` in the output dict. Internal scale-position detection (used for `matchedLabel` resolution) stays.
+- **Read paths — TS.** Every internal consumer (~27 files) rewired to read `canonicalDecision` instead of `decisionCode`. Analysis/aggregation groups by canonical. Services/exports derive on emission via one shared helper. **Explicit targets include** (not exhaustive): `apps/api/src/services/unresolvable-count.ts` (today filters on `decisionCodeSource`), `apps/api/src/services/analysis/aggregate/*`, `apps/api/src/queue/handlers/analyze-basic-data.ts`, `apps/api/src/graphql/queries/domain/analysis/value-detail.ts`, `apps/api/src/graphql/queries/domain/analysis/condition-transcripts.ts`, `apps/api/src/graphql/queries/models-consistency.ts`, `apps/api/src/mcp/tools/get-unsummarized-transcripts.ts`. The implementation must run the full grep inventory first and rewire every hit.
+- **External APIs.** MCP `get-run-results`, MCP `get-transcript-summary`, CSV export, OData export: `decisionCode` field is **removed** from the response shape. No null-emitting compat layer. Clients that referenced it fail loudly — intentional.
+- **Read paths — Web.** `TranscriptRow.tsx`, `TranscriptList.tsx`, `TranscriptViewer.tsx`, `RunResults.tsx`, `useRunDetailHandlers.ts`, `transcriptDecisionModel.ts`, `DomainAnalysisValueDetail.tsx` — rewired to read canonical.
+- **GraphQL schema.** Remove `decisionCode` from `transcript.ts` and `run.ts` type definitions. Regenerate `apps/web/src/generated/graphql.ts`. No deprecation directive — hard break.
+- **Canonical types.** `decision-model-types.ts`: `CachedWinnerFirstDecision.cacheVersion` stays as `1 | 2` union **in this PR** (reader tolerance bridge); tightens to literal `2` in a separate mini-PR after migration applies. `decisionState` adds `"refusal"`. `isCachedWinnerFirstDecision` accepts both v1 and v2 shapes + the new refusal state.
+- **Manual override mutation.** Reshaped to accept `{favoredValueKey, strength}`. Server derives `direction` from `favoredValueKey` against the definition's value pair (rejects `favoredValueKey` that matches neither value in the pair). Updates `canonicalDecision` directly. No `decisionCode` in request or response. (Derivation avoids the redundant-client-field failure mode.)
+- **Shared derivation helper.** One function `scaleCodeFromCanonical(canonical, pair, orientationFlipped): '1' | '2' | '3' | '4' | '5' | 'refusal' | 'unknown'` for the rare internal path that needs the number (e.g. if we ever re-add a legacy export). NOT exposed via external APIs.
+- **Migration.** `cloud/scripts/backfill-canonical-v2-migration.ts` rewritten with a **four-case processor** (ordered; first match wins):
+  1. **Missing snapshot / missing pair.** If `pairFromSnapshot(definitionSnapshot)` returns `null`, the row cannot be case-2 or case-3 upgraded (we don't know the value pair). **Still strip `decisionCode` + `decisionCodeSource`** and bump `cacheVersion` to `2`, synthesizing an unknown canonical if none exists. This achieves the "scorched-earth" goal even for malformed rows — no `decisionCode` residue lingers. Reported in the final counts as `missing-snapshot-stripped`.
+  2. **Refusal tagging.** If `summary.decisionCode === "refusal"` and existing `canonicalDecision.decisionState !== "refusal"`, set `decisionState: "refusal"`, `strength: "unknown"`, `direction: "refusal"`, `favoredValueKey: null`, `opposedValueKey: null`. Preserves the semantic distinction between model refusal and parser failure.
+  3. **Unknown-canonical recovery.** If existing `canonicalDecision.decisionState === "unknown"` OR `canonicalDecision.strength === "unknown"`, AND **all** of the following preconditions hold — source these fields from `transcripts.decision_metadata` **top-level** (not `summaryCache.summary`, which does not carry parser evidence):
+     - `decisionMetadata.parseClass` is `"exact"` or `"fallback_resolved"`
+     - `decisionMetadata.matchedLabel` is a non-empty string
+     - `resolveValueKeyFromText(matchedLabel, valueStatements, labelPrefix)` (imported from `cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts`) returns a value key that matches `pair.valueA` or `pair.valueB`
+     - `parseJobChoiceStrengthFromText(matchedLabel)` (same file) returns a non-null strength (`"strong"`, `"lean"`, or `"neutral"`)
+
+     — then build the canonical via `buildCanonicalDecisionFromPair(pair, direction, strength)` from the same helpers file. Direction is derived as `favoredValueKey === pair.valueA ? 'favor_first' : 'favor_second'` (no `orientationFlipped` needed — direction is a property of the pair mapping, not the scale layout). Strength `"neutral"` collapses to `decisionState: "neutral"` and nulls out favored/opposed keys.
+
+     If ANY precondition fails (parseClass wrong, matchedLabel absent, value-key resolve returns null, or strength parse returns null), **do not partially upgrade** — fall through to case 4 (preserve verbatim). Partial upgrades are worse than no upgrade.
+
+     `valueStatements` and `labelPrefix` are extracted from the row's `definitionSnapshot` via the existing `extractValueStatementsFromSnapshot` / `extractLabelPrefixFromSnapshot` helpers (same file).
+
+     **Note:** `matchedLabel` is display text like "Strongly support taking the job with personal security in everyday life", not a bare value key — the migration must run it through the same text-resolution pipeline the write path uses.
+  4. **Preserve otherwise.** All other rows: keep `canonicalDecision` verbatim. This is the majority of rows, including all ~123k rows where my earlier naive drift inspection flagged false positives.
+
+  In all cases (except case 1): bump `cacheVersion: 1 → 2`, strip `decisionCode` + `decisionCodeSource` from summary. Synthesize `{decisionState: "unknown", strength: "unknown", direction: "unknown", favoredValueKey: null, opposedValueKey: null, cacheVersion: 2}` for the rare row with no existing canonical at all. Dry-run default; `--apply` to write.
+- **Reader tolerance bridge.** `isCachedWinnerFirstDecision` keeps `cacheVersion: 1 | 2` union in this PR so live v1 rows read correctly until the migration runs. Writers emit v2 only. Tightening to literal `cacheVersion: 2` is a separate mini-PR opened after `--apply` lands and SC-003 verifies zero v1 rows remain.
+- **Top-level column reads.** Every call site that **reads** `transcripts.decision_code` (the legacy Postgres column) is rewired to read `canonicalDecision` instead. Call sites that **write** that column continue writing in this PR (kept for the follow-up PR that drops the column entirely). Specific files: `apps/api/src/graphql/mutations/run/maintenance.ts`, `apps/api/src/services/export/decision-display.ts`, plus any file caught by `grep -rn "transcripts.decision_code\|\.decisionCode.*column" cloud/apps`.
+- **Tests.** All TS + Python tests updated. Expect `decisionCode` to appear in tests only as assertions that it is absent from produced output / stripped from fixtures. Rough estimate: ~45 test files touched, most via narrow edits.
+- **Script inventory.** Each script that references `decisionCode` gets one of these treatments:
+  - **Delete** — purpose is purely to manipulate `decisionCode` with no other useful function:
+    - `cloud/scripts/inspect-canonical-drift.ts` (diagnostic, no longer needed)
+  - **Keep and rewire** — has a useful purpose beyond `decisionCode`:
+    - `cloud/scripts/backfill-reparse-decisions.ts` (+ `cloud/scripts/reparse-decision-stdin.py`) → **kept**. Its real purpose is re-running the Python parser on transcripts where the current canonical is unresolved. Rewired to read `canonicalDecision.decisionState` to identify targets and to write `canonicalDecision` back instead of `decisionCode`. This preserves the operational ability to recover ambiguous transcripts when the parser improves.
+    - `cloud/scripts/job-choice-bridge-report.ts` + `job-choice-bridge-report-lib.ts` → read `canonicalDecision` via `scaleCodeFromCanonical` helper when the report needs the 1–5 number.
+    - `cloud/scripts/__tests__/job-choice-bridge-report.test.ts` + `__tests__/job-choice-transform.test.ts` → fixtures updated.
+  - **Leave analysis scripts** in `cloud/scripts/analysis/` (process_transcripts.py, extract_cross_model_data.py, fetch-all-transcripts.js) — these are one-off data extraction scripts that read historical data; they live outside the deploy path. They are **explicitly carved out** of SC-001's grep scope (see SC-001). Flagged in the PR body; owners can clean up async.
+  - **New** — `cloud/scripts/backfill-canonical-v2-migration.ts` + tests (the rewritten migration).
+
+### Out of Scope
+
+- **Drop the top-level `transcripts.decision_code` Postgres column.** Separate follow-up PR, opened immediately after this one lands. The column is already unread outside legacy migration code.
+- **Change the Python parser's internal resolution logic.** The exact/leading/relaxed/distinctive-tail paths are preserved verbatim. Only the emission into the worker's output dict changes.
+- **Change the UI manual-override dropdown options.** Still five human-readable choices. Only the wire format sent to the server changes.
+- **Any change to the `transcripts.decision_metadata.matchedLabel` / `parseClass` / `parsePath` / `responseExcerpt` fields.** Those are parser evidence and stay as-is.
+- **Tightening `cacheVersion` to literal `2`.** This PR keeps `1 | 2` tolerant reads. A separate mini-PR after `--apply` verifies zero v1 rows remain and tightens to literal `2`.
+- **Drop writes to `transcripts.decision_code` column.** This PR removes reads of that legacy column; writes remain. The follow-up PR that drops the column removes the writes too.
+
+## User Scenarios
+
+### US1 — No Dashes in the UI for Parseable Decisions (Priority: P1)
+
+**As** an analyst viewing domain analysis, **I need** every transcript whose parser matched a real value to show that value in the UI, **so that** I do not see false "unknown" dashes for decisions the system actually resolved.
+
+**Why P1.** This is the bug the collapse fixes. ~1,537 transcripts today display as unknown because the stale `canonicalDecision.strength = "unknown"` wins over a valid `decisionCode = "5"` that nobody reads cleanly.
+
+**Independent test.** Pick five transcripts from the drift ledger (IDs visible via current dry-run output). After migration, open each in the UI. Each shows a resolved decision with favored value + strength label.
+
+**Acceptance:**
+
+1. Given a transcript whose `canonicalDecision.strength` today is `"unknown"` but whose `decisionMetadata.matchedLabel` resolves to a valid value key via `resolveValueKeyFromText(matchedLabel, valueStatements, labelPrefix)` AND whose `parseClass` is `"exact"` or `"fallback_resolved"` AND whose `parseJobChoiceStrengthFromText(matchedLabel)` returns a non-null strength, when the migration runs in `--apply` mode, then `canonicalDecision` is rewritten with the recovered `{favoredValueKey, opposedValueKey, direction, strength, decisionState: "resolved"}` via `buildCanonicalDecisionFromPair(pair, direction, strength)` and `cacheVersion` is bumped to `2`. Rows that do not satisfy ALL those preconditions are preserved verbatim (the unknown stays unknown — no partial upgrades).
+2. Given a transcript summarized **after** this PR lands, when the API writes `summaryCache.summary`, then `decisionCode` and `decisionCodeSource` are not present and `canonicalDecision` is populated with the parser-derived interpretation.
+3. Given any external client that referenced `transcript.decisionCode`, when they call `mcp__valuerank__get_run_results` or download a CSV export after this PR, then the response does not contain `decisionCode` and the client fails at the point of reference (or silently drops it if they use optional chaining — intentional).
+4. **Operational verification of the dashed-UI fix.** Take 5 specific transcript IDs from the current prod drift ledger (captured in the PR body as expected-to-fix). After `--apply` lands in prod, open each in the UI. Each MUST render a resolved decision. If any still shows a dash, this is a signal that the GraphQL resolver path is ALSO reading stale canonical bypassing its own unknown-recomputation logic — in which case a follow-up fix to the resolver is required and this PR's success is downgraded to "field removed, drift reduction pending."
+
+### US2 — Reviewer Applies a Manual Override (Priority: P2)
+
+**As** a reviewer correcting a miscategorized transcript, **I need** the override mutation to accept `{favoredValueKey, strength}` and have the server derive direction, **so that** I cannot submit an inconsistent payload and there is no redundant client field to maintain.
+
+**Why P2.** Safety-critical but rare path. Used by the Analysis UI's override dropdown.
+
+**Independent test.** Invoke the mutation with a `favoredValueKey` that matches neither value in the definition's pair. Assert the request is rejected with a validation error naming the unknown key.
+
+**Acceptance:**
+
+1. Given a definition has value pair `(A, B)`, when the mutation is called with `{favoredValueKey: A, strength: "strong"}`, then it succeeds and sets `canonicalDecision` to `{favoredValueKey: A, direction: "favor_first", strength: "strong", decisionState: "resolved"}`.
+2. Given the same definition, when the mutation is called with `{favoredValueKey: B, strength: "lean"}`, then direction is derived as `"favor_second"`.
+3. Given `favoredValueKey: "SomeOtherValue"` not in the pair, when the mutation is called, then it is rejected with a validation error.
+4. Given `strength: "neutral"`, the mutation sets `decisionState: "neutral"`, `direction: "neutral"`, `favoredValueKey: null`.
+
+### US3 — External Consumer Breaks Loudly (Priority: P2)
+
+**As** an external script or MCP client that hard-codes `response.decisionCode`, **I need** to be told clearly that the field is gone, **so that** I migrate to `canonicalDecision.favoredValueKey` / `.strength` rather than silently reading stale data.
+
+**Why P2.** The "stamp it out" intent — we want callers to surface now, not months later when a null is silently consumed.
+
+**Independent test.** Run the MCP integration test or the CSV export fixture before and after this PR. Expect the output shape to NOT contain `decisionCode`. Any old test assertion on `decisionCode` fails.
+
+**Acceptance:**
+
+1. The MCP response schema for `get-run-results` and `get-transcript-summary` has no `decisionCode` field.
+2. The CSV export column list does not include `decisionCode`.
+3. The OData `$metadata` does not expose a `decisionCode` field on the transcript entity.
+
+## Edge Cases
+
+- **Refusal rows.** Today's `decisionCode = "refusal"` rows have `canonicalDecision.decisionState = "unknown"`. The migration's **refusal-tagging case** upgrades them to `decisionState: "refusal"` so analytics can distinguish refusal from parser failure. No Python re-parse needed — the `decisionCode == "refusal"` signal is sufficient evidence.
+- **Rows with no canonical at all.** Rare, but exist. Migration synthesizes `{cacheVersion: 2, decisionState: "unknown", strength: "unknown", favoredValueKey: null}` so the validator does not reject them.
+- **In-flight summarize jobs during deploy.** A Python worker that started before this PR deployed may emit `decisionCode` in its output. The write path drops it on the floor (the TS persistence code ignores the field). Safe.
+- **Resolver-path responsibility for the US1 fix.** Production's `resolveCanonicalDecision` in `cloud/apps/api/src/graphql/queries/domain/decision-model.ts` already falls through to re-derive from `matchedLabel` when the cached canonical is `decisionState: "unknown"`. In principle, US1 should already be fixed at read time, not write time. The fact that ~1,537 rows still render as dashes suggests either (a) the GraphQL resolver that serves `Transcript.canonicalDecision` does NOT call through `resolveCanonicalDecision` (and instead returns the raw cached field), OR (b) those rows have `parseClass` or `matchedLabel` values that fail the re-derivation preconditions. The migration directly rewrites the cached canonical so the dashes go away regardless of which branch is broken. The implementation slice that rewires internal reads MUST verify the GraphQL `Transcript` resolver goes through the canonical-aware helper (not a raw DB field pluck) — otherwise US1 is not actually fixed.
+- **Rolling deploy window.** For the ~5-minute deploy window, some API instances write v2 rows while old instances still try to read v1-tolerant code that no longer exists. Mitigation: a transient "unknown" display is acceptable; no data corruption.
+- **Old cache entries keyed by response hash.** The cache key is the response SHA — removing `decisionCode` from the written value does not invalidate cache lookups.
+- **Python tests that fixture `decisionCode`.** Updated to either remove or expect its absence in output.
+- **MCP `get-unsummarized-transcripts`.** Uses `decisionCode` today for filter logic. Migrated to use `canonicalDecision.decisionState`.
+- **CSV consumer that regex-matches `decisionCode` column header.** Fails loudly (column missing) — intentional per Q1.
+
+## Functional Requirements
+
+- **FR-001.** The TypeScript write path MUST NOT include `decisionCode` or `decisionCodeSource` keys in the object written to `summaryCache.summary`. *(Supports US1.)*
+- **FR-002.** The Python summarize worker's output dict MUST NOT contain `decisionCode` or `decisionCodeSource` keys. It MUST contain `canonicalDecision`. *(Supports US1.)*
+- **FR-003.** The `CachedWinnerFirstDecision` type MUST keep `cacheVersion: 1 | 2` (transitional union — tightened in a follow-up mini-PR), and MUST include `"refusal"` in the `decisionState` union. `isCachedWinnerFirstDecision` MUST accept both the v1 and v2 shapes plus the new refusal state. *(Supports US1 and the deploy-window tolerance.)*
+- **FR-004.** The GraphQL schema for `Transcript` and `Run` related types MUST NOT expose `decisionCode`. *(Supports US3.)*
+- **FR-005.** The MCP tools `get-run-results`, `get-transcript-summary`, and `get-unsummarized-transcripts` MUST NOT emit a `decisionCode` field in their response payloads. *(Supports US3.)*
+- **FR-006.** The CSV and OData exports MUST NOT include a `decisionCode` column. *(Supports US3.)*
+- **FR-007.** The manual-override mutation MUST accept `{favoredValueKey, strength}` as required fields. The server MUST derive `direction` from `favoredValueKey` against the definition's value pair and store it in `canonicalDecision`. A `favoredValueKey` matching neither value MUST be rejected with a validation error. `strength: "neutral"` MUST produce `{decisionState: "neutral", direction: "neutral", favoredValueKey: null}` regardless of the input key. The mutation MUST NOT write to the legacy top-level `transcripts.decision_code` column. *(Supports US2.)*
+- **FR-008.** A shared helper `scaleCodeFromCanonical(canonical, pair, orientationFlipped)` MUST exist for any internal code path that needs the 1–5 number. It MUST NOT be called by any external API emitter (MCP / CSV / OData), GraphQL resolver, or web component. It is ONLY callable from `cloud/scripts/job-choice-bridge-report-lib.ts` and its tests (documented in a JSDoc allowlist comment on the helper). Adding a new caller requires updating the allowlist, making future misuse visible in code review. *(Supports the shared-derivation invariant; addresses the Gemini LOW residual-risk finding about re-introduction pathways.)*
+- **FR-009.** The migration script MUST visit every transcript with a non-null `summaryCache`, apply the three-case processor described in the scope (refusal-tag → unknown-recovery → preserve), strip `decisionCode` and `decisionCodeSource`, and write `cacheVersion: 2`. It MUST run as dry-run by default and MUST support `--apply`, `--domain=<name>`, and `--limit=<n>` flags. *(Supports US1.)*
+- **FR-010.** After `--apply` runs against prod, `SELECT COUNT(*) FROM transcripts WHERE decision_metadata->'summaryCache'->'summary' ? 'decisionCode'` MUST return `0`. *(Acceptance check.)*
+- **FR-011.** The unit test suite MUST pass without the `any` type, `@ts-ignore`, or `eslint-disable` directives being added to paper over the removal. *(Code quality.)*
+- **FR-012.** All existing tests that assert on `decisionCode` MUST be updated — either rewired to assert on `canonicalDecision`, or replaced with an assertion that `decisionCode` is absent. No test deleted purely to make the removal pass. *(Test coverage.)*
+
+## Success Criteria
+
+- **SC-001.** `git grep -n "decisionCode" cloud/apps/api/src cloud/apps/web/src cloud/workers cloud/scripts -- ':!cloud/scripts/analysis/**' ':!cloud/scripts/backfill-canonical-v2-migration.ts'` returns zero non-comment hits after the PR merges. Exclusions: the migration script itself (which strips `decisionCode`), the `cloud/scripts/analysis/**` tree (one-off historical data extraction; not on the deploy path), and negation assertions in tests. `cloud/packages` is also **excluded** because the Prisma schema and generated DB types still reference `decisionCode` as part of the top-level column — that column is removed by the follow-up PR.
+- **SC-002.** The production dry-run of the rewritten migration reports categories: `refusal-tagged`, `unknown-recovered`, `unknown-recovery-skipped-insufficient-evidence` (unknown row where preconditions failed → preserved instead), `preserved-with-strip`, `already-v2` (no-op), `synthesized-unknown` (no existing canonical, wrote a v2 unknown), `missing-snapshot-stripped` (malformed `definition_snapshot`, canonical not upgraded but decisionCode still stripped + cacheVersion bumped), `errors` = 0. `drifted` does NOT appear (not a category anymore).
+- **SC-003.** After `--apply` against prod: `SELECT COUNT(*) FROM transcripts WHERE decision_metadata->'summaryCache'->'summary' ? 'decisionCode'` returns `0` — **every** row is stripped, including `missing-snapshot-stripped` ones (which only skip the canonical upgrade, not the strip). This is a single absolute check, no exceptions, no residual.
+- **SC-004.** A domain analysis page that today shows false dashes (e.g. the known software-approach-choice transcripts in the drift ledger) renders resolved decisions for those rows.
+- **SC-005.** All preflight gates pass: lint + build + tests for shared, db, api, web; Python worker pytest.
+- **SC-006.** CI passes on the PR branch without skipped or quarantined tests related to this change.
+- **SC-007.** Deploy to prod produces no error spike for 15 minutes post-deploy in the API or worker logs.
+
+## Assumptions Recorded in Discovery
+
+1. User confirms scorched-earth intent: break every dependency on the 1-5 code so it fails loudly. No soft deprecation anywhere.
+2. Manual override mutation will be reshaped to accept `{favoredValueKey, strength, direction}` and update `canonicalDecision` directly.
+3. Python worker keeps internal parsing logic intact; only stops emitting `decisionCode`/`decisionCodeSource` in its output dict.
+4. Migration strips `decisionCode` + `decisionCodeSource` from `summaryCache.summary`, bumps `cacheVersion` 1 to 2, preserves `canonicalDecision` verbatim; no truth-table derivation.
+5. A derivation helper `scaleCodeFromCanonical(canonical, pair, orientationFlipped)` exists internally for any code path that needs the 1-5 number; it is never called by external APIs.
+
+## Key Entities
+
+- **`CachedWinnerFirstDecision`** — the in-cache canonical shape; `cacheVersion: 1 | 2` (reader tolerance bridge — tightens to `2` in follow-up), `decisionState ∈ {"resolved", "neutral", "unknown", "refusal"}`, `favoredValueKey: DomainAnalysisValueKey | null`, `strength: DecisionStrength`.
+- **`RawDecisionEvidence`** — parser output untouched (`matchedLabel`, `parseClass`, `parsePath`, `parserVersion`, `responseExcerpt`).
+- **`CanonicalDecision`** — API-level shape returned to consumers. Keeps its existing field set including `direction`, `favoredValueKey`, `opposedValueKey`, `strength`, `normalizationApplied`, `normalizationReason`, `source`. No `decisionCode`; consumers that need the 1–5 scale number call `scaleCodeFromCanonical` internally (and only from the allowlist in FR-008). `direction` is STORED in the canonical (derivable from `favoredValueKey + pair`, but stored redundantly so readers don't have to re-derive).
+- **Manual override payload** — new GraphQL input `{favoredValueKey, strength}`. Server derives direction and opposedValueKey. Server does NOT write to the legacy `transcripts.decision_code` column.
+
+## Dependencies
+
+- Prisma client unchanged for this PR. (Column drop deferred to follow-up PR.)
+- Railway rolling deploy — acceptable ~5-minute window of transient "unknown" display on in-flight summaries written by pre-deploy instances.
+
+## Post-Merge Operational Steps
+
+1. Run migration dry-run against prod. Verify categorized counts are reasonable.
+2. Run migration `--apply` against prod.
+3. Run FR-010 verification query — expect 0.
+4. Verify prod UI on a previously-dashed transcript — expect resolved.
+5. Immediately open follow-up PR to drop the top-level `transcripts.decision_code` Postgres column.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the spec against the provided code paths now, with an adversarial focus on where the spec assumes more than the code actually guarantees. Then I’ll call out only the issues that look real and concrete.
+codex
+## Findings
+- **High** [CODE-CONFIRMED] The migration does not actually strip `decisionCode` from malformed snapshots. The spec says malformed `definition_snapshot` rows should still be stripped and counted in the final absolute check, but `backfill-canonical-v2-migration.ts` returns `pairFromSnapshot(null)` and then `continue`s, leaving those rows untouched. That creates a permanent tail of `decisionCode` residue and makes SC-003 unattainable for any malformed row.
+- **High** [CODE-CONFIRMED] Refusal rows will be written, then read back as `unknown`. The spec adds `decisionState: "refusal"` to the cache shape, but `decision-model.ts` has no refusal branch in `resolveCanonicalDecision()`. Because refusal rows have `favoredValueKey: null` and `strength: "unknown"`, the current read path falls through to the unknown fallback and erases the distinction the spec is trying to preserve.
+- **Medium** [CODE-CONFIRMED] The migration’s unknown-recovery case is narrower than the live resolver. `decision-model.ts` falls back to `JOB_CHOICE_VALUE_STATEMENTS` when `valueStatements` are missing for `job-choice-v2`, but the spec only allows recovery when both `valueStatements` and `labelPrefix` are extracted from `definitionSnapshot`. That means some rows the read path could still resolve will be preserved instead.
+- **Medium** [CODE-CONFIRMED] The spec calls `buildCanonicalDecisionFromPair(pair, direction, strength)`, but the provided helper in `decision-model-helpers.ts` requires two additional arguments: `normalizationApplied` and `source`. Unless the helper is changed too, the migration as written will not compile.
+- **Medium** [CODE-CONFIRMED] The migration is not safe against concurrent writes. It reads `decisionMetadata` into memory, mutates the entire JSON blob, and writes it back by transcript `id` with no optimistic guard. On a live system, a summarize job or manual override that lands between read and write can be clobbered, which is exactly the case the spec says this must tolerate.
+
+## Residual Risks
+- Rows with missing parser evidence or ambiguous text will still be left behind by design; the spec does not define a separate recovery or audit path for them.
+- The follow-up PR that drops the top-level `transcripts.decision_code` column is still required. Until that lands, legacy writes remain possible outside `summaryCache.summary`.
+tokens used
+39,015

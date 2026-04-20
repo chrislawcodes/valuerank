@@ -41,7 +41,6 @@ type TranscriptForFingerprint = {
   sampleIndex: number;
   modelId: string;
   scenarioId: string | null;
-  decisionCode: string | null;
   decisionMetadata: unknown;
   definitionSnapshot: unknown;
   createdAt: Date;
@@ -180,7 +179,6 @@ export function buildFingerprintPayload(args: {
       modelId: transcript.modelId,
       scenarioId: transcript.scenarioId,
       decision: resolveTranscriptDecisionModel({
-        decisionCode: transcript.decisionCode,
         decisionMetadata: transcript.decisionMetadata,
         definitionSnapshot: transcript.definitionSnapshot,
         orientationFlipped: transcript.scenario?.orientationFlipped ?? null,

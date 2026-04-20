@@ -11,6 +11,7 @@ import { TranscriptList } from './TranscriptList';
 import { TranscriptViewer } from './TranscriptViewer';
 import type { Run, Transcript } from '../../api/operations/runs';
 import { hasTranscriptDecisionModelV2 } from '../../utils/transcriptDecisionModel';
+import { toManualDecisionInput } from '../../utils/manualDecisionOverrideInput';
 
 type RunResultsProps = {
   run: Run;
@@ -22,7 +23,14 @@ type RunResultsProps = {
   isExportingTranscripts?: boolean;
   scenarioDimensions?: Record<string, Record<string, string | number>>;
   dimensionLabels?: Record<string, string>;
-  onUpdateTranscriptDecision?: (transcriptId: string, decisionCode: string) => Promise<void>;
+  onUpdateTranscriptDecision?: (
+    transcriptId: string,
+    input: {
+      decisionState: 'resolved' | 'neutral' | 'unknown' | 'refusal';
+      favoredValueKey?: string | null;
+      strength?: 'strong' | 'lean' | null;
+    },
+  ) => Promise<void>;
 };
 
 type ViewMode = 'list' | 'grouped';
@@ -138,9 +146,17 @@ export function RunResults({
   const handleDecisionChange = useCallback(async (transcript: Transcript, decisionCode: string) => {
     if (!onUpdateTranscriptDecision) return;
 
+    const definitionSnapshot = (transcript as { definitionSnapshot?: unknown }).definitionSnapshot ?? null;
+    const orientationFlipped =
+      ((transcript as { scenario?: { orientationFlipped?: boolean | null } }).scenario?.orientationFlipped) ?? null;
+    const input = toManualDecisionInput(decisionCode, definitionSnapshot, orientationFlipped);
+    if (input == null) {
+      return;
+    }
+
     setUpdatingTranscriptIds((prev) => new Set(prev).add(transcript.id));
     try {
-      await onUpdateTranscriptDecision(transcript.id, decisionCode);
+      await onUpdateTranscriptDecision(transcript.id, input);
     } finally {
       setUpdatingTranscriptIds((prev) => {
         const next = new Set(prev);

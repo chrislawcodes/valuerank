@@ -1,0 +1,1190 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 1776643149
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 2,
+    "asked_count": 2,
+    "questions": [
+      {
+        "question": "Manual override mutation input shape \u2014 all three components {favoredValueKey, strength, direction}, or just two?",
+        "recommendation": "Take all three: {favoredValueKey, strength, direction}. Server validates consistency against the definition's value pair; mismatch is rejected.",
+        "rationale": "Losing favoredValueKey at the API boundary has caused past headaches. Redundant inputs let the server catch client bugs at the boundary instead of silent drift downstream.",
+        "updated_at": 1776640741
+      },
+      {
+        "question": "Where does the refusal signal live after collapsing decisionCode?",
+        "recommendation": "Extend canonicalDecision.decisionState to include 'refusal'. Bump cacheVersion from 1 to 2. Existing v1 caches are recomputed lazily by derive-on-read.",
+        "rationale": "Conflating refusal (model intent) with unknown (parser failure) loses analytical signal. Canonical is where analysis code reads \u2014 put semantic facts there, not in parseEvidence.",
+        "updated_at": 1776640756
+      }
+    ],
+    "assumptions": [
+      "v3 canonicalDecision schema is frozen \u2014 this PR does not bump cacheVersion or rename fields",
+      "Python parser return dict keeps its internal decisionCode field; only the persistence layer stops writing it into summaryCache",
+      "Top-level transcripts.decision_code column is not touched by this PR (separate cleanup once manual-override stops writing it)",
+      "One feature branch with sequenced internal commits (read rewire \u2192 mutation rewire \u2192 write rewire \u2192 migration) \u2014 same pattern as recent PRs",
+      "Transcripts with no summaryCache entry today (~3,128 job-choice + 121,105 no-domain) are unaffected; derive-on-read path handles them",
+      "External API shape for MCP get-run-results and CSV exports: still emits 'decisionCode' string '1'..'5' derived on demand \u2014 no external break",
+      "Existing filler-word / distinctive-tail parser fixes shipped in PRs #694, #698, #700 remain intact \u2014 this refactor does not regress decision extraction quality",
+      "Rollout order (reads first, then manual override, then writes, then migration) is per user's spec; each step must leave the system in a consistent state mid-rollout",
+      "cacheVersion is bumped from 1 to 2 to accommodate the new 'refusal' decisionState value. Existing v1 caches are recomputed lazily by the derive-on-read path."
+    ],
+    "summary": "Canonical-decision single-source refactor. User spec is substantial; only API shape for manual override and refusal-signal preservation need confirmation.",
+    "updated_at": 1776640764,
+    "answers": {
+      "Manual override mutation input shape \u2014 all three components {favoredValueKey, strength, direction}, or just two?": "Take all three. Server validates that favoredValueKey is consistent with direction against the definition's value pair; mismatch is rejected. Losing favoredValueKey at the API boundary has caused past headaches, so keep it explicit.",
+      "Where does the refusal signal live after collapsing decisionCode?": "Extend decisionState to include 'refusal' as a distinct value. Bump cacheVersion from 1 to 2. Existing v1 caches are recomputed lazily by derive-on-read. Refusal must not be conflated with unknown (parser failure)."
+    },
+    "non_goals": [],
+    "acceptance_criteria": [],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": false,
+    "found": false,
+    "note": "",
+    "updated_at": 0
+  },
+  "init_head_sha": "4201294766a93a21d6bc5c872aee243032e60b58",
+  "token_usage": [
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:24:07.487325Z",
+      "started_at": "2026-04-19T23:23:33.194586Z",
+      "ended_at": "2026-04-19T23:24:07.487325Z",
+      "duration_seconds": 34.292521,
+      "agent_id": null,
+      "artifact_sha_at_time": "d37d6e5fb18018bf77103f2accc4d307d7125cf982dbfcd147a02ec3d682f3f1",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:25:47.865630Z",
+      "started_at": "2026-04-19T23:24:42.509979Z",
+      "ended_at": "2026-04-19T23:25:47.865630Z",
+      "duration_seconds": 65.355473,
+      "agent_id": null,
+      "artifact_sha_at_time": "d37d6e5fb18018bf77103f2accc4d307d7125cf982dbfcd147a02ec3d682f3f1",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:26:40.048110Z",
+      "started_at": "2026-04-19T23:25:48.006396Z",
+      "ended_at": "2026-04-19T23:26:40.048110Z",
+      "duration_seconds": 52.041576,
+      "agent_id": null,
+      "artifact_sha_at_time": "d37d6e5fb18018bf77103f2accc4d307d7125cf982dbfcd147a02ec3d682f3f1",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:29:57.882103Z",
+      "started_at": "2026-04-19T23:28:51.660405Z",
+      "ended_at": "2026-04-19T23:29:57.882103Z",
+      "duration_seconds": 66.221584,
+      "agent_id": null,
+      "artifact_sha_at_time": "c7c9f2cf560db121189f16ba5dd4f0caf8d184dae30a79d048b2008092c03388",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:31:48.189288Z",
+      "started_at": "2026-04-19T23:29:58.056526Z",
+      "ended_at": "2026-04-19T23:31:48.189288Z",
+      "duration_seconds": 110.132584,
+      "agent_id": null,
+      "artifact_sha_at_time": "c7c9f2cf560db121189f16ba5dd4f0caf8d184dae30a79d048b2008092c03388",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:32:35.990314Z",
+      "started_at": "2026-04-19T23:31:48.348436Z",
+      "ended_at": "2026-04-19T23:32:35.990314Z",
+      "duration_seconds": 47.641704,
+      "agent_id": null,
+      "artifact_sha_at_time": "c7c9f2cf560db121189f16ba5dd4f0caf8d184dae30a79d048b2008092c03388",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:35:16.331591Z",
+      "started_at": "2026-04-19T23:33:54.433077Z",
+      "ended_at": "2026-04-19T23:35:16.331591Z",
+      "duration_seconds": 81.89835,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:36:38.609415Z",
+      "started_at": "2026-04-19T23:35:16.490881Z",
+      "ended_at": "2026-04-19T23:36:38.609415Z",
+      "duration_seconds": 82.118339,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:37:30.275205Z",
+      "started_at": "2026-04-19T23:36:38.782021Z",
+      "ended_at": "2026-04-19T23:37:30.275205Z",
+      "duration_seconds": 51.493084,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:38:25.644851Z",
+      "started_at": "2026-04-19T23:37:51.653688Z",
+      "ended_at": "2026-04-19T23:38:25.644851Z",
+      "duration_seconds": 33.991154,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:38:58.156905Z",
+      "started_at": "2026-04-19T23:38:25.646647Z",
+      "ended_at": "2026-04-19T23:38:58.156905Z",
+      "duration_seconds": 32.510263,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:39:29.388372Z",
+      "started_at": "2026-04-19T23:37:51.652611Z",
+      "ended_at": "2026-04-19T23:39:29.388372Z",
+      "duration_seconds": 97.73569,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:40:51.677101Z",
+      "started_at": "2026-04-19T23:37:51.652398Z",
+      "ended_at": "2026-04-19T23:40:51.677101Z",
+      "duration_seconds": 180.024407,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:41:39.284037Z",
+      "started_at": "2026-04-19T23:40:51.678548Z",
+      "ended_at": "2026-04-19T23:41:39.284037Z",
+      "duration_seconds": 47.605468,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:44:23.753773Z",
+      "started_at": "2026-04-19T23:43:55.990444Z",
+      "ended_at": "2026-04-19T23:44:23.753773Z",
+      "duration_seconds": 27.763289,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:44:35.655415Z",
+      "started_at": "2026-04-19T23:43:55.990196Z",
+      "ended_at": "2026-04-19T23:44:35.655415Z",
+      "duration_seconds": 39.664957,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:44:49.184579Z",
+      "started_at": "2026-04-19T23:44:23.755872Z",
+      "ended_at": "2026-04-19T23:44:49.184579Z",
+      "duration_seconds": 25.42866,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:45:03.224885Z",
+      "started_at": "2026-04-19T23:44:35.657249Z",
+      "ended_at": "2026-04-19T23:45:03.224885Z",
+      "duration_seconds": 27.567544,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:45:37.931585Z",
+      "started_at": "2026-04-19T23:43:55.991908Z",
+      "ended_at": "2026-04-19T23:45:37.931585Z",
+      "duration_seconds": 101.939299,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:46:28.875545Z",
+      "started_at": "2026-04-19T23:45:37.932831Z",
+      "ended_at": "2026-04-19T23:46:28.875545Z",
+      "duration_seconds": 50.942585,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:49:06.313303Z",
+      "started_at": "2026-04-19T23:48:28.998350Z",
+      "ended_at": "2026-04-19T23:49:06.313303Z",
+      "duration_seconds": 37.31475,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:49:33.803714Z",
+      "started_at": "2026-04-19T23:48:28.998725Z",
+      "ended_at": "2026-04-19T23:49:33.803714Z",
+      "duration_seconds": 64.804795,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:49:44.838010Z",
+      "started_at": "2026-04-19T23:49:06.315666Z",
+      "ended_at": "2026-04-19T23:49:44.838010Z",
+      "duration_seconds": 38.522211,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:50:11.736129Z",
+      "started_at": "2026-04-19T23:48:29.001005Z",
+      "ended_at": "2026-04-19T23:50:11.736129Z",
+      "duration_seconds": 102.734748,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-19T23:51:14.359345Z",
+      "started_at": "2026-04-19T23:50:11.737701Z",
+      "ended_at": "2026-04-19T23:51:14.359345Z",
+      "duration_seconds": 62.621439,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T00:00:00.413115Z",
+      "started_at": "2026-04-19T23:59:15.758795Z",
+      "ended_at": "2026-04-20T00:00:00.413115Z",
+      "duration_seconds": 44.654184,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T00:00:29.054282Z",
+      "started_at": "2026-04-19T23:59:15.758584Z",
+      "ended_at": "2026-04-20T00:00:29.054282Z",
+      "duration_seconds": 73.295331,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T00:01:00.579430Z",
+      "started_at": "2026-04-20T00:00:29.055876Z",
+      "ended_at": "2026-04-20T00:01:00.579430Z",
+      "duration_seconds": 31.523465,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T00:02:06.626949Z",
+      "started_at": "2026-04-19T23:59:15.758831Z",
+      "ended_at": "2026-04-20T00:02:06.626949Z",
+      "duration_seconds": 170.867543,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T00:03:14.524888Z",
+      "started_at": "2026-04-20T00:02:06.629379Z",
+      "ended_at": "2026-04-20T00:03:14.524888Z",
+      "duration_seconds": 67.895294,
+      "agent_id": null,
+      "artifact_sha_at_time": "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T00:08:08.096089Z",
+      "started_at": "2026-04-20T00:07:24.877835Z",
+      "ended_at": "2026-04-20T00:08:08.096089Z",
+      "duration_seconds": 43.218008,
+      "agent_id": null,
+      "artifact_sha_at_time": "f47924c7cbf0a1cb6990765d3874d0e032bac77eab8f7d53c509a8dd9ee13350",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T00:09:00.373099Z",
+      "started_at": "2026-04-20T00:08:08.228959Z",
+      "ended_at": "2026-04-20T00:09:00.373099Z",
+      "duration_seconds": 52.143819,
+      "agent_id": null,
+      "artifact_sha_at_time": "f47924c7cbf0a1cb6990765d3874d0e032bac77eab8f7d53c509a8dd9ee13350",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T00:09:29.673658Z",
+      "started_at": "2026-04-20T00:09:00.501879Z",
+      "ended_at": "2026-04-20T00:09:29.673658Z",
+      "duration_seconds": 29.171557,
+      "agent_id": null,
+      "artifact_sha_at_time": "f47924c7cbf0a1cb6990765d3874d0e032bac77eab8f7d53c509a8dd9ee13350",
+      "parse_error": "no Gemini token stats found in stdout"
+    }
+  ],
+  "stages": {
+    "spec": {
+      "adversarial_rounds": 3,
+      "judge_rounds": 3,
+      "judge_verdicts": [
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.2",
+            "verdict": "block",
+            "confidence": 4,
+            "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is not clearly addressed anywhere in the current artifact chain. The closest text is FR-004 / Assumption 7, which says `cacheVersion: 1` caches are valid-but-legacy and missing the refusal distinction; that states the regression condition, not a mitigation that preserves refusal during the rollout window. spec.codex.edge-cases-adversarial.review#high-2 is also not resolved: FR-012 still scopes the migration to rows with `decisionCode`, while the Measurement/edge-case text still claims the post-migration state should be `cacheVersion: 2` for cached rows, so the invariant mismatch remains. spec.gemini.requirements-adversarial.review#high-1 is addressed as an explicit accepted limitation in Spec Out of scope / Assumptions 2 / Review Reconciliation note (a): removal of the top-level `transcripts.decision_code` column is deferred to a follow-up PR, which is specific enough to implement as a scoped deferral. spec.gemini.requirements-adversarial.review#high-2 is not addressed: the spec says the migration is safe because it only reads cached rows, but there is no named locking, transaction, or maintenance-window mitigation for concurrent writes.",
+            "evidence": [
+              {
+                "artifact": "docs/workflow/feature-runs/decision-cache-single-source/spec.md",
+                "section": "FR-004 / Assumption 7",
+                "quote": "cacheVersion 1 caches remain valid-but-legacy and missing the refusal distinction."
+              },
+              {
+                "artifact": "docs/workflow/feature-runs/decision-cache-single-source/spec.md",
+                "section": "FR-012 / Measurement (D)",
+                "quote": "apply mode only visits transcripts with decisionCode, while the measurement still expects cacheVersion 2."
+              },
+              {
+                "artifact": "docs/workflow/feature-runs/decision-cache-single-source/spec.md",
+                "section": "Out of scope / Assumptions 2 / Review Reconciliation",
+                "quote": "top-level transcripts.decision_code is deferred to a separate follow-up PR."
+              },
+              {
+                "artifact": "docs/workflow/feature-runs/decision-cache-single-source/spec.md",
+                "section": "Edge Cases / In-flight summarize jobs during migration",
+                "quote": "the migration only reads cached rows; no locking or maintenance window is named."
+              }
+            ],
+            "timestamp": "2026-04-19T00:00:00-07:00"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5",
+            "verdict": "block",
+            "confidence": 5,
+            "reasoning": "All latest findings are NEW because the record explicitly says there were no earlier rounds: \"No prior findings yet.\" That means none of these can be RESTATEMENTs, since there is no earlier finding and no orchestrator response to compare against. Per finding: spec.codex.edge-cases-adversarial.review#high-1 is NEW because it identifies a rollout-order failure mode where legacy refusal rows read as \"unknown\" before migration; #high-2 is NEW because it identifies a migration invariant mismatch for cached rows lacking decisionCode; #medium-3 is NEW because it identifies an outward API/export mapping ambiguity for unresolved decisions (other vs unknown vs null); #medium-4 is NEW because it identifies missing orientationFlipped semantics for manual overrides. spec.codex.feasibility-adversarial.review#medium-1 is NEW because it restates the migration-scope/invariant conflict as a spec-level end-state ambiguity, still new relative to prior rounds because there were none; #medium-2 is NEW because it adds two uncovered write-path failure modes: invalid neutral+non-neutral strength combinations and override writes that may fail to stamp cacheVersion 2; #medium-3 is NEW because it identifies discovery-process blind spots for dynamic SQL, aliases, or wrapped consumers. spec.gemini.requirements-adversarial.review#high-1, #high-2, #medium-3, and #medium-4 are also NEW in the only defensible sense available here, because there are no prior rounds, but the provided excerpts do not include enough detail to state their specific failure modes beyond severity labels. Since well over 30% of the latest round surfaces genuinely new concerns, the loop is still producing signal and should be blocked from auto-proceeding.",
+            "evidence": [
+              {
+                "artifact": "earlier-rounds",
+                "section": "prior findings",
+                "quote": "No prior findings yet."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "high-1",
+                "quote": "any preexisting refusal still on v1 will read as `unknown` until the migration lands, which breaks the stated requirement to preserve the refusal signal during the rollout window"
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "high-2",
+                "quote": "Any cache row without `decisionCode` will be left at v1, so the post-migration invariant cannot be true as written."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "The spec never says whether exports/API should emit `other`, `unknown`, or null for canonical `decisionState=\"unknown\"`, so the \"no public API break\" guarantee is not actually pinned down."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-4",
+                "quote": "it never says how `orientationFlipped=true` changes the meaning of `favor_first` and `favor_second`"
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "Those cannot all be true at once unless the migration also touches cached rows without `decisionCode`, so the spec currently leaves the final cache-version state ambiguous."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "it never explicitly says `direction=\"neutral\"` must force `strength=\"neutral\"`"
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "The spec also never explicitly requires the override path to stamp `canonicalDecision.cacheVersion: 2`, so the write path can keep producing legacy-version canonical objects after the bump."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "A repo-wide literal grep for `summaryCache.summary.decisionCode` and a few JSON-path spellings can still miss dynamically built SQL, aliased accessors, or helper-wrapped queries."
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "high-1/high-2/medium-3/medium-4",
+                "quote": "Severity**: HIGH / Severity**: HIGH / Severity**: MEDIUM / Severity**: MEDIUM"
+              }
+            ],
+            "timestamp": "2026-04-19T00:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-5",
+            "verdict": "block",
+            "confidence": 4,
+            "reasoning": "Four load-bearing gaps would cause a competent implementer to get stuck or guess wrong. (1) The plan and tasks artifacts are empty \u2014 the plan contains only review reconciliation notes and tasks contains only a heading. There is no file inventory, no sequencing of commits, and no grep results. (2) FR-006 requires a repo-wide grep as a hard pre-condition before any write-path change lands ('merging is blocked until the discovered list is closed'), but the plan never executed that grep, so the consumer inventory is unverified. (3) The migration script must read orientationFlipped and the value pair from the transcript's definition_snapshot JSON column, but neither the exact JSON path nor the column schema is specified anywhere in the artifacts \u2014 an implementer would have to guess. (4) The shared derivation helper (FR-005) is described by output type only; its module location, package, and TypeScript signature are not specified, which matters because multiple consumers across cloud/apps/, cloud/workers/, and cloud/packages/ must all import the same helper.",
+            "evidence": [
+              {
+                "artifact": "PLAN",
+                "section": "entire plan body",
+                "quote": "## Review Reconciliation\n- review: reviews/spec.codex.edge-cases-adversarial.review.md | status: accepted | note: No actionable findings detected \u2014 auto-accepted\n- review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: No actionable findings detected \u2014 auto-accepted\n- review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: No actionable findings detected \u2014 auto-accepted"
+              },
+              {
+                "artifact": "TASKS",
+                "section": "entire tasks body",
+                "quote": "# Tasks"
+              },
+              {
+                "artifact": "SPEC",
+                "section": "FR-006",
+                "quote": "The plan phase MUST include a repo-wide grep step across the entire cloud/ tree (cloud/apps/, cloud/workers/, cloud/packages/, cloud/scripts/, cloud/tests/, cloud/migrations/) plus repo-root scripts/, docs/workflow/feature-runs/**/scripts/, and any other directory containing code that runs against the DB... Any consumer discovered that was missed in the initial list MUST be added to the task list before any write-path change lands; merging is blocked until the discovered list is closed."
+              },
+              {
+                "artifact": "SPEC",
+                "section": "Edge Cases \u2014 orientationFlipped mismatch",
+                "quote": "The migration reads orientationFlipped from the scenario content snapshot on each transcript. If the flag is missing, it defaults to false (same as current read-path behavior)."
+              },
+              {
+                "artifact": "SPEC",
+                "section": "Edge Cases \u2014 Definition deleted or soft-deleted before migration",
+                "quote": "The migration reads from the transcript's definition_snapshot JSON column, not the live definition, so soft deletion does not affect correctness."
+              },
+              {
+                "artifact": "SPEC",
+                "section": "FR-005",
+                "quote": "A single shared helper (TS) MUST derive scale position ('1' | '2' | '3' | '4' | '5' | 'refusal' | 'unknown') from canonicalDecision + {valueA, valueB} value pair + orientationFlipped. The Python worker keeps its existing logic \u2014 the helper applies to read-side derivation only."
+              }
+            ],
+            "timestamp": "2026-04-19T00:00:00Z"
+          }
+        ],
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.2",
+            "verdict": "proceed",
+            "confidence": 5,
+            "reasoning": "All four HIGH findings are addressed somewhere in the current artifact chain by name. spec.codex.edge-cases-adversarial.review#high-1 is mitigated by FR-019's rollout-window refusal-preservation branch. spec.codex.edge-cases-adversarial.review#high-2 is mitigated by FR-012's requirement to visit every cached row and always write cacheVersion: 2. spec.gemini.requirements-adversarial.review#high-1 is explicitly acknowledged as an out-of-scope follow-up for the top-level transcripts.decision_code column. spec.gemini.requirements-adversarial.review#high-2 is mitigated by FR-012's per-row atomic UPDATE rule. Each addressing is specific enough to implement.",
+            "evidence": [
+              {
+                "artifact": "SPEC",
+                "section": "Functional Requirements (FR-019)",
+                "quote": "inspect summaryCache.summary.decisionCode if present and treat decisionCode = \"refusal\" as if decisionState = \"refusal\""
+              },
+              {
+                "artifact": "SPEC",
+                "section": "Functional Requirements (FR-012)",
+                "quote": "The migration MUST process every transcript whose decision_metadata.summaryCache is not null, regardless of whether decisionCode is present ... and always writes cacheVersion: 2."
+              },
+              {
+                "artifact": "SPEC",
+                "section": "Scope Boundaries / Non-Goals",
+                "quote": "Removing the top-level transcripts.decision_code column. Separate follow-up PR after this one lands"
+              },
+              {
+                "artifact": "SPEC",
+                "section": "Functional Requirements (FR-012)",
+                "quote": "Migration writes are per-row atomic (one UPDATE per transcript, using the primary-key row lock); no global lock is required."
+              }
+            ],
+            "timestamp": "2026-04-19T23:44:33Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5",
+            "verdict": "block",
+            "confidence": 5,
+            "reasoning": "All latest-round findings are NEW, not restatements, because the record explicitly says there were no earlier findings at all. Finding `high-1` is NEW: it surfaces a rollout-order regression where valid `cacheVersion: 1` refusal rows would be read as `unknown` before migration, which is a distinct user-visible failure mode. Finding `high-2` is NEW: it identifies an invariant mismatch between selective migration (`only rows where decisionCode exists`) and the claimed post-migration state (`all cached rows should be cacheVersion = 2`). Finding `medium-3` is NEW: it surfaces an outward-contract ambiguity for unresolved decisions (`other` vs `unknown` vs `null`) that was not previously raised. Finding `medium-4` is NEW: it identifies missing flipped-orientation semantics for manual overrides, creating a risk of accepting or rejecting the wrong favored value. Finding `feasibility-medium-1` is NEW: it repeats the migration/invariant conflict theme from this same latest round, but there is still no earlier round or orchestrator response, so it cannot be a restatement under the stated rule. Finding `feasibility-medium-2` is NEW: it adds two uncovered failure modes, invalid neutral-strength combinations and missing `cacheVersion: 2` stamping on manual overrides. Finding `feasibility-medium-3` is NEW: it raises a discovery-gap risk that grep-based consumer audits can miss dynamic or wrapped access paths. The Gemini findings `high-1`, `high-2`, `medium-3`, and `medium-4` must also be treated as NEW because no earlier findings exist; however, the provided excerpt does not include their substantive text, so their specific failure modes cannot be evaluated beyond noting that they are not restatements. Because substantially more than 30% of the latest round consists of genuinely new concerns, the loop is still producing signal and should block rather than proceed.",
+            "evidence": [
+              {
+                "artifact": "earlier-rounds",
+                "section": "prior-findings",
+                "quote": "Earlier rounds' findings (with orchestrator responses): - No prior findings yet."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "high-1",
+                "quote": "The rollout order creates a user-visible regression for legacy refusal rows... any preexisting refusal still on v1 will read as `unknown` until the migration lands"
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "high-2",
+                "quote": "FR-012 only migrates rows where `summaryCache.summary.decisionCode` exists... Any cache row without `decisionCode` will be left at v1"
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "The spec never says whether exports/API should emit `other`, `unknown`, or null for canonical `decisionState=\"unknown\"`"
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-4",
+                "quote": "FR-008 validates against `pair.valueA` / `pair.valueB`, but it never says how `orientationFlipped=true` changes the meaning of `favor_first` and `favor_second`"
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "it never explicitly says `direction=\"neutral\"` must force `strength=\"neutral\"`... The spec also never explicitly requires the override path to stamp `canonicalDecision.cacheVersion: 2`"
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "A repo-wide literal grep for `summaryCache.summary.decisionCode` and a few JSON-path spellings can still miss dynamically built SQL, aliased accessors, or helper-wrapped queries"
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "high-1/high-2/medium-3/medium-4",
+                "quote": "Only severity labels are provided in the excerpt (`Severity**: HIGH` / `Severity**: MEDIUM`), so these items cannot be matched to any earlier concern and therefore cannot be classified as restatements."
+              }
+            ],
+            "timestamp": "2026-04-19T00:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-5",
+            "verdict": "block",
+            "confidence": 4,
+            "reasoning": "Four load-bearing ambiguities would cause an implementer to guess or ship bugs. (1) FR-019 requires the shared derivation helper to inspect summaryCache.summary.decisionCode during the rollout window, but the helper signature defined in FR-005 has no parameter for decisionCode \u2014 an implementer would have to invent a fourth optional parameter or a wrapper function with no spec guidance. (2) FR-012 and FR-015 directly contradict each other about whether rows without decisionCode in the cache are in scope for the migration: FR-012 says process every cached row regardless of decisionCode presence and upgrade cacheVersion, while FR-015 says those rows are 'out of the migration's scope.' Both FRs cannot be satisfied simultaneously. (3) The migration script's language and file location are never specified. FR-005 places a Python helper at cloud/workers/scale_position_from_canonical.py 'for the migration script's use,' implying Python, but the spec also lists cloud/scripts/ as a search location for consumers, never names the migration file, and the rest of the codebase is TypeScript \u2014 an implementer would guess. (4) The manual-override mutation (FR-007/FR-008) must validate favoredValueKey against pair.valueA/valueB, but the spec never says how the server resolves the value pair for a given transcript \u2014 whether to use definition_snapshot JSON on the transcript row, a live join to the definitions table, or the run's snapshot \u2014 and the definition_snapshot path for null/malformed is only specified for the migration, not for the mutation.",
+            "evidence": [
+              {
+                "artifact": "spec",
+                "section": "FR-019",
+                "quote": "The shared derivation helper (FR-005) MUST, when given a cacheVersion: 1 canonical with decisionState = 'unknown', inspect summaryCache.summary.decisionCode if present and treat decisionCode = 'refusal' as if decisionState = 'refusal'."
+              },
+              {
+                "artifact": "spec",
+                "section": "FR-005",
+                "quote": "Signature: export function scalePositionFromCanonical(canonical: CanonicalDecision, pair: { valueA: string; valueB: string }, orientationFlipped: boolean): '1' | '2' | '3' | '4' | '5' | 'refusal' | 'unknown'"
+              },
+              {
+                "artifact": "spec",
+                "section": "FR-012",
+                "quote": "The migration MUST process every transcript whose decision_metadata.summaryCache is not null, regardless of whether decisionCode is present. For each visited row, it either (a) strips decisionCode/decisionCodeSource from the cache if present, (b) rewrites canonicalDecision if cacheVersion != 2 or derivation disagrees with the cached value, and (c) always writes cacheVersion: 2."
+              },
+              {
+                "artifact": "spec",
+                "section": "FR-015",
+                "quote": "Transcripts with no decisionCode in the cache are out of the migration's scope \u2014 they already lack the field to remove, and their canonicalDecision is assumed correct as of prior writes; derive-on-read handles them at query time."
+              },
+              {
+                "artifact": "spec",
+                "section": "FR-007 / FR-008",
+                "quote": "The manual-override mutation MUST reject requests where: direction = 'favor_first' and favoredValueKey != pair.valueA / direction = 'favor_second' and favoredValueKey != pair.valueB"
+              }
+            ],
+            "timestamp": "2026-04-19T00:00:00Z"
+          }
+        ],
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.2",
+            "verdict": "proceed",
+            "confidence": 5,
+            "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is addressed in SPEC / Functional Requirements (FR-019) with the rollout-window refusal-preservation branch: \"inspect summaryCache.summary.decisionCode if present and treat decisionCode = \\\"refusal\\\" as if decisionState = \\\"refusal\\\"\". Specific enough to implement: yes. spec.codex.edge-cases-adversarial.review#high-2 is addressed in SPEC / Functional Requirements (FR-012): \"The migration MUST process every transcript whose decision_metadata.summaryCache is not null, regardless of whether decisionCode is present\" and the same section requires it to write \"canonicalDecision.cacheVersion: 2\". Specific enough to implement: yes. spec.gemini.requirements-adversarial.review#high-1 is explicitly acknowledged as an accepted limitation in SPEC / Scope Boundaries / Non-Goals and Assumptions Carried In: \"Removing the top-level transcripts.decision_code column. Separate follow-up PR after this one lands\" / \"The top-level transcripts.decision_code column is not touched by this PR\". Specific enough to implement: yes, as a deliberate out-of-scope item. spec.gemini.requirements-adversarial.review#high-2 is addressed in SPEC / Functional Requirements (FR-012) by per-row atomic migration writes: \"Migration writes are per-row atomic (one UPDATE per transcript, using the primary-key row lock); no global lock is required\". Specific enough to implement: yes.",
+            "evidence": [
+              {
+                "artifact": "SPEC",
+                "section": "Functional Requirements (FR-019)",
+                "quote": "inspect summaryCache.summary.decisionCode if present and treat decisionCode = \"refusal\" as if decisionState = \"refusal\""
+              },
+              {
+                "artifact": "SPEC",
+                "section": "Functional Requirements (FR-012)",
+                "quote": "The migration MUST process every transcript whose decision_metadata.summaryCache is not null, regardless of whether decisionCode is present"
+              },
+              {
+                "artifact": "SPEC",
+                "section": "Scope Boundaries / Non-Goals",
+                "quote": "Removing the top-level transcripts.decision_code column. Separate follow-up PR after this one lands"
+              },
+              {
+                "artifact": "SPEC",
+                "section": "Functional Requirements (FR-012)",
+                "quote": "Migration writes are per-row atomic (one UPDATE per transcript, using the primary-key row lock); no global lock is required"
+              }
+            ],
+            "timestamp": "2026-04-19T00:00:00Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5",
+            "verdict": "block",
+            "confidence": 5,
+            "reasoning": "Earlier-round baseline: there are no earlier findings to restate. The record explicitly says \"No prior findings yet.\" That makes every latest finding NEW rather than RESTATEMENT, because the required prior condition does not exist. Per finding: spec.codex.edge-cases-adversarial.review#high-1 = NEW; new failure mode is a rollout-order regression where legacy refusal rows can read as \"unknown\" before migration because v1 caches are still treated as valid. spec.codex.edge-cases-adversarial.review#high-2 = NEW; new failure mode is an invariant conflict where migration only touches rows with decisionCode, leaving some cached rows at v1 despite the spec claiming all cached rows end at cacheVersion 2. spec.codex.edge-cases-adversarial.review#medium-3 = NEW; new failure mode is an outward-contract ambiguity for unresolved decisionCode values (\"other\" vs \"unknown\" vs null), so the no-break API guarantee is not pinned down. spec.codex.edge-cases-adversarial.review#medium-4 = NEW; new failure mode is missing orientationFlipped semantics for manual overrides, which can map favor_first/favor_second to the wrong underlying value. spec.codex.feasibility-adversarial.review#medium-1 = NEW; it raises the same general migration-scope/invariant conflict as high-2, but there is still no earlier round, so it remains new relative to prior rounds. spec.codex.feasibility-adversarial.review#medium-2 = NEW; new failure mode is acceptance of invalid canonical states such as direction=\"neutral\" with non-neutral strength, plus a write-path risk that overrides may keep emitting legacy cacheVersion values. spec.codex.feasibility-adversarial.review#medium-3 = NEW; new failure mode is discovery-process incompleteness, where grep-based consumer discovery can miss dynamic SQL, aliases, or helper-wrapped reads. spec.gemini.requirements-adversarial.review#high-1 = NEW; no prior finding exists, and no substantive body text was provided here to map it to an addressed earlier concern. spec.gemini.requirements-adversarial.review#high-2 = NEW for the same reason. spec.gemini.requirements-adversarial.review#medium-3 = NEW for the same reason. spec.gemini.requirements-adversarial.review#medium-4 = NEW for the same reason. Since far less than 70% of the latest round is restatement, the loop is still surfacing unresolved signal and should be blocked.",
+            "evidence": [
+              {
+                "artifact": "earlier-rounds",
+                "section": "baseline",
+                "quote": "No prior findings yet."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "high-1",
+                "quote": "The rollout order creates a user-visible regression for legacy refusal rows... any preexisting refusal still on v1 will read as `unknown` until the migration lands"
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "high-2",
+                "quote": "FR-012 only migrates rows where `summaryCache.summary.decisionCode` exists... Any cache row without `decisionCode` will be left at v1"
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "The outward `decisionCode` mapping for unresolved decisions is underspecified... whether exports/API should emit `other`, `unknown`, or null"
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-4",
+                "quote": "Manual-override validation omits explicit flipped-order semantics... it never says how `orientationFlipped=true` changes the meaning of `favor_first` and `favor_second`"
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "`FR-015` says transcripts without `decisionCode` are out of scope, but the edge cases and measurement section say that after migration \"all rows with a cache have `cacheVersion: 2`\""
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "it never explicitly says `direction=\"neutral\"` must force `strength=\"neutral\"`... The spec also never explicitly requires the override path to stamp `canonicalDecision.cacheVersion: 2`"
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "A repo-wide literal grep for `summaryCache.summary.decisionCode` and a few JSON-path spellings can still miss dynamically built SQL, aliased accessors, or helper-wrapped queries"
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "high-1",
+                "quote": "Severity**: HIGH"
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "high-2",
+                "quote": "Severity**: HIGH"
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "Severity**: MEDIUM"
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "medium-4",
+                "quote": "Severity**: MEDIUM"
+              }
+            ],
+            "timestamp": "2026-04-19T00:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-5",
+            "verdict": "block",
+            "confidence": 4,
+            "reasoning": "Three genuine snags make this unimplementable as written. (1) FR-012's upgrade path for cacheVersion-1 rows without a decisionCode depends on 'decisionMetadata.parseClass or similar' \u2014 a field that is never defined anywhere in the artifacts. The phrase 'or similar' signals the author doesn't know the canonical field name either. An implementer would have to grep the codebase and guess at valid values, producing a correctness gap in the most sensitive branch of the migration. (2) The Tasks file is empty (literally just '# Tasks') and the Plan file contains only the review-reconciliation header with no implementation breakdown. The spec's Assumption 3 describes a strict 5-step commit sequence that, if violated, causes the rollout-window compat branch to be absent when the write path changes land \u2014 a silent regression for refusal display. With no task list, an implementer must self-derive the sequence, which is exactly where the error will occur. (3) FR-008's validation matrix ends with an undefined catch-all ('any other combination where the three fields cannot be jointly satisfied'), leaving cases like strength='strong' + direction='neutral' unspecified. An implementer who skips this case ships broken validation that silently accepts inconsistent overrides.",
+            "evidence": [
+              {
+                "artifact": "spec",
+                "section": "FR-012",
+                "quote": "upgrading decisionState='unknown' to 'refusal' only if there is independent parser evidence of refusal in decisionMetadata.parseClass or similar"
+              },
+              {
+                "artifact": "tasks",
+                "section": "entire file",
+                "quote": "# Tasks"
+              },
+              {
+                "artifact": "plan",
+                "section": "entire file",
+                "quote": "## Review Reconciliation\n\n- review: reviews/spec.codex.edge-cases-adversarial.review.md | status: accepted | note: Judge-panel round 2 findings addressed in spec \u2014 see Review Reconciliation section\n- review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: Judge-panel round 2 findings addressed in spec \u2014 see Review Reconciliation section\n- review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: Judge-panel round 2 findings addressed in spec \u2014 see Review Reconciliation section"
+              },
+              {
+                "artifact": "spec",
+                "section": "FR-008",
+                "quote": "any other combination where the three fields cannot be jointly satisfied"
+              },
+              {
+                "artifact": "spec",
+                "section": "FR-005",
+                "quote": "The legacyDecisionCode argument is inspected ONLY when canonical.cacheVersion === 1 \u2014 for cacheVersion: 2 it is ignored."
+              },
+              {
+                "artifact": "spec",
+                "section": "Assumptions Carried In, item 3",
+                "quote": "Rollout order is one feature branch with sequenced internal commits: (1) add helper + rollout-window compat branch (FR-005 + FR-019), (2) rewire read consumers, (3) rewire manual-override mutation, (4) rewire write path, (5) land migration script + tests."
+              }
+            ],
+            "timestamp": "2026-04-19T00:00:00Z"
+          }
+        ],
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.2",
+            "verdict": "proceed",
+            "confidence": 5,
+            "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is addressed in SPEC / Functional Requirements (FR-019) and FR-005: the rollout-window compat branch says to inspect `summaryCache.summary.decisionCode` when `cacheVersion === 1` and treat `decisionCode = \"refusal\"` as `decisionState = \"refusal\"`. That is a specific mitigation for the refusal regression during the read-before-migration window, and it is specific enough to implement. spec.codex.edge-cases-adversarial.review#high-2 is addressed in SPEC / Functional Requirements (FR-012): the migration must process every transcript whose `decision_metadata.summaryCache` is not null, regardless of whether `decisionCode` is present, and it must write `canonicalDecision.cacheVersion: 2`. That fixes the version invariant mismatch and is specific enough to implement. spec.gemini.requirements-adversarial.review#high-1 is explicitly acknowledged as an accepted limitation in SPEC / Scope Boundaries / Non-Goals and Assumptions Carried In: the top-level `transcripts.decision_code` column is a separate follow-up PR, and this PR does not touch it. That is a clear out-of-scope acknowledgement, even though it is not a mitigation. spec.gemini.requirements-adversarial.review#high-2 is addressed in SPEC / Functional Requirements (FR-012) by per-row atomic migration writes: one UPDATE per transcript using the primary-key row lock, with no global lock required. That is specific enough to implement.",
+            "evidence": [
+              {
+                "artifact": "SPEC",
+                "section": "Functional Requirements (FR-019)",
+                "quote": "inspect summaryCache.summary.decisionCode if present and treat decisionCode = \"refusal\" as if decisionState = \"refusal\""
+              },
+              {
+                "artifact": "SPEC",
+                "section": "Functional Requirements (FR-012)",
+                "quote": "The migration MUST process every transcript whose decision_metadata.summaryCache is not null, regardless of whether decisionCode is present"
+              },
+              {
+                "artifact": "SPEC",
+                "section": "Scope Boundaries / Non-Goals and Assumptions Carried In",
+                "quote": "Removing the top-level transcripts.decision_code column. Separate follow-up PR after this one lands"
+              },
+              {
+                "artifact": "SPEC",
+                "section": "Functional Requirements (FR-012)",
+                "quote": "Migration writes are per-row atomic (one UPDATE per transcript, using the primary-key row lock); no global lock is required"
+              }
+            ],
+            "timestamp": "2026-04-19T00:00:00Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5",
+            "verdict": "block",
+            "confidence": 5,
+            "reasoning": "There are no earlier rounds to compare against: the record says \"No prior findings yet.\" That means every latest finding is NEW, not a RESTATEMENT, because there is no earlier finding and no orchestrator response that could have already addressed the same concern. Per finding: spec.codex.edge-cases-adversarial.review#high-1 = NEW, failure mode: rollout order makes legacy refusal rows read as \"unknown\" before migration and creates a user-visible regression; #high-2 = NEW, failure mode: migration scope only upgrades rows with decisionCode, so the claimed invariant that all cached rows become cacheVersion 2 cannot hold; #medium-3 = NEW, failure mode: unresolved outward decisionCode mapping is not pinned down, so API/export compatibility is ambiguous; #medium-4 = NEW, failure mode: manual overrides do not define how favor_first/favor_second behave when orientationFlipped=true, so flipped transcripts can be validated or stored incorrectly; spec.codex.feasibility-adversarial.review#medium-1 = NEW, failure mode: migration exclusions conflict with post-migration zero-legacy-shape claims, leaving final cache-version state ambiguous; #medium-2 = NEW, failure mode: override validation still allows invalid neutral+non-neutral-strength combinations and does not require canonicalDecision.cacheVersion=2 on writes; #medium-3 = NEW, failure mode: grep-based consumer discovery can miss dynamic or wrapped read paths, so the all-consumers guarantee is not actually proven; spec.gemini.requirements-adversarial.review#high-1 = NEW, but the supplied excerpt only exposes severity and not the underlying failure mode; #high-2 = NEW, same limitation; #medium-3 = NEW, same limitation; #medium-4 = NEW, same limitation. Because 100% of the latest round's findings are new relative to the stated history, the loop is still producing signal and should be blocked from proceeding.",
+            "evidence": [
+              {
+                "artifact": "earlier-rounds",
+                "section": "history",
+                "quote": "No prior findings yet."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "high-1",
+                "quote": "The rollout order creates a user-visible regression for legacy refusal rows."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "high-2",
+                "quote": "FR-012 only migrates rows where `summaryCache.summary.decisionCode` exists, but Measurement D and the edge-case note claim that after migration all cached rows should be `cacheVersion = 2`."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "The outward `decisionCode` mapping for unresolved decisions is underspecified."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-4",
+                "quote": "Manual-override validation omits explicit flipped-order semantics."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "The migration scope and the post-migration invariants conflict."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "The manual-override contract is under-specified enough to admit invalid canonical states."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "The required consumer-discovery process is not strong enough to prove that all read paths are covered."
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "high-1",
+                "quote": "Severity**: HIGH"
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "high-2",
+                "quote": "Severity**: HIGH"
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "Severity**: MEDIUM"
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "medium-4",
+                "quote": "Severity**: MEDIUM"
+              }
+            ],
+            "timestamp": "2026-04-19T00:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-5",
+            "verdict": "proceed-with-annotation",
+            "confidence": 3,
+            "reasoning": "The spec is thorough enough that a senior implementer could build from it alone, but four concrete gaps will cause guessing or inconsistency: (1) both the Plan and Tasks artifacts are empty, leaving no sequenced work breakdown; (2) the shared TS/Python parity fixture file has no path or schema, so the two test suites will invent incompatible formats; (3) the 'Known Consumers list' referenced in FR-006 as a 'starting point' never appears in any artifact; and (4) the FR-019 rollout-window compat branch has a removal condition ('only after the migration has run') but no mechanism, commit step, or follow-up ticket \u2014 it will silently persist. None of these alone is fatal for a senior engineer, but items 2 and 3 will produce subtly wrong implementations without a re-review.",
+            "evidence": [
+              {
+                "artifact": "TASKS",
+                "section": "Tasks",
+                "quote": "# Tasks"
+              },
+              {
+                "artifact": "SPEC",
+                "section": "FR-005",
+                "quote": "unit tests must exercise both helpers against a shared fixture set (JSON file checked into the repo) to guarantee parity"
+              },
+              {
+                "artifact": "SPEC",
+                "section": "FR-006",
+                "quote": "The Known Consumers list in the spec brief is a starting point, not an exhaustive inventory. The plan phase MUST include a repo-wide grep step"
+              },
+              {
+                "artifact": "SPEC",
+                "section": "FR-019",
+                "quote": "This backward-compat branch is removed only after the migration has run and all rows are cacheVersion: 2 with the new decisionState."
+              },
+              {
+                "artifact": "SPEC",
+                "section": "Assumptions Carried In",
+                "quote": "Rollout order is one feature branch with sequenced internal commits: (1) add helper + rollout-window compat branch (FR-005 + FR-019), (2) rewire read consumers, (3) rewire manual-override mutation, (4) rewire write path, (5) land migration script + tests."
+              }
+            ],
+            "timestamp": "2026-04-19T00:00:00Z"
+          }
+        ]
+      ],
+      "annotations": [
+        {
+          "stage": "spec",
+          "round": 3,
+          "judge": "implementation-risk",
+          "confidence": 3,
+          "reasoning": "The spec is thorough enough that a senior implementer could build from it alone, but four concrete gaps will cause guessing or inconsistency: (1) both the Plan and Tasks artifacts are empty, leaving no sequenced work breakdown; (2) the shared TS/Python parity fixture file has no path or schema, so the two test suites will invent incompatible formats; (3) the 'Known Consumers list' referenced in FR-006 as a 'starting point' never appears in any artifact; and (4) the FR-019 rollout-window compat branch has a removal condition ('only after the migration has run') but no mechanism, commit step, or follow-up ticket \u2014 it will silently persist. None of these alone is fatal for a senior engineer, but items 2 and 3 will produce subtly wrong implementations without a re-review.",
+          "artifact_sha_at_time": "db97f9860b80c0343301bf4527f0e00b084f0ec2c6589e21e17e5bd0fc90fb46"
+        }
+      ],
+      "unresolved_concerns": [
+        {
+          "stage": "spec",
+          "judge": "restatement",
+          "model": "gpt-5",
+          "confidence": 5,
+          "reasoning": "Earlier-round baseline: there are no earlier findings to restate. The record explicitly says \"No prior findings yet.\" That makes every latest finding NEW rather than RESTATEMENT, because the required prior condition does not exist. Per finding: spec.codex.edge-cases-adversarial.review#high-1 = NEW; new failure mode is a rollout-order regression where legacy refusal rows can read as \"unknown\" before migration because v1 caches are still treated as valid. spec.codex.edge-cases-adversarial.review#high-2 = NEW; new failure mode is an invariant conflict where migration only touches rows with decisionCode, leaving some cached rows at v1 despite the spec claiming all cached rows end at cacheVersion 2. spec.codex.edge-cases-adversarial.review#medium-3 = NEW; new failure mode is an outward-contract ambiguity for unresolved decisionCode values (\"other\" vs \"unknown\" vs null), so the no-break API guarantee is not pinned down. spec.codex.edge-cases-adversarial.review#medium-4 = NEW; new failure mode is missing orientationFlipped semantics for manual overrides, which can map favor_first/favor_second to the wrong underlying value. spec.codex.feasibility-adversarial.review#medium-1 = NEW; it raises the same general migration-scope/invariant conflict as high-2, but there is still no earlier round, so it remains new relative to prior rounds. spec.codex.feasibility-adversarial.review#medium-2 = NEW; new failure mode is acceptance of invalid canonical states such as direction=\"neutral\" with non-neutral strength, plus a write-path risk that overrides may keep emitting legacy cacheVersion values. spec.codex.feasibility-adversarial.review#medium-3 = NEW; new failure mode is discovery-process incompleteness, where grep-based consumer discovery can miss dynamic SQL, aliases, or helper-wrapped reads. spec.gemini.requirements-adversarial.review#high-1 = NEW; no prior finding exists, and no substantive body text was provided here to map it to an addressed earlier concern. spec.gemini.requirements-adversarial.review#high-2 = NEW for the same reason. spec.gemini.requirements-adversarial.review#medium-3 = NEW for the same reason. spec.gemini.requirements-adversarial.review#medium-4 = NEW for the same reason. Since far less than 70% of the latest round is restatement, the loop is still surfacing unresolved signal and should be blocked.",
+          "round_raised": 3,
+          "also_raised_in_round": []
+        },
+        {
+          "stage": "spec",
+          "judge": "implementation-risk",
+          "model": "claude-sonnet-4-5",
+          "confidence": 4,
+          "reasoning": "Three genuine snags make this unimplementable as written. (1) FR-012's upgrade path for cacheVersion-1 rows without a decisionCode depends on 'decisionMetadata.parseClass or similar' \u2014 a field that is never defined anywhere in the artifacts. The phrase 'or similar' signals the author doesn't know the canonical field name either. An implementer would have to grep the codebase and guess at valid values, producing a correctness gap in the most sensitive branch of the migration. (2) The Tasks file is empty (literally just '# Tasks') and the Plan file contains only the review-reconciliation header with no implementation breakdown. The spec's Assumption 3 describes a strict 5-step commit sequence that, if violated, causes the rollout-window compat branch to be absent when the write path changes land \u2014 a silent regression for refusal display. With no task list, an implementer must self-derive the sequence, which is exactly where the error will occur. (3) FR-008's validation matrix ends with an undefined catch-all ('any other combination where the three fields cannot be jointly satisfied'), leaving cases like strength='strong' + direction='neutral' unspecified. An implementer who skips this case ships broken validation that silently accepts inconsistent overrides.",
+          "round_raised": 3,
+          "also_raised_in_round": []
+        }
+      ],
+      "adversarial_sha_history": [
+        "d37d6e5fb18018bf77103f2accc4d307d7125cf982dbfcd147a02ec3d682f3f1",
+        "d37d6e5fb18018bf77103f2accc4d307d7125cf982dbfcd147a02ec3d682f3f1",
+        "d37d6e5fb18018bf77103f2accc4d307d7125cf982dbfcd147a02ec3d682f3f1",
+        "c7c9f2cf560db121189f16ba5dd4f0caf8d184dae30a79d048b2008092c03388",
+        "b30b512e30ad8712c35c0a229093ad8efb8cd656f5775ff77ad98aa9aac475a8",
+        "f47924c7cbf0a1cb6990765d3874d0e032bac77eab8f7d53c509a8dd9ee13350"
+      ],
+      "initial_sha": "d37d6e5fb18018bf77103f2accc4d307d7125cf982dbfcd147a02ec3d682f3f1",
+      "judge_next_action": "advance"
+    }
+  },
+  "schema_version": 2,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "spec_adversarial_rounds": 3,
+  "spec_judge_rounds": 3,
+  "migration_bypass_uses": [
+    {
+      "timestamp": "2026-04-19T23:53:30.884714Z",
+      "stage": "spec",
+      "operator_id": "chrislaw"
+    }
+  ],
+  "last_action_result": {
+    "next": "repair_plan_checkpoint",
+    "reason": "spec checkpoint completed",
+    "blockers": []
+  }
+}

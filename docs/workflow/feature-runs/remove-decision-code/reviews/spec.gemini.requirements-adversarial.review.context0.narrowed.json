@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/scripts/backfill-canonical-v2-migration.ts",
+  "source_artifact_sha256": "a40e55ef1729da6fe6c484fc62bbf067f78d39b9975760eb2107339f9a1dfe05",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/remove-decision-code/reviews/spec.gemini.requirements-adversarial.review.context0.narrowed.txt",
+  "narrowed_artifact_sha256": "23c12d322c245992abbccb736fa06fa1f4c574c08edc772d0ab4b05e82914248",
+  "strategy": "head-tail-numbered-lines"
+}

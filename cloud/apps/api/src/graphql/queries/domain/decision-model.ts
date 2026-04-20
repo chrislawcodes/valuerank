@@ -70,6 +70,7 @@ export function buildRawDecisionEvidence(
     parsePath: record && typeof record.parsePath === 'string' ? record.parsePath : null,
     parserVersion: record && typeof record.parserVersion === 'string' ? record.parserVersion : null,
     responseExcerpt: record && typeof record.responseExcerpt === 'string' ? record.responseExcerpt : null,
+    refusal: record ? record.refusal === true : false,
     manualOverride:
       manualOverride === null
         ? null
@@ -131,6 +132,21 @@ export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDe
     return validated.canonical;
   }
 
+  // First-class refusal signal from the Python worker (A9). Takes precedence
+  // over everything except manual overrides, so refusals never fall through
+  // to unknown just because parseClass is null or the parser path isn't exact.
+  if (input.raw.refusal) {
+    return {
+      favoredValueKey: null,
+      opposedValueKey: null,
+      direction: 'refusal',
+      strength: 'unknown',
+      normalizationApplied: false,
+      normalizationReason: null,
+      source: 'deterministic',
+    };
+  }
+
   const parseClass = input.raw.parseClass;
   if (parseClass !== 'exact' && parseClass !== 'fallback_resolved') {
     return buildUnknownCanonicalDecision('unknown');
@@ -152,6 +168,21 @@ export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDe
         false,
         'deterministic',
       );
+    }
+
+    // Refusal cached rows: return refusal directly. Symmetric to the neutral
+    // special-case above. Without this, refusal cached rows fall into the
+    // null-key check below and get returned as unknown, losing the signal.
+    if (cachedDecision.decisionState === 'refusal') {
+      return {
+        favoredValueKey: null,
+        opposedValueKey: null,
+        direction: 'refusal',
+        strength: 'unknown',
+        normalizationApplied: false,
+        normalizationReason: null,
+        source: 'deterministic',
+      };
     }
 
     if (

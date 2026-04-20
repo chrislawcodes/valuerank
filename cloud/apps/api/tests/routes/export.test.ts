@@ -321,7 +321,7 @@ describe('CSV Serialization Helper', () => {
     expect(row.variables).toEqual({ Stakes: 1, Certainty: 2 });
     // Format: Model, TrialSignature, Batch, SampleIndex, Certainty, Stakes,
     // DecisionDirection, DecisionStrength, DecisionReason, TranscriptId, ...
-    expect(formatted).toContain('gpt-4o,v1t0.5,,0,2,1,unknown,unknown,missing_metadata,test-id,,I choose option A');
+    expect(formatted).toContain('gpt-4o,v1t0.5,,0,2,1,unknown,unknown,empty_input,test-id,,I choose option A');
     expect(row.targetResponse).toBe('I choose option A');
   });
 
@@ -523,7 +523,7 @@ describe('CSV Serialization Helper', () => {
 
     const formatted = formatCSVRow(row, []);
     // Post-variable columns now use canonical decision display fields.
-    expect(formatted).toContain(',unknown,unknown,missing_metadata,transcript-id,');
+    expect(formatted).toContain(',unknown,unknown,empty_input,transcript-id,');
     expect(formatted).toContain('What should I do?');
     expect(formatted).toContain('Are you sure?');
   });
@@ -547,7 +547,7 @@ describe('CSV Serialization Helper', () => {
 
     expect(row.sampleIndex).toBe(3);
     // Format: Model,TrialSignature,Batch,SampleIndex,Stakes,DecisionDirection,...
-    expect(formatted).toContain('gpt-4o,v?td,,3,2,unknown,unknown,missing_metadata');
+    expect(formatted).toContain('gpt-4o,v?td,,3,2,unknown,unknown,empty_input');
   });
 });
 

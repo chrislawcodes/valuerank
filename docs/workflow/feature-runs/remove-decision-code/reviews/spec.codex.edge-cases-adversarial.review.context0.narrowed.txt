@@ -1,0 +1,217 @@
+00001: /**
+00002:  * Migration: upgrade every cached canonicalDecision to cacheVersion 2.
+00003:  *
+00004:  * For each transcript whose `decision_metadata.summaryCache` is not null:
+00005:  *   - If `summaryCache.summary.decisionCode` is present, derive a fresh
+00006:  *     canonicalDecision from {decisionCode, value pair, orientationFlipped}
+00007:  *     using the truth table in `canonicalFromDecisionCode` below. Strip
+00008:  *     decisionCode and decisionCodeSource from the summary. Write
+00009:  *     cacheVersion: 2.
+00010:  *   - If decisionCode is absent and cacheVersion is not yet 2, preserve
+00011:  *     the existing canonical values verbatim and only bump cacheVersion
+00012:  *     to 2. No retroactive refusal inference.
+00013:  *   - If decisionCode is absent and cacheVersion is already 2, no-op.
+00014:  *
+00015:  * Rows with a malformed `definition_snapshot` (missing or non-string
+00016:  * value pair tokens) are skipped and reported under `missing-snapshot`.
+00017:  *
+00018:  * Idempotent. Per-row atomic. Dry-run by default.
+00019:  *
+00020:  * Usage (from cloud/apps/api/):
+00021:  *   npx tsx --env-file=../../.env ../../scripts/backfill-canonical-v2-migration.ts
+00022:  *   npx tsx --env-file=../../.env ../../scripts/backfill-canonical-v2-migration.ts --apply
+00023:  *
+00024:  * Against prod (from cloud/):
+00025:  *   DATABASE_URL="$PROD_URL" npx tsx scripts/backfill-canonical-v2-migration.ts
+00026:  *   DATABASE_URL="$PROD_URL" npx tsx scripts/backfill-canonical-v2-migration.ts --apply
+00027:  *
+00028:  * Flags:
+00029:  *   --apply                         Write mode (default: dry-run).
+00030:  *   --domain=<normalizedName>       Scope to one domain.
+00031:  *   --limit=<n>                     Cap the number of rows visited.
+00032:  */
+00033: import { pathToFileURL } from 'node:url';
+00034: 
+00035: import { db } from '@valuerank/db';
+00036: import type { Prisma } from '@valuerank/db';
+00037: import { createLogger } from '@valuerank/shared';
+00038: 
+00039: const log = createLogger('scripts:backfill-canonical-v2-migration');
+00040: 
+00041: // -------------------------------------------------------------------
+00042: // Truth table
+00043: // -------------------------------------------------------------------
+00044: 
+00045: export type CanonicalV2 = {
+00046:   cacheVersion: 2;
+00047:   decisionState: 'resolved' | 'neutral' | 'unknown' | 'refusal';
+00048:   strength: 'strong' | 'lean' | 'neutral' | 'unknown';
+00049:   favoredValueKey: string | null;
+00050: };
+00051: 
+00052: export type ValuePair = { valueA: string; valueB: string };
+00053: 
+00054: /**
+00055:  * Pure derivation of the v2 canonical from {decisionCode, pair, orientationFlipped}.
+00056:  *
+00057:  * Mapping:
+00058:  *   "5" + !flipped  -> favor_first  strong    (favoredValueKey = valueA)
+00059:  *   "5" + flipped   -> favor_second strong    (favoredValueKey = valueB)
+00060:  *   "4" + !flipped  -> favor_first  lean      (favoredValueKey = valueA)
+00061:  *   "4" + flipped   -> favor_second lean      (favoredValueKey = valueB)
+00062:  *   "3"             -> neutral (both orientations identical)
+00063:  *   "2" + !flipped  -> favor_second lean      (favoredValueKey = valueB)
+00064:  *   "2" + flipped   -> favor_first  lean      (favoredValueKey = valueA)
+00065:  *   "1" + !flipped  -> favor_second strong    (favoredValueKey = valueB)
+00066:  *   "1" + flipped   -> favor_first  strong    (favoredValueKey = valueA)
+00067:  *   "refusal"       -> {refusal, unknown, null}
+00068:  *   "other" / null  -> {unknown, unknown, null}
+00069:  */
+00070: export function canonicalFromDecisionCode(
+00071:   decisionCode: string | null | undefined,
+00072:   pair: ValuePair,
+00073:   orientationFlipped: boolean,
+00074: ): CanonicalV2 {
+00075:   if (decisionCode === 'refusal') {
+00076:     return { cacheVersion: 2, decisionState: 'refusal', strength: 'unknown', favoredValueKey: null };
+00077:   }
+00078:   if (decisionCode == null || decisionCode === '' || decisionCode === 'other') {
+00079:     return { cacheVersion: 2, decisionState: 'unknown', strength: 'unknown', favoredValueKey: null };
+00080:   }
+00081:   if (decisionCode === '3') {
+00082:     return { cacheVersion: 2, decisionState: 'neutral', strength: 'neutral', favoredValueKey: null };
+00083:   }
+00084:   if (decisionCode === '5') {
+00085:     return {
+00086:       cacheVersion: 2,
+00087:       decisionState: 'resolved',
+00088:       strength: 'strong',
+00089:       favoredValueKey: orientationFlipped ? pair.valueB : pair.valueA,
+00090:     };
+00091:   }
+00092:   if (decisionCode === '4') {
+00093:     return {
+00094:       cacheVersion: 2,
+00095:       decisionState: 'resolved',
+00096:       strength: 'lean',
+00097:       favoredValueKey: orientationFlipped ? pair.valueB : pair.valueA,
+00098:     };
+00099:   }
+00100:   if (decisionCode === '2') {
+00101:     return {
+00102:       cacheVersion: 2,
+00103:       decisionState: 'resolved',
+00104:       strength: 'lean',
+00105:       favoredValueKey:
+
+... [narrowed review slice: middle omitted] ...
+
+ites still atomic per row.
+00246:     for (const t of transcripts) {
+00247:       try {
+00248:         const existingMeta = (t.decisionMetadata as Record<string, unknown> | null) ?? {};
+00249:         const summaryCache = (existingMeta.summaryCache as Record<string, unknown> | undefined) ?? null;
+00250:         if (summaryCache == null) continue;
+00251:         const summary = (summaryCache.summary as Record<string, unknown> | undefined) ?? {};
+00252:         const existingCode = typeof summary.decisionCode === 'string' ? summary.decisionCode : null;
+00253:         const existingCanonical = summary.canonicalDecision as Record<string, unknown> | undefined;
+00254:         const existingCacheVersion = existingCanonical?.cacheVersion;
+00255: 
+00256:         // Case 3: already at target.
+00257:         if (existingCode == null && existingCacheVersion === 2) {
+00258:           counts['already-v2'] += 1;
+00259:           continue;
+00260:         }
+00261: 
+00262:         let updatedSummary: Record<string, unknown>;
+00263:         let category: Category;
+00264: 
+00265:         if (existingCode != null) {
+00266:           // Case 1: derive from decisionCode + pair + orientationFlipped.
+00267:           const pair = pairFromSnapshot(t.definitionSnapshot);
+00268:           if (pair == null) {
+00269:             counts['missing-snapshot'] += 1;
+00270:             continue;
+00271:           }
+00272:           const orientationFlipped = t.scenarioId != null
+00273:             ? (scenarioMap.get(t.scenarioId) ?? false)
+00274:             : false;
+00275:           const newCanonical = canonicalFromDecisionCode(existingCode, pair, orientationFlipped);
+00276:           const drifted = !canonicalEquals(existingCanonical, newCanonical);
+00277:           category = drifted ? 'drifted' : 'no-change-with-code';
+00278: 
+00279:           // Strip decisionCode and decisionCodeSource; write new canonical.
+00280:           const { decisionCode: _dropCode, decisionCodeSource: _dropSource, ...restSummary } = summary;
+00281:           void _dropCode;
+00282:           void _dropSource;
+00283:           updatedSummary = {
+00284:             ...restSummary,
+00285:             canonicalDecision: newCanonical,
+00286:           };
+00287:         } else {
+00288:           // Case 2: no decisionCode, cacheVersion != 2 — preserve canonical verbatim, bump.
+00289:           if (existingCanonical == null) {
+00290:             counts['missing-snapshot'] += 1;
+00291:             continue;
+00292:           }
+00293:           const preserved: CanonicalV2 = {
+00294:             cacheVersion: 2,
+00295:             decisionState: (existingCanonical.decisionState as CanonicalV2['decisionState']) ?? 'unknown',
+00296:             strength: (existingCanonical.strength as CanonicalV2['strength']) ?? 'unknown',
+00297:             favoredValueKey: (existingCanonical.favoredValueKey as string | null) ?? null,
+00298:           };
+00299:           updatedSummary = {
+00300:             ...summary,
+00301:             canonicalDecision: preserved,
+00302:           };
+00303:           category = 'v1-upgrade-preserving-canonical';
+00304:         }
+00305: 
+00306:         counts[category] += 1;
+00307: 
+00308:         if (!apply) continue;
+00309: 
+00310:         const updatedMetadata = {
+00311:           ...existingMeta,
+00312:           summaryCache: {
+00313:             ...summaryCache,
+00314:             summary: updatedSummary,
+00315:           },
+00316:         };
+00317: 
+00318:         await db.transcript.update({
+00319:           where: { id: t.id },
+00320:           data: { decisionMetadata: updatedMetadata as unknown as Prisma.InputJsonValue },
+00321:         });
+00322:       } catch (err) {
+00323:         counts.errors += 1;
+00324:         log.error({ id: t.id, err: String(err) }, 'Migration failed for transcript');
+00325:       }
+00326:     }
+00327: 
+00328:     const visited = batchStart + transcripts.length;
+00329:     const elapsedSec = Math.round((Date.now() - started) / 1000);
+00330:     const rate = elapsedSec > 0 ? Math.round(visited / elapsedSec) : 0;
+00331:     const remainingSec = rate > 0 ? Math.round((candidateIds.length - visited) / rate) : 0;
+00332:     log.info(
+00333:       { progress: `${visited}/${candidateIds.length}`, rate: `${rate}/s`, etaSec: remainingSec, counts },
+00334:       'Batch complete',
+00335:     );
+00336:   }
+00337: 
+00338:   log.info(
+00339:     { apply, total: candidateIds.length, counts },
+00340:     apply ? 'Migration complete' : 'Dry-run complete — pass --apply to write',
+00341:   );
+00342: }
+00343: 
+00344: // Only run when executed directly, not when imported by tests.
+00345: const isDirectRun = import.meta.url === pathToFileURL(process.argv[1] ?? '').href;
+00346: if (isDirectRun) {
+00347:   main()
+00348:     .catch((err) => {
+00349:       log.error({ err: String(err) }, 'Migration failed');
+00350:       process.exitCode = 1;
+00351:     })
+00352:     .finally(() => {
+00353:  

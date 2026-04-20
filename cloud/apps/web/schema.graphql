@@ -673,8 +673,6 @@ type DomainAnalysisConditionDetail {
 type DomainAnalysisConditionTranscript {
   content: JSON!
   createdAt: DateTime!
-  decisionCode: String
-  decisionCodeSource: String
   decisionModelV2: JSON
   durationMs: Int!
   id: ID!
@@ -1738,10 +1736,16 @@ type Mutation {
   """Update a system setting (creates if not exists)"""
   updateSystemSetting(input: UpdateSystemSettingInput!): SystemSetting!
 
-  "\n      Manually update a transcript decision code.\n\n      Accepts only positive integer decision codes.\n      If the run is already completed, this will supersede current analysis\n      and queue a recompute job.\n\n      Requires authentication.\n    "
+  "\n      Manually override a transcript's canonical decision.\n\n      Accepts one of four decisionStates: resolved, neutral, unknown, refusal.\n      For resolved, favoredValueKey (one of the vignette pair's two value tokens)\n      and strength (strong or lean) are also required. Server derives direction\n      (favor_first / favor_second) from favoredValueKey against the vignette pair.\n\n      If the run is already completed, this supersedes current analysis\n      and queues a recompute job.\n\n      Requires authentication.\n    "
   updateTranscriptDecision(
-    """Decision code override (must be a positive integer)"""
-    decisionCode: String!
+    """One of: resolved, neutral, unknown, refusal"""
+    decisionState: String!
+
+    """Value key (pair.valueA or pair.valueB). Required when decisionState is resolved."""
+    favoredValueKey: String
+
+    """strong or lean. Required when decisionState is resolved."""
+    strength: String
 
     """The ID of the transcript to update"""
     transcriptId: ID!

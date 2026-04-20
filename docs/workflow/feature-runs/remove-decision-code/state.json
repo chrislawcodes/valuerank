@@ -1,0 +1,1000 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": true,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 2,
+    "asked_count": 2,
+    "questions": [
+      {
+        "question": "External API shape: remove decisionCode field from MCP/CSV/OData responses entirely (hard fail-loud) or keep field emitting null (soft deprecate)?",
+        "recommendation": "Hard remove (Option A)",
+        "rationale": "Matches user intent to stamp out the 1-5 code; soft deprecation leaves silent consumers.",
+        "updated_at": 1776656111
+      },
+      {
+        "question": "Top-level transcripts.decision_code Postgres column: drop in this PR or defer to a separate PR right afterward?",
+        "recommendation": "Defer to separate PR (Option B)",
+        "rationale": "Schema migrations want their own PR for rollback clarity; column is already unread outside migration code.",
+        "updated_at": 1776656119
+      }
+    ],
+    "assumptions": [
+      "User confirms scorched-earth intent: break every dependency on the 1-5 code so it fails loudly. No soft deprecation anywhere.",
+      "Manual override mutation will be reshaped to accept {favoredValueKey, strength, direction} and update canonicalDecision directly.",
+      "Python worker keeps internal parsing logic intact; only stops emitting decisionCode/decisionCodeSource in its output dict.",
+      "Migration strips decisionCode + decisionCodeSource from summaryCache.summary, bumps cacheVersion 1 to 2, preserves canonicalDecision verbatim; no truth-table derivation.",
+      "A derivation helper scaleCodeFromCanonical(canonical, pair, orientationFlipped) exists internally for any code path that needs the 1-5 number; it is never called by external APIs."
+    ],
+    "summary": "Scorched-earth removal of decisionCode from entire codebase: write path, read path, external APIs, types, tests, worker emission, plus DB migration to strip from ~278k rows. Top-level decision_code column deferred to an immediate follow-up PR.",
+    "updated_at": 1776656136,
+    "answers": {
+      "External API shape: remove decisionCode field from MCP/CSV/OData responses entirely (hard fail-loud) or keep field emitting null (soft deprecate)?": "A \u2014 hard remove. Field is gone from responses; clients that reference it throw / get undefined.",
+      "Top-level transcripts.decision_code Postgres column: drop in this PR or defer to a separate PR right afterward?": "B \u2014 defer. Separate PR opens IMMEDIATELY after this one lands to drop the column."
+    },
+    "non_goals": [
+      "Change the UI manual-override dropdown options (still 5 choices; only wire format changes)."
+    ],
+    "acceptance_criteria": [
+      "All tests pass without decisionCode references (except in deletion / negation assertions)."
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": true,
+    "found": false,
+    "note": "All 10 waves have sequential dependencies documented in plan. W2/W3 are serial (TS write path must precede Python emission change to avoid contract break). W6/W7 are serial (schema change feeds web regen). W9 migration script creation has no code-level dependencies on other waves but the --apply run is post-deploy and depends on W2+W3 being live. No safe parallel implementation opportunities identified.",
+    "updated_at": 1776659843
+  },
+  "init_head_sha": "a50a4b6e54d0816f0ff99be3defba99d0315f4ad",
+  "token_usage": [
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T03:41:51.693582Z",
+      "started_at": "2026-04-20T03:39:33.956264Z",
+      "ended_at": "2026-04-20T03:41:51.693582Z",
+      "duration_seconds": 137.736986,
+      "agent_id": null,
+      "artifact_sha_at_time": "1f2f4e6c88c90cee4d64e3fc27bc3a2979811d5cf179ffca5d196b4a4131cb68",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T03:44:21.783143Z",
+      "started_at": "2026-04-20T03:41:51.856259Z",
+      "ended_at": "2026-04-20T03:44:21.783143Z",
+      "duration_seconds": 149.926551,
+      "agent_id": null,
+      "artifact_sha_at_time": "1f2f4e6c88c90cee4d64e3fc27bc3a2979811d5cf179ffca5d196b4a4131cb68",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T03:45:15.654689Z",
+      "started_at": "2026-04-20T03:44:21.943357Z",
+      "ended_at": "2026-04-20T03:45:15.654689Z",
+      "duration_seconds": 53.711165,
+      "agent_id": null,
+      "artifact_sha_at_time": "1f2f4e6c88c90cee4d64e3fc27bc3a2979811d5cf179ffca5d196b4a4131cb68",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T03:51:36.779616Z",
+      "started_at": "2026-04-20T03:50:42.438321Z",
+      "ended_at": "2026-04-20T03:51:36.779616Z",
+      "duration_seconds": 54.341127,
+      "agent_id": null,
+      "artifact_sha_at_time": "6023f58f245f109ff7102fa6341dbf6948f7a20fe2d69a8433cfc665dd0c2643",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T03:52:55.602354Z",
+      "started_at": "2026-04-20T03:51:36.905999Z",
+      "ended_at": "2026-04-20T03:52:55.602354Z",
+      "duration_seconds": 78.696081,
+      "agent_id": null,
+      "artifact_sha_at_time": "6023f58f245f109ff7102fa6341dbf6948f7a20fe2d69a8433cfc665dd0c2643",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T03:53:44.958244Z",
+      "started_at": "2026-04-20T03:52:55.747338Z",
+      "ended_at": "2026-04-20T03:53:44.958244Z",
+      "duration_seconds": 49.210735,
+      "agent_id": null,
+      "artifact_sha_at_time": "6023f58f245f109ff7102fa6341dbf6948f7a20fe2d69a8433cfc665dd0c2643",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T03:59:37.159829Z",
+      "started_at": "2026-04-20T03:57:14.156018Z",
+      "ended_at": "2026-04-20T03:59:37.159829Z",
+      "duration_seconds": 143.003472,
+      "agent_id": null,
+      "artifact_sha_at_time": "4065b0f8ae92575cebb6e212d8b71bc31a4de0f7050391345d24e87fb6e25518",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:01:25.364658Z",
+      "started_at": "2026-04-20T03:59:37.300245Z",
+      "ended_at": "2026-04-20T04:01:25.364658Z",
+      "duration_seconds": 108.06411,
+      "agent_id": null,
+      "artifact_sha_at_time": "4065b0f8ae92575cebb6e212d8b71bc31a4de0f7050391345d24e87fb6e25518",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:02:07.511258Z",
+      "started_at": "2026-04-20T04:01:25.479344Z",
+      "ended_at": "2026-04-20T04:02:07.511258Z",
+      "duration_seconds": 42.031753,
+      "agent_id": null,
+      "artifact_sha_at_time": "4065b0f8ae92575cebb6e212d8b71bc31a4de0f7050391345d24e87fb6e25518",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:07:41.523913Z",
+      "started_at": "2026-04-20T04:05:45.168873Z",
+      "ended_at": "2026-04-20T04:07:41.523913Z",
+      "duration_seconds": 116.354561,
+      "agent_id": null,
+      "artifact_sha_at_time": "2c40c139f87d48cfa7bb0659a243acc9093dadee342734a99880c7f5840e6989",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:09:00.344171Z",
+      "started_at": "2026-04-20T04:07:41.647490Z",
+      "ended_at": "2026-04-20T04:09:00.344171Z",
+      "duration_seconds": 78.696329,
+      "agent_id": null,
+      "artifact_sha_at_time": "2c40c139f87d48cfa7bb0659a243acc9093dadee342734a99880c7f5840e6989",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:09:59.714824Z",
+      "started_at": "2026-04-20T04:09:00.500906Z",
+      "ended_at": "2026-04-20T04:09:59.714824Z",
+      "duration_seconds": 59.213555,
+      "agent_id": null,
+      "artifact_sha_at_time": "2c40c139f87d48cfa7bb0659a243acc9093dadee342734a99880c7f5840e6989",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:10:06.217309Z",
+      "started_at": "2026-04-20T04:10:00.266478Z",
+      "ended_at": "2026-04-20T04:10:06.217309Z",
+      "duration_seconds": 5.950738,
+      "agent_id": null,
+      "artifact_sha_at_time": "c3964bb3b70a957ec9b233c7dd3653f6ba17701ab00facf88ae1393dc6155577",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:10:15.345013Z",
+      "started_at": "2026-04-20T04:10:06.375293Z",
+      "ended_at": "2026-04-20T04:10:15.345013Z",
+      "duration_seconds": 8.969614,
+      "agent_id": null,
+      "artifact_sha_at_time": "c3964bb3b70a957ec9b233c7dd3653f6ba17701ab00facf88ae1393dc6155577",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:10:54.073942Z",
+      "started_at": "2026-04-20T04:10:15.478364Z",
+      "ended_at": "2026-04-20T04:10:54.073942Z",
+      "duration_seconds": 38.595366,
+      "agent_id": null,
+      "artifact_sha_at_time": "c3964bb3b70a957ec9b233c7dd3653f6ba17701ab00facf88ae1393dc6155577",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:11:26.657842Z",
+      "started_at": "2026-04-20T04:10:54.075728Z",
+      "ended_at": "2026-04-20T04:11:26.657842Z",
+      "duration_seconds": 32.582022,
+      "agent_id": null,
+      "artifact_sha_at_time": "c3964bb3b70a957ec9b233c7dd3653f6ba17701ab00facf88ae1393dc6155577",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:15:24.138264Z",
+      "started_at": "2026-04-20T04:13:25.589567Z",
+      "ended_at": "2026-04-20T04:15:24.138264Z",
+      "duration_seconds": 118.548199,
+      "agent_id": null,
+      "artifact_sha_at_time": "e690901f724f2b660caec1f78d9b88286e5c3f5e5650e8d04692318cb8978a38",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:18:12.226669Z",
+      "started_at": "2026-04-20T04:15:24.287118Z",
+      "ended_at": "2026-04-20T04:18:12.226669Z",
+      "duration_seconds": 167.938901,
+      "agent_id": null,
+      "artifact_sha_at_time": "e690901f724f2b660caec1f78d9b88286e5c3f5e5650e8d04692318cb8978a38",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:18:58.411397Z",
+      "started_at": "2026-04-20T04:18:12.347110Z",
+      "ended_at": "2026-04-20T04:18:58.411397Z",
+      "duration_seconds": 46.064069,
+      "agent_id": null,
+      "artifact_sha_at_time": "e690901f724f2b660caec1f78d9b88286e5c3f5e5650e8d04692318cb8978a38",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:19:50.303371Z",
+      "started_at": "2026-04-20T04:18:58.413322Z",
+      "ended_at": "2026-04-20T04:19:50.303371Z",
+      "duration_seconds": 51.889917,
+      "agent_id": null,
+      "artifact_sha_at_time": "e690901f724f2b660caec1f78d9b88286e5c3f5e5650e8d04692318cb8978a38",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:24:37.740651Z",
+      "started_at": "2026-04-20T04:22:43.550767Z",
+      "ended_at": "2026-04-20T04:24:37.740651Z",
+      "duration_seconds": 114.189381,
+      "agent_id": null,
+      "artifact_sha_at_time": "627ed0c3e1ed9d605a7f67c6a3b20f676ab21d0b33de753136a3a310ee2fc1ed",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:26:55.580404Z",
+      "started_at": "2026-04-20T04:24:37.856120Z",
+      "ended_at": "2026-04-20T04:26:55.580404Z",
+      "duration_seconds": 137.723759,
+      "agent_id": null,
+      "artifact_sha_at_time": "627ed0c3e1ed9d605a7f67c6a3b20f676ab21d0b33de753136a3a310ee2fc1ed",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:27:36.428184Z",
+      "started_at": "2026-04-20T04:26:55.712468Z",
+      "ended_at": "2026-04-20T04:27:36.428184Z",
+      "duration_seconds": 40.715504,
+      "agent_id": null,
+      "artifact_sha_at_time": "627ed0c3e1ed9d605a7f67c6a3b20f676ab21d0b33de753136a3a310ee2fc1ed",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:31:43.736686Z",
+      "started_at": "2026-04-20T04:29:58.352620Z",
+      "ended_at": "2026-04-20T04:31:43.736686Z",
+      "duration_seconds": 105.383618,
+      "agent_id": null,
+      "artifact_sha_at_time": "33448055efa15714600556fbd6321124acd2b3e68e5e9ec390ca90aeff04c73b",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:33:07.599831Z",
+      "started_at": "2026-04-20T04:31:43.846192Z",
+      "ended_at": "2026-04-20T04:33:07.599831Z",
+      "duration_seconds": 83.753265,
+      "agent_id": null,
+      "artifact_sha_at_time": "33448055efa15714600556fbd6321124acd2b3e68e5e9ec390ca90aeff04c73b",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:34:05.738672Z",
+      "started_at": "2026-04-20T04:33:07.711046Z",
+      "ended_at": "2026-04-20T04:34:05.738672Z",
+      "duration_seconds": 58.027344,
+      "agent_id": null,
+      "artifact_sha_at_time": "33448055efa15714600556fbd6321124acd2b3e68e5e9ec390ca90aeff04c73b",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:39:53.636383Z",
+      "started_at": "2026-04-20T04:37:51.483175Z",
+      "ended_at": "2026-04-20T04:39:53.636383Z",
+      "duration_seconds": 122.152422,
+      "agent_id": null,
+      "artifact_sha_at_time": "33c221a08db543266041458aac83cebff45766767edd25e104475fa7e8af712f",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:41:50.806741Z",
+      "started_at": "2026-04-20T04:39:53.775754Z",
+      "ended_at": "2026-04-20T04:41:50.806741Z",
+      "duration_seconds": 117.030424,
+      "agent_id": null,
+      "artifact_sha_at_time": "33c221a08db543266041458aac83cebff45766767edd25e104475fa7e8af712f",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:43:09.473291Z",
+      "started_at": "2026-04-20T04:41:50.935552Z",
+      "ended_at": "2026-04-20T04:43:09.473291Z",
+      "duration_seconds": 78.537355,
+      "agent_id": null,
+      "artifact_sha_at_time": "33c221a08db543266041458aac83cebff45766767edd25e104475fa7e8af712f",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:52:44.492301Z",
+      "started_at": "2026-04-20T04:49:44.478585Z",
+      "ended_at": "2026-04-20T04:52:44.492301Z",
+      "duration_seconds": 180.013023,
+      "agent_id": null,
+      "artifact_sha_at_time": "ef0869f429a1b3f99a1845eed2c000bd6a651f262ce4ac1e816c0c39e258b185",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:54:40.661962Z",
+      "started_at": "2026-04-20T04:52:44.617203Z",
+      "ended_at": "2026-04-20T04:54:40.661962Z",
+      "duration_seconds": 116.044271,
+      "agent_id": null,
+      "artifact_sha_at_time": "ef0869f429a1b3f99a1845eed2c000bd6a651f262ce4ac1e816c0c39e258b185",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T04:55:38.958435Z",
+      "started_at": "2026-04-20T04:54:40.799079Z",
+      "ended_at": "2026-04-20T04:55:38.958435Z",
+      "duration_seconds": 58.159076,
+      "agent_id": null,
+      "artifact_sha_at_time": "ef0869f429a1b3f99a1845eed2c000bd6a651f262ce4ac1e816c0c39e258b185",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T05:02:02.000539Z",
+      "started_at": "2026-04-20T05:00:36.633314Z",
+      "ended_at": "2026-04-20T05:02:02.000539Z",
+      "duration_seconds": 85.366786,
+      "agent_id": null,
+      "artifact_sha_at_time": "95a4b183debafbf474ac7e0cb80546daa2329ab587ed1dca476a9063a04e1d09",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T05:04:02.014658Z",
+      "started_at": "2026-04-20T05:02:02.126552Z",
+      "ended_at": "2026-04-20T05:04:02.014658Z",
+      "duration_seconds": 119.887601,
+      "agent_id": null,
+      "artifact_sha_at_time": "95a4b183debafbf474ac7e0cb80546daa2329ab587ed1dca476a9063a04e1d09",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T05:04:59.730476Z",
+      "started_at": "2026-04-20T05:04:02.143744Z",
+      "ended_at": "2026-04-20T05:04:59.730476Z",
+      "duration_seconds": 57.586452,
+      "agent_id": null,
+      "artifact_sha_at_time": "95a4b183debafbf474ac7e0cb80546daa2329ab587ed1dca476a9063a04e1d09",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T05:06:13.800248Z",
+      "started_at": "2026-04-20T05:05:00.385203Z",
+      "ended_at": "2026-04-20T05:06:13.800248Z",
+      "duration_seconds": 73.414681,
+      "agent_id": null,
+      "artifact_sha_at_time": "6b86d73eb871ea52b0f21b6751d7e263aed481dcb04d776bd18f01f2c55c92c3",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T05:07:05.331217Z",
+      "started_at": "2026-04-20T05:06:13.948385Z",
+      "ended_at": "2026-04-20T05:07:05.331217Z",
+      "duration_seconds": 51.382603,
+      "agent_id": null,
+      "artifact_sha_at_time": "6b86d73eb871ea52b0f21b6751d7e263aed481dcb04d776bd18f01f2c55c92c3",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T05:07:53.373407Z",
+      "started_at": "2026-04-20T05:07:05.507125Z",
+      "ended_at": "2026-04-20T05:07:53.373407Z",
+      "duration_seconds": 47.866009,
+      "agent_id": null,
+      "artifact_sha_at_time": "6b86d73eb871ea52b0f21b6751d7e263aed481dcb04d776bd18f01f2c55c92c3",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T05:10:41.962335Z",
+      "started_at": "2026-04-20T05:10:15.079526Z",
+      "ended_at": "2026-04-20T05:10:41.962335Z",
+      "duration_seconds": 26.882764,
+      "agent_id": null,
+      "artifact_sha_at_time": "95a4b183debafbf474ac7e0cb80546daa2329ab587ed1dca476a9063a04e1d09",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T05:10:45.637431Z",
+      "started_at": "2026-04-20T05:10:15.079299Z",
+      "ended_at": "2026-04-20T05:10:45.637431Z",
+      "duration_seconds": 30.557895,
+      "agent_id": null,
+      "artifact_sha_at_time": "95a4b183debafbf474ac7e0cb80546daa2329ab587ed1dca476a9063a04e1d09",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T05:11:08.551397Z",
+      "started_at": "2026-04-20T05:10:41.964379Z",
+      "ended_at": "2026-04-20T05:11:08.551397Z",
+      "duration_seconds": 26.586956,
+      "agent_id": null,
+      "artifact_sha_at_time": "95a4b183debafbf474ac7e0cb80546daa2329ab587ed1dca476a9063a04e1d09",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T05:11:43.102181Z",
+      "started_at": "2026-04-20T05:10:45.638731Z",
+      "ended_at": "2026-04-20T05:11:43.102181Z",
+      "duration_seconds": 57.463253,
+      "agent_id": null,
+      "artifact_sha_at_time": "95a4b183debafbf474ac7e0cb80546daa2329ab587ed1dca476a9063a04e1d09",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T05:12:40.756336Z",
+      "started_at": "2026-04-20T05:10:15.079489Z",
+      "ended_at": "2026-04-20T05:12:40.756336Z",
+      "duration_seconds": 145.676337,
+      "agent_id": null,
+      "artifact_sha_at_time": "95a4b183debafbf474ac7e0cb80546daa2329ab587ed1dca476a9063a04e1d09",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T05:14:45.559316Z",
+      "started_at": "2026-04-20T05:12:40.758397Z",
+      "ended_at": "2026-04-20T05:14:45.559316Z",
+      "duration_seconds": 124.800504,
+      "agent_id": null,
+      "artifact_sha_at_time": "95a4b183debafbf474ac7e0cb80546daa2329ab587ed1dca476a9063a04e1d09",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    }
+  ],
+  "stages": {
+    "spec": {
+      "adversarial_rounds": 2,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "1f2f4e6c88c90cee4d64e3fc27bc3a2979811d5cf179ffca5d196b4a4131cb68",
+        "6023f58f245f109ff7102fa6341dbf6948f7a20fe2d69a8433cfc665dd0c2643",
+        "4065b0f8ae92575cebb6e212d8b71bc31a4de0f7050391345d24e87fb6e25518",
+        "4065b0f8ae92575cebb6e212d8b71bc31a4de0f7050391345d24e87fb6e25518",
+        "2c40c139f87d48cfa7bb0659a243acc9093dadee342734a99880c7f5840e6989"
+      ],
+      "initial_sha": "1f2f4e6c88c90cee4d64e3fc27bc3a2979811d5cf179ffca5d196b4a4131cb68"
+    },
+    "plan": {
+      "adversarial_rounds": 3,
+      "judge_rounds": 1,
+      "judge_verdicts": [
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.2",
+            "verdict": "proceed",
+            "confidence": 4,
+            "reasoning": "plan.codex.architecture-adversarial.review#high-1 is addressed in plan.md A2 and tasks.md T9.3/T9.5: suspicious rows are forced through resolveCanonicalDecision with cachedDecision: null, so the migration does not preserve stale bad canonicals. plan.codex.architecture-adversarial.review#high-2 is addressed in plan.md A9 plus tasks.md T3.2 and T4.2a: the worker emits decisionMetadata.refusal, buildRawDecisionEvidence copies it, the resolver early-returns refusal, and cached refusal rows are special-cased instead of falling through to unknown. plan.gemini.testability-adversarial.review#high-1 is addressed in tasks.md T3.3: existing decisionCode tests are rewritten for semantic coverage, and every parser branch retains at least one surviving test. plan.gemini.testability-adversarial.review#high-2 is addressed in plan.md A2 and tasks.md T9.2-T9.8: the migration imports the production resolver, classifies rows, and re-derives suspicious rows with cachedDecision null, with tests that exercise that path. All four HIGH findings have named mitigations that are specific enough to implement; none are left only implied or merely accepted as limitations.",
+            "evidence": [
+              {
+                "artifact": "plan.md",
+                "section": "A2",
+                "quote": "Suspicious existing canonical OR no canonical \u2014 call `resolveCanonicalDecision` with `cachedDecision: null` to force re-derivation from raw evidence."
+              },
+              {
+                "artifact": "tasks.md",
+                "section": "T9.3",
+                "quote": "If hasGoodCanonical \u2192 preserve branch ... Else \u2192 re-derive branch: build `DecisionModelInput` with `cachedDecision: null` (force raw re-derivation); call `resolveCanonicalDecision(input)`."
+              },
+              {
+                "artifact": "plan.md",
+                "section": "A9",
+                "quote": "Add `refusal: boolean` field to `RawDecisionEvidence` type ... copy `decisionMetadata.refusal` ... Early-check `raw.refusal === true` ... cached-decision branch ... refusal special-case."
+              },
+              {
+                "artifact": "tasks.md",
+                "section": "T3.3",
+                "quote": "Each existing test keyed on `decisionCode` is re-evaluated for the semantic it tests ... Every parser branch has at least one surviving test."
+              }
+            ],
+            "timestamp": "2026-04-19T00:00:00Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5.2",
+            "verdict": "block",
+            "confidence": 4,
+            "reasoning": "Block. The supplied earlier-round record says \"No prior findings yet.\", so none of the latest findings can be a RESTATEMENT under the stated rule, which requires an earlier round that raised the same concern plus an orchestrator response that substantively addressed it. Classifications: plan.codex.architecture-adversarial.review#high-1 NEW: it surfaces a new failure mode where a W9 backfill that calls resolveCanonicalDecision can preserve stale cached canonicals because the resolver prefers any cached canonical with decisionState !== 'unknown' before recomputing from raw evidence. plan.codex.architecture-adversarial.review#high-2 NEW: it surfaces two new failure modes, that refusal is not carried through RawDecisionEvidence/DecisionModelInput/buildRawDecisionEvidence, and that cached refusal rows still fall through to unknown in resolveCanonicalDecision. plan.codex.architecture-adversarial.review#medium-3 NEW: it surfaces a new failure mode where W10 treats canonicalDecision.decisionState === 'unknown' as parser-only even though the resolver uses unknown for multiple non-parser cases, so a reparse filter will over-include unrecoverable rows and miss some relevant ones. plan.codex.implementation-adversarial.review#medium-1 NEW: it surfaces a new failure mode where the planned test rewrite remaps current 'other'/None outcomes to 'unparseable' even though the worker currently emits parseClass 'ambiguous', which would drop coverage for real ambiguity paths. plan.codex.implementation-adversarial.review#medium-2 NEW: it surfaces a new failure mode where cacheVersion: 1 conflates refusal and unknown, so any retained reparse script run before the apply migration finishes can mis-target refusal rows as parse failures. plan.codex.implementation-adversarial.review#low-3 NEW: it surfaces a new failure mode where W9 depends on importing live resolver code into a standalone cloud/scripts entrypoint without a proven bootstrap path. plan.gemini.testability-adversarial.review#high-1 NEW, #high-2 NEW, #medium-3 NEW, #medium-4 NEW, #low-5 NEW, and #low-6 NEW: no earlier round exists to restate, and the prompt omits their bodies so no narrower comparison is possible. The 70% restatement threshold is not met; in the supplied record the latest round is still surfacing new issues rather than recycling addressed ones.",
+            "evidence": [
+              {
+                "artifact": "earlier-rounds-summary",
+                "section": "prior findings",
+                "quote": "No prior findings yet."
+              },
+              {
+                "artifact": "plan.codex.architecture-adversarial.review.md",
+                "section": "high-1",
+                "quote": "The proposed migration primitive in W9 is wrong for the job. The live resolver explicitly prefers any cached canonical with `decisionState !== 'unknown'` ... That means a backfill that calls `resolveCanonicalDecision` can preserve already-bad cached canonicals instead of recomputing them, so the drift the plan is trying to remove may survive the migration."
+              },
+              {
+                "artifact": "plan.codex.architecture-adversarial.review.md",
+                "section": "high-2",
+                "quote": "The refusal refactor is incomplete in two places. First, the plan says the resolver should read `decisionMetadata.refusal`, but `RawDecisionEvidence` and `DecisionModelInput` do not carry any refusal bit today ... Second, even if refusal reaches the raw path, the cached-decision branch in `resolveCanonicalDecision` never special-cases `decisionState: 'refusal'`, so a cached refusal row will still fall through to unknown ..."
+              },
+              {
+                "artifact": "plan.codex.architecture-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "W10 assumes `canonicalDecision.decisionState === 'unknown'` now means \u201cparser failure only,\u201d but the resolver uses `\"unknown\"` for several unrelated cases ... A reparse filter built on that field will pull in rows that cannot be recovered by reparsing and can still miss rows whose failure mode is not parsing."
+              },
+              {
+                "artifact": "plan.codex.implementation-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "W3\u2019s test-rewrite guidance maps current `\"other\"`/`None` cases to `\"unparseable\"`, but the worker code does not do that. In [summarize.py], unresolved cases from `extract_decision_result()` are returned with `parseClass: \"ambiguous\"` when `decision_code == \"other\"` ... If the rewrite only checks for `unparseable` or `refusal` absence, it will stop protecting the ambiguity paths that actually exist today."
+              },
+              {
+                "artifact": "plan.codex.implementation-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "W10 assumes `canonicalDecision.decisionState === \"unknown\"` means \u201cpure parser failure,\u201d but the current code explicitly says v1 rows conflate refusal and unknown ... That means any retained `backfill-reparse-decisions.ts` run before the `--apply` migration finishes can still mis-target refusal rows as parse failures."
+              },
+              {
+                "artifact": "plan.codex.implementation-adversarial.review.md",
+                "section": "low-3",
+                "quote": "W9 depends on importing the live resolver into a standalone script, but the provided code only shows the current migration as a self-contained module with local helpers. The plan does not show the workspace/bootstrap path needed for a `cloud/scripts` entrypoint to safely import application resolver code, so the migration\u2019s execution path is not yet proven."
+              },
+              {
+                "artifact": "plan.gemini.testability-adversarial.review.md",
+                "section": "high-1",
+                "quote": "HIGH plan.gemini.testability-adversarial.review#high-1: [CODE-CONFIRMED]"
+              },
+              {
+                "artifact": "plan.gemini.testability-adversarial.review.md",
+                "section": "high-2",
+                "quote": "HIGH plan.gemini.testability-adversarial.review#high-2: [CODE-CONFIRMED]"
+              },
+              {
+                "artifact": "plan.gemini.testability-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "MEDIUM plan.gemini.testability-adversarial.review#medium-3: [UNVERIFIED]"
+              },
+              {
+                "artifact": "plan.gemini.testability-adversarial.review.md",
+                "section": "medium-4",
+                "quote": "MEDIUM plan.gemini.testability-adversarial.review#medium-4: [UNVERIFIED]"
+              },
+              {
+                "artifact": "plan.gemini.testability-adversarial.review.md",
+                "section": "low-5",
+                "quote": "LOW plan.gemini.testability-adversarial.review#low-5: [UNVERIFIED]"
+              },
+              {
+                "artifact": "plan.gemini.testability-adversarial.review.md",
+                "section": "low-6",
+                "quote": "LOW plan.gemini.testability-adversarial.review#low-6: [UNVERIFIED]"
+              }
+            ],
+            "timestamp": "2026-04-19T12:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-opus-4-5",
+            "verdict": "proceed-with-annotation",
+            "confidence": 3,
+            "reasoning": "Four load-bearing ambiguities that would cause a competent implementer to pause or guess: (1) T5.3 explicitly invites adding scaleCodeFromCanonical to the CSV export, which directly contradicts FR-008's strict allowlist \u2014 an implementer following the tasks mechanically would violate the invariant the feature was designed to enforce, with no warning at the task level. (2) T4.2 tells the implementer to grep for `resolveTranscriptDecisionModel` as the function to rewire, but every other artifact reference to the key function uses the name `resolveCanonicalDecision` in decision-model.ts \u2014 if these are different functions, the grep catches the wrong set of call sites and the rewire is incomplete. (3) W9 delegates importing from the API workspace to an 'existing cross-workspace tsx import pattern' but names no example script, forcing the implementer to spelunk before writing a single import. (4) The spec FR-007 specifies the mutation accepts {favoredValueKey, strength} as required fields, while plan W8 redesigns it to {decisionState, favoredValueKey?, strength?} \u2014 the plan supersedes the spec here but never says so explicitly, leaving an implementer who reads spec before plan uncertain which is authoritative. Risks (1) and (2) are the sharpest: (1) would produce a silent spec violation with no friction at the task level; (2) would produce missing rewires that survive the SC-001 grep because the grep pattern in T10.5 keys on the string 'decisionCode', not the function name.",
+            "evidence": [
+              {
+                "artifact": "tasks",
+                "section": "Slice W5, T5.3",
+                "quote": "If users need a scale number, add a `scaleCode` column derived via `scaleCodeFromCanonical` (optional; discuss with product if worth keeping)."
+              },
+              {
+                "artifact": "spec",
+                "section": "Functional Requirements FR-008",
+                "quote": "It is ONLY callable from `cloud/scripts/job-choice-bridge-report-lib.ts` and its tests (documented in a JSDoc allowlist comment on the helper). Adding a new caller requires updating the allowlist, making future misuse visible in code review."
+              },
+              {
+                "artifact": "tasks",
+                "section": "Slice W4, T4.2",
+                "quote": "Update every call site that passes `decisionCode` into `resolveTranscriptDecisionModel` (grep `resolveTranscriptDecisionModel\\(`)."
+              },
+              {
+                "artifact": "plan",
+                "section": "Architecture Decision A2",
+                "quote": "the migration imports and calls the production `resolveCanonicalDecision` from `cloud/apps/api/src/graphql/queries/domain/decision-model.ts`"
+              },
+              {
+                "artifact": "plan",
+                "section": "Review Reconciliation (bottom)",
+                "quote": "LOW W9 workspace import path -> acknowledged; implementation will use the existing cross-workspace tsx import pattern used by other scripts (e.g. via @valuerank/api package alias or direct relative import)."
+              },
+              {
+                "artifact": "spec",
+                "section": "Functional Requirements FR-007",
+                "quote": "The manual-override mutation MUST accept `{favoredValueKey, strength}` as required fields."
+              },
+              {
+                "artifact": "plan",
+                "section": "Wave W8",
+                "quote": "Change the mutation's GraphQL input type from `{decisionCode}` to `{decisionState, favoredValueKey?, strength?}`"
+              }
+            ],
+            "timestamp": "2026-04-19T00:00:00Z"
+          }
+        ]
+      ],
+      "annotations": [
+        {
+          "stage": "plan",
+          "round": 1,
+          "judge": "implementation-risk",
+          "confidence": 3,
+          "reasoning": "Four load-bearing ambiguities that would cause a competent implementer to pause or guess: (1) T5.3 explicitly invites adding scaleCodeFromCanonical to the CSV export, which directly contradicts FR-008's strict allowlist \u2014 an implementer following the tasks mechanically would violate the invariant the feature was designed to enforce, with no warning at the task level. (2) T4.2 tells the implementer to grep for `resolveTranscriptDecisionModel` as the function to rewire, but every other artifact reference to the key function uses the name `resolveCanonicalDecision` in decision-model.ts \u2014 if these are different functions, the grep catches the wrong set of call sites and the rewire is incomplete. (3) W9 delegates importing from the API workspace to an 'existing cross-workspace tsx import pattern' but names no example script, forcing the implementer to spelunk before writing a single import. (4) The spec FR-007 specifies the mutation accepts {favoredValueKey, strength} as required fields, while plan W8 redesigns it to {decisionState, favoredValueKey?, strength?} \u2014 the plan supersedes the spec here but never says so explicitly, leaving an implementer who reads spec before plan uncertain which is authoritative. Risks (1) and (2) are the sharpest: (1) would produce a silent spec violation with no friction at the task level; (2) would produce missing rewires that survive the SC-001 grep because the grep pattern in T10.5 keys on the string 'decisionCode', not the function name.",
+          "artifact_sha_at_time": "15a9e6d05277f3252db61fa592482c5d7455749f9598d3b9f074a0bffa06707f"
+        }
+      ],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "c3964bb3b70a957ec9b233c7dd3653f6ba17701ab00facf88ae1393dc6155577",
+        "e690901f724f2b660caec1f78d9b88286e5c3f5e5650e8d04692318cb8978a38",
+        "627ed0c3e1ed9d605a7f67c6a3b20f676ab21d0b33de753136a3a310ee2fc1ed",
+        "33448055efa15714600556fbd6321124acd2b3e68e5e9ec390ca90aeff04c73b",
+        "33c221a08db543266041458aac83cebff45766767edd25e104475fa7e8af712f",
+        "ef0869f429a1b3f99a1845eed2c000bd6a651f262ce4ac1e816c0c39e258b185",
+        "95a4b183debafbf474ac7e0cb80546daa2329ab587ed1dca476a9063a04e1d09"
+      ],
+      "initial_sha": "c3964bb3b70a957ec9b233c7dd3653f6ba17701ab00facf88ae1393dc6155577",
+      "judge_next_action": "advance"
+    },
+    "tasks": {
+      "adversarial_rounds": 1,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "6b86d73eb871ea52b0f21b6751d7e263aed481dcb04d776bd18f01f2c55c92c3"
+      ],
+      "initial_sha": "6b86d73eb871ea52b0f21b6751d7e263aed481dcb04d776bd18f01f2c55c92c3"
+    }
+  },
+  "schema_version": 2,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "spec_adversarial_rounds": 2,
+  "last_action_result": {
+    "next": "repair_plan_checkpoint",
+    "reason": "plan judge panel completed: advance",
+    "blockers": [
+      "Block. The supplied earlier-round record says \"No prior findings yet.\", so none of the latest findings can be a RESTATEMENT under the stated rule, which requires an earlier round that raised the same concern plus an orchestrator response that substantively addressed it. Classifications: plan.codex.architecture-adversarial.review#high-1 NEW: it surfaces a new failure mode where a W9 backfill that calls resolveCanonicalDecision can preserve stale cached canonicals because the resolver prefers any cached canonical with decisionState !== 'unknown' before recomputing from raw evidence. plan.codex.architecture-adversarial.review#high-2 NEW: it surfaces two new failure modes, that refusal is not carried through RawDecisionEvidence/DecisionModelInput/buildRawDecisionEvidence, and that cached refusal rows still fall through to unknown in resolveCanonicalDecision. plan.codex.architecture-adversarial.review#medium-3 NEW: it surfaces a new failure mode where W10 treats canonicalDecision.decisionState === 'unknown' as parser-only even though the resolver uses unknown for multiple non-parser cases, so a reparse filter will over-include unrecoverable rows and miss some relevant ones. plan.codex.implementation-adversarial.review#medium-1 NEW: it surfaces a new failure mode where the planned test rewrite remaps current 'other'/None outcomes to 'unparseable' even though the worker currently emits parseClass 'ambiguous', which would drop coverage for real ambiguity paths. plan.codex.implementation-adversarial.review#medium-2 NEW: it surfaces a new failure mode where cacheVersion: 1 conflates refusal and unknown, so any retained reparse script run before the apply migration finishes can mis-target refusal rows as parse failures. plan.codex.implementation-adversarial.review#low-3 NEW: it surfaces a new failure mode where W9 depends on importing live resolver code into a standalone cloud/scripts entrypoint without a proven bootstrap path. plan.gemini.testability-adversarial.review#high-1 NEW, #high-2 NEW, #medium-3 NEW, #medium-4 NEW, #low-5 NEW, and #low-6 NEW: no earlier round exists to restate, and the prompt omits their bodies so no narrower comparison is possible. The 70% restatement threshold is not met; in the supplied record the latest round is still surfacing new issues rather than recycling addressed ones."
+    ],
+    "outcome": "advance",
+    "proceed_count": 2,
+    "block_count": 1,
+    "timestamp": "2026-04-20T05:14:45.676027Z",
+    "judge_round": 1
+  },
+  "plan_adversarial_rounds": 3,
+  "tasks_adversarial_rounds": 1,
+  "plan_judge_rounds": 1
+}

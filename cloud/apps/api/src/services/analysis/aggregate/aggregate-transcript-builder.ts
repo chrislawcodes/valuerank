@@ -14,7 +14,6 @@ type TranscriptRecordForBuilder = {
   sampleIndex: number;
   modelId: string;
   scenarioId: string | null;
-  decisionCode: string | null;
   decisionMetadata: unknown;
   definitionSnapshot: unknown;
   scenario: {
@@ -36,7 +35,6 @@ export function buildAggregateWorkerTranscripts(
     const dimensions = buildScenarioAnalysisDimensionRecord(normalizedScenarioMetadata);
     const orientationFlipped = transcript.scenario?.orientationFlipped ?? false;
     const resolved = resolveTranscriptDecisionModel({
-      decisionCode: transcript.decisionCode,
       decisionMetadata: transcript.decisionMetadata,
       definitionSnapshot: transcript.definitionSnapshot,
       orientationFlipped,

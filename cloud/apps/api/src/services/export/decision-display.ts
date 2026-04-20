@@ -34,7 +34,6 @@ export const DECISION_BUCKET_LABELS: readonly DecisionBucketLabel[] = [
 ] as const;
 
 export type DecisionDisplayTranscript = {
-  decisionCode?: string | null;
   decisionMetadata?: unknown;
   definitionSnapshot?: unknown;
   scenario?: {
@@ -120,8 +119,6 @@ function getDecisionReason(
   canonicalStrength: DecisionStrength,
 ): DecisionReason {
   const hasMeaningfulInput = (
-    transcript.decisionCode !== null && transcript.decisionCode !== undefined
-  ) || (
     transcript.decisionMetadata !== null && transcript.decisionMetadata !== undefined
   ) || (
     transcript.definitionSnapshot !== null && transcript.definitionSnapshot !== undefined
@@ -153,7 +150,6 @@ function getDecisionReason(
 
 export function formatDecisionDisplay(transcript: DecisionDisplayTranscript): ExportDecisionDisplay {
   const model = resolveTranscriptDecisionModel({
-    decisionCode: transcript.decisionCode ?? null,
     decisionMetadata: transcript.decisionMetadata,
     definitionSnapshot: transcript.definitionSnapshot,
     orientationFlipped: transcript.scenario?.orientationFlipped ?? null,

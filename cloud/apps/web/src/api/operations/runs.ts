@@ -141,10 +141,6 @@ export type Transcript = Omit<
   'decisionModelV2' | 'dimensionValues' | 'decisionMetadata' | 'scenarioId'
 > & {
   scenarioId: string | null;
-  /** @deprecated Use decisionModelV2 instead */
-  decisionCode?: string | null;
-  /** @deprecated Use decisionModelV2 instead */
-  decisionCodeSource?: string | null;
   decisionMetadata?: unknown;
   dimensionValues?: Record<string, string | number> | null;
   decisionModelV2?: TranscriptDecisionModelV2 | null;

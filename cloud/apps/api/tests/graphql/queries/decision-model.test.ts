@@ -119,6 +119,7 @@ describe('decision model', () => {
       parsePath: 'exact.favor_first.strong',
       parserVersion: 'parser-1',
       responseExcerpt: 'Achievement ...',
+      refusal: false,
       manualOverride: null,
     });
     expect(
@@ -136,7 +137,6 @@ describe('decision model', () => {
 
   it('resolves a transcript decision model envelope behind the shared boundary', () => {
     const result = resolveTranscriptDecisionModel({
-      decisionCode: null,
       decisionMetadata: {
         matchedLabel: 'Achievement',
         parseClass: 'exact',
@@ -160,6 +160,7 @@ describe('decision model', () => {
       parsePath: 'exact.favor_first.strong',
       parserVersion: 'parser-1',
       responseExcerpt: 'Achievement',
+      refusal: false,
       manualOverride: null,
     });
     expect(result.canonical).toMatchObject({

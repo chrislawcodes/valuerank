@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts",
+  "source_artifact_sha256": "980f95d10c240783f6bc20e88a7f76b539ba3d550aa11a844087e9c7bcef78a4",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/decision-cache-v2-tolerance/reviews/plan.codex.architecture-adversarial.review.context1.narrowed.txt",
+  "narrowed_artifact_sha256": "6ccf3931085965473b0ff8a6d801c29f364195331d9f50c8c31ea3bed652db27",
+  "strategy": "head-tail-numbered-lines"
+}

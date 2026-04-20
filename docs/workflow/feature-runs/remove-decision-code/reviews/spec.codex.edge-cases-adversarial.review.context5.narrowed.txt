@@ -1,0 +1,216 @@
+00001: import { DOMAIN_ANALYSIS_VALUE_KEYS, toPascalCaseKey, type DomainAnalysisValueKey } from '../domain-analysis-values.js';
+00002: import { JOB_CHOICE_VALUE_STATEMENTS, labelFromBody } from '@valuerank/shared';
+00003: import { stripFillerWords } from './decision-model-filler-words.js';
+00004: import type {
+00005:   DecisionDirection,
+00006:   DecisionStrength,
+00007:   DecisionSource,
+00008:   CanonicalAppliedDecision,
+00009:   CanonicalDecision,
+00010:   DecisionPair,
+00011:   ValueStatementEntry,
+00012:   ParsedDecisionPath,
+00013:   CachedWinnerFirstDecision,
+00014: } from './decision-model-types.js';
+00015: 
+00016: export { JOB_CHOICE_VALUE_STATEMENTS };
+00017: 
+00018: export function isValueKey(value: string): value is DomainAnalysisValueKey {
+00019:   return (DOMAIN_ANALYSIS_VALUE_KEYS as readonly string[]).includes(value);
+00020: }
+00021: 
+00022: export function isDecisionDirection(value: unknown): value is DecisionDirection {
+00023:   return value === 'favor_first' || value === 'favor_second' || value === 'neutral' || value === 'refusal' || value === 'unknown';
+00024: }
+00025: 
+00026: export function isDecisionStrength(value: unknown): value is DecisionStrength {
+00027:   return value === 'strong' || value === 'lean' || value === 'neutral' || value === 'unknown';
+00028: }
+00029: 
+00030: export function isCanonicalAppliedDecision(value: unknown): value is CanonicalAppliedDecision {
+00031:   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+00032:     return false;
+00033:   }
+00034: 
+00035:   const decision = value as CanonicalAppliedDecision;
+00036:   return (
+00037:     isDecisionDirection(decision.direction) &&
+00038:     isDecisionStrength(decision.strength) &&
+00039:     (decision.favoredValueKey === null || (typeof decision.favoredValueKey === 'string' && isValueKey(decision.favoredValueKey))) &&
+00040:     (decision.opposedValueKey === null || (typeof decision.opposedValueKey === 'string' && isValueKey(decision.opposedValueKey)))
+00041:   );
+00042: }
+00043: 
+00044: export function isCachedWinnerFirstDecision(value: unknown): value is CachedWinnerFirstDecision {
+00045:   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+00046:     return false;
+00047:   }
+00048: 
+00049:   const decision = value as CachedWinnerFirstDecision;
+00050: 
+00051:   // Accept cacheVersion 1 (current write-path shape) and cacheVersion 2
+00052:   // (extended shape with decisionState='refusal', produced by the migration
+00053:   // landing in this PR and by PR #2's new write path). Any other value is
+00054:   // an unknown future schema and MUST be rejected so callers fall back to
+00055:   // derive-on-read.
+00056:   if (decision.cacheVersion !== 1 && decision.cacheVersion !== 2) {
+00057:     return false;
+00058:   }
+00059: 
+00060:   // Accept the legacy 3-state decisionState union PLUS 'refusal'. 'refusal'
+00061:   // is semantically valid on both cacheVersion 1 (if any caller produces it
+00062:   // — none do today, but the validator should not gate on that) and
+00063:   // cacheVersion 2 (the new canonical home for refusal signals).
+00064:   if (
+00065:     decision.decisionState !== 'resolved'
+00066:     && decision.decisionState !== 'neutral'
+00067:     && decision.decisionState !== 'unknown'
+00068:     && decision.decisionState !== 'refusal'
+00069:   ) {
+00070:     return false;
+00071:   }
+00072: 
+00073:   if (decision.decisionState === 'resolved') {
+00074:     return (
+00075:       typeof decision.favoredValueKey === 'string'
+00076:       && isValueKey(decision.favoredValueKey)
+00077:       && (decision.strength === 'strong' || decision.strength === 'lean')
+00078:     );
+00079:   }
+00080: 
+00081:   if (decision.decisionState === 'neutral') {
+00082:     return decision.favoredValueKey === null && decision.strength === 'neutral';
+00083:   }
+00084: 
+00085:   // 'unknown' and 'refusal' share the same field shape: no favored value,
+00086:   // strength reported as 'unknown'. Keeping them separate decisionStates
+00087:   // preserves the semantic signal (parser failure vs model refusal) without
+00088:   // requiring any other field to differ.
+00089:   return decision.favoredValueKey === null && decision.strength === 'unknown';
+00090: }
+00091: 
+00092: export function isRecord(value: unknown): value is Record<string, unknown> {
+00093:   return value !== null && typeof value === 'object' && !Array.isArray(value);
+00094: }
+00095: 
+00096: export function isValidDecisionPair(pair: DecisionPair | null | undefined): pair is DecisionPair {
+00097:   if (pair === null || pair === undefined) {
+00098:     return false;
+00099:   }
+00100: 
+00101:   return (
+00102:     isValueKey(pair.valueA) &&
+00103:     isValueKey(pair.valueB) &&
+00104:     pair.valueA !== pair.valueB
+00105:   );
+00106: }
+00107: 
+00108: export function parseDecisionPath(parsePath: string | null | undefined): ParsedDecisionPath | null {
+00109:   if (typeof parsePath !== 'string') {
+00110:     return null;
+00111:   }
+
+... [narrowed review slice: middle omitted] ...
+
+irst' &&
+00305:       decision.strength !== 'unknown' &&
+00306:       decision.strength !== 'neutral' &&
+00307:       decision.favoredValueKey === pair.valueA &&
+00308:       decision.opposedValueKey === pair.valueB) ||
+00309:     (decision.direction === 'favor_second' &&
+00310:       decision.strength !== 'unknown' &&
+00311:       decision.strength !== 'neutral' &&
+00312:       decision.favoredValueKey === pair.valueB &&
+00313:       decision.opposedValueKey === pair.valueA);
+00314: 
+00315:   if (!validKnownPair) {
+00316:     return { ok: false };
+00317:   }
+00318: 
+00319:   return {
+00320:     ok: true,
+00321:     canonical: {
+00322:       favoredValueKey: decision.favoredValueKey,
+00323:       opposedValueKey: decision.opposedValueKey,
+00324:       direction: decision.direction,
+00325:       strength: decision.strength,
+00326:       normalizationApplied: false,
+00327:       normalizationReason: null,
+00328:       source: 'manual',
+00329:     },
+00330:   };
+00331: }
+00332: 
+00333: export function extractManualOverrideDecision(
+00334:   decisionMetadata: unknown,
+00335: ): CanonicalAppliedDecision | null {
+00336:   const record = isRecord(decisionMetadata) ? decisionMetadata : null;
+00337:   const manualOverride = record && isRecord(record.manualOverride) ? record.manualOverride : null;
+00338:   if (!manualOverride || !isCanonicalAppliedDecision(manualOverride.appliedDecision)) {
+00339:     return null;
+00340:   }
+00341:   return manualOverride.appliedDecision;
+00342: }
+00343: 
+00344: export function extractCachedWinnerFirstDecision(
+00345:   decisionMetadata: unknown,
+00346: ): CachedWinnerFirstDecision | null {
+00347:   const record = isRecord(decisionMetadata) ? decisionMetadata : null;
+00348:   const summaryCache = record && isRecord(record.summaryCache) ? record.summaryCache : null;
+00349:   const summary = summaryCache && isRecord(summaryCache.summary) ? summaryCache.summary : null;
+00350:   const canonicalDecision = summary && isCachedWinnerFirstDecision(summary.canonicalDecision)
+00351:     ? summary.canonicalDecision
+00352:     : null;
+00353: 
+00354:   return canonicalDecision;
+00355: }
+00356: 
+00357: export function extractValueStatementsFromSnapshot(snapshot: unknown): ValueStatementEntry[] | undefined {
+00358:   if (snapshot === null || typeof snapshot !== 'object' || Array.isArray(snapshot)) return undefined;
+00359:   const components = (snapshot as { components?: unknown }).components;
+00360:   if (components === null || typeof components !== 'object' || Array.isArray(components)) return undefined;
+00361: 
+00362:   const vf = (components as { value_first?: unknown }).value_first;
+00363:   const vs = (components as { value_second?: unknown }).value_second;
+00364:   if (!isRecord(vf) || !isRecord(vs)) return undefined;
+00365: 
+00366:   const tokenFirst = typeof vf.token === 'string' ? vf.token : null;
+00367:   const bodyFirst = typeof vf.body === 'string' ? vf.body : null;
+00368:   const tokenSecond = typeof vs.token === 'string' ? vs.token : null;
+00369:   const bodySecond = typeof vs.body === 'string' ? vs.body : null;
+00370: 
+00371:   if (tokenFirst == null || bodyFirst == null || tokenSecond == null || bodySecond == null) return undefined;
+00372:   return [
+00373:     { token: tokenFirst, body: bodyFirst },
+00374:     { token: tokenSecond, body: bodySecond },
+00375:   ];
+00376: }
+00377: 
+00378: const LABEL_PREFIX_REGEX = /^(?:Strongly|Somewhat) support (.+)$/;
+00379: 
+00380: export function extractLabelPrefixFromSnapshot(snapshot: unknown): string | undefined {
+00381:   if (snapshot === null || typeof snapshot !== 'object' || Array.isArray(snapshot)) return undefined;
+00382:   const template = (snapshot as { template?: unknown }).template;
+00383:   if (typeof template !== 'string') return undefined;
+00384: 
+00385:   const components = (snapshot as { components?: unknown }).components;
+00386:   if (components === null || typeof components !== 'object' || Array.isArray(components)) return undefined;
+00387:   const vf = (components as { value_first?: unknown }).value_first;
+00388:   if (!isRecord(vf) || typeof vf.body !== 'string') return undefined;
+00389: 
+00390:   // Extract the short body (before "because") to find it in the scale label
+00391:   const shortBody = (vf.body.split(' because')[0] ?? vf.body).trim();
+00392:   if (shortBody.length === 0) return undefined;
+00393: 
+00394:   // Find a scale label line that ends with the short body
+00395:   const lines = template.split('\n');
+00396:   for (const line of lines) {
+00397:     const trimmed = line.replace(/^- /, '').trim();
+00398:     const match = LABEL_PREFIX_REGEX.exec(trimmed);
+00399:     if (match == null) continue;
+00400:     const afterStrength = match[1] ?? '';
+00401:     if (afterStrength.endsWith(shortBody)) {
+00402:       const prefix = afterStrength.slice(0, afterStrength.length - shortBody.length).trimEnd();
+00403:       if (prefix.length > 0) return prefix;
+00404:     }
+004

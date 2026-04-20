@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/api/src/graphql/queries/domain/decision-model-helpers.ts",
+  "source_artifact_sha256": "a838f8004a48843dc7549995da36c30b53007a2a1311437bbe118dc368d4b543",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/remove-decision-code/reviews/spec.codex.edge-cases-adversarial.review.context5.narrowed.txt",
+  "narrowed_artifact_sha256": "0af909b71791ed8280f656920ef6174bfc13ef9a2535893db73f1be1d06c7465",
+  "strategy": "head-tail-numbered-lines"
+}

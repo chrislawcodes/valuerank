@@ -47,9 +47,25 @@ export function isCachedWinnerFirstDecision(value: unknown): value is CachedWinn
   }
 
   const decision = value as CachedWinnerFirstDecision;
+
+  // Accept cacheVersion 1 (current write-path shape) and cacheVersion 2
+  // (extended shape with decisionState='refusal', produced by the migration
+  // landing in this PR and by PR #2's new write path). Any other value is
+  // an unknown future schema and MUST be rejected so callers fall back to
+  // derive-on-read.
+  if (decision.cacheVersion !== 1 && decision.cacheVersion !== 2) {
+    return false;
+  }
+
+  // Accept the legacy 3-state decisionState union PLUS 'refusal'. 'refusal'
+  // is semantically valid on both cacheVersion 1 (if any caller produces it
+  // — none do today, but the validator should not gate on that) and
+  // cacheVersion 2 (the new canonical home for refusal signals).
   if (
-    decision.cacheVersion !== 1
-    || (decision.decisionState !== 'resolved' && decision.decisionState !== 'neutral' && decision.decisionState !== 'unknown')
+    decision.decisionState !== 'resolved'
+    && decision.decisionState !== 'neutral'
+    && decision.decisionState !== 'unknown'
+    && decision.decisionState !== 'refusal'
   ) {
     return false;
   }
@@ -66,6 +82,10 @@ export function isCachedWinnerFirstDecision(value: unknown): value is CachedWinn
     return decision.favoredValueKey === null && decision.strength === 'neutral';
   }
 
+  // 'unknown' and 'refusal' share the same field shape: no favored value,
+  // strength reported as 'unknown'. Keeping them separate decisionStates
+  // preserves the semantic signal (parser failure vs model refusal) without
+  // requiring any other field to differ.
   return decision.favoredValueKey === null && decision.strength === 'unknown';
 }
 

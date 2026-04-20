@@ -1,0 +1,42 @@
+---
+reviewer: "codex"
+lens: "dependency-order-adversarial"
+stage: "tasks"
+artifact_path: "docs/workflow/feature-runs/remove-decision-code/tasks.md"
+artifact_sha256: "6b86d73eb871ea52b0f21b6751d7e263aed481dcb04d776bd18f01f2c55c92c3"
+repo_root: "."
+git_head_sha: "fe2d375f349891708ea81efa9f6958fbcc592998"
+git_base_ref: "origin/main"
+git_base_sha: "bd742f04a07dd015aa976e30754c675d915b3903"
+generation_method: "codex-runner"
+resolution_status: "open"
+resolution_note: ""
+raw_output_path: "docs/workflow/feature-runs/remove-decision-code/reviews/tasks.codex.dependency-order-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: tasks dependency-order-adversarial
+
+## Findings
+
+- **High:** `W7.4` is scheduled before `W8`, but it depends on the mutation contract that `W8.1` changes. `useRunMutations.ts` cannot safely stop sending `decisionCode` until the server input is reshaped to `{decisionState, favoredValueKey?, strength?}`. As written, the web slice is not dependency-safe and will either fail the checkpoint or land a broken client.
+- **High:** `W9.4` treats refusal as a fallback only when the resolver returns `unknown`. That means a row that was explicitly tagged `decisionCode === "refusal"` can still be rewritten into a substantive decision if the resolver finds any other canonical. For a first-class refusal signal, refusal needs to win unconditionally, or the migration needs a stricter precedence rule.
+- **Medium [UNVERIFIED]:** `W2.2` assumes every persisted summary cache already has `canonicalDecision`. The plan removes `decisionCode`/`decisionCodeSource` from validation before any migration proves that invariant. If any live v1 cache lacks `canonicalDecision`, reads will start failing before `W9` repairs the data.
+- **Medium [UNVERIFIED]:** `W4.4` and `W5.3` replace `decisionCode` with `canonicalDecision.decisionState` plus `.strength`, but the plan never says how side-specific meaning is preserved. If current aggregation or export logic distinguishes mirrored orientations or favored side, that information will be collapsed and opposite cases will be merged.
+
+## Residual Risks
+
+- I could not verify whether there are additional `decisionCode` consumers outside the listed files, such as ad hoc SQL, scripts, or dashboards.
+- The plan still relies on the assumption that `cacheVersion: 2`, `canonicalDecision`, and the new refusal flag are enough to preserve all current behavior without a second cleanup pass after `W9`.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: open
+- note: 

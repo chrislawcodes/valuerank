@@ -99,7 +99,7 @@ export function formatRunListItem(
 
 /**
  * Formats a transcript for MCP summary response
- * Uses the transcript's summary fields (decisionCode, decisionText)
+ * Uses the transcript's canonicalDecision + decisionText
  */
 export function formatTranscriptSummary(
   transcript: Transcript & { scenario?: { orientationFlipped?: boolean | null } | null }
@@ -124,7 +124,6 @@ export function formatTranscriptSummary(
   }
 
   const resolved = resolveTranscriptDecisionModel({
-    decisionCode: transcript.decisionCode,
     decisionMetadata: transcript.decisionMetadata,
     definitionSnapshot: transcript.definitionSnapshot,
     orientationFlipped: transcript.scenario?.orientationFlipped ?? null,

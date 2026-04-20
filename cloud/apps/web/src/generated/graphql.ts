@@ -647,8 +647,6 @@ export type DomainAnalysisConditionTranscript = {
   __typename?: 'DomainAnalysisConditionTranscript';
   content: Scalars['JSON']['output'];
   createdAt: Scalars['DateTime']['output'];
-  decisionCode?: Maybe<Scalars['String']['output']>;
-  decisionCodeSource?: Maybe<Scalars['String']['output']>;
   decisionModelV2?: Maybe<Scalars['JSON']['output']>;
   durationMs: Scalars['Int']['output'];
   id: Scalars['ID']['output'];
@@ -1665,11 +1663,15 @@ export type Mutation = {
   updateSystemSetting: SystemSetting;
   /**
    *
-   *       Manually update a transcript decision code.
+   *       Manually override a transcript's canonical decision.
    *
-   *       Accepts only positive integer decision codes.
-   *       If the run is already completed, this will supersede current analysis
-   *       and queue a recompute job.
+   *       Accepts one of four decisionStates: resolved, neutral, unknown, refusal.
+   *       For resolved, favoredValueKey (one of the vignette pair's two value tokens)
+   *       and strength (strong or lean) are also required. Server derives direction
+   *       (favor_first / favor_second) from favoredValueKey against the vignette pair.
+   *
+   *       If the run is already completed, this supersedes current analysis
+   *       and queues a recompute job.
    *
    *       Requires authentication.
    *
@@ -2088,7 +2090,9 @@ export type MutationUpdateSystemSettingArgs = {
 
 
 export type MutationUpdateTranscriptDecisionArgs = {
-  decisionCode: Scalars['String']['input'];
+  decisionState: Scalars['String']['input'];
+  favoredValueKey?: InputMaybe<Scalars['String']['input']>;
+  strength?: InputMaybe<Scalars['String']['input']>;
   transcriptId: Scalars['ID']['input'];
 };
 
@@ -3789,7 +3793,7 @@ export type DomainAnalysisConditionTranscriptsQueryVariables = Exact<{
 }>;
 
 
-export type DomainAnalysisConditionTranscriptsQuery = { __typename?: 'Query', domainAnalysisConditionTranscripts: Array<{ __typename?: 'DomainAnalysisConditionTranscript', id: string, runId: string, scenarioId?: string | null, modelId: string, decisionCode?: string | null, decisionModelV2?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, createdAt: string, content: unknown }> };
+export type DomainAnalysisConditionTranscriptsQuery = { __typename?: 'Query', domainAnalysisConditionTranscripts: Array<{ __typename?: 'DomainAnalysisConditionTranscript', id: string, runId: string, scenarioId?: string | null, modelId: string, decisionModelV2?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, createdAt: string, content: unknown }> };
 
 export type DomainAvailableSignaturesQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
@@ -4281,7 +4285,9 @@ export type RestartSummarizationMutation = { __typename?: 'Mutation', restartSum
 
 export type UpdateTranscriptDecisionMutationVariables = Exact<{
   transcriptId: Scalars['ID']['input'];
-  decisionCode: Scalars['String']['input'];
+  decisionState: Scalars['String']['input'];
+  favoredValueKey?: InputMaybe<Scalars['String']['input']>;
+  strength?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
@@ -5398,7 +5404,6 @@ export const DomainAnalysisConditionTranscriptsDocument = gql`
     runId
     scenarioId
     modelId
-    decisionCode
     decisionModelV2
     turnCount
     tokenCount
@@ -6613,10 +6618,12 @@ export function useRestartSummarizationMutation() {
   return Urql.useMutation<RestartSummarizationMutation, RestartSummarizationMutationVariables>(RestartSummarizationDocument);
 };
 export const UpdateTranscriptDecisionDocument = gql`
-    mutation UpdateTranscriptDecision($transcriptId: ID!, $decisionCode: String!) {
+    mutation UpdateTranscriptDecision($transcriptId: ID!, $decisionState: String!, $favoredValueKey: String, $strength: String) {
   updateTranscriptDecision(
     transcriptId: $transcriptId
-    decisionCode: $decisionCode
+    decisionState: $decisionState
+    favoredValueKey: $favoredValueKey
+    strength: $strength
   ) {
     id
     runId

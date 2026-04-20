@@ -176,13 +176,11 @@ export type DecisionManualOverride = {
 };
 
 export type SummaryCacheSummary = {
-  decisionCode?: string;
-  decisionCodeSource?: string;
   decisionText: string | null;
   decisionMetadata: Record<string, unknown> | null;
   canonicalDecision?: {
-    cacheVersion: 1;
-    decisionState: 'resolved' | 'neutral' | 'unknown';
+    cacheVersion: 1 | 2;
+    decisionState: 'resolved' | 'neutral' | 'unknown' | 'refusal';
     favoredValueKey: string | null;
     strength: 'strong' | 'lean' | 'neutral' | 'unknown';
   };
@@ -205,6 +203,10 @@ export type DecisionMetadata = {
   scaleLabels?: DecisionScaleLabel[];
   manualOverride?: DecisionManualOverride;
   summaryCache?: SummaryCache;
+  /** First-class refusal signal — set by the Python worker when the model refused
+   * to answer. Replaces the legacy `summary.decisionCode === "refusal"` encoding.
+   */
+  refusal?: boolean;
 };
 
 // ============================================================================

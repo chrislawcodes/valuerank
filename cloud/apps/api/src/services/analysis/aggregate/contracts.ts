@@ -278,7 +278,6 @@ export interface ValueAggregateStats {
 export type AggregateTranscriptInput = {
   modelId: string;
   scenarioId: string | null;
-  decisionCode: string | null;
   scenario: { orientationFlipped: boolean } | null;
 };
 

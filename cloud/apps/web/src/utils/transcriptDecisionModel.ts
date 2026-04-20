@@ -205,14 +205,14 @@ export function getTranscriptDecisionSortValue(
     return getCanonicalTranscriptDecisionSortValue(transcript);
   }
 
+  // Legacy fallback sort keys for pre-canonical transcripts. decisionCode
+  // has been removed from the schema as the source of truth; content-blob
+  // fallbacks remain for ancient unparseable records.
   const fallbackCandidates = [
-    transcript.decisionCode,
-    (transcript.content as { decisionCode?: unknown } | null)?.decisionCode,
     (transcript.content as { decision?: unknown } | null)?.decision,
     (transcript.content as { score?: unknown } | null)?.score,
-    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.decisionCode,
-    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.decision,
-    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.score,
+    (transcript.content as { summary?: { decision?: unknown; score?: unknown } } | null)?.summary?.decision,
+    (transcript.content as { summary?: { decision?: unknown; score?: unknown } } | null)?.summary?.score,
   ];
 
   for (const candidate of fallbackCandidates) {

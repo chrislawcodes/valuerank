@@ -1,0 +1,232 @@
+# Spec: Canonical Decision as Single Source of Truth
+
+**Slug**: `decision-cache-single-source`
+**Status**: Authored — awaiting spec checkpoint
+
+## Problem
+
+Transcript decisions are currently persisted in two overlapping, derivable-from-each-other formats inside `transcripts.decision_metadata.summaryCache.summary`:
+
+- **v2 — `decisionCode`**: a string `"1" | "2" | "3" | "4" | "5" | "other" | "refusal"`, representing the scale position the model picked in the probe's 5-line support scale.
+- **v3 — `canonicalDecision`**: `{favoredValueKey: string | null, strength: "strong" | "lean" | "neutral" | "unknown", decisionState: "resolved" | "neutral" | "unknown", cacheVersion: 1}`, an order-independent canonical interpretation.
+
+v3 is fully derivable from v2 + the vignette's value pair + `orientationFlipped`. Writing both persistently creates a drift invariant that is easy to violate. Recent backfill PRs (#694, #695, #698, #700) updated `decisionCode` but not `canonicalDecision`, leaving ~1,537 transcripts with a recovered v2 and a stale v3 that reads as `strength: "unknown"` in the UI even though the parser successfully resolved the decision.
+
+The `"1".."5"` string is also **probe-format leakage into the persistent store** — it encodes the probe's 5-line scale layout rather than a semantic fact about the decision. For analysis, only v3 matters.
+
+## Goal
+
+Make `canonicalDecision` the single source of truth for transcript decisions. Remove `decisionCode` from the summaryCache persistent write path. Callers that legitimately need "which of the 5 scale positions" derive it on demand from `canonicalDecision` + the value pair.
+
+As part of this collapse, preserve the analytically meaningful **refusal** signal that `decisionCode = "refusal"` currently carries. The new `canonicalDecision` gains a `"refusal"` value for `decisionState`, distinct from `"unknown"` (parser failure). `cacheVersion` bumps from 1 to 2.
+
+## Scope Boundaries
+
+### In scope
+
+- Modify the summarize-transcript persistence layer to stop writing `decisionCode` and `decisionCodeSource` to `summaryCache.summary`.
+- Extend `canonicalDecision` schema to include `decisionState: "refusal"`. Bump `cacheVersion` to 2.
+- Update the Python worker to emit `canonicalDecision` in its return dict alongside (not instead of) the existing `decisionCode`. The worker's return contract keeps backward compatibility; the persistence layer chooses which fields to cache.
+- Rewrite all internal read consumers of `summaryCache.summary.decisionCode` to derive scale position from `canonicalDecision` on demand via a single shared helper.
+- Rewrite the manual-override mutation to accept `{favoredValueKey, strength, direction}` and update `canonicalDecision` directly. Server validates that `direction` is consistent with `favoredValueKey` against the definition's value pair; mismatches are rejected.
+- External API shape for MCP `get-run-results` and CSV exports continues to emit a `decisionCode` string `"1".."5"` derived from canonical on demand — no public API break.
+- Migration script to recompute `canonicalDecision` from `decisionCode` + value pair for every transcript where they have drifted, then remove `decisionCode` from summaryCache.
+- Post-migration verification queries.
+
+### Out of scope
+
+- Removing the top-level `transcripts.decision_code` column. Separate follow-up PR after this one lands and the manual-override mutation no longer writes to that column.
+- Changing the Python parser's internal behavior. The parser's existing resolution logic (exact / leading / relaxed / distinctive-tail) is preserved verbatim.
+- Renaming any field in `canonicalDecision`. Schema changes are limited to: add `"refusal"` to `decisionState`; bump `cacheVersion`.
+- Changing the UI dropdown for manual overrides beyond what's needed to send the new payload shape. It still presents the same 5 human-readable options.
+- Transcripts with no `summaryCache` entry today (~3,128 job-choice + 121,105 no-domain orphans). They remain handled by the existing derive-on-read fallback.
+
+## User Scenarios
+
+### US1 — Analyst opens a domain overview page (Priority: P1)
+
+**As** an analyst using the UI, **I need** every transcript with a parseable decision to show a populated canonical decision in the UI, **so that** I do not see false "unknown" dashes for transcripts the parser actually resolved.
+
+**Why P1**: This is the bug the collapse fixes. Today ~1,537 transcripts across the 4 active domains display as unknown in the UI despite having a valid `decisionCode` in the cache.
+
+**Independent test**: Pick one of the drifted transcripts from the backfill ledger, open it in the UI, verify it shows a resolved decision (not a dash) after the migration runs.
+
+**Acceptance**:
+1. Given a transcript whose cached `canonicalDecision.strength = "unknown"` but `decisionCode = "5"`, when the migration runs, then the new `canonicalDecision.strength` equals `"strong"` and `favoredValueKey` matches the definition's `value_first.token` (un-flipped) or `value_second.token` (flipped).
+2. Given a transcript whose parser tagged the response as a refusal, when the migration runs, then `canonicalDecision.decisionState = "refusal"` (not `"unknown"`).
+3. Given a transcript with a fresh probe completing **after** this PR lands, when the summary is written, then `summaryCache.summary.decisionCode` is absent and `canonicalDecision` is populated with the correct value.
+
+### US2 — Reviewer applies a manual override (Priority: P2)
+
+**As** a reviewer correcting a miscategorized transcript, **I need** the override mutation to accept `{favoredValueKey, strength, direction}` and validate consistency, **so that** a client-side bug cannot silently drift the cached canonical away from the intended override.
+
+**Why P2**: Safety-critical but rare path. Used by the Analysis UI's override dropdown.
+
+**Independent test**: Invoke the mutation with a deliberately inconsistent payload (direction=favor_first but favoredValueKey set to the second value's token). Assert the request is rejected with a validation error.
+
+**Acceptance**:
+1. Given a transcript's definition has value pair `(A, B)` with `orientationFlipped = false`, when the mutation is called with `{favoredValueKey: A, strength: "strong", direction: "favor_first"}`, then it succeeds and sets `canonicalDecision` accordingly.
+2. Given the same definition, when the mutation is called with `{favoredValueKey: A, strength: "strong", direction: "favor_second"}`, then it is rejected with a validation error naming the conflict.
+3. Given `direction = "neutral"`, when the mutation is called with a non-null `favoredValueKey`, then it is rejected.
+
+### US3 — External consumer reads the raw decision via MCP or CSV (Priority: P2)
+
+**As** an external MCP client or a CSV-export consumer, **I need** the public API to continue emitting a `decisionCode` string `"1".."5"`, **so that** existing downstream tooling keeps working.
+
+**Why P2**: No external break, but the derivation path needs to be correct.
+
+**Independent test**: Call `mcp__valuerank__get_run_results` on a run with known decisions before and after this PR; assert the returned `decisionCode` values are identical.
+
+**Acceptance**:
+1. Given a run with 50 completed transcripts, when `get_run_results` returns them, then each transcript's `decisionCode` string equals what the pre-collapse system would have returned.
+2. Given a CSV export of a run, when I compare rows to the pre-collapse baseline, then the `decision_code` column is unchanged.
+3. Given a transcript whose `canonicalDecision.decisionState = "refusal"`, when it is emitted via MCP or CSV, then `decisionCode = "refusal"` (existing behavior for refusals is preserved).
+
+### US4 — Operator runs the migration on prod (Priority: P1)
+
+**As** the operator, **I need** a backfill script that recomputes `canonicalDecision` from `decisionCode` + the value pair for every drifted transcript, and removes `decisionCode` from `summaryCache.summary` once done, **so that** the database converges on the single-source-of-truth shape.
+
+**Why P1**: Without this step, the fix reaches new transcripts only. The ~1,537 already-affected transcripts stay wrong.
+
+**Independent test**: Dry-run the migration, inspect the reported change set. Apply. Re-run dry-run, verify the change set is now empty and the pre-defined verification queries report the expected post-migration counts.
+
+**Acceptance**:
+1. Dry-run mode emits a summary of `{drifted count, refusal count, no-change count}` and does not write.
+2. Apply mode updates `canonicalDecision` per the derivation rule and removes `decisionCode` from `summaryCache.summary` on each touched row.
+3. Post-apply, no transcript has `decisionCode` in summaryCache.
+4. Post-apply, the count of `canonicalDecision.strength = "unknown"` across the 4 active domains drops to the known residual (1 Grok refusal + any genuine edge cases that were already unresolved pre-migration).
+
+## Functional Requirements
+
+- **FR-001** — The summarize-transcript persistence layer MUST NOT write `decisionCode` or `decisionCodeSource` to `summaryCache.summary` for new writes.
+- **FR-002** — The summarize-transcript persistence layer MUST write a complete `canonicalDecision` including `cacheVersion: 2` for every new summary. If the parser could not resolve a decision, `decisionState` MUST be `"unknown"`. If the parser identified a refusal, `decisionState` MUST be `"refusal"`.
+- **FR-003** — The `canonicalDecision` schema MUST support `decisionState: "refusal"` as a distinct value from `"unknown"`.
+- **FR-004** — `cacheVersion` MUST be bumped from `1` to `2` in this PR. All new writes MUST use `cacheVersion: 2`. Read code MUST accept both `1` and `2` and treat a `cacheVersion: 1` cache as valid but missing the refusal distinction.
+- **FR-005** — A single shared helper MUST derive scale position from `canonicalDecision` + `{valueA, valueB}` value pair + `orientationFlipped`, with an optional `legacyDecisionCode` parameter for the rollout-window compat branch (see FR-019). Location: `cloud/packages/shared/src/scale-position-from-canonical.ts`, exported from `@valuerank/shared`. Signature: `export function scalePositionFromCanonical(canonical: CanonicalDecision, pair: { valueA: string; valueB: string }, orientationFlipped: boolean, legacyDecisionCode?: string | null): "1" | "2" | "3" | "4" | "5" | "refusal" | "unknown"`. The `legacyDecisionCode` argument is inspected ONLY when `canonical.cacheVersion === 1` — for `cacheVersion: 2` it is ignored. Every TS consumer (api, web, mcp, scripts) imports from this single location and, during the rollout window, passes `summaryCache.summary.decisionCode ?? null` as the fourth argument. The Python worker keeps its existing parser logic — the helper applies to read-side and migration-side derivation only. A matching Python helper at `cloud/workers/scale_position_from_canonical.py` MUST exist for the migration script's use with identical semantics; unit tests must exercise both helpers against a shared fixture set (JSON file checked into the repo) to guarantee parity.
+- **FR-006** — Every internal consumer of `summaryCache.summary.decisionCode` MUST be rewritten to use the new helper with `canonicalDecision` as input. The Known Consumers list in the spec brief is a **starting point, not an exhaustive inventory**. The plan phase MUST include a repo-wide grep step across the entire `cloud/` tree (`cloud/apps/`, `cloud/workers/`, `cloud/packages/`, `cloud/scripts/`, `cloud/tests/`, `cloud/migrations/`) **plus** repo-root `scripts/`, `docs/workflow/feature-runs/**/scripts/`, and any other directory containing code that runs against the DB. The search target is string `summaryCache.summary.decisionCode` as well as both JSON path forms (`->'decisionCode'` and `->>'decisionCode'`). Any consumer discovered that was missed in the initial list MUST be added to the task list before any write-path change lands; merging is blocked until the discovered list is closed.
+- **FR-007** — The manual-override mutation MUST accept `{favoredValueKey: string | null, strength: "strong" | "lean" | "neutral", direction: "favor_first" | "favor_second" | "neutral"}`.
+- **FR-008** — The manual-override mutation MUST accept exactly these 5 valid combinations and reject everything else:
+  | direction | strength | favoredValueKey |
+  |---|---|---|
+  | `favor_first` | `strong` | `pair.valueA` |
+  | `favor_first` | `lean` | `pair.valueA` |
+  | `neutral` | `neutral` | `null` |
+  | `favor_second` | `lean` | `pair.valueB` |
+  | `favor_second` | `strong` | `pair.valueB` |
+  
+  Any other `{direction, strength, favoredValueKey}` tuple — including but not limited to `direction='neutral'` with a non-null `favoredValueKey`, `direction='favor_first'` with `favoredValueKey != pair.valueA`, `direction='favor_second'` with `favoredValueKey != pair.valueB`, `strength='neutral'` with any non-neutral direction, `strength='strong' | 'lean'` with `direction='neutral'` — MUST be rejected with a validation error naming the specific conflict. The reject path MUST NOT silently coerce or repair the input.
+- **FR-009** — The manual-override mutation MUST update `canonicalDecision` directly (bypassing any `decisionCode` indirection) and MUST NOT write to `summaryCache.summary.decisionCode`.
+- **FR-010** — MCP tools that expose a `decisionCode` field (`get-run-results`, `get-transcript-summary`) MUST derive it on demand from `canonicalDecision` and keep the output string shape unchanged.
+- **FR-011** — CSV and JSON export paths MUST derive `decisionCode` on demand and keep output columns unchanged.
+- **FR-012** — A migration script MUST support `--dry-run` (default) and `--apply` modes. The migration MUST process **every transcript whose `decision_metadata.summaryCache` is not null**, regardless of whether `decisionCode` is present. For each visited row:
+  - If `decisionCode` is present in `summaryCache.summary`: derive `canonicalDecision` from `{decisionCode, pair, orientationFlipped}` per the Mapping Rule table below (including the "other" and "refusal" cases).
+  - If `decisionCode` is absent and `canonicalDecision` is missing or has `cacheVersion != 2`: preserve the existing `cacheVersion: 1` canonical values (`strength`, `favoredValueKey`, `decisionState`) verbatim and only bump `cacheVersion` to `2`. Refusal re-classification is NOT attempted for rows that lack `decisionCode` (the migration has no reliable way to detect refusal without re-parsing transcript content, which is out of scope). Legacy v1 rows with `decisionState='unknown'` that might have been refusals remain as `'unknown'` post-migration — this is an accepted limitation logged as a known data-quality issue, not a blocker.
+  - If `decisionCode` is absent and `canonicalDecision.cacheVersion === 2`: no-op (row already at target).
+  - After derivation, strip `decisionCode` and `decisionCodeSource` from `summaryCache.summary` if present, and write `canonicalDecision.cacheVersion: 2`.
+  
+  Dry-run reports the set broken down by `{decisionCode-present × {drifted, no-change, missing-snapshot}, decisionCode-absent × {v1-upgrade, already-v2, missing-snapshot}}`. Migration writes are per-row atomic (one UPDATE per transcript, using the primary-key row lock); no global lock is required. New transcripts written mid-migration by in-flight summarize jobs use the new write path and are correctly shaped, so the migration harmlessly skips them (already-v2) or correctly upgrades them (v1-upgrade) if encountered.
+- **FR-013** — The migration MUST correctly handle `orientationFlipped`. For each transcript, `orientationFlipped` is read from the authoritative column `scenarios.orientation_flipped` (Boolean, default false) by joining via `transcripts.scenario_id`. If a transcript lacks a scenario reference (rare — legacy probes), default `orientationFlipped = false`. The value pair `(valueA, valueB)` is derived from the transcript's `definition_snapshot.components.value_first.token` (= valueA) and `value_second.token` (= valueB) JSON paths. For transcripts whose `definition_snapshot` is null or malformed, the migration logs and skips the row (no false updates); these are reported as `{migration-skipped, reason: missing-snapshot}` in dry-run output.
+- **FR-014** — *(merged into FR-012; see the Mapping Rule table in the Critical Correctness Risk section for decisionCode → canonical mapping including "refusal" and "other" cases.)*
+- **FR-015** — *(merged into FR-012; the migration's handling of decisionCode-present vs decisionCode-absent rows is fully specified in FR-012's bullet list.)*
+- **FR-016** — Existing parser quality improvements from PRs #694, #698, #700 MUST remain intact. Regression tests for filler-word tolerance, possessive-pronoun recovery, and distinctive-tail match MUST continue to pass.
+- **FR-017** — The refusal signal (today tagged by the REFUSAL_PATTERN in the Python parser and set as `decisionCode = "refusal"`) MUST be propagated to `canonicalDecision.decisionState = "refusal"` in new summary writes.
+- **FR-019** — **Rollout-window refusal preservation.** Between the code deploy (new write path active) and the migration run, pre-existing `cacheVersion: 1` rows that represent refusals still have `decisionCode = "refusal"` in cache and `canonicalDecision.decisionState = "unknown"`. The shared derivation helper (FR-005) MUST, when given a `cacheVersion: 1` canonical with `decisionState = "unknown"`, inspect `summaryCache.summary.decisionCode` if present and treat `decisionCode = "refusal"` as if `decisionState = "refusal"`. This backward-compat branch is removed only after the migration has run and all rows are `cacheVersion: 2` with the new decisionState. Rationale: without this, the rollout window causes refusals to display as parse failures in the UI until the migration lands, which is a visible regression.
+- **FR-018** — No public API field name changes. External callers of MCP and CSV see the same shape before and after.
+
+## Success Criteria
+
+- **SC-001** — After the prod migration runs, the query `SELECT COUNT(*) FROM transcripts t JOIN runs r ON r.id = t.run_id JOIN definitions def ON def.id = r.definition_id WHERE def.domain_id IS NOT NULL AND t.decision_metadata->'summaryCache'->'summary'->'canonicalDecision'->>'decisionState' = 'unknown'` returns at most 5 (the genuine parse-failure residual), down from the pre-migration equivalent. Note: this counts only `decisionState='unknown'` (parser failure), **not** `strength='unknown'` in general — refusals intentionally have `strength='unknown'` with `decisionState='refusal'` and MUST NOT be counted here.
+- **SC-002** — After the prod migration runs, the query `SELECT COUNT(*) FROM transcripts WHERE decision_metadata->'summaryCache'->'summary' ? 'decisionCode'` returns 0.
+- **SC-003** — MCP `get-run-results` output for a fixed baseline run matches byte-for-byte (modulo timestamps) between pre-collapse and post-collapse snapshots.
+- **SC-004** — CSV export for a fixed baseline run matches byte-for-byte (modulo timestamps) between pre-collapse and post-collapse snapshots.
+- **SC-005** — All existing unit and integration tests in `@valuerank/api` and the `workers/tests` suite pass.
+- **SC-006** — New targeted tests cover: derivation helper correctness (all 5 codes × flipped/un-flipped × refusal cases), manual-override validation (accept and reject paths), migration correctness against a synthetic fixture (drifted, refusal, no-change rows), **and a cross-path parity test** asserting that a transcript's derived scale position is identical whether computed via (a) the new helper reading `canonicalDecision`, or (b) the existing derive-on-read fallback reading raw evidence. At least one fixture MUST exercise both paths on the same input and assert equality.
+- **SC-007** — A fresh probe run kicked off post-merge produces transcripts where `summaryCache.summary` has `canonicalDecision` with `cacheVersion: 2` and no `decisionCode` field.
+
+## Edge Cases
+
+- **Transcript with no summaryCache**: Not touched by the migration. Read path's derive-on-read fallback handles them from raw evidence + pair.
+- **Transcript with cacheVersion 1 and no refusal context**: Treated as valid. Read code does not upgrade v1 → v2 unless the migration explicitly walks the row. After the migration, all rows with a cache have `cacheVersion: 2`.
+- **Transcript with `decisionCode = "refusal"` but no canonicalDecision at all**: Migration writes `canonicalDecision = {decisionState: "refusal", strength: "unknown", favoredValueKey: null, cacheVersion: 2}`.
+- **Transcript with `decisionCode = "3"` (neutral)**: Migration writes `{decisionState: "neutral", strength: "neutral", favoredValueKey: null, cacheVersion: 2}`.
+- **Manual override previously written with `decisionCode`**: Migration updates the canonical to match. The top-level `transcripts.decision_code` column is untouched (separate follow-up).
+- **In-flight summarize jobs during migration**: Safe. The migration only reads cached rows. Newly-written rows after this PR lands use the new shape automatically. The migration run is idempotent.
+- **`orientationFlipped` mismatch between run config and scenario content**: The migration reads `orientationFlipped` from the scenario content snapshot on each transcript. If the flag is missing, it defaults to `false` (same as current read-path behavior).
+- **Definition deleted or soft-deleted before migration**: The migration reads from the transcript's `definition_snapshot` JSON column, not the live definition, so soft deletion does not affect correctness.
+- **Python worker returns `decisionCode` in its dict but persistence layer silently drops it**: This is by design — keeps the worker contract stable while changing the persistence shape.
+
+## Non-Goals
+
+- Improving parser quality or recovering more unknowns.
+- Changing `canonicalDecision` field names or adding fields beyond `refusal` in `decisionState`.
+- Dropping the top-level `transcripts.decision_code` column (separate PR).
+- Changing the Python parser internals.
+- Rewriting the UI's manual-override dropdown beyond the payload shape.
+
+## Critical Correctness Risk
+
+The `orientationFlipped` flag has repeatedly been a source of subtle bugs. Every derivation and migration path MUST be tested with both `orientationFlipped = true` and `orientationFlipped = false` fixtures. The mapping rule:
+
+| decisionCode | direction (un-flipped) | direction (flipped) | strength | decisionState |
+|---|---|---|---|---|
+| `"5"` | `favor_first` | `favor_second` | `strong` | `resolved` |
+| `"4"` | `favor_first` | `favor_second` | `lean` | `resolved` |
+| `"3"` | `neutral` | `neutral` | `neutral` | `neutral` |
+| `"2"` | `favor_second` | `favor_first` | `lean` | `resolved` |
+| `"1"` | `favor_second` | `favor_first` | `strong` | `resolved` |
+| `"refusal"` | — | — | `unknown` | `refusal` |
+| `"other"` / missing | — | — | `unknown` | `unknown` |
+
+`favoredValueKey` is derived from `direction` + the pair: `favor_first → pair.valueA`, `favor_second → pair.valueB`, `neutral → null`, `unknown → null`, `refusal → null`.
+
+## Assumptions Carried In
+
+1. Python parser return dict keeps its internal `decisionCode` field; only the persistence layer stops writing it into summaryCache.
+2. The top-level `transcripts.decision_code` column is not touched by this PR (separate follow-up once the manual-override mutation stops writing to it).
+3. Rollout order is one feature branch with sequenced internal commits: (1) add helper + rollout-window compat branch (FR-005 + FR-019), (2) rewire read consumers, (3) rewire manual-override mutation, (4) rewire write path, (5) land migration script + tests. The migration is intentionally run **immediately after merge**, ideally within the same deploy window, to minimize the rollout-window duration where legacy v1 refusals rely on the FR-019 compat branch.
+4. Transcripts with no summaryCache entry today (~3,128 job-choice + 121,105 no-domain) are unaffected; derive-on-read path continues to handle them.
+5. External API shape: MCP `get-run-results` and CSV exports still emit `decisionCode` as a string `"1".."5" | "refusal"` derived on demand — no external break.
+6. Existing filler-word / distinctive-tail parser fixes (PRs #694, #698, #700) remain intact.
+7. `cacheVersion` bumps from 1 to 2 to accommodate the new `"refusal"` decisionState value. Existing `cacheVersion: 1` caches are treated as valid-but-legacy; derive-on-read can re-classify them at query time and the migration rewrites them to `cacheVersion: 2`.
+
+## Measurement
+
+Pre- and post-migration queries to run against prod:
+
+```sql
+-- (A) Parse-failure count by domain (decisionState='unknown' only).
+-- This EXCLUDES refusals (which have decisionState='refusal' with strength='unknown').
+-- Post-migration target: ≤5.
+SELECT d.normalized_name, COUNT(*) AS parse_failure_count
+FROM transcripts t
+JOIN runs r ON r.id = t.run_id
+JOIN definitions def ON def.id = r.definition_id
+JOIN domains d ON d.id = def.domain_id
+WHERE t.decision_metadata->'summaryCache'->'summary'->'canonicalDecision'->>'decisionState' = 'unknown'
+GROUP BY d.normalized_name
+ORDER BY parse_failure_count DESC;
+
+-- (B) decisionCode residue in cache. Pre-migration: non-zero. Post: 0.
+SELECT COUNT(*) AS residual_decision_code
+FROM transcripts
+WHERE decision_metadata->'summaryCache'->'summary' ? 'decisionCode';
+
+-- (C) Refusal distribution. Should increase post-migration as refusals are now tagged in decisionState.
+SELECT decision_metadata->'summaryCache'->'summary'->'canonicalDecision'->>'decisionState' AS state, COUNT(*)
+FROM transcripts
+WHERE decision_metadata->'summaryCache' IS NOT NULL
+GROUP BY state;
+
+-- (D) cacheVersion distribution. Post-migration: only cacheVersion = 2 (or cacheVersion = 1 for rows never re-parsed, i.e. none if the migration is thorough).
+SELECT decision_metadata->'summaryCache'->'summary'->'canonicalDecision'->>'cacheVersion' AS version, COUNT(*)
+FROM transcripts
+WHERE decision_metadata->'summaryCache' IS NOT NULL
+GROUP BY version;
+```
+
+## Review Reconciliation
+
+- review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: All rounds + judge panel addressed. FR-005 signature extended with optional legacyDecisionCode arg for rollout-window compat, eliminating the contradiction with FR-019. FR-012 absorbs FR-014 and FR-015, making the migration's behavior fully specified for all cache states (decisionCode present vs absent × cacheVersion v1 vs v2).
+- review: reviews/spec.codex.edge-cases-adversarial.review.md | status: accepted | note: Judge-panel findings addressed — HIGH-1 (rollout-window refusal loss) by FR-019 + FR-005 legacyDecisionCode param; HIGH-2 (FR-012 scope vs cacheVersion invariant) by expanding FR-012 into an explicit case analysis.
+- review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: HIGH-1 (top-level decision_code column) REJECTED as explicit follow-up scope per user direction. HIGH-2 (concurrent-write safety) accepted via per-row atomic UPDATE clarification in FR-012.
+

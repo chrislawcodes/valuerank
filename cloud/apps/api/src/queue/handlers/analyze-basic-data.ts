@@ -81,7 +81,6 @@ type TranscriptForAnalysis = {
   modelId: string;
   scenarioId: string | null;
   sampleIndex: number;
-  decisionCode: string | null;
   decisionMetadata: unknown;
   definitionSnapshot: unknown;
   scenario: {
@@ -151,7 +150,6 @@ export async function buildTranscriptDataForAnalysis(params: {
       const orientationFlipped = scenario.orientationFlipped ?? false;
       const decisionModel = resolveAnalysisDecisionModel(
         {
-          decisionCode: t.decisionCode,
           decisionMetadata: t.decisionMetadata,
           definitionSnapshot: t.definitionSnapshot,
           orientationFlipped,
@@ -160,7 +158,6 @@ export async function buildTranscriptDataForAnalysis(params: {
       );
       const values = resolveAnalysisValueOutcomes(
         {
-          decisionCode: t.decisionCode,
           decisionMetadata: t.decisionMetadata,
           definitionSnapshot: t.definitionSnapshot,
           orientationFlipped,

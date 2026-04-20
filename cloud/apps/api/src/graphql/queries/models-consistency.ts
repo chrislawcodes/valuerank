@@ -167,7 +167,6 @@ type OrderEffectTranscriptRow = {
 
 function toOrderEffectTranscript(row: OrderEffectTranscriptRow): OrderEffectTranscript {
   const decisionModelV2 = resolveTranscriptDecisionModel({
-    decisionCode: null,
     decisionMetadata: row.decisionMetadata,
     definitionSnapshot: row.definitionSnapshot,
     orientationFlipped: row.scenario?.orientationFlipped ?? null,

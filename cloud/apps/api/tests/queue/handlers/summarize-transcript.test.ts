@@ -337,7 +337,7 @@ describe('summarize-transcript handler', () => {
       const call = mockPersistSuccess.mock.calls[0];
       if (!call) throw new Error('expected persistSuccessfulSummary call');
       expect(call[5]).toEqual({
-        cacheVersion: 1,
+        cacheVersion: 2,
         decisionState: 'resolved',
         favoredValueKey: 'Benevolence_Dependability',
         strength: 'strong',

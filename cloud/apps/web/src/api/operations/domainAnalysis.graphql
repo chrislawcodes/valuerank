@@ -176,7 +176,6 @@ query DomainAnalysisConditionTranscripts(
     runId
     scenarioId
     modelId
-    decisionCode
     decisionModelV2
     turnCount
     tokenCount

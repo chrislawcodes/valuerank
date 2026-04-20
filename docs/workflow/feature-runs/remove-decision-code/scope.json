@@ -1,0 +1,17 @@
+{
+  "paths": [
+    "cloud/apps/api/src",
+    "cloud/apps/web/src",
+    "cloud/packages/db/src",
+    "cloud/scripts",
+    "cloud/workers"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src",
+    "cloud/apps/web/src",
+    "cloud/packages/db/src",
+    "cloud/scripts",
+    "cloud/workers",
+    "docs/workflow/feature-runs/remove-decision-code"
+  ]
+}
