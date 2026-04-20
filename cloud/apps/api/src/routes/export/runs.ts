@@ -283,7 +283,6 @@ runsExportRouter.get(
         transcriptCount: transcripts.length,
         transcripts: transcripts.map((t) => {
           const decision = resolveTranscriptDecisionModel({
-            decisionCode: t.decisionCode,
             decisionMetadata: t.decisionMetadata,
             definitionSnapshot: t.definitionSnapshot,
             orientationFlipped: t.scenario?.orientationFlipped ?? null,

@@ -183,7 +183,6 @@ export function computeVarianceAnalysis(
 
     const orientationFlipped = transcript.scenario?.orientationFlipped ?? false;
     const resolved = resolveTranscriptDecisionModel({
-      decisionCode: transcript.decisionCode ?? null,
       decisionMetadata: transcript.decisionMetadata,
       definitionSnapshot: transcript.definitionSnapshot,
       orientationFlipped,

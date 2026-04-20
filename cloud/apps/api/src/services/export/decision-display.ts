@@ -153,7 +153,6 @@ function getDecisionReason(
 
 export function formatDecisionDisplay(transcript: DecisionDisplayTranscript): ExportDecisionDisplay {
   const model = resolveTranscriptDecisionModel({
-    decisionCode: transcript.decisionCode ?? null,
     decisionMetadata: transcript.decisionMetadata,
     definitionSnapshot: transcript.definitionSnapshot,
     orientationFlipped: transcript.scenario?.orientationFlipped ?? null,

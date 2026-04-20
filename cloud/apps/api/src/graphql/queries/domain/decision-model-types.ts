@@ -18,6 +18,10 @@ export type RawDecisionEvidence = {
   parsePath: string | null;
   parserVersion: string | null;
   responseExcerpt: string | null;
+  /** First-class refusal signal from the Python worker. When true, the model
+   * refused to answer. Replaces the legacy `summary.decisionCode === "refusal"`
+   * encoding. */
+  refusal: boolean;
   manualOverride: {
     previousValue: string | null;
     overriddenAt: string | null;
@@ -90,7 +94,6 @@ export type DecisionModelResult = {
 };
 
 export type TranscriptDecisionModelInput = {
-  decisionCode: string | null;
   decisionMetadata: unknown;
   /** Supply definitionSnapshot OR pairOverride — pairOverride takes precedence if both provided */
   definitionSnapshot?: unknown;

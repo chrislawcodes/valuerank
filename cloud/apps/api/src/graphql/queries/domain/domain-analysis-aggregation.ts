@@ -56,7 +56,6 @@ export function aggregateValueCountsFromTranscripts(
     if (!pair) continue;
 
     const resolved = resolveTranscriptDecisionModel({
-      decisionCode: transcript.decisionCode,
       decisionMetadata: transcript.decisionMetadata,
       orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
       pairOverride: pair,

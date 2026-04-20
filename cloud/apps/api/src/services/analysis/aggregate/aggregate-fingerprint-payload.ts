@@ -180,7 +180,6 @@ export function buildFingerprintPayload(args: {
       modelId: transcript.modelId,
       scenarioId: transcript.scenarioId,
       decision: resolveTranscriptDecisionModel({
-        decisionCode: transcript.decisionCode,
         decisionMetadata: transcript.decisionMetadata,
         definitionSnapshot: transcript.definitionSnapshot,
         orientationFlipped: transcript.scenario?.orientationFlipped ?? null,

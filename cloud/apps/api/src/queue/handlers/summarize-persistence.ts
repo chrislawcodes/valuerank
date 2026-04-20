@@ -17,8 +17,6 @@ const log = createLogger('queue:summarize-transcript');
 
 export function buildSummaryCacheRecord(
   summary: {
-    decisionCode: string;
-    decisionSource: string;
     decisionText: string | null;
     decisionMetadata?: unknown;
     canonicalDecision?: WinnerFirstSummaryCache | null;
@@ -38,8 +36,6 @@ export function buildSummaryCacheRecord(
     parserVersion,
     modelId,
     summary: {
-      decisionCode: summary.decisionCode,
-      decisionCodeSource: summary.decisionSource,
       decisionText: summary.decisionText,
       decisionMetadata: workerDecisionMetadata,
       ...(summary.canonicalDecision ? { canonicalDecision: summary.canonicalDecision } : {}),
@@ -177,8 +173,6 @@ export async function persistCachedSummary(
   const persistedSummaryCache = responseSha256
     ? buildSummaryCacheRecord(
         {
-          decisionCode: summaryCache.summary.decisionCode ?? '',
-          decisionSource: summaryCache.summary.decisionCodeSource ?? '',
           decisionText: summaryCache.summary.decisionText,
           decisionMetadata: summaryCache.summary.decisionMetadata,
           canonicalDecision: summaryCache.summary.canonicalDecision ?? null,
@@ -213,7 +207,7 @@ export async function persistSuccessfulSummary(
   parserVersion: string,
   modelId: string,
   canonicalDecision: WinnerFirstSummaryCache | null,
-  summary: { decisionCode: string; decisionSource: string; decisionText: string | null; decisionMetadata?: unknown },
+  summary: { decisionText: string | null; decisionMetadata?: unknown },
 ): Promise<void> {
   const rawDecisionEvidence = buildRawDecisionEvidence(summary.decisionMetadata);
   const freshSummaryCache = responseSha256

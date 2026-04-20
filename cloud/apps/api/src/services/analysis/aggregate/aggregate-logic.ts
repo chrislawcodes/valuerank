@@ -250,7 +250,6 @@ export function aggregateAnalysesLogic(
       return;
     }
     const resolved = resolveTranscriptDecisionModel({
-      decisionCode: transcript.decisionCode,
       decisionMetadata: transcript.decisionMetadata,
       definitionSnapshot: transcript.definitionSnapshot,
       orientationFlipped: transcript.scenario?.orientationFlipped ?? null,

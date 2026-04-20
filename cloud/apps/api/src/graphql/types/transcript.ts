@@ -45,7 +45,6 @@ builder.objectType(TranscriptRef, {
             : await ctx.loaders.scenario.load(transcript.scenarioId);
 
         return resolveTranscriptDecisionModel({
-          decisionCode: transcript.decisionCode,
           decisionMetadata: transcript.decisionMetadata,
           definitionSnapshot: transcript.definitionSnapshot,
           orientationFlipped: scenario?.orientationFlipped ?? null,

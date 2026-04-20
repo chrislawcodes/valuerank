@@ -195,7 +195,6 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
           select: {
             runId: true,
             scenarioId: true,
-            decisionCode: true,
             decisionMetadata: true,
             scenario: {
               select: {
@@ -238,7 +237,6 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
           if (!pair || !vignette) continue;
 
           const canon = resolveTranscriptDecisionModel({
-            decisionCode: transcript.decisionCode,
             decisionMetadata: transcript.decisionMetadata,
             orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
             pairOverride: pair,

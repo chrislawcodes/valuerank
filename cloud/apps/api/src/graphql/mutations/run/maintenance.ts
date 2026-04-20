@@ -187,7 +187,6 @@ builder.mutationField('updateTranscriptDecision', (t) =>
       // Resolve canonical v2 decision for the new code so the manual
       // override is readable through the v2 model.
       const resolved = resolveTranscriptDecisionModel({
-        decisionCode,
         decisionMetadata: transcript.decisionMetadata,
         definitionSnapshot: transcript.definitionSnapshot,
         orientationFlipped: transcript.scenario?.orientationFlipped ?? null,

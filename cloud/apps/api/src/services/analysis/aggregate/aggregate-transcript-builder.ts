@@ -36,7 +36,6 @@ export function buildAggregateWorkerTranscripts(
     const dimensions = buildScenarioAnalysisDimensionRecord(normalizedScenarioMetadata);
     const orientationFlipped = transcript.scenario?.orientationFlipped ?? false;
     const resolved = resolveTranscriptDecisionModel({
-      decisionCode: transcript.decisionCode,
       decisionMetadata: transcript.decisionMetadata,
       definitionSnapshot: transcript.definitionSnapshot,
       orientationFlipped,

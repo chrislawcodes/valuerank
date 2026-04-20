@@ -151,7 +151,6 @@ export async function buildTranscriptDataForAnalysis(params: {
       const orientationFlipped = scenario.orientationFlipped ?? false;
       const decisionModel = resolveAnalysisDecisionModel(
         {
-          decisionCode: t.decisionCode,
           decisionMetadata: t.decisionMetadata,
           definitionSnapshot: t.definitionSnapshot,
           orientationFlipped,
@@ -160,7 +159,6 @@ export async function buildTranscriptDataForAnalysis(params: {
       );
       const values = resolveAnalysisValueOutcomes(
         {
-          decisionCode: t.decisionCode,
           decisionMetadata: t.decisionMetadata,
           definitionSnapshot: t.definitionSnapshot,
           orientationFlipped,

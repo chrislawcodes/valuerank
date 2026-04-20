@@ -71,9 +71,18 @@ export function isWinnerFirstSummaryCache(value: unknown): value is WinnerFirstS
     return false;
   }
 
+  // Accept both cacheVersion 1 (legacy pre-migration) and 2 (post-migration).
+  // A follow-up mini-PR tightens this to literal 2 after the migration --apply
+  // verifies zero v1 rows remain.
+  if (value.cacheVersion !== 1 && value.cacheVersion !== 2) {
+    return false;
+  }
+
   if (
-    value.cacheVersion !== 1
-    || (value.decisionState !== 'resolved' && value.decisionState !== 'neutral' && value.decisionState !== 'unknown')
+    value.decisionState !== 'resolved'
+    && value.decisionState !== 'neutral'
+    && value.decisionState !== 'unknown'
+    && value.decisionState !== 'refusal'
   ) {
     return false;
   }
@@ -90,6 +99,7 @@ export function isWinnerFirstSummaryCache(value: unknown): value is WinnerFirstS
     return value.favoredValueKey === null && value.strength === 'neutral';
   }
 
+  // "unknown" and "refusal" — both have null favored key and strength 'unknown'.
   return value.favoredValueKey === null && value.strength === 'unknown';
 }
 
@@ -98,10 +108,11 @@ export function isSummaryCacheSummary(value: unknown): value is SummaryCache['su
     return false;
   }
 
+  // decisionCode/decisionCodeSource were removed from the write path. Stored
+  // rows may still carry them (pre-migration), but the validator no longer
+  // requires them. Post-migration rows have canonicalDecision as the only
+  // decision signal.
   return (
-    typeof value.decisionCode === 'string' &&
-    value.decisionCode !== 'error' &&
-    typeof value.decisionCodeSource === 'string' &&
     (typeof value.decisionText === 'string' || value.decisionText === null) &&
     isPlainJsonObject(value.decisionMetadata) &&
     (!('canonicalDecision' in value) || isWinnerFirstSummaryCache(value.canonicalDecision)) &&

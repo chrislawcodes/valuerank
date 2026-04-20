@@ -47,8 +47,6 @@ type SummarizeWorkerOutput =
   | {
       success: true;
       summary: {
-        decisionCode: string;
-        decisionSource: string;
         decisionText: string | null;
         decisionMetadata?: DecisionMetadata | null;
       };
@@ -126,7 +124,6 @@ async function buildWinnerFirstSummaryCache(
       });
 
   const result = resolveTranscriptDecisionModel({
-    decisionCode: summary.decisionCode,
     decisionMetadata: summary.decisionMetadata,
     definitionSnapshot: transcript.definitionSnapshot,
     orientationFlipped: scenario?.orientationFlipped ?? null,
@@ -134,9 +131,18 @@ async function buildWinnerFirstSummaryCache(
 
   const canonical = result.canonical;
 
+  if (canonical.direction === 'refusal') {
+    return {
+      cacheVersion: 2,
+      decisionState: 'refusal',
+      favoredValueKey: null,
+      strength: 'unknown',
+    };
+  }
+
   if (canonical.direction === 'unknown' || canonical.strength === 'unknown') {
     return {
-      cacheVersion: 1,
+      cacheVersion: 2,
       decisionState: 'unknown',
       favoredValueKey: null,
       strength: 'unknown',
@@ -145,7 +151,7 @@ async function buildWinnerFirstSummaryCache(
 
   if (canonical.direction === 'neutral' && canonical.strength === 'neutral') {
     return {
-      cacheVersion: 1,
+      cacheVersion: 2,
       decisionState: 'neutral',
       favoredValueKey: null,
       strength: 'neutral',
@@ -157,7 +163,7 @@ async function buildWinnerFirstSummaryCache(
   }
 
   return {
-    cacheVersion: 1,
+    cacheVersion: 2,
     decisionState: 'resolved',
     favoredValueKey: canonical.favoredValueKey,
     strength: canonical.strength,

@@ -20,7 +20,6 @@ export async function getUnresolvableCount(runId: string): Promise<UnresolvableC
     },
     select: {
       modelId: true,
-      decisionCode: true,
       decisionMetadata: true,
       definitionSnapshot: true,
       scenario: {
@@ -33,7 +32,6 @@ export async function getUnresolvableCount(runId: string): Promise<UnresolvableC
 
   for (const t of transcripts) {
     const resolved = resolveTranscriptDecisionModel({
-      decisionCode: t.decisionCode,
       decisionMetadata: t.decisionMetadata,
       definitionSnapshot: t.definitionSnapshot,
       orientationFlipped: t.scenario?.orientationFlipped ?? null,
