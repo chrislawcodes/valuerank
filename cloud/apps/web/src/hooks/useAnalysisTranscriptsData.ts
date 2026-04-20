@@ -12,6 +12,7 @@ import { useAnalysis } from './useAnalysis';
 import { useRunMutations } from './useRunMutations';
 import { useAnalysisTranscriptParams } from './useAnalysisTranscriptParams';
 import type { Transcript } from '../api/operations/runs';
+import { toManualDecisionInput } from '../utils/manualDecisionOverrideInput';
 import {
   deriveDecisionDimensionLabels,
   getDecisionSideNames,
@@ -231,9 +232,18 @@ export function useAnalysisTranscriptsData(runId: string | undefined) {
 
   // --- Transcript mutation ---
   const handleDecisionChange = useCallback(async (transcript: Transcript, nextDecisionCode: string) => {
+    const definitionSnapshot = (transcript as { definitionSnapshot?: unknown }).definitionSnapshot ?? null;
+    const orientationFlipped =
+      ((transcript as { scenario?: { orientationFlipped?: boolean | null } }).scenario?.orientationFlipped) ?? null;
+    const input = toManualDecisionInput(nextDecisionCode, definitionSnapshot, orientationFlipped);
+    if (input == null) {
+      // Could not build a canonical input — surface this as a no-op rather
+      // than corrupting the canonical. Caller should log or toast.
+      return;
+    }
     setUpdatingTranscriptIds((prev) => new Set(prev).add(transcript.id));
     try {
-      await updateTranscriptDecision(transcript.id, nextDecisionCode);
+      await updateTranscriptDecision(transcript.id, input);
       refetch();
     } finally {
       setUpdatingTranscriptIds((prev) => {

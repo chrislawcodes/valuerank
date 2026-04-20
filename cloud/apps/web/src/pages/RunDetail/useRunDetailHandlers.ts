@@ -121,8 +121,15 @@ export function useRunDetailHandlers(run: Run | null, refetch: () => void) {
   );
 
   const handleUpdateTranscriptDecision = useCallback(
-    async (transcriptId: string, decisionCode: string) => {
-      await updateTranscriptDecision(transcriptId, decisionCode);
+    async (
+      transcriptId: string,
+      input: {
+        decisionState: 'resolved' | 'neutral' | 'unknown' | 'refusal';
+        favoredValueKey?: string | null;
+        strength?: 'strong' | 'lean' | null;
+      },
+    ) => {
+      await updateTranscriptDecision(transcriptId, input);
       refetch();
     },
     [updateTranscriptDecision, refetch]

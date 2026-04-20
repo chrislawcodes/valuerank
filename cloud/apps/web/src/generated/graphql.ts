@@ -1665,11 +1665,15 @@ export type Mutation = {
   updateSystemSetting: SystemSetting;
   /**
    *
-   *       Manually update a transcript decision code.
+   *       Manually override a transcript's canonical decision.
    *
-   *       Accepts only positive integer decision codes.
-   *       If the run is already completed, this will supersede current analysis
-   *       and queue a recompute job.
+   *       Accepts one of four decisionStates: resolved, neutral, unknown, refusal.
+   *       For resolved, favoredValueKey (one of the vignette pair's two value tokens)
+   *       and strength (strong or lean) are also required. Server derives direction
+   *       (favor_first / favor_second) from favoredValueKey against the vignette pair.
+   *
+   *       If the run is already completed, this supersedes current analysis
+   *       and queues a recompute job.
    *
    *       Requires authentication.
    *
@@ -2088,7 +2092,9 @@ export type MutationUpdateSystemSettingArgs = {
 
 
 export type MutationUpdateTranscriptDecisionArgs = {
-  decisionCode: Scalars['String']['input'];
+  decisionState: Scalars['String']['input'];
+  favoredValueKey?: InputMaybe<Scalars['String']['input']>;
+  strength?: InputMaybe<Scalars['String']['input']>;
   transcriptId: Scalars['ID']['input'];
 };
 
@@ -4281,7 +4287,9 @@ export type RestartSummarizationMutation = { __typename?: 'Mutation', restartSum
 
 export type UpdateTranscriptDecisionMutationVariables = Exact<{
   transcriptId: Scalars['ID']['input'];
-  decisionCode: Scalars['String']['input'];
+  decisionState: Scalars['String']['input'];
+  favoredValueKey?: InputMaybe<Scalars['String']['input']>;
+  strength?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
@@ -6613,10 +6621,12 @@ export function useRestartSummarizationMutation() {
   return Urql.useMutation<RestartSummarizationMutation, RestartSummarizationMutationVariables>(RestartSummarizationDocument);
 };
 export const UpdateTranscriptDecisionDocument = gql`
-    mutation UpdateTranscriptDecision($transcriptId: ID!, $decisionCode: String!) {
+    mutation UpdateTranscriptDecision($transcriptId: ID!, $decisionState: String!, $favoredValueKey: String, $strength: String) {
   updateTranscriptDecision(
     transcriptId: $transcriptId
-    decisionCode: $decisionCode
+    decisionState: $decisionState
+    favoredValueKey: $favoredValueKey
+    strength: $strength
   ) {
     id
     runId
