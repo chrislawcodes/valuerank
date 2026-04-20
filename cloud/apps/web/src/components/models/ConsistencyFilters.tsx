@@ -5,22 +5,28 @@ type Option = { value: string; label: string };
 type ConsistencyFiltersProps = {
   domainId: string | null;
   providerId: string | null;
+  signature: string;
   minScenarios: number;
   domainOptions: Option[];
   providerOptions: Option[];
+  signatureOptions: Option[];
   onDomainChange: (value: string | null) => void;
   onProviderChange: (value: string | null) => void;
+  onSignatureChange: (value: string) => void;
   onMinScenariosChange: (value: number) => void;
 };
 
 export function ConsistencyFilters({
   domainId,
   providerId,
+  signature,
   minScenarios,
   domainOptions,
   providerOptions,
+  signatureOptions,
   onDomainChange,
   onProviderChange,
+  onSignatureChange,
   onMinScenariosChange,
 }: ConsistencyFiltersProps) {
   return (
@@ -32,6 +38,14 @@ export function ConsistencyFilters({
             value={domainId ?? 'all'}
             onChange={(value) => onDomainChange(value === 'all' ? null : value)}
             options={[{ value: 'all', label: 'All domains' }, ...domainOptions]}
+          />
+        </div>
+        <div className="min-w-[220px] flex-1">
+          <Select
+            label="Signature"
+            value={signature}
+            onChange={(value) => onSignatureChange(value)}
+            options={signatureOptions}
           />
         </div>
         <div className="min-w-[220px] flex-1">
