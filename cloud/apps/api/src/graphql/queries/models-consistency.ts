@@ -64,7 +64,15 @@ function buildParsedModelData(runs: RunRow[], modelId: string): ParsedModelData 
         continue;
       }
 
-      const perScenario = parseScenarioList((rawEntry as { perScenario?: unknown }).perScenario);
+      // A missing perScenario key means "no repeat coverage for this model in
+      // this run" — single-sample runs legitimately omit it. Only flag the row
+      // as invalid-summary-shape when the key is present but parses to zero
+      // entries (i.e. malformed data the pipeline produced).
+      const rawPerScenario = (rawEntry as { perScenario?: unknown }).perScenario;
+      if (rawPerScenario == null) {
+        continue;
+      }
+      const perScenario = parseScenarioList(rawPerScenario);
       if (perScenario.length === 0) {
         invalidShape = true;
         continue;
