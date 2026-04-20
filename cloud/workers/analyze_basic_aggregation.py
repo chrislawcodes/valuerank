@@ -4,8 +4,23 @@ import math
 from typing import Any
 
 from common.errors import ValidationError
-from stats.decision_model import resolve_transcript_signed_distance
+from stats.decision_model import SIGNED_TO_BUCKET, resolve_transcript_signed_distance
 from stats.preference_stats import compute_two_step_by_value
+
+_CANONICAL_APPEAL_RANK: dict[str, int] = {
+    "strongly": 2,
+    "somewhat": 1,
+    "neutral": 0,
+    "opponentSomewhat": -1,
+    "opponentStrongly": -2,
+}
+_POSITIVE_DIRECTION_BUCKETS: tuple[str, str] = (
+    SIGNED_TO_BUCKET[2.0],
+    SIGNED_TO_BUCKET[1.0],
+)
+_NEUTRAL_DIRECTION_BUCKETS: tuple[str, ...] = (
+    SIGNED_TO_BUCKET[0.0],
+)
 
 
 def validate_input(data: dict[str, Any]) -> None:
@@ -273,7 +288,139 @@ def build_preference_summary(
     }
 
 
-def build_reliability_summary(variance_analysis: dict[str, Any]) -> dict[str, Any]:
+def _bernoulli_pair_counts(stats: dict[str, Any]) -> tuple[int, int]:
+    sample_count = int(stats.get("sampleCount", 0))
+    if sample_count < 2:
+        return 0, 0
+
+    direction_counts = stats.get("directionCounts", {})
+    if not isinstance(direction_counts, dict):
+        direction_counts = {}
+
+    trials = sample_count * (sample_count - 1) // 2
+    matches = 0
+    for count in direction_counts.values():
+        if isinstance(count, int) and not isinstance(count, bool) and count > 1:
+            matches += count * (count - 1) // 2
+    return trials, matches
+
+
+def _to_condition_rank(value: Any) -> int | None:
+    if isinstance(value, str):
+        return _CANONICAL_APPEAL_RANK.get(value)
+
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+
+    return None
+
+
+def _direction_count(direction_counts: dict[str, Any], canonical_key: str, fallback_key: str) -> int:
+    if canonical_key in direction_counts:
+        value = direction_counts.get(canonical_key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+
+    value = direction_counts.get(fallback_key)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return 0
+
+
+def _direction_counts_sum(
+    direction_counts: dict[str, Any],
+    keys: tuple[str, ...],
+) -> int:
+    total = 0
+    for key in keys:
+        value = direction_counts.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            total += value
+    return total
+
+
+def _build_per_pair_for_model(
+    model_stats: dict[str, Any],
+    run_context: dict[str, Any],
+) -> dict[str, dict[str, Any]] | None:
+    per_scenario = model_stats.get("perScenario", {})
+    if not isinstance(per_scenario, dict) or not per_scenario:
+        return None
+
+    value_key = run_context.get("valueKey")
+    opposing_value_key = run_context.get("opposingValueKey")
+    target_analysis_run_id = run_context.get("targetAnalysisRunId")
+    target_companion_run_id = run_context.get("targetCompanionRunId")
+    primary_condition_ids = run_context.get("primaryConditionIds", [])
+    companion_condition_ids = run_context.get("companionConditionIds", [])
+    scenario_dimensions_by_id = run_context.get("scenarioDimensionsById", {})
+    if not isinstance(scenario_dimensions_by_id, dict):
+        scenario_dimensions_by_id = {}
+
+    if not isinstance(value_key, str) or value_key.strip() == "":
+        return None
+    if not isinstance(opposing_value_key, str) or opposing_value_key.strip() == "":
+        return None
+    if not isinstance(target_analysis_run_id, str) or target_analysis_run_id.strip() == "":
+        return None
+
+    per_condition: list[dict[str, Any]] = []
+    for scenario_id, stats in per_scenario.items():
+        if not isinstance(scenario_id, str) or not isinstance(stats, dict):
+            continue
+
+        sample_count = int(stats.get("sampleCount", 0))
+        if sample_count <= 0:
+            continue
+
+        direction_counts = stats.get("directionCounts", {})
+        if not isinstance(direction_counts, dict):
+            direction_counts = {}
+
+        neutral_count = _direction_counts_sum(direction_counts, _NEUTRAL_DIRECTION_BUCKETS)
+        trials = max(sample_count - neutral_count, 1)
+        matches = _direction_counts_sum(direction_counts, _POSITIVE_DIRECTION_BUCKETS)
+        win_rate = round(matches / trials, 6)
+
+        scenario_dimensions = scenario_dimensions_by_id.get(scenario_id, {})
+        net_pressure_rank: int | None = None
+        if isinstance(scenario_dimensions, dict):
+            target_rank = _to_condition_rank(scenario_dimensions.get(value_key))
+            opposing_rank = _to_condition_rank(scenario_dimensions.get(opposing_value_key))
+            if target_rank is not None and opposing_rank is not None:
+                net_pressure_rank = target_rank - opposing_rank
+
+        per_condition.append({
+            "scenarioId": scenario_id,
+            "netPressureRank": net_pressure_rank,
+            "winRate": win_rate,
+            "matches": matches,
+            "trials": trials,
+        })
+
+    return {
+        value_key: {
+            "targetAnalysisRunId": target_analysis_run_id,
+            "targetCompanionRunId": target_companion_run_id if isinstance(target_companion_run_id, str) and target_companion_run_id.strip() != "" else None,
+            "primaryConditionIds": [
+                item
+                for item in primary_condition_ids
+                if isinstance(item, str) and item.strip() != ""
+            ] if isinstance(primary_condition_ids, list) else [],
+            "companionConditionIds": [
+                item
+                for item in companion_condition_ids
+                if isinstance(item, str) and item.strip() != ""
+            ] if isinstance(companion_condition_ids, list) else [],
+            "perCondition": per_condition,
+        },
+    }
+
+
+def build_reliability_summary(
+    variance_analysis: dict[str, Any],
+    run_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """
     Build baseline reliability semantics from repeated-trial variance analysis.
 
@@ -286,6 +433,21 @@ def build_reliability_summary(variance_analysis: dict[str, Any]) -> dict[str, An
     per_model_summary: dict[str, Any] = {}
     for model_id, model_stats in per_model_variance.items():
         per_scenario = model_stats.get("perScenario", {})
+        per_scenario_bernoulli: dict[str, dict[str, int]] = {}
+        for scenario_id, stats in per_scenario.items():
+            if not isinstance(scenario_id, str) or not isinstance(stats, dict):
+                continue
+
+            sample_count = int(stats.get("sampleCount", 0))
+            if sample_count < 2:
+                continue
+
+            trials, matches = _bernoulli_pair_counts(stats)
+            per_scenario_bernoulli[scenario_id] = {
+                "trials": trials,
+                "matches": matches,
+            }
+
         repeated_scenarios = [
             stats
             for stats in per_scenario.values()
@@ -345,6 +507,14 @@ def build_reliability_summary(variance_analysis: dict[str, Any]) -> dict[str, An
             "coverageCount": coverage_count,
             "uniqueScenarios": int(model_stats.get("uniqueScenarios", 0)),
         }
+
+        if per_scenario_bernoulli:
+            per_model_summary[model_id]["perScenario"] = per_scenario_bernoulli
+
+        if run_context is not None:
+            per_pair = _build_per_pair_for_model(model_stats, run_context)
+            if per_pair:
+                per_model_summary[model_id]["perPair"] = per_pair
 
     return {
         "perModel": per_model_summary,

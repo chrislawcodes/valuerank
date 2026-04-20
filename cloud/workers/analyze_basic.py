@@ -82,6 +82,7 @@ def build_pooled_aggregate_reliability(
     min_repeat_coverage_count: int,
     min_repeat_coverage_share: float,
     drift_warning_threshold: float,
+    run_context: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """
     Build pooled aggregate reliability and aggregate semantic metadata.
@@ -119,7 +120,7 @@ def build_pooled_aggregate_reliability(
 
     # Pool ALL transcripts: cross-run repeats of same (modelId, scenarioId) become repeated samples
     pooled_variance = compute_variance_analysis(transcripts)
-    pooled_reliability = build_reliability_summary(pooled_variance)
+    pooled_reliability = build_reliability_summary(pooled_variance, run_context=run_context)
     pooled_per_model_reliability = pooled_reliability.get("perModel", {})
 
     planned_condition_count = len(planned_scenario_ids)
@@ -182,6 +183,10 @@ def build_pooled_aggregate_reliability(
             "coverageCount": total_repeat_coverage_count,
             "uniqueScenarios": total_repeat_coverage_count,
         }
+        if isinstance(pooled_model_rel.get("perScenario"), dict) and pooled_model_rel["perScenario"]:
+            reliability_per_model[model_id]["perScenario"] = pooled_model_rel["perScenario"]
+        if isinstance(pooled_model_rel.get("perPair"), dict) and pooled_model_rel["perPair"]:
+            reliability_per_model[model_id]["perPair"] = pooled_model_rel["perPair"]
 
     return (
         {"perModel": reliability_per_model},
@@ -238,6 +243,37 @@ def run_analysis(data: dict[str, Any]) -> dict[str, Any]:
     # Compute variance analysis (for multi-sample runs)
     variance_analysis = compute_variance_analysis(transcripts)
 
+    scenario_dimensions_by_id: dict[str, dict[str, Any]] = {}
+    for transcript in transcripts:
+        scenario_id = transcript.get("scenarioId")
+        scenario = transcript.get("scenario")
+        dimensions = scenario.get("dimensions") if isinstance(scenario, dict) else None
+        if isinstance(scenario_id, str) and scenario_id not in scenario_dimensions_by_id and isinstance(dimensions, dict):
+            scenario_dimensions_by_id[scenario_id] = dimensions
+
+    run_context: dict[str, Any] | None = None
+    if aggregate_semantics is not None:
+        value_pair = data.get("valuePair")
+        if isinstance(value_pair, dict):
+            value_key = value_pair.get("valueA")
+            opposing_value_key = value_pair.get("valueB")
+            if isinstance(value_key, str) and value_key.strip() != "" and isinstance(opposing_value_key, str) and opposing_value_key.strip() != "":
+                planned_ids = aggregate_semantics.get("plannedScenarioIds", [])
+                primary_condition_ids = [
+                    item
+                    for item in planned_ids
+                    if isinstance(item, str) and item.strip() != ""
+                ] if isinstance(planned_ids, list) else []
+                run_context = {
+                    "targetAnalysisRunId": run_id,
+                    "targetCompanionRunId": data.get("targetCompanionRunId"),
+                    "valueKey": value_key,
+                    "opposingValueKey": opposing_value_key,
+                    "primaryConditionIds": primary_condition_ids,
+                    "companionConditionIds": list(primary_condition_ids),
+                    "scenarioDimensionsById": scenario_dimensions_by_id,
+                }
+
     # Build explicit semantic summaries for baseline vignette runs only.
     preference_summary = None
     reliability_summary = None
@@ -251,9 +287,10 @@ def run_analysis(data: dict[str, Any]) -> dict[str, Any]:
                 int(aggregate_semantics["minRepeatCoverageCount"]),
                 float(aggregate_semantics["minRepeatCoverageShare"]),
                 float(aggregate_semantics["driftWarningThreshold"]),
+                run_context=run_context,
             )
         else:
-            reliability_summary = build_reliability_summary(variance_analysis)
+            reliability_summary = build_reliability_summary(variance_analysis, run_context=run_context)
 
     # Find most contested scenarios
     contested = find_contested_scenarios(transcripts)
