@@ -41,9 +41,8 @@ import { db } from '@valuerank/db';
 import type { Prisma } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 
-import { resolveCanonicalDecision } from '../apps/api/src/graphql/queries/domain/decision-model.js';
+import { buildRawDecisionEvidence, resolveCanonicalDecision } from '../apps/api/src/graphql/queries/domain/decision-model.js';
 import {
-  buildRawDecisionEvidence,
   extractCachedWinnerFirstDecision,
   extractLabelPrefixFromSnapshot,
   extractManualOverrideDecision,

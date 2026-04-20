@@ -62,6 +62,15 @@ REFUSAL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+
+def is_refusal(text: str) -> bool:
+    """Returns True when the model response matches the refusal pattern.
+
+    Used as a standalone detector so the main parser flow can check for
+    refusals without going through the (now removed) numeric extractor.
+    """
+    return bool(text) and bool(REFUSAL_PATTERN.search(text))
+
 DEFAULT_SUMMARIZE_PARSER_VERSION = "paired-v2"
 
 
