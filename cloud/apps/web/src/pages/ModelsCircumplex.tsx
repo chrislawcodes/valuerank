@@ -16,6 +16,7 @@ import { useAvailableSignatures } from '../hooks/useAvailableSignatures';
 import { CircumplexThresholdControl } from '../components/models/CircumplexThresholdControl';
 import { CircumplexModelPicker } from '../components/models/CircumplexModelPicker';
 import { CircumplexMethodologyPanel } from '../components/models/CircumplexMethodologyPanel';
+import { CircumplexMdsScatter } from '../components/models/CircumplexMdsScatter';
 import { CircumplexModelCard } from '../components/models/CircumplexModelCard';
 import { CircumplexLoadingProgress } from '../components/models/CircumplexLoadingProgress';
 
@@ -335,10 +336,13 @@ export function ModelsCircumplex() {
               <p className="font-medium text-gray-900">Pick one or more models to see the circumplex panel.</p>
             </section>
           ) : (
-            <div data-testid="circumplex-model-card-stack" className="space-y-4">
-              {selectedResults.map((result) => (
-                <CircumplexModelCard key={result.modelId} result={result} />
-              ))}
+            <div className="space-y-4">
+              <CircumplexMdsScatter results={selectedResults} />
+              <div data-testid="circumplex-model-card-stack" className="space-y-4">
+                {selectedResults.map((result) => (
+                  <CircumplexModelCard key={result.modelId} result={result} />
+                ))}
+              </div>
             </div>
           )}
         </>
