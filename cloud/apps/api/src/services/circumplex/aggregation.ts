@@ -135,9 +135,11 @@ export async function aggregatePairwiseWinRates(args: {
   // row carries a large JSON blob (definitionSnapshot + decisionMetadata), so
   // fetching 20+ models × thousands of trials in one shot blows past Prisma's
   // napi-to-rust string buffer limit and crashes. Per-model keeps each query's
-  // result set bounded.
-  for (const modelId of args.modelIds) {
-    const transcripts = (await db.transcript.findMany({
+  // result set bounded. Parallelize across models so wall-clock stays under
+  // browser timeout — at ~6-8s per model, 20 serial = ~2 min (timeout),
+  // parallel = ~8-10s (limited by connection pool).
+  const transcriptBatches = await Promise.all(
+    args.modelIds.map(async (modelId) => (await db.transcript.findMany({
       where: {
         runId: { in: scopedRunIds },
         modelId,
@@ -156,8 +158,10 @@ export async function aggregatePairwiseWinRates(args: {
           },
         },
       },
-    })) as TranscriptRow[];
+    })) as TranscriptRow[]),
+  );
 
+  for (const transcripts of transcriptBatches) {
     for (const transcript of transcripts) {
       if (!scopedRunIdSet.has(transcript.runId)) continue;
       if (!modelIdSet.has(transcript.modelId)) continue;
