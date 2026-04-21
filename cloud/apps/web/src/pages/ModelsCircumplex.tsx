@@ -4,7 +4,6 @@ import { X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Button } from '../components/ui/Button';
-import { Select } from '../components/ui/Select';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import {
   CIRCUMPLEX_ANALYSIS_QUERY,
@@ -16,6 +15,7 @@ import { useAvailableSignatures } from '../hooks/useAvailableSignatures';
 import { CircumplexThresholdControl } from '../components/models/CircumplexThresholdControl';
 import { CircumplexModelPicker } from '../components/models/CircumplexModelPicker';
 import { CircumplexMethodologyPanel } from '../components/models/CircumplexMethodologyPanel';
+import { CircumplexMdsScatter } from '../components/models/CircumplexMdsScatter';
 import { CircumplexModelCard } from '../components/models/CircumplexModelCard';
 import { CircumplexLoadingProgress } from '../components/models/CircumplexLoadingProgress';
 
@@ -209,8 +209,6 @@ export function ModelsCircumplex() {
     setSearchParams(params, { replace: true });
   };
 
-  const signatureOptions = signatures.map((signature) => ({ value: signature, label: signature }));
-
   if (signaturesError != null || rosterError != null || circumplexError != null) {
     return (
       <ErrorMessage
@@ -237,41 +235,11 @@ export function ModelsCircumplex() {
   const hasAnySignatureData = analysisModels.some((result) => result.trialsPerValue.some((entry) => entry.trials > 0));
   const noEligibleModels = eligibleModels.length === 0;
   const noSignatureData = !hasAnySignatureData && roster.length > 0;
+  const signatureOptions = signatures.map((signature) => ({ value: signature, label: signature }));
 
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Models / Circumplex</h1>
-        <p className="text-sm text-gray-600">
-          Check whether a model&apos;s own pairwise choices form Schwartz&apos;s circumplex structure.
-        </p>
-      </div>
-
-      <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
-        <div className="flex flex-wrap items-start gap-4">
-          <div className="w-full md:w-60">
-            <Select
-              label="Signature"
-              options={signatureOptions}
-              value={selectedSignature}
-              onChange={handleSignatureChange}
-              placeholder="Select signature"
-            />
-          </div>
-          <CircumplexThresholdControl value={threshold} onChange={handleThresholdChange} />
-          <CircumplexMethodologyPanel
-            open={methodologyParam === 'open'}
-            onToggleOpen={(open) => {
-              const params = new URLSearchParams(searchParams);
-              params.set('methodology', open ? 'open' : 'closed');
-              setSearchParams(params, { replace: true });
-            }}
-          />
-        </div>
-        <p className="mt-3 text-sm text-gray-600">
-          Eligible models must have at least {threshold} trials on each of the 10 Schwartz values.
-        </p>
-      </section>
+      {selectedResults.length > 0 && <CircumplexMdsScatter results={selectedResults} />}
 
       {selectionNotice != null && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -299,49 +267,74 @@ export function ModelsCircumplex() {
       ) : noSignatureData ? (
         <section className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
           <p className="font-medium text-gray-900">No models have circumplex data for this signature.</p>
-          <p className="mt-1">Try another signature from the dropdown above.</p>
+          <p className="mt-1">Try another signature from the dropdown below.</p>
         </section>
       ) : (
-        <>
-          <CircumplexModelPicker
-            eligible={eligibleModels.map((entry) => entry.result)}
-            insufficient={insufficientModels.map((entry) => {
-              const status = entry.status;
-              return {
-                modelId: entry.result.modelId,
-                modelLabel: entry.result.modelLabel,
-                providerName: entry.result.providerName,
-                reason: status.eligible ? 'below_threshold' : status.reason,
-                trialsPerValue: entry.result.trialsPerValue,
-              };
-            })}
-            selectedModelIds={selectedModelIds}
-            onToggle={handleToggleModel}
-            onSelectAll={handleSelectAll}
-            onClear={handleClearSelection}
-          />
+        <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
+          <div className="space-y-2">
+            <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Models / Circumplex</h1>
+            <p className="text-sm text-gray-600">
+              Check whether a model&apos;s own pairwise choices form Schwartz&apos;s circumplex structure.
+            </p>
+          </div>
 
-          {hiddenCount > 0 && (
-            <p className="text-sm text-gray-600">{hiddenCount} model{hiddenCount === 1 ? '' : 's'} hidden due to insufficient data.</p>
-          )}
+          <div className="mt-4 flex flex-wrap items-start gap-4">
+            <CircumplexThresholdControl value={threshold} onChange={handleThresholdChange} />
+            <CircumplexMethodologyPanel
+              open={methodologyParam === 'open'}
+              onToggleOpen={(open) => {
+                const params = new URLSearchParams(searchParams);
+                params.set('methodology', open ? 'open' : 'closed');
+                setSearchParams(params, { replace: true });
+              }}
+            />
+          </div>
 
           {noEligibleModels ? (
-            <section className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
+            <section className="mt-5 rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
               <p className="font-medium text-gray-900">No models meet the current threshold.</p>
               <p className="mt-1">Lower the threshold to widen the picker.</p>
             </section>
           ) : selectedResults.length === 0 ? (
-            <section className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
+            <section className="mt-5 rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
               <p className="font-medium text-gray-900">Pick one or more models to see the circumplex panel.</p>
             </section>
           ) : (
-            <div data-testid="circumplex-model-card-stack" className="space-y-4">
-              {selectedResults.map((result) => (
-                <CircumplexModelCard key={result.modelId} result={result} />
-              ))}
+            <div className="mt-5 space-y-4">
+              <CircumplexModelPicker
+                eligible={eligibleModels.map((entry) => entry.result)}
+                insufficient={insufficientModels.map((entry) => {
+                  const status = entry.status;
+                  return {
+                    modelId: entry.result.modelId,
+                    modelLabel: entry.result.modelLabel,
+                    providerName: entry.result.providerName,
+                    reason: status.eligible ? 'below_threshold' : status.reason,
+                    trialsPerValue: entry.result.trialsPerValue,
+                  };
+                })}
+                selectedModelIds={selectedModelIds}
+                onToggle={handleToggleModel}
+                onSelectAll={handleSelectAll}
+                onClear={handleClearSelection}
+                signatureOptions={signatureOptions}
+                selectedSignature={selectedSignature}
+                onSignatureChange={handleSignatureChange}
+                asSection={false}
+              />
+
+              {hiddenCount > 0 && (
+                <p className="text-sm text-gray-600">{hiddenCount} model{hiddenCount === 1 ? '' : 's'} hidden due to insufficient data.</p>
+              )}
+
+              <div data-testid="circumplex-model-card-stack" className="space-y-4">
+                {selectedResults.map((result) => (
+                  <CircumplexModelCard key={result.modelId} result={result} />
+                ))}
+              </div>
             </div>
           )}
-        </>
+        </section>
       )}
     </div>
   );

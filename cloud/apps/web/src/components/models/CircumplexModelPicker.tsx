@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Check, ChevronDown, Lock } from 'lucide-react';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
+import { Select } from '../ui/Select';
 import type { CircumplexInsufficientModel, CircumplexResult } from '../../api/operations/circumplex';
 
 type Props = {
@@ -11,6 +12,10 @@ type Props = {
   onToggle: (modelId: string) => void;
   onSelectAll: () => void;
   onClear: () => void;
+  signatureOptions: Array<{ value: string; label: string }>;
+  selectedSignature: string;
+  onSignatureChange: (value: string) => void;
+  asSection?: boolean;
 };
 
 function trialsLabel(model: CircumplexInsufficientModel): string {
@@ -21,7 +26,18 @@ function trialsLabel(model: CircumplexInsufficientModel): string {
   return `Below threshold · n=${total}`;
 }
 
-export function CircumplexModelPicker({ eligible, insufficient, selectedModelIds, onToggle, onSelectAll, onClear }: Props) {
+export function CircumplexModelPicker({
+  eligible,
+  insufficient,
+  selectedModelIds,
+  onToggle,
+  onSelectAll,
+  onClear,
+  signatureOptions,
+  selectedSignature,
+  onSignatureChange,
+  asSection = true,
+}: Props) {
   const [open, setOpen] = useState(false);
   const allSelected = eligible.length > 0 && selectedModelIds.length === eligible.length;
   const anySelected = selectedModelIds.length > 0;
@@ -37,8 +53,10 @@ export function CircumplexModelPicker({ eligible, insufficient, selectedModelIds
       ? selectedLabels[0] ?? '1 model selected'
       : `${selectedLabels.length} selected: ${selectedLabels.slice(0, 2).join(', ')}${selectedLabels.length > 2 ? ', ...' : ''}`;
 
+  const Wrapper = asSection ? 'section' : 'div';
+
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
+    <Wrapper className={asSection ? 'rounded-xl border border-gray-200 bg-white p-4 md:p-5' : ''}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Models</h2>
@@ -135,8 +153,25 @@ export function CircumplexModelPicker({ eligible, insufficient, selectedModelIds
               </div>
             </div>
           )}
+
+          <div className="border-t border-gray-200 pt-4">
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="min-w-[220px]">
+                <Select
+                  label="Signature"
+                  options={signatureOptions}
+                  value={selectedSignature}
+                  onChange={onSignatureChange}
+                  placeholder="Select signature"
+                />
+              </div>
+              <p className="text-xs text-gray-500">
+                Analysis is shown for signature <span className="font-medium text-gray-700">{selectedSignature}</span>.
+              </p>
+            </div>
+          </div>
         </div>
       )}
-    </section>
+    </Wrapper>
   );
 }

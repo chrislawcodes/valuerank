@@ -19,7 +19,7 @@ const methodologyTooltip = (
       <strong>Closed:</strong> keeps the header compact and hides the longer methodology notes.
     </p>
     <p>
-      <strong>Open:</strong> shows the full explanation in the same top box as the signature and threshold controls.
+      <strong>Open:</strong> shows the full explanation in the same controls area.
     </p>
   </div>
 );
