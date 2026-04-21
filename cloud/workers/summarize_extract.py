@@ -53,10 +53,10 @@ USER_DIRECTED_PATTERN = re.compile(
 SELF_RATING_PATTERN = re.compile(r"\b(i|i'm|i’d|i'd|i would|my|for me|personally)\b", re.IGNORECASE)
 REFUSAL_PATTERN = re.compile(
     r"\b("
-    r"must decline|decline to (?:engage|respond)|"
+    r"must decline|decline to (?:engage|respond|answer)|"
     r"can't comply|cannot comply|won't comply|"
     r"jailbreak|circumvent (?:my )?(?:safety|guidelines)|"
-    r"adhere to my safety instructions|"
+    r"(?:adher(?:e|ing) to|violat(?:e|es|ing)) (?:my |the )?safety (?:instructions|guidelines)|"
     r"i(?: am|'m) sorry[, ]+but"
     r")\b",
     re.IGNORECASE,
