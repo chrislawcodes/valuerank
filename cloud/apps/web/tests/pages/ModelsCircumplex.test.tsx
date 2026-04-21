@@ -4,8 +4,45 @@ import { MemoryRouter } from 'react-router-dom';
 import { ModelsCircumplex } from '../../src/pages/ModelsCircumplex';
 import { LLM_MODELS_QUERY } from '../../src/api/operations/llm';
 import { CIRCUMPLEX_ANALYSIS_QUERY } from '../../src/api/operations/circumplex';
+import type { CircumplexResult } from '../../src/api/operations/circumplex';
 
 const useQueryMock = vi.fn();
+
+function buildCircumplexResult(modelId: string, modelLabel: string): CircumplexResult {
+  return {
+    modelId,
+    modelLabel,
+    providerName: 'openai',
+    signature: 'vnewtd',
+    valueOrder: ['Self_Direction_Action', 'Universalism_Nature', 'Benevolence_Dependability'],
+    profileCorrelationMatrix: [
+      [1, 0.7, 0.2],
+      [0.7, 1, 0.1],
+      [0.2, 0.1, 1],
+    ],
+    pairTrialCounts: [
+      [0, 20, 20],
+      [20, 0, 20],
+      [20, 20, 0],
+    ],
+    excludedValues: [],
+    spearmanRho: -0.61,
+    spearmanP: 0.012,
+    verdictBand: 'clear',
+    mds2d: [
+      { valueKey: 'Self_Direction_Action', x: 0, y: 1, theoreticalAngleDeg: 90 },
+      { valueKey: 'Universalism_Nature', x: 0.8, y: -0.1, theoreticalAngleDeg: 18 },
+      { valueKey: 'Benevolence_Dependability', x: -0.6, y: -0.4, theoreticalAngleDeg: -54 },
+    ],
+    mdsStress: 0.08,
+    mdsWarning: null,
+    trialsPerValue: [
+      { valueKey: 'Self_Direction_Action', trials: 8 },
+      { valueKey: 'Universalism_Nature', trials: 8 },
+      { valueKey: 'Benevolence_Dependability', trials: 8 },
+    ],
+  } as CircumplexResult;
+}
 
 vi.mock('urql', async () => {
   const actual = await vi.importActual<typeof import('urql')>('urql');
@@ -53,22 +90,7 @@ describe('ModelsCircumplex', () => {
         return [{
           data: {
             circumplexAnalysis: {
-              models: [
-                {
-                  modelId: 'model-a',
-                  modelLabel: 'Model A',
-                  providerName: 'openai',
-                  signature: 'vnewtd',
-                  trialsPerValue: [{ valueKey: 'Achievement', trials: 8 }],
-                },
-                {
-                  modelId: 'model-b',
-                  modelLabel: 'Model B',
-                  providerName: 'anthropic',
-                  signature: 'vnewtd',
-                  trialsPerValue: [{ valueKey: 'Achievement', trials: 8 }],
-                },
-              ],
+              models: [buildCircumplexResult('model-a', 'Model A'), buildCircumplexResult('model-b', 'Model B')],
               insufficient: [],
             },
           },
@@ -101,8 +123,9 @@ describe('ModelsCircumplex', () => {
     const stack = screen.getByTestId('circumplex-model-card-stack');
     expect(stack).toHaveClass('space-y-4');
     expect(stack).not.toHaveClass('xl:grid-cols-2');
-    expect(screen.getByText('Model A')).toBeInTheDocument();
-    expect(screen.getByText('Model B')).toBeInTheDocument();
+    expect(screen.getByTestId('circumplex-overlay-chart')).toBeInTheDocument();
+    expect(screen.getAllByText('Model A').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Model B').length).toBeGreaterThan(0);
   });
 
   it('shows estimated progress while circumplex data is loading', () => {

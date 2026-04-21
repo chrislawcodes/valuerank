@@ -1,5 +1,4 @@
 import { CircumplexMatrix } from './CircumplexMatrix';
-import { CircumplexMdsScatter } from './CircumplexMdsScatter';
 import { CircumplexVerdictPanel } from './CircumplexVerdictPanel';
 import type { CircumplexResult } from '../../api/operations/circumplex';
 import type { ValueKey } from '../../data/domainAnalysisData';
@@ -33,20 +32,12 @@ export function CircumplexModelCard({ result }: Props) {
           valueOrder={result.valueOrder as ValueKey[]}
           excludedValues={toExcludedSet(result.excludedValues)}
         />
-        <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.95fr)_minmax(0,1fr)]">
-          <CircumplexMdsScatter
-            mds={result.mds2d}
-            excludedValues={result.excludedValues as ValueKey[]}
-            mdsWarning={result.mdsWarning ?? null}
-            mdsStress={result.mdsStress ?? 0}
-          />
-          <CircumplexVerdictPanel
-            rho={result.spearmanRho ?? null}
-            p={result.spearmanP ?? null}
-            verdictBand={result.verdictBand}
-            excludedValues={result.excludedValues as ValueKey[]}
-          />
-        </div>
+        <CircumplexVerdictPanel
+          rho={result.spearmanRho ?? null}
+          p={result.spearmanP ?? null}
+          verdictBand={result.verdictBand}
+          excludedValues={result.excludedValues as ValueKey[]}
+        />
       </div>
     </section>
   );
