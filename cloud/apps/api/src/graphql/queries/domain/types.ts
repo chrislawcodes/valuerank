@@ -28,7 +28,7 @@ import type {
 import type {
   DomainAnalysisContributionSummary,
   DomainAnalysisExcludedDataSummary,
-} from '../../services/analysis/domain-analysis-cache-types.js';
+} from '../../../services/analysis/domain-analysis-cache-types.js';
 
 export {
   DomainAnalysisConditionDetailRef,

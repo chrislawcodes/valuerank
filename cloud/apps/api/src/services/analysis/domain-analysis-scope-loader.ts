@@ -164,11 +164,12 @@ export function buildContributionAndExcludedSummary(params: {
 
   const excludedDataSummary: DomainAnalysisExcludedDataSummary[] = Array.from(excludedByDomainReason.entries())
     .map(([key, count]) => {
-      const [domainId, reasonCode] = key.split('::');
+      const [domainId, reasonCode] = key.split('::') as [string, DomainAnalysisExcludedDataSummary['reasonCode']];
+      const domainName = domainNameById.get(domainId) ?? domainId;
       return {
         domainId,
-        domainName: domainNameById.get(domainId) ?? domainId,
-        reasonCode: reasonCode as DomainAnalysisExcludedDataSummary['reasonCode'],
+        domainName,
+        reasonCode,
         count,
       };
     })
