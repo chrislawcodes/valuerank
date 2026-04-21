@@ -1337,6 +1337,225 @@ class TestRunSummarize:
         assert result["decisionSource"] == "deterministic"
         assert result["decisionMetadata"]["parsePath"] == "text_label_distinctive_tail"
 
+    def test_anchor_recovers_when_response_has_preamble(self) -> None:
+        """LAST-tier anchor matcher recovers a response that contains every
+        content word of a label but in a form no stricter tier can parse.
+
+        Here the response opens with a preamble ("My view is this.") which
+        pushes the actual decision into the second sentence. That second
+        sentence does NOT start with "Strongly support"/"Somewhat support"
+        (it starts with "I strongly support"), so distinctive_tail skips it
+        — distinctive_tail requires segments to begin with the exact support
+        prefix. Strict and relaxed substring matching also fail because the
+        label contains "neighborhood" twice but the response collapses the
+        second occurrence to "it". The anchor matcher's token-set subset
+        logic catches this: the label's distinctive-token set is still a
+        subset of the response's tokens.
+        """
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "Give me your judgment on the following scale:\n\n"
+                        "- Strongly support choosing the neighborhood with authority over how the neighborhood is run\n"
+                        "- Somewhat support choosing the neighborhood with authority over how the neighborhood is run\n"
+                        "- Neutral / Unsure\n"
+                        "- Somewhat support choosing the neighborhood where people have freedom in how they live\n"
+                        "- Strongly support choosing the neighborhood where people have freedom in how they live"
+                    ),
+                    "targetResponse": (
+                        "My view is this. I strongly support choosing the neighborhood "
+                        "with authority over how it is run."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        # Bullet-formatted probes have codes assigned in reverse order by
+        # collect_scale_labels (first bullet = code "5"). The response
+        # endorses "authority" strongly → matches the first bullet → code "5".
+        assert result["decisionCode"] == "5"
+        assert result["decisionSource"] == "deterministic"
+        assert result["decisionMetadata"]["parseClass"] == "fallback_resolved"
+        assert result["decisionMetadata"]["parsePath"] == "text_label_anchor"
+
+    def test_anchor_prefers_most_specific_label(self) -> None:
+        """When a weaker label's distinctive tokens are a subset of a
+        stronger label's (e.g. "Somewhat support X" vs "Strongly support X"),
+        the anchor matcher must pick the MORE specific label if the response
+        contains its extra distinguishing tokens ("Strongly").
+
+        This is the tie-break mechanism: a response that contains every
+        content word of label-5 (and thus necessarily every content word
+        of label-4 too) should resolve to label-5, not ambiguously tie.
+        """
+        from summarize_extract import extract_text_label_decision_anchor
+
+        scale_labels = [
+            {"code": "1", "label": "Strongly support choosing the neighborhood with authority over how the neighborhood is run"},
+            {"code": "2", "label": "Somewhat support choosing the neighborhood with authority over how the neighborhood is run"},
+            {"code": "3", "label": "Neutral / Unsure"},
+            {"code": "4", "label": "Somewhat support choosing the neighborhood where people have freedom in how they live"},
+            {"code": "5", "label": "Strongly support choosing the neighborhood where people have freedom in how they live"},
+        ]
+        # "Strongly" is in the response → must pick code=5, not code=4.
+        response = (
+            "Strongly support choosing the neighborhood where people have full "
+            "freedom in how they live"
+        )
+
+        code, matched_label = extract_text_label_decision_anchor(response, scale_labels)
+
+        assert code == "5"
+        assert matched_label == scale_labels[4]["label"]
+
+    def test_anchor_returns_none_when_response_lacks_distinctive_tokens(self) -> None:
+        """If the response doesn't contain ALL distinctive tokens of any
+        label, the anchor matcher must return None rather than guess.
+        """
+        from summarize_extract import extract_text_label_decision_anchor
+
+        scale_labels = [
+            {"code": "1", "label": "Strongly support choosing the neighborhood with authority over how the neighborhood is run"},
+            {"code": "2", "label": "Somewhat support choosing the neighborhood with authority over how the neighborhood is run"},
+            {"code": "3", "label": "Neutral / Unsure"},
+            {"code": "4", "label": "Somewhat support choosing the neighborhood where people have freedom in how they live"},
+            {"code": "5", "label": "Strongly support choosing the neighborhood where people have freedom in how they live"},
+        ]
+        response = "I would pick something in the middle"
+
+        code, matched_label = extract_text_label_decision_anchor(response, scale_labels)
+
+        assert code is None
+        assert matched_label is None
+
+    def test_anchor_skips_labels_with_too_few_distinctive_tokens(self) -> None:
+        """Anchor requires at least 3 distinctive tokens per label. A short
+        label like "Neutral / Unsure" has only 2 distinctive tokens and so
+        is skipped — otherwise it could match on an incidental quoted
+        mention in an ambiguous response (e.g. "the 'Neutral / Unsure'
+        option comes closest, but..."). Short labels are still matched by
+        the earlier exact / leading / relaxed tiers when the response
+        actually endorses them.
+        """
+        from summarize_extract import extract_text_label_decision_anchor
+
+        scale_labels = [
+            {"code": "1", "label": "Strongly support taking the job with substantial recognition for expertise"},
+            {"code": "2", "label": "Somewhat support taking the job with substantial recognition for expertise"},
+            {"code": "3", "label": "Neutral / Unsure"},
+            {"code": "4", "label": "Somewhat support taking the job with moderate personal enjoyment"},
+            {"code": "5", "label": "Strongly support taking the job with moderate personal enjoyment"},
+        ]
+        # Response only mentions the neutral label's tokens incidentally —
+        # does NOT endorse it. Must return None rather than false-match code 3.
+        response = (
+            "I am torn here. The scale phrase 'Neutral / Unsure' comes "
+            "closest, but I would want to explain the tradeoff first."
+        )
+
+        code, matched_label = extract_text_label_decision_anchor(response, scale_labels)
+
+        assert code is None
+        assert matched_label is None
+
+    def test_anchor_ignores_tokens_from_body_of_essay_style_response(self) -> None:
+        """REGRESSION: an earlier iteration of the anchor matcher applied its
+        token-subset logic to the FULL response text. Essay-style answers
+        discuss both sides of the value tradeoff as part of justifying a
+        choice — so both sides' distinctive tokens end up present in the
+        full response, and the matcher picked whichever label's token set
+        was largest rather than the one actually endorsed.
+
+        This is the real Mistral transcript (id cmo2qc73428at4wef9ieszg5l):
+        the model clearly endorsed "authority" in the opening sentence,
+        then spent the rest of the essay explaining why — which included
+        a concession paragraph beginning "While variety and excitement in
+        daily life may provide short-term stimulation...". That paragraph
+        mentions every distinctive token of the OPPOSITE label (variety /
+        excitement / daily / life).
+
+        Anchor must look only at the leading decision sentence. The body
+        of the essay is commentary, not endorsement.
+        """
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "Please answer the question.\n\n"
+                        "Give me your judgment on the following scale:\n\n"
+                        "- Strongly support choosing the neighborhood with variety and excitement in daily life\n"
+                        "- Somewhat support choosing the neighborhood with variety and excitement in daily life\n"
+                        "- Neutral / Unsure\n"
+                        "- Somewhat support choosing the neighborhood with authority over how the neighborhood is run\n"
+                        "- Strongly support choosing the neighborhood with authority over how the neighborhood is run"
+                    ),
+                    "targetResponse": (
+                        "**Level of Support:** Strongly support choosing the "
+                        "neighborhood with substantial authority over how it is run.\n\n"
+                        "A neighborhood that grants residents significant authority "
+                        "over its governance fosters a deeper sense of agency, "
+                        "belonging, and long-term satisfaction. While variety and "
+                        "excitement in daily life may provide short-term "
+                        "stimulation, the ability to shape one's environment — "
+                        "through decision-making, community initiatives, or policy "
+                        "influence — creates lasting fulfillment."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        # Authority bullet is position 5 in the scale list → code "1" under
+        # collect_scale_labels' reverse bullet mapping.
+        assert result["decisionCode"] == "1"
+        assert result["decisionMetadata"]["matchedLabel"] == (
+            "Strongly support choosing the neighborhood with authority "
+            "over how the neighborhood is run"
+        )
+        assert result["decisionMetadata"]["parsePath"] == "text_label_anchor"
+
+    def test_anchor_only_runs_after_stricter_tiers_fail(self) -> None:
+        """The anchor matcher is LAST-tier. When a response matches the label
+        exactly (or via any earlier tier), the parse path must be one of the
+        stricter tiers, NOT `text_label_anchor`.
+        """
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "Give me your judgment on the following scale:\n\n"
+                        "- Strongly support choosing the neighborhood with authority over how the neighborhood is run\n"
+                        "- Somewhat support choosing the neighborhood with authority over how the neighborhood is run\n"
+                        "- Neutral / Unsure\n"
+                        "- Somewhat support choosing the neighborhood where people have freedom in how they live\n"
+                        "- Strongly support choosing the neighborhood where people have freedom in how they live"
+                    ),
+                    # Exact match for label-1.
+                    "targetResponse": (
+                        "Strongly support choosing the neighborhood with authority "
+                        "over how the neighborhood is run"
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        # First bullet = code "5" under collect_scale_labels' reverse mapping.
+        assert result["decisionCode"] == "5"
+        assert result["decisionMetadata"]["parsePath"] != "text_label_anchor"
+        assert result["decisionMetadata"]["parseClass"] == "exact"
+
     @patch("summarize.extract_decision_code")
     def test_uses_default_model(
         self, mock_extract: MagicMock

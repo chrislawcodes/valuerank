@@ -335,6 +335,134 @@ def extract_text_label_decision_distinctive_tail(
     return None, None
 
 
+def _anchor_match_candidate(
+    candidate: str,
+    label_token_sets: list[tuple[dict[str, str], set[str]]],
+    common_tokens: set[str],
+) -> tuple[Optional[str], Optional[str]]:
+    """Inner anchor matcher: token-set subset match for a single candidate
+    string against pre-computed label token sets.
+    """
+    from summarize_text import normalize_for_relaxed_match
+
+    candidate_norm = normalize_for_relaxed_match(candidate)
+    if not candidate_norm:
+        return None, None
+    candidate_tokens = set(candidate_norm.split())
+
+    # Minimum distinctive-token count for a match to count. Below this, a
+    # short label like "Neutral / Unsure" can match on 2 incidental tokens
+    # that appear in the candidate as a quoted mention or passing reference
+    # — a false positive. 3 is a balance: still admits substantive content
+    # labels, rejects thin anchors. Short labels are still handled by the
+    # earlier exact / leading / relaxed tiers when the response endorses
+    # them literally.
+    MIN_DISTINCTIVE_TOKENS = 3
+
+    matches: list[tuple[int, dict[str, str]]] = []
+    for entry, label_tokens in label_token_sets:
+        distinctive = label_tokens - common_tokens
+        if len(distinctive) < MIN_DISTINCTIVE_TOKENS:
+            continue
+        if distinctive.issubset(candidate_tokens):
+            matches.append((len(distinctive), entry))
+
+    if not matches:
+        return None, None
+
+    # Prefer the most specific label (largest distinctive set matched).
+    matches.sort(key=lambda x: x[0], reverse=True)
+    top_count = matches[0][0]
+    top_matches = [e for c, e in matches if c == top_count]
+    if len(top_matches) != 1:
+        return None, None
+
+    matched = top_matches[0]
+    return matched.get("code"), matched.get("label")
+
+
+def extract_text_label_decision_anchor(
+    text: str, scale_labels: list[dict[str, str]]
+) -> tuple[Optional[str], Optional[str]]:
+    """LAST-tier matcher. Anchors on each label's distinctive content tokens.
+
+    Motivation: models sometimes rephrase the probe's canonical scale label,
+    substituting a pronoun for a repeated noun, inserting a level word, or
+    reordering filler. Strict and relaxed substring matching fail on these,
+    even though the content signal is clear. Example:
+
+      label:  "Strongly support choosing the neighborhood with authority
+               over how the neighborhood is run"
+      model:  "Strongly support choosing the neighborhood with substantial
+               authority over how it is run"
+
+    Algorithm:
+      1. Normalize each label with the relaxed filler strip. Build a token
+         set per label.
+      2. Compute `common_tokens` — tokens that appear in EVERY label in the
+         scale. These are scale-wide noise (e.g. "choosing", "is") and
+         don't distinguish one label from another.
+      3. For each label, `distinctive_tokens = label_tokens − common_tokens`.
+         This is the anchor set — the content the model must reproduce to
+         pick this label.
+      4. Take candidate strings from `leading_response_candidates(text)` —
+         the first line / first segment, with and without prefix stripping.
+         Matching against the FULL response text is unsafe: essay-style
+         answers discuss both values in the vignette, so both sides'
+         distinctive tokens end up present in the full response and the
+         algorithm would pick whichever label's token set is largest
+         rather than which value the model endorsed.
+      5. For each candidate (in order), a label is a "match" if ALL its
+         distinctive tokens are a subset of the candidate's tokens.
+      6. Winner = matching label with the MOST distinctive tokens matched.
+         Handles "strongly support X" vs "somewhat support X" nesting: the
+         weaker label's distinctive tokens are a subset of the stronger
+         label's, so both match — the stronger wins because it has more
+         matched distinctive tokens.
+      7. If two labels tie at the top for a candidate, skip that candidate
+         (ambiguous) and try the next one. Return the first candidate that
+         produces a unique winner.
+      8. Labels with fewer than 3 distinctive tokens are skipped — short
+         labels like "Neutral / Unsure" can false-match on incidental
+         mentions.
+
+    Runs AFTER extract_text_label_decision, _relaxed, and _distinctive_tail
+    have all returned None. Tagged `fallback_resolved` by the caller.
+    """
+    from summarize_text import leading_response_candidates, normalize_for_relaxed_match
+
+    if not text or not scale_labels:
+        return None, None
+
+    # Pre-compute per-label token sets and the across-all-labels common set.
+    # These are scale-level invariants — computed once, reused per candidate.
+    label_token_sets: list[tuple[dict[str, str], set[str]]] = []
+    for entry in scale_labels:
+        label = entry.get("label", "")
+        if not label:
+            continue
+        label_norm = normalize_for_relaxed_match(label)
+        if not label_norm:
+            continue
+        tokens = set(label_norm.split())
+        if not tokens:
+            continue
+        label_token_sets.append((entry, tokens))
+
+    if len(label_token_sets) < 2:
+        return None, None
+
+    common_tokens: set[str] = set.intersection(*(ts for _, ts in label_token_sets))
+
+    # Try each leading candidate in order; first unique winner wins.
+    for candidate, _used_prefix_stripping in leading_response_candidates(text):
+        code, label = _anchor_match_candidate(candidate, label_token_sets, common_tokens)
+        if code is not None:
+            return code, label
+
+    return None, None
+
+
 def extract_leading_decision_code(text: str) -> Optional[str]:
     for candidate, _used_prefix_stripping in leading_response_candidates(text):
         decision_code = extract_explicit_leading_decision_code(candidate)
