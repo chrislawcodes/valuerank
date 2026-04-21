@@ -22,7 +22,6 @@ type RunRow = {
 type TranscriptRow = {
   runId: string;
   modelId: string;
-  decisionCode: string | null;
   decisionMetadata: unknown;
   definitionSnapshot: unknown;
   scenario: {
@@ -135,7 +134,6 @@ export async function aggregatePairwiseWinRates(args: {
     select: {
       runId: true,
       modelId: true,
-      decisionCode: true,
       decisionMetadata: true,
       definitionSnapshot: true,
       deletedAt: true,
@@ -157,7 +155,6 @@ export async function aggregatePairwiseWinRates(args: {
     if (pair == null) continue;
 
     const resolved = resolveTranscriptDecisionModel({
-      decisionCode: transcript.decisionCode,
       decisionMetadata: transcript.decisionMetadata,
       definitionSnapshot: transcript.definitionSnapshot,
       orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
