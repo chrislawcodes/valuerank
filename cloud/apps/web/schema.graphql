@@ -1984,6 +1984,56 @@ type ModelsConsistencyResult {
   models: [ModelConsistency!]!
 }
 
+type AvailableSignature {
+  mostRecentRunAt: DateTime
+  signature: String!
+}
+
+type CircumplexAnalysisResult {
+  eligibilityThreshold: Int!
+  insufficient: [CircumplexInsufficientModel!]!
+  models: [CircumplexResult!]!
+  signature: String!
+}
+
+type CircumplexInsufficientModel {
+  modelId: String!
+  modelLabel: String!
+  providerName: String!
+  reason: String!
+  trialsPerValue: [CircumplexPerValue!]!
+}
+
+type CircumplexMdsCoord {
+  theoreticalAngleDeg: Float!
+  valueKey: String!
+  x: Float!
+  y: Float!
+}
+
+type CircumplexPerValue {
+  trials: Int!
+  valueKey: String!
+}
+
+type CircumplexResult {
+  excludedValues: [String!]!
+  mds2d: [CircumplexMdsCoord!]!
+  mdsStress: Float!
+  mdsWarning: String
+  modelId: String!
+  modelLabel: String!
+  pairTrialCounts: [[Int!]!]!
+  profileCorrelationMatrix: [[Float]]!
+  providerName: String!
+  signature: String!
+  spearmanP: Float
+  spearmanRho: Float
+  trialsPerValue: [CircumplexPerValue!]!
+  valueOrder: [String!]!
+  verdictBand: String!
+}
+
 type OrderEffect {
   flippedPct: Float!
   noisyPct: Float!
@@ -2050,6 +2100,8 @@ type Query {
     status: String
   ): AnalysisFolderCounts!
 
+  availableSignatures: [AvailableSignature!]!
+
   """Fetch all analysis versions for a run, including superseded versions."""
   analysisHistory(
     """Maximum number of results (default: 10, max: 100)"""
@@ -2100,6 +2152,7 @@ type Query {
     """Number of results to skip (default: 0)"""
     offset: Int
   ): [AvailableModel!]!
+  circumplexAnalysis(modelIds: [String!]!, minTrialsPerValue: Int, signature: String!): CircumplexAnalysisResult!
   modelsConsistency(domainId: ID, minScenarios: Int, providerId: ID, signature: String!): ModelsConsistencyResult!
 
   """Fetch a single definition by ID. Returns null if not found."""

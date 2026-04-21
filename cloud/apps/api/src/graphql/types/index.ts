@@ -27,6 +27,7 @@ import './probe-result.js';
 import './available-model.js';
 import './models-analysis.js';
 import './models-consistency.js';
+import './circumplex.js';
 
 // LLM Provider types
 import './llm-provider.js';

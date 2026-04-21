@@ -66,6 +66,10 @@ Estimated diff: ~450 lines. If statistics exceeds ~300 lines on its own, split t
 - [ ] Inside `cloud/apps/api/src/services/`, locate the existing `resolveTranscriptDecisionModel` helper (referenced in `domain-analysis-aggregation.ts` and `value-detail.ts` per plan Decision 1). Document its exact module path in this tasks file as a comment so later tasks can import it.
 - [ ] Inside `cloud/apps/api/src/graphql/queries/models-consistency.ts`, locate `runMatchesSignature` and confirm it is exported (not file-private). If not, export it or extract to a small shared file `signature-matcher.ts`.
 - [ ] No code changes in this step beyond exports — just the audit results recorded in comments.
+<!-- Audit note:
+resolveTranscriptDecisionModel is exported from /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/domain/decision-model.ts.
+runMatchesSignature is already exported from /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts and re-exported from /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/domain/planning-utils.ts.
+-->
 
 ### A6. Aggregation `cloud/apps/api/src/services/circumplex/aggregation.ts`
 

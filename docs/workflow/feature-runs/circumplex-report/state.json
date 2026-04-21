@@ -406,5 +406,21 @@
     "next": "dispatch_next_slice_to_codex",
     "reason": "tasks checkpoint completed",
     "blockers": []
-  }
+  },
+  "heartbeats": [
+    {
+      "timestamp_pt": "2026-04-20T16:54:59.974598-07:00",
+      "timestamp_utc": "2026-04-20T23:54:59.974614+00:00",
+      "stage": "implement",
+      "activity": "codex exec running",
+      "elapsed_ms": 600004
+    },
+    {
+      "timestamp_pt": "2026-04-20T17:04:59.982197-07:00",
+      "timestamp_utc": "2026-04-21T00:04:59.982218+00:00",
+      "stage": "implement",
+      "activity": "codex exec running",
+      "elapsed_ms": 1200007
+    }
+  ]
 }

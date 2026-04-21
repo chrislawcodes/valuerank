@@ -1,0 +1,204 @@
+import { db as defaultDb } from '@valuerank/db';
+import { SCHWARTZ_CIRCULAR_ORDER, type ValueKey } from '@valuerank/shared/schwartz';
+import { extractValuePair, type DomainAnalysisValuePair } from '../../graphql/queries/domain-analysis-values.js';
+import { runMatchesSignature } from '../../graphql/queries/domain-coverage-gql-types.js';
+import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/decision-model.js';
+
+export type CircumplexPairCell = {
+  winRate: number | null;
+  trials: number;
+  neutrals: number;
+};
+
+export type CircumplexPairMatrix = CircumplexPairCell[][];
+
+type RunRow = {
+  id: string;
+  config: unknown;
+  status: string;
+  deletedAt: Date | null;
+};
+
+type TranscriptRow = {
+  runId: string;
+  modelId: string;
+  decisionCode: string | null;
+  decisionMetadata: unknown;
+  definitionSnapshot: unknown;
+  scenario: {
+    orientationFlipped: boolean | null;
+    deletedAt: Date | null;
+  } | null;
+  deletedAt: Date | null;
+};
+
+type CircumplexDb = Pick<typeof defaultDb, 'run' | 'transcript'>;
+
+type PairStats = {
+  pair: DomainAnalysisValuePair;
+  prioritizedA: number;
+  prioritizedB: number;
+  neutrals: number;
+};
+
+function createEmptyCell(): CircumplexPairCell {
+  return { winRate: null, trials: 0, neutrals: 0 };
+}
+
+function createEmptyMatrix(): CircumplexPairMatrix {
+  return SCHWARTZ_CIRCULAR_ORDER.map(() => SCHWARTZ_CIRCULAR_ORDER.map(() => createEmptyCell()));
+}
+
+function pairKey(pair: DomainAnalysisValuePair): string {
+  return `${pair.valueA}::${pair.valueB}`;
+}
+
+function buildOrderedCell(stats: PairStats | undefined, left: ValueKey): CircumplexPairCell {
+  if (stats == null) {
+    return createEmptyCell();
+  }
+
+  const total = stats.prioritizedA + stats.prioritizedB + stats.neutrals;
+  if (total <= 0) {
+    return createEmptyCell();
+  }
+
+  const winCount = left === stats.pair.valueA ? stats.prioritizedA : stats.prioritizedB;
+  return {
+    winRate: winCount / total,
+    trials: total,
+    neutrals: stats.neutrals,
+  };
+}
+
+export async function aggregatePairwiseWinRates(args: {
+  modelIds: string[];
+  signature: string;
+  db?: CircumplexDb;
+}): Promise<Map<string, CircumplexPairMatrix>> {
+  const db = args.db ?? defaultDb;
+  const modelIdSet = new Set(args.modelIds);
+  const scopedRunIdSet = new Set<string>();
+  const output = new Map<string, CircumplexPairMatrix>();
+  const statsByModel = new Map<string, Map<string, PairStats>>();
+
+  for (const modelId of args.modelIds) {
+    output.set(modelId, createEmptyMatrix());
+    statsByModel.set(modelId, new Map<string, PairStats>());
+  }
+
+  if (args.modelIds.length === 0) {
+    return output;
+  }
+
+  const runs = (await db.run.findMany({
+    where: {
+      tags: { some: { tag: { name: 'Aggregate' } } },
+      status: 'COMPLETED',
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      config: true,
+    },
+  })) as RunRow[];
+
+  const scopedRunIds = runs
+    .filter((run) => run.status === 'COMPLETED' && run.deletedAt == null && runMatchesSignature(run.config, args.signature))
+    .map((run) => run.id);
+  for (const runId of scopedRunIds) {
+    scopedRunIdSet.add(runId);
+  }
+  if (scopedRunIds.length === 0) {
+    return output;
+  }
+
+  const transcripts = (await db.transcript.findMany({
+    where: {
+      runId: { in: scopedRunIds },
+      modelId: { in: args.modelIds },
+      deletedAt: null,
+    },
+    select: {
+      runId: true,
+      modelId: true,
+      decisionCode: true,
+      decisionMetadata: true,
+      definitionSnapshot: true,
+      deletedAt: true,
+      scenario: {
+        select: {
+          orientationFlipped: true,
+          deletedAt: true,
+        },
+      },
+    },
+  })) as TranscriptRow[];
+
+  for (const transcript of transcripts) {
+    if (!scopedRunIdSet.has(transcript.runId)) continue;
+    if (!modelIdSet.has(transcript.modelId)) continue;
+    if (transcript.deletedAt != null || transcript.scenario?.deletedAt != null) continue;
+
+    const pair = extractValuePair(transcript.definitionSnapshot);
+    if (pair == null) continue;
+
+    const resolved = resolveTranscriptDecisionModel({
+      decisionCode: transcript.decisionCode,
+      decisionMetadata: transcript.decisionMetadata,
+      definitionSnapshot: transcript.definitionSnapshot,
+      orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+      pairOverride: pair,
+    });
+
+    if (resolved.canonical.direction === 'unknown') {
+      continue;
+    }
+
+    const statsMap = statsByModel.get(transcript.modelId);
+    if (statsMap == null) continue;
+
+    const key = pairKey(pair);
+    const stats = statsMap.get(key) ?? {
+      pair,
+      prioritizedA: 0,
+      prioritizedB: 0,
+      neutrals: 0,
+    };
+
+    if (resolved.canonical.direction === 'neutral') {
+      stats.neutrals += 1;
+    } else if (resolved.canonical.favoredValueKey === pair.valueA) {
+      stats.prioritizedA += 1;
+    } else if (resolved.canonical.favoredValueKey === pair.valueB) {
+      stats.prioritizedB += 1;
+    } else {
+      continue;
+    }
+
+    statsMap.set(key, stats);
+  }
+
+  for (const [modelId, statsMap] of statsByModel.entries()) {
+    const matrix = createEmptyMatrix();
+
+    for (let row = 0; row < SCHWARTZ_CIRCULAR_ORDER.length; row += 1) {
+      const left = SCHWARTZ_CIRCULAR_ORDER[row]!;
+      for (let col = 0; col < SCHWARTZ_CIRCULAR_ORDER.length; col += 1) {
+        const right = SCHWARTZ_CIRCULAR_ORDER[col]!;
+        if (row === col) {
+          matrix[row]![col] = createEmptyCell();
+          continue;
+        }
+        const sortedPair = left < right
+          ? { valueA: left, valueB: right }
+          : { valueA: right, valueB: left };
+        matrix[row]![col] = buildOrderedCell(statsMap.get(pairKey(sortedPair)), left);
+      }
+    }
+
+    output.set(modelId, matrix);
+  }
+
+  return output;
+}

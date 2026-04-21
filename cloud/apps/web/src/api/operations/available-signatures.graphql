@@ -1,0 +1,6 @@
+query AvailableSignatures {
+  availableSignatures {
+    signature
+    mostRecentRunAt
+  }
+}

@@ -36,6 +36,7 @@ const domainMenuItems: MenuItem[] = [
 const modelsMenuItems: MenuItem[] = [
   { name: 'Matrix', path: '/models' },
   { name: 'Consistency', path: '/models/consistency' },
+  { name: 'Circumplex', path: '/models/circumplex' },
 ];
 
 const archiveMenuItems: MenuItem[] = [
