@@ -144,4 +144,41 @@ describe('ModelsCircumplex', () => {
     expect(screen.getByText(/Computing circumplex fit across models/i)).toBeInTheDocument();
     expect(screen.getByText(/2 models on/i)).toBeInTheDocument();
   });
+
+  it('waits to start the circumplex query until model ids are available', () => {
+    let circumplexPause: boolean | undefined;
+
+    useQueryMock.mockImplementation((args: { query: unknown; pause?: boolean }) => {
+      if (args.query === LLM_MODELS_QUERY) {
+        return [{
+          data: undefined,
+          fetching: true,
+          error: undefined,
+        }];
+      }
+
+      if (args.query === CIRCUMPLEX_ANALYSIS_QUERY) {
+        circumplexPause = args.pause;
+        return [{
+          data: undefined,
+          fetching: false,
+          error: undefined,
+        }];
+      }
+
+      return [{ data: undefined, fetching: false, error: undefined }];
+    });
+
+    render(
+      <MemoryRouter
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+        initialEntries={['/models/circumplex?signature=vnewtd&n=5&methodology=closed']}
+      >
+        <ModelsCircumplex />
+      </MemoryRouter>,
+    );
+
+    expect(circumplexPause).toBe(true);
+    expect(screen.getByRole('progressbar', { name: /estimated circumplex loading progress/i })).toBeInTheDocument();
+  });
 });

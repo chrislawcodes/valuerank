@@ -8,8 +8,8 @@ type Props = {
   excludedValues: Set<ValueKey>;
 };
 
-const CELL_SIZE = 34;
-const LABEL_SIZE = 128;
+const CELL_SIZE = 48;
+const LABEL_SIZE = 148;
 const MARGIN = 10;
 
 function clamp(value: number): number {
@@ -33,6 +33,10 @@ function colorForCorrelation(value: number | null): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
+function textColorForCorrelation(value: number): string {
+  return Math.abs(value) >= 0.65 ? '#ffffff' : '#111827';
+}
+
 export function CircumplexMatrix({ matrix, pairTrialCounts, valueOrder, excludedValues }: Props) {
   const width = LABEL_SIZE + (valueOrder.length * CELL_SIZE) + MARGIN * 2;
   const height = LABEL_SIZE + (valueOrder.length * CELL_SIZE) + MARGIN * 2;
@@ -41,10 +45,13 @@ export function CircumplexMatrix({ matrix, pairTrialCounts, valueOrder, excluded
     <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
       <div className="mb-3">
         <h2 className="text-lg font-semibold text-gray-900">Value-profile correlation matrix</h2>
-        <p className="text-sm text-gray-600">Short labels use the shipped ValueRank label map; the tooltip spells out the full Schwartz names.</p>
+        <p className="text-sm text-gray-600">
+          Each cell is a Pearson correlation between two values&apos; win-rate profiles, not the direct win rate between those two values.
+          Higher green means this model treats the values similarly across their other matchups.
+        </p>
       </div>
       <div className="overflow-x-auto">
-        <svg viewBox={`0 0 ${width} ${height}`} className="block min-w-[640px]">
+        <svg viewBox={`0 0 ${width} ${height}`} className="block min-w-[760px]">
           <defs>
             <pattern id="circumplex-hatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
               <rect width="6" height="6" fill="rgba(255,255,255,0.22)" />
@@ -107,11 +114,18 @@ export function CircumplexMatrix({ matrix, pairTrialCounts, valueOrder, excluded
                     <text x={x + CELL_SIZE / 2} y={y + CELL_SIZE / 2 + 4} textAnchor="middle" className="fill-gray-500 text-[11px]">
                       —
                     </text>
-                  ) : lowCount ? (
-                    <text x={x + CELL_SIZE / 2} y={y + CELL_SIZE / 2 + 4} textAnchor="middle" className="fill-gray-700 text-[9px] font-medium">
-                      n={trials}
+                  ) : (
+                    <text
+                      x={x + CELL_SIZE / 2}
+                      y={y + CELL_SIZE / 2 + 4}
+                      textAnchor="middle"
+                      className="text-[10px] font-semibold"
+                      fill={textColorForCorrelation(cell)}
+                      pointerEvents="none"
+                    >
+                      {cell.toFixed(2)}
                     </text>
-                  ) : null}
+                  )}
                 </g>
               );
             })
