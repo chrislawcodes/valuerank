@@ -2,7 +2,7 @@
   "feature_slug": "circumplex-report",
   "stage": "diff",
   "artifact_path": "docs/workflow/feature-runs/circumplex-report/reviews/implementation.diff.patch",
-  "git_base_ref": "origin/claude/consistency-signature-dropdown",
+  "git_base_ref": "03d8ef90b9cbe77b8bb67d7213019ab23eb816c1",
   "allowed_dirty_paths": [],
   "required_reviews": [
     {

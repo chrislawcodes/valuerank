@@ -414,6 +414,54 @@
       "agent_id": null,
       "artifact_sha_at_time": "f318c47f095f2b3e003313858b32fdf929e2cc852f7fc028e62c0cff3bc6f221",
       "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:27:56.863247Z",
+      "started_at": "2026-04-21T00:26:10.767480Z",
+      "ended_at": "2026-04-21T00:27:56.863247Z",
+      "duration_seconds": 106.094869,
+      "agent_id": null,
+      "artifact_sha_at_time": "fbbc6e355438812e12621a52e5569120681f93adbbea36c31901e3b8e7db3c1a",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:29:29.129574Z",
+      "started_at": "2026-04-21T00:27:57.039405Z",
+      "ended_at": "2026-04-21T00:29:29.129574Z",
+      "duration_seconds": 92.089338,
+      "agent_id": null,
+      "artifact_sha_at_time": "fbbc6e355438812e12621a52e5569120681f93adbbea36c31901e3b8e7db3c1a",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:30:26.302332Z",
+      "started_at": "2026-04-21T00:29:29.290764Z",
+      "ended_at": "2026-04-21T00:30:26.302332Z",
+      "duration_seconds": 57.011021,
+      "agent_id": null,
+      "artifact_sha_at_time": "fbbc6e355438812e12621a52e5569120681f93adbbea36c31901e3b8e7db3c1a",
+      "parse_error": "no Gemini token stats found in stdout"
     }
   ],
   "stages": {
@@ -456,13 +504,14 @@
       "initial_sha": "b0ec317d4acc47f5ef074abe6bda5b0db954a9eec2002271f47842b3f1122650"
     },
     "diff": {
-      "adversarial_rounds": 1,
+      "adversarial_rounds": 2,
       "judge_rounds": 0,
       "judge_verdicts": [],
       "annotations": [],
       "unresolved_concerns": [],
       "adversarial_sha_history": [
-        "f318c47f095f2b3e003313858b32fdf929e2cc852f7fc028e62c0cff3bc6f221"
+        "f318c47f095f2b3e003313858b32fdf929e2cc852f7fc028e62c0cff3bc6f221",
+        "fbbc6e355438812e12621a52e5569120681f93adbbea36c31901e3b8e7db3c1a"
       ],
       "initial_sha": "f318c47f095f2b3e003313858b32fdf929e2cc852f7fc028e62c0cff3bc6f221"
     }
@@ -497,6 +546,6 @@
       "elapsed_ms": 1200007
     }
   ],
-  "diff_adversarial_rounds": 1,
+  "diff_adversarial_rounds": 2,
   "dirty_overrides": {}
 }
