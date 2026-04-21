@@ -183,6 +183,15 @@ export function ModelsCircumplex() {
     updateModelsParam(next);
   };
 
+  const handleSelectAll = () => {
+    const next = eligibleModels.map((entry) => entry.result.modelId);
+    updateModelsParam(next);
+  };
+
+  const handleClearSelection = () => {
+    updateModelsParam([]);
+  };
+
   const handleSignatureChange = (value: string) => {
     const params = new URLSearchParams(searchParams);
     params.set('signature', value);
@@ -297,6 +306,8 @@ export function ModelsCircumplex() {
             })}
             selectedModelIds={selectedModelIds}
             onToggle={handleToggleModel}
+            onSelectAll={handleSelectAll}
+            onClear={handleClearSelection}
           />
 
           {hiddenCount > 0 && (

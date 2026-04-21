@@ -8,6 +8,8 @@ type Props = {
   insufficient: CircumplexInsufficientModel[];
   selectedModelIds: string[];
   onToggle: (modelId: string) => void;
+  onSelectAll: () => void;
+  onClear: () => void;
 };
 
 function trialsLabel(model: CircumplexInsufficientModel): string {
@@ -18,7 +20,10 @@ function trialsLabel(model: CircumplexInsufficientModel): string {
   return `Below threshold · n=${total}`;
 }
 
-export function CircumplexModelPicker({ eligible, insufficient, selectedModelIds, onToggle }: Props) {
+export function CircumplexModelPicker({ eligible, insufficient, selectedModelIds, onToggle, onSelectAll, onClear }: Props) {
+  const allSelected = eligible.length > 0 && selectedModelIds.length === eligible.length;
+  const anySelected = selectedModelIds.length > 0;
+
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -26,7 +31,29 @@ export function CircumplexModelPicker({ eligible, insufficient, selectedModelIds
           <h2 className="text-lg font-semibold text-gray-900">Models</h2>
           <p className="text-sm text-gray-600">Select one or more eligible models to compare their circumplex fit.</p>
         </div>
-        <Badge variant="neutral" size="sm">{eligible.length} eligible</Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="neutral" size="sm">{eligible.length} eligible</Badge>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={allSelected || eligible.length === 0}
+            onClick={onSelectAll}
+            className="text-xs"
+          >
+            Select all
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={!anySelected}
+            onClick={onClear}
+            className="text-xs"
+          >
+            Clear
+          </Button>
+        </div>
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
