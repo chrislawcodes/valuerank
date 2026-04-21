@@ -19,17 +19,18 @@ export function DomainAnalysisScopeSummary({
   return (
     <div className="mt-3 rounded-lg border border-sky-100 bg-sky-50 p-3 text-xs text-sky-900">
       <p className="font-semibold">Cross-domain summary</p>
+      <p className="mt-1 text-sky-800">
+        Each domain counts equally in the all-domains aggregate.
+      </p>
       {hasContributions ? (
         <div className="mt-2 grid gap-3 md:grid-cols-2">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-800">Included raw trials</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-800">Included domains</p>
             <ul className="mt-2 space-y-1.5">
               {contributionSummary.map((entry) => (
                 <li key={`${entry.domainId}-${entry.domainName}`} className="flex items-center justify-between gap-3 rounded border border-sky-100 bg-white px-2 py-1.5">
                   <span className="font-medium text-sky-950">{entry.domainName}</span>
-                  <span className="text-sky-800">
-                    {Math.round(entry.share * 1000) / 10}% · {entry.rawTrialCount.toFixed(1)} trials
-                  </span>
+                  <span className="text-sky-800">{Math.round(entry.share * 1000) / 10}%</span>
                 </li>
               ))}
             </ul>

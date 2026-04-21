@@ -131,7 +131,6 @@ export function buildContributionAndExcludedSummary(params: {
   }
 
   const domainNameById = params.domainNameById;
-  const totalContribution = Array.from(contributionByDomain.values()).reduce((sum, value) => sum + value, 0);
   const sortedContributions = Array.from(contributionByDomain.entries())
     .map(([domainId, rawTrialCount]) => ({
       domainId,
@@ -140,23 +139,25 @@ export function buildContributionAndExcludedSummary(params: {
     }))
     .sort((left, right) => right.rawTrialCount - left.rawTrialCount || left.domainName.localeCompare(right.domainName));
 
+  const contributingDomainCount = sortedContributions.length;
   const topContributions = sortedContributions.slice(0, 5);
   const remainingContribution = sortedContributions.slice(5).reduce((sum, entry) => sum + entry.rawTrialCount, 0);
+  const remainingDomainCount = Math.max(0, contributingDomainCount - topContributions.length);
 
-  const contributionSummary: DomainAnalysisContributionSummary[] = totalContribution > 0
+  const contributionSummary: DomainAnalysisContributionSummary[] = contributingDomainCount > 0
     ? [
         ...topContributions.map((entry) => ({
           domainId: entry.domainId,
           domainName: entry.domainName,
           rawTrialCount: entry.rawTrialCount,
-          share: entry.rawTrialCount / totalContribution,
+          share: 1 / contributingDomainCount,
         })),
         ...(remainingContribution > 0
           ? [{
               domainId: 'other-domains',
               domainName: 'Other domains',
               rawTrialCount: remainingContribution,
-              share: remainingContribution / totalContribution,
+              share: remainingDomainCount / contributingDomainCount,
             }]
           : []),
       ]
