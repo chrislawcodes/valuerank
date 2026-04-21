@@ -134,6 +134,25 @@ Repeat until all checks pass.
 
 ---
 
+## Step 4.5 — Pre-merge smoke test against real data (REQUIRED if the change touches a data resolver, aggregation, or analysis pipeline)
+
+CI confirms the code compiles and passes mocked tests. It does NOT confirm the resolver's assumptions about the data model are correct. For any change that adds or modifies a GraphQL resolver, a Prisma query, or a data-aggregation path, run one real query against production (or a staging instance with real data if available) BEFORE squash-merge.
+
+**Why this step exists:** unit tests encode the author's mental model of the data. If that mental model is wrong, the tests pass against made-up fixtures and the production query returns nothing useful. This is cheap to catch ONCE with a real query; catastrophic to miss (feature ships broken, requires a follow-up hotfix PR).
+
+**How to run:**
+
+1. Identify at least one concrete input that should produce a non-trivial result (e.g., a known model ID + signature that has production data).
+2. Execute the relevant query via the valuerank MCP `graphql_query` tool or via `curl` against the production GraphQL endpoint.
+3. Inspect the response. If it returns empty / zero-count / null for every field that should have content, STOP: the resolver is wrong, do not merge. Investigate before proceeding.
+4. Paste the query + abbreviated response into the PR description under a `## Production smoke test` section (or append a comment to the PR).
+
+**When to skip:** UI-only changes with no data-layer impact. Pure refactors with existing test coverage and no resolver-shape changes. Documentation.
+
+**When NOT to skip:** anything where the diff adds or modifies `cloud/apps/api/src/graphql/queries/` or `cloud/apps/api/src/services/` or any aggregation file. When in doubt, do it — it's 30 seconds.
+
+---
+
 ## Step 5 — Squash merge
 
 Once all CI checks are green, squash merge via GitHub:
