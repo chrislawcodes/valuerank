@@ -22,6 +22,7 @@ from summarize_extract import (
     extract_leading_text_label_decision,
     extract_leading_text_label_decision_relaxed,
     extract_text_label_decision,
+    extract_text_label_decision_anchor,
     extract_text_label_decision_distinctive_tail,
     extract_text_label_decision_relaxed,
     is_refusal,
@@ -152,6 +153,26 @@ def extract_decision_result(transcript_content: dict[str, Any]) -> dict[str, Any
                             matched_label = tail_matched_label
                             parse_class = "exact"
                             parse_path = "text_label_distinctive_tail"
+                        else:
+                            # LAST-tier matcher. Anchors on per-label
+                            # distinctive content tokens (label tokens minus
+                            # tokens common to every label in the scale).
+                            # Catches rephrasings like noun→pronoun collapse
+                            # ("how the neighborhood is run" → "how it is
+                            # run") where the token set is still sufficient
+                            # to identify the label uniquely. Tagged as
+                            # fallback_resolved (lower confidence than the
+                            # strict tiers above).
+                            anchor_code, anchor_matched_label = (
+                                extract_text_label_decision_anchor(
+                                    response_text, scale_labels
+                                )
+                            )
+                            if anchor_code is not None:
+                                decision_code = anchor_code
+                                matched_label = anchor_matched_label
+                                parse_class = "fallback_resolved"
+                                parse_path = "text_label_anchor"
 
     is_refusal_response = is_refusal(response_text)
     if parse_class == "ambiguous" and is_refusal_response:
