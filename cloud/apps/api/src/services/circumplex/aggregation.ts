@@ -97,9 +97,13 @@ export async function aggregatePairwiseWinRates(args: {
     return output;
   }
 
+  // Circumplex needs raw transcripts. Aggregate-tagged runs are rollups that
+  // reference sourceRunIds — they don't have transcripts directly. We need
+  // the PRIMARY runs that actually produced transcripts. We filter out the
+  // aggregate rollups (config.isAggregate === true) to avoid double-counting
+  // their source data, then pick the ones that match the requested signature.
   const runs = (await db.run.findMany({
     where: {
-      tags: { some: { tag: { name: 'Aggregate' } } },
       status: 'COMPLETED',
       deletedAt: null,
     },
@@ -111,12 +115,14 @@ export async function aggregatePairwiseWinRates(args: {
     },
   })) as RunRow[];
 
-  // Belt-and-suspenders: the WHERE clause already filters on status/deletedAt,
-  // but we re-check after selection in case of future schema changes. The
-  // runMatchesSignature check is the critical one — WHERE cannot express it
-  // because signature is synthesized from config.
   const scopedRunIds = runs
-    .filter((run) => run.status === 'COMPLETED' && run.deletedAt == null && runMatchesSignature(run.config, args.signature))
+    .filter((run) => {
+      if (run.status !== 'COMPLETED' || run.deletedAt != null) return false;
+      // Skip aggregate-rollup runs — their transcripts (if any) duplicate source runs.
+      const config = run.config as { isAggregate?: boolean } | null;
+      if (config?.isAggregate === true) return false;
+      return runMatchesSignature(run.config, args.signature);
+    })
     .map((run) => run.id);
   for (const runId of scopedRunIds) {
     scopedRunIdSet.add(runId);
