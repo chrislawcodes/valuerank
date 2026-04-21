@@ -50,7 +50,14 @@ function createEmptyMatrix(): CircumplexPairMatrix {
 }
 
 function pairKey(pair: DomainAnalysisValuePair): string {
-  return `${pair.valueA}::${pair.valueB}`;
+  // Canonicalize: always sort alphabetically so both ingest and lookup
+  // produce the same key regardless of whether extractValuePair returns
+  // (A, B) or (B, A) for the same underlying scenario. This prevents
+  // silent split of counts across two keys.
+  const [first, second] = pair.valueA < pair.valueB
+    ? [pair.valueA, pair.valueB]
+    : [pair.valueB, pair.valueA];
+  return `${first}::${second}`;
 }
 
 function buildOrderedCell(stats: PairStats | undefined, left: ValueKey): CircumplexPairCell {
@@ -100,9 +107,15 @@ export async function aggregatePairwiseWinRates(args: {
     select: {
       id: true,
       config: true,
+      status: true,
+      deletedAt: true,
     },
   })) as RunRow[];
 
+  // Belt-and-suspenders: the WHERE clause already filters on status/deletedAt,
+  // but we re-check after selection in case of future schema changes. The
+  // runMatchesSignature check is the critical one — WHERE cannot express it
+  // because signature is synthesized from config.
   const scopedRunIds = runs
     .filter((run) => run.status === 'COMPLETED' && run.deletedAt == null && runMatchesSignature(run.config, args.signature))
     .map((run) => run.id);
@@ -158,9 +171,17 @@ export async function aggregatePairwiseWinRates(args: {
     const statsMap = statsByModel.get(transcript.modelId);
     if (statsMap == null) continue;
 
-    const key = pairKey(pair);
+    // Canonicalize the pair orientation so prioritizedA always refers to the
+    // lexicographically-smaller value, regardless of which orientation the
+    // transcript's definitionSnapshot used. Without this, transcripts from
+    // different orientation conventions merge their counts incorrectly.
+    const canonicalPair: DomainAnalysisValuePair = pair.valueA < pair.valueB
+      ? pair
+      : { valueA: pair.valueB, valueB: pair.valueA };
+
+    const key = pairKey(canonicalPair);
     const stats = statsMap.get(key) ?? {
-      pair,
+      pair: canonicalPair,
       prioritizedA: 0,
       prioritizedB: 0,
       neutrals: 0,
@@ -168,9 +189,9 @@ export async function aggregatePairwiseWinRates(args: {
 
     if (resolved.canonical.direction === 'neutral') {
       stats.neutrals += 1;
-    } else if (resolved.canonical.favoredValueKey === pair.valueA) {
+    } else if (resolved.canonical.favoredValueKey === canonicalPair.valueA) {
       stats.prioritizedA += 1;
-    } else if (resolved.canonical.favoredValueKey === pair.valueB) {
+    } else if (resolved.canonical.favoredValueKey === canonicalPair.valueB) {
       stats.prioritizedB += 1;
     } else {
       continue;

@@ -1,0 +1,16 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "03d8ef90b9cbe77b8bb67d7213019ab23eb816c1",
+  "git_base_ref": "origin/claude/consistency-signature-dropdown",
+  "git_base_sha": "2a61705a6965451e85ef5426ef3dffad0fabbbd7",
+  "paths": [
+    "cloud/apps/api/src/graphql/queries",
+    "cloud/apps/api/src/services",
+    "cloud/apps/web/src/components/models",
+    "cloud/apps/web/src/pages"
+  ],
+  "allowed_dirty_paths": [],
+  "untracked_files_included": [],
+  "artifact_path": "docs/workflow/feature-runs/circumplex-report/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

@@ -1,0 +1,8 @@
+## Findings
+- High: `cloud/apps/api/src/services/circumplex/aggregation.ts` never finds any scoped runs because the first `findMany()` only selects `id` and `config`, but the later filter checks `run.status === 'COMPLETED'` and `run.deletedAt == null`. Those fields are `undefined`, so every run is dropped and the circumplex matrices stay empty. The new analysis page will report no usable data even when transcripts exist.
+- Medium [UNVERIFIED]: `aggregatePairwiseWinRates()` keys pair stats with `${pair.valueA}::${pair.valueB}` and later looks them up using a separately sorted `{ valueA: left, valueB: right }` pair. If `extractValuePair()` does not already canonicalize pairs the same way, the lookup will miss real observations and silently turn valid cells into zeros/nulls.
+- Medium: `cloud/apps/api/src/services/circumplex/mds.ts` exports `anchorMdsRotation()`, but the new circumplex flow never calls it. That leaves the 2D embedding in an arbitrary rotation, so the plotted orientation and the theoretical-angle comparison are unstable across runs and can be misleading.
+
+## Residual Risks
+- I could not verify the contracts of `extractValuePair()`, `runMatchesSignature()`, or the GraphQL shapes, so the pair-canonicalization issue remains [UNVERIFIED].
+- The frontend re-implements eligibility checks locally instead of trusting the backend `insufficient` field, so any future backend rule changes could drift unless both sides stay in sync.

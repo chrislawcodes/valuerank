@@ -1,0 +1,2225 @@
+Reading additional input from stdin...
+OpenAI Codex v0.122.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dad65-3f4b-72d2-a796-b80663af7b1b
+--------
+user
+Review this diff artifact using a correctness-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/apps/api/src/graphql/queries/available-signatures.ts b/cloud/apps/api/src/graphql/queries/available-signatures.ts
+new file mode 100644
+index 00000000..820b3905
+--- /dev/null
++++ b/cloud/apps/api/src/graphql/queries/available-signatures.ts
+@@ -0,0 +1,39 @@
++import { db } from '@valuerank/db';
++import { builder } from '../builder.js';
++import { formatRunSignature } from './domain-coverage-gql-types.js';
++import { AvailableSignatureRef, type AvailableSignatureShape } from '../types/circumplex.js';
++
++builder.queryField('availableSignatures', (t) =>
++  t.field({
++    type: [AvailableSignatureRef],
++    resolve: async () => {
++      const runs = await db.run.findMany({
++        where: {
++          tags: { some: { tag: { name: 'Aggregate' } } },
++          status: 'COMPLETED',
++          deletedAt: null,
++        },
++        select: {
++          config: true,
++          createdAt: true,
++        },
++      });
++
++      const bySignature = new Map<string, Date>();
++      for (const run of runs) {
++        const signature = formatRunSignature(run.config);
++        const mostRecentRunAt = bySignature.get(signature);
++        if (mostRecentRunAt == null || run.createdAt > mostRecentRunAt) {
++          bySignature.set(signature, run.createdAt);
++        }
++      }
++
++      return [...bySignature.entries()]
++        .sort((left, right) => right[1].getTime() - left[1].getTime())
++        .map(([signature, mostRecentRunAt]) => ({
++          signature,
++          mostRecentRunAt,
++        } satisfies AvailableSignatureShape));
++    },
++  }),
++);
+diff --git a/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts b/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts
+new file mode 100644
+index 00000000..4a9c6cc0
+--- /dev/null
++++ b/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts
+@@ -0,0 +1,161 @@
++import { db } from '@valuerank/db';
++import { SCHWARTZ_CIRCULAR_ORDER, theoreticalAngleDeg } from '@valuerank/shared/schwartz';
++import { builder } from '../builder.js';
++import {
++  CircumplexAnalysisResultRef,
++  type CircumplexAnalysisResultShape,
++  type CircumplexMdsCoordShape,
++  type CircumplexResultShape,
++} from '../types/circumplex.js';
++import { aggregatePairwiseWinRates, type CircumplexPairMatrix } from '../../services/circumplex/aggregation.js';
++import { classicalMds2d, circumplexFit, valueProfileMatrix } from '../../services/circumplex/statistics.js';
++
++type ModelRow = {
++  id: string;
++  modelId: string;
++  displayName: string;
++  provider: {
++    displayName: string;
++    name: string;
++  };
++};
++
++function createEmptyPairwiseMatrix(): CircumplexPairMatrix {
++  return SCHWARTZ_CIRCULAR_ORDER.map(() =>
++    SCHWARTZ_CIRCULAR_ORDER.map(() => ({ winRate: null, trials: 0, neutrals: 0 })));
++}
++
++function pairwiseToWinRateMatrix(pairwise: CircumplexPairMatrix): Array<Array<number | null>> {
++  return pairwise.map((row) => row.map((cell) => cell.winRate));
++}
++
++function pairwiseToTrialMatrix(pairwise: CircumplexPairMatrix): number[][] {
++  return pairwise.map((row) => row.map((cell) => cell.trials));
++}
++
++function computeExcludedIndices(pairwise: CircumplexPairMatrix): Set<number> {
++  const excluded = new Set<number>();
++
++  for (let rowIndex = 0; rowIndex < SCHWARTZ_CIRCULAR_ORDER.length; rowIndex += 1) {
++    let determinate = 0;
++    let hasLowTrialCell = false;
++
++    for (let colIndex = 0; colIndex < SCHWARTZ_CIRCULAR_ORDER.length; colIndex += 1) {
++      if (rowIndex === colIndex) continue;
++      const cell = pairwise[rowIndex]?.[colIndex];
++      if (cell == null || cell.trials <= 0 || cell.winRate == null) {
++        continue;
++      }
++      determinate += 1;
++      if (cell.trials < 20) {
++        hasLowTrialCell = true;
++      }
++    }
++
++    if (determinate < 6 || hasLowTrialCell) {
++      excluded.add(rowIndex);
++    }
++  }
++
++  return excluded;
++}
++
++function buildTrialsPerValue(pairwise: CircumplexPairMatrix) {
++  return SCHWARTZ_CIRCULAR_ORDER.map((valueKey, rowIndex) => ({
++    valueKey,
++    trials: pairwise[rowIndex]?.reduce((sum, cell, colIndex) => (
++      rowIndex === colIndex ? sum : sum + cell.trials
++    ), 0) ?? 0,
++  }));
++}
++
++function buildMdsCoords(coords: Array<{ x: number; y: number } | null>): CircumplexMdsCoordShape[] {
++  return coords.flatMap((point, index) => {
++    if (point == null) return [];
++    return [{
++      valueKey: SCHWARTZ_CIRCULAR_ORDER[index]!,
++      x: point.x,
++      y: point.y,
++      theoreticalAngleDeg: theoreticalAngleDeg(index),
++    }];
++  });
++}
++
++function buildResult(
++  modelId: string,
++  model: ModelRow | undefined,
++  signature: string,
++  pairwise: CircumplexPairMatrix,
++): CircumplexResultShape {
++  const winRateMatrix = pairwiseToWinRateMatrix(pairwise);
++  const trialMatrix = pairwiseToTrialMatrix(pairwise);
++  const excludedIndices = computeExcludedIndices(pairwise);
++  const profileCorrelationMatrix = valueProfileMatrix(winRateMatrix, trialMatrix, excludedIndices);
++  const fit = circumplexFit(profileCorrelationMatrix, SCHWARTZ_CIRCULAR_ORDER);
++  const distanceMatrix = profileCorrelationMatrix.map((row) => row.map((value) => (value == null ? null : 1 - value)));
++  const mds = classicalMds2d(distanceMatrix);
++
++  return {
++    modelId,
++    modelLabel: model?.displayName ?? model?.modelId ?? modelId,
++    providerName: model?.provider.displayName ?? model?.provider.name ?? 'Unknown provider',
++    signature,
++    valueOrder: [...SCHWARTZ_CIRCULAR_ORDER],
++    profileCorrelationMatrix,
++    pairTrialCounts: trialMatrix,
++    excludedValues: SCHWARTZ_CIRCULAR_ORDER.filter((_valueKey, index) => excludedIndices.has(index)),
++    spearmanRho: fit.rho,
++    spearmanP: fit.p,
++    verdictBand: fit.verdict,
++    mds2d: buildMdsCoords(mds.coords),
++    mdsStress: mds.stress,
++    mdsWarning: mds.warning,
++    trialsPerValue: buildTrialsPerValue(pairwise),
++  };
++}
++
++builder.queryField('circumplexAnalysis', (t) =>
++  t.field({
++    type: CircumplexAnalysisResultRef,
++    args: {
++      modelIds: t.arg.stringList({ required: true }),
++      signature: t.arg.string({ required: true }),
++      minTrialsPerValue: t.arg.int({ required: false }),
++    },
++    resolve: async (_root, args): Promise<CircumplexAnalysisResultShape> => {
++      const signature = String(args.signature);
++      const modelIds = [...new Set(args.modelIds.filter((modelId) => modelId != null && modelId !== ''))];
++      const minTrialsPerValue = args.minTrialsPerValue ?? 5;
++
++      if (modelIds.length === 0) {
++        return {
++          signature,
++          models: [],
++          insufficient: [],
++          eligibilityThreshold: minTrialsPerValue,
++        };
++      }
++
++      const [models, pairwiseMap] = await Promise.all([
++        db.llmModel.findMany({
++          where: { id: { in: modelIds } },
++          include: { provider: true },
++        }) as Promise<ModelRow[]>,
++        aggregatePairwiseWinRates({ modelIds, signature }),
++      ]);
++
++      const modelById = new Map(models.map((model) => [model.id, model] as const));
++      const results = modelIds.map((modelId) => {
++        const pairwise = pairwiseMap.get(modelId) ?? createEmptyPairwiseMatrix();
++        return buildResult(modelId, modelById.get(modelId), signature, pairwise);
++      });
++
++      return {
++        signature,
++        models: results,
++        insufficient: [],
++        eligibilityThreshold: minTrialsPerValue,
++      };
++    },
++  }),
++);
+diff --git a/cloud/apps/api/src/services/circumplex/aggregation.ts b/cloud/apps/api/src/services/circumplex/aggregation.ts
+new file mode 100644
+index 00000000..7576a994
+--- /dev/null
++++ b/cloud/apps/api/src/services/circumplex/aggregation.ts
+@@ -0,0 +1,204 @@
++import { db as defaultDb } from '@valuerank/db';
++import { SCHWARTZ_CIRCULAR_ORDER, type ValueKey } from '@valuerank/shared/schwartz';
++import { extractValuePair, type DomainAnalysisValuePair } from '../../graphql/queries/domain-analysis-values.js';
++import { runMatchesSignature } from '../../graphql/queries/domain-coverage-gql-types.js';
++import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/decision-model.js';
++
++export type CircumplexPairCell = {
++  winRate: number | null;
++  trials: number;
++  neutrals: number;
++};
++
++export type CircumplexPairMatrix = CircumplexPairCell[][];
++
++type RunRow = {
++  id: string;
++  config: unknown;
++  status: string;
++  deletedAt: Date | null;
++};
++
++type TranscriptRow = {
++  runId: string;
++  modelId: string;
++  decisionCode: string | null;
++  decisionMetadata: unknown;
++  definitionSnapshot: unknown;
++  scenario: {
++    orientationFlipped: boolean | null;
++    deletedAt: Date | null;
++  } | null;
++  deletedAt: Date | null;
++};
++
++type CircumplexDb = Pick<typeof defaultDb, 'run' | 'transcript'>;
++
++type PairStats = {
++  pair: DomainAnalysisValuePair;
++  prioritizedA: number;
++  prioritizedB: number;
++  neutrals: number;
++};
++
++function createEmptyCell(): CircumplexPairCell {
++  return { winRate: null, trials: 0, neutrals: 0 };
++}
++
++function createEmptyMatrix(): CircumplexPairMatrix {
++  return SCHWARTZ_CIRCULAR_ORDER.map(() => SCHWARTZ_CIRCULAR_ORDER.map(() => createEmptyCell()));
++}
++
++function pairKey(pair: DomainAnalysisValuePair): string {
++  return `${pair.valueA}::${pair.valueB}`;
++}
++
++function buildOrderedCell(stats: PairStats | undefined, left: ValueKey): CircumplexPairCell {
++  if (stats == null) {
++    return createEmptyCell();
++  }
++
++  const total = stats.prioritizedA + stats.prioritizedB + stats.neutrals;
++  if (total <= 0) {
++    return createEmptyCell();
++  }
++
++  const winCount = left === stats.pair.valueA ? stats.prioritizedA : stats.prioritizedB;
++  return {
++    winRate: winCount / total,
++    trials: total,
++    neutrals: stats.neutrals,
++  };
++}
++
++export async function aggregatePairwiseWinRates(args: {
++  modelIds: string[];
++  signature: string;
++  db?: CircumplexDb;
++}): Promise<Map<string, CircumplexPairMatrix>> {
++  const db = args.db ?? defaultDb;
++  const modelIdSet = new Set(args.modelIds);
++  const scopedRunIdSet = new Set<string>();
++  const output = new Map<string, CircumplexPairMatrix>();
++  const statsByModel = new Map<string, Map<string, PairStats>>();
++
++  for (const modelId of args.modelIds) {
++    output.set(modelId, createEmptyMatrix());
++    statsByModel.set(modelId, new Map<string, PairStats>());
++  }
++
++  if (args.modelIds.length === 0) {
++    return output;
++  }
++
++  const runs = (await db.run.findMany({
++    where: {
++      tags: { some: { tag: { name: 'Aggregate' } } },
++      status: 'COMPLETED',
++      deletedAt: null,
++    },
++    select: {
++      id: true,
++      config: true,
++    },
++  })) as RunRow[];
++
++  const scopedRunIds = runs
++    .filter((run) => run.status === 'COMPLETED' && run.deletedAt == null && runMatchesSignature(run.config, args.signature))
++    .map((run) => run.id);
++  for (const runId of scopedRunIds) {
++    scopedRunIdSet.add(runId);
++  }
++  if (scopedRunIds.length === 0) {
++    return output;
++  }
++
++  const transcripts = (await db.transcript.findMany({
++    where: {
++      runId: { in: scopedRunIds },
++      modelId: { in: args.modelIds },
++      deletedAt: null,
++    },
++    select: {
++      runId: true,
++      modelId: true,
++      decisionCode: true,
++      decisionMetadata: true,
++      definitionSnapshot: true,
++      deletedAt: true,
++      scenario: {
++        select: {
++          orientationFlipped: true,
++          deletedAt: true,
++        },
++      },
++    },
++  })) as TranscriptRow[];
++
++  for (const transcript of transcripts) {
++    if (!scopedRunIdSet.has(transcript.runId)) continue;
++    if (!modelIdSet.has(transcript.modelId)) continue;
++    if (transcript.deletedAt != null || transcript.scenario?.deletedAt != null) continue;
++
++    const pair = extractValuePair(transcript.definitionSnapshot);
++    if (pair == null) continue;
++
++    const resolved = resolveTranscriptDecisionModel({
++      decisionCode: transcript.decisionCode,
++      decisionMetadata: transcript.decisionMetadata,
++      definitionSnapshot: transcript.definitionSnapshot,
++      orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
++      pairOverride: pair,
++    });
++
++    if (resolved.canonical.direction === 'unknown') {
++      continue;
++    }
++
++    const statsMap = statsByModel.get(transcript.modelId);
++    if (statsMap == null) continue;
++
++    const key = pairKey(pair);
++    const stats = statsMap.get(key) ?? {
++      pair,
++      prioritizedA: 0,
++      prioritizedB: 0,
++      neutrals: 0,
++    };
++
++    if (resolved.canonical.direction === 'neutral') {
++      stats.neutrals += 1;
++    } else if (resolved.canonical.favoredValueKey === pair.valueA) {
++      stats.prioritizedA += 1;
++    } else if (resolved.canonical.favoredValueKey === pair.valueB) {
++      stats.prioritizedB += 1;
++    } else {
++      continue;
++    }
++
++    statsMap.set(key, stats);
++  }
++
++  for (const [modelId, statsMap] of statsByModel.entries()) {
++    const matrix = createEmptyMatrix();
++
++    for (let row = 0; row < SCHWARTZ_CIRCULAR_ORDER.length; row += 1) {
++      const left = SCHWARTZ_CIRCULAR_ORDER[row]!;
++      for (let col = 0; col < SCHWARTZ_CIRCULAR_ORDER.length; col += 1) {
++        const right = SCHWARTZ_CIRCULAR_ORDER[col]!;
++        if (row === col) {
++          matrix[row]![col] = createEmptyCell();
++          continue;
++        }
++        const sortedPair = left < right
++          ? { valueA: left, valueB: right }
++          : { valueA: right, valueB: left };
++        matrix[row]![col] = buildOrderedCell(statsMap.get(pairKey(sortedPair)), left);
++      }
++    }
++
++    output.set(modelId, matrix);
++  }
++
++  return output;
++}
+diff --git a/cloud/apps/api/src/services/circumplex/eligibility.ts b/cloud/apps/api/src/services/circumplex/eligibility.ts
+new file mode 100644
+index 00000000..b1dd434a
+--- /dev/null
++++ b/cloud/apps/api/src/services/circumplex/eligibility.ts
+@@ -0,0 +1,65 @@
++import { SCHWARTZ_CIRCULAR_ORDER, type ValueKey } from '@valuerank/shared/schwartz';
++
++export type CircumplexPairCell = {
++  winRate: number | null;
++  trials: number;
++  neutrals: number;
++};
++
++export type CircumplexPairMatrix = CircumplexPairCell[][];
++
++export type CircumplexEligibilityStatus = 'eligible' | 'insufficient';
++export type CircumplexEligibilityReason =
++  | 'no_transcripts_for_signature'
++  | 'missing_values'
++  | 'below_threshold';
++
++export type CircumplexEligibilityResult = {
++  status: CircumplexEligibilityStatus;
++  reason?: CircumplexEligibilityReason;
++  trialsPerValue: Array<{ valueKey: ValueKey; trials: number }>;
++};
++
++export function classifyEligibility(args: {
++  model: { modelId: string; modelLabel: string; providerName: string };
++  pairwise: CircumplexPairMatrix;
++  minTrialsPerValue: number;
++}): CircumplexEligibilityResult {
++  void args.model;
++  const trialsPerValue = SCHWARTZ_CIRCULAR_ORDER.map((valueKey, rowIndex) => {
++    const trials = args.pairwise[rowIndex]?.reduce((sum, cell, colIndex) => (
++      rowIndex === colIndex ? sum : sum + (cell?.trials ?? 0)
++    ), 0) ?? 0;
++    return { valueKey, trials };
++  });
++
++  const totalTrials = trialsPerValue.reduce((sum, entry) => sum + entry.trials, 0);
++  if (totalTrials === 0) {
++    return {
++      status: 'insufficient',
++      reason: 'no_transcripts_for_signature',
++      trialsPerValue,
++    };
++  }
++
++  if (trialsPerValue.some((entry) => entry.trials === 0)) {
++    return {
++      status: 'insufficient',
++      reason: 'missing_values',
++      trialsPerValue,
++    };
++  }
++
++  if (trialsPerValue.some((entry) => entry.trials < args.minTrialsPerValue)) {
++    return {
++      status: 'insufficient',
++      reason: 'below_threshold',
++      trialsPerValue,
++    };
++  }
++
++  return {
++    status: 'eligible',
++    trialsPerValue,
++  };
++}
+diff --git a/cloud/apps/api/src/services/circumplex/mds.ts b/cloud/apps/api/src/services/circumplex/mds.ts
+new file mode 100644
+index 00000000..02f5fea1
+--- /dev/null
++++ b/cloud/apps/api/src/services/circumplex/mds.ts
+@@ -0,0 +1,231 @@
++import { type ValueKey } from '@valuerank/shared/schwartz';
++
++type Point = { x: number; y: number };
++
++type EigenDecomposition = {
++  eigenvalues: number[];
++  eigenvectors: number[][];
++};
++
++type EigenPair = {
++  value: number;
++  vector: number[];
++};
++
++function identityMatrix(size: number): number[][] {
++  return Array.from({ length: size }, (_unused, row) =>
++    Array.from({ length: size }, (_unused2, col) => (row === col ? 1 : 0)));
++}
++
++function cloneMatrix(matrix: number[][]): number[][] {
++  return matrix.map((row) => [...row]);
++}
++
++function jacobiEigenDecomposition(input: number[][]): EigenDecomposition {
++  const n = input.length;
++  const a = cloneMatrix(input);
++  const v = identityMatrix(n);
++  const maxIterations = 100;
++  const epsilon = 1e-12;
++
++  for (let iteration = 0; iteration < maxIterations; iteration += 1) {
++    let p = 0;
++    let q = 1;
++    let maxValue = 0;
++
++    for (let row = 0; row < n; row += 1) {
++      for (let col = row + 1; col < n; col += 1) {
++        const value = Math.abs(a[row]![col]!);
++        if (value > maxValue) {
++          maxValue = value;
++          p = row;
++          q = col;
++        }
++      }
++    }
++
++    if (maxValue < epsilon) {
++      break;
++    }
++
++    const app = a[p]![p]!;
++    const aqq = a[q]![q]!;
++    const apq = a[p]![q]!;
++    if (Math.abs(apq) < epsilon) {
++      continue;
++    }
++
++    const tau = (aqq - app) / (2 * apq);
++    const sign = tau >= 0 ? 1 : -1;
++    const t = sign / (Math.abs(tau) + Math.sqrt(1 + tau * tau));
++    const c = 1 / Math.sqrt(1 + t * t);
++    const s = t * c;
++    const tauPrime = s / (1 + c);
++
++    a[p]![p] = app - t * apq;
++    a[q]![q] = aqq + t * apq;
++    a[p]![q] = 0;
++    a[q]![p] = 0;
++
++    for (let row = 0; row < n; row += 1) {
++      if (row === p || row === q) continue;
++      const arp = a[row]![p]!;
++      const arq = a[row]![q]!;
++      const nextArp = arp - s * (arq + tauPrime * arp);
++      const nextArq = arq + s * (arp - tauPrime * arq);
++      a[row]![p] = nextArp;
++      a[p]![row] = nextArp;
++      a[row]![q] = nextArq;
++      a[q]![row] = nextArq;
++    }
++
++    for (let row = 0; row < n; row += 1) {
++      const vrp = v[row]![p]!;
++      const vrq = v[row]![q]!;
++      v[row]![p] = c * vrp - s * vrq;
++      v[row]![q] = s * vrp + c * vrq;
++    }
++  }
++
++  const eigenvalues = Array.from({ length: n }, (_unused, index) => a[index]![index]!);
++  return { eigenvalues, eigenvectors: v };
++}
++
++function isIncludedIndex(distanceMatrix: (number | null)[][], index: number): boolean {
++  return distanceMatrix[index]?.some((value) => value != null) ?? false;
++}
++
++function centerDistanceMatrix(distanceMatrix: number[][]): number[][] {
++  const n = distanceMatrix.length;
++  const rowMeans = distanceMatrix.map((row) => row.reduce((sum, value) => sum + value, 0) / n);
++  const grandMean = rowMeans.reduce((sum, value) => sum + value, 0) / n;
++
++  return Array.from({ length: n }, (_unused, rowIndex) =>
++    Array.from({ length: n }, (_unused2, colIndex) => (
++      -0.5 * (
++        distanceMatrix[rowIndex]![colIndex]!
++        - rowMeans[rowIndex]!
++        - rowMeans[colIndex]!
++        + grandMean
++      )
++    )));
++}
++
++export function classicalMds2d(distanceMatrix: (number | null)[][]): {
++  coords: Array<Point | null>;
++  stress: number;
++  excluded: number[];
++  warning: string | null;
++} {
++  const size = distanceMatrix.length;
++  const excluded = Array.from({ length: size }, (_unused, index) => index).filter((index) => !isIncludedIndex(distanceMatrix, index));
++  const included = Array.from({ length: size }, (_unused, index) => index).filter((index) => !excluded.includes(index));
++
++  if (included.length === 0) {
++    return {
++      coords: Array.from({ length: size }, () => null),
++      stress: 0,
++      excluded,
++      warning: 'No values have enough determinate data for a 2D embedding.',
++    };
++  }
++
++  const reduced = included.map((rowIndex) =>
++    included.map((colIndex) => {
++      const value = distanceMatrix[rowIndex]![colIndex];
++      if (value == null) {
++        return 0;
++      }
++      return value * value;
++    }));
++
++  const centered = centerDistanceMatrix(reduced);
++  const { eigenvalues, eigenvectors } = jacobiEigenDecomposition(centered);
++  const ranked: EigenPair[] = eigenvalues
++    .map((value, index) => ({ value, vector: eigenvectors.map((row) => row[index] ?? 0) }))
++    .sort((left, right) => right.value - left.value);
++
++  const totalAbsEigenvalue = eigenvalues.reduce((sum, value) => sum + Math.abs(value), 0);
++  const first = ranked[0]?.value ?? 0;
++  const second = ranked[1]?.value ?? 0;
++  const topTwoShare = totalAbsEigenvalue <= 0 ? 0 : (Math.max(0, first) + Math.max(0, second)) / totalAbsEigenvalue;
++  const warning = topTwoShare < 0.5
++    ? '2D embedding does not cleanly represent this model\'s correlation structure.'
++    : null;
++
++  const firstScale = Math.sqrt(Math.max(0, first));
++  const secondScale = Math.sqrt(Math.max(0, second));
++
++  const reducedCoords = included.map((rowIndex) => {
++    const x = firstScale * (ranked[0]?.vector[rowIndex] ?? 0);
++    const y = secondScale * (ranked[1]?.vector[rowIndex] ?? 0);
++    return { x, y };
++  });
++
++  let residualSum = 0;
++  let inputSum = 0;
++  for (let i = 0; i < reducedCoords.length; i += 1) {
++    for (let j = i + 1; j < reducedCoords.length; j += 1) {
++      const inputDistance = Math.sqrt(reduced[i]![j] ?? 0);
++      const dx = reducedCoords[i]!.x - reducedCoords[j]!.x;
++      const dy = reducedCoords[i]!.y - reducedCoords[j]!.y;
++      const embeddedDistance = Math.sqrt(dx * dx + dy * dy);
++      residualSum += Math.pow(inputDistance - embeddedDistance, 2);
++      inputSum += Math.pow(inputDistance, 2);
++    }
++  }
++
++  const coords = Array.from({ length: size }, () => null as Point | null);
++  included.forEach((index, coordIndex) => {
++    coords[index] = reducedCoords[coordIndex] ?? null;
++  });
++
++  return {
++    coords,
++    stress: inputSum <= 0 ? 0 : residualSum / inputSum,
++    excluded,
++    warning,
++  };
++}
++
++export function anchorMdsRotation(
++  coords: Array<Point | null>,
++  canonicalOrder: readonly ValueKey[],
++  anchorKey: ValueKey = 'Self_Direction_Action',
++): Array<Point | null> {
++  const startIndex = canonicalOrder.indexOf(anchorKey);
++  if (startIndex < 0) {
++    return coords;
++  }
++
++  let anchorIndex = -1;
++  for (let offset = 0; offset < canonicalOrder.length; offset += 1) {
++    const candidateIndex = (startIndex + offset) % canonicalOrder.length;
++    if (coords[candidateIndex] != null) {
++      anchorIndex = candidateIndex;
++      break;
++    }
++  }
++
++  if (anchorIndex < 0) {
++    return coords;
++  }
++
++  const anchor = coords[anchorIndex];
++  if (anchor == null) {
++    return coords;
++  }
++
++  const angle = Math.atan2(anchor.x, anchor.y);
++  const rotation = angle;
++  const cos = Math.cos(rotation);
++  const sin = Math.sin(rotation);
++
++  return coords.map((point) => {
++    if (point == null) return null;
++    return {
++      x: (point.x * cos) - (point.y * sin),
++      y: (point.x * sin) + (point.y * cos),
++    };
++  });
++}
+diff --git a/cloud/apps/api/src/services/circumplex/statistics.ts b/cloud/apps/api/src/services/circumplex/statistics.ts
+new file mode 100644
+index 00000000..09c6d458
+--- /dev/null
++++ b/cloud/apps/api/src/services/circumplex/statistics.ts
+@@ -0,0 +1,163 @@
++import { circularDistance, type ValueKey } from '@valuerank/shared/schwartz';
++import { spearmanRankCorrelation } from '../statistics/spearman.js';
++
++export type CircumplexFitVerdict =
++  | 'clear'
++  | 'partial'
++  | 'not_evident'
++  | 'insufficient_data';
++
++export type CircumplexFitResult = {
++  rho: number | null;
++  p: number | null;
++  determinatePairs: number;
++  verdict: CircumplexFitVerdict;
++};
++
++function isFiniteNumber(value: unknown): value is number {
++  return typeof value === 'number' && Number.isFinite(value);
++}
++
++function readMatrixValue(matrix: Array<Array<number | null>>, row: number, col: number): number | null {
++  const value = matrix[row]?.[col];
++  return isFiniteNumber(value) ? value : null;
++}
++
++function readTrialCount(matrix: number[][], row: number, col: number): number {
++  const value = matrix[row]?.[col];
++  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
++}
++
++export function pearsonCorrelation(x: Array<number | null>, y: Array<number | null>): number | null {
++  if (x.length !== y.length) {
++    throw new RangeError('Pearson inputs must have the same length');
++  }
++
++  const paired: Array<[number, number]> = [];
++  for (let index = 0; index < x.length; index += 1) {
++    const left = x[index];
++    const right = y[index];
++    if (!isFiniteNumber(left) || !isFiniteNumber(right)) {
++      continue;
++    }
++    paired.push([left, right]);
++  }
++
++  if (paired.length < 3) {
++    return null;
++  }
++
++  const xs = paired.map(([left]) => left);
++  const ys = paired.map(([, right]) => right);
++  const meanX = xs.reduce((sum, value) => sum + value, 0) / xs.length;
++  const meanY = ys.reduce((sum, value) => sum + value, 0) / ys.length;
++
++  let covariance = 0;
++  let varianceX = 0;
++  let varianceY = 0;
++  for (let index = 0; index < paired.length; index += 1) {
++    const [left, right] = paired[index]!;
++    const deltaX = left - meanX;
++    const deltaY = right - meanY;
++    covariance += deltaX * deltaY;
++    varianceX += deltaX * deltaX;
++    varianceY += deltaY * deltaY;
++  }
++
++  if (varianceX <= 1e-12 || varianceY <= 1e-12) {
++    return null;
++  }
++
++  return covariance / Math.sqrt(varianceX * varianceY);
++}
++
++export function valueProfileMatrix(
++  pairwiseWinRates: Array<Array<number | null>>,
++  pairTrialCounts: number[][],
++  excluded: Set<number>,
++): Array<Array<number | null>> {
++  const size = pairwiseWinRates.length;
++  const matrix = Array.from({ length: size }, () => Array<number | null>(size).fill(null));
++
++  for (let index = 0; index < size; index += 1) {
++    if (excluded.has(index)) {
++      continue;
++    }
++    matrix[index]![index] = 1;
++  }
++
++  for (let i = 0; i < size; i += 1) {
++    if (excluded.has(i)) continue;
++    for (let j = i + 1; j < size; j += 1) {
++      if (excluded.has(j)) continue;
++
++      const x: Array<number | null> = [];
++      const y: Array<number | null> = [];
++
++      for (let k = 0; k < size; k += 1) {
++        if (k === i || k === j || excluded.has(k)) continue;
++
++        const leftValue = readMatrixValue(pairwiseWinRates, i, k);
++        const rightValue = readMatrixValue(pairwiseWinRates, j, k);
++        const leftTrials = readTrialCount(pairTrialCounts, i, k);
++        const rightTrials = readTrialCount(pairTrialCounts, j, k);
++        if (leftTrials <= 0 || rightTrials <= 0) {
++          continue;
++        }
++
++        x.push(leftValue);
++        y.push(rightValue);
++      }
++
++      const correlation = pearsonCorrelation(x, y);
++      matrix[i]![j] = correlation;
++      matrix[j]![i] = correlation;
++    }
++  }
++
++  return matrix;
++}
++
++export function circumplexFit(
++  profileMatrix: Array<Array<number | null>>,
++  canonicalOrder: readonly ValueKey[],
++): CircumplexFitResult {
++  const distances: number[] = [];
++  const correlations: number[] = [];
++
++  for (let i = 0; i < canonicalOrder.length; i += 1) {
++    for (let j = i + 1; j < canonicalOrder.length; j += 1) {
++      const value = profileMatrix[i]?.[j];
++      if (!isFiniteNumber(value)) {
++        continue;
++      }
++      distances.push(circularDistance(i, j, canonicalOrder.length));
++      correlations.push(value);
++    }
++  }
++
++  if (distances.length < 15 || new Set(correlations.map((value) => value.toFixed(12))).size < 2 || new Set(distances).size < 2) {
++    return {
++      rho: null,
++      p: null,
++      determinatePairs: distances.length,
++      verdict: 'insufficient_data',
++    };
++  }
++
++  const { rho, p } = spearmanRankCorrelation(distances, correlations);
++  const verdict: CircumplexFitVerdict = rho <= -0.5
++    ? 'clear'
++    : rho <= -0.2
++      ? 'partial'
++      : 'not_evident';
++
++  return {
++    rho,
++    p,
++    determinatePairs: distances.length,
++    verdict,
++  };
++}
++
++export { classicalMds2d, anchorMdsRotation } from './mds.js';
+diff --git a/cloud/apps/api/src/services/consistency/statistics.ts b/cloud/apps/api/src/services/consistency/statistics.ts
+index 60917db2..d6026b68 100644
+--- a/cloud/apps/api/src/services/consistency/statistics.ts
++++ b/cloud/apps/api/src/services/consistency/statistics.ts
+@@ -1,3 +1,6 @@
++import { spearmanRankCorrelation } from '../statistics/spearman.js';
++export { spearmanRankCorrelation } from '../statistics/spearman.js';
++
+ export type CanonicalAppealLevel =
+   | 'strongly'
+   | 'somewhat'
+@@ -25,11 +28,6 @@ export type DlsPoolResult = {
+   tauSquared: number;
+ };
+ 
+-export type SpearmanResult = {
+-  rho: number;
+-  p: number;
+-};
+-
+ export type CoherenceConditionStat = {
+   pressureRank: number;
+   winRate: number;
+@@ -44,16 +42,6 @@ export type CoherenceResult = {
+ 
+ const Z_95 = 1.96;
+ const EPSILON = 1e-12;
+-const LOG_GAMMA_COEFFS = [
+-  676.5203681218851,
+-  -1259.1392167224028,
+-  771.32342877765313,
+-  -176.61502916214059,
+-  12.507343278686905,
+-  -0.13857109526572012,
+-  9.9843695780195716e-6,
+-  1.5056327351493116e-7,
+-] as const;
+ 
+ function clamp01(value: number): number {
+   if (value < 0) return 0;
+@@ -74,152 +62,6 @@ function validateProportion(matches: number, trials: number): void {
+   }
+ }
+ 
+-function logGamma(z: number): number {
+-  if (z < 0.5) {
+-    return Math.log(Math.PI) - Math.log(Math.sin(Math.PI * z)) - logGamma(1 - z);
+-  }
+-
+-  let x = 0.9999999999998099;
+-  const shifted = z - 1;
+-  for (let index = 0; index < LOG_GAMMA_COEFFS.length; index += 1) {
+-    x += LOG_GAMMA_COEFFS[index]! / (shifted + index + 1);
+-  }
+-  const t = shifted + LOG_GAMMA_COEFFS.length - 0.5;
+-  return 0.9189385332046727 + (shifted + 0.5) * Math.log(t) - t + Math.log(x);
+-}
+-
+-function betaContinuedFraction(a: number, b: number, x: number): number {
+-  const MAX_ITERATIONS = 200;
+-  const FPMIN = 1e-30;
+-  const qab = a + b;
+-  const qap = a + 1;
+-  const qam = a - 1;
+-  let c = 1;
+-  let d = 1 - (qab * x) / qap;
+-  if (Math.abs(d) < FPMIN) d = FPMIN;
+-  d = 1 / d;
+-  let h = d;
+-
+-  for (let m = 1; m <= MAX_ITERATIONS; m += 1) {
+-    const m2 = 2 * m;
+-    let aa = (m * (b - m) * x) / ((qam + m2) * (a + m2));
+-    d = 1 + aa * d;
+-    if (Math.abs(d) < FPMIN) d = FPMIN;
+-    c = 1 + aa / c;
+-    if (Math.abs(c) < FPMIN) c = FPMIN;
+-    d = 1 / d;
+-    h *= d * c;
+-
+-    aa = (-(a + m) * (qab + m) * x) / ((a + m2) * (qap + m2));
+-    d = 1 + aa * d;
+-    if (Math.abs(d) < FPMIN) d = FPMIN;
+-    c = 1 + aa / c;
+-    if (Math.abs(c) < FPMIN) c = FPMIN;
+-    d = 1 / d;
+-    const delta = d * c;
+-    h *= delta;
+-
+-    if (Math.abs(delta - 1) < 3e-7) {
+-      break;
+-    }
+-  }
+-
+-  return h;
+-}
+-
+-function regularizedIncompleteBeta(a: number, b: number, x: number): number {
+-  if (x <= 0) return 0;
+-  if (x >= 1) return 1;
+-
+-  const bt = Math.exp(
+-    logGamma(a + b)
+-    - logGamma(a)
+-    - logGamma(b)
+-    + a * Math.log(x)
+-    + b * Math.log(1 - x),
+-  );
+-
+-  if (x < (a + 1) / (a + b + 2)) {
+-    return (bt * betaContinuedFraction(a, b, x)) / a;
+-  }
+-
+-  return 1 - ((bt * betaContinuedFraction(b, a, 1 - x)) / b);
+-}
+-
+-function studentTCdf(t: number, df: number): number {
+-  if (df <= 0) return Number.NaN;
+-  if (!Number.isFinite(t)) return t > 0 ? 1 : 0;
+-  const x = df / (df + t * t);
+-  const ibeta = regularizedIncompleteBeta(df / 2, 0.5, x);
+-  if (t >= 0) {
+-    return 1 - (ibeta / 2);
+-  }
+-  return ibeta / 2;
+-}
+-
+-function rankValues(values: number[]): number[] {
+-  const indexed = values.map((value, index) => ({ value, index }));
+-  indexed.sort((left, right) => left.value - right.value);
+-
+-  const ranks = new Array<number>(values.length);
+-  let position = 0;
+-  while (position < indexed.length) {
+-    let end = position + 1;
+-    while (end < indexed.length && indexed[end]!.value === indexed[position]!.value) {
+-      end += 1;
+-    }
+-    const averageRank = (position + 1 + end) / 2;
+-    for (let cursor = position; cursor < end; cursor += 1) {
+-      ranks[indexed[cursor]!.index] = averageRank;
+-    }
+-    position = end;
+-  }
+-
+-  return ranks;
+-}
+-
+-function pearsonCorrelation(x: number[], y: number[]): number {
+-  const n = x.length;
+-  if (n === 0 || y.length !== n) {
+-    return Number.NaN;
+-  }
+-
+-  const meanX = x.reduce((sum, value) => sum + value, 0) / n;
+-  const meanY = y.reduce((sum, value) => sum + value, 0) / n;
+-
+-  let covariance = 0;
+-  let varianceX = 0;
+-  let varianceY = 0;
+-
+-  for (let index = 0; index < n; index += 1) {
+-    const deltaX = x[index]! - meanX;
+-    const deltaY = y[index]! - meanY;
+-    covariance += deltaX * deltaY;
+-    varianceX += deltaX * deltaX;
+-    varianceY += deltaY * deltaY;
+-  }
+-
+-  if (varianceX <= EPSILON || varianceY <= EPSILON) {
+-    return Number.NaN;
+-  }
+-
+-  return covariance / Math.sqrt(varianceX * varianceY);
+-}
+-
+-function twoSidedTPValue(tStatistic: number, df: number): number {
+-  if (!Number.isFinite(tStatistic)) {
+-    return 0;
+-  }
+-  if (df <= 0) {
+-    return Number.NaN;
+-  }
+-  const cdf = studentTCdf(Math.abs(tStatistic), df);
+-  if (!Number.isFinite(cdf)) {
+-    return Number.NaN;
+-  }
+-  return clamp01(2 * (1 - cdf));
+-}
+-
+ function scenarioMatchesFromProportion(p: number, n: number): number {
+   return Math.max(0, Math.min(n, Math.round(p * n)));
+ }
+@@ -319,37 +161,6 @@ export function dersimonianLairdPool(scenarioStats: DlsScenarioStat[]): DlsPoolR
+   };
+ }
+ 
+-export function spearmanRankCorrelation(x: number[], y: number[]): SpearmanResult {
+-  if (x.length !== y.length) {
+-    throw new RangeError('Spearman inputs must have the same length');
+-  }
+-  if (x.length < 2) {
+-    return { rho: 0, p: 1 };
+-  }
+-
+-  const ranksX = rankValues(x);
+-  const ranksY = rankValues(y);
+-  const rho = pearsonCorrelation(ranksX, ranksY);
+-  if (!Number.isFinite(rho)) {
+-    return { rho: 0, p: 1 };
+-  }
+-
+-  if (Math.abs(rho) >= 1) {
+-    return { rho: Math.sign(rho), p: 0 };
+-  }
+-
+-  const df = x.length - 2;
+-  if (df <= 0) {
+-    return { rho, p: 1 };
+-  }
+-
+-  const tStatistic = rho * Math.sqrt(df / Math.max(EPSILON, 1 - rho * rho));
+-  return {
+-    rho,
+-    p: twoSidedTPValue(tStatistic, df),
+-  };
+-}
+-
+ export function coherenceForPair(conditionStats: CoherenceConditionStat[]): CoherenceResult {
+   const usable = conditionStats.filter((entry) => isFiniteNumber(entry.pressureRank) && isFiniteNumber(entry.winRate));
+   if (usable.length < 3) {
+diff --git a/cloud/apps/api/src/services/statistics/spearman.ts b/cloud/apps/api/src/services/statistics/spearman.ts
+new file mode 100644
+index 00000000..b565cde6
+--- /dev/null
++++ b/cloud/apps/api/src/services/statistics/spearman.ts
+@@ -0,0 +1,195 @@
++type SpearmanInternalResult = {
++  rho: number;
++  p: number;
++};
++
++const EPSILON = 1e-12;
++const LOG_GAMMA_COEFFS = [
++  676.5203681218851,
++  -1259.1392167224028,
++  771.32342877765313,
++  -176.61502916214059,
++  12.507343278686905,
++  -0.13857109526572012,
++  9.9843695780195716e-6,
++  Number('1.5056327351493117e-7'),
++] as const;
++
++function rankValues(values: number[]): number[] {
++  const indexed = values.map((value, index) => ({ value, index }));
++  indexed.sort((left, right) => left.value - right.value);
++
++  const ranks = new Array<number>(values.length);
++  let position = 0;
++  while (position < indexed.length) {
++    let end = position + 1;
++    while (end < indexed.length && indexed[end]!.value === indexed[position]!.value) {
++      end += 1;
++    }
++    const averageRank = (position + 1 + end) / 2;
++    for (let cursor = position; cursor < end; cursor += 1) {
++      ranks[indexed[cursor]!.index] = averageRank;
++    }
++    position = end;
++  }
++
++  return ranks;
++}
++
++function pearsonCorrelation(x: number[], y: number[]): number {
++  const n = x.length;
++  if (n === 0 || y.length !== n) {
++    return Number.NaN;
++  }
++
++  const meanX = x.reduce((sum, value) => sum + value, 0) / n;
++  const meanY = y.reduce((sum, value) => sum + value, 0) / n;
++
++  let covariance = 0;
++  let varianceX = 0;
++  let varianceY = 0;
++
++  for (let index = 0; index < n; index += 1) {
++    const deltaX = x[index]! - meanX;
++    const deltaY = y[index]! - meanY;
++    covariance += deltaX * deltaY;
++    varianceX += deltaX * deltaX;
++    varianceY += deltaY * deltaY;
++  }
++
++  if (varianceX <= EPSILON || varianceY <= EPSILON) {
++    return Number.NaN;
++  }
++
++  return covariance / Math.sqrt(varianceX * varianceY);
++}
++
++function logGamma(z: number): number {
++  if (z < 0.5) {
++    return Math.log(Math.PI) - Math.log(Math.sin(Math.PI * z)) - logGamma(1 - z);
++  }
++
++  let x = Number('0.99999999999980993');
++  const shifted = z - 1;
++  for (let index = 0; index < LOG_GAMMA_COEFFS.length; index += 1) {
++    x += LOG_GAMMA_COEFFS[index]! / (shifted + index + 1);
++  }
++  const t = shifted + LOG_GAMMA_COEFFS.length - 0.5;
++  return 0.9189385332046727 + (shifted + 0.5) * Math.log(t) - t + Math.log(x);
++}
++
++function betaContinuedFraction(a: number, b: number, x: number): number {
++  const MAX_ITERATIONS = 200;
++  const FPMIN = 1e-30;
++  const qab = a + b;
++  const qap = a + 1;
++  const qam = a - 1;
++  let c = 1;
++  let d = 1 - (qab * x) / qap;
++  if (Math.abs(d) < FPMIN) d = FPMIN;
++  d = 1 / d;
++  let h = d;
++
++  for (let m = 1; m <= MAX_ITERATIONS; m += 1) {
++    const m2 = 2 * m;
++    let aa = (m * (b - m) * x) / ((qam + m2) * (a + m2));
++    d = 1 + aa * d;
++    if (Math.abs(d) < FPMIN) d = FPMIN;
++    c = 1 + aa / c;
++    if (Math.abs(c) < FPMIN) c = FPMIN;
++    d = 1 / d;
++    h *= d * c;
++
++    aa = (-(a + m) * (qab + m) * x) / ((a + m2) * (qap + m2));
++    d = 1 + aa * d;
++    if (Math.abs(d) < FPMIN) d = FPMIN;
++    c = 1 + aa / c;
++    if (Math.abs(c) < FPMIN) c = FPMIN;
++    d = 1 / d;
++    const delta = d * c;
++    h *= delta;
++
++    if (Math.abs(delta - 1) < 3e-7) {
++      break;
++    }
++  }
++
++  return h;
++}
++
++function regularizedIncompleteBeta(a: number, b: number, x: number): number {
++  if (x <= 0) return 0;
++  if (x >= 1) return 1;
++
++  const bt = Math.exp(
++    logGamma(a + b)
++    - logGamma(a)
++    - logGamma(b)
++    + a * Math.log(x)
++    + b * Math.log(1 - x),
++  );
++
++  if (x < (a + 1) / (a + b + 2)) {
++    return (bt * betaContinuedFraction(a, b, x)) / a;
++  }
++
++  return 1 - ((bt * betaContinuedFraction(b, a, 1 - x)) / b);
++}
++
++function studentTCdf(t: number, df: number): number {
++  if (df <= 0) return Number.NaN;
++  if (!Number.isFinite(t)) return t > 0 ? 1 : 0;
++  const x = df / (df + t * t);
++  const ibeta = regularizedIncompleteBeta(df / 2, 0.5, x);
++  if (t >= 0) {
++    return 1 - (ibeta / 2);
++  }
++  return ibeta / 2;
++}
++
++function twoSidedTPValue(tStatistic: number, df: number): number {
++  if (!Number.isFinite(tStatistic)) {
++    return 0;
++  }
++  if (df <= 0) {
++    return Number.NaN;
++  }
++  const cdf = studentTCdf(Math.abs(tStatistic), df);
++  if (!Number.isFinite(cdf)) {
++    return Number.NaN;
++  }
++  return Math.max(0, Math.min(1, 2 * (1 - cdf)));
++}
++
++export type SpearmanResult = SpearmanInternalResult;
++
++export function spearmanRankCorrelation(x: number[], y: number[]): SpearmanResult {
++  if (x.length !== y.length) {
++    throw new RangeError('Spearman inputs must have the same length');
++  }
++  if (x.length < 2) {
++    return { rho: 0, p: 1 };
++  }
++
++  const ranksX = rankValues(x);
++  const ranksY = rankValues(y);
++  const rho = pearsonCorrelation(ranksX, ranksY);
++  if (!Number.isFinite(rho)) {
++    return { rho: 0, p: 1 };
++  }
++
++  if (Math.abs(rho) >= 1) {
++    return { rho: Math.sign(rho), p: 0 };
++  }
++
++  const df = x.length - 2;
++  if (df <= 0) {
++    return { rho, p: 1 };
++  }
++
++  const tStatistic = rho * Math.sqrt(df / Math.max(EPSILON, 1 - rho * rho));
++  return {
++    rho,
++    p: twoSidedTPValue(tStatistic, df),
++  };
++}
+diff --git a/cloud/apps/web/src/components/models/CircumplexMatrix.tsx b/cloud/apps/web/src/components/models/CircumplexMatrix.tsx
+new file mode 100644
+index 00000000..1e925466
+--- /dev/null
++++ b/cloud/apps/web/src/components/models/CircumplexMatrix.tsx
+@@ -0,0 +1,128 @@
++import { VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
++import { formatFullSchwartzValueName } from '../../utils/schwartz';
++
++type Props = {
++  matrix: Array<Array<number | null> | null>;
++  pairTrialCounts: number[][];
++  valueOrder: ValueKey[];
++  excludedValues: Set<ValueKey>;
++};
++
++const CELL_SIZE = 34;
++const LABEL_SIZE = 128;
++const MARGIN = 10;
++
++function clamp(value: number): number {
++  return Math.max(-1, Math.min(1, value));
++}
++
++function colorForCorrelation(value: number | null): string {
++  if (value == null) return '#e5e7eb';
++  const t = (clamp(value) + 1) / 2;
++  if (t < 0.5) {
++    const ratio = t / 0.5;
++    const r = 239 + Math.round((255 - 239) * ratio);
++    const g = 68 + Math.round((255 - 68) * ratio);
++    const b = 68 + Math.round((255 - 68) * ratio);
++    return `rgb(${r}, ${g}, ${b})`;
++  }
++  const ratio = (t - 0.5) / 0.5;
++  const r = 255 - Math.round((255 - 34) * ratio);
++  const g = 255 - Math.round((255 - 197) * ratio);
++  const b = 255 - Math.round((255 - 94) * ratio);
++  return `rgb(${r}, ${g}, ${b})`;
++}
++
++export function CircumplexMatrix({ matrix, pairTrialCounts, valueOrder, excludedValues }: Props) {
++  const width = LABEL_SIZE + (valueOrder.length * CELL_SIZE) + MARGIN * 2;
++  const height = LABEL_SIZE + (valueOrder.length * CELL_SIZE) + MARGIN * 2;
++
++  return (
++    <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
++      <div className="mb-3">
++        <h2 className="text-lg font-semibold text-gray-900">Value-profile correlation matrix</h2>
++        <p className="text-sm text-gray-600">Short labels use the shipped ValueRank label map; the tooltip spells out the full Schwartz names.</p>
++      </div>
++      <div className="overflow-x-auto">
++        <svg viewBox={`0 0 ${width} ${height}`} className="block min-w-[640px]">
++          <defs>
++            <pattern id="circumplex-hatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
++              <rect width="6" height="6" fill="rgba(255,255,255,0.22)" />
++              <path d="M 0 0 L 0 6" stroke="rgba(0,0,0,0.25)" strokeWidth="2" />
++            </pattern>
++          </defs>
++
++          {valueOrder.map((valueKey, index) => {
++            const x = LABEL_SIZE + MARGIN + index * CELL_SIZE;
++            const y = LABEL_SIZE + MARGIN + index * CELL_SIZE;
++            return (
++              <g key={valueKey}>
++                <text x={x + CELL_SIZE / 2} y={LABEL_SIZE - 4} textAnchor="middle" className="fill-gray-700 text-[10px] font-medium">
++                  {VALUE_LABELS[valueKey]}
++                </text>
++                <text x={LABEL_SIZE - 8} y={y + CELL_SIZE / 2 + 3} textAnchor="end" className="fill-gray-700 text-[10px] font-medium">
++                  {VALUE_LABELS[valueKey]}
++                </text>
++              </g>
++            );
++          })}
++
++          {valueOrder.map((rowValue, rowIndex) => (
++            valueOrder.map((colValue, colIndex) => {
++              const cell = matrix[rowIndex]?.[colIndex] ?? null;
++              const trials = pairTrialCounts[rowIndex]?.[colIndex] ?? 0;
++              const x = LABEL_SIZE + MARGIN + colIndex * CELL_SIZE;
++              const y = LABEL_SIZE + MARGIN + rowIndex * CELL_SIZE;
++              const lowCount = trials > 0 && trials < 20;
++              const fullName = `${formatFullSchwartzValueName(rowValue)} vs ${formatFullSchwartzValueName(colValue)}`;
++
++              return (
++                <g key={`${rowValue}:${colValue}`}>
++                  <rect
++                    x={x}
++                    y={y}
++                    width={CELL_SIZE}
++                    height={CELL_SIZE}
++                    rx="3"
++                    fill={colorForCorrelation(cell)}
++                    stroke={excludedValues.has(rowValue) || excludedValues.has(colValue) ? '#cbd5e1' : '#d1d5db'}
++                    strokeWidth="1"
++                  >
++                    <title>
++                      {`${fullName} · ρ ${cell == null ? '—' : cell.toFixed(2)} · n=${trials}`}
++                    </title>
++                  </rect>
++                  {lowCount && cell != null && (
++                    <rect
++                      x={x}
++                      y={y}
++                      width={CELL_SIZE}
++                      height={CELL_SIZE}
++                      rx="3"
++                      fill="url(#circumplex-hatch)"
++                      pointerEvents="none"
++                    />
++                  )}
++                  {cell == null ? (
++                    <text x={x + CELL_SIZE / 2} y={y + CELL_SIZE / 2 + 4} textAnchor="middle" className="fill-gray-500 text-[11px]">
++                      —
++                    </text>
++                  ) : lowCount ? (
++                    <text x={x + CELL_SIZE / 2} y={y + CELL_SIZE / 2 + 4} textAnchor="middle" className="fill-gray-700 text-[9px] font-medium">
++                      n={trials}
++                    </text>
++                  ) : null}
++                </g>
++              );
++            })
++          ))}
++        </svg>
++      </div>
++      {excludedValues.size > 0 && (
++        <p className="mt-3 text-xs text-gray-500">
++          Excluded from profile correlation: {Array.from(excludedValues).map((valueKey) => VALUE_LABELS[valueKey]).join(', ')}
++        </p>
++      )}
++    </section>
++  );
++}
+diff --git a/cloud/apps/web/src/components/models/CircumplexMdsScatter.tsx b/cloud/apps/web/src/components/models/CircumplexMdsScatter.tsx
+new file mode 100644
+index 00000000..f92c7919
+--- /dev/null
++++ b/cloud/apps/web/src/components/models/CircumplexMdsScatter.tsx
+@@ -0,0 +1,82 @@
++import { VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
++import { formatFullSchwartzValueName } from '../../utils/schwartz';
++import type { CircumplexMdsCoord } from '../../api/operations/circumplex';
++
++type Props = {
++  mds: CircumplexMdsCoord[];
++  excludedValues: ValueKey[];
++  mdsWarning: string | null;
++  mdsStress: number;
++};
++
++const SIZE = 360;
++const CENTER = SIZE / 2;
++const RADIUS = 120;
++
++function format(value: number): string {
++  return value.toFixed(2);
++}
++
++export function CircumplexMdsScatter({ mds, excludedValues, mdsWarning, mdsStress }: Props) {
++  if (mdsWarning != null) {
++    return (
++      <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 md:p-5">
++        <h2 className="text-lg font-semibold text-amber-950">2D embedding warning</h2>
++        <p className="mt-2 text-sm text-amber-900">{mdsWarning}</p>
++        <p className="mt-2 text-xs text-amber-800">Stress: {format(mdsStress)}</p>
++      </section>
++    );
++  }
++
++  const maxAbs = Math.max(
++    1,
++    ...mds.flatMap((point) => [Math.abs(point.x), Math.abs(point.y)]),
++  );
++  const scale = RADIUS / maxAbs;
++
++  return (
++    <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
++      <div className="mb-3">
++        <h2 className="text-lg font-semibold text-gray-900">Classical MDS</h2>
++        <p className="text-sm text-gray-600">The dotted circle shows the theoretical order. Stress: {format(mdsStress)}.</p>
++      </div>
++      <div className="overflow-x-auto">
++        <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="block min-w-[320px]">
++          <defs>
++            <marker id="circumplex-arrow" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
++              <path d="M0,0 L8,4 L0,8 z" fill="#94a3b8" />
++            </marker>
++          </defs>
++
++          <circle cx={CENTER} cy={CENTER} r={RADIUS} fill="none" stroke="#cbd5e1" strokeDasharray="4 4" />
++          <line x1={CENTER - RADIUS - 20} y1={CENTER} x2={CENTER + RADIUS + 20} y2={CENTER} stroke="#e2e8f0" />
++          <line x1={CENTER} y1={CENTER - RADIUS - 20} x2={CENTER} y2={CENTER + RADIUS + 20} stroke="#e2e8f0" />
++
++          {mds.map((point) => {
++            const x = CENTER + point.x * scale;
++            const y = CENTER - point.y * scale;
++            const radius = Math.hypot(point.x, point.y);
++            const offAxis = Math.abs(radius - 1);
++            return (
++              <g key={point.valueKey}>
++            <circle cx={x} cy={y} r="6" fill="#0f766e" stroke="#083344" strokeWidth="1.5">
++              <title>
++                    {`${formatFullSchwartzValueName(point.valueKey as ValueKey)} · theoretical angle ${point.theoreticalAngleDeg.toFixed(0)}° · empirical (${point.x.toFixed(2)}, ${point.y.toFixed(2)}) · off-axis ${offAxis.toFixed(2)}`}
++              </title>
++            </circle>
++                <text x={x + 8} y={y - 8} className="fill-gray-700 text-[10px] font-medium">
++                  {VALUE_LABELS[point.valueKey as ValueKey]}
++                </text>
++              </g>
++            );
++          })}
++        </svg>
++      </div>
++      {excludedValues.length > 0 && (
++        <p className="mt-3 text-xs text-gray-500">
++          Excluded from the scatter: {excludedValues.map((valueKey) => VALUE_LABELS[valueKey]).join(', ')}.
++        </p>
++      )}
++    </section>
++  );
++}
+diff --git a/cloud/apps/web/src/components/models/CircumplexMethodologyPanel.tsx b/cloud/apps/web/src/components/models/CircumplexMethodologyPanel.tsx
+new file mode 100644
+index 00000000..df8d5631
+--- /dev/null
++++ b/cloud/apps/web/src/components/models/CircumplexMethodologyPanel.tsx
+@@ -0,0 +1,58 @@
++type Props = {
++  open: boolean;
++  onToggleOpen: (open: boolean) => void;
++};
++
++export function CircumplexMethodologyPanel({ open, onToggleOpen }: Props) {
++  return (
++    <details
++      open={open}
++      onToggle={(event) => onToggleOpen(event.currentTarget.open)}
++      className="rounded-xl border border-gray-200 bg-white p-4 md:p-5"
++    >
++      <summary className="cursor-pointer list-none">
++        <div className="flex items-center justify-between gap-3">
++          <div>
++            <h2 className="text-lg font-semibold text-gray-900">How this is computed</h2>
++            <p className="text-sm text-gray-600">Structural similarity, not direct head-to-head dominance.</p>
++          </div>
++          <span className="text-xs font-medium uppercase tracking-[0.16em] text-gray-500">
++            {open ? 'Open' : 'Closed'}
++          </span>
++        </div>
++      </summary>
++
++      <div className="mt-4 space-y-4 text-sm leading-6 text-gray-700">
++        <p>
++          A value profile is the row of win rates for one value against the other nine values.
++          We compare those profiles with Pearson correlation so the question becomes:
++          do two values face the same allies and enemies across the value space?
++          That is different from asking whether one value wins more often in a direct matchup.
++        </p>
++        <p>
++          Example: Universalism — Nature and Benevolence — Dependability can tie head-to-head in a
++          particular pair, yet still have similar profiles if they both tend to beat the same
++          opponents and lose to the same opponents. That structural similarity is what circumplex
++          theory predicts.
++        </p>
++        <p>
++          This report applies Schwartz&apos;s circular-value theory to LLM forced-choice behavior,
++          which is a novel use of the method rather than a previously validated measure for models.
++          See Schwartz, 2012, <a
++            href="https://doi.org/10.9707/2307-0919.1116"
++            target="_blank"
++            rel="noreferrer"
++            className="font-medium text-teal-700 hover:underline"
++          >
++            doi:10.9707/2307-0919.1116
++          </a>.
++        </p>
++        <p>
++          The raw Spearman ρ and p-value are shown next to the verdict band.
++          The cutoffs are editorial, not psychometric, and the p-value should be read as
++          directional only because the pairwise observations are not independent.
++        </p>
++      </div>
++    </details>
++  );
++}
+diff --git a/cloud/apps/web/src/components/models/CircumplexModelCard.tsx b/cloud/apps/web/src/components/models/CircumplexModelCard.tsx
+new file mode 100644
+index 00000000..0a6829c6
+--- /dev/null
++++ b/cloud/apps/web/src/components/models/CircumplexModelCard.tsx
+@@ -0,0 +1,53 @@
++import { CircumplexMatrix } from './CircumplexMatrix';
++import { CircumplexMdsScatter } from './CircumplexMdsScatter';
++import { CircumplexVerdictPanel } from './CircumplexVerdictPanel';
++import type { CircumplexResult } from '../../api/operations/circumplex';
++import type { ValueKey } from '../../data/domainAnalysisData';
++
++type Props = {
++  result: CircumplexResult;
++};
++
++function toExcludedSet(values: string[]): Set<ValueKey> {
++  return new Set(values as ValueKey[]);
++}
++
++export function CircumplexModelCard({ result }: Props) {
++  return (
++    <section className="rounded-2xl border border-gray-200 bg-white p-4 md:p-5">
++      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
++        <div>
++          <h2 className="text-xl font-semibold text-gray-900">{result.modelLabel}</h2>
++          <p className="text-sm text-gray-600">{result.providerName} · Signature {result.signature}</p>
++        </div>
++        <div className="text-right text-sm text-gray-500">
++          <div>ρ {result.spearmanRho == null ? '—' : result.spearmanRho.toFixed(2)}</div>
++          <div>p {result.spearmanP == null ? '—' : result.spearmanP.toFixed(3)}</div>
++        </div>
++      </div>
++
++      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
++        <CircumplexMatrix
++          matrix={result.profileCorrelationMatrix}
++          pairTrialCounts={result.pairTrialCounts}
++          valueOrder={result.valueOrder as ValueKey[]}
++          excludedValues={toExcludedSet(result.excludedValues)}
++        />
++        <div className="space-y-4">
++        <CircumplexMdsScatter
++          mds={result.mds2d}
++          excludedValues={result.excludedValues as ValueKey[]}
++          mdsWarning={result.mdsWarning ?? null}
++          mdsStress={result.mdsStress ?? 0}
++        />
++        <CircumplexVerdictPanel
++          rho={result.spearmanRho ?? null}
++          p={result.spearmanP ?? null}
++          verdictBand={result.verdictBand}
++          excludedValues={result.excludedValues as ValueKey[]}
++        />
++        </div>
++      </div>
++    </section>
++  );
++}
+diff --git a/cloud/apps/web/src/components/models/CircumplexModelPicker.tsx b/cloud/apps/web/src/components/models/CircumplexModelPicker.tsx
+new file mode 100644
+index 00000000..60166ef9
+--- /dev/null
++++ b/cloud/apps/web/src/components/models/CircumplexModelPicker.tsx
+@@ -0,0 +1,77 @@
++import { Check, Lock } from 'lucide-react';
++import { Badge } from '../ui/Badge';
++import { Button } from '../ui/Button';
++import type { CircumplexInsufficientModel, CircumplexResult } from '../../api/operations/circumplex';
++
++type Props = {
++  eligible: CircumplexResult[];
++  insufficient: CircumplexInsufficientModel[];
++  selectedModelIds: string[];
++  onToggle: (modelId: string) => void;
++};
++
++function trialsLabel(model: CircumplexInsufficientModel): string {
++  const values = model.trialsPerValue.map((entry) => entry.trials);
++  const total = values.reduce((sum, value) => sum + value, 0);
++  if (model.reason === 'no_transcripts_for_signature') return 'No data';
++  if (model.reason === 'missing_values') return `Missing values · n=${total}`;
++  return `Below threshold · n=${total}`;
++}
++
++export function CircumplexModelPicker({ eligible, insufficient, selectedModelIds, onToggle }: Props) {
++  return (
++    <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
++      <div className="flex flex-wrap items-center justify-between gap-3">
++        <div>
++          <h2 className="text-lg font-semibold text-gray-900">Models</h2>
++          <p className="text-sm text-gray-600">Select one or more eligible models to compare their circumplex fit.</p>
++        </div>
++        <Badge variant="neutral" size="sm">{eligible.length} eligible</Badge>
++      </div>
++
++      <div className="mt-4 grid gap-3 md:grid-cols-2">
++        {eligible.map((model) => {
++          const selected = selectedModelIds.includes(model.modelId);
++          return (
++            <Button
++              key={model.modelId}
++              type="button"
++              variant={selected ? 'secondary' : 'ghost'}
++              className={`justify-start border px-3 py-2 text-left ${selected ? 'border-teal-300 bg-teal-50 text-teal-950' : 'border-gray-200 bg-white text-gray-800 hover:bg-gray-50'}`}
++              onClick={() => onToggle(model.modelId)}
++            >
++              <Check className={`mr-2 h-4 w-4 ${selected ? 'opacity-100' : 'opacity-0'}`} />
++              <span className="truncate">
++                <span className="font-medium">{model.modelLabel}</span>
++                <span className="ml-2 text-xs text-gray-500">{model.providerName}</span>
++              </span>
++            </Button>
++          );
++        })}
++      </div>
++
++      {insufficient.length > 0 && (
++        <div className="mt-5 border-t border-gray-200 pt-4">
++          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
++            <Lock className="h-4 w-4" />
++            Hidden from selection
++          </div>
++          <div className="grid gap-2 md:grid-cols-2">
++            {insufficient.map((model) => (
++              <div key={model.modelId} className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
++                <div className="flex items-start justify-between gap-3">
++                  <div>
++                    <div className="font-medium text-gray-800">{model.modelLabel}</div>
++                    <div className="text-xs text-gray-500">{model.providerName}</div>
++                  </div>
++                  <Badge variant="warning" size="sm">{model.reason.replace(/_/g, ' ')}</Badge>
++                </div>
++                <div className="mt-1 text-xs text-gray-500">{trialsLabel(model)}</div>
++              </div>
++            ))}
++          </div>
++        </div>
++      )}
++    </section>
++  );
++}
+diff --git a/cloud/apps/web/src/components/models/CircumplexThresholdControl.tsx b/cloud/apps/web/src/components/models/CircumplexThresholdControl.tsx
+new file mode 100644
+index 00000000..6d962ae9
+--- /dev/null
++++ b/cloud/apps/web/src/components/models/CircumplexThresholdControl.tsx
+@@ -0,0 +1,21 @@
++import { Input } from '../ui/Input';
++
++type Props = {
++  value: number;
++  onChange: (value: number) => void;
++};
++
++export function CircumplexThresholdControl({ value, onChange }: Props) {
++  return (
++    <Input
++      type="number"
++      min={1}
++      step={1}
++      label="Minimum trials per value"
++      value={String(value)}
++      onChange={(event) => onChange(Number.parseInt(event.target.value, 10) || 1)}
++      helperText="Values below the threshold are excluded from the picker."
++      className="max-w-[220px]"
++    />
++  );
++}
+diff --git a/cloud/apps/web/src/components/models/CircumplexVerdictPanel.tsx b/cloud/apps/web/src/components/models/CircumplexVerdictPanel.tsx
+new file mode 100644
+index 00000000..38c85953
+--- /dev/null
++++ b/cloud/apps/web/src/components/models/CircumplexVerdictPanel.tsx
+@@ -0,0 +1,60 @@
++import { Badge } from '../ui/Badge';
++import type { ValueKey } from '../../data/domainAnalysisData';
++
++type Props = {
++  rho: number | null;
++  p: number | null;
++  verdictBand: string;
++  excludedValues: ValueKey[];
++};
++
++function verdictLabel(verdictBand: string): { label: string; variant: 'success' | 'warning' | 'neutral' | 'error' } {
++  switch (verdictBand) {
++    case 'clear':
++      return { label: 'Clear circumplex structure', variant: 'success' };
++    case 'partial':
++      return { label: 'Partial circumplex structure', variant: 'warning' };
++    case 'insufficient_data':
++      return { label: 'Insufficient determinate pairs', variant: 'error' };
++    case 'not_evident':
++    default:
++      return { label: 'Circumplex not evident', variant: 'neutral' };
++  }
++}
++
++function formatStat(value: number | null, digits: number): string {
++  return value == null ? '—' : value.toFixed(digits);
++}
++
++export function CircumplexVerdictPanel({ rho, p, verdictBand, excludedValues }: Props) {
++  const verdict = verdictLabel(verdictBand);
++
++  return (
++    <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
++      <div className="flex flex-wrap items-center justify-between gap-3">
++        <div>
++          <h2 className="text-lg font-semibold text-gray-900">Fit summary</h2>
++          <p className="text-sm text-gray-600">Spearman ρ compares theoretical circle distance with empirical profile correlation.</p>
++        </div>
++        <Badge variant={verdict.variant} size="md">{verdict.label}</Badge>
++      </div>
++
++      <div className="mt-4 grid gap-3 sm:grid-cols-3">
++        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
++          <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Spearman ρ</div>
++          <div className="mt-1 text-2xl font-semibold text-gray-900">{formatStat(rho, 2)}</div>
++        </div>
++        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
++          <div className="text-xs uppercase tracking-[0.16em] text-gray-500">p-value</div>
++          <div className="mt-1 text-2xl font-semibold text-gray-900">{formatStat(p, 3)}</div>
++        </div>
++        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
++          <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Excluded values</div>
++          <div className="mt-1 text-sm text-gray-700">
++            {excludedValues.length === 0 ? 'None' : excludedValues.join(', ')}
++          </div>
++        </div>
++      </div>
++    </section>
++  );
++}
+diff --git a/cloud/apps/web/src/pages/ModelsCircumplex.tsx b/cloud/apps/web/src/pages/ModelsCircumplex.tsx
+new file mode 100644
+index 00000000..5709a1a8
+--- /dev/null
++++ b/cloud/apps/web/src/pages/ModelsCircumplex.tsx
+@@ -0,0 +1,326 @@
++import { useEffect, useMemo, useState } from 'react';
++import { useQuery } from 'urql';
++import { X } from 'lucide-react';
++import { useSearchParams } from 'react-router-dom';
++import { ErrorMessage } from '../components/ui/ErrorMessage';
++import { Loading } from '../components/ui/Loading';
++import { Button } from '../components/ui/Button';
++import { Select } from '../components/ui/Select';
++import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
++import {
++  CIRCUMPLEX_ANALYSIS_QUERY,
++  type CircumplexAnalysisQueryResult,
++  type CircumplexAnalysisQueryVariables,
++  type CircumplexResult,
++} from '../api/operations/circumplex';
++import { useAvailableSignatures } from '../hooks/useAvailableSignatures';
++import { CircumplexThresholdControl } from '../components/models/CircumplexThresholdControl';
++import { CircumplexModelPicker } from '../components/models/CircumplexModelPicker';
++import { CircumplexMethodologyPanel } from '../components/models/CircumplexMethodologyPanel';
++import { CircumplexModelCard } from '../components/models/CircumplexModelCard';
++
++function parseCommaList(value: string | null): string[] {
++  if (value == null || value.trim() === '') return [];
++  return value.split(',').map((item) => item.trim()).filter((item) => item !== '');
++}
++
++function normalizeSelection(ids: string[], order: Map<string, number>): string[] {
++  return [...new Set(ids)].sort((left, right) => (order.get(left) ?? Number.POSITIVE_INFINITY) - (order.get(right) ?? Number.POSITIVE_INFINITY));
++}
++
++function classifyResult(result: CircumplexResult, threshold: number): { eligible: boolean } | { eligible: false; reason: 'no_transcripts_for_signature' | 'missing_values' | 'below_threshold' } {
++  const counts = result.trialsPerValue.map((entry) => entry.trials);
++  const total = counts.reduce((sum, value) => sum + value, 0);
++  if (total === 0) {
++    return { eligible: false, reason: 'no_transcripts_for_signature' };
++  }
++  if (counts.some((count) => count === 0)) {
++    return { eligible: false, reason: 'missing_values' };
++  }
++  if (counts.some((count) => count < threshold)) {
++    return { eligible: false, reason: 'below_threshold' };
++  }
++  return { eligible: true };
++}
++
++export function ModelsCircumplex() {
++  const [searchParams, setSearchParams] = useSearchParams();
++  const { signatures, defaultSignature, loading: signaturesLoading, error: signaturesError } = useAvailableSignatures();
++  const [selectionNotice, setSelectionNotice] = useState<string | null>(null);
++
++  const signatureParam = searchParams.get('signature');
++  const modelsParam = searchParams.get('models');
++  const nParam = searchParams.get('n');
++  const methodologyParam = searchParams.get('methodology') === 'open' ? 'open' : 'closed';
++
++  const selectedSignature = signatureParam ?? defaultSignature ?? 'vnewtd';
++  const threshold = Math.max(1, Number.parseInt(nParam ?? '5', 10) || 5);
++  const selectedModelIdsFromUrl = useMemo(() => parseCommaList(modelsParam), [modelsParam]);
++
++  useEffect(() => {
++    if (signatureParam == null && defaultSignature == null) return;
++    const next = new URLSearchParams(searchParams);
++    let changed = false;
++
++    if (signatureParam == null && defaultSignature != null) {
++      next.set('signature', defaultSignature);
++      changed = true;
++    }
++    if (nParam == null) {
++      next.set('n', '5');
++      changed = true;
++    }
++    if (searchParams.get('methodology') == null) {
++      next.set('methodology', 'closed');
++      changed = true;
++    }
++
++    if (changed) {
++      setSearchParams(next, { replace: true });
++    }
++  }, [defaultSignature, nParam, searchParams, setSearchParams, signatureParam]);
++
++  const [{ data: rosterData, fetching: rosterLoading, error: rosterError }] = useQuery<LlmModelsQueryResult>({
++    query: LLM_MODELS_QUERY,
++    variables: { status: 'ACTIVE' },
++    requestPolicy: 'cache-and-network',
++  });
++
++  const roster = useMemo(() => rosterData?.llmModels ?? [], [rosterData?.llmModels]);
++  const rosterIds = useMemo(() => roster.map((model) => model.id), [roster]);
++
++  const circumplexVariables = useMemo<CircumplexAnalysisQueryVariables>(() => ({
++    modelIds: rosterIds,
++    signature: selectedSignature,
++    minTrialsPerValue: threshold,
++  }), [rosterIds, selectedSignature, threshold]);
++
++  const [{ data: circumplexData, fetching: circumplexLoading, error: circumplexError }] = useQuery<CircumplexAnalysisQueryResult, CircumplexAnalysisQueryVariables>({
++    query: CIRCUMPLEX_ANALYSIS_QUERY,
++    variables: circumplexVariables,
++    requestPolicy: 'cache-and-network',
++  });
++
++  const analysis = circumplexData?.circumplexAnalysis ?? null;
++  const analysisModels = useMemo(() => analysis?.models ?? [], [analysis?.models]);
++
++  const evaluatedModels = useMemo(() => {
++    return analysisModels
++      .map((result) => ({ result, status: classifyResult(result, threshold) }))
++      .sort((left, right) => left.result.modelLabel.localeCompare(right.result.modelLabel));
++  }, [analysisModels, threshold]);
++
++  const eligibleModels = useMemo(
++    () => evaluatedModels.filter((entry): entry is { result: CircumplexResult; status: { eligible: true } } => entry.status.eligible),
++    [evaluatedModels],
++  );
++  const insufficientModels = useMemo(
++    () => evaluatedModels.filter((entry): entry is { result: CircumplexResult; status: { eligible: false; reason: 'no_transcripts_for_signature' | 'missing_values' | 'below_threshold' } } => !entry.status.eligible),
++    [evaluatedModels],
++  );
++
++  const eligibleIds = useMemo(() => new Set(eligibleModels.map((entry) => entry.result.modelId)), [eligibleModels]);
++  const orderMap = useMemo(() => new Map(eligibleModels.map((entry, index) => [entry.result.modelId, index] as const)), [eligibleModels]);
++
++  const selectedModelIds = useMemo(
++    () => normalizeSelection(selectedModelIdsFromUrl.filter((modelId) => eligibleIds.has(modelId)), orderMap),
++    [eligibleIds, orderMap, selectedModelIdsFromUrl],
++  );
++
++  useEffect(() => {
++    if (eligibleModels.length === 0) return;
++
++    const current = selectedModelIdsFromUrl;
++    const next = normalizeSelection(current.filter((modelId) => eligibleIds.has(modelId)), orderMap);
++    const removed = current.filter((modelId) => !eligibleIds.has(modelId));
++
++    if (current.length === 0) {
++      const firstEligible = eligibleModels[0]?.result.modelId ?? null;
++      if (firstEligible != null) {
++        const params = new URLSearchParams(searchParams);
++        params.set('models', firstEligible);
++        setSearchParams(params, { replace: true });
++      }
++      return;
++    }
++
++    if (removed.length > 0) {
++      const removedLabels = removed
++        .map((modelId) => analysisModels.find((model) => model.modelId === modelId)?.modelLabel ?? modelId)
++        .join(', ');
++      setSelectionNotice(`${removed.length} model${removed.length === 1 ? '' : 's'} removed: ${removedLabels} fell below the n=${threshold} threshold`);
++
++      const nextSelection = next.length > 0 ? next : [eligibleModels[0]!.result.modelId];
++      const params = new URLSearchParams(searchParams);
++      params.set('models', nextSelection.join(','));
++      setSearchParams(params, { replace: true });
++    }
++  }, [analysisModels, eligibleIds, eligibleModels, orderMap, searchParams, selectedModelIdsFromUrl, setSearchParams, threshold]);
++
++  const hiddenCount = Math.max(0, roster.length - eligibleModels.length);
++  const modelById = useMemo(() => new Map(analysisModels.map((model) => [model.modelId, model] as const)), [analysisModels]);
++  const selectedResults = selectedModelIds.map((modelId) => modelById.get(modelId)).filter((value): value is CircumplexResult => value != null);
++
++  const loading = (signaturesLoading && signatures.length === 0)
++    || (rosterLoading && roster.length === 0)
++    || (circumplexLoading && circumplexData == null);
++
++  const updateModelsParam = (nextIds: string[]) => {
++    const params = new URLSearchParams(searchParams);
++    if (nextIds.length === 0) {
++      params.delete('models');
++    } else {
++      params.set('models', nextIds.join(','));
++    }
++    setSelectionNotice(null);
++    setSearchParams(params, { replace: true });
++  };
++
++  const handleToggleModel = (modelId: string) => {
++    const next = selectedModelIds.includes(modelId)
++      ? selectedModelIds.filter((id) => id !== modelId)
++      : normalizeSelection([...selectedModelIds, modelId], orderMap);
++    updateModelsParam(next);
++  };
++
++  const handleSignatureChange = (value: string) => {
++    const params = new URLSearchParams(searchParams);
++    params.set('signature', value);
++    setSelectionNotice(null);
++    setSearchParams(params, { replace: true });
++  };
++
++  const handleThresholdChange = (value: number) => {
++    const params = new URLSearchParams(searchParams);
++    params.set('n', String(value));
++    setSelectionNotice(null);
++    setSearchParams(params, { replace: true });
++  };
++
++  const signatureOptions = signatures.map((signature) => ({ value: signature, label: signature }));
++
++  if (signaturesError != null || rosterError != null || circumplexError != null) {
++    return (
++      <ErrorMessage
++        message={`Failed to load circumplex report: ${(signaturesError ?? rosterError ?? circumplexError)?.message ?? 'Unknown error'}`}
++      />
++    );
++  }
++
++  if (loading) {
++    return <Loading text="Loading circumplex report..." />;
++  }
++
++  const hasAnySignatureData = analysisModels.some((result) => result.trialsPerValue.some((entry) => entry.trials > 0));
++  const noEligibleModels = eligibleModels.length === 0;
++  const noSignatureData = !hasAnySignatureData && roster.length > 0;
++
++  return (
++    <div className="space-y-6">
++      <div className="space-y-2">
++        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Models / Circumplex</h1>
++        <p className="text-sm text-gray-600">
++          Check whether a model&apos;s own pairwise choices form Schwartz&apos;s circumplex structure.
++        </p>
++      </div>
++
++      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
++        <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
++          <div className="flex flex-wrap items-end gap-4">
++            <div className="w-60">
++              <Select
++                label="Signature"
++                options={signatureOptions}
++                value={selectedSignature}
++                onChange={handleSignatureChange}
++                placeholder="Select signature"
++              />
++            </div>
++            <CircumplexThresholdControl value={threshold} onChange={handleThresholdChange} />
++          </div>
++          <p className="mt-3 text-sm text-gray-600">
++            Eligible models must have at least {threshold} trials on each of the 10 Schwartz values.
++          </p>
++        </section>
++
++        <CircumplexMethodologyPanel
++          open={methodologyParam === 'open'}
++          onToggleOpen={(open) => {
++            const params = new URLSearchParams(searchParams);
++            params.set('methodology', open ? 'open' : 'closed');
++            setSearchParams(params, { replace: true });
++          }}
++        />
++      </div>
++
++      {selectionNotice != null && (
++        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
++          <div className="flex items-start justify-between gap-3">
++            <div>{selectionNotice}</div>
++            <Button
++              type="button"
++              variant="ghost"
++              size="icon"
++              aria-label="Dismiss notice"
++              onClick={() => setSelectionNotice(null)}
++              className="-mr-1 -mt-1 text-amber-900 hover:bg-amber-100"
++            >
++              <X className="h-4 w-4" />
++            </Button>
++          </div>
++        </div>
++      )}
++
++      {signatureOptions.length === 0 ? (
++        <section className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
++          <p className="font-medium text-gray-900">No signatures are available yet.</p>
++          <p className="mt-1">Once aggregate analysis data exists, this dropdown will populate automatically.</p>
++        </section>
++      ) : noSignatureData ? (
++        <section className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
++          <p className="font-medium text-gray-900">No models have circumplex data for this signature.</p>
++          <p className="mt-1">Try another signature from the dropdown above.</p>
++        </section>
++      ) : (
++        <>
++          <CircumplexModelPicker
++            eligible={eligibleModels.map((entry) => entry.result)}
++            insufficient={insufficientModels.map((entry) => {
++              const status = entry.status;
++              return {
++                modelId: entry.result.modelId,
++                modelLabel: entry.result.modelLabel,
++                providerName: entry.result.providerName,
++                reason: status.eligible ? 'below_threshold' : status.reason,
++                trialsPerValue: entry.result.trialsPerValue,
++              };
++            })}
++            selectedModelIds={selectedModelIds}
++            onToggle={handleToggleModel}
++          />
++
++          {hiddenCount > 0 && (
++            <p className="text-sm text-gray-600">{hiddenCount} model{hiddenCount === 1 ? '' : 's'} hidden due to insufficient data.</p>
++          )}
++
++          {noEligibleModels ? (
++            <section className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
++              <p className="font-medium text-gray-900">No models meet the current threshold.</p>
++              <p className="mt-1">Lower the threshold to widen the picker.</p>
++            </section>
++          ) : selectedResults.length === 0 ? (
++            <section className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
++              <p className="font-medium text-gray-900">Pick one or more models to see the circumplex panel.</p>
++            </section>
++          ) : (
++            <div className="grid gap-4 xl:grid-cols-2">
++              {selectedResults.map((result) => (
++                <CircumplexModelCard key={result.modelId} result={result} />
++              ))}
++            </div>
++          )}
++        </>
++      )}
++    </div>
++  );
++}
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+- High: `cloud/apps/api/src/services/circumplex/aggregation.ts` never finds any scoped runs because the first `findMany()` only selects `id` and `config`, but the later filter checks `run.status === 'COMPLETED'` and `run.deletedAt == null`. Those fields are `undefined`, so every run is dropped and the circumplex matrices stay empty. The new analysis page will report no usable data even when transcripts exist.
+- Medium [UNVERIFIED]: `aggregatePairwiseWinRates()` keys pair stats with `${pair.valueA}::${pair.valueB}` and later looks them up using a separately sorted `{ valueA: left, valueB: right }` pair. If `extractValuePair()` does not already canonicalize pairs the same way, the lookup will miss real observations and silently turn valid cells into zeros/nulls.
+- Medium: `cloud/apps/api/src/services/circumplex/mds.ts` exports `anchorMdsRotation()`, but the new circumplex flow never calls it. That leaves the 2D embedding in an arbitrary rotation, so the plotted orientation and the theoretical-angle comparison are unstable across runs and can be misleading.
+
+## Residual Risks
+- I could not verify the contracts of `extractValuePair()`, `runMatchesSignature()`, or the GraphQL shapes, so the pair-canonicalization issue remains [UNVERIFIED].
+- The frontend re-implements eligibility checks locally instead of trusting the backend `insufficient` field, so any future backend rule changes could drift unless both sides stay in sync.
+tokens used
+32,085

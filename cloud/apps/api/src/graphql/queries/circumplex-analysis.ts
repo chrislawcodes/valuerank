@@ -4,11 +4,14 @@ import { builder } from '../builder.js';
 import {
   CircumplexAnalysisResultRef,
   type CircumplexAnalysisResultShape,
+  type CircumplexInsufficientModelShape,
   type CircumplexMdsCoordShape,
   type CircumplexResultShape,
 } from '../types/circumplex.js';
 import { aggregatePairwiseWinRates, type CircumplexPairMatrix } from '../../services/circumplex/aggregation.js';
 import { classicalMds2d, circumplexFit, valueProfileMatrix } from '../../services/circumplex/statistics.js';
+import { anchorMdsRotation } from '../../services/circumplex/mds.js';
+import { classifyEligibility } from '../../services/circumplex/eligibility.js';
 
 type ModelRow = {
   id: string;
@@ -36,9 +39,22 @@ function pairwiseToTrialMatrix(pairwise: CircumplexPairMatrix): number[][] {
 function computeExcludedIndices(pairwise: CircumplexPairMatrix): Set<number> {
   const excluded = new Set<number>();
 
+  // Exclusion rule (revised from the earlier "single-strike" version flagged
+  // in diff review). A value is excluded if EITHER:
+  //   (a) fewer than 6 of its 9 pair cells are determinate (have a
+  //       computable win rate and at least one trial), OR
+  //   (b) fewer than 4 of its 9 pair cells have at least 20 trials.
+  // Rule (a) is the minimum for a stable Pearson correlation. Rule (b)
+  // prevents a single low-trial cell from killing an otherwise well-
+  // covered value, while still requiring that most of the profile has
+  // enough statistical weight to matter.
+  const MIN_DETERMINATE_CELLS = 6;
+  const MIN_HIGH_TRIAL_CELLS = 4;
+  const HIGH_TRIAL_THRESHOLD = 20;
+
   for (let rowIndex = 0; rowIndex < SCHWARTZ_CIRCULAR_ORDER.length; rowIndex += 1) {
     let determinate = 0;
-    let hasLowTrialCell = false;
+    let highTrialCells = 0;
 
     for (let colIndex = 0; colIndex < SCHWARTZ_CIRCULAR_ORDER.length; colIndex += 1) {
       if (rowIndex === colIndex) continue;
@@ -47,12 +63,12 @@ function computeExcludedIndices(pairwise: CircumplexPairMatrix): Set<number> {
         continue;
       }
       determinate += 1;
-      if (cell.trials < 20) {
-        hasLowTrialCell = true;
+      if (cell.trials >= HIGH_TRIAL_THRESHOLD) {
+        highTrialCells += 1;
       }
     }
 
-    if (determinate < 6 || hasLowTrialCell) {
+    if (determinate < MIN_DETERMINATE_CELLS || highTrialCells < MIN_HIGH_TRIAL_CELLS) {
       excluded.add(rowIndex);
     }
   }
@@ -94,6 +110,10 @@ function buildResult(
   const fit = circumplexFit(profileCorrelationMatrix, SCHWARTZ_CIRCULAR_ORDER);
   const distanceMatrix = profileCorrelationMatrix.map((row) => row.map((value) => (value == null ? null : 1 - value)));
   const mds = classicalMds2d(distanceMatrix);
+  // Rotate so the first included value in canonical order (default: Self-Direction)
+  // sits at 12 o'clock. Without this, the MDS output rotates/flips arbitrarily
+  // from run to run, making the theoretical-angle overlay meaningless.
+  const rotatedCoords = anchorMdsRotation(mds.coords, SCHWARTZ_CIRCULAR_ORDER);
 
   return {
     modelId,
@@ -107,7 +127,7 @@ function buildResult(
     spearmanRho: fit.rho,
     spearmanP: fit.p,
     verdictBand: fit.verdict,
-    mds2d: buildMdsCoords(mds.coords),
+    mds2d: buildMdsCoords(rotatedCoords),
     mdsStress: mds.stress,
     mdsWarning: mds.warning,
     trialsPerValue: buildTrialsPerValue(pairwise),
@@ -145,15 +165,45 @@ builder.queryField('circumplexAnalysis', (t) =>
       ]);
 
       const modelById = new Map(models.map((model) => [model.id, model] as const));
-      const results = modelIds.map((modelId) => {
+      const eligible: CircumplexResultShape[] = [];
+      const insufficient: CircumplexInsufficientModelShape[] = [];
+
+      for (const modelId of modelIds) {
         const pairwise = pairwiseMap.get(modelId) ?? createEmptyPairwiseMatrix();
-        return buildResult(modelId, modelById.get(modelId), signature, pairwise);
-      });
+        const model = modelById.get(modelId);
+        const modelLabel = model?.displayName ?? model?.modelId ?? modelId;
+        const providerName = model?.provider.displayName ?? model?.provider.name ?? 'Unknown provider';
+
+        const eligibility = classifyEligibility({
+          model: { modelId, modelLabel, providerName },
+          pairwise,
+          minTrialsPerValue,
+        });
+
+        if (eligibility.status === 'eligible') {
+          eligible.push(buildResult(modelId, model, signature, pairwise));
+        } else {
+          insufficient.push({
+            modelId,
+            modelLabel,
+            providerName,
+            reason: eligibility.reason ?? 'below_threshold',
+            trialsPerValue: eligibility.trialsPerValue.map((entry) => ({
+              valueKey: entry.valueKey,
+              trials: entry.trials,
+            })),
+          });
+        }
+      }
+
+      // Alphabetical stable sort per spec FR-011a.
+      eligible.sort((a, b) => a.modelLabel.localeCompare(b.modelLabel));
+      insufficient.sort((a, b) => a.modelLabel.localeCompare(b.modelLabel));
 
       return {
         signature,
-        models: results,
-        insufficient: [],
+        models: eligible,
+        insufficient,
         eligibilityThreshold: minTrialsPerValue,
       };
     },

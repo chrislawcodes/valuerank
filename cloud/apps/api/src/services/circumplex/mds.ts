@@ -130,13 +130,26 @@ export function classicalMds2d(distanceMatrix: (number | null)[][]): {
     };
   }
 
+  // Compute mean of non-null distance cells to use for imputation.
+  // Treating null as exact 0 (same-point) was fabricating geometry; treating
+  // as max distance would over-push; mean-imputation is the neutral choice.
+  const finiteValues: number[] = [];
+  for (const rowIndex of included) {
+    for (const colIndex of included) {
+      if (rowIndex === colIndex) continue;
+      const value = distanceMatrix[rowIndex]![colIndex];
+      if (value != null) finiteValues.push(value);
+    }
+  }
+  const meanDistance = finiteValues.length > 0
+    ? finiteValues.reduce((sum, v) => sum + v, 0) / finiteValues.length
+    : 1;
+
   const reduced = included.map((rowIndex) =>
     included.map((colIndex) => {
       const value = distanceMatrix[rowIndex]![colIndex];
-      if (value == null) {
-        return 0;
-      }
-      return value * value;
+      const resolved = value == null ? meanDistance : value;
+      return resolved * resolved;
     }));
 
   const centered = centerDistanceMatrix(reduced);
