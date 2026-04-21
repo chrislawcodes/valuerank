@@ -95,9 +95,12 @@ export function ModelsCircumplex() {
     minTrialsPerValue: threshold,
   }), [rosterIds, selectedSignature, threshold]);
 
+  const circumplexReady = rosterIds.length > 0 && (signatureParam != null || defaultSignature != null);
+
   const [{ data: circumplexData, fetching: circumplexLoading, error: circumplexError }] = useQuery<CircumplexAnalysisQueryResult, CircumplexAnalysisQueryVariables>({
     query: CIRCUMPLEX_ANALYSIS_QUERY,
     variables: circumplexVariables,
+    pause: !circumplexReady,
     requestPolicy: 'cache-and-network',
   });
 
