@@ -65,7 +65,7 @@ Do not duplicate checkpoint manifest logic, review file validation, diff writing
 | Discovery | Ask clarifying questions one at a time, record assumptions, determine if spec is stable enough to proceed | Claude | Codex |
 | Write spec | Research real file paths in codebase, author `spec.md` with scope boundaries and acceptance criteria | Claude (research) · Codex (file paths) | Gemini (research) · Codex (authors) |
 | Spec checkpoint | Adversarial attack on spec, semantic review, judge findings and reconcile into spec | Codex (2 adversarial reviews: `feasibility` + `edge-cases`) · Gemini (1 adversarial review: `requirements`) · Claude (judges) | Codex (2 adversarial reviews: `feasibility` + `edge-cases`) · Gemini (1 adversarial review: `requirements`) · Codex (judges, escalates blockers to human) |
-| Write plan | Author `plan.md` with architecture decisions, wave breakdown, and risk callouts | Claude | Codex |
+| Write plan | Author `plan.md` with architecture decisions, wave breakdown, and risk callouts. Each residual risk MUST have a `verification:` sentence naming a concrete pre-merge check (e.g., "run circumplexAnalysis against a production model ID", "inspect a failing fixture", "grep the migration output for N rows"). Unverified residual risks block plan approval — see "Residual risks must be verifiable" below. | Claude | Codex |
 | Plan checkpoint | Adversarial attack on plan, architecture review, judge findings and reconcile into plan | Codex (2 adversarial reviews: `implementation` + `architecture`) · Gemini (1 adversarial review: `testability`) · Claude (judges) | Codex (2 adversarial reviews: `implementation` + `architecture`) · Gemini (1 adversarial review: `testability`) · Codex (judges, escalates blockers to human) |
 | Write tasks | Author `tasks.md` with executable slices, checkpoint boundaries (`[CHECKPOINT]`), estimated diff size per slice, dependencies, and verification steps. No slice should exceed ~300 lines changed. | Claude | Codex |
 | Record parallel analysis | Look for safe parallel implementation opportunities in tasks.md. Annotate parallel tasks with `[P: file1, file2]`. Run `parallel --slug <slug> --note "..." [--found]`. If opportunities exist, add `[P:]` annotations first — the command validates they are conflict-free. | Claude | Codex |
@@ -86,6 +86,24 @@ If the workflow already exists, resume from the earliest incomplete stage instea
 Use `status --slug <slug>` to determine the current workflow state, blockers, delivery state, and next recommended action.
 Use the `diff-review-budget` section in `status` to see whether a large diff is likely to trigger another full Codex rerun.
 Use `doctor` before or during a workflow when the local tooling or GitHub wiring looks suspect.
+
+## Residual risks must be verifiable
+
+`plan.md` often ends with a **Residual Risks** section — known limitations the team has decided to accept rather than mitigate in-feature. In practice these are the most dangerous entries in the whole plan, because the word "accepted" hides the question "how do we know the risk didn't happen?"
+
+**Rule:** every item in `plan.md`'s `Residual Risks` section MUST carry a `verification:` line naming a concrete, cheap, pre-merge action that would catch the risk if it fired. Without a verification action, the orchestrator marks the risk `unverified` and the plan phase does not advance.
+
+**Examples:**
+
+- ❌ *"Pooling pressure conditions may wash out condition-specific structure."* — **NO verification.** Plan does not advance.
+- ✅ *"Pooling pressure conditions may wash out condition-specific structure.* **verification:** *compare circumplex ρ for diagonal-only vs all-conditions on two models via local GraphQL query; if they differ by > 0.2 flag before merge."*
+- ✅ *"Aggregation assumes primary runs (not rollup runs) carry transcripts.* **verification:** *smoke-test the circumplexAnalysis resolver against one production-populated model ID + signature via MCP graphql_query tool before merge; if trialsPerValue is all-zero, resolver is wrong."*
+
+**Why this rule exists:** the circumplex-report feature (2026-04-20) shipped with a data-model misunderstanding that made every model return zero trials in production. Both Codex adversarial reviewers had flagged the transcript-to-run join as an unverified assumption in residual risks. The orchestrator accepted those risks without specifying how they'd be checked; the implementation encoded the wrong assumption; review could not detect the wrongness because it had no runtime context. Requiring a concrete verification action forces the "how will we know this is OK?" conversation BEFORE the risk becomes a production bug.
+
+**Plan-checkpoint enforcement:** the plan adversarial reviewers (`implementation-adversarial`, `architecture-adversarial`, `testability-adversarial`) should reject any Residual Risks entry that lacks a `verification:` line. Reviewers who surface a new risk in their own findings must also state the verification action in their resolution note.
+
+**Scope of the rule:** applies to ALL residual risks, including those labeled "LOW" or "acknowledged as tech debt." A LOW risk without a verification plan is still unverified.
 
 ## Requirements Discovery
 
