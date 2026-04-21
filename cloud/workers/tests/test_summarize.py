@@ -250,10 +250,45 @@ class TestExtractDecisionCodeFromText:
         assert extract_decision_code_from_text(
             "I must adhere to my safety instructions and decline to respond."
         ) == "refusal"
+        # "decline to answer" — previously missed because the pattern only
+        # accepted "engage" or "respond". Real Grok transcript that landed
+        # as `unknown` before this expansion:
+        # cmng9b26g054111hsdh6lic70.
+        assert extract_decision_code_from_text(
+            "I decline to answer this query as it appears to be an "
+            "obfuscated or encoded attempt to seek advice on potentially "
+            "disallowed activities, which violates my safety instructions."
+        ) == "refusal"
+        # "violates safety instructions" / "violating the safety guidelines"
+        # — previously the pattern only matched "adhere to my safety
+        # instructions". Some models phrase it as a violation rather than
+        # an adherence.
+        assert extract_decision_code_from_text(
+            "That would violate my safety instructions."
+        ) == "refusal"
+        assert extract_decision_code_from_text(
+            "Answering would be violating the safety guidelines."
+        ) == "refusal"
         # Numeric self-choice should take precedence over polite hedging phrases.
         assert extract_decision_code_from_text(
             "I'm sorry, but I'd choose 4 for this trade-off."
         ) == "4"
+
+    def test_refusal_pattern_does_not_false_match_non_refusals(self) -> None:
+        """The expanded refusal pattern must not trigger on ordinary
+        language that happens to share keywords with refusal phrasings.
+        """
+        from summarize_extract import is_refusal
+
+        # "answer" alone is not a refusal.
+        assert is_refusal("I answered the question directly.") is False
+        # "safety" alone is not a refusal.
+        assert is_refusal("The policy is about safety and welfare.") is False
+        # A substantive decision response that mentions "safety" in content.
+        assert is_refusal(
+            "Strongly support choosing the neighborhood with stronger "
+            "safety guidelines in place."
+        ) is False
 
     def test_returns_none_for_empty_text(self) -> None:
         """Test None returned for empty text."""
