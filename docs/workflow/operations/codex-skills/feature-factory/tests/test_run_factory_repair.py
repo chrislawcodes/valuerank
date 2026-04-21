@@ -30,6 +30,24 @@ CMD_IMPLEMENT_MODULE = sys.modules["factory_cmd_implement"]
 NEXT_ACTION_MODULE = sys.modules["factory_next_action"]
 PARALLEL_MODULE = sys.modules["factory_parallel"]
 
+REVIEW_LENS_SCRIPTS = Path(__file__).resolve().parents[2] / "review-lens" / "scripts"
+if str(REVIEW_LENS_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(REVIEW_LENS_SCRIPTS))
+
+
+def load_review_lens_module(name: str):
+    path = REVIEW_LENS_SCRIPTS / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+REPAIR_MODULE = load_review_lens_module("repair_review_checkpoint")
+ATTEMPTS_MODULE = load_review_lens_module("review_attempts")
+
 
 def stage_state(
     *,
@@ -51,6 +69,75 @@ def stage_state(
 
 
 class RepairDecisionTests(unittest.TestCase):
+    class _FakeLockedState:
+        def __init__(self) -> None:
+            self.state: dict[str, object] = {}
+
+        def __enter__(self) -> dict[str, object]:
+            return self.state
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+    def test_partial_artifact_repair_expands_review_budgets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            artifact = repo_root / "docs" / "workflow" / "feature-runs" / "demo" / "tasks.md"
+            artifact.parent.mkdir(parents=True)
+            artifact.write_text("x" * 1500, encoding="utf-8")
+            review = artifact.parent / "reviews" / "tasks.codex.md"
+            review.parent.mkdir()
+            review.write_text(
+                "\n".join(
+                    [
+                        "---",
+                        'coverage_status: "partial"',
+                        'coverage_note: "artifact exceeded max_artifact_chars and was narrowed"',
+                        "---",
+                        "body",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            spec = {"path": str(review.relative_to(repo_root)), "context_paths": []}
+            checkpoint = {"stage": "tasks", "max_artifact_chars": 500, "max_total_chars": 1000}
+
+            with patch.object(REPAIR_MODULE, "REPO_ROOT", repo_root):
+                expanded = REPAIR_MODULE.expanded_checkpoint_for_partial_artifact(spec, artifact, checkpoint)
+
+            self.assertIsNotNone(expanded)
+            assert expanded is not None
+            self.assertGreaterEqual(expanded["max_artifact_chars"], 2500)
+            self.assertGreaterEqual(expanded["max_total_chars"], 12500)
+
+    def test_partial_context_repair_does_not_expand_artifact_budget(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            artifact = repo_root / "docs" / "workflow" / "feature-runs" / "demo" / "tasks.md"
+            artifact.parent.mkdir(parents=True)
+            artifact.write_text("x" * 1500, encoding="utf-8")
+            review = artifact.parent / "reviews" / "tasks.codex.md"
+            review.parent.mkdir()
+            review.write_text(
+                "\n".join(
+                    [
+                        "---",
+                        'coverage_status: "partial"',
+                        'coverage_note: "context exceeded max_context_chars and was narrowed"',
+                        "---",
+                        "body",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            spec = {"path": str(review.relative_to(repo_root)), "context_paths": []}
+            checkpoint = {"stage": "tasks", "max_artifact_chars": 500, "max_total_chars": 1000}
+
+            with patch.object(REPAIR_MODULE, "REPO_ROOT", repo_root):
+                expanded = REPAIR_MODULE.expanded_checkpoint_for_partial_artifact(spec, artifact, checkpoint)
+
+            self.assertIsNone(expanded)
+
     def test_repair_checkpoint_args_preserves_required_reviews(self) -> None:
         manifest = {
             "required_reviews": [
@@ -593,6 +680,10 @@ class RepairDecisionTests(unittest.TestCase):
             merge_when_green=False,
             auto_merge=False,
             dry_run=False,
+            override_judges=False,
+            reason=None,
+            resume_merge_wait=False,
+            refresh=False,
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
@@ -1171,6 +1262,10 @@ class RepairDecisionTests(unittest.TestCase):
             merge_when_green=False,
             auto_merge=False,
             dry_run=True,
+            override_judges=False,
+            reason=None,
+            resume_merge_wait=False,
+            refresh=False,
         )
         fake_manifest_path = MagicMock()
         fake_manifest_path.exists.return_value = True
@@ -1292,6 +1387,7 @@ class RepairDecisionTests(unittest.TestCase):
             gemini_retries=1,
             repair_timeout_seconds=30,
             fallback=True,
+            json=False,
             use_existing_artifact=True,
             allow_large_diff_rerun=False,
             required_reviews=None,
@@ -1347,6 +1443,8 @@ class RepairDecisionTests(unittest.TestCase):
                 CMD_CHECKPOINT_MODULE, "record_checkpoint_fallback"
             ) as record_fallback, patch.object(
                 CMD_CHECKPOINT_MODULE, "run_checkpoint_fallback", return_value=(False, "boom")
+            ), patch.object(
+                CMD_CHECKPOINT_MODULE, "with_locked_state", return_value=self._FakeLockedState()
             ), patch.object(
                 CMD_CHECKPOINT_MODULE.subprocess, "run", return_value=SimpleNamespace(returncode=1, stdout="", stderr="repair failed")
             ):
@@ -1417,6 +1515,7 @@ class RepairDecisionTests(unittest.TestCase):
             gemini_retries=1,
             repair_timeout_seconds=30,
             fallback=False,
+            json=False,
             use_existing_artifact=False,
             allow_large_diff_rerun=False,
             required_reviews=None,
@@ -1513,6 +1612,8 @@ class RepairDecisionTests(unittest.TestCase):
             ), patch.object(
                 CMD_CHECKPOINT_MODULE, "update_workflow_state", return_value={}
             ), patch.object(
+                CMD_CHECKPOINT_MODULE, "with_locked_state", return_value=self._FakeLockedState()
+            ), patch.object(
                 CMD_CHECKPOINT_MODULE.subprocess, "run", side_effect=fake_run
             ):
                 exit_code = MODULE.command_checkpoint(args)
@@ -1521,6 +1622,53 @@ class RepairDecisionTests(unittest.TestCase):
         joined = "\n".join(" ".join(cmd) for cmd in commands)
         self.assertIn("--base-ref", joined)
         self.assertIn("abc123def4567890", joined)
+
+
+class ReviewAttemptTelemetryTests(unittest.TestCase):
+    def test_review_attempt_record_infers_slug_and_omits_content(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            review_path = repo_root / "docs" / "workflow" / "feature-runs" / "demo" / "reviews" / "spec.codex.md"
+            review_path.parent.mkdir(parents=True)
+
+            record = ATTEMPTS_MODULE.review_attempt_record(
+                repo_root=repo_root,
+                reviewer="codex",
+                model="gpt-test",
+                stage="spec",
+                lens="risk",
+                artifact_chars=100,
+                context_chars=20,
+                total_chars=120,
+                max_artifact_chars=1000,
+                max_context_chars=1000,
+                max_total_chars=2000,
+                coverage_status="full",
+                coverage_note="",
+                result="passed",
+                exit_code=0,
+                duration_seconds=1.23456,
+                artifact_sha256="abc123",
+                review_path=review_path,
+            )
+
+        self.assertEqual(record["slug"], "demo")
+        self.assertEqual(record["review_path"], "docs/workflow/feature-runs/demo/reviews/spec.codex.md")
+        self.assertEqual(record["duration_seconds"], 1.235)
+        self.assertNotIn("prompt", record)
+        self.assertNotIn("artifact_text", record)
+        self.assertNotIn("review_body", record)
+
+    def test_append_review_attempt_writes_central_jsonl(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            record = {"slug": "demo", "result": "passed"}
+
+            ATTEMPTS_MODULE.append_review_attempt(record, repo_root)
+
+            log_path = repo_root / "docs" / "workflow" / "operations" / "review-attempts.jsonl"
+            self.assertTrue(log_path.exists())
+            self.assertEqual(json.loads(log_path.read_text(encoding="utf-8")), record)
 
 
 class CheckpointMarkerTests(unittest.TestCase):

@@ -14,9 +14,11 @@ VERIFY = SCRIPT_DIR / "verify_review_checkpoint.py"
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from workflow_utils import normalized_artifact_hash, resolve_stored_path
+from workflow_utils import normalized_artifact_hash, normalized_artifact_text, resolve_stored_path
 
 REPO_ROOT = SCRIPT_DIR.parents[5]
+REPAIR_LIMIT_BUFFER_CHARS = 1000
+REPAIR_MIN_TOTAL_BUFFER_CHARS = 10000
 
 
 def sha256_file(path: Path) -> str:
@@ -63,6 +65,45 @@ def review_is_healthy(spec: dict, artifact_path: Path) -> bool:
         if not raw_output or not resolve_stored_path(raw_output, REPO_ROOT, data.get("repo_root", "")).exists():
             return False
     return True
+
+
+def partial_coverage_reason(spec: dict) -> str:
+    review_path = resolve_stored_path(spec["path"], REPO_ROOT)
+    if not review_path.exists():
+        return ""
+    try:
+        data, _ = parse_frontmatter(review_path)
+    except Exception:
+        return ""
+    if data.get("coverage_status") != "partial":
+        return ""
+    return data.get("coverage_note", "")
+
+
+def context_chars(spec: dict) -> int:
+    total = 0
+    for raw_path in spec.get("context_paths", []):
+        path = resolve_stored_path(raw_path, REPO_ROOT)
+        if path.exists():
+            total += len(path.read_text(encoding="utf-8"))
+    return total
+
+
+def expanded_checkpoint_for_partial_artifact(spec: dict, artifact_path: Path, checkpoint: dict) -> dict | None:
+    if "artifact exceeded max_artifact_chars" not in partial_coverage_reason(spec):
+        return None
+
+    artifact_chars = len(normalized_artifact_text(checkpoint["stage"], artifact_path))
+    expanded = dict(checkpoint)
+    expanded["max_artifact_chars"] = max(
+        int(checkpoint.get("max_artifact_chars") or 0),
+        artifact_chars + REPAIR_LIMIT_BUFFER_CHARS,
+    )
+    expanded["max_total_chars"] = max(
+        int(checkpoint.get("max_total_chars") or 0),
+        expanded["max_artifact_chars"] + context_chars(spec) + REPAIR_MIN_TOTAL_BUFFER_CHARS,
+    )
+    return expanded
 
 
 def run_gemini(
@@ -156,12 +197,21 @@ def main() -> int:
     for spec in checkpoint.get("required_reviews", []):
         if review_is_healthy(spec, artifact_path):
             continue
+        review_checkpoint = expanded_checkpoint_for_partial_artifact(spec, artifact_path, checkpoint)
+        if review_checkpoint:
+            print(
+                f"repair expanding artifact budget for {spec['path']} to "
+                f"{review_checkpoint['max_artifact_chars']} chars",
+                file=sys.stderr,
+            )
+        else:
+            review_checkpoint = checkpoint
         if spec.get("reviewer") == "gemini":
             try:
                 run_gemini(
                     spec,
                     artifact_path,
-                    checkpoint,
+                    review_checkpoint,
                     workspace_dir,
                     args.gemini_timeout_seconds,
                     args.gemini_retries,
@@ -175,7 +225,7 @@ def main() -> int:
                 run_codex(
                     spec,
                     artifact_path,
-                    checkpoint,
+                    review_checkpoint,
                     workspace_dir,
                 )
             except subprocess.TimeoutExpired:
