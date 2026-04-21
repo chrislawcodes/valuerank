@@ -156,21 +156,28 @@ builder.queryField('circumplexAnalysis', (t) =>
         };
       }
 
-      const [models, pairwiseMap] = await Promise.all([
-        db.llmModel.findMany({
-          where: { id: { in: modelIds } },
-          include: { provider: true },
-        }) as Promise<ModelRow[]>,
-        aggregatePairwiseWinRates({ modelIds, signature }),
-      ]);
+      // The client passes cuid primary keys (LlmModel.id). Transcripts store the
+      // string modelId (LlmModel.modelId — e.g. "claude-sonnet-4-5"). We need both:
+      // look up LlmModel rows by cuid to get metadata, and use the string modelId
+      // to filter transcripts in the aggregation layer.
+      const models = await (db.llmModel.findMany({
+        where: { id: { in: modelIds } },
+        include: { provider: true },
+      }) as Promise<ModelRow[]>);
+      const transcriptModelIds = models.map((model) => model.modelId);
+      const pairwiseMap = await aggregatePairwiseWinRates({ modelIds: transcriptModelIds, signature });
 
       const modelById = new Map(models.map((model) => [model.id, model] as const));
       const eligible: CircumplexResultShape[] = [];
       const insufficient: CircumplexInsufficientModelShape[] = [];
 
       for (const modelId of modelIds) {
-        const pairwise = pairwiseMap.get(modelId) ?? createEmptyPairwiseMatrix();
         const model = modelById.get(modelId);
+        // The pairwiseMap is keyed by the TRANSCRIPT modelId (string name), not
+        // the LlmModel cuid. Look up the pairwise matrix via the model's string
+        // name, not its cuid.
+        const transcriptKey = model?.modelId ?? modelId;
+        const pairwise = pairwiseMap.get(transcriptKey) ?? createEmptyPairwiseMatrix();
         const modelLabel = model?.displayName ?? model?.modelId ?? modelId;
         const providerName = model?.provider.displayName ?? model?.provider.name ?? 'Unknown provider';
 
