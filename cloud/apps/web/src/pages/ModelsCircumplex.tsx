@@ -3,7 +3,6 @@ import { useQuery } from 'urql';
 import { X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
-import { Loading } from '../components/ui/Loading';
 import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Select';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
@@ -18,6 +17,7 @@ import { CircumplexThresholdControl } from '../components/models/CircumplexThres
 import { CircumplexModelPicker } from '../components/models/CircumplexModelPicker';
 import { CircumplexMethodologyPanel } from '../components/models/CircumplexMethodologyPanel';
 import { CircumplexModelCard } from '../components/models/CircumplexModelCard';
+import { CircumplexLoadingProgress } from '../components/models/CircumplexLoadingProgress';
 
 function parseCommaList(value: string | null): string[] {
   if (value == null || value.trim() === '') return [];
@@ -217,7 +217,18 @@ export function ModelsCircumplex() {
   }
 
   if (loading) {
-    return <Loading text="Loading circumplex report..." />;
+    const loadingStage = (signaturesLoading && signatures.length === 0) || (rosterLoading && roster.length === 0)
+      ? 'prepare'
+      : 'analyze';
+
+    return (
+      <CircumplexLoadingProgress
+        modelCount={rosterIds.length}
+        signature={selectedSignature}
+        stage={loadingStage}
+        threshold={threshold}
+      />
+    );
   }
 
   const hasAnySignatureData = analysisModels.some((result) => result.trialsPerValue.some((entry) => entry.trials > 0));

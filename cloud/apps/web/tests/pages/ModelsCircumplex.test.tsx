@@ -104,4 +104,44 @@ describe('ModelsCircumplex', () => {
     expect(screen.getByText('Model A')).toBeInTheDocument();
     expect(screen.getByText('Model B')).toBeInTheDocument();
   });
+
+  it('shows estimated progress while circumplex data is loading', () => {
+    useQueryMock.mockImplementation((args: { query: unknown }) => {
+      if (args.query === LLM_MODELS_QUERY) {
+        return [{
+          data: {
+            llmModels: [
+              { id: 'model-a', isDefault: true },
+              { id: 'model-b', isDefault: false },
+            ],
+          },
+          fetching: false,
+          error: undefined,
+        }];
+      }
+
+      if (args.query === CIRCUMPLEX_ANALYSIS_QUERY) {
+        return [{
+          data: undefined,
+          fetching: true,
+          error: undefined,
+        }];
+      }
+
+      return [{ data: undefined, fetching: false, error: undefined }];
+    });
+
+    render(
+      <MemoryRouter
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+        initialEntries={['/models/circumplex?signature=vnewtd&n=5&methodology=closed']}
+      >
+        <ModelsCircumplex />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('progressbar', { name: /estimated circumplex loading progress/i })).toHaveAttribute('aria-valuenow', '35');
+    expect(screen.getByText(/Computing circumplex fit across models/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 models on/i)).toBeInTheDocument();
+  });
 });
