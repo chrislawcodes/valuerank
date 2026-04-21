@@ -1,0 +1,38 @@
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "judge": "implementation-risk",
+  "model": "claude-sonnet-4-6",
+  "verdict": "proceed-with-annotation",
+  "confidence": 3,
+  "reasoning": "Four real implementation snags exist but none are fatal blockers given the artifact chain is self-consistent enough to resolve them with a brief look at the actual codebase. (1) resolveTranscriptDecisionModel's exact call signature is unconfirmed — the plan says 'path to be confirmed in wave A' and the audit note gives a module path but not the function signature or what fields transcript must carry, so an implementer writing aggregation.ts will be guessing at the argument shape. (2) formatTrialSignature is referenced in A10 but never defined or located in the artifacts — it appears from nowhere. (3) The spearmanRankCorrelation shared helper's current return shape (plan says it 'returns { rho: 0, p: 1 } for degenerate inputs') conflicts with circumplexFit needing nullable output — the wrapper logic is described but the exact condition for 'zero-fallback vs null' is not nailed down, meaning the implementer must infer when to trust vs override the helper. (4) The SDL type [[Float]]! cannot hold top-level nulls (a null row) — the artifact corrects inner Float to nullable but a null row in the outer list is still unrepresentable in the current schema definition, which will cause a codegen/runtime mismatch for fully excluded value rows.",
+  "evidence": [
+    {
+      "artifact": "TASKS",
+      "section": "A5. Canonicalization helper import audit",
+      "quote": "locate the existing resolveTranscriptDecisionModel helper (referenced in domain-analysis-aggregation.ts and value-detail.ts per plan Decision 1). Document its exact module path in this tasks file as a comment so later tasks can import it. <!-- Audit note: resolveTranscriptDecisionModel is exported from /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/domain/decision-model.ts. -->"
+    },
+    {
+      "artifact": "TASKS",
+      "section": "A6. Aggregation step 4",
+      "quote": "For each transcript: resolveTranscriptDecisionModel(transcript, { orientationFlipped, pairOverride }). Drop unknown."
+    },
+    {
+      "artifact": "TASKS",
+      "section": "A10. Resolver: available signatures",
+      "quote": "extract signature via formatTrialSignature(run.config) → deduplicate with most-recent createdAt per signature"
+    },
+    {
+      "artifact": "PLAN",
+      "section": "Decision 4: Statistics module",
+      "quote": "The shared spearmanRankCorrelation returns { rho: 0, p: 1 } for short/degenerate inputs (historically desired by Consistency). Circumplex needs nullable results. circumplexFit MUST wrap the shared helper and return { rho: null, p: null, verdict: 'insufficient_data' } when the determinate pair count is below the threshold (default: < 15 of 45 pairs, tunable) or when the distance/correlation vectors collapse to constants. The shared helper's zero-fallback is preserved; circumplex-specific null logic lives in the wrapper."
+    },
+    {
+      "artifact": "TASKS",
+      "section": "A8. Pothos types",
+      "quote": "profileCorrelationMatrix: [[Float]]! — note profileCorrelationMatrix is a non-null list of non-null lists of nullable Floats so excluded cells and degenerate correlations can be represented as null."
+    }
+  ],
+  "timestamp": "2026-04-20T00:00:00.000Z"
+}
+```

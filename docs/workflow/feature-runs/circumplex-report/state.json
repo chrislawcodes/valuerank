@@ -462,6 +462,150 @@
       "agent_id": null,
       "artifact_sha_at_time": "fbbc6e355438812e12621a52e5569120681f93adbbea36c31901e3b8e7db3c1a",
       "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:34:32.149303Z",
+      "started_at": "2026-04-21T00:34:08.221829Z",
+      "ended_at": "2026-04-21T00:34:32.149303Z",
+      "duration_seconds": 23.927176,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:35:03.383646Z",
+      "started_at": "2026-04-21T00:34:32.309644Z",
+      "ended_at": "2026-04-21T00:35:03.383646Z",
+      "duration_seconds": 31.073673,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:35:36.105504Z",
+      "started_at": "2026-04-21T00:35:03.502229Z",
+      "ended_at": "2026-04-21T00:35:36.105504Z",
+      "duration_seconds": 32.602927,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:36:04.804640Z",
+      "started_at": "2026-04-21T00:35:50.998953Z",
+      "ended_at": "2026-04-21T00:36:04.804640Z",
+      "duration_seconds": 13.805617,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:36:12.827173Z",
+      "started_at": "2026-04-21T00:36:04.806042Z",
+      "ended_at": "2026-04-21T00:36:12.827173Z",
+      "duration_seconds": 8.021093,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:36:21.813727Z",
+      "started_at": "2026-04-21T00:35:50.997621Z",
+      "ended_at": "2026-04-21T00:36:21.813727Z",
+      "duration_seconds": 30.815881,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:36:52.457694Z",
+      "started_at": "2026-04-21T00:36:21.814788Z",
+      "ended_at": "2026-04-21T00:36:52.457694Z",
+      "duration_seconds": 30.642699,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:38:03.272063Z",
+      "started_at": "2026-04-21T00:35:50.997363Z",
+      "ended_at": "2026-04-21T00:38:03.272063Z",
+      "duration_seconds": 132.273512,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:38:26.789293Z",
+      "started_at": "2026-04-21T00:38:03.273135Z",
+      "ended_at": "2026-04-21T00:38:26.789293Z",
+      "duration_seconds": 23.51601,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa",
+      "parse_error": "no Claude token counts found in stdout or stderr"
     }
   ],
   "stages": {
@@ -504,16 +648,129 @@
       "initial_sha": "b0ec317d4acc47f5ef074abe6bda5b0db954a9eec2002271f47842b3f1122650"
     },
     "diff": {
-      "adversarial_rounds": 2,
-      "judge_rounds": 0,
-      "judge_verdicts": [],
-      "annotations": [],
+      "adversarial_rounds": 3,
+      "judge_rounds": 1,
+      "judge_verdicts": [
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.2",
+            "verdict": "proceed",
+            "confidence": 5,
+            "reasoning": "No HIGH findings were reported in the adversarial review rounds, so there are no HIGH-severity gaps to verify, mitigate, or accept as limitations. The artifact chain does include named mitigations and explicit limitation acknowledgements for many non-HIGH issues, but none are required to satisfy this audit. Therefore the completeness check passes with no blocking HIGH findings outstanding.",
+            "evidence": [],
+            "timestamp": "2026-04-20T12:00:00-07:00"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5-codex",
+            "verdict": "block",
+            "confidence": 5,
+            "reasoning": "Earlier rounds contain no findings at all, so none of the latest-round findings can be RESTATEMENTs under the stated rule. Classification by finding: `diff.codex.correctness-adversarial.review#medium-1` = NEW, failure mode: the new `tooManyExcluded` cutoff can create false negatives by demoting otherwise eligible models based on a proxy count rather than the true validity rule; `#medium-2` = NEW, failure mode: the new demotion path collapses distinct causes into `reason: 'below_threshold'`, which can mislead downstream UI or remediation logic; `diff.codex.regression-adversarial.review#medium-1` = NEW for the same reason as correctness `#medium-1`, because no earlier round raised it; `#medium-2` = NEW for the same reason as correctness `#medium-2`, because no earlier round raised it; `diff.gemini.quality-adversarial.review#medium-1` = NEW, failure mode: the hardcoded 50% threshold is brittle and undocumented, creating maintenance risk if sufficiency rules change; `#low-2` = NEW, failure mode: potentially wasted computation from the two-tier eligibility flow; `#low-3` = NEW, failure mode: possible unhandled non-success verdict bands leaving bad states in `eligible`; `#low-4` = NEW, failure mode: direct `result.excludedValues.length` access could throw if the property shape changes. Some latest findings overlap with each other, but overlap within the same latest round does not satisfy the RESTATEMENT definition, which requires an earlier round plus an orchestrator response. Restatement rate versus earlier rounds is therefore 0%, so the loop is still producing new signal and should be blocked from proceeding.",
+            "evidence": [
+              {
+                "artifact": "earlier-rounds",
+                "section": "prior-findings",
+                "quote": "No prior findings yet."
+              },
+              {
+                "artifact": "diff.codex.correctness-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "The new `tooManyExcluded` gate (`result.excludedValues.length > SCHWARTZ_CIRCULAR_ORDER.length / 2`) adds a hard cutoff that is not justified by the diff itself. If `excludedValues` is just a descriptive output from `buildResult` rather than the actual validity rule, this will misclassify otherwise eligible models as `insufficient`"
+              },
+              {
+                "artifact": "diff.codex.correctness-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "Models demoted by the new branch are all recorded with `reason: 'below_threshold'`, even when the real failure is pairwise exclusion or `verdictBand === 'insufficient_data'`. That collapses distinct failure modes into one code path"
+              },
+              {
+                "artifact": "diff.codex.regression-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "`tooManyExcluded` makes eligibility depend on `result.excludedValues.length > SCHWARTZ_CIRCULAR_ORDER.length / 2`, which is only a proxy for the actual pair-level verdict. If `buildResult()` can still produce a valid model with more than half the values excluded, this new gate will create false negatives"
+              },
+              {
+                "artifact": "diff.codex.regression-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "The new demotion path always stores `reason: 'below_threshold'`, even when the model was moved because of the pair-level exclusion heuristic. Any downstream UI, alerting, or retry logic that keys off `reason` will now see the wrong failure cause"
+              },
+              {
+                "artifact": "diff.gemini.quality-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "The logic demotes a model if the number of excluded values exceeds half the total (`> SCHWARTZ_CIRCULAR_ORDER.length / 2`). This 50% threshold is a \"magic number\""
+              },
+              {
+                "artifact": "diff.gemini.quality-adversarial.review.md",
+                "section": "low-2",
+                "quote": "The code performs a quick eligibility check, and for those that pass, it executes `buildResult` only to potentially discard the result immediately after"
+              },
+              {
+                "artifact": "diff.gemini.quality-adversarial.review.md",
+                "section": "low-3",
+                "quote": "The code explicitly checks for `result.verdictBand === 'insufficient_data'` to demote a model. However, it fails to account for other potential non-successful verdicts that `buildResult` might return"
+              },
+              {
+                "artifact": "diff.gemini.quality-adversarial.review.md",
+                "section": "low-4",
+                "quote": "The code directly accesses `result.excludedValues.length` without a defensive check to ensure the `excludedValues` property exists and is an array"
+              }
+            ],
+            "timestamp": "2026-04-20T00:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-6",
+            "verdict": "proceed-with-annotation",
+            "confidence": 3,
+            "reasoning": "Four real implementation snags exist but none are fatal blockers given the artifact chain is self-consistent enough to resolve them with a brief look at the actual codebase. (1) resolveTranscriptDecisionModel's exact call signature is unconfirmed \u2014 the plan says 'path to be confirmed in wave A' and the audit note gives a module path but not the function signature or what fields transcript must carry, so an implementer writing aggregation.ts will be guessing at the argument shape. (2) formatTrialSignature is referenced in A10 but never defined or located in the artifacts \u2014 it appears from nowhere. (3) The spearmanRankCorrelation shared helper's current return shape (plan says it 'returns { rho: 0, p: 1 } for degenerate inputs') conflicts with circumplexFit needing nullable output \u2014 the wrapper logic is described but the exact condition for 'zero-fallback vs null' is not nailed down, meaning the implementer must infer when to trust vs override the helper. (4) The SDL type [[Float]]! cannot hold top-level nulls (a null row) \u2014 the artifact corrects inner Float to nullable but a null row in the outer list is still unrepresentable in the current schema definition, which will cause a codegen/runtime mismatch for fully excluded value rows.",
+            "evidence": [
+              {
+                "artifact": "TASKS",
+                "section": "A5. Canonicalization helper import audit",
+                "quote": "locate the existing resolveTranscriptDecisionModel helper (referenced in domain-analysis-aggregation.ts and value-detail.ts per plan Decision 1). Document its exact module path in this tasks file as a comment so later tasks can import it. <!-- Audit note: resolveTranscriptDecisionModel is exported from /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/domain/decision-model.ts. -->"
+              },
+              {
+                "artifact": "TASKS",
+                "section": "A6. Aggregation step 4",
+                "quote": "For each transcript: resolveTranscriptDecisionModel(transcript, { orientationFlipped, pairOverride }). Drop unknown."
+              },
+              {
+                "artifact": "TASKS",
+                "section": "A10. Resolver: available signatures",
+                "quote": "extract signature via formatTrialSignature(run.config) \u2192 deduplicate with most-recent createdAt per signature"
+              },
+              {
+                "artifact": "PLAN",
+                "section": "Decision 4: Statistics module",
+                "quote": "The shared spearmanRankCorrelation returns { rho: 0, p: 1 } for short/degenerate inputs (historically desired by Consistency). Circumplex needs nullable results. circumplexFit MUST wrap the shared helper and return { rho: null, p: null, verdict: 'insufficient_data' } when the determinate pair count is below the threshold (default: < 15 of 45 pairs, tunable) or when the distance/correlation vectors collapse to constants. The shared helper's zero-fallback is preserved; circumplex-specific null logic lives in the wrapper."
+              },
+              {
+                "artifact": "TASKS",
+                "section": "A8. Pothos types",
+                "quote": "profileCorrelationMatrix: [[Float]]! \u2014 note profileCorrelationMatrix is a non-null list of non-null lists of nullable Floats so excluded cells and degenerate correlations can be represented as null."
+              }
+            ],
+            "timestamp": "2026-04-20T00:00:00.000Z"
+          }
+        ]
+      ],
+      "annotations": [
+        {
+          "stage": "diff",
+          "round": 1,
+          "judge": "implementation-risk",
+          "confidence": 3,
+          "reasoning": "Four real implementation snags exist but none are fatal blockers given the artifact chain is self-consistent enough to resolve them with a brief look at the actual codebase. (1) resolveTranscriptDecisionModel's exact call signature is unconfirmed \u2014 the plan says 'path to be confirmed in wave A' and the audit note gives a module path but not the function signature or what fields transcript must carry, so an implementer writing aggregation.ts will be guessing at the argument shape. (2) formatTrialSignature is referenced in A10 but never defined or located in the artifacts \u2014 it appears from nowhere. (3) The spearmanRankCorrelation shared helper's current return shape (plan says it 'returns { rho: 0, p: 1 } for degenerate inputs') conflicts with circumplexFit needing nullable output \u2014 the wrapper logic is described but the exact condition for 'zero-fallback vs null' is not nailed down, meaning the implementer must infer when to trust vs override the helper. (4) The SDL type [[Float]]! cannot hold top-level nulls (a null row) \u2014 the artifact corrects inner Float to nullable but a null row in the outer list is still unrepresentable in the current schema definition, which will cause a codegen/runtime mismatch for fully excluded value rows.",
+          "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa"
+        }
+      ],
       "unresolved_concerns": [],
       "adversarial_sha_history": [
         "f318c47f095f2b3e003313858b32fdf929e2cc852f7fc028e62c0cff3bc6f221",
-        "fbbc6e355438812e12621a52e5569120681f93adbbea36c31901e3b8e7db3c1a"
+        "fbbc6e355438812e12621a52e5569120681f93adbbea36c31901e3b8e7db3c1a",
+        "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa"
       ],
-      "initial_sha": "f318c47f095f2b3e003313858b32fdf929e2cc852f7fc028e62c0cff3bc6f221"
+      "initial_sha": "f318c47f095f2b3e003313858b32fdf929e2cc852f7fc028e62c0cff3bc6f221",
+      "judge_next_action": "advance"
     }
   },
   "schema_version": 2,
@@ -526,9 +783,16 @@
   "plan_adversarial_rounds": 0,
   "tasks_adversarial_rounds": 1,
   "last_action_result": {
-    "next": "reconcile_reviews",
-    "reason": "diff checkpoint completed",
-    "blockers": []
+    "next": "dispatch_next_slice_to_codex",
+    "reason": "diff judge panel completed: advance",
+    "blockers": [
+      "Earlier rounds contain no findings at all, so none of the latest-round findings can be RESTATEMENTs under the stated rule. Classification by finding: `diff.codex.correctness-adversarial.review#medium-1` = NEW, failure mode: the new `tooManyExcluded` cutoff can create false negatives by demoting otherwise eligible models based on a proxy count rather than the true validity rule; `#medium-2` = NEW, failure mode: the new demotion path collapses distinct causes into `reason: 'below_threshold'`, which can mislead downstream UI or remediation logic; `diff.codex.regression-adversarial.review#medium-1` = NEW for the same reason as correctness `#medium-1`, because no earlier round raised it; `#medium-2` = NEW for the same reason as correctness `#medium-2`, because no earlier round raised it; `diff.gemini.quality-adversarial.review#medium-1` = NEW, failure mode: the hardcoded 50% threshold is brittle and undocumented, creating maintenance risk if sufficiency rules change; `#low-2` = NEW, failure mode: potentially wasted computation from the two-tier eligibility flow; `#low-3` = NEW, failure mode: possible unhandled non-success verdict bands leaving bad states in `eligible`; `#low-4` = NEW, failure mode: direct `result.excludedValues.length` access could throw if the property shape changes. Some latest findings overlap with each other, but overlap within the same latest round does not satisfy the RESTATEMENT definition, which requires an earlier round plus an orchestrator response. Restatement rate versus earlier rounds is therefore 0%, so the loop is still producing new signal and should be blocked from proceeding."
+    ],
+    "outcome": "advance",
+    "proceed_count": 2,
+    "block_count": 1,
+    "timestamp": "2026-04-21T00:38:26.974065Z",
+    "judge_round": 1
   },
   "heartbeats": [
     {
@@ -546,6 +810,7 @@
       "elapsed_ms": 1200007
     }
   ],
-  "diff_adversarial_rounds": 2,
-  "dirty_overrides": {}
+  "diff_adversarial_rounds": 3,
+  "dirty_overrides": {},
+  "diff_judge_rounds": 1
 }

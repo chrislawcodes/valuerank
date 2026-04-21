@@ -1,233 +1,35 @@
 diff --git a/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts b/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts
-index 4a9c6cc0..c7ffc819 100644
+index c7ffc819..9032bbd9 100644
 --- a/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts
 +++ b/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts
-@@ -4,11 +4,14 @@ import { builder } from '../builder.js';
- import {
-   CircumplexAnalysisResultRef,
-   type CircumplexAnalysisResultShape,
-+  type CircumplexInsufficientModelShape,
-   type CircumplexMdsCoordShape,
-   type CircumplexResultShape,
- } from '../types/circumplex.js';
- import { aggregatePairwiseWinRates, type CircumplexPairMatrix } from '../../services/circumplex/aggregation.js';
- import { classicalMds2d, circumplexFit, valueProfileMatrix } from '../../services/circumplex/statistics.js';
-+import { anchorMdsRotation } from '../../services/circumplex/mds.js';
-+import { classifyEligibility } from '../../services/circumplex/eligibility.js';
+@@ -181,7 +181,29 @@ builder.queryField('circumplexAnalysis', (t) =>
+         });
  
- type ModelRow = {
-   id: string;
-@@ -36,9 +39,22 @@ function pairwiseToTrialMatrix(pairwise: CircumplexPairMatrix): number[][] {
- function computeExcludedIndices(pairwise: CircumplexPairMatrix): Set<number> {
-   const excluded = new Set<number>();
- 
-+  // Exclusion rule (revised from the earlier "single-strike" version flagged
-+  // in diff review). A value is excluded if EITHER:
-+  //   (a) fewer than 6 of its 9 pair cells are determinate (have a
-+  //       computable win rate and at least one trial), OR
-+  //   (b) fewer than 4 of its 9 pair cells have at least 20 trials.
-+  // Rule (a) is the minimum for a stable Pearson correlation. Rule (b)
-+  // prevents a single low-trial cell from killing an otherwise well-
-+  // covered value, while still requiring that most of the profile has
-+  // enough statistical weight to matter.
-+  const MIN_DETERMINATE_CELLS = 6;
-+  const MIN_HIGH_TRIAL_CELLS = 4;
-+  const HIGH_TRIAL_THRESHOLD = 20;
-+
-   for (let rowIndex = 0; rowIndex < SCHWARTZ_CIRCULAR_ORDER.length; rowIndex += 1) {
-     let determinate = 0;
--    let hasLowTrialCell = false;
-+    let highTrialCells = 0;
- 
-     for (let colIndex = 0; colIndex < SCHWARTZ_CIRCULAR_ORDER.length; colIndex += 1) {
-       if (rowIndex === colIndex) continue;
-@@ -47,12 +63,12 @@ function computeExcludedIndices(pairwise: CircumplexPairMatrix): Set<number> {
-         continue;
-       }
-       determinate += 1;
--      if (cell.trials < 20) {
--        hasLowTrialCell = true;
-+      if (cell.trials >= HIGH_TRIAL_THRESHOLD) {
-+        highTrialCells += 1;
-       }
-     }
- 
--    if (determinate < 6 || hasLowTrialCell) {
-+    if (determinate < MIN_DETERMINATE_CELLS || highTrialCells < MIN_HIGH_TRIAL_CELLS) {
-       excluded.add(rowIndex);
-     }
-   }
-@@ -94,6 +110,10 @@ function buildResult(
-   const fit = circumplexFit(profileCorrelationMatrix, SCHWARTZ_CIRCULAR_ORDER);
-   const distanceMatrix = profileCorrelationMatrix.map((row) => row.map((value) => (value == null ? null : 1 - value)));
-   const mds = classicalMds2d(distanceMatrix);
-+  // Rotate so the first included value in canonical order (default: Self-Direction)
-+  // sits at 12 o'clock. Without this, the MDS output rotates/flips arbitrarily
-+  // from run to run, making the theoretical-angle overlay meaningless.
-+  const rotatedCoords = anchorMdsRotation(mds.coords, SCHWARTZ_CIRCULAR_ORDER);
- 
-   return {
-     modelId,
-@@ -107,7 +127,7 @@ function buildResult(
-     spearmanRho: fit.rho,
-     spearmanP: fit.p,
-     verdictBand: fit.verdict,
--    mds2d: buildMdsCoords(mds.coords),
-+    mds2d: buildMdsCoords(rotatedCoords),
-     mdsStress: mds.stress,
-     mdsWarning: mds.warning,
-     trialsPerValue: buildTrialsPerValue(pairwise),
-@@ -145,15 +165,45 @@ builder.queryField('circumplexAnalysis', (t) =>
-       ]);
- 
-       const modelById = new Map(models.map((model) => [model.id, model] as const));
--      const results = modelIds.map((modelId) => {
-+      const eligible: CircumplexResultShape[] = [];
-+      const insufficient: CircumplexInsufficientModelShape[] = [];
-+
-+      for (const modelId of modelIds) {
-         const pairwise = pairwiseMap.get(modelId) ?? createEmptyPairwiseMatrix();
--        return buildResult(modelId, modelById.get(modelId), signature, pairwise);
--      });
-+        const model = modelById.get(modelId);
-+        const modelLabel = model?.displayName ?? model?.modelId ?? modelId;
-+        const providerName = model?.provider.displayName ?? model?.provider.name ?? 'Unknown provider';
-+
-+        const eligibility = classifyEligibility({
-+          model: { modelId, modelLabel, providerName },
-+          pairwise,
-+          minTrialsPerValue,
-+        });
-+
-+        if (eligibility.status === 'eligible') {
-+          eligible.push(buildResult(modelId, model, signature, pairwise));
-+        } else {
-+          insufficient.push({
-+            modelId,
-+            modelLabel,
-+            providerName,
-+            reason: eligibility.reason ?? 'below_threshold',
-+            trialsPerValue: eligibility.trialsPerValue.map((entry) => ({
-+              valueKey: entry.valueKey,
-+              trials: entry.trials,
-+            })),
-+          });
-+        }
-+      }
-+
-+      // Alphabetical stable sort per spec FR-011a.
-+      eligible.sort((a, b) => a.modelLabel.localeCompare(b.modelLabel));
-+      insufficient.sort((a, b) => a.modelLabel.localeCompare(b.modelLabel));
- 
-       return {
-         signature,
--        models: results,
--        insufficient: [],
-+        models: eligible,
-+        insufficient,
-         eligibilityThreshold: minTrialsPerValue,
-       };
-     },
-diff --git a/cloud/apps/api/src/services/circumplex/aggregation.ts b/cloud/apps/api/src/services/circumplex/aggregation.ts
-index 7576a994..6e52a069 100644
---- a/cloud/apps/api/src/services/circumplex/aggregation.ts
-+++ b/cloud/apps/api/src/services/circumplex/aggregation.ts
-@@ -50,7 +50,14 @@ function createEmptyMatrix(): CircumplexPairMatrix {
- }
- 
- function pairKey(pair: DomainAnalysisValuePair): string {
--  return `${pair.valueA}::${pair.valueB}`;
-+  // Canonicalize: always sort alphabetically so both ingest and lookup
-+  // produce the same key regardless of whether extractValuePair returns
-+  // (A, B) or (B, A) for the same underlying scenario. This prevents
-+  // silent split of counts across two keys.
-+  const [first, second] = pair.valueA < pair.valueB
-+    ? [pair.valueA, pair.valueB]
-+    : [pair.valueB, pair.valueA];
-+  return `${first}::${second}`;
- }
- 
- function buildOrderedCell(stats: PairStats | undefined, left: ValueKey): CircumplexPairCell {
-@@ -100,9 +107,15 @@ export async function aggregatePairwiseWinRates(args: {
-     select: {
-       id: true,
-       config: true,
-+      status: true,
-+      deletedAt: true,
-     },
-   })) as RunRow[];
- 
-+  // Belt-and-suspenders: the WHERE clause already filters on status/deletedAt,
-+  // but we re-check after selection in case of future schema changes. The
-+  // runMatchesSignature check is the critical one — WHERE cannot express it
-+  // because signature is synthesized from config.
-   const scopedRunIds = runs
-     .filter((run) => run.status === 'COMPLETED' && run.deletedAt == null && runMatchesSignature(run.config, args.signature))
-     .map((run) => run.id);
-@@ -158,9 +171,17 @@ export async function aggregatePairwiseWinRates(args: {
-     const statsMap = statsByModel.get(transcript.modelId);
-     if (statsMap == null) continue;
- 
--    const key = pairKey(pair);
-+    // Canonicalize the pair orientation so prioritizedA always refers to the
-+    // lexicographically-smaller value, regardless of which orientation the
-+    // transcript's definitionSnapshot used. Without this, transcripts from
-+    // different orientation conventions merge their counts incorrectly.
-+    const canonicalPair: DomainAnalysisValuePair = pair.valueA < pair.valueB
-+      ? pair
-+      : { valueA: pair.valueB, valueB: pair.valueA };
-+
-+    const key = pairKey(canonicalPair);
-     const stats = statsMap.get(key) ?? {
--      pair,
-+      pair: canonicalPair,
-       prioritizedA: 0,
-       prioritizedB: 0,
-       neutrals: 0,
-@@ -168,9 +189,9 @@ export async function aggregatePairwiseWinRates(args: {
- 
-     if (resolved.canonical.direction === 'neutral') {
-       stats.neutrals += 1;
--    } else if (resolved.canonical.favoredValueKey === pair.valueA) {
-+    } else if (resolved.canonical.favoredValueKey === canonicalPair.valueA) {
-       stats.prioritizedA += 1;
--    } else if (resolved.canonical.favoredValueKey === pair.valueB) {
-+    } else if (resolved.canonical.favoredValueKey === canonicalPair.valueB) {
-       stats.prioritizedB += 1;
-     } else {
-       continue;
-diff --git a/cloud/apps/api/src/services/circumplex/mds.ts b/cloud/apps/api/src/services/circumplex/mds.ts
-index 02f5fea1..ef1df7bf 100644
---- a/cloud/apps/api/src/services/circumplex/mds.ts
-+++ b/cloud/apps/api/src/services/circumplex/mds.ts
-@@ -130,13 +130,26 @@ export function classicalMds2d(distanceMatrix: (number | null)[][]): {
-     };
-   }
- 
-+  // Compute mean of non-null distance cells to use for imputation.
-+  // Treating null as exact 0 (same-point) was fabricating geometry; treating
-+  // as max distance would over-push; mean-imputation is the neutral choice.
-+  const finiteValues: number[] = [];
-+  for (const rowIndex of included) {
-+    for (const colIndex of included) {
-+      if (rowIndex === colIndex) continue;
-+      const value = distanceMatrix[rowIndex]![colIndex];
-+      if (value != null) finiteValues.push(value);
-+    }
-+  }
-+  const meanDistance = finiteValues.length > 0
-+    ? finiteValues.reduce((sum, v) => sum + v, 0) / finiteValues.length
-+    : 1;
-+
-   const reduced = included.map((rowIndex) =>
-     included.map((colIndex) => {
-       const value = distanceMatrix[rowIndex]![colIndex];
--      if (value == null) {
--        return 0;
--      }
--      return value * value;
-+      const resolved = value == null ? meanDistance : value;
-+      return resolved * resolved;
-     }));
- 
-   const centered = centerDistanceMatrix(reduced);
+         if (eligibility.status === 'eligible') {
+-          eligible.push(buildResult(modelId, model, signature, pairwise));
++          // Two-tier check: the first-pass eligibility (classifyEligibility) only
++          // asks "does this model have enough total trials per value?" — the stricter
++          // pair-level test (computeExcludedIndices inside buildResult) asks "does
++          // every value have enough determinate + high-trial pair cells?". A model
++          // can pass the first test but still have too many values excluded by the
++          // second, producing an "insufficient_data" verdict in the models array.
++          // That's confusing; demote such models to the insufficient list.
++          const result = buildResult(modelId, model, signature, pairwise);
++          const tooManyExcluded = result.excludedValues.length > SCHWARTZ_CIRCULAR_ORDER.length / 2;
++          if (result.verdictBand === 'insufficient_data' || tooManyExcluded) {
++            insufficient.push({
++              modelId,
++              modelLabel,
++              providerName,
++              reason: 'below_threshold',
++              trialsPerValue: eligibility.trialsPerValue.map((entry) => ({
++                valueKey: entry.valueKey,
++                trials: entry.trials,
++              })),
++            });
++          } else {
++            eligible.push(result);
++          }
+         } else {
+           insufficient.push({
+             modelId,

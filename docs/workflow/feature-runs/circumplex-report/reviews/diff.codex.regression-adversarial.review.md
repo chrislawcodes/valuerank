@@ -3,14 +3,14 @@ reviewer: "codex"
 lens: "regression-adversarial"
 stage: "diff"
 artifact_path: "docs/workflow/feature-runs/circumplex-report/reviews/implementation.diff.patch"
-artifact_sha256: "fbbc6e355438812e12621a52e5569120681f93adbbea36c31901e3b8e7db3c1a"
+artifact_sha256: "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa"
 repo_root: "."
-git_head_sha: "d8aab9e62d2147e71ac4cc92673f04c6ccd1e3c0"
-git_base_ref: "03d8ef90b9cbe77b8bb67d7213019ab23eb816c1"
-git_base_sha: "03d8ef90b9cbe77b8bb67d7213019ab23eb816c1"
+git_head_sha: "3940e203860c9e9f41ff014a070b901022439c42"
+git_base_ref: "d8aab9e62d2147e71ac4cc92673f04c6ccd1e3c0"
+git_base_sha: "d8aab9e62d2147e71ac4cc92673f04c6ccd1e3c0"
 generation_method: "codex-runner"
 resolution_status: "accepted"
-resolution_note: "MEDIUM (eligibility/exclusion desync): same fix as correctness review — two-tier check now demotes insufficient_data results to the insufficient list after buildResult. LOW (MDS reflection ambiguity): accepted as residual, same rationale as correctness review. Residual risks (mean imputation can flatten sparse models, orientation assumption in canonicalization) acknowledged — both accepted for v1."
+resolution_note: "Round 3: same findings as correctness review; same resolutions. Judge panel ruled ADVANCE."
 raw_output_path: "docs/workflow/feature-runs/circumplex-report/reviews/diff.codex.regression-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,13 +22,13 @@ coverage_note: ""
 
 ## Findings
 
-- **Medium [UNVERIFIED]** [`circumplex-analysis.ts`](/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts): the new `classifyEligibility()` gate is much looser than the analysis it feeds. It only checks total trials per value, but `buildResult()` still excludes values unless they have at least 6 determinate cells and 4 cells with 20+ trials. A model can now pass as `eligible`, land in `models`, and still produce an effectively empty or `insufficient_data` circumplex because every value gets filtered out later.
-- **Low [UNVERIFIED]** [`mds.ts`](/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/circumplex/mds.ts): `anchorMdsRotation()` only fixes rotation. It does not remove the sign ambiguity of the MDS axes, so the same input can still come back mirrored across runs. That means the new theoretical-angle overlay can still flip left/right even after anchoring, which weakens the determinism claim in the query comment.
+- [UNVERIFIED] Medium: `tooManyExcluded` makes eligibility depend on `result.excludedValues.length > SCHWARTZ_CIRCULAR_ORDER.length / 2`, which is only a proxy for the actual pair-level verdict. If `buildResult()` can still produce a valid model with more than half the values excluded, this new gate will create false negatives and move a valid model out of `eligible`.
+- [UNVERIFIED] Medium: The new demotion path always stores `reason: 'below_threshold'`, even when the model was moved because of the pair-level exclusion heuristic. Any downstream UI, alerting, or retry logic that keys off `reason` will now see the wrong failure cause and may suggest the wrong fix.
 
 ## Residual Risks
 
-- The new mean-imputation in classical MDS will still bias sparse matrices toward the global average distance. That is better than treating nulls as zero, but it can still compress or flatten weak models.
-- The new alphabetical canonicalization in pair aggregation assumes the value keys are always intended to be orientation-free. If any downstream report still expects the original pair direction, this will hide that distinction.
+- [UNVERIFIED] I could not verify whether `excludedValues` is deduplicated or whether the `SCHWARTZ_CIRCULAR_ORDER.length / 2` cutoff matches the intended analysis rule everywhere else.
+- [UNVERIFIED] I could not verify whether any consumer depends on the previous split where first-pass eligible models always stayed in `eligible`, even if the deeper check would have marked them `insufficient_data`.
 
 ## Runner Stats
 - total_input=0
@@ -37,4 +37,4 @@ coverage_note: ""
 
 ## Resolution
 - status: accepted
-- note: MEDIUM (eligibility/exclusion desync): same fix as correctness review — two-tier check now demotes insufficient_data results to the insufficient list after buildResult. LOW (MDS reflection ambiguity): accepted as residual, same rationale as correctness review. Residual risks (mean imputation can flatten sparse models, orientation assumption in canonicalization) acknowledged — both accepted for v1.
+- note: Round 3: same findings as correctness review; same resolutions. Judge panel ruled ADVANCE.
