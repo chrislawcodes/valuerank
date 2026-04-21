@@ -233,34 +233,31 @@ export function ModelsCircumplex() {
         </p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
-        <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="w-60">
-              <Select
-                label="Signature"
-                options={signatureOptions}
-                value={selectedSignature}
-                onChange={handleSignatureChange}
-                placeholder="Select signature"
-              />
-            </div>
-            <CircumplexThresholdControl value={threshold} onChange={handleThresholdChange} />
+      <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
+        <div className="flex flex-wrap items-start gap-4">
+          <div className="w-full md:w-60">
+            <Select
+              label="Signature"
+              options={signatureOptions}
+              value={selectedSignature}
+              onChange={handleSignatureChange}
+              placeholder="Select signature"
+            />
           </div>
-          <p className="mt-3 text-sm text-gray-600">
-            Eligible models must have at least {threshold} trials on each of the 10 Schwartz values.
-          </p>
-        </section>
-
-        <CircumplexMethodologyPanel
-          open={methodologyParam === 'open'}
-          onToggleOpen={(open) => {
-            const params = new URLSearchParams(searchParams);
-            params.set('methodology', open ? 'open' : 'closed');
-            setSearchParams(params, { replace: true });
-          }}
-        />
-      </div>
+          <CircumplexThresholdControl value={threshold} onChange={handleThresholdChange} />
+          <CircumplexMethodologyPanel
+            open={methodologyParam === 'open'}
+            onToggleOpen={(open) => {
+              const params = new URLSearchParams(searchParams);
+              params.set('methodology', open ? 'open' : 'closed');
+              setSearchParams(params, { replace: true });
+            }}
+          />
+        </div>
+        <p className="mt-3 text-sm text-gray-600">
+          Eligible models must have at least {threshold} trials on each of the 10 Schwartz values.
+        </p>
+      </section>
 
       {selectionNotice != null && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -324,7 +321,7 @@ export function ModelsCircumplex() {
               <p className="font-medium text-gray-900">Pick one or more models to see the circumplex panel.</p>
             </section>
           ) : (
-            <div className="grid gap-4 xl:grid-cols-2">
+            <div data-testid="circumplex-model-card-stack" className="space-y-4">
               {selectedResults.map((result) => (
                 <CircumplexModelCard key={result.modelId} result={result} />
               ))}

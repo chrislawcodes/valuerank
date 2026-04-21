@@ -85,6 +85,8 @@ Once the above are resolved:
 
 **Update (2026-04-19):** ff-judge-panel slice 10 migration script + SKILL.md update + smoke test are implemented locally. Migration dry-run reports the two blocked workflows cleanly as missing in this worktree, the judge smoke test passes with stub judges, and the Feature Factory scripts test suite is green.
 
+**Update (2026-04-21):** Local Feature Factory run `models-circumplex-layout-cleanup` is implemented on `codex/models-circumplex-layout-cleanup`. The Circumplex page now keeps signature, minimum-trials, and methodology controls in one header box; uses a dropdown + tooltip help for methodology state; collapses model selection into a compact details row; and stacks selected model cards full width. Targeted web tests pass in the clean worktree. Next: repair the inherited partial review artifacts, then run the diff checkpoint and delivery steps.
+
 ### What We Keep (Differentiated)
 - Mandatory discovery phase — catches bad requirements early
 - Multi-agent adversarial review (Gemini + Codex attack, Claude judges)

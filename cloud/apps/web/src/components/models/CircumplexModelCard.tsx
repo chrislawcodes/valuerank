@@ -14,7 +14,7 @@ function toExcludedSet(values: string[]): Set<ValueKey> {
 
 export function CircumplexModelCard({ result }: Props) {
   return (
-    <section className="rounded-2xl border border-gray-200 bg-white p-4 md:p-5">
+    <section className="w-full rounded-2xl border border-gray-200 bg-white p-4 md:p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">{result.modelLabel}</h2>
