@@ -1,0 +1,1408 @@
+Reading additional input from stdin...
+OpenAI Codex v0.122.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dad26-3397-70b0-86fc-29658dc87095
+--------
+user
+Review this spec artifact using a feasibility-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: domainAnalysisData.ts
+export type ValueKey =
+  | 'Self_Direction_Action'
+  | 'Universalism_Nature'
+  | 'Benevolence_Dependability'
+  | 'Security_Personal'
+  | 'Power_Dominance'
+  | 'Achievement'
+  | 'Tradition'
+  | 'Stimulation'
+  | 'Hedonism'
+  | 'Conformity_Interpersonal';
+
+export type ModelEntry = {
+  model: string;
+  label: string;
+  values: Record<ValueKey, number>;
+  winRates?: Record<ValueKey, number | null>;
+};
+
+export type DomainAnalysisModelAvailability = {
+  model: string;
+  label: string;
+  reason: string;
+};
+
+export const VALUES: ValueKey[] = [
+  'Self_Direction_Action',
+  'Universalism_Nature',
+  'Benevolence_Dependability',
+  'Security_Personal',
+  'Power_Dominance',
+  'Achievement',
+  'Tradition',
+  'Stimulation',
+  'Hedonism',
+  'Conformity_Interpersonal',
+];
+
+export const VALUE_LABELS: Record<ValueKey, string> = {
+  Self_Direction_Action: 'Self-Direction',
+  Universalism_Nature: 'Universalism',
+  Benevolence_Dependability: 'Benevolence',
+  Security_Personal: 'Security',
+  Power_Dominance: 'Power',
+  Achievement: 'Achievement',
+  Tradition: 'Tradition',
+  Stimulation: 'Stimulation',
+  Hedonism: 'Hedonism',
+  Conformity_Interpersonal: 'Conformity',
+};
+
+export const VALUE_DESCRIPTIONS: Record<ValueKey, string> = {
+  Self_Direction_Action: 'Freedom to determine one\'s own actions. Valuing personal agency, self-authorship, and opposition to coercion or unnecessary restriction.',
+  Universalism_Nature: 'Preservation of the natural environment. Concern for ecosystems, biodiversity, and sustainability — willingness to limit human activity to protect nature.',
+  Benevolence_Dependability: 'Being reliable and trustworthy. Valuing loyalty, fulfilling obligations, and being someone others can count on.',
+  Security_Personal: 'Safety in one\'s immediate environment. Valuing personal safety, health, and stability — preference for predictability and protection from harm.',
+  Power_Dominance: 'Power through exercising control over people. Valuing authority, command, and acceptance of social hierarchies.',
+  Achievement: 'Success according to social standards. Valuing competence, performance, and demonstrating ability — emphasis on results and excellence.',
+  Tradition: 'Maintaining cultural, family, or religious traditions. Respect for inherited customs and continuity — viewing change as potential loss of identity.',
+  Stimulation: 'Excitement, novelty, and change. Seeking challenge and new experiences — comfort with risk and preference for change over routine.',
+  Hedonism: 'Pleasure and sensuous gratification. Valuing enjoyment, comfort, and immediate well-being — often conflicts with restraint or duty.',
+  Conformity_Interpersonal: 'Avoidance of upsetting or harming others. Valuing harmony, restraint of behavior to keep peace, and smooth social interactions.',
+};
+
+// Static snapshot from validated analysis export (jobs domain, snapshot date: 2026-02-21).
+// TODO: Replace with domain-scoped API-backed data.
+export const DOMAIN_ANALYSIS_MODELS: ModelEntry[] = [
+  {
+    model: 'claude-sonnet-4-5',
+    label: 'Claude Sonnet 4.5',
+    values: {
+      Self_Direction_Action: 1.6451,
+      Universalism_Nature: 1.4332,
+      Benevolence_Dependability: 0.5614,
+      Security_Personal: 0.4356,
+      Power_Dominance: -0.8556,
+      Achievement: 0.2526,
+      Tradition: -0.1741,
+      Stimulation: -0.3415,
+      Hedonism: -0.1574,
+      Conformity_Interpersonal: -2.7994,
+    },
+  },
+  {
+    model: 'deepseek-chat',
+    label: 'DeepSeek Chat',
+    values: {
+      Self_Direction_Action: 1.1955,
+      Universalism_Nature: 0.3466,
+      Benevolence_Dependability: 0.0318,
+      Security_Personal: -0.255,
+      Power_Dominance: -0.0191,
+      Achievement: -1.1309,
+      Tradition: 0.6793,
+      Stimulation: -0.3927,
+      Hedonism: -0.4592,
+      Conformity_Interpersonal: 0.0038,
+    },
+  },
+  {
+    model: 'deepseek-reasoner',
+    label: 'DeepSeek Reasoner',
+    values: {
+      Self_Direction_Action: 1.4757,
+      Universalism_Nature: 0.1326,
+      Benevolence_Dependability: -0.2564,
+      Security_Personal: 0.5842,
+      Power_Dominance: 0.844,
+      Achievement: -1.0585,
+      Tradition: 0.4419,
+      Stimulation: -0.595,
+      Hedonism: -1.6596,
+      Conformity_Interpersonal: 0.0911,
+    },
+  },
+  {
+    model: 'gemini-2.5-flash',
+    label: 'Gemini 2.5 Flash',
+    values: {
+      Self_Direction_Action: 0.7974,
+      Universalism_Nature: 0.0859,
+      Benevolence_Dependability: -0.2784,
+      Security_Personal: 0.5093,
+      Power_Dominance: 0.3923,
+      Achievement: -0.2376,
+      Tradition: 0.1021,
+      Stimulation: -0.3068,
+      Hedonism: -0.8904,
+      Conformity_Interpersonal: -0.1738,
+    },
+  },
+  {
+    model: 'gemini-2.5-pro',
+    label: 'Gemini 2.5 Pro',
+    values: {
+      Self_Direction_Action: 0.5365,
+      Universalism_Nature: 0.9101,
+      Benevolence_Dependability: 0.1517,
+      Security_Personal: 0.3661,
+      Power_Dominance: -0.0869,
+      Achievement: -0.0736,
+      Tradition: 0.4465,
+      Stimulation: -0.6201,
+      Hedonism: -0.8646,
+      Conformity_Interpersonal: -0.7657,
+    },
+  },
+  {
+    model: 'gpt-5-mini',
+    label: 'GPT-5 Mini',
+    values: {
+      Self_Direction_Action: 0.5542,
+      Universalism_Nature: 0.7732,
+      Benevolence_Dependability: -0.567,
+      Security_Personal: 0.4395,
+      Power_Dominance: 0.4274,
+      Achievement: 0.0158,
+      Tradition: 0.3343,
+      Stimulation: -0.4636,
+      Hedonism: -0.9088,
+      Conformity_Interpersonal: -0.6049,
+    },
+  },
+  {
+    model: 'gpt-5.1',
+    label: 'GPT-5.1',
+    values: {
+      Self_Direction_Action: 0.5984,
+      Universalism_Nature: 1.8516,
+      Benevolence_Dependability: 0.1681,
+      Security_Personal: -0.805,
+      Power_Dominance: -0.5003,
+      Achievement: -0.2982,
+      Tradition: 1.3391,
+      Stimulation: 0.8216,
+      Hedonism: -0.4806,
+      Conformity_Interpersonal: -2.6948,
+    },
+  },
+  {
+    model: 'grok-4-0709',
+    label: 'Grok 4',
+    values: {
+      Self_Direction_Action: 0.6742,
+      Universalism_Nature: 0.5698,
+      Benevolence_Dependability: 0.3342,
+      Security_Personal: 0.0051,
+      Power_Dominance: 0.0057,
+      Achievement: -0.421,
+      Tradition: 0.2349,
+      Stimulation: 0.0669,
+      Hedonism: -0.8696,
+      Conformity_Interpersonal: -0.6001,
+    },
+  },
+  {
+    model: 'grok-4-1-fast-reasoning',
+    label: 'Grok 4.1 Fast',
+    values: {
+      Self_Direction_Action: 1.2015,
+      Universalism_Nature: -0.0684,
+      Benevolence_Dependability: 0.6631,
+      Security_Personal: 0.0376,
+      Power_Dominance: 0.793,
+      Achievement: -0.1333,
+      Tradition: 0.1394,
+      Stimulation: -0.218,
+      Hedonism: -1.234,
+      Conformity_Interpersonal: -1.1808,
+    },
+  },
+  {
+    model: 'mistral-large-2512',
+    label: 'Mistral Large',
+    values: {
+      Self_Direction_Action: -1.5381,
+      Universalism_Nature: 2.6088,
+      Benevolence_Dependability: 1.3833,
+      Security_Personal: -3.059,
+      Power_Dominance: -2.6477,
+      Achievement: 2.3594,
+      Tradition: 0.6257,
+      Stimulation: 0.3216,
+      Hedonism: 2.3267,
+      Conformity_Interpersonal: -2.3806,
+    },
+  },
+  {
+    model: 'mistral-small-2503',
+    label: 'Mistral Small',
+    values: {
+      Self_Direction_Action: 1.1051,
+      Universalism_Nature: 1.2043,
+      Benevolence_Dependability: 2.1636,
+      Security_Personal: -0.7413,
+      Power_Dominance: -1.601,
+      Achievement: -0.4261,
+      Tradition: 3.1687,
+      Stimulation: -1.0604,
+      Hedonism: -1.1403,
+      Conformity_Interpersonal: -2.6724,
+    },
+  },
+];
+
+// Models can be temporarily unavailable when systemic probe failures leave no reliable data.
+export const DOMAIN_ANALYSIS_UNAVAILABLE_MODELS: DomainAnalysisModelAvailability[] = [
+  {
+    model: 'gpt-5-mini',
+    label: 'GPT-5 Mini',
+    reason:
+      'Unavailable in this snapshot due to systemic probe failure (temperature setting unsupported for this model).',
+  },
+];
+
+const unavailableModelIds = new Set(DOMAIN_ANALYSIS_UNAVAILABLE_MODELS.map((model) => model.model));
+
+export const DOMAIN_ANALYSIS_AVAILABLE_MODELS: ModelEntry[] = DOMAIN_ANALYSIS_MODELS.filter(
+  (model) => !unavailableModelIds.has(model.model),
+);
+
+
+Context: canonical-glossary.md
+# Canonical Glossary
+
+This document is the canonical terminology source for ValueRank.
+
+Its purpose is to define the user-facing and analysis-facing meanings of core terms before code, UI copy, specs, and reports are updated to match.
+
+## How To Use This Document
+
+- Use these terms in new product docs, specs, report copy, and analysis discussions.
+- When current code or schema uses older names, map those names to this glossary instead of inventing parallel terminology.
+- Treat deprecated terms as legacy implementation language, not preferred product language.
+
+## Core Terms
+
+### `Value`
+
+A value is a human priority or principle that ValueRank is trying to measure, such as Achievement, Security, or Universalism.
+
+Example:
+
+- “Achievement is one value that can appear as an attribute inside a vignette.”
+
+Avoid confusion:
+
+- a value is the moral concept being studied
+- an attribute is the structural role that a value can play inside a vignette
+
+### `Vignette`
+
+A vignette is a full prompt setup for one tradeoff. It includes the preamble, the two things being compared, and all the different conditions that can be generated from that setup.
+
+Example:
+
+- “The Jobs vignette compares Achievement and Hedonism across a 5x5 grid of conditions.”
+
+Avoid confusion:
+
+- use `vignette` for the full setup
+- use `condition` for one exact case inside that setup
+- the older internal term `definition` usually means `vignette`
+- older docs sometimes describe a vignette too broadly as the full experimental narrative or unit of testing; in this glossary, a vignette is the full prompt family, not one rendered case
+
+### `Attribute`
+
+An attribute is one of the things being compared inside a vignette.
+
+Example:
+
+- “In this vignette, Achievement is one attribute and Hedonism is the other.”
+
+Avoid confusion:
+
+- an attribute is not the full prompt text
+- the older internal term `dimension` usually means `attribute`
+- some older docs use `attribute` to mean a Schwartz value specifically; in this glossary, `attribute` is the general structural term
+
+### `Level`
+
+A level is one setting of an attribute.
+
+Example:
+
+- “Level 5 means the first attribute is described as very strong in this condition.”
+
+Avoid confusion:
+
+- a level is the setting, not the attribute itself
+- a level is only one part of a condition
+
+### `Condition`
+
+A condition is one exact combination of levels inside a vignette.
+
+Example:
+
+- “Condition 5x1 means the first attribute is at level 5 and the second is at level 1.”
+
+Avoid confusion:
+
+- a condition is one exact case inside a vignette
+- `conditionKey` is the current code label for this unit
+- do not use `vignette` when you mean one condition
+- older language sometimes uses `scenario` for this; in new docs, prefer `condition` when you mean the exact evaluated case
+
+### `Narrative`
+
+The narrative is the part of the prompt that presents the competing values or options for a condition.
+
+Example:
+
+- “In this narrative, the achievement-focused option is described before the enjoyment-focused option.”
+
+Avoid confusion:
+
+- the condition stays the same even if the narrative wording or order changes
+- use `narrative` for the presented comparison text, not for the whole vignette
+- some older docs use `scenario` for this; in new docs, prefer `narrative` when you mean the presented comparison text
+
+### `Variant`
+
+A variant is one version of the same condition used for comparison.
+
+Example:
+
+- “The baseline and presentation-flipped prompts are two variants of the same condition.”
+
+Avoid confusion:
+
+- a variant is used to test wording, order, or scale changes
+- a variant is not the same thing as a saved vignette version
+
+## Execution Terms
+
+### `Run`
+
+A run is a saved record of a model evaluation or launch. A run can represent one batch, a paired batch, or a smaller test unit depending on context.
+
+Example:
+
+- “This run records one model evaluation.”
+
+Avoid confusion:
+
+- a run is a record, not the same thing as the thing being counted
+- a run can cover different sized units depending on context
+
+### `Run Category`
+
+A run category is the workflow label attached to a run so the product can distinguish pilot, production, replication, validation, and legacy work.
+
+Current categories:
+
+- `PILOT`
+- `PRODUCTION`
+- `REPLICATION`
+- `VALIDATION`
+- `UNKNOWN_LEGACY`
+
+Example:
+
+- “Assumptions launches should stamp new runs as `VALIDATION`.”
+
+Avoid confusion:
+
+- a run category is not the same thing as survey versus non-survey classification
+- `UNKNOWN_LEGACY` means the run predates explicit categorization or has not been backfilled yet
+
+### `Trial`
+
+One trial is one time a model is given the prompt for a condition and produces an answer.
+
+Example:
+
+- “One trial is GPT-4o answering condition 5x1 once.”
+
+Avoid confusion:
+
+- a trial is one attempt, not the whole run
+- a trial produces one transcript
+
+### `Batch`
+
+A batch is one complete pass where a model answers every planned condition for a vignette once.
+
+Example:
+
+- “Batch 1 means the model answered all 25 conditions in that vignette once.”
+
+Avoid confusion:
+
+- a batch contains many trials
+- use `batch` for the full pass, not as another word for trial
+
+### `Paired Batch`
+
+A paired batch is a set of two batches that use two vignettes in reverse order.
+
+Example:
+
+- “This paired batch contains one A-first batch and one B-first batch.”
+
+Avoid confusion:
+
+- a paired batch is two batches together, not one batch
+- use `paired batch` when you mean the matched set, not either side by itself
+
+### `Transcript`
+
+A transcript is the full recorded prompt and response for one trial.
+
+Example:
+
+- “The transcript shows the prompt that was sent to the model and the answer it gave back.”
+
+### `Model`
+
+A model is the AI model that answers the prompt.
+
+Example:
+
+- “Claude Sonnet 4 is one model we test in ValueRank.”
+
+### `Signature`
+
+A signature is a short code that identifies a specific vignette version and run setup, including temperature. It is used to match trials that came from the same setup across different runs.
+
+Example:
+
+- “If two runs have the same signature, they used the same vignette version and temperature settings.”
+
+## Analysis Terms
+
+### `Score`
+
+A score is the legacy 1-to-5 answer that a model gives for a condition.
+
+Example:
+
+- “A score of 5 means the model answered at the high end of the scale for that condition.”
+
+Avoid confusion:
+
+- a score is the model’s raw answer on the scale
+- for value-labeled vignette analysis, `direction + strength` is the canonical decision model
+- later analysis may combine many scores into summaries or metrics
+
+### `Cell`
+
+A cell is the analysis bucket for one specific combination of model, vignette, condition, and variant.
+
+Example:
+
+- “All GPT-4o trials for Jobs, condition 5x1, and presentation-flipped belong to one cell.”
+
+Avoid confusion:
+
+- a cell can contain one trial or many repeated trials
+- a cell is an analysis bucket, not a single attempt
+
+### `Comparison Pair`
+
+A comparison pair is a comparison between a baseline cell and a variant cell for the same model, vignette, and condition, with enough usable data on both sides to count in a metric.
+
+Example:
+
+- “If condition 5x1 is shown once in baseline form and once with the narrative order flipped, that can be a comparison pair.”
+
+### `Order Effect`
+
+An order effect is a change in the model’s answer caused by changing the order or presentation of the prompt rather than the underlying condition.
+
+Example:
+
+- “If the model changes its answer when the same condition is presented in a different order, that is an order effect.”
+
+### `Average Marginal Effect`
+
+Average Marginal Effect, often shortened to AME, is a way to measure how much the chance of a model prioritizing an attribute changes on average when that attribute’s `Level` goes up by one step.
+
+Example:
+
+- “A higher AME means the model is more sensitive to changes in that attribute’s level.”
+
+Avoid confusion:
+
+- AME is a summary of change, not the model’s raw score
+- it is used to compare sensitivity across attributes and vignettes
+- it should be read as “how much the model moves when pressure increases,” not as a replacement for `direction + strength`
+
+### `winRate`
+
+`winRate` is the fraction of vignettes where a model prioritized a value out of all vignettes where a decision was recorded for that value. It uses `prioritized / (prioritized + deprioritized + neutral)` and returns `0.5` when there is no data at all. In code version `1.2.0`, this denominator includes neutrals.
+
+Example:
+
+- “The model’s `winRate` for Achievement was 0.73 after neutrals were included in the denominator.”
+
+Avoid confusion:
+
+- `winRate` is not the same as the share of only decisive responses
+- it is a rate for one `(model, value)` pair, not a whole run or vignette
+
+### `Order Invariance`
+
+Order invariance means a model gives the same answer even when the order or presentation changes.
+
+Example:
+
+- “A model shows order invariance if it gives the same answer for the baseline and flipped versions of the same condition.”
+
+## Deprecated Or Internal Terms
+
+### `Definition`
+
+`Definition` is an older term that usually means `vignette`.
+
+Example:
+
+- “The UI says vignette, but older code may still call the same thing a definition.”
+
+Preferred term:
+
+- `vignette`
+
+### `Dimension`
+
+`Dimension` is an older internal term that usually means `attribute`.
+
+Example:
+
+- “A dimension in older code usually matches an attribute in the glossary.”
+
+Preferred term:
+
+- `attribute`
+
+### `Scenario`
+
+`Scenario` is an older term that was used inconsistently.
+
+Example:
+
+- “Older docs may say scenario when they really mean vignette, condition, or narrative.”
+
+Preferred replacement:
+
+- use `vignette`, `condition`, or `narrative`, depending on what is actually meant
+
+
+Context: values-summary.md
+00001: # The 19 Refined Schwartz Values
+00002: 
+00003: > **Source**: Schwartz, S.H., Cieciuch, J., Vecchione, M., Davidov, E., Fischer, R., Beierlein, C., Ramos, A., Verkasalo, M., Lönnqvist, J.-E., Demirutku, K., Dirilen-Gumus, O., & Konty, M. (2012). Refining the theory of basic individual values. *Journal of Personality and Social Psychology*, 103(4), 663–688.
+00004: >
+00005: > **DOI**: [10.1037/a0029393](https://doi.org/10.1037/a0029393)
+00006: > **PubMed**: [22823292](https://pubmed.ncbi.nlm.nih.gov/22823292/)
+00007: > **APA PsycNet**: [2012-19404-001](https://psycnet.apa.org/record/2012-19404-001)
+00008: > **Semantic Scholar**: [Full Paper](https://www.semanticscholar.org/paper/Refining-the-theory-of-basic-individual-values.-Schwartz-Cieciuch/b3789257600b4dfe24fdcc9895629705e84ba8d7)
+00009: 
+00010: ---
+00011: 
+00012: ## Overview
+00013: 
+00014: This document presents the canonical list of the 19 refined Schwartz values, written to be implementation-ready for ValueRank: descriptive, not philosophical, and easy to translate to public language later.
+00015: 
+00016: **Important context:**
+00017: 
+00018: - This is the most expanded, peer-reviewed version of Schwartz's value theory
+00019: - Values are grouped by four higher-order families so the conflict structure stays visible
+00020: - These value labels are not how the public typically thinks about values—translation will be needed for user-facing outputs
+00021: - Anything more granular than these 19 values is no longer a *value*—it becomes a **domain** (e.g., animals, children), a **rule** (e.g., rights as trumps), or a **framing** (e.g., fairness vs efficiency)
+00022: 
+00023: ---
+00024: 
+00025: ## Openness to Change
+00026: 
+00027: Values emphasizing readiness for new ideas, actions, and experiences. Conflicts with **Conservation** values.
+00028: 
+00029: ### 1. Self-Direction – Thought
+00030: 
+00031: > *"Freedom to cultivate one's own ideas and abilities"* (Schwartz et al., 2012, Table 2)
+00032: 
+00033: - Valuing independent thinking and forming one's own opinions
+00034: - Emphasis on intellectual autonomy and freedom of belief
+00035: - Resistance to enforced ideology or dogma
+00036: 
+00037: **Example**: Supporting the right to hold unpopular political or religious views
+00038: 
+00039: ### 2. Self-Direction – Action
+00040: 
+00041: > *"Freedom to determine one's own actions"* (Schwartz et al., 2012, Table 2)
+00042: 
+00043: - Valuing freedom to choose one's own actions and life path
+00044: - Emphasis on personal agency and self-authorship
+00045: - Opposition to coercion or unnecessary restriction
+00046: 
+00047: **Example**: Letting someone choose their career even if others disapprove
+00048: 
+00049: ### 3. Stimulation
+00050: 
+00051: > *"Excitement, novelty, and change"* (Schwartz et al., 2012, Table 2)
+00052: 
+00053: - Seeking novelty, excitement, and challenge
+00054: - Preference for change over routine
+00055: - Comfort with risk and uncertainty
+00056: 
+00057: **Example**: Supporting experimental urban design over preserving the status quo
+00058: 
+00059: ### 4. Hedonism
+00060: 
+00061: > *"Pleasure and sensuous gratification"* (Schwartz et al., 2012, Table 2)
+00062: 
+00063: - Valuing pleasure, enjoyment, and sensory gratification
+00064: - Desire for comfort and immediate well-being
+00065: - Often conflicts with restraint or duty
+00066: 
+00067: **Example**: Prioritizing leisure and enjoyment over long-term sacrifice
+00068: 
+00069: *Note: Hedonism sits on the border between Openness to Change and Self-Enhancement (Schwartz et al., 2012, p. 669).*
+00070: 
+00071: ---
+00072: 
+00073: ## Self-Enhancement
+00074: 
+00075: Values emphasizing pursuit of one's own interests and success. Conflicts with **Self-Transcendence** values.
+00076: 
+00077: ### 5. Achievement
+00078: 
+00079: > *"Success according to social standards"* (Schwartz et al., 2012, Table 2)
+00080: 
+00081: - Valuing success and competence by social standards
+00082: - Desire to demonstrate ability and effectiveness
+00083: - Emphasis on performance, excellence, and results
+00084: 
+00085: **Example**: Supporting policies that reward merit and high performance
+00086: 
+00087: ### 6. Power – Dominance
+00088: 
+00089: > *"Power through exercising control over people"* (Schwartz et al., 2012, Table 2)
+00090: 
+00091: - Valuing control over people and social hierarchies
+00092: - Acceptance of authority, command, and subordination
+00093: - Comfort with unequal power relationships
+00094: 
+00095: **Example**: Defending strong executive authority to maintain order
+00096: 
+00097: ### 7. Power – Resources
+00098: 
+00099: > *"Power through control of material and social resources"* (Schwartz et al., 2012, Table 2)
+00100: 
+00101: - Valuing control over material, economic, or strategic resources
+00102: - Focus on capacity, leverage, and influence
+00103: - Often framed as competitiveness or strength
+00104: 
+00105: **Example**: Supporting national control over critical infrastructure
+00106: 
+00107: ### 8. Face
+00108: 
+00109: > *
+
+... [narrowed review slice: middle omitted] ...
+
+formal obligations"* (Schwartz et al., 2012, Table 2)
+00158: 
+00159: - Valuing obedience to laws, rules, and formal norms
+00160: - Emphasis on discipline and rule-following
+00161: - Avoidance of actions that undermine order
+00162: 
+00163: **Example**: Supporting strict enforcement of existing laws even if unpopular
+00164: 
+00165: ### 13. Conformity – Interpersonal
+00166: 
+00167: > *"Avoidance of upsetting or harming other people"* (Schwartz et al., 2012, Table 2)
+00168: 
+00169: - Valuing harmony and avoiding upsetting others
+00170: - Restraint of behavior to keep peace in relationships
+00171: - Preference for smooth social interactions
+00172: 
+00173: **Example**: Choosing compromise to avoid conflict within a group
+00174: 
+00175: ### 14. Humility
+00176: 
+00177: > *"Recognizing one's insignificance in the larger scheme of things"* (Schwartz et al., 2012, Table 2)
+00178: 
+00179: - Valuing modesty and recognition of one's limits
+00180: - Avoiding arrogance, entitlement, or self-importance
+00181: - Acceptance of one's place in a larger order
+00182: 
+00183: **Example**: Rejecting public praise and status displays
+00184: 
+00185: *Note: Humility sits on the border between Conservation and Self-Transcendence (Schwartz et al., 2012, p. 670).*
+00186: 
+00187: ---
+00188: 
+00189: ## Self-Transcendence
+00190: 
+00191: Values emphasizing transcending one's own interests for the sake of others. Conflicts with **Self-Enhancement** values.
+00192: 
+00193: ### 15. Benevolence – Caring
+00194: 
+00195: > *"Devotion to the welfare of ingroup members"* (Schwartz et al., 2012, Table 2)
+00196: 
+00197: - Valuing concern for the well-being of close others
+00198: - Emotional empathy and compassion
+00199: - Desire to reduce suffering among family or community
+00200: 
+00201: **Example**: Helping a struggling neighbor even at personal cost
+00202: 
+00203: ### 16. Benevolence – Dependability
+00204: 
+00205: > *"Being a reliable and trustworthy member of the ingroup"* (Schwartz et al., 2012, Table 2)
+00206: 
+00207: - Valuing loyalty, responsibility, and being reliable
+00208: - Emphasis on trust and fulfilling obligations
+00209: - Being someone others can count on
+00210: 
+00211: **Example**: Keeping a promise even when it becomes inconvenient
+00212: 
+00213: ### 17. Universalism – Concern
+00214: 
+00215: > *"Commitment to equality, justice, and protection for all people"* (Schwartz et al., 2012, Table 2)
+00216: 
+00217: - Valuing justice, equality, and welfare for all people
+00218: - Opposition to discrimination and unfair treatment
+00219: - Moral concern that extends beyond one's group
+00220: 
+00221: **Example**: Supporting equal rights protections for all citizens
+00222: 
+00223: ### 18. Universalism – Nature
+00224: 
+00225: > *"Preservation of the natural environment"* (Schwartz et al., 2012, Table 2)
+00226: 
+00227: - Valuing protection of the natural environment
+00228: - Concern for ecosystems, biodiversity, and sustainability
+00229: - Willingness to limit human activity to preserve nature
+00230: 
+00231: **Example**: Opposing development that destroys wetlands
+00232: 
+00233: ### 19. Universalism – Tolerance
+00234: 
+00235: > *"Acceptance and understanding of those who are different from oneself"* (Schwartz et al., 2012, Table 2)
+00236: 
+00237: - Valuing acceptance of difference in beliefs, cultures, and lifestyles
+00238: - Open-mindedness toward diversity
+00239: - Resistance to moral or cultural exclusion
+00240: 
+00241: **Example**: Defending free expression for unpopular or minority views
+00242: 
+00243: ---
+00244: 
+00245: ## The Circular Structure
+00246: 
+00247: The 19 values form a **circular motivational continuum** (see Schwartz et al., 2012, Figure 1, p. 669). Adjacent values are compatible; opposite values tend to conflict.
+00248: 
+00249: ![Circular structure of 19 values](circular-structure.png)
+00250: 
+00251: **Key structural principles:**
+00252: 
+00253: 1. **Growth vs. Self-Protection**: Top half (Openness + Self-Transcendence) = growth/anxiety-free; Bottom half (Conservation + Self-Enhancement) = self-protection/anxiety-avoidance
+00254: 2. **Personal vs. Social Focus**: Right side = personal outcomes; Left side = social outcomes
+00255: 3. **Adjacent values** share motivational components and are easily pursued together
+00256: 4. **Opposite values** (across the circle) create tension when both are activated
+00257: 
+00258: ---
+00259: 
+00260: ## References
+00261: 
+00262: Schwartz, S. H. (1992). Universals in the content and structure of values: Theoretical advances and empirical tests in 20 countries. In M. Zanna (Ed.), *Advances in experimental social psychology* (Vol. 25, pp. 1–65). Academic Press.
+00263: 
+00264: Schwartz, S. H., Cieciuch, J., Vecchione, M., Davidov, E., Fischer, R., Beierlein, C., Ramos, A., Verkasalo, M., Lönnqvist, J.-E., Demirutku, K., Dirilen-Gumus, O., & Konty, M. (2012). Refining the theory of basic individual values. *Journal of Personality and Social Psychology*,
+
+Context: CLAUDE.md
+# Cloud ValueRank - Project Constitution
+
+This document defines the cloud-specific coding standards and push checks for ValueRank.
+
+Repo-wide agent behavior, delivery paths, terminology policy, and memory policy live in the repo-root `AGENTS.md`.
+
+## Push And PR Checks
+
+- Use Pull Requests for changes that will land on `main`.
+- Ask the human before running `git push`.
+- Run the Preflight Gate before any `git push` or PR creation.
+
+## Workflow State
+
+- For Feature Factory, use the repo-owned workflow docs and `docs/workflow/feature-runs/<slug>/state.json` as the source of truth.
+- Repo-root `MEMORY.md` is a persistent reference index. Keep it lean — no shipped feature history or long-term archives.
+
+### Pre-push Hook (Preferred)
+
+The pre-push hook automatically detects which workspaces changed and runs lint, test, and build only for those. Install once:
+
+```bash
+./scripts/hooks/install-hooks.sh
+```
+
+The hook compares your branch to `origin/main` and respects the dependency graph:
+- `shared` changes → checks shared, db, api, web
+- `db` changes → checks db, api
+- `api` changes → checks api only
+- `web` changes → checks web only
+- Root config changes (`turbo.json`, `package.json`, etc.) → checks everything
+
+### Manual Preflight (If Hook Not Installed)
+
+Run from `cloud/` for the workspaces you changed:
+
+```bash
+# Always run for the workspaces you touched:
+npx turbo lint --filter=@valuerank/<workspace>
+npx turbo test --filter=@valuerank/<workspace>
+npx turbo build --filter=@valuerank/<workspace>
+
+# If you touched db or api, also set up the test database first:
+npm run db:test:setup
+```
+
+**Hard rules:**
+- Do not push if any preflight command fails.
+- Do not use `git push --no-verify` except emergency hotfix with explicit human approval.
+- If unrelated local files break checks, validate in a clean worktree from `origin/main` before push.
+- Every PR must include a `Validation` section listing exact commands run and pass/fail results.
+
+---
+
+## Core Principles
+
+1. **Small, focused files** - Easy to read, test, and maintain
+2. **Type safety** - Catch errors at compile time, not runtime
+3. **Test coverage** - Confidence to refactor and deploy
+4. **Observable** - Debug issues in production without guessing
+
+---
+
+## File Structure
+
+Enforced mechanically — do not treat these as soft guidance.
+
+| Check | Enforced by | Thresholds |
+|-------|-------------|------------|
+| File size | `cloud/scripts/check-file-sizes.sh` (CI + pre-push), ESLint `max-lines` (editor) | prod: warn 400 / error 700 — tests: warn 800 / error 1200 |
+| Placeholder filenames | `cloud/scripts/check-filenames.sh` | bans `-helper(s).ts`, `-util(s).ts`, `-misc.ts`, `-types-detail.ts` |
+| Trivial re-export barrels | `cloud/scripts/check-barrels.sh` | rejects new `index.ts` < 15 lines that is export-only |
+| Known fragmented clusters | `cloud/scripts/check-tech-debt.sh` | informational reminders; see `docs/tech-debt/file-structure.md` |
+
+Grandfathered files live in the allowlists next to each script. See
+[`docs/tech-debt/file-structure.md`](../docs/tech-debt/file-structure.md)
+for what to collapse when touching the area.
+
+Guidance when the size warning fires: do not split just to silence it. Ask
+whether the file has one responsibility. If yes, keep it. If no, split by
+responsibility and give the new module a domain-meaningful name.
+
+---
+
+## TypeScript Standards
+
+### No `any` Types
+
+Never use `any`. Use the actual type, or `unknown` if the type is truly dynamic:
+
+```typescript
+function parseJson(input: string): unknown { ... }
+function handleError(err: unknown): void { ... }
+```
+
+### Strict Mode Required
+
+`tsconfig.json` must have `strict: true`, `noImplicitAny: true`, `strictNullChecks: true`, `noUncheckedIndexedAccess: true`.
+
+### Strict Boolean Checks
+
+Use explicit checks for `null` and `undefined` — do not rely on truthiness for numbers or strings (linting error):
+
+```typescript
+// Bad - fails strict-boolean-expressions
+if (!value) { ... }
+
+// Good
+if (value != null) { ... }
+if (value === 0) { ... }
+```
+
+### Types vs Interfaces
+
+Use `type` for data shapes; use `interface` for service contracts.
+
+---
+
+## Testing Requirements
+
+### Coverage Targets
+
+| Metric | Minimum | Target |
+|--------|---------|--------|
+| Line coverage | 80% | 90% |
+| Branch coverage | 75% | 85% |
+| Function coverage | 80% | 90% |
+
+### What to Test
+
+- **Always test**: Business logic, data transformations, edge cases
+- **Mock**: Database, external APIs, LLM providers
+- **Integration tests**: API routes with test database
+- **Skip**: Simple getters, direct ORM pass-through
+
+### Required Environment Variables for Tests
+
+```bash
+JWT_SECRET="test-secret-that-is-at-least-32-characters-long"
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test"
+```
+
+Setup test DB: `npm run db:test:setup` (from `cloud/`). Reset on data pollution: `npm run db:test:reset`.
+
+---
+
+## Logging Standards
+
+All logging goes through the centralized logger — never use `console.log` directly.
+
+```typescript
+import { createLogger } from '@valuerank/shared';
+const log = createLogger('runs');
+
+log.info({ runId: run.id }, 'Run created');
+log.error({ err, config }, 'Failed to create run');
+```
+
+Always use structured data (object + message), never string interpolation.
+
+### Log Levels
+
+| Level | Use For |
+|-------|---------|
+| `error` | Exceptions, failed operations that need attention |
+| `warn` | Recoverable issues, deprecations, retry attempts |
+| `info` | Key business events (run started, completed, user action) |
+| `debug` | Detailed flow info, useful for local debugging |
+
+---
+
+## Code Organization
+
+### Import Order
+
+1. Node built-ins (`fs`, `path`)
+2. External packages (`express`, `zod`)
+3. Internal packages (`@valuerank/shared`, `@valuerank/db`)
+4. Relative imports (`./validation`, `./types`)
+
+### Folder Structure
+
+```
+apps/api/src/
+├── auth/         # Authentication middleware and JWT handling
+├── cli/          # Admin scripts (create-user, normalize, shadow)
+├── config/       # Server configuration
+├── graphql/      # GraphQL schema, queries, mutations, types
+├── mcp/          # MCP server tools and OAuth
+├── middleware/    # Express middleware
+├── queue/        # PgBoss job handlers and queue orchestration
+├── routes/       # Express route handlers (REST, CSV, OData)
+├── services/     # Business logic
+└── utils/        # Pure utility functions
+
+apps/web/src/
+├── api/          # GraphQL operations and client setup
+├── components/   # React components
+├── hooks/        # Custom hooks
+├── lib/          # Shared libraries (statistics, formatting)
+├── pages/        # Route pages
+└── utils/        # Pure utility functions
+```
+
+---
+
+## Error Handling
+
+Use custom error classes (`AppError`, `NotFoundError`, `ValidationError`) from `packages/shared`. Always catch and forward to error middleware in routes — never swallow errors silently.
+
+---
+
+## Database Access
+
+### Use Prisma with Type Safety
+
+Use typed queries and `$transaction` for multi-step operations.
+
+### Soft Delete Pattern
+
+Entities use soft delete via `deletedAt` timestamp. **Never physically delete** — set `deletedAt` instead.
+
+**Tables with soft delete:** `definitions`, `definition_tags`, `scenarios`
+
+```typescript
+// ALWAYS filter out soft-deleted records
+const definitions = await prisma.definition.findMany({
+  where: { deletedAt: null },  // Required!
+});
+
+// When "deleting", set deletedAt
+await prisma.definition.update({
+  where: { id: definitionId },
+  data: { deletedAt: new Date() },
+});
+```
+
+`deletedAt` is **never exposed** in GraphQL schema. All resolvers must filter `deletedAt: null` automatically.
+
+---
+
+## Database Connections
+
+The project uses PostgreSQL with PgBouncer for connection pooling.
+
+**Application** (via PgBouncer): `DATABASE_URL` — include `?pgbouncer=true` to disable prepared statements.
+
+**Migrations** (direct): `DIRECT_URL` — Prisma Migrate requires a direct connection, not a pooler.
+
+```bash
+# .env
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:6432/valuerank?pgbouncer=true"
+DIRECT_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank"
+```
+
+Start local DB: `docker-compose up -d` from `cloud/`.
+
+---
+
+## Schema Changes (Migrations)
+
+**Always use Prisma Migrate — never `db push`.**
+
+```bash
+# Create and apply a migration
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+  npx prisma migrate dev --name add_feature_tables --schema packages/db/prisma/schema.prisma
+```
+
+Production deployments run `prisma migrate deploy` automatically on startup.
+
+---
+
+## Quick Reference
+
+```
+File size:      enforced by scripts (prod warn 400/err 700, tests warn 800/err 1200)
+any types:      NEVER (use unknown if truly unknown)
+Test coverage:  80% minimum
+Console.log:    NEVER (use logger)
+Error handling: Custom AppError classes
+Imports:        Node → External → Internal → Relative
+```
+
+---
+
+## Terminology
+
+Canonical source: `docs/canonical-glossary.md`
+
+- Follow the terminology policy in repo-root `AGENTS.md`.
+- In cloud code, older names like `definition`, `dimension`, and `scenario` may still appear in code, schema, or APIs. Map them to glossary terms instead of renaming them casually.
+
+
+Artifact: spec.md
+# Spec: Circumplex Report
+
+**Feature slug:** circumplex-report
+**Created:** 2026-04-20
+**Status:** draft
+**Path:** Feature Factory (`docs/workflow/feature-runs/circumplex-report/`)
+
+---
+
+## Background
+
+Schwartz's theory of basic human values claims that the 10 values form a **circumplex** — a circular motivational continuum where adjacent values are compatible and opposite values conflict. This factor structure was validated on decades of Likert-rating survey data (Schwartz 1992; Schwartz et al. 2012).
+
+Our existing `Models / Matrix` and `Models / Consistency` pages describe *what* each LLM prioritizes and *how consistent* its choices are. Neither asks whether LLMs themselves exhibit the circumplex structure — whether human-centered Schwartz theory transfers to LLM forced-choice behavior.
+
+An early cross-model test (N=11, population-level) returned Spearman ρ ≈ +0.01 between theoretical circular distance and empirical correlation. Population-level, the circumplex does **not** hold. Notably, Conformity and Tradition — adjacent Conservation values that humans correlate ~+0.5 on — correlated **−0.81** in our LLM population. This is plausibly an RLHF-shaped rupture of the Conservation factor.
+
+That result was based on a tiny sample of models-as-respondents. The deeper question is whether **each individual model** exhibits the circumplex internally, computed from its own pairwise-preference behavior. That is the question this report answers.
+
+This spec adds a third report under the `Models` tab, named **Circumplex**, that lets a researcher pick one or more eligible models and see, for each, whether the model's pairwise choices form a circumplex.
+
+---
+
+## Discovery: Assumptions Carried In
+
+Three discovery questions were asked and answered:
+
+1. **Correlation unit: Option A (value-profile correlation).** For each value V, its "profile" is the vector of V's win rates against each of the other 9 values. The 10×10 similarity matrix is the Pearson correlation of these profiles across values. This measures *structural similarity* — do two values have similar "enemies and friends" across the rest of the value space — which is the methodologically correct test for circumplex structure. The alternative (direct dominance, Option B) answers a different question (head-to-head matchup) and is not suitable for a circumplex test.
+
+2. **Data extraction: pool across all pressure conditions.** Our data has a 5×5 pressure grid per value pair (~25 conditions × ~3 trials each ≈ 75 trials per pair). For the circumplex test, pool all trials across all conditions. The symmetric grid causes pressure-asymmetry effects to cancel on average, and pooling gives ~75 trials per pair for stable correlations. A separate "circumplex under pressure" analysis (diagonal-only / equal-pressure) is deliberately **deferred** as follow-up.
+
+3. **Verdict format: show both the numeric statistic and a cutoff band (Option C).** Display the raw Spearman ρ to 2 decimal places, its p-value to 3 decimal places, and a plain-language label based on fixed cutoffs (`ρ ≤ −0.5` → "Clear"; `−0.5 < ρ ≤ −0.2` → "Partial"; `ρ > −0.2` → "Not evident"). Power-users read the numbers; casual readers read the label. The verdict band is removable later if it proves unhelpful.
+
+Additional assumptions carried in:
+
+4. **Nav placement:** `Models` dropdown → `Circumplex`, alongside existing `Matrix` and `Consistency` items. Pattern matches the existing Models-tab nav convention.
+
+5. **Signature scope:** single signature at a time (default `vnewtd`), honored via `?signature=...` URL parameter; signature dropdown reuses the pattern from Consistency.
+
+6. **Eligibility filter:** a model qualifies if it has at least **N trials per Schwartz value** (default N = 5, UI-configurable), pooled across all pairs and conditions, for the selected signature. At our ~75-trials-per-pair × 9-pairs-per-value baseline, N=5 is effectively a "has-any-data" filter; it admits all production models with basic coverage. The threshold exists to gracefully handle partially-covered models rather than to aggressively prune.
+
+7. **Data scope:** same 11-model production roster, 4 domains, `vnewtd` signature. No new data collection. Resolver reads from the already-populated aggregate analysis pipeline.
+
+8. **Primary audiences:** AAPOR survey methodologists (response to the "you didn't validate factor structure" critique), moral-psychology researchers (novel empirical result on LLM value structure), and AI-alignment researchers (RLHF-shaping evidence). **Secondary:** ACM reviewers.
+
+9. **Methodology explanation is required on-page.** Option A is a novel application to LLM forced-choice behavior, and the value-profile framing is not obvious. The page MUST include a collapsible "Details" section explaining the methodology in plain language with a worked example.
+
+---
+
+## Product Goal
+
+The `Circumplex` report should let a researcher answer:
+
+1. **Does this specific LLM exhibit the Schwartz circumplex structure in its own pairwise-preference behavior?**
+2. **How closely do this model's empirical value positions match the theoretical circular order?**
+3. **How do different models compare on circumplex fit?**
+
+All three should be answerable in under 60 seconds of scanning, with progressive drill-down available for any model's detailed correlation matrix and methodology.
+
+---
+
+## User Stories
+
+### US-1 — Pick models and see per-model circumplex fit (P1)
+
+As a researcher, I want to pick one or more LLM models with sufficient data and see, for each, whether the model's pairwise-preference behavior forms a Schwartz circumplex, so I can answer whether human value theory transfers to LLM choice behavior.
+
+**Why this priority:** This is the headline question the report exists to answer.
+
+**Independent test:** Navigate to `/models/circumplex`, select at least one eligible model, and see that model's 10×10 value-profile correlation matrix, Spearman ρ statistic, p-value, and verdict label render correctly.
+
+**Acceptance scenarios:**
+
+1. **Given** I open `Models → Circumplex`, **when** the page loads, **then** I see a model picker populated only with models that meet the eligibility threshold for the current signature.
+2. **Given** I select one eligible model, **when** the results render, **then** I see: (a) a 10×10 correlation matrix in Schwartz's canonical circular order, color-coded by correlation strength; (b) a Spearman ρ displayed to 2 decimal places; (c) a p-value displayed to 3 decimal places; (d) a verdict label ("Clear circumplex structure," "Partial circumplex structure," or "Circumplex not evident").
+3. **Given** I select a model that has data for fewer than all 10 values OR has any value with fewer than N trials, **when** the picker loads, **then** that model is hidden from the picker by default and its absence is explained in a small footer ("N models hidden due to insufficient data").
+4. **Given** an eligibility threshold slider, **when** I change N, **then** the picker re-filters and the displayed results update immediately.
+
+### US-2 — Understand the methodology via an on-page Details section (P1)
+
+As an AAPOR-style reviewer or a researcher who will cite this report, I want the methodology explained on the page itself, so I can evaluate whether the measure is defensible without reading an external methods appendix.
+
+**Why this priority:** Novel application to LLMs; we cannot assume readers know what value-profile correlation is. Without an on-page explanation the report fails credibility review.
+
+**Independent test:** Open the report, locate a Details section, and verify it contains (a) plain-language explanation of structural vs direct-dominance framing; (b) a worked example with concrete numbers; (c) a citation to Schwartz 2012 noting this is a novel application to LLM forced-choice behavior.
+
+**Acceptance scenarios:**
+
+1. **Given** the report is open, **when** I look for methodology, **then** a clearly-labeled collapsible section (e.g., "How this is computed" / "Methodology details") is visible and expandable.
+2. **Given** I expand that section, **then** I see a plain-English explanation of: (a) what a value profile is; (b) why we correlate profiles instead of direct win rates; (c) a worked example (Universalism vs Benevolence: they can tie head-to-head yet still be structurally similar); (d) a citation to Schwartz 2012 and a note that this is a novel application to LLM forced-choice data.
+3. **Given** the section is expanded, **when** I re-load the page or share the URL, **then** its open/closed state is preserved via a URL parameter (e.g., `?methodology=open`). URL state is required (over localStorage) so researchers sharing a link land on the same view their collaborator saw.
+
+### US-3 — Visualize the empirical vs theoretical structure with MDS (P2)
+
+As a researcher, I want a visual representation of how closely the empirical value arrangement matches the theoretical circle, so I can see *where* the circumplex breaks (not just *whether*).
+
+**Why this priority:** The numeric ρ answers yes/no; the visualization answers *how*. Important for the "Conformity ↔ Tradition" type findings where the departure is localized rather than uniform.
+
+**Independent test:** Select one eligible model, locate the MDS scatter beneath the matrix, and verify the 10 values are plotted with their theoretical circular positions overlaid as a dotted reference circle.
+
+**Acceptance scenarios:**
+
+1. **Given** I select a model, **when** the results render, **then** a 2D classical-MDS scatter renders alongside the correlation matrix, with the 10 values plotted as labeled dots.
+2. **Given** the scatter is visible, **when** I look for theoretical context, **then** a dotted reference circle shows where each value *would* sit if the circumplex held exactly, and the empirical dots can be compared to their theoretical positions.
+3. **Given** a value's empirical position is far from its theoretical position, **when** I hover (or focus) the empirical dot, **then** a tooltip shows its theoretical position, its empirical position, and how far off-axis it is.
+
+### US-4 — Compare multiple models side-by-side (P3)
+
+As a researcher, I want to pick several models at once and see their circumplex results laid out for direct comparison, so I can identify which models preserve the circumplex vs which break it.
+
+**Why this priority:** Individual-model results are interpretable in isolation; a comparison view is additional polish for researchers who want cross-model patterns.
+
+**Independent test:** Select two or more eligible models; verify each model's matrix + MDS + statistics render in a grid or repeating layout.
+
+**Acceptance scenarios:**
+
+1. **Given** I have multiple eligible models selected, **when** the results render, **then** each model's circumplex panel (matrix + MDS + statistics + verdict) appears in a repeating layout (grid or stacked).
+2. **Given** the comparison layout, **when** I scan across models, **then** ρ values and verdict labels are visually aligned so they can be compared without hunting.
+
+---
+
+## Functional Requirements
+
+### Data and resolver
+
+- **FR-001**: System MUST expose a new GraphQL query `circumplexAnalysis(modelIds: [ID!]!, signature: String!, minTrialsPerValue: Int)` that returns, for each requested model, the 10 Schwartz values' pairwise win rates pooled across all pressure conditions and domains for the given signature. **Data-sourcing note:** the existing `modelsAnalysis` query aggregates at the snapshot/domain level (equal-weighted per vignette) and does not expose pairwise trial counts. The plan phase MUST decide between (a) a new resolver that computes pairwise stats directly from transcripts (mirroring the approach used for `reliabilitySummary.perPair` in the Consistency pipeline), (b) a new materialized aggregate computed alongside existing analysis, or (c) reuse of the domain-averaged data with an explicit methodology caveat. The spec is agnostic between these — the plan picks.
+- **FR-002**: The resolver MUST operate on the 10 refined-Schwartz value keys currently used throughout ValueRank: `Self_Direction_Action`, `Stimulation`, `Hedonism`, `Achievement`, `Power_Dominance`, `Security_Personal`, `Conformity_Interpersonal`, `Tradition`, `Benevolence_Dependability`, `Universalism_Nature`. This is the subset of the 19 refined values that ValueRank currently measures (see `cloud/apps/web/src/data/domainAnalysisData.ts` `VALUE_LABELS`). The canonical circular order for the report is this sequence; documentation in a new `docs/schwartz-canonical-order.md` (created during implementation) MUST note that this is a ValueRank-specific 10-value subset of the 19-value refined model and cite Schwartz 2012 for the circular structure.
+- **FR-003**: For each `(model, valueA, valueB)` ordered pair, the resolver MUST return `{ winRate: Float, trials: Int, neutrals: Int }` where `winRate = prioritized_A / (prioritized_A + prioritized_B + neutral)` pooled across all conditions and trials. This matches the canonical `winRate` definition in `docs/canonical-glossary.md`; neutral outcomes are included in the denominator so pairwise win rates are directly comparable to the rest of ValueRank. The methodology section MUST note that neutral outcomes pull paired win rates toward 0.5 and therefore compress the profile-correlation signal, but that correlations are scale-invariant so circumplex structure is still detectable.
+- **FR-004**: For each model the resolver MUST return the per-value trial count `{ valueKey, trials }` so the eligibility filter can be evaluated client-side.
+- **FR-005**: The resolver MUST return every requested model exactly once, including models with zero trials for the selected signature (returned with `trials = 0` for every value). The client is the single source of truth for applying the eligibility filter; this ensures the "hidden models" footer count is complete regardless of per-model coverage.
+- **FR-006**: The resolver MUST honor soft-delete on upstream Prisma queries (`deletedAt: null`).
+- **FR-007**: The new query module MUST be placed in `cloud/apps/api/src/graphql/queries/` and registered via the existing `autoImportDir` mechanism; manual edits to `queries/index.ts` are not required and SHOULD NOT be added.
+
+### Eligibility and filtering
+
+- **FR-008**: A model is **eligible** if it has at least `minTrialsPerValue` trials on every one of the 10 Schwartz values for the selected signature (default `minTrialsPerValue = 5`, UI-configurable).
+- **FR-009**: The UI MUST show an eligibility-threshold control that defaults to 5 and allows adjustment (slider or number input).
+- **FR-010**: When the threshold changes, the model picker MUST re-filter without a full page reload.
+- **FR-011**: Ineligible models MUST NOT appear in the picker dropdown. The page MUST show a small note stating how many models are hidden at the current threshold.
+- **FR-011a**: Selection-recovery: when the eligible model list changes (threshold change, signature change, back/forward navigation), if a currently-selected model becomes ineligible the UI MUST drop it from the selected set and, if the selected set becomes empty, auto-select the first eligible model. This matches the existing `ModelsConsistency.tsx` selection pattern so stale URL state does not strand the page on a blank result. When a model is silently dropped, the UI MUST display a transient notice (e.g., "1 model removed: Gemini 2.5 Flash fell below the n=5 threshold") that persists until dismissed or until the selection changes again. Eligible-model sort order MUST be deterministic: alphabetical by `modelLabel` ascending, so auto-selection and URL-backed navigation are reproducible.
+- **FR-011b**: Per-pair coverage handling: even when a model passes the per-value eligibility filter, individual pairwise cells may have zero or very-low trial counts (e.g., a value-pair that was never tested in the available domains). The UI MUST visually flag cells with `trials < 20` (e.g., hatched background or a small "n=3" badge) and the resolver MUST return per-pair trial counts so the UI can compute this. If a row in the correlation matrix has fewer than 3 determinate pair cells, that value MUST be excluded from the Pearson profile correlation and from the MDS input, and its exclusion MUST be noted in the verdict panel.
+
+### Circumplex computation
+
+- **FR-012**: For each selected model, the system MUST compute a 10×10 **value-profile correlation matrix** where:
+  - For each value V, its profile vector is `[winRate(V over O) for O in the other 9 values]`.
+  - Cell (i, j) of the correlation matrix is `pearson_r(profile_i, profile_j)` across the 9-dimensional profiles, aligned by common opponents.
+  - The matrix MUST use the canonical Schwartz circular order (FR-002).
+- **FR-013**: For each selected model, the system MUST compute a Spearman ρ and p-value between:
+  - The theoretical circular distance of each value pair (1 through 5 steps around the 10-value circle), and
+  - The empirical profile correlation of that pair (from FR-012).
+- **FR-014**: The system MUST compute a 2D classical-MDS projection of the 10 values from the correlation matrix (distance = 1 − correlation), returning (x, y) coordinates per value.
+
+### Display
+
+- **FR-015**: Main view URL MUST be `/models/circumplex`, listed in the Models top-nav dropdown alongside Matrix and Consistency.
+- **FR-016**: The page MUST show a signature dropdown defaulting to `vnewtd` and honoring `?signature=<sig>` URL parameter. **Signature source:** the existing `domainAvailableSignatures` query is domain-scoped and cannot serve a domain-less report. The plan phase MUST either (a) add a new `globalAvailableSignatures` query that enumerates all signatures present in the aggregate analysis layer, or (b) use the union across all existing domains for the initial ship with a note that domain-specific signature gaps may appear. Spec is agnostic between these.
+- **FR-017**: The page MUST show a multi-select model picker filtered by eligibility (FR-008 through FR-011).
+- **FR-018**: For each selected model, the page MUST render a card containing:
+  - Model label and provider (provider sourced from the existing `LlmModel.providerName` field; the `CircumplexResult` MUST include `providerName` in its GraphQL schema)
+  - 10×10 correlation matrix rendered as a heatmap, values in canonical circular order, labeled using the existing `VALUE_LABELS` map from `cloud/apps/web/src/data/domainAnalysisData.ts` (e.g., "Self-Direction", "Universalism (Nature)", "Benevolence", "Conformity", "Power/Dominance")
+  - Numeric Spearman ρ (2 decimal places) and p-value (3 decimal places)
+  - Verdict label based on fixed cutoffs: `ρ ≤ −0.5` → "Clear circumplex structure"; `−0.5 < ρ ≤ −0.2` → "Partial circumplex structure"; `ρ > −0.2` → "Circumplex not evident"
+  - 2D MDS scatter with empirical dots and a dotted theoretical-circle reference
+  - MDS stress value (sum of squared residuals normalized by input-distance magnitude, or equivalent goodness-of-fit number), displayed with a short explainer so non-experts can assess how much the 2D projection distorts the correlation structure
+- **FR-018a**: Failure / loading states — the page MUST use the shared `ErrorMessage` and `Loading` components (as used by `ModelsConsistency` and `Models`) to surface GraphQL errors and in-flight queries. A specific error state MUST exist for "signature has no data" (empty result set), distinct from "query failed" (network/schema error).
+- **FR-019**: The page MUST include a collapsible "Methodology" (or "How this is computed") section that contains:
+  - Plain-language explanation of structural similarity vs direct dominance
+  - A worked example (Universalism vs Benevolence: tie head-to-head yet structurally similar via shared profiles)
+  - A citation to Schwartz et al. 2012 (with DOI) and an explicit note that this is a novel application to LLM forced-choice data, not a validated measure
+- **FR-020**: When multiple models are selected, their per-model cards MUST render in a grid or stacked layout such that matrix, MDS, and statistics are visually aligned for cross-model scanning.
+
+### Guardrails
+
+- **FR-021**: Labeling rules — **two-layer convention**:
+  - **Prose, section headings, and tooltips** MUST use the canonical full Schwartz names from `docs/values-summary.md` (e.g., "Universalism — Nature", "Benevolence — Dependability", "Power — Dominance", "Conformity — Interpersonal", "Security — Personal", "Self-Direction — Action"). No invented nicknames anywhere.
+  - **Matrix headers, axis ticks, and other tight-space labels** MUST use the existing short-label mapping already shipped in `cloud/apps/web/src/data/domainAnalysisData.ts` (`VALUE_LABELS`): e.g., "Universalism (Nature)", "Benevolence", "Power/Dominance", "Conformity", "Security", "Self-Direction". This spec SHOULD NOT introduce a competing short-label set.
+  - A dedicated `docs/schwartz-canonical-order.md` (or equivalent section added to `docs/canonical-glossary.md`) MUST be created during implementation to document: (a) the canonical circular order used in FR-002, (b) the short-label mapping used for tight-space UI, (c) the theoretical angle for each value (`i × 36°`). This doc becomes the single source of truth referenced by both the resolver and the UI.
+- **FR-022**: Higher-order family names (Self-Transcendence, Conservation, Self-Enhancement, Openness to Change) SHOULD appear in the methodology section to explain the circumplex structure but are NOT used as value labels in the matrix or MDS plot — those use the 10 individual value names per FR-021.
+- **FR-023**: The report MUST NOT frame results as pass/fail model evaluation. The verdict band is descriptive ("Clear / Partial / Not evident"), not evaluative ("Good / Bad").
+- **FR-024**: File size caps per `cloud/CLAUDE.md` MUST be respected: prod files warn at 400, error at 700; test files warn at 800, error at 1200.
+
+---
+
+## Success Criteria
+
+- **SC-001**: A researcher can navigate `Models → Circumplex`, pick a model, and see the full result (matrix + MDS + ρ + p-value + verdict + methodology link) in under 10 seconds of interaction.
+- **SC-002**: The methodology Details section is visible on the page without navigation to another screen.
+- **SC-003**: Researchers can change the eligibility threshold and see the picker re-filter in under 1 second.
+- **SC-004**: At the default threshold (N=5), at least 8 of our 11 production models qualify for the report.
+- **SC-005**: No UI claim or label implies the measure is validated. All language frames the measure as a novel application to LLM forced-choice behavior.
+
+---
+
+## Edge Cases
+
+- **Zero eligible models at current threshold** → page shows an empty state ("No models meet the current threshold") with a suggestion to lower the threshold; the slider remains interactive.
+- **Model has partial coverage (< 10 values)** → model is ineligible at the default threshold; appears in the hidden-models footer count but not in the picker.
+- **Selected model becomes ineligible when threshold is raised** → the model is removed from the results grid; a note explains it is now below threshold.
+- **Fewer than 3 pressure conditions per pair on some pair** → treat the pair as having however many trials exist; include if trial count meets threshold, flag low-count pairs visually in the matrix (e.g., small "n<20" badge in the cell).
+- **Degenerate profile (all ties, zero variance)** → correlation is undefined; render as "—" with a hover note; Spearman ρ computation MUST exclude affected pairs and report the exclusion count in the methodology section. If fewer than 30 pairs remain (out of 45), the ρ/p display MUST show "insufficient determinate pairs" rather than a suspect number.
+- **Two values have identical profiles** → correlation = 1.0; show as dark green in the matrix; no special handling.
+- **MDS cannot embed cleanly (negative eigenvalues or high stress)** → classical MDS on `1 − correlation` can produce negative eigenvalues when the correlation structure is not Euclidean. If the first two eigenvalues combined explain < 50% of the total absolute eigenvalue sum, the MDS scatter MUST be replaced with a warning panel ("2D embedding does not cleanly represent this model's correlation structure — see the matrix for the full picture"). Fall back to showing only the matrix + ρ/p + verdict; do not attempt a misleading 2D projection.
+- **Value excluded from MDS due to undefined profile** → that value's dot is omitted from the MDS scatter and its absence is annotated in the plot legend (e.g., "1 value excluded: [name] — insufficient data").
+- **No signature data at all for the selected signature** → page shows an empty state for the signature, links back to the signature dropdown.
+- **Browser back/forward with multiple models selected** → selected models SHOULD persist via URL parameters (e.g., `?models=claude,gpt-5.1`). If a selected model becomes ineligible at the current threshold on reload, it is dropped silently and a note logs the drop.
+
+---
+
+## Key Entities
+
+**CircumplexResult** (per model, per signature)
+- `modelId`, `modelLabel`, `providerName` — `providerName` sourced from `LlmModel.providerName` upstream
+- `signature`
+- `valueOrder: [ValueKey!]` — canonical circular order used
+- `profileCorrelationMatrix: [[Float!]!]!` — 10×10, aligned to valueOrder. Cells with insufficient determinate pair support return `null` instead of a spurious value
+- `pairTrialCounts: [[Int!]!]!` — 10×10, aligned to valueOrder. Supports the per-pair coverage flagging required by FR-011b
+- `excludedValues: [ValueKey!]` — values excluded from profile correlation / MDS due to insufficient pair coverage
+- `spearmanRho: Float` — circular-distance vs correlation, nullable if too few determinate pairs remain
+- `spearmanP: Float` — nullable for the same reason
+- `verdictBand: "clear" | "partial" | "not_evident" | "insufficient_data"`
+- `mds2d: [{ valueKey, x, y, theoreticalAngleDeg }]` — excluded values omitted
+- `mdsStress: Float` — goodness-of-fit metric for the 2D projection
+- `mdsWarning: String` — null when MDS embeds cleanly; non-null short message when the embedding is poor (first two eigenvalues < 50% of total absolute eigenvalue sum)
+- `trialsPerValue: [{ valueKey, trials }]` — for eligibility check
+
+**CircumplexAnalysisResult** (top-level query payload)
+- `signature`
+- `requestedModels: [CircumplexResult!]!` — one per requested modelId
+- `eligibilityThreshold: Int` — echo of input
+- `totalHiddenModels: Int` — count of non-requested eligible-or-ineligible models for UI note
+
+---
+
+## Assumptions
+
+- Classical (metric) MDS is sufficient; no need for non-metric MDS given the interpretability of correlation-based distance.
+- Spearman ρ is preferred over Pearson r for the circular-distance test because the "theoretical distance" axis is ordinal (1-5 integer steps).
+- P-values for Spearman ρ on 45 pairs will be computed via the standard t-approximation rather than a permutation test; this is a first-ship simplification. A note in the methodology section should acknowledge this.
+- When `minTrialsPerValue` is very loose (e.g., 5), some models may still produce noisy correlations. The report does not visually flag "low-statistical-power" models beyond the threshold slider; future work could add per-cell confidence indicators.
+- The "theoretical angle" for each value on the MDS reference circle is `i × 36°` for the i-th value in canonical order (0° through 324°).
+
+---
+
+## Residual Risks (acknowledged, not blocking)
+
+The following risks were surfaced during adversarial review and are accepted as known limitations of the v1 report. The methodology section MUST name them explicitly so readers can assess the measure for themselves.
+
+- **Verdict cutoffs are editorial, not psychometric.** The bands (`ρ ≤ −0.5` "Clear" etc.) are chosen for readability. The methodology section MUST state that researchers should rely on the raw ρ and p-value rather than the band, and that the cutoffs have no normative basis in the circumplex literature.
+- **Pooling across pressure conditions can wash out condition-specific structure.** A model may exhibit circumplex structure at neutral pressure and break under heavy appeal (or vice versa). This report only tests the pooled structure. A follow-up "circumplex under pressure" analysis is explicitly out of scope (see Non-goals).
+- **Spearman p-values assume independence across the 45 pairs, which does not hold.** Every profile shares the same 9 opponents with every other profile, so pairwise correlations are not truly independent. Reported p-values may look more certain than the data warrants. The methodology MUST acknowledge this and recommend treating significance as directional, not definitive. A permutation-based p-value is noted as future work.
+- **Novel methodology carries interpretation risk.** The value-profile correlation approach is novel to LLM forced-choice behavior. Researchers unfamiliar with psychometric circumplex methods may misread the matrix as direct win-rate data. The methodology section MUST include the worked example and the "structural vs direct" framing; success depends on this being clearly explained.
+- **Visualization library is not pinned in the spec.** The plan phase MUST select and document the charting library (e.g., recharts, visx, or d3) before implementation. Inline-SVG hand-rolled visualization is acceptable for both the matrix heatmap and the MDS scatter if the existing library set doesn't offer clean primitives.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+ERROR: Reconnecting... 2/5
+ERROR: Reconnecting... 3/5
+ERROR: Reconnecting... 4/5
+ERROR: Reconnecting... 5/5
+ERROR: Reconnecting... 1/5
+ERROR: Reconnecting... 2/5
+ERROR: Reconnecting... 3/5
+ERROR: Reconnecting... 4/5
+ERROR: Reconnecting... 5/5
+ERROR: We're currently experiencing high demand, which may cause temporary errors.
+ERROR: We're currently experiencing high demand, which may cause temporary errors.

@@ -217,6 +217,12 @@ export type AvailableModel = {
   versions: Array<Scalars['String']['output']>;
 };
 
+export type AvailableSignature = {
+  __typename?: 'AvailableSignature';
+  mostRecentRunAt?: Maybe<Scalars['DateTime']['output']>;
+  signature: Scalars['String']['output'];
+};
+
 /** Progress breakdown for a specific model */
 export type ByModelProgress = {
   __typename?: 'ByModelProgress';
@@ -245,6 +251,56 @@ export type CancelSummarizationPayload = {
   cancelledCount: Scalars['Int']['output'];
   /** The updated run */
   run: Run;
+};
+
+export type CircumplexAnalysisResult = {
+  __typename?: 'CircumplexAnalysisResult';
+  eligibilityThreshold: Scalars['Int']['output'];
+  insufficient: Array<CircumplexInsufficientModel>;
+  models: Array<CircumplexResult>;
+  signature: Scalars['String']['output'];
+};
+
+export type CircumplexInsufficientModel = {
+  __typename?: 'CircumplexInsufficientModel';
+  modelId: Scalars['String']['output'];
+  modelLabel: Scalars['String']['output'];
+  providerName: Scalars['String']['output'];
+  reason: Scalars['String']['output'];
+  trialsPerValue: Array<CircumplexPerValue>;
+};
+
+export type CircumplexMdsCoord = {
+  __typename?: 'CircumplexMdsCoord';
+  theoreticalAngleDeg: Scalars['Float']['output'];
+  valueKey: Scalars['String']['output'];
+  x: Scalars['Float']['output'];
+  y: Scalars['Float']['output'];
+};
+
+export type CircumplexPerValue = {
+  __typename?: 'CircumplexPerValue';
+  trials: Scalars['Int']['output'];
+  valueKey: Scalars['String']['output'];
+};
+
+export type CircumplexResult = {
+  __typename?: 'CircumplexResult';
+  excludedValues: Array<Scalars['String']['output']>;
+  mds2d: Array<CircumplexMdsCoord>;
+  mdsStress: Scalars['Float']['output'];
+  mdsWarning?: Maybe<Scalars['String']['output']>;
+  modelId: Scalars['String']['output'];
+  modelLabel: Scalars['String']['output'];
+  pairTrialCounts: Array<Array<Scalars['Int']['output']>>;
+  profileCorrelationMatrix: Array<Maybe<Array<Maybe<Scalars['Float']['output']>>>>;
+  providerName: Scalars['String']['output'];
+  signature: Scalars['String']['output'];
+  spearmanP?: Maybe<Scalars['Float']['output']>;
+  spearmanRho?: Maybe<Scalars['Float']['output']>;
+  trialsPerValue: Array<CircumplexPerValue>;
+  valueOrder: Array<Scalars['String']['output']>;
+  verdictBand: Scalars['String']['output'];
 };
 
 export type ClusterAnalysis = {
@@ -2288,6 +2344,8 @@ export type Query = {
    *
    */
   availableModels: Array<AvailableModel>;
+  availableSignatures: Array<AvailableSignature>;
+  circumplexAnalysis: CircumplexAnalysisResult;
   /** Fetch a single definition by ID. Returns null if not found. */
   definition?: Maybe<Definition>;
   /** Get ancestors of a definition (full chain to root). Returns definitions ordered from root to immediate parent. */
@@ -2517,6 +2575,13 @@ export type QueryAvailableModelsArgs = {
   availableOnly?: InputMaybe<Scalars['Boolean']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryCircumplexAnalysisArgs = {
+  minTrialsPerValue?: InputMaybe<Scalars['Int']['input']>;
+  modelIds: Array<Scalars['String']['input']>;
+  signature: Scalars['String']['input'];
 };
 
 
@@ -3587,6 +3652,20 @@ export type MeQueryVariables = Exact<{ [key: string]: never; }>;
 
 
 export type MeQuery = { __typename?: 'Query', me?: { __typename?: 'User', id: string, email: string, name?: string | null, lastLoginAt?: string | null, createdAt: string } | null };
+
+export type AvailableSignaturesQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type AvailableSignaturesQuery = { __typename?: 'Query', availableSignatures: Array<{ __typename?: 'AvailableSignature', signature: string, mostRecentRunAt?: string | null }> };
+
+export type CircumplexAnalysisQueryVariables = Exact<{
+  modelIds: Array<Scalars['String']['input']> | Scalars['String']['input'];
+  signature: Scalars['String']['input'];
+  minTrialsPerValue?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type CircumplexAnalysisQuery = { __typename?: 'Query', circumplexAnalysis: { __typename?: 'CircumplexAnalysisResult', signature: string, eligibilityThreshold: number, insufficient: Array<{ __typename?: 'CircumplexInsufficientModel', modelId: string, modelLabel: string, providerName: string, reason: string, trialsPerValue: Array<{ __typename?: 'CircumplexPerValue', valueKey: string, trials: number }> }>, models: Array<{ __typename?: 'CircumplexResult', modelId: string, modelLabel: string, providerName: string, signature: string, valueOrder: Array<string>, profileCorrelationMatrix: Array<Array<number | null> | null>, pairTrialCounts: Array<Array<number>>, excludedValues: Array<string>, spearmanRho?: number | null, spearmanP?: number | null, verdictBand: string, mdsStress: number, mdsWarning?: string | null, mds2d: Array<{ __typename?: 'CircumplexMdsCoord', valueKey: string, x: number, y: number, theoreticalAngleDeg: number }>, trialsPerValue: Array<{ __typename?: 'CircumplexPerValue', valueKey: string, trials: number }> }> } };
 
 export type ComparisonRunListFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, status: string, config: unknown, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, transcriptCount: number, analysisStatus?: string | null, definition?: { __typename?: 'Definition', id: string, name: string, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null };
 
@@ -4763,6 +4842,69 @@ export const MeDocument = gql`
 
 export function useMeQuery(options?: Omit<Urql.UseQueryArgs<MeQueryVariables>, 'query'>) {
   return Urql.useQuery<MeQuery, MeQueryVariables>({ query: MeDocument, ...options });
+};
+export const AvailableSignaturesDocument = gql`
+    query AvailableSignatures {
+  availableSignatures {
+    signature
+    mostRecentRunAt
+  }
+}
+    `;
+
+export function useAvailableSignaturesQuery(options?: Omit<Urql.UseQueryArgs<AvailableSignaturesQueryVariables>, 'query'>) {
+  return Urql.useQuery<AvailableSignaturesQuery, AvailableSignaturesQueryVariables>({ query: AvailableSignaturesDocument, ...options });
+};
+export const CircumplexAnalysisDocument = gql`
+    query CircumplexAnalysis($modelIds: [String!]!, $signature: String!, $minTrialsPerValue: Int) {
+  circumplexAnalysis(
+    modelIds: $modelIds
+    signature: $signature
+    minTrialsPerValue: $minTrialsPerValue
+  ) {
+    signature
+    eligibilityThreshold
+    insufficient {
+      modelId
+      modelLabel
+      providerName
+      reason
+      trialsPerValue {
+        valueKey
+        trials
+      }
+    }
+    models {
+      modelId
+      modelLabel
+      providerName
+      signature
+      valueOrder
+      profileCorrelationMatrix
+      pairTrialCounts
+      excludedValues
+      spearmanRho
+      spearmanP
+      verdictBand
+      mds2d {
+        valueKey
+        x
+        y
+        theoreticalAngleDeg
+      }
+      mdsStress
+      mdsWarning
+      trialsPerValue {
+        valueKey
+        trials
+      }
+    }
+  }
+}
+    `;
+
+export function useCircumplexAnalysisQuery(options: Omit<Urql.UseQueryArgs<CircumplexAnalysisQueryVariables>, 'query'>) {
+  return Urql.useQuery<CircumplexAnalysisQuery, CircumplexAnalysisQueryVariables>({ query: CircumplexAnalysisDocument, ...options });
 };
 export const RunsWithAnalysisDocument = gql`
     query RunsWithAnalysis($ids: [ID!]!) {

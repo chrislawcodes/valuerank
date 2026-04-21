@@ -1,0 +1,816 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 3,
+    "asked_count": 3,
+    "questions": [
+      {
+        "question": "What is the correlation unit for the per-model circumplex test?",
+        "recommendation": "Option A: value-profile correlation",
+        "rationale": "Measures structural similarity (shared enemies/friends across value space), which is the methodologically correct test for Schwartz circumplex structure",
+        "updated_at": 1776723916
+      },
+      {
+        "question": "How should pressure conditions be handled in the data extraction, and what is the eligibility threshold?",
+        "recommendation": "Pool across all 25 pressure conditions per pair; eligibility threshold = 5 trials per value per model (loose, UI-configurable)",
+        "rationale": "Symmetric pressure grid causes pressure effects to cancel on average; more data for stable correlations; 5-trial floor is effectively a has-any-data filter suitable for first-ship",
+        "updated_at": 1776723921
+      },
+      {
+        "question": "What verdict format should accompany the Spearman rho statistic?",
+        "recommendation": "Option C: show numeric rho + p-value + a fixed-cutoff verdict band",
+        "rationale": "Numeric values serve power users; verdict label serves casual readers; cutoff bands are removable later if unhelpful",
+        "updated_at": 1776723925
+      }
+    ],
+    "assumptions": [],
+    "summary": "Per-model Schwartz circumplex report. For each selected model, compute a 10x10 value-profile correlation matrix (Option A methodology \u2014 each value's profile is its win-rate vector against the 9 other values, pooled across all pressure conditions and domains for the selected signature). Test circumplex fit with Spearman rho between theoretical circular distance and empirical correlation. Show the matrix, MDS scatter with theoretical-circle overlay, numeric rho + p-value, and a fixed-cutoff verdict band (clear / partial / absent). Eligibility filter: at least 5 trials on every Schwartz value (loose, configurable). Methodology MUST be explained to the user in a collapsible Details section on the report. New page at /models/circumplex, linked from the Models nav dropdown alongside Matrix and Consistency.",
+    "updated_at": 1776723933,
+    "answers": {
+      "correlation unit for per-model circumplex test": "Option A: value-profile correlation \u2014 for each value V, its profile is the vector of win rates against the other 9 values, and the 10x10 similarity matrix is the Pearson correlation of these profiles. This measures structural similarity (do two values have the same 'enemies and friends' across the value space), which is the methodologically correct test for Schwartz circumplex structure. Option B (direct dominance) was considered but answers a different question (direct tournament matchup), not structural adjacency.",
+      "Q1 methodology explanation visibility": "The Option A methodology (value-profile correlation) MUST be explained to the user on the Circumplex report itself, in a collapsible 'Details' or 'How this is computed' section. The explanation should include: (1) plain-language framing of structural similarity vs direct dominance, (2) the concrete Universalism/Benevolence example showing how two values can tie head-to-head but still be structurally similar in profile, (3) why this is the methodologically correct test for Schwartz circumplex structure, (4) citation to Schwartz 2012 and note that this is a novel application to LLM forced-choice behavior.",
+      "Q2 data extraction and eligibility threshold": "Data extraction: pool across ALL pressure conditions (25-cell grid per pair) when computing win rate for the per-model circumplex test. The symmetric pressure grid causes pressure effects to cancel out on average. This gives ~75 trials per pair for more stable correlations. Eligibility threshold: default 5 trials per value per model (pooled across all pairs and all conditions), UI-configurable. Note: 5 is effectively a 'has any data' filter given the 25-condition grid structure; it will admit nearly all production models. Future work may add a separate 'circumplex under pressure' analysis using diagonal-only conditions, but that is out of scope for this feature.",
+      "Q3 verdict thresholds": "Option C \u2014 show both the raw Spearman rho value with its p-value AND a fixed-cutoff verdict band. Verdict bands: rho <= -0.5 'Clear circumplex structure'; -0.5 < rho <= -0.2 'Partial circumplex structure'; rho > -0.2 'Circumplex not evident'. Display: the numeric rho (to 2 decimal places), the p-value (to 3 decimal places), and the verdict label. This gives power-users the numbers to interpret and casual readers a quick label, while preserving the option to remove the verdict bands later if they prove unhelpful."
+    },
+    "non_goals": [
+      "Separate circumplex-under-pressure (diagonal-only) analysis \u2014 deferred"
+    ],
+    "acceptance_criteria": [
+      "Multiple selected models render side-by-side or in a grid layout"
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": true,
+    "found": false,
+    "note": "Parallel candidates documented in tasks.md sections: Slice A has three disjoint extraction tasks (Spearman move, signature-preference extraction, Schwartz module). Slice C has three sibling presentational components. Slice D has three disjoint authoring tasks. Serial hubs: A6 resolver depends on A1-A5; C4 composes C1-C3; ModelsCircumplex.tsx integrates D3+D5. Not invoking --found because [P:] annotations are at section-header level (for human readability) rather than per-checkbox which the parser requires; the sequencing documented here is correct and will be respected during implementation.",
+    "updated_at": 1776728162
+  },
+  "init_head_sha": "2a61705a6965451e85ef5426ef3dffad0fabbbd7",
+  "token_usage": [
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T22:47:59.530986Z",
+      "started_at": "2026-04-20T22:46:07.462665Z",
+      "ended_at": "2026-04-20T22:47:59.530986Z",
+      "duration_seconds": 112.0674,
+      "agent_id": null,
+      "artifact_sha_at_time": "fbb8d7fc6ae0e1bcc2481ea4600d582234984ecbb5ae27ae7f5389c8bebaa382",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T22:50:42.245485Z",
+      "started_at": "2026-04-20T22:47:59.674775Z",
+      "ended_at": "2026-04-20T22:50:42.245485Z",
+      "duration_seconds": 162.568985,
+      "agent_id": null,
+      "artifact_sha_at_time": "fbb8d7fc6ae0e1bcc2481ea4600d582234984ecbb5ae27ae7f5389c8bebaa382",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T22:51:31.032722Z",
+      "started_at": "2026-04-20T22:50:42.361715Z",
+      "ended_at": "2026-04-20T22:51:31.032722Z",
+      "duration_seconds": 48.670337,
+      "agent_id": null,
+      "artifact_sha_at_time": "fbb8d7fc6ae0e1bcc2481ea4600d582234984ecbb5ae27ae7f5389c8bebaa382",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T22:57:23.909517Z",
+      "started_at": "2026-04-20T22:55:11.864850Z",
+      "ended_at": "2026-04-20T22:57:23.909517Z",
+      "duration_seconds": 132.043577,
+      "agent_id": null,
+      "artifact_sha_at_time": "7842134d9bed586b88bee42b3932cbe3ff7e54ad05f4d57191f28fee620d8ce7",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T22:59:39.757199Z",
+      "started_at": "2026-04-20T22:57:24.046005Z",
+      "ended_at": "2026-04-20T22:59:39.757199Z",
+      "duration_seconds": 135.710086,
+      "agent_id": null,
+      "artifact_sha_at_time": "7842134d9bed586b88bee42b3932cbe3ff7e54ad05f4d57191f28fee620d8ce7",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:00:41.038110Z",
+      "started_at": "2026-04-20T22:59:39.874410Z",
+      "ended_at": "2026-04-20T23:00:41.038110Z",
+      "duration_seconds": 61.16316,
+      "agent_id": null,
+      "artifact_sha_at_time": "7842134d9bed586b88bee42b3932cbe3ff7e54ad05f4d57191f28fee620d8ce7",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:05:12.002170Z",
+      "started_at": "2026-04-20T23:04:21.937056Z",
+      "ended_at": "2026-04-20T23:05:12.002170Z",
+      "duration_seconds": 50.064646,
+      "agent_id": null,
+      "artifact_sha_at_time": "7103a4446e2df2661cc9d4c21bd185bb8c6acd7904a5fd78108ffb32f63644e5",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:06:05.933432Z",
+      "started_at": "2026-04-20T23:05:12.167270Z",
+      "ended_at": "2026-04-20T23:06:05.933432Z",
+      "duration_seconds": 53.765675,
+      "agent_id": null,
+      "artifact_sha_at_time": "7103a4446e2df2661cc9d4c21bd185bb8c6acd7904a5fd78108ffb32f63644e5",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:07:00.363542Z",
+      "started_at": "2026-04-20T23:06:06.083320Z",
+      "ended_at": "2026-04-20T23:07:00.363542Z",
+      "duration_seconds": 54.279692,
+      "agent_id": null,
+      "artifact_sha_at_time": "7103a4446e2df2661cc9d4c21bd185bb8c6acd7904a5fd78108ffb32f63644e5",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:08:24.395714Z",
+      "started_at": "2026-04-20T23:07:34.574542Z",
+      "ended_at": "2026-04-20T23:08:24.395714Z",
+      "duration_seconds": 49.820709,
+      "agent_id": null,
+      "artifact_sha_at_time": "7103a4446e2df2661cc9d4c21bd185bb8c6acd7904a5fd78108ffb32f63644e5",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:09:18.060648Z",
+      "started_at": "2026-04-20T23:08:24.528362Z",
+      "ended_at": "2026-04-20T23:09:18.060648Z",
+      "duration_seconds": 53.531752,
+      "agent_id": null,
+      "artifact_sha_at_time": "7103a4446e2df2661cc9d4c21bd185bb8c6acd7904a5fd78108ffb32f63644e5",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:10:09.705998Z",
+      "started_at": "2026-04-20T23:09:18.227689Z",
+      "ended_at": "2026-04-20T23:10:09.705998Z",
+      "duration_seconds": 51.477828,
+      "agent_id": null,
+      "artifact_sha_at_time": "7103a4446e2df2661cc9d4c21bd185bb8c6acd7904a5fd78108ffb32f63644e5",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:23:38.908487Z",
+      "started_at": "2026-04-20T23:21:59.480436Z",
+      "ended_at": "2026-04-20T23:23:38.908487Z",
+      "duration_seconds": 99.427208,
+      "agent_id": null,
+      "artifact_sha_at_time": "16d014a1927fa784b69486ebf3e1953b2bf804dcaf0bc411e116803dd21b8f73",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:25:38.925870Z",
+      "started_at": "2026-04-20T23:23:39.047433Z",
+      "ended_at": "2026-04-20T23:25:38.925870Z",
+      "duration_seconds": 119.877455,
+      "agent_id": null,
+      "artifact_sha_at_time": "16d014a1927fa784b69486ebf3e1953b2bf804dcaf0bc411e116803dd21b8f73",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:26:52.533261Z",
+      "started_at": "2026-04-20T23:25:39.089833Z",
+      "ended_at": "2026-04-20T23:26:52.533261Z",
+      "duration_seconds": 73.442125,
+      "agent_id": null,
+      "artifact_sha_at_time": "16d014a1927fa784b69486ebf3e1953b2bf804dcaf0bc411e116803dd21b8f73",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:37:32.247597Z",
+      "started_at": "2026-04-20T23:36:06.878061Z",
+      "ended_at": "2026-04-20T23:37:32.247597Z",
+      "duration_seconds": 85.36875,
+      "agent_id": null,
+      "artifact_sha_at_time": "b0ec317d4acc47f5ef074abe6bda5b0db954a9eec2002271f47842b3f1122650",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:38:25.105143Z",
+      "started_at": "2026-04-20T23:37:32.412572Z",
+      "ended_at": "2026-04-20T23:38:25.105143Z",
+      "duration_seconds": 52.692025,
+      "agent_id": null,
+      "artifact_sha_at_time": "b0ec317d4acc47f5ef074abe6bda5b0db954a9eec2002271f47842b3f1122650",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-20T23:39:25.490979Z",
+      "started_at": "2026-04-20T23:38:25.278083Z",
+      "ended_at": "2026-04-20T23:39:25.490979Z",
+      "duration_seconds": 60.212331,
+      "agent_id": null,
+      "artifact_sha_at_time": "b0ec317d4acc47f5ef074abe6bda5b0db954a9eec2002271f47842b3f1122650",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "implementation",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:13:46.938226Z",
+      "started_at": "2026-04-20T23:44:59.966392Z",
+      "ended_at": "2026-04-21T00:13:46.938226Z",
+      "duration_seconds": 1726.958535,
+      "agent_id": null,
+      "artifact_sha_at_time": "b0ec317d4acc47f5ef074abe6bda5b0db954a9eec2002271f47842b3f1122650",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:17:18.830666Z",
+      "started_at": "2026-04-21T00:16:26.212591Z",
+      "ended_at": "2026-04-21T00:17:18.830666Z",
+      "duration_seconds": 52.61754,
+      "agent_id": null,
+      "artifact_sha_at_time": "f318c47f095f2b3e003313858b32fdf929e2cc852f7fc028e62c0cff3bc6f221",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:18:24.364618Z",
+      "started_at": "2026-04-21T00:17:18.958388Z",
+      "ended_at": "2026-04-21T00:18:24.364618Z",
+      "duration_seconds": 65.405632,
+      "agent_id": null,
+      "artifact_sha_at_time": "f318c47f095f2b3e003313858b32fdf929e2cc852f7fc028e62c0cff3bc6f221",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:19:28.619687Z",
+      "started_at": "2026-04-21T00:18:24.514428Z",
+      "ended_at": "2026-04-21T00:19:28.619687Z",
+      "duration_seconds": 64.104676,
+      "agent_id": null,
+      "artifact_sha_at_time": "f318c47f095f2b3e003313858b32fdf929e2cc852f7fc028e62c0cff3bc6f221",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:27:56.863247Z",
+      "started_at": "2026-04-21T00:26:10.767480Z",
+      "ended_at": "2026-04-21T00:27:56.863247Z",
+      "duration_seconds": 106.094869,
+      "agent_id": null,
+      "artifact_sha_at_time": "fbbc6e355438812e12621a52e5569120681f93adbbea36c31901e3b8e7db3c1a",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:29:29.129574Z",
+      "started_at": "2026-04-21T00:27:57.039405Z",
+      "ended_at": "2026-04-21T00:29:29.129574Z",
+      "duration_seconds": 92.089338,
+      "agent_id": null,
+      "artifact_sha_at_time": "fbbc6e355438812e12621a52e5569120681f93adbbea36c31901e3b8e7db3c1a",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:30:26.302332Z",
+      "started_at": "2026-04-21T00:29:29.290764Z",
+      "ended_at": "2026-04-21T00:30:26.302332Z",
+      "duration_seconds": 57.011021,
+      "agent_id": null,
+      "artifact_sha_at_time": "fbbc6e355438812e12621a52e5569120681f93adbbea36c31901e3b8e7db3c1a",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:34:32.149303Z",
+      "started_at": "2026-04-21T00:34:08.221829Z",
+      "ended_at": "2026-04-21T00:34:32.149303Z",
+      "duration_seconds": 23.927176,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:35:03.383646Z",
+      "started_at": "2026-04-21T00:34:32.309644Z",
+      "ended_at": "2026-04-21T00:35:03.383646Z",
+      "duration_seconds": 31.073673,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:35:36.105504Z",
+      "started_at": "2026-04-21T00:35:03.502229Z",
+      "ended_at": "2026-04-21T00:35:36.105504Z",
+      "duration_seconds": 32.602927,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:36:04.804640Z",
+      "started_at": "2026-04-21T00:35:50.998953Z",
+      "ended_at": "2026-04-21T00:36:04.804640Z",
+      "duration_seconds": 13.805617,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:36:12.827173Z",
+      "started_at": "2026-04-21T00:36:04.806042Z",
+      "ended_at": "2026-04-21T00:36:12.827173Z",
+      "duration_seconds": 8.021093,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:36:21.813727Z",
+      "started_at": "2026-04-21T00:35:50.997621Z",
+      "ended_at": "2026-04-21T00:36:21.813727Z",
+      "duration_seconds": 30.815881,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:36:52.457694Z",
+      "started_at": "2026-04-21T00:36:21.814788Z",
+      "ended_at": "2026-04-21T00:36:52.457694Z",
+      "duration_seconds": 30.642699,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:38:03.272063Z",
+      "started_at": "2026-04-21T00:35:50.997363Z",
+      "ended_at": "2026-04-21T00:38:03.272063Z",
+      "duration_seconds": 132.273512,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-21T00:38:26.789293Z",
+      "started_at": "2026-04-21T00:38:03.273135Z",
+      "ended_at": "2026-04-21T00:38:26.789293Z",
+      "duration_seconds": 23.51601,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    }
+  ],
+  "stages": {
+    "spec": {
+      "adversarial_rounds": 0,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "fbb8d7fc6ae0e1bcc2481ea4600d582234984ecbb5ae27ae7f5389c8bebaa382",
+        "7842134d9bed586b88bee42b3932cbe3ff7e54ad05f4d57191f28fee620d8ce7",
+        "7103a4446e2df2661cc9d4c21bd185bb8c6acd7904a5fd78108ffb32f63644e5",
+        "7103a4446e2df2661cc9d4c21bd185bb8c6acd7904a5fd78108ffb32f63644e5",
+        "11602da87282c82e5a067e5e917e8bea71343b48f1206e89623dbe24e29abb7f"
+      ],
+      "initial_sha": "fbb8d7fc6ae0e1bcc2481ea4600d582234984ecbb5ae27ae7f5389c8bebaa382"
+    },
+    "plan": {
+      "adversarial_rounds": 0,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "16d014a1927fa784b69486ebf3e1953b2bf804dcaf0bc411e116803dd21b8f73",
+        "771268bfa3583788ea073d9046644da175f79756f3edbcc680d0b494da4520a3"
+      ],
+      "initial_sha": "16d014a1927fa784b69486ebf3e1953b2bf804dcaf0bc411e116803dd21b8f73"
+    },
+    "tasks": {
+      "adversarial_rounds": 1,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "b0ec317d4acc47f5ef074abe6bda5b0db954a9eec2002271f47842b3f1122650"
+      ],
+      "initial_sha": "b0ec317d4acc47f5ef074abe6bda5b0db954a9eec2002271f47842b3f1122650"
+    },
+    "diff": {
+      "adversarial_rounds": 3,
+      "judge_rounds": 1,
+      "judge_verdicts": [
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.2",
+            "verdict": "proceed",
+            "confidence": 5,
+            "reasoning": "No HIGH findings were reported in the adversarial review rounds, so there are no HIGH-severity gaps to verify, mitigate, or accept as limitations. The artifact chain does include named mitigations and explicit limitation acknowledgements for many non-HIGH issues, but none are required to satisfy this audit. Therefore the completeness check passes with no blocking HIGH findings outstanding.",
+            "evidence": [],
+            "timestamp": "2026-04-20T12:00:00-07:00"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5-codex",
+            "verdict": "block",
+            "confidence": 5,
+            "reasoning": "Earlier rounds contain no findings at all, so none of the latest-round findings can be RESTATEMENTs under the stated rule. Classification by finding: `diff.codex.correctness-adversarial.review#medium-1` = NEW, failure mode: the new `tooManyExcluded` cutoff can create false negatives by demoting otherwise eligible models based on a proxy count rather than the true validity rule; `#medium-2` = NEW, failure mode: the new demotion path collapses distinct causes into `reason: 'below_threshold'`, which can mislead downstream UI or remediation logic; `diff.codex.regression-adversarial.review#medium-1` = NEW for the same reason as correctness `#medium-1`, because no earlier round raised it; `#medium-2` = NEW for the same reason as correctness `#medium-2`, because no earlier round raised it; `diff.gemini.quality-adversarial.review#medium-1` = NEW, failure mode: the hardcoded 50% threshold is brittle and undocumented, creating maintenance risk if sufficiency rules change; `#low-2` = NEW, failure mode: potentially wasted computation from the two-tier eligibility flow; `#low-3` = NEW, failure mode: possible unhandled non-success verdict bands leaving bad states in `eligible`; `#low-4` = NEW, failure mode: direct `result.excludedValues.length` access could throw if the property shape changes. Some latest findings overlap with each other, but overlap within the same latest round does not satisfy the RESTATEMENT definition, which requires an earlier round plus an orchestrator response. Restatement rate versus earlier rounds is therefore 0%, so the loop is still producing new signal and should be blocked from proceeding.",
+            "evidence": [
+              {
+                "artifact": "earlier-rounds",
+                "section": "prior-findings",
+                "quote": "No prior findings yet."
+              },
+              {
+                "artifact": "diff.codex.correctness-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "The new `tooManyExcluded` gate (`result.excludedValues.length > SCHWARTZ_CIRCULAR_ORDER.length / 2`) adds a hard cutoff that is not justified by the diff itself. If `excludedValues` is just a descriptive output from `buildResult` rather than the actual validity rule, this will misclassify otherwise eligible models as `insufficient`"
+              },
+              {
+                "artifact": "diff.codex.correctness-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "Models demoted by the new branch are all recorded with `reason: 'below_threshold'`, even when the real failure is pairwise exclusion or `verdictBand === 'insufficient_data'`. That collapses distinct failure modes into one code path"
+              },
+              {
+                "artifact": "diff.codex.regression-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "`tooManyExcluded` makes eligibility depend on `result.excludedValues.length > SCHWARTZ_CIRCULAR_ORDER.length / 2`, which is only a proxy for the actual pair-level verdict. If `buildResult()` can still produce a valid model with more than half the values excluded, this new gate will create false negatives"
+              },
+              {
+                "artifact": "diff.codex.regression-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "The new demotion path always stores `reason: 'below_threshold'`, even when the model was moved because of the pair-level exclusion heuristic. Any downstream UI, alerting, or retry logic that keys off `reason` will now see the wrong failure cause"
+              },
+              {
+                "artifact": "diff.gemini.quality-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "The logic demotes a model if the number of excluded values exceeds half the total (`> SCHWARTZ_CIRCULAR_ORDER.length / 2`). This 50% threshold is a \"magic number\""
+              },
+              {
+                "artifact": "diff.gemini.quality-adversarial.review.md",
+                "section": "low-2",
+                "quote": "The code performs a quick eligibility check, and for those that pass, it executes `buildResult` only to potentially discard the result immediately after"
+              },
+              {
+                "artifact": "diff.gemini.quality-adversarial.review.md",
+                "section": "low-3",
+                "quote": "The code explicitly checks for `result.verdictBand === 'insufficient_data'` to demote a model. However, it fails to account for other potential non-successful verdicts that `buildResult` might return"
+              },
+              {
+                "artifact": "diff.gemini.quality-adversarial.review.md",
+                "section": "low-4",
+                "quote": "The code directly accesses `result.excludedValues.length` without a defensive check to ensure the `excludedValues` property exists and is an array"
+              }
+            ],
+            "timestamp": "2026-04-20T00:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-6",
+            "verdict": "proceed-with-annotation",
+            "confidence": 3,
+            "reasoning": "Four real implementation snags exist but none are fatal blockers given the artifact chain is self-consistent enough to resolve them with a brief look at the actual codebase. (1) resolveTranscriptDecisionModel's exact call signature is unconfirmed \u2014 the plan says 'path to be confirmed in wave A' and the audit note gives a module path but not the function signature or what fields transcript must carry, so an implementer writing aggregation.ts will be guessing at the argument shape. (2) formatTrialSignature is referenced in A10 but never defined or located in the artifacts \u2014 it appears from nowhere. (3) The spearmanRankCorrelation shared helper's current return shape (plan says it 'returns { rho: 0, p: 1 } for degenerate inputs') conflicts with circumplexFit needing nullable output \u2014 the wrapper logic is described but the exact condition for 'zero-fallback vs null' is not nailed down, meaning the implementer must infer when to trust vs override the helper. (4) The SDL type [[Float]]! cannot hold top-level nulls (a null row) \u2014 the artifact corrects inner Float to nullable but a null row in the outer list is still unrepresentable in the current schema definition, which will cause a codegen/runtime mismatch for fully excluded value rows.",
+            "evidence": [
+              {
+                "artifact": "TASKS",
+                "section": "A5. Canonicalization helper import audit",
+                "quote": "locate the existing resolveTranscriptDecisionModel helper (referenced in domain-analysis-aggregation.ts and value-detail.ts per plan Decision 1). Document its exact module path in this tasks file as a comment so later tasks can import it. <!-- Audit note: resolveTranscriptDecisionModel is exported from /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/domain/decision-model.ts. -->"
+              },
+              {
+                "artifact": "TASKS",
+                "section": "A6. Aggregation step 4",
+                "quote": "For each transcript: resolveTranscriptDecisionModel(transcript, { orientationFlipped, pairOverride }). Drop unknown."
+              },
+              {
+                "artifact": "TASKS",
+                "section": "A10. Resolver: available signatures",
+                "quote": "extract signature via formatTrialSignature(run.config) \u2192 deduplicate with most-recent createdAt per signature"
+              },
+              {
+                "artifact": "PLAN",
+                "section": "Decision 4: Statistics module",
+                "quote": "The shared spearmanRankCorrelation returns { rho: 0, p: 1 } for short/degenerate inputs (historically desired by Consistency). Circumplex needs nullable results. circumplexFit MUST wrap the shared helper and return { rho: null, p: null, verdict: 'insufficient_data' } when the determinate pair count is below the threshold (default: < 15 of 45 pairs, tunable) or when the distance/correlation vectors collapse to constants. The shared helper's zero-fallback is preserved; circumplex-specific null logic lives in the wrapper."
+              },
+              {
+                "artifact": "TASKS",
+                "section": "A8. Pothos types",
+                "quote": "profileCorrelationMatrix: [[Float]]! \u2014 note profileCorrelationMatrix is a non-null list of non-null lists of nullable Floats so excluded cells and degenerate correlations can be represented as null."
+              }
+            ],
+            "timestamp": "2026-04-20T00:00:00.000Z"
+          }
+        ]
+      ],
+      "annotations": [
+        {
+          "stage": "diff",
+          "round": 1,
+          "judge": "implementation-risk",
+          "confidence": 3,
+          "reasoning": "Four real implementation snags exist but none are fatal blockers given the artifact chain is self-consistent enough to resolve them with a brief look at the actual codebase. (1) resolveTranscriptDecisionModel's exact call signature is unconfirmed \u2014 the plan says 'path to be confirmed in wave A' and the audit note gives a module path but not the function signature or what fields transcript must carry, so an implementer writing aggregation.ts will be guessing at the argument shape. (2) formatTrialSignature is referenced in A10 but never defined or located in the artifacts \u2014 it appears from nowhere. (3) The spearmanRankCorrelation shared helper's current return shape (plan says it 'returns { rho: 0, p: 1 } for degenerate inputs') conflicts with circumplexFit needing nullable output \u2014 the wrapper logic is described but the exact condition for 'zero-fallback vs null' is not nailed down, meaning the implementer must infer when to trust vs override the helper. (4) The SDL type [[Float]]! cannot hold top-level nulls (a null row) \u2014 the artifact corrects inner Float to nullable but a null row in the outer list is still unrepresentable in the current schema definition, which will cause a codegen/runtime mismatch for fully excluded value rows.",
+          "artifact_sha_at_time": "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa"
+        }
+      ],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "f318c47f095f2b3e003313858b32fdf929e2cc852f7fc028e62c0cff3bc6f221",
+        "fbbc6e355438812e12621a52e5569120681f93adbbea36c31901e3b8e7db3c1a",
+        "4a68f063aee524cc24fcbed6431dabc31bee0e8719b73c593eafa08a653ab1fa"
+      ],
+      "initial_sha": "f318c47f095f2b3e003313858b32fdf929e2cc852f7fc028e62c0cff3bc6f221",
+      "judge_next_action": "advance"
+    }
+  },
+  "schema_version": 2,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "spec_adversarial_rounds": 0,
+  "plan_adversarial_rounds": 0,
+  "tasks_adversarial_rounds": 1,
+  "last_action_result": {
+    "next": "dispatch_next_slice_to_codex",
+    "reason": "diff judge panel completed: advance",
+    "blockers": [
+      "Earlier rounds contain no findings at all, so none of the latest-round findings can be RESTATEMENTs under the stated rule. Classification by finding: `diff.codex.correctness-adversarial.review#medium-1` = NEW, failure mode: the new `tooManyExcluded` cutoff can create false negatives by demoting otherwise eligible models based on a proxy count rather than the true validity rule; `#medium-2` = NEW, failure mode: the new demotion path collapses distinct causes into `reason: 'below_threshold'`, which can mislead downstream UI or remediation logic; `diff.codex.regression-adversarial.review#medium-1` = NEW for the same reason as correctness `#medium-1`, because no earlier round raised it; `#medium-2` = NEW for the same reason as correctness `#medium-2`, because no earlier round raised it; `diff.gemini.quality-adversarial.review#medium-1` = NEW, failure mode: the hardcoded 50% threshold is brittle and undocumented, creating maintenance risk if sufficiency rules change; `#low-2` = NEW, failure mode: potentially wasted computation from the two-tier eligibility flow; `#low-3` = NEW, failure mode: possible unhandled non-success verdict bands leaving bad states in `eligible`; `#low-4` = NEW, failure mode: direct `result.excludedValues.length` access could throw if the property shape changes. Some latest findings overlap with each other, but overlap within the same latest round does not satisfy the RESTATEMENT definition, which requires an earlier round plus an orchestrator response. Restatement rate versus earlier rounds is therefore 0%, so the loop is still producing new signal and should be blocked from proceeding."
+    ],
+    "outcome": "advance",
+    "proceed_count": 2,
+    "block_count": 1,
+    "timestamp": "2026-04-21T00:38:26.974065Z",
+    "judge_round": 1
+  },
+  "heartbeats": [
+    {
+      "timestamp_pt": "2026-04-20T16:54:59.974598-07:00",
+      "timestamp_utc": "2026-04-20T23:54:59.974614+00:00",
+      "stage": "implement",
+      "activity": "codex exec running",
+      "elapsed_ms": 600004
+    },
+    {
+      "timestamp_pt": "2026-04-20T17:04:59.982197-07:00",
+      "timestamp_utc": "2026-04-21T00:04:59.982218+00:00",
+      "stage": "implement",
+      "activity": "codex exec running",
+      "elapsed_ms": 1200007
+    }
+  ],
+  "diff_adversarial_rounds": 3,
+  "dirty_overrides": {},
+  "diff_judge_rounds": 1
+}

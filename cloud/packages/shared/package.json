@@ -14,6 +14,14 @@
       "import": "./dist/trial-signature.js",
       "types": "./dist/trial-signature.d.ts"
     },
+    "./signature-preference": {
+      "import": "./dist/signature-preference.js",
+      "types": "./dist/signature-preference.d.ts"
+    },
+    "./schwartz": {
+      "import": "./dist/schwartz.js",
+      "types": "./dist/schwartz.d.ts"
+    },
     "./canonical-dimensions": {
       "import": "./dist/canonical-dimensions.js",
       "types": "./dist/canonical-dimensions.d.ts"

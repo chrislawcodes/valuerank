@@ -1,0 +1,8 @@
+## Findings
+1. [UNVERIFIED][MEDIUM] In [`cloud/apps/api/src/cli/backfill-aggregate-consistency.ts`](/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/cli/backfill-aggregate-consistency.ts), `parseSelection()` only reads `definitionSnapshot._meta.preambleVersionId` and `definitionSnapshot._meta.definitionVersion`. The codebase’s own snapshot helper also accepts top-level `definitionSnapshot.preambleVersionId` and `definitionSnapshot.version`, so older rows using that shape will be marked as malformed and never backfilled.
+
+2. [UNVERIFIED][MEDIUM] In [`cloud/apps/api/src/services/analysis/aggregate/aggregate-preparation.ts`](/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/services/analysis/aggregate/aggregate-preparation.ts), `targetCompanionRunId` is taken from the first compatible run only, but `compatibleRuns` are selected without considering `companionRunId`. If the same definition/selection can contain runs paired to different companions, the new worker input and fingerprint become order-dependent, so the same logical aggregate source set can produce different persisted results.
+
+## Residual Risks
+- The backfill still reruns the full aggregate workflow for each stale row, so large historical datasets may take a long time even when correct.
+- The new reliability-summary shape may still have edge cases the heuristic does not recognize, especially if the worker emits empty `perPair` collections or other partially populated objects.

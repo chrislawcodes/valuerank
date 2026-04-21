@@ -1,0 +1,7 @@
+## Findings
+- **[UNVERIFIED] Medium** - The new `tooManyExcluded` gate (`result.excludedValues.length > SCHWARTZ_CIRCULAR_ORDER.length / 2`) adds a hard cutoff that is not justified by the diff itself. If `excludedValues` is just a descriptive output from `buildResult` rather than the actual validity rule, this will misclassify otherwise eligible models as `insufficient` and remove them from the main results array.
+- **[UNVERIFIED] Medium** - Models demoted by the new branch are all recorded with `reason: 'below_threshold'`, even when the real failure is pairwise exclusion or `verdictBand === 'insufficient_data'`. That collapses distinct failure modes into one code path and can surface the wrong remediation signal to any caller or UI that relies on `reason`.
+
+## Residual Risks
+- The diff assumes `buildResult().excludedValues` and `buildResult().verdictBand` are stable, authoritative signals for the same underlying failure. That equivalence is not verifiable from the artifact alone.
+- The review cannot confirm whether downstream consumers treat `reason` as informational only or as part of control flow, so the impact of the reason collapse may be larger or smaller than it appears here.

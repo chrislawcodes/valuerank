@@ -1,0 +1,7 @@
+## Findings
+- [UNVERIFIED] Medium: `tooManyExcluded` makes eligibility depend on `result.excludedValues.length > SCHWARTZ_CIRCULAR_ORDER.length / 2`, which is only a proxy for the actual pair-level verdict. If `buildResult()` can still produce a valid model with more than half the values excluded, this new gate will create false negatives and move a valid model out of `eligible`.
+- [UNVERIFIED] Medium: The new demotion path always stores `reason: 'below_threshold'`, even when the model was moved because of the pair-level exclusion heuristic. Any downstream UI, alerting, or retry logic that keys off `reason` will now see the wrong failure cause and may suggest the wrong fix.
+
+## Residual Risks
+- [UNVERIFIED] I could not verify whether `excludedValues` is deduplicated or whether the `SCHWARTZ_CIRCULAR_ORDER.length / 2` cutoff matches the intended analysis rule everywhere else.
+- [UNVERIFIED] I could not verify whether any consumer depends on the previous split where first-pass eligible models always stayed in `eligible`, even if the deeper check would have marked them `insufficient_data`.

@@ -1,0 +1,97 @@
+00001: # Spec: Circumplex Report
+00002: 
+00003: **Feature slug:** circumplex-report
+00004: **Created:** 2026-04-20
+00005: **Status:** draft
+00006: **Path:** Feature Factory (`docs/workflow/feature-runs/circumplex-report/`)
+00007: 
+00008: ---
+00009: 
+00010: ## Background
+00011: 
+00012: Schwartz's theory of basic human values claims that the 10 values form a **circumplex** — a circular motivational continuum where adjacent values are compatible and opposite values conflict. This factor structure was validated on decades of Likert-rating survey data (Schwartz 1992; Schwartz et al. 2012).
+00013: 
+00014: Our existing `Models / Matrix` and `Models / Consistency` pages describe *what* each LLM prioritizes and *how consistent* its choices are. Neither asks whether LLMs themselves exhibit the circumplex structure — whether human-centered Schwartz theory transfers to LLM forced-choice behavior.
+00015: 
+00016: An early cross-model test (N=11, population-level) returned Spearman ρ ≈ +0.01 between theoretical circular distance and empirical correlation. Population-level, the circumplex does **not** hold. Notably, Conformity and Tradition — adjacent Conservation values that humans correlate ~+0.5 on — correlated **−0.81** in our LLM population. This is plausibly an RLHF-shaped rupture of the Conservation factor.
+00017: 
+00018: That result was based on a tiny sample of models-as-respondents. The deeper question is whether **each individual model** exhibits the circumplex internally, computed from its own pairwise-preference behavior. That is the question this report answers.
+00019: 
+00020: This spec adds a third report under the `Models` tab, named **Circumplex**, that lets a researcher pick one or more eligible models and see, for each, whether the model's pairwise choices form a circumplex.
+00021: 
+00022: ---
+00023: 
+00024: ## Discovery: Assumptions Carried In
+00025: 
+00026: Three discovery questions were asked and answered:
+00027: 
+00028: 1. **Correlation unit: Option A (value-profile correlation).** For each value V, its "profile" is the vector of V's win rates against each of the other 9 values. The 10×10 similarity matrix is the Pearson correlation of these profiles across values. This measures *structural similarity* — do two values have similar "enemies and friends" across the rest of the value space — which is the methodologically correct test for circumplex structure. The alternative (direct dominance, Option B) answers a different question (head-to-head matchup) and is not suitable for a circumplex test.
+00029: 
+00030: 2. **Data extraction: pool across all pressure conditions.** Our data has a 5×5 pressure grid per value pair (~25 conditions × ~3 trials each ≈ 75 trials per pair). For the circumplex test, pool all trials across all conditions. The symmetric grid causes pressure-asymmetry effects to cancel on average, and pooling gives ~75 trials per pair for stable correlations. A separate "circumplex under pressure" analysis (diagonal-only / equal-pressure) is deliberately **deferred** as follow-up.
+00031: 
+00032: 3. **Verdict format: show both the numeric statistic and a cutoff band (Option C).** Display the raw Spearman ρ to 2 decimal places, its p-value to 3 decimal places, and a plain-language label based on fixed cutoffs (`ρ ≤ −0.5` → "Clear"; `−0.5 < ρ ≤ −0.2` → "Partial"; `ρ > −0.2` → "Not evident"). Power-users read the numbers; casual readers read the label. The verdict band is removable later if it proves unhelpful.
+00033: 
+00034: Additional assumptions carried in:
+00035: 
+00036: 4. **Nav placement:** `Models` dropdown → `Circumplex`, alongside existing `Matrix` and `Consistency` items. Pattern matches the existing Models-tab nav convention.
+00037: 
+00038: 5. **Signature scope:** single signature at a time (default `vnewtd`), honored via `?signature=...` URL parameter; signature dropdown reuses the pattern from Consistency.
+00039: 
+00040: 6. **Eligibility filter:** a model qualifies if it has at least **N trials per Schwartz value** (default N = 5, UI-configurable), pooled across all pairs and conditions, for the selected signature. At our ~75-trials-per-pair × 9-pairs-per-value baseline, N=5 is effectively a "has-any-data" filter; it admits all production models with basic coverage. The threshold exists to gracefully handle partially-covered models rather than to aggressively prune.
+00041: 
+00042: 7. **Data scope:** same 11-model production roster, 4 domains, `vnewtd` signature. No new data collection. Resolver reads from the already-populated aggregate analysis pipeline.
+00043: 
+00044: 8. **Primary audiences:** AAPOR survey methodologists (response to the "you didn't validate factor structure" critique), moral-psychology researchers (novel empirical result on LLM value structure), and AI-alignment researchers (RLHF-shaping evidence). **Secondary:** ACM reviewers.
+00045: 
+00046: 9. **Methodology explanation is required on-page.** Option A is a novel application to LLM forced-choice behavior, and the
+
+... [narrowed review slice: middle omitted] ...
+
+eligible at the current threshold on reload, it is dropped silently and a note logs the drop.
+00208: 
+00209: ---
+00210: 
+00211: ## Key Entities
+00212: 
+00213: **CircumplexResult** (per model, per signature)
+00214: - `modelId`, `modelLabel`, `providerName` — `providerName` sourced from `LlmModel.providerName` upstream
+00215: - `signature`
+00216: - `valueOrder: [ValueKey!]` — canonical circular order used
+00217: - `profileCorrelationMatrix: [[Float!]!]!` — 10×10, aligned to valueOrder. Cells with insufficient determinate pair support return `null` instead of a spurious value
+00218: - `pairTrialCounts: [[Int!]!]!` — 10×10, aligned to valueOrder. Supports the per-pair coverage flagging required by FR-011b
+00219: - `excludedValues: [ValueKey!]` — values excluded from profile correlation / MDS due to insufficient pair coverage
+00220: - `spearmanRho: Float` — circular-distance vs correlation, nullable if too few determinate pairs remain
+00221: - `spearmanP: Float` — nullable for the same reason
+00222: - `verdictBand: "clear" | "partial" | "not_evident" | "insufficient_data"`
+00223: - `mds2d: [{ valueKey, x, y, theoreticalAngleDeg }]` — excluded values omitted
+00224: - `mdsStress: Float` — goodness-of-fit metric for the 2D projection
+00225: - `mdsWarning: String` — null when MDS embeds cleanly; non-null short message when the embedding is poor (first two eigenvalues < 50% of total absolute eigenvalue sum)
+00226: - `trialsPerValue: [{ valueKey, trials }]` — for eligibility check
+00227: 
+00228: **CircumplexAnalysisResult** (top-level query payload)
+00229: - `signature`
+00230: - `requestedModels: [CircumplexResult!]!` — one per requested modelId
+00231: - `eligibilityThreshold: Int` — echo of input
+00232:   - Note: `totalHiddenModels` is NOT a server-returned field. It is computed client-side using the full model roster from the existing `llmModels` query and the eligibility filter.
+00233: 
+00234: ---
+00235: 
+00236: ## Assumptions
+00237: 
+00238: - Classical (metric) MDS is sufficient; no need for non-metric MDS given the interpretability of correlation-based distance.
+00239: - Spearman ρ is preferred over Pearson r for the circular-distance test because the "theoretical distance" axis is ordinal (1-5 integer steps).
+00240: - P-values for Spearman ρ on 45 pairs will be computed via the standard t-approximation rather than a permutation test; this is a first-ship simplification. A note in the methodology section should acknowledge this.
+00241: - When `minTrialsPerValue` is very loose (e.g., 5), some models may still produce noisy correlations. The report does not visually flag "low-statistical-power" models beyond the threshold slider; future work could add per-cell confidence indicators.
+00242: - The "theoretical angle" for each value on the MDS reference circle is `i × 36°` for the i-th value in canonical order (0° through 324°).
+00243: 
+00244: ---
+00245: 
+00246: ## Residual Risks (acknowledged, not blocking)
+00247: 
+00248: The following risks were surfaced during adversarial review and are accepted as known limitations of the v1 report. The methodology section MUST name them explicitly so readers can assess the measure for themselves.
+00249: 
+00250: - **Verdict cutoffs are editorial, not psychometric.** The bands (`ρ ≤ −0.5` "Clear" etc.) are chosen for readability. The methodology section MUST state that researchers should rely on the raw ρ and p-value rather than the band, and that the cutoffs have no normative basis in the circumplex literature.
+00251: - **Pooling across pressure conditions can wash out condition-specific structure.** A model may exhibit circumplex structure at neutral pressure and break under heavy appeal (or vice versa). This report only tests the pooled structure. A follow-up "circumplex under pressure" analysis is explicitly out of scope (see Non-goals).
+00252: - **Spearman p-values assume independence across the 45 pairs, which does not hold.** Every profile shares the same 9 opponents with every other profile, so pairwise correlations are not truly independent. Reported p-values may look more certain than the data warrants. The methodology MUST acknowledge this and recommend treating significance as directional, not definitive. A permutation-based p-value is noted as future work.
+00253: - **Novel methodology carries interpretation risk.** The value-profile correlation approach is novel to LLM forced-choice behavior. Researchers unfamiliar with psychometric circumplex methods may misread the matrix as direct win-rate data. The methodology section MUST include the worked example and the "structural vs direct" framing; success depends on this being clearly explained.
+00254: - **Visualization library is not pinned in the spec.** The plan phase MUST select and document the charting library (e.g., recharts, visx, or d3) before implementation. Inline-SVG hand-rolled visualization is acceptable for both the matrix heatmap and the MDS scatter if the e

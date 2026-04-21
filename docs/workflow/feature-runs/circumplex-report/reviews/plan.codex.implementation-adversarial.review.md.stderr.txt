@@ -1,0 +1,2709 @@
+Reading additional input from stdin...
+OpenAI Codex v0.122.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dad33-67bd-7451-b62c-ad887f034aad
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: spec.md
+00001: # Spec: Circumplex Report
+00002: 
+00003: **Feature slug:** circumplex-report
+00004: **Created:** 2026-04-20
+00005: **Status:** draft
+00006: **Path:** Feature Factory (`docs/workflow/feature-runs/circumplex-report/`)
+00007: 
+00008: ---
+00009: 
+00010: ## Background
+00011: 
+00012: Schwartz's theory of basic human values claims that the 10 values form a **circumplex** — a circular motivational continuum where adjacent values are compatible and opposite values conflict. This factor structure was validated on decades of Likert-rating survey data (Schwartz 1992; Schwartz et al. 2012).
+00013: 
+00014: Our existing `Models / Matrix` and `Models / Consistency` pages describe *what* each LLM prioritizes and *how consistent* its choices are. Neither asks whether LLMs themselves exhibit the circumplex structure — whether human-centered Schwartz theory transfers to LLM forced-choice behavior.
+00015: 
+00016: An early cross-model test (N=11, population-level) returned Spearman ρ ≈ +0.01 between theoretical circular distance and empirical correlation. Population-level, the circumplex does **not** hold. Notably, Conformity and Tradition — adjacent Conservation values that humans correlate ~+0.5 on — correlated **−0.81** in our LLM population. This is plausibly an RLHF-shaped rupture of the Conservation factor.
+00017: 
+00018: That result was based on a tiny sample of models-as-respondents. The deeper question is whether **each individual model** exhibits the circumplex internally, computed from its own pairwise-preference behavior. That is the question this report answers.
+00019: 
+00020: This spec adds a third report under the `Models` tab, named **Circumplex**, that lets a researcher pick one or more eligible models and see, for each, whether the model's pairwise choices form a circumplex.
+00021: 
+00022: ---
+00023: 
+00024: ## Discovery: Assumptions Carried In
+00025: 
+00026: Three discovery questions were asked and answered:
+00027: 
+00028: 1. **Correlation unit: Option A (value-profile correlation).** For each value V, its "profile" is the vector of V's win rates against each of the other 9 values. The 10×10 similarity matrix is the Pearson correlation of these profiles across values. This measures *structural similarity* — do two values have similar "enemies and friends" across the rest of the value space — which is the methodologically correct test for circumplex structure. The alternative (direct dominance, Option B) answers a different question (head-to-head matchup) and is not suitable for a circumplex test.
+00029: 
+00030: 2. **Data extraction: pool across all pressure conditions.** Our data has a 5×5 pressure grid per value pair (~25 conditions × ~3 trials each ≈ 75 trials per pair). For the circumplex test, pool all trials across all conditions. The symmetric grid causes pressure-asymmetry effects to cancel on average, and pooling gives ~75 trials per pair for stable correlations. A separate "circumplex under pressure" analysis (diagonal-only / equal-pressure) is deliberately **deferred** as follow-up.
+00031: 
+00032: 3. **Verdict format: show both the numeric statistic and a cutoff band (Option C).** Display the raw Spearman ρ to 2 decimal places, its p-value to 3 decimal places, and a plain-language label based on fixed cutoffs (`ρ ≤ −0.5` → "Clear"; `−0.5 < ρ ≤ −0.2` → "Partial"; `ρ > −0.2` → "Not evident"). Power-users read the numbers; casual readers read the label. The verdict band is removable later if it proves unhelpful.
+00033: 
+00034: Additional assumptions carried in:
+00035: 
+00036: 4. **Nav placement:** `Models` dropdown → `Circumplex`, alongside existing `Matrix` and `Consistency` items. Pattern matches the existing Models-tab nav convention.
+00037: 
+00038: 5. **Signature scope:** single signature at a time (default `vnewtd`), honored via `?signature=...` URL parameter; signature dropdown reuses the pattern from Consistency.
+00039: 
+00040: 6. **Eligibility filter:** a model qualifies if it has at least **N trials per Schwartz value** (default N = 5, UI-configurable), pooled across all pairs and conditions, for the selected signature. At our ~75-trials-per-pair × 9-pairs-per-value baseline, N=5 is effectively a "has-any-data" filter; it admits all production models with basic coverage. The threshold exists to gracefully handle partially-covered models rather than to aggressively prune.
+00041: 
+00042: 7. **Data scope:** same 11-model production roster, 4 domains, `vnewtd` signature. No new data collection. Resolver reads from the already-populated aggregate analysis pipeline.
+00043: 
+00044: 8. **Primary audiences:** AAPOR survey methodologists (response to the "you didn't validate factor structure" critique), moral-psychology researchers (novel empirical result on LLM value structure), and AI-alignment researchers (RLHF-shaping evidence). **Secondary:** ACM reviewers.
+00045: 
+00046: 9. **Methodology explanation is required on-page.** Option A is a novel application to LLM forced-choice behavior, and the
+
+... [narrowed review slice: middle omitted] ...
+
+eligible at the current threshold on reload, it is dropped silently and a note logs the drop.
+00208: 
+00209: ---
+00210: 
+00211: ## Key Entities
+00212: 
+00213: **CircumplexResult** (per model, per signature)
+00214: - `modelId`, `modelLabel`, `providerName` — `providerName` sourced from `LlmModel.providerName` upstream
+00215: - `signature`
+00216: - `valueOrder: [ValueKey!]` — canonical circular order used
+00217: - `profileCorrelationMatrix: [[Float!]!]!` — 10×10, aligned to valueOrder. Cells with insufficient determinate pair support return `null` instead of a spurious value
+00218: - `pairTrialCounts: [[Int!]!]!` — 10×10, aligned to valueOrder. Supports the per-pair coverage flagging required by FR-011b
+00219: - `excludedValues: [ValueKey!]` — values excluded from profile correlation / MDS due to insufficient pair coverage
+00220: - `spearmanRho: Float` — circular-distance vs correlation, nullable if too few determinate pairs remain
+00221: - `spearmanP: Float` — nullable for the same reason
+00222: - `verdictBand: "clear" | "partial" | "not_evident" | "insufficient_data"`
+00223: - `mds2d: [{ valueKey, x, y, theoreticalAngleDeg }]` — excluded values omitted
+00224: - `mdsStress: Float` — goodness-of-fit metric for the 2D projection
+00225: - `mdsWarning: String` — null when MDS embeds cleanly; non-null short message when the embedding is poor (first two eigenvalues < 50% of total absolute eigenvalue sum)
+00226: - `trialsPerValue: [{ valueKey, trials }]` — for eligibility check
+00227: 
+00228: **CircumplexAnalysisResult** (top-level query payload)
+00229: - `signature`
+00230: - `requestedModels: [CircumplexResult!]!` — one per requested modelId
+00231: - `eligibilityThreshold: Int` — echo of input
+00232:   - Note: `totalHiddenModels` is NOT a server-returned field. It is computed client-side using the full model roster from the existing `llmModels` query and the eligibility filter.
+00233: 
+00234: ---
+00235: 
+00236: ## Assumptions
+00237: 
+00238: - Classical (metric) MDS is sufficient; no need for non-metric MDS given the interpretability of correlation-based distance.
+00239: - Spearman ρ is preferred over Pearson r for the circular-distance test because the "theoretical distance" axis is ordinal (1-5 integer steps).
+00240: - P-values for Spearman ρ on 45 pairs will be computed via the standard t-approximation rather than a permutation test; this is a first-ship simplification. A note in the methodology section should acknowledge this.
+00241: - When `minTrialsPerValue` is very loose (e.g., 5), some models may still produce noisy correlations. The report does not visually flag "low-statistical-power" models beyond the threshold slider; future work could add per-cell confidence indicators.
+00242: - The "theoretical angle" for each value on the MDS reference circle is `i × 36°` for the i-th value in canonical order (0° through 324°).
+00243: 
+00244: ---
+00245: 
+00246: ## Residual Risks (acknowledged, not blocking)
+00247: 
+00248: The following risks were surfaced during adversarial review and are accepted as known limitations of the v1 report. The methodology section MUST name them explicitly so readers can assess the measure for themselves.
+00249: 
+00250: - **Verdict cutoffs are editorial, not psychometric.** The bands (`ρ ≤ −0.5` "Clear" etc.) are chosen for readability. The methodology section MUST state that researchers should rely on the raw ρ and p-value rather than the band, and that the cutoffs have no normative basis in the circumplex literature.
+00251: - **Pooling across pressure conditions can wash out condition-specific structure.** A model may exhibit circumplex structure at neutral pressure and break under heavy appeal (or vice versa). This report only tests the pooled structure. A follow-up "circumplex under pressure" analysis is explicitly out of scope (see Non-goals).
+00252: - **Spearman p-values assume independence across the 45 pairs, which does not hold.** Every profile shares the same 9 opponents with every other profile, so pairwise correlations are not truly independent. Reported p-values may look more certain than the data warrants. The methodology MUST acknowledge this and recommend treating significance as directional, not definitive. A permutation-based p-value is noted as future work.
+00253: - **Novel methodology carries interpretation risk.** The value-profile correlation approach is novel to LLM forced-choice behavior. Researchers unfamiliar with psychometric circumplex methods may misread the matrix as direct win-rate data. The methodology section MUST include the worked example and the "structural vs direct" framing; success depends on this being clearly explained.
+00254: - **Visualization library is not pinned in the spec.** The plan phase MUST select and document the charting library (e.g., recharts, visx, or d3) before implementation. Inline-SVG hand-rolled visualization is acceptable for both the matrix heatmap and the MDS scatter if the e
+
+Context: NavTabs.tsx
+00001: import { type FocusEvent, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
+00002: import { NavLink, useLocation } from 'react-router-dom';
+00003: import { Activity, Archive, ChevronDown, ChevronRight, Cpu, FolderTree, Library, Settings } from 'lucide-react';
+00004: import { Button } from '../ui/Button';
+00005: import { useClickOutside } from '../../hooks/useClickOutside';
+00006: 
+00007: const utilityTabs: { name: string; path: string; icon: React.ComponentType<{ className?: string }>; aliases?: string[] }[] = [
+00008:   { name: 'Status', path: '/status', icon: Activity, aliases: ['/domains/status'] },
+00009: ];
+00010: 
+00011: type MenuLinkItem = {
+00012:   name: string;
+00013:   path: string;
+00014:   aliases?: string[];
+00015: };
+00016: 
+00017: type MenuGroupItem = {
+00018:   name: string;
+00019:   children: MenuLinkItem[];
+00020: };
+00021: 
+00022: type MenuItem = MenuLinkItem | MenuGroupItem;
+00023: 
+00024: const vignettesMenuItems: MenuItem[] = [
+00025:   { name: 'Vignette Library', path: '/definitions' },
+00026:   { name: 'Runs', path: '/runs' },
+00027:   { name: 'Analysis', path: '/analysis' },
+00028: ];
+00029: 
+00030: const domainMenuItems: MenuItem[] = [
+00031:   { name: 'Overview', path: '/domains' },
+00032:   { name: 'Domain Analysis', path: '/domains/analysis' },
+00033:   { name: 'Manage Domains', path: '/domains/manage' },
+00034: ];
+00035: 
+00036: const modelsMenuItems: MenuItem[] = [
+00037:   { name: 'Matrix', path: '/models' },
+00038:   { name: 'Consistency', path: '/models/consistency' },
+00039: ];
+00040: 
+00041: const archiveMenuItems: MenuItem[] = [
+00042:   { name: 'Overview', path: '/archive', aliases: [] as string[] },
+00043:   { name: 'Legacy Survey Work', path: '/archive/surveys' },
+00044:   { name: 'Legacy Survey Results', path: '/archive/survey-results' },
+00045: ];
+00046: 
+00047: const settingsMenuItems: MenuItem[] = [
+00048:   {
+00049:     name: 'Research Setup',
+00050:     children: [
+00051:       { name: 'Preambles', path: '/preambles' },
+00052:       { name: 'Level Presets', path: '/level-presets' },
+00053:     ],
+00054:   },
+00055:   { name: 'Account', path: '/settings/account' },
+00056:   { name: 'System Health', path: '/settings/system-health' },
+00057:   { name: 'LLM Models', path: '/settings/models' },
+00058:   { name: 'Infrastructure', path: '/settings/infrastructure' },
+00059:   { name: 'API Keys', path: '/settings/api-keys' },
+00060: ];
+00061: 
+00062: function isMenuGroupItem(item: MenuItem): item is MenuGroupItem {
+00063:   return 'children' in item;
+00064: }
+00065: 
+00066: export function NavTabs() {
+00067:   const location = useLocation();
+00068:   const [isVignettesMenuOpen, setIsVignettesMenuOpen] = useState(false);
+00069:   const [isDomainsMenuOpen, setIsDomainsMenuOpen] = useState(false);
+00070:   const [isModelsMenuOpen, setIsModelsMenuOpen] = useState(false);
+00071:   const [isArchiveMenuOpen, setIsArchiveMenuOpen] = useState(false);
+00072:   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
+00073:   const vignettesMenuRef = useRef<HTMLDivElement>(null);
+00074:   const domainMenuRef = useRef<HTMLDivElement>(null);
+00075:   const modelsMenuRef = useRef<HTMLDivElement>(null);
+00076:   const archiveMenuRef = useRef<HTMLDivElement>(null);
+00077:   const settingsMenuRef = useRef<HTMLDivElement>(null);
+00078: 
+00079:   const isPathActive = useCallback((path: string) => (
+00080:     location.pathname === path || location.pathname.startsWith(`${path}/`)
+00081:   ), [location.pathname]);
+00082: 
+00083:   const isTabActive = useCallback((tabPath: string, aliases: string[] = []) => (
+00084:     isPathActive(tabPath) || aliases.some((alias) => isPathActive(alias))
+00085:   ), [isPathActive]);
+00086: 
+00087:   const isMenuItemActive = useCallback((item: MenuItem) => (
+00088:     isMenuGroupItem(item)
+00089:       ? item.children.some((child) => isTabActive(child.path, child.aliases ?? []))
+00090:       : isTabActive(item.path, item.aliases ?? [])
+00091:   ), [isTabActive]);
+00092: 
+00093:   const isVignettesActive = vignettesMenuItems.some((item) => isMenuItemActive(item));
+00094:   const isDomainsActive = domainMenuItems.some((item) => isMenuItemActive(item));
+00095:   const isModelsActive = modelsMenuItems.some((item) => isMenuItemActive(item));
+00096:   const isArchiveActive = archiveMenuItems.some((item) => isMenuItemActive(item));
+00097:   const isSettingsActive = settingsMenuItems.some((item) => isMenuItemActive(item));
+00098: 
+00099:   useEffect(() => {
+00100:     setIsVignettesMenuOpen(false);
+00101:     setIsDomainsMenuOpen(false);
+00102:     setIsModelsMenuOpen(false);
+00103:     setIsArchiveMenuOpen(false);
+00104:     setIsSettingsMenuOpen(false);
+00105:   }, [location.pathname, isMenuItemActive]);
+00106: 
+00107:   useClickOutside(vignettesMenuRef, () => {
+00108:     if (isVignettesMenuOpen) setIsVignettesMenuOpen(false);
+00109:   }, isVignettesMenuOpen);
+00110:   useClickOutside(domainMenuRef, () => {
+00111:     if
+
+... [narrowed review slice: middle omitted] ...
+
+/Button>
+00179:         </div>
+00180:         <div className={`absolute left-0 top-full z-50 min-w-[200px] pt-1 transition-all duration-150 ${isOpen ? 'opacity-100 visible pointer-events-auto' : 'opacity-0 invisible pointer-events-none'}`}>
+00181:           <div className="rounded-md border border-gray-700 bg-[#1A1A1A] shadow-lg py-1">
+00182:             {items.map((item) => {
+00183:               if (isMenuGroupItem(item)) {
+00184:                 return (
+00185:                   <div key={item.name} className="relative border-t border-gray-800/80 mt-1 pt-1 group/submenu">
+00186:                     <div
+00187:                       className={`flex w-full items-center justify-between px-3 py-2 text-sm cursor-default select-none ${isMenuItemActive(item) ? 'bg-teal-600/20 text-teal-300' : 'text-white/80 group-hover/submenu:bg-gray-800 group-hover/submenu:text-white'}`}
+00188:                     >
+00189:                       <span>{item.name}</span>
+00190:                       <ChevronRight className="w-4 h-4" />
+00191:                     </div>
+00192:                     <div className="absolute left-full top-0 z-50 min-w-[180px] pl-1 opacity-0 invisible pointer-events-none group-hover/submenu:opacity-100 group-hover/submenu:visible group-hover/submenu:pointer-events-auto transition-all duration-150">
+00193:                       <div className="rounded-md border border-gray-700 bg-[#1A1A1A] shadow-lg py-1">
+00194:                         {item.children.map((child) => {
+00195:                           const childActive = isTabActive(child.path, child.aliases ?? []);
+00196:                           return (
+00197:                             <NavLink
+00198:                               key={child.path}
+00199:                               to={child.path}
+00200:                               className={`block px-3 py-2 text-sm ${childActive ? 'bg-teal-600/20 text-teal-300' : 'text-white/70 hover:bg-gray-800 hover:text-white'}`}
+00201:                             >
+00202:                               {child.name}
+00203:                             </NavLink>
+00204:                           );
+00205:                         })}
+00206:                       </div>
+00207:                     </div>
+00208:                   </div>
+00209:                 );
+00210:               }
+00211: 
+00212:               const itemActive = isTabActive(item.path, item.aliases ?? []);
+00213:               return (
+00214:                 <NavLink
+00215:                   key={item.path}
+00216:                   to={item.path}
+00217:                   className={`block px-3 py-2 text-sm ${itemActive ? 'bg-teal-600/20 text-teal-300' : 'text-white/80 hover:bg-gray-800 hover:text-white'}`}
+00218:                 >
+00219:                   {item.name}
+00220:                 </NavLink>
+00221:               );
+00222:             })}
+00223:           </div>
+00224:         </div>
+00225:       </div>
+00226:     );
+00227:   };
+00228: 
+00229:   return (
+00230:     <nav className="hidden sm:block bg-[#1A1A1A] border-t border-gray-800 sticky top-14 z-10">
+00231:       <div className="max-w-7xl mx-auto px-4">
+00232:         <div className="flex gap-1">
+00233:           {renderMenu(modelsMenuRef, 'Models', '/models', Cpu, modelsMenuItems, isModelsActive, isModelsMenuOpen, setIsModelsMenuOpen)}
+00234:           {renderMenu(domainMenuRef, 'Domains', '/domains', FolderTree, domainMenuItems, isDomainsActive, isDomainsMenuOpen, setIsDomainsMenuOpen)}
+00235:           {renderMenu(vignettesMenuRef, 'Vignettes', '/definitions', Library, vignettesMenuItems, isVignettesActive, isVignettesMenuOpen, setIsVignettesMenuOpen)}
+00236:           {renderMenu(archiveMenuRef, 'Archive', '/archive', Archive, archiveMenuItems, isArchiveActive, isArchiveMenuOpen, setIsArchiveMenuOpen)}
+00237:           {renderMenu(settingsMenuRef, 'Settings', '/settings/account', Settings, settingsMenuItems, isSettingsActive, isSettingsMenuOpen, setIsSettingsMenuOpen)}
+00238: 
+00239:           {utilityTabs.map((tab) => {
+00240:             const Icon = tab.icon;
+00241:             const isActive = isTabActive(tab.path) ||
+00242:               (tab.aliases?.some((alias) => location.pathname.includes(alias)) ?? false);
+00243: 
+00244:             return (
+00245:               <NavLink
+00246:                 key={tab.path}
+00247:                 to={tab.path}
+00248:                 className={`flex items-center gap-2 px-3 py-3 min-h-[44px] text-sm font-medium transition-colors border-b-2 ${isActive
+00249:                   ? 'text-white border-teal-500'
+00250:                   : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
+00251:                 }`}
+00252:               >
+00253:                 <Icon className="w-4 h-4" />
+00254:                 <span className="hidden sm:inline">{tab.name}</span>
+00255:               </NavLink>
+00256:             );
+00257:           })}
+00258:         </div>
+00259: 
+
+Context: App.tsx
+00001: // NOTE: The term "Vignette" is used throughout the UI for user-friendliness.
+00002: // However, the underlying codebase, API, and database still use the term "Definition".
+00003: import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+00004: import { Provider } from 'urql';
+00005: import { AuthProvider } from './auth/context';
+00006: import { ProtectedRoute } from './components/ProtectedRoute';
+00007: import { Layout } from './components/layout/Layout';
+00008: import { Login } from './pages/Login';
+00009: import { Dashboard } from './pages/Dashboard';
+00010: import { ArchiveHome } from './pages/ArchiveHome';
+00011: import { Definitions } from './pages/Definitions';
+00012: import { Domains } from './pages/Domains';
+00013: import { DomainsManage } from './pages/DomainsManage';
+00014: import { DomainStartBatches } from './pages/DomainStartBatches';
+00015: import { DomainStatus } from './pages/DomainStatus';
+00016: import { DomainAnalysis } from './pages/DomainAnalysis';
+00017: import { DomainCoverage } from './pages/DomainCoverage';
+00018: import { DomainAnalysisValueDetail } from './pages/DomainAnalysisValueDetail';
+00019: import { Models } from './pages/Models';
+00020: import { ModelsConsistency } from './pages/ModelsConsistency';
+00021: import { DefinitionDetail } from './pages/DefinitionDetail';
+00022: import { StartPairedBatchPage } from './pages/DefinitionDetail/StartPairedBatchPage';
+00023: import { Runs } from './pages/Runs';
+00024: import { RunDetail } from './pages/RunDetail';
+00025: import { Analysis } from './pages/Analysis';
+00026: import { AnalysisDetail } from './pages/AnalysisDetail';
+00027: import { AnalysisConditionDetail } from './pages/AnalysisConditionDetail';
+00028: import { AnalysisTranscripts } from './pages/AnalysisTranscripts';
+00029: import { Survey } from './pages/Survey';
+00030: import { SurveyResults } from './pages/SurveyResults';
+00031: import { SettingsAccount } from './pages/SettingsAccount';
+00032: import { SettingsSystemHealth } from './pages/SettingsSystemHealth';
+00033: import { SettingsModels } from './pages/SettingsModels';
+00034: import { SettingsInfrastructure } from './pages/SettingsInfrastructure';
+00035: import { SettingsApiKeys } from './pages/SettingsApiKeys';
+00036: import { Preambles } from './pages/Preambles';
+00037: import { LevelPresets } from './pages/LevelPresets';
+00038: import { DomainContexts } from './pages/DomainContexts';
+00039: import { ValueStatements } from './pages/ValueStatements';
+00040: import { PairedVignetteNew } from './pages/PairedVignetteNew';
+00041: import { StartRedirect } from './pages/StartRedirect';
+00042: import { StatusRedirect } from './pages/StatusRedirect';
+00043: import { NotFound } from './pages/NotFound';
+00044: import { client } from './api/client';
+00045: import { useHorizontalScrollOnWheel } from './hooks/useHorizontalScrollOnWheel';
+00046: 
+00047: // Protected layout wrapper
+00048: function ProtectedLayout({ children, fullWidth = false }: { children: React.ReactNode; fullWidth?: boolean }) {
+00049:   return (
+00050:     <ProtectedRoute>
+00051:       <Layout fullWidth={fullWidth}>{children}</Layout>
+00052:     </ProtectedRoute>
+00053:   );
+00054: }
+00055: 
+00056: 
+00057: function App() {
+00058:   useHorizontalScrollOnWheel();
+00059: 
+00060:   return (
+00061:     <BrowserRouter>
+00062:       <Provider value={client}>
+00063:         <AuthProvider>
+00064:           <Routes>
+00065:             {/* Public routes */}
+00066:             <Route path="/login" element={<Login />} />
+00067: 
+00068:             {/* Protected routes with layout */}
+00069:             <Route
+00070:               path="/"
+00071:               element={
+00072:                 <ProtectedLayout>
+00073:                   <Dashboard />
+00074:                 </ProtectedLayout>
+00075:               }
+00076:             />
+00077:             <Route
+00078:               path="/status"
+00079:               element={
+00080:                 <ProtectedLayout>
+00081:                   <StatusRedirect />
+00082:                 </ProtectedLayout>
+00083:               }
+00084:             />
+00085:             <Route
+00086:               path="/definitions"
+00087:               element={
+00088:                 <ProtectedLayout>
+00089:                   <Definitions />
+00090:                 </ProtectedLayout>
+00091:               }
+00092:             />
+00093:             <Route
+00094:               path="/domains"
+00095:               element={
+00096:                 <ProtectedLayout>
+00097:                   <Domains />
+00098:                 </ProtectedLayout>
+00099:               }
+00100:             />
+00101:             <Route
+00102:               path="/domains/manage"
+00103:               element={
+00104:                 <ProtectedLayout>
+00105:                   <DomainsManage />
+00106:                 </ProtectedLayout>
+00107:               }
+00108:             />
+00109:             <Route
+00110:               path="/archive"
+00111:
+
+... [narrowed review slice: middle omitted] ...
+
+<Route
+00214:               path="/runs/:id"
+00215:               element={
+00216:                 <ProtectedLayout>
+00217:                   <RunDetail />
+00218:                 </ProtectedLayout>
+00219:               }
+00220:             />
+00221:             <Route
+00222:               path="/analysis"
+00223:               element={
+00224:                 <ProtectedLayout>
+00225:                   <Analysis />
+00226:                 </ProtectedLayout>
+00227:               }
+00228:             />
+00229:             <Route
+00230:               path="/analysis/:id"
+00231:               element={
+00232:                 <ProtectedLayout>
+00233:                   <AnalysisDetail />
+00234:                 </ProtectedLayout>
+00235:               }
+00236:             />
+00237:             <Route
+00238:               path="/analysis/:id/transcripts"
+00239:               element={
+00240:                 <ProtectedLayout fullWidth>
+00241:                   <AnalysisTranscripts />
+00242:                 </ProtectedLayout>
+00243:               }
+00244:             />
+00245:             <Route
+00246:               path="/analysis/:id/conditions/:conditionKey"
+00247:               element={
+00248:                 <ProtectedLayout fullWidth>
+00249:                   <AnalysisConditionDetail />
+00250:                 </ProtectedLayout>
+00251:               }
+00252:             />
+00253:             <Route
+00254:               path="/archive/surveys"
+00255:               element={
+00256:                 <ProtectedLayout>
+00257:                   <Survey />
+00258:                 </ProtectedLayout>
+00259:               }
+00260:             />
+00261:             <Route
+00262:               path="/archive/survey-results"
+00263:               element={
+00264:                 <ProtectedLayout>
+00265:                   <SurveyResults />
+00266:                 </ProtectedLayout>
+00267:               }
+00268:             />
+00269:             <Route path="/settings" element={<Navigate to="/settings/account" replace />} />
+00270:             <Route
+00271:               path="/settings/account"
+00272:               element={
+00273:                 <ProtectedLayout>
+00274:                   <SettingsAccount />
+00275:                 </ProtectedLayout>
+00276:               }
+00277:             />
+00278:             <Route
+00279:               path="/settings/system-health"
+00280:               element={
+00281:                 <ProtectedLayout>
+00282:                   <SettingsSystemHealth />
+00283:                 </ProtectedLayout>
+00284:               }
+00285:             />
+00286:             <Route
+00287:               path="/settings/models"
+00288:               element={
+00289:                 <ProtectedLayout>
+00290:                   <SettingsModels />
+00291:                 </ProtectedLayout>
+00292:               }
+00293:             />
+00294:             <Route
+00295:               path="/settings/infrastructure"
+00296:               element={
+00297:                 <ProtectedLayout>
+00298:                   <SettingsInfrastructure />
+00299:                 </ProtectedLayout>
+00300:               }
+00301:             />
+00302:             <Route
+00303:               path="/settings/api-keys"
+00304:               element={
+00305:                 <ProtectedLayout>
+00306:                   <SettingsApiKeys />
+00307:                 </ProtectedLayout>
+00308:               }
+00309:             />
+00310:             <Route
+00311:               path="/preambles"
+00312:               element={
+00313:                 <ProtectedLayout>
+00314:                   <Preambles />
+00315:                 </ProtectedLayout>
+00316:               }
+00317:             />
+00318:             <Route
+00319:               path="/level-presets"
+00320:               element={
+00321:                 <ProtectedLayout>
+00322:                   <LevelPresets />
+00323:                 </ProtectedLayout>
+00324:               }
+00325:             />
+00326:             <Route
+00327:               path="/domain-contexts"
+00328:               element={
+00329:                 <ProtectedLayout>
+00330:                   <DomainContexts />
+00331:                 </ProtectedLayout>
+00332:               }
+00333:             />
+00334:             <Route
+00335:               path="/value-statements"
+00336:               element={
+00337:                 <ProtectedLayout>
+00338:                   <ValueStatements />
+00339:                 </ProtectedLayout>
+00340:               }
+00341:             />
+00342:             {['/paired/new', '/paired/:id/edit'].map((path) => (
+00343:               <Route key={path} path={path} element={<ProtectedLayout><PairedVignetteNew /></ProtectedLayout>} />
+00344:             ))}
+00345:             <Route path="*" element={<ProtectedLayout><NotFound /></ProtectedLayout>} />
+00346:           </Routes>
+00347:         </AuthProvider>
+00348:       </Provider>
+00349:     </BrowserRouter>
+00350: 
+
+Artifact: plan.md
+# Implementation Plan: Circumplex Report
+
+**Branch:** `claude/consistency-signature-dropdown` | **Date:** 2026-04-20
+**Spec:** `docs/workflow/feature-runs/circumplex-report/spec.md`
+
+## Summary
+
+Add a `/models/circumplex` page (third item under the Models dropdown, after Matrix and Consistency) that lets a researcher pick one or more LLM models with sufficient data and, for each, see a 10×10 value-profile correlation matrix, MDS scatter with theoretical-circle overlay, Spearman ρ/p-value, verdict band, and a collapsible methodology section. All statistics are computed server-side from pooled pairwise win rates; the client renders. No new DB tables.
+
+Four implementation slices, each under ~300 lines: (A) API — pairwise aggregation + circumplex stats + resolver + SDL; (B) web — types + routing + page skeleton + model picker; (C) web — correlation-matrix heatmap + MDS scatter; (D) web — methodology panel + error/empty states + canonical-order doc.
+
+## Technical Context
+
+| Aspect | Detail |
+|---|---|
+| Language | TypeScript (strict, no `any`) |
+| API framework | Pothos (code-first GraphQL) |
+| SDL snapshot | `cloud/apps/web/schema.graphql` — manually maintained |
+| Web framework | React + urql + Vite |
+| Codegen | `npm run codegen --workspace @valuerank/web` |
+| DB access | Prisma reads from existing `Transcript` + `AggregateAnalysis` tables — no new tables |
+| Testing | Vitest (API and web) |
+| File size limit | 400 lines / file (CI enforced) |
+| New DB tables | None |
+| Performance target | 11 models × 4 domains × ~75 trials/pair = ~30k transcripts/request; resolver completes in < 800 ms uncached |
+
+---
+
+## Architecture Decisions
+
+### Decision 1: Live-transcript aggregation in the resolver (no new materialized table)
+
+**Chosen:** The `circumplexAnalysis` resolver queries the `Transcript` table directly, filtered by `(modelId, signature)`, joins to `Scenario` to read the tested value pair and condition, and aggregates pairwise win rates + neutral counts in memory. No new Prisma table, no pipeline change.
+
+**Rationale:**
+- The existing `modelsAnalysis` aggregation uses equal-weighted domain summaries — not what circumplex needs (see spec FR-001 footnote).
+- The Consistency pipeline emits `reliabilitySummary.perPair` per analysis run, but that payload is keyed by the analysis's own value pair — it would need downstream stitching to cover all 45 value-pair cells. Not worth the pipeline churn for v1.
+- Live aggregation is ~30k rows per request at current data scale. Fits in memory. Single round-trip.
+- If performance regresses at ≥ 100k rows, add a `ModelPairwiseStats` materialized view in follow-up work. Tracked as risk; out of scope now.
+
+**Alternatives considered:**
+- New materialized view + pipeline emission — rejected for v1 (pipeline churn, rollout complexity).
+- Reuse `modelsAnalysis` with caveat — rejected because the domain-equal-weighting changes the correlations materially.
+
+### Decision 2: New `availableSignatures` global resolver (no domain scope)
+
+**Chosen:** Add `Query.availableSignatures: [AvailableSignature!]!` that returns the distinct set of signatures present across all aggregate-analysis runs, ordered by recency. The UI defaults to `vnewtd` when present; falls back to the most recent otherwise. The existing `domainAvailableSignatures` is untouched.
+
+**Rationale:**
+- `domainAvailableSignatures` requires a `domainId`; circumplex has no domain axis. Reusing it with a hardcoded domain would bias the list.
+- A global resolver is ~1 SQL query (distinct on the aggregate table) — negligible cost.
+- Gives other future Models-tab reports the same signature picker primitive.
+
+### Decision 3: URL state for model selection + methodology open/closed; no query-param pollution
+
+**Chosen:** `?models=claude-sonnet-4-5,gpt-5.1&signature=vnewtd&methodology=open&n=5`. Model IDs in comma-separated form; threshold as `n`; signature already in use on Consistency. Selection lives in the URL; the page treats the URL as source of truth and reconciles on change.
+
+**Rationale:**
+- Researcher-shareable URLs (primary audience constraint).
+- URL length: worst case 11 model IDs + query params ≈ 400 chars, well below browser/server limits. Not a concern at current scale.
+- Methodology expand/collapse is UI state but also a shareability concern (spec US-2 AC-3); URL wins for shareability.
+
+### Decision 4: Statistics module — pure functions in a new `circumplex/` service directory
+
+**Chosen:** `cloud/apps/api/src/services/circumplex/statistics.ts` (≤ 400 lines):
+
+```
+pearsonCorrelation(x, y)              → number | null      (null for zero-variance)
+valueProfileMatrix(pairwiseWinRates)  → number[10][10]     (10×10 symmetric; nulls where excluded)
+spearmanRankCorrelation(x, y)         → { rho, p }         (shares impl with Consistency's utility)
+circularDistance(i, j, k = 10)        → number             (min steps around the circle)
+circumplexFit(profileMatrix)          → { rho, p, verdict, determinatePairs }
+classicalMds2d(distanceMatrix)        → { coords: [[x,y]...], stress, warning | null }
+```
+
+All pure functions; worked-example unit tests cite textbook values. `spearmanRankCorrelation` may be copied from or re-exported from the Consistency `statistics.ts` if one exists — to be checked during wave A.
+
+### Decision 5: Visualization — inline SVG, no new chart library
+
+**Chosen:** Both the 10×10 correlation heatmap and the MDS scatter render as inline SVG using `d3-scale` for axis math (already a transitive dep in the web workspace — no new package install). No recharts, no visx, no Chart.js.
+
+**Rationale:**
+- `ConsistencyScatter.tsx` already ships inline-SVG dots/labels; style and motion conventions already exist.
+- Heatmap is trivial (10×10 rects); scatter is 10 dots + dotted-circle overlay — both well under 150 LoC each.
+- Avoids pulling in a charting lib for two small views.
+
+### Decision 6: 10-value canonical order encoded once in shared data
+
+**Chosen:** Add `SCHWARTZ_CIRCULAR_ORDER: readonly ValueKey[]` to `cloud/packages/shared/src/schwartz.ts` (new file) alongside a tiny helper `theoreticalAngleDeg(valueKey)`. Both the API resolver (for `valueOrder` in the payload) and the web (for axis labels, MDS reference circle) import from `@valuerank/shared`.
+
+**Rationale:**
+- Single source of truth; matches the spec requirement in FR-021 (dedicated ordering doc / export).
+- The doc `docs/schwartz-canonical-order.md` (spec FR-021) cites this module as the canonical encoding.
+
+### Decision 7: Methodology panel copy is static; no CMS or content pipeline
+
+**Chosen:** The methodology panel copy (plain-language explanation, Universalism/Benevolence worked example, Schwartz 2012 citation, novel-application caveat) is authored as a React component with static JSX. No Markdown rendering, no content-service abstraction.
+
+**Rationale:**
+- One page, one panel. Adding infrastructure for "content" is overkill.
+- Copy is product-owner-reviewed before ship; changes land via normal code review.
+
+---
+
+## Wave Breakdown
+
+Each wave is bounded by a `[CHECKPOINT]` in `tasks.md` and should change ≤ 300 lines.
+
+### Wave A — API: aggregation + statistics + resolver + SDL
+
+1. `cloud/apps/api/src/services/circumplex/statistics.ts` — pure functions per Decision 4.
+2. `cloud/apps/api/src/services/circumplex/aggregation.ts` — Prisma query builder + in-memory win-rate reducer. Live-transcript path per Decision 1.
+3. `cloud/apps/api/src/graphql/queries/circumplex-analysis.ts` — Pothos resolver exposing `circumplexAnalysis(modelIds, signature, minTrialsPerValue)`. Imports stats + aggregation. Uses existing `autoImportDir` registration.
+4. `cloud/apps/api/src/graphql/queries/available-signatures.ts` — Pothos resolver for Decision 2.
+5. `cloud/apps/web/schema.graphql` — regenerated; SDL snapshot commit.
+6. `cloud/packages/shared/src/schwartz.ts` — canonical order + angle helper.
+7. Unit tests: `circumplex/statistics.test.ts` (worked examples), `circumplex/aggregation.test.ts` (fixture transcripts → expected matrix).
+
+**Verification:** `npm run lint --workspace @valuerank/api && npm run test --workspace @valuerank/api && npm run build --workspace @valuerank/api`. Manual GraphQL query against local API returns a populated matrix for `claude-sonnet-4-5`.
+
+**[CHECKPOINT]**
+
+### Wave B — Web: types + routing + page skeleton + model picker
+
+1. `cloud/apps/web/src/api/operations/circumplex.ts` — typed query, generated from SDL.
+2. `cloud/apps/web/src/pages/ModelsCircumplex.tsx` — page component; reads URL params, renders Loading/ErrorMessage/empty states, renders the model picker.
+3. `cloud/apps/web/src/components/models/CircumplexModelPicker.tsx` — multi-select filtered by eligibility; uses `llmModels` query for the full roster.
+4. `cloud/apps/web/src/components/layout/NavTabs.tsx` — add "Circumplex" to the Models dropdown.
+5. `cloud/apps/web/src/App.tsx` (or router equivalent) — register `/models/circumplex`.
+6. `cloud/apps/web/src/hooks/useAvailableSignatures.ts` — small hook wrapping Decision 2's query.
+
+**Verification:** `npm run lint --workspace @valuerank/web && npm run test --workspace @valuerank/web && npm run build --workspace @valuerank/web`. Navigate to `/models/circumplex` on local dev server; picker populates; nothing else renders yet (selection is empty).
+
+**[CHECKPOINT]**
+
+### Wave C — Web: correlation-matrix heatmap + MDS scatter + verdict
+
+1. `cloud/apps/web/src/components/models/CircumplexMatrix.tsx` — 10×10 SVG heatmap per Decision 5.
+2. `cloud/apps/web/src/components/models/CircumplexMdsScatter.tsx` — SVG scatter + dotted theoretical circle per Decision 5.
+3. `cloud/apps/web/src/components/models/CircumplexVerdictPanel.tsx` — ρ / p / band label display per spec FR-018.
+4. `cloud/apps/web/src/components/models/CircumplexModelCard.tsx` — composes matrix + MDS + verdict + model label.
+5. Wire these into `ModelsCircumplex.tsx` so selecting a model renders the card.
+
+**Verification:** lint + test + build + manual: select one model, see matrix + MDS + verdict render correctly. Select multiple models, see grid layout.
+
+**[CHECKPOINT]**
+
+### Wave D — Web: methodology panel + docs + polish
+
+1. `cloud/apps/web/src/components/models/CircumplexMethodologyPanel.tsx` — collapsible; static copy per Decision 7.
+2. `cloud/apps/web/src/components/models/CircumplexThresholdControl.tsx` — slider / number input for `minTrialsPerValue`.
+3. `docs/schwartz-canonical-order.md` — per spec FR-021; cites `@valuerank/shared/schwartz` as source of truth.
+4. Transient notice for silently-dropped ineligible selections (FR-011a).
+5. URL-param handling for methodology open/closed (Decision 3).
+6. Final lint + build + manual smoke test.
+
+**Verification:** lint + test + build + preflight gate.
+
+**[CHECKPOINT]**
+
+---
+
+## Risks
+
+- **(HIGH) Live aggregation performance.** At ~30k transcripts per request we expect sub-second response, but we have not benchmarked. If wave A hits > 2s on local Postgres, add an early index on `(modelId, signature, scenarioId)` before proceeding. If still slow, fall back to a materialized-view approach (out of v1 scope).
+- **(MEDIUM) Label drift.** Decision 6 centralizes the canonical order, but if a future feature adds a value to ValueRank without updating `@valuerank/shared/schwartz`, the circumplex page will silently drop it. Mitigate: unit test in `shared/schwartz.test.ts` asserts `SCHWARTZ_CIRCULAR_ORDER.length === 10` and enumerates the expected keys.
+- **(MEDIUM) URL length.** Worst case ~400 chars with 11 selected models. Monitor; if users start selecting ≥ 20 models in practice, switch to sessionStorage for selection and URL for signature + threshold only.
+- **(LOW) Inline SVG ergonomics.** Custom SVG means no built-in tooltip primitives; we'll hand-roll hover handlers. If this becomes unwieldy in wave C, escape hatch is to add `@visx/tooltip` (small add).
+- **(LOW) MDS rotation non-determinism.** Classical MDS output can rotate/flip arbitrarily. Decision: anchor by rotating so Self-Direction's MDS position is at the top (theoretical 0°); flag if the rotation creates > 90° disagreement with theoretical order.
+
+---
+
+## Out of Scope (explicitly deferred)
+
+- Pooled / across-models circumplex test.
+- Cross-signature circumplex drift analysis.
+- Circumplex-under-pressure (diagonal-only) analysis.
+- Human-baseline overlay (needs external reference data).
+- Non-metric MDS alternative.
+- Materialized-view resolution of Decision 1's live-aggregation fallback.
+- Permutation-based Spearman p-value (t-approximation used per spec assumption).
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the artifact against the provided code paths and route/menu patterns first, then I’ll call out only the gaps that are actually supported by that context.
+codex
+I have enough to start checking the current implementation shape. I’m reading the existing models pages and GraphQL patterns so I can tell whether the plan leaves any real integration gaps versus just describing future work.
+exec
+/bin/zsh -lc "rg -n \"ModelsConsistency|models/consistency|availableSignatures|signature\" src cloud/apps/web/src cloud/apps/api/src -g '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ exited 2 in 0ms:
+rg: src: No such file or directory (os error 2)
+cloud/apps/api/src/services/domain.ts:59: * Resolve the run IDs for a domain scoped to a specific (or default) signature.
+cloud/apps/api/src/services/domain.ts:62: * Covers: domain lookup, latest-lineage definition selection, and signature-based run filtering.
+cloud/apps/api/src/services/domain.ts:67:  signature: string | null,
+cloud/apps/api/src/services/domain.ts:87:      resolvedSignature: signature,
+cloud/apps/api/src/services/domain.ts:97:    signature,
+cloud/apps/web/src/pages/AnalysisDetail.tsx:11:import { formatTrialSignature } from '@valuerank/shared/trial-signature';
+cloud/apps/web/src/pages/Models.tsx:31:  const [{ data: signatureData }] = useQuery<DomainAvailableSignaturesQueryResult, { domainId: string }>({
+cloud/apps/web/src/pages/Models.tsx:38:  const signatureOptions = useMemo(
+cloud/apps/web/src/pages/Models.tsx:39:    () => signatureData?.domainAvailableSignatures ?? [],
+cloud/apps/web/src/pages/Models.tsx:40:    [signatureData],
+cloud/apps/web/src/pages/Models.tsx:53:      signature: selectedSignature,
+cloud/apps/web/src/pages/Models.tsx:204:          {selectedDomainId != null && signatureOptions.length > 0 && (
+cloud/apps/web/src/pages/Models.tsx:208:                options={signatureOptions.map((o) => ({ value: o.signature, label: formatSignatureOptionLabel(o) }))}
+cloud/apps/web/src/pages/DomainAnalysis.tsx:44:  const [selectedSignature, setSelectedSignature] = useState<string>(searchParams.get('signature') ?? '');
+cloud/apps/web/src/pages/DomainAnalysis.tsx:51:  const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
+cloud/apps/web/src/pages/DomainAnalysis.tsx:60:  const signatureOptions = useMemo<DomainAvailableSignature[]>(() => {
+cloud/apps/web/src/pages/DomainAnalysis.tsx:61:    const options = signatureData?.domainAvailableSignatures ?? [];
+cloud/apps/web/src/pages/DomainAnalysis.tsx:69:  }, [signatureData]);
+cloud/apps/web/src/pages/DomainAnalysis.tsx:78:    if (signatureOptions.length === 0) { setSelectedSignature(''); return; }
+cloud/apps/web/src/pages/DomainAnalysis.tsx:79:    if (selectedSignature !== '' && signatureOptions.some((o) => o.signature === selectedSignature)) return;
+cloud/apps/web/src/pages/DomainAnalysis.tsx:80:    setSelectedSignature(signatureOptions[0]?.signature ?? '');
+cloud/apps/web/src/pages/DomainAnalysis.tsx:81:  }, [selectedSignature, signatureOptions]);
+cloud/apps/web/src/pages/DomainAnalysis.tsx:92:    if (searchParams.get('domainId') === selectedDomainId && (searchParams.get('signature') ?? '') === selectedSignature) return;
+cloud/apps/web/src/pages/DomainAnalysis.tsx:96:    if (selectedSignature === '') next.delete('signature');
+cloud/apps/web/src/pages/DomainAnalysis.tsx:97:    else next.set('signature', selectedSignature);
+cloud/apps/web/src/pages/DomainAnalysis.tsx:106:    variables: { domainId: selectedDomainId, scoreMethod: 'FULL_BT', signature: selectedSignature === '' ? undefined : selectedSignature },
+cloud/apps/web/src/pages/DomainAnalysis.tsx:124:      || message.includes('Unknown argument "signature"')
+cloud/apps/web/src/pages/DomainAnalysis.tsx:195:      signature: selectedSignature === '' ? undefined : selectedSignature,
+cloud/apps/web/src/pages/DomainAnalysis.tsx:212:      query.set('signature', selectedSignature);
+cloud/apps/web/src/pages/DomainAnalysis.tsx:252:      {(domainsError != null || signaturesError != null || error != null) && (
+cloud/apps/web/src/pages/DomainAnalysis.tsx:253:        <ErrorMessage message={`Failed to load domain analysis: ${(domainsError ?? signaturesError ?? error)?.message ?? 'Unknown error'}`} />
+cloud/apps/web/src/pages/DomainAnalysis.tsx:278:              disabled={signaturesLoading || signatureOptions.length === 0}
+cloud/apps/web/src/pages/DomainAnalysis.tsx:280:              {signatureOptions.length === 0 && <option value="">No signatures with completed runs</option>}
+cloud/apps/web/src/pages/DomainAnalysis.tsx:281:              {signatureOptions.map((opt) => (
+cloud/apps/web/src/pages/DomainAnalysis.tsx:282:                <option key={opt.signature} value={opt.signature}>{formatSignatureOptionLabel(opt)}</option>
+cloud/apps/web/src/pages/AnalysisDetailHeader.tsx:12:import { formatTrialSignature } from '@valuerank/shared/trial-signature';
+cloud/apps/web/src/pages/AnalysisDetailHeader.tsx:19:function getDisplaySignature(signature: string | null | undefined): string {
+cloud/apps/web/src/pages/AnalysisDetailHeader.tsx:20:  return signature && signature !== 'v?td' ? signature : 'Unknown Signature';
+cloud/apps/web/src/pages/AnalysisDetailHeader.tsx:65:    return { id: r.id, signature: formatTrialSignature(defVersion, temp) };
+cloud/apps/web/src/pages/AnalysisDetailHeader.tsx:66:  }).reduce<Array<{ id: string; signature: string; count: number }>>((acc, run) => {
+cloud/apps/web/src/pages/AnalysisDetailHeader.tsx:67:    const existing = acc.find((item) => item.signature === run.signature);
+cloud/apps/web/src/pages/AnalysisDetailHeader.tsx:79:  const selectedAggregateSignature = aggregateRuns.find((run) => run.id === runId)?.signature ?? currentSignature ?? 'v?td';
+cloud/apps/web/src/pages/AnalysisDetailHeader.tsx:120:                      const nextRun = aggregateRuns.find((run) => run.signature === e.target.value);
+cloud/apps/web/src/pages/AnalysisDetailHeader.tsx:134:                      <option key={r.signature} value={r.signature}>
+cloud/apps/web/src/pages/AnalysisDetailHeader.tsx:135:                        {getDisplaySignature(r.signature)}{r.count > 1 ? ` (${r.count} runs)` : ''}
+cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:35:  const signature = searchParams.get('signature');
+cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:40:  if (signature !== null && signature !== '') backParams.set('signature', signature);
+cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:48:    variables: { domainId, modelId, valueKey, scoreMethod, signature: signature ?? undefined },
+cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:72:      signature: signature ?? undefined,
+cloud/apps/web/src/pages/ModelsConsistency.tsx:14:  type ModelsConsistencyQueryResult,
+cloud/apps/web/src/pages/ModelsConsistency.tsx:15:  type ModelsConsistencyQueryVariables,
+cloud/apps/web/src/pages/ModelsConsistency.tsx:29:export function ModelsConsistency() {
+cloud/apps/web/src/pages/ModelsConsistency.tsx:33:  const signatureParam = searchParams.get('signature');
+cloud/apps/web/src/pages/ModelsConsistency.tsx:44:  const [{ data: signatureData, error: signatureError }] = useQuery<DomainAvailableSignaturesQueryResult, { domainId: string }>({
+cloud/apps/web/src/pages/ModelsConsistency.tsx:51:  const availableSignatures = useMemo(
+cloud/apps/web/src/pages/ModelsConsistency.tsx:52:    () => signatureData?.domainAvailableSignatures ?? [],
+cloud/apps/web/src/pages/ModelsConsistency.tsx:53:    [signatureData],
+cloud/apps/web/src/pages/ModelsConsistency.tsx:56:  const signatureOptions = useMemo(
+cloud/apps/web/src/pages/ModelsConsistency.tsx:57:    () => availableSignatures.map((option) => ({
+cloud/apps/web/src/pages/ModelsConsistency.tsx:58:      value: option.signature,
+cloud/apps/web/src/pages/ModelsConsistency.tsx:61:    [availableSignatures],
+cloud/apps/web/src/pages/ModelsConsistency.tsx:64:  // Default picker: honor ?signature URL param first. Otherwise prefer the
+cloud/apps/web/src/pages/ModelsConsistency.tsx:65:  // canonical "vnewest @ default temperature" signature if it is actually
+cloud/apps/web/src/pages/ModelsConsistency.tsx:66:  // offered for this domain; fall back to the first available signature;
+cloud/apps/web/src/pages/ModelsConsistency.tsx:68:  const signatureChoice = (() => {
+cloud/apps/web/src/pages/ModelsConsistency.tsx:69:    if (signatureParam != null) return signatureParam;
+cloud/apps/web/src/pages/ModelsConsistency.tsx:71:    if (signatureError != null) return DEFAULT_SIGNATURE;
+cloud/apps/web/src/pages/ModelsConsistency.tsx:72:    if (signatureData == null) return null;
+cloud/apps/web/src/pages/ModelsConsistency.tsx:73:    if (availableSignatures.some((option) => option.signature === DEFAULT_SIGNATURE)) {
+cloud/apps/web/src/pages/ModelsConsistency.tsx:76:    return availableSignatures[0]?.signature ?? DEFAULT_SIGNATURE;
+cloud/apps/web/src/pages/ModelsConsistency.tsx:78:  const selectedSignature = signatureChoice ?? DEFAULT_SIGNATURE;
+cloud/apps/web/src/pages/ModelsConsistency.tsx:81:    if (signatureParam != null || signatureChoice == null) {
+cloud/apps/web/src/pages/ModelsConsistency.tsx:85:      setSearchParams({ domainId: 'all', signature: signatureChoice }, { replace: true });
+cloud/apps/web/src/pages/ModelsConsistency.tsx:89:      setSearchParams({ domainId: urlDomainId, signature: signatureChoice }, { replace: true });
+cloud/apps/web/src/pages/ModelsConsistency.tsx:91:  }, [domainParam, hasDomainParam, setSearchParams, signatureChoice, signatureParam, urlDomainId]);
+cloud/apps/web/src/pages/ModelsConsistency.tsx:93:  const queryVariables = useMemo<ModelsConsistencyQueryVariables>(() => ({
+cloud/apps/web/src/pages/ModelsConsistency.tsx:97:    signature: selectedSignature,
+cloud/apps/web/src/pages/ModelsConsistency.tsx:100:  const [{ data, fetching, error }] = useQuery<ModelsConsistencyQueryResult, ModelsConsistencyQueryVariables>({
+cloud/apps/web/src/pages/ModelsConsistency.tsx:103:    pause: (!hasDomainParam && urlDomainId == null) || signatureChoice == null,
+cloud/apps/web/src/pages/ModelsConsistency.tsx:134:  const loading = (domainsLoading && domains.length === 0) || (signatureChoice == null) || (fetching && data == null);
+cloud/apps/web/src/pages/ModelsConsistency.tsx:141:      next.set('signature', signatureParam ?? DEFAULT_SIGNATURE);
+cloud/apps/web/src/pages/ModelsConsistency.tsx:144:      next.delete('signature');
+cloud/apps/web/src/pages/ModelsConsistency.tsx:159:    next.set('signature', value);
+cloud/apps/web/src/pages/ModelsConsistency.tsx:188:        signature={selectedSignature}
+cloud/apps/web/src/pages/ModelsConsistency.tsx:192:        signatureOptions={signatureOptions}
+cloud/apps/web/src/pages/ModelsConsistency.tsx:208:          {selectedModel && <ConsistencyDrill model={selectedModel} domainId={urlDomainId} signature={selectedSignature} />}
+cloud/apps/api/src/services/analysis/domain-analysis-cache.ts:159:  signature: string | null;
+cloud/apps/api/src/services/analysis/domain-analysis-cache.ts:163:    log.warn({ domainId: params.domainId, signature: params.signature, reason: params.reason }, 'Domain analysis refresh skipped because queue is unavailable');
+cloud/apps/api/src/services/analysis/domain-analysis-cache.ts:168:  const normalizedSignature = normalizeSignature(params.signature);
+cloud/apps/api/src/services/analysis/domain-analysis-cache.ts:173:      signature: params.signature,
+cloud/apps/api/src/services/analysis/domain-analysis-cache.ts:251:      signature: state.selectedSignature,
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-builder.ts:28:export function normalizeSignature(signature: string | null): string {
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-builder.ts:29:  return signature ?? DOMAIN_ANALYSIS_NONE_SIGNATURE;
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-builder.ts:52:  signature: string;
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-builder.ts:59:    signature: params.signature,
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-builder.ts:123:    signature: configSignature,
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-builder.ts:244:        signature: params.configSignature,
+cloud/apps/web/src/pages/RunDetail/RunDetail.tsx:10:import { formatTrialSignature } from '@valuerank/shared/trial-signature';
+cloud/apps/web/src/pages/AnalysisTranscriptHeader.tsx:21:  signature: string;
+cloud/apps/web/src/pages/AnalysisTranscriptHeader.tsx:102:                    const nextRun = aggregateRuns.find((candidate) => candidate.signature === e.target.value);
+cloud/apps/web/src/pages/AnalysisTranscriptHeader.tsx:109:                    <option key={candidate.signature} value={candidate.signature}>
+cloud/apps/web/src/pages/AnalysisTranscriptHeader.tsx:110:                      {getDisplaySignature(candidate.signature)}{candidate.count > 1 ? ` (${candidate.count} runs)` : ''}
+cloud/apps/api/src/queue/handlers/analyze-basic.ts:14:import { formatTrialSignature, formatVnewSignature } from '@valuerank/shared/trial-signature';
+cloud/apps/api/src/queue/handlers/analyze-basic.ts:268:                  signature: formatVnewSignature(temperature),
+cloud/apps/api/src/queue/handlers/analyze-basic.ts:273:                  signature: exactSignature,
+cloud/apps/api/src/services/consistency/orderEffectPairing.ts:27:function reverseSignature(signature: string): string {
+cloud/apps/api/src/services/consistency/orderEffectPairing.ts:28:  const separator = signature.indexOf('::');
+cloud/apps/api/src/services/consistency/orderEffectPairing.ts:30:    return signature === 'favor_first' ? 'favor_second' : signature === 'favor_second' ? 'favor_first' : signature;
+cloud/apps/api/src/services/consistency/orderEffectPairing.ts:33:  const left = signature.slice(0, separator);
+cloud/apps/api/src/services/consistency/orderEffectPairing.ts:34:  const right = signature.slice(separator + 2);
+cloud/apps/web/src/pages/RunDetail/RunDetailBanners.tsx:14:export function getDisplaySignature(signature: string): string {
+cloud/apps/web/src/pages/RunDetail/RunDetailBanners.tsx:15:  return signature !== 'v?td' ? signature : 'Unknown Signature';
+cloud/apps/api/src/queue/types.ts:70:  signature: string | null;
+cloud/apps/api/src/queue/handlers/refresh-domain-analysis-snapshot.ts:11:      const { domainId, signature, reason } = job.data;
+cloud/apps/api/src/queue/handlers/refresh-domain-analysis-snapshot.ts:12:      log.info({ jobId: job.id, domainId, signature, reason }, 'Refreshing domain analysis snapshot');
+cloud/apps/api/src/queue/handlers/refresh-domain-analysis-snapshot.ts:13:      await refreshDomainAnalysisSnapshot(domainId, signature);
+cloud/apps/api/src/queue/handlers/refresh-domain-analysis-snapshot.ts:14:      log.info({ jobId: job.id, domainId, signature, reason }, 'Domain analysis snapshot refreshed');
+cloud/apps/api/src/routes/export/domains.ts:17: * signature (or the default vnew signature if omitted).
+cloud/apps/api/src/routes/export/domains.ts:19: * Includes all models and all latest-vignette runs matching the signature.
+cloud/apps/api/src/routes/export/domains.ts:37:      const signature = typeof req.query.signature === 'string' && req.query.signature.trim() !== ''
+cloud/apps/api/src/routes/export/domains.ts:38:        ? req.query.signature.trim()
+cloud/apps/api/src/routes/export/domains.ts:42:        { userId: req.user.id, domainId, signature },
+cloud/apps/api/src/routes/export/domains.ts:46:      const resolved = await resolveDomainSignatureRunIds(domainId, signature);
+cloud/apps/api/src/graphql/queries/models-consistency.ts:5:import { ModelsConsistencyResultRef, type ModelsConsistencyShape } from '../types/models-consistency.js';
+cloud/apps/api/src/graphql/queries/models-consistency.ts:96:function buildRepeatabilitySummary(scenarios: ConsistencyParsedScenario[]): ModelsConsistencyShape['models'][number]['repeatability'] {
+cloud/apps/api/src/graphql/queries/models-consistency.ts:125:function buildCoherenceSummary(pairs: ConsistencyParsedPair[]): ModelsConsistencyShape['models'][number]['coherence'] {
+cloud/apps/api/src/graphql/queries/models-consistency.ts:184:    type: ModelsConsistencyResultRef,
+cloud/apps/api/src/graphql/queries/models-consistency.ts:189:      signature: t.arg.string({ required: true }),
+cloud/apps/api/src/graphql/queries/models-consistency.ts:195:      const signature = toString(args.signature);
+cloud/apps/api/src/graphql/queries/models-consistency.ts:235:      const scopedRuns = runs.filter((run) => runMatchesSignature(run.config, signature));
+cloud/apps/api/src/graphql/queries/models-consistency.ts:278:      const insufficient: ModelsConsistencyShape['insufficient'] = [];
+cloud/apps/api/src/graphql/queries/models-consistency.ts:279:      const outputModels: ModelsConsistencyShape['models'] = [];
+cloud/apps/api/src/services/export/csv.ts:205: * Format the trial signature from definition version and temperature.
+cloud/apps/web/src/api/export.ts:207: * Scoped to the given domainId and optional signature (defaults to the domain's
+cloud/apps/web/src/api/export.ts:208: * primary vnew signature when omitted).
+cloud/apps/web/src/api/export.ts:211: * @param signature - Optional signature filter (e.g. "vnewt0")
+cloud/apps/web/src/api/export.ts:216:  signature?: string,
+cloud/apps/web/src/api/export.ts:224:  const params = signature !== undefined && signature !== '' ? `?signature=${encodeURIComponent(signature)}` : '';
+cloud/apps/api/src/services/analysis/aggregate/aggregate-preparation.ts:295:  if (aggregateEligibility === 'eligible_same_signature_baseline') {
+cloud/apps/api/src/services/analysis/aggregate/aggregate-preparation.ts:300:        mode: 'same_signature_v1',
+cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts:167:        aggregateSemantics: 'same-signature-v1',
+cloud/apps/api/src/services/analysis/aggregate/contracts.ts:168:  | 'eligible_same_signature_baseline'
+cloud/apps/api/src/services/analysis/aggregate/contracts.ts:169:  | 'ineligible_mixed_signature'
+cloud/apps/api/src/services/analysis/aggregate/contracts.ts:223:    mode: 'same_signature_v1';
+cloud/apps/api/src/services/analysis/aggregate/aggregate-eligibility.ts:89:  let aggregateEligibility: AggregateMetadata['aggregateEligibility'] = 'eligible_same_signature_baseline';
+cloud/apps/api/src/services/analysis/aggregate/aggregate-eligibility.ts:101:      ? 'This aggregate does not cover the full baseline condition set for this signature.'
+cloud/apps/web/src/App.tsx:20:import { ModelsConsistency } from './pages/ModelsConsistency';
+cloud/apps/web/src/App.tsx:174:              path="/models/consistency"
+cloud/apps/web/src/App.tsx:177:                  <ModelsConsistency />
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.ts:224:          && aggregateEntries.every((entry) => entry.aggregateEligibility === 'eligible_same_signature_baseline'),
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts:113:  if (aggregateMetadata?.aggregateEligibility === 'eligible_same_signature_baseline') {
+cloud/apps/web/src/api/operations/domainAnalysis.graphql:1:query DomainAnalysis($domainId: ID!, $scoreMethod: String, $signature: String) {
+cloud/apps/web/src/api/operations/domainAnalysis.graphql:2:  domainAnalysis(domainId: $domainId, scoreMethod: $scoreMethod, signature: $signature) {
+cloud/apps/web/src/api/operations/domainAnalysis.graphql:75:mutation RefreshDomainAnalysis($domainId: ID!, $signature: String) {
+cloud/apps/web/src/api/operations/domainAnalysis.graphql:76:  refreshDomainAnalysis(domainId: $domainId, signature: $signature) {
+cloud/apps/web/src/api/operations/domainAnalysis.graphql:111:query DomainAnalysisValueDetail($domainId: ID!, $modelId: String!, $valueKey: String!, $scoreMethod: String, $signature: String) {
+cloud/apps/web/src/api/operations/domainAnalysis.graphql:112:  domainAnalysisValueDetail(domainId: $domainId, modelId: $modelId, valueKey: $valueKey, scoreMethod: $scoreMethod, signature: $signature) {
+cloud/apps/web/src/api/operations/domainAnalysis.graphql:164:  $signature: String
+cloud/apps/web/src/api/operations/domainAnalysis.graphql:173:    signature: $signature
+cloud/apps/web/src/api/operations/domainAnalysis.graphql:191:    signature
+cloud/apps/web/src/components/layout/NavTabs.tsx:38:  { name: 'Consistency', path: '/models/consistency' },
+cloud/apps/web/src/generated/graphql.ts:46:/** Eligibility and coverage metadata for same-signature aggregate analysis support */
+cloud/apps/web/src/generated/graphql.ts:761:  signature: Scalars['String']['output'];
+cloud/apps/web/src/generated/graphql.ts:866:  signature: Scalars['String']['output'];
+cloud/apps/web/src/generated/graphql.ts:1020:  signature: Scalars['String']['output'];
+cloud/apps/web/src/generated/graphql.ts:1397:export type ModelsConsistencyResult = {
+cloud/apps/web/src/generated/graphql.ts:1398:  __typename?: 'ModelsConsistencyResult';
+cloud/apps/web/src/generated/graphql.ts:1897:  signature?: InputMaybe<Scalars['String']['input']>;
+cloud/apps/web/src/generated/graphql.ts:2366:  modelsConsistency: ModelsConsistencyResult;
+cloud/apps/web/src/generated/graphql.ts:2567:  signature?: InputMaybe<Scalars['String']['input']>;
+cloud/apps/web/src/generated/graphql.ts:2577:  signature?: InputMaybe<Scalars['String']['input']>;
+cloud/apps/web/src/generated/graphql.ts:2586:  signature?: InputMaybe<Scalars['String']['input']>;
+cloud/apps/web/src/generated/graphql.ts:2668:  signature?: InputMaybe<Scalars['String']['input']>;
+cloud/apps/web/src/generated/graphql.ts:2754:  signature?: InputMaybe<Scalars['String']['input']>;
+cloud/apps/web/src/generated/graphql.ts:2758:export type QueryModelsConsistencyArgs = {
+cloud/apps/web/src/generated/graphql.ts:2762:  signature: Scalars['String']['input'];
+cloud/apps/web/src/generated/graphql.ts:3327:  /** Human-readable trial signature combining version and temperature (e.g. v3td, v2t0.7) */
+cloud/apps/web/src/generated/graphql.ts:3328:  signature?: Maybe<Scalars['String']['output']>;
+cloud/apps/web/src/generated/graphql.ts:3329:  /** Per-signature breakdown of trial counts for this definition */
+cloud/apps/web/src/generated/graphql.ts:3330:  signatureBreakdown: Array<TrialSignatureBreakdown>;
+cloud/apps/web/src/generated/graphql.ts:3335:/** Trial count grouped by signature/version/temperature for a definition */
+cloud/apps/web/src/generated/graphql.ts:3339:  signature: Scalars['String']['output'];
+cloud/apps/web/src/generated/graphql.ts:3630:export type DefinitionsQuery = { __typename?: 'Query', definitions: Array<{ __typename?: 'Definition', id: string, name: string, domainId?: string | null, parentId?: string | null, content: unknown, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, version: number, runCount: number, trialCount: number, domain?: { __typename?: 'Domain', id: string, name: string } | null, trialConfig: { __typename?: 'TrialConfigSummary', definitionVersion?: number | null, temperature?: number | null, signature?: string | null, isConsistent: boolean, message?: string | null, signatureBreakdown: Array<{ __typename?: 'TrialSignatureBreakdown', signature: string, definitionVersion?: number | null, temperature?: number | null, trialCount: number }> }, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, allTags: Array<{ __typename?: 'Tag', id: string, name: string }> }> };
+cloud/apps/web/src/generated/graphql.ts:3637:export type DefinitionQuery = { __typename?: 'Query', definition?: { __typename?: 'Definition', id: string, name: string, domainId?: string | null, domainContextId?: string | null, parentId?: string | null, content: unknown, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, version: number, runCount: number, trialCount: number, scenarioCount: number, preambleVersionId?: string | null, levelPresetVersionId?: string | null, isForked: boolean, resolvedContent: unknown, localContent: unknown, domain?: { __typename?: 'Domain', id: string, name: string } | null, trialConfig: { __typename?: 'TrialConfigSummary', definitionVersion?: number | null, temperature?: number | null, signature?: string | null, isConsistent: boolean, message?: string | null, signatureBreakdown: Array<{ __typename?: 'TrialSignatureBreakdown', signature: string, definitionVersion?: number | null, temperature?: number | null, trialCount: number }> }, preambleVersion?: { __typename?: 'PreambleVersion', id: string, version: string, content: string, preamble?: { __typename?: 'Preamble', name: string } | null } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string, createdAt: string }>, parent?: { __typename?: 'Definition', id: string, name: string } | null, children: Array<{ __typename?: 'Definition', id: string, name: string, createdAt: string }>, overrides: { __typename?: 'DefinitionOverrides', template: boolean, dimensions: boolean, matchingRules: boolean }, inheritedTags: Array<{ __typename?: 'Tag', id: string, name: string, createdAt: string }>, allTags: Array<{ __typename?: 'Tag', id: string, name: string, createdAt: string }>, expansionStatus: { __typename?: 'ExpansionStatus', status: ExpansionJobStatus, jobId?: string | null, triggeredBy?: string | null, createdAt?: string | null, completedAt?: string | null, error?: string | null, scenarioCount: number, progress?: { __typename?: 'ExpansionProgress', phase: string, expectedScenarios: number, generatedScenarios: number, inputTokens: number, outputTokens: number, message: string, updatedAt: string } | null } } | null };
+cloud/apps/web/src/generated/graphql.ts:3749:  signature?: InputMaybe<Scalars['String']['input']>;
+cloud/apps/web/src/generated/graphql.ts:3757:  signature?: InputMaybe<Scalars['String']['input']>;
+cloud/apps/web/src/generated/graphql.ts:3775:  signature?: InputMaybe<Scalars['String']['input']>;
+cloud/apps/web/src/generated/graphql.ts:3788:  signature?: InputMaybe<Scalars['String']['input']>;
+cloud/apps/web/src/generated/graphql.ts:3799:export type DomainAvailableSignaturesQuery = { __typename?: 'Query', domainAvailableSignatures: Array<{ __typename?: 'DomainAvailableSignature', signature: string, label: string, isVirtual: boolean, temperature?: number | null }> };
+cloud/apps/web/src/generated/graphql.ts:3811:  signature?: InputMaybe<Scalars['String']['input']>;
+cloud/apps/web/src/generated/graphql.ts:3935:export type DomainTrialsPlanQuery = { __typename?: 'Query', domainTrialsPlan: { __typename?: 'DomainTrialPlanResult', domainId: string, domainName: string, totalEstimatedCost: number, existingTemperatures: Array<number>, defaultTemperature?: number | null, temperatureWarning?: string | null, vignettes: Array<{ __typename?: 'DomainTrialPlanVignette', definitionId: string, definitionName: string, definitionVersion: number, signature: string, scenarioCount: number, existingBatchCount: number }>, models: Array<{ __typename?: 'DomainTrialPlanModel', modelId: string, label: string, isDefault: boolean, supportsTemperature: boolean }>, cellEstimates: Array<{ __typename?: 'DomainTrialPlanCellEstimate', definitionId: string, modelId: string, estimatedCost: number }> } };
+cloud/apps/web/src/generated/graphql.ts:3948:export type EstimateDomainEvaluationCostQuery = { __typename?: 'Query', estimateDomainEvaluationCost: { __typename?: 'DomainEvaluationCostEstimate', domainId: string, domainName: string, scopeCategory: string, targetedDefinitions: number, totalScenarioCount: number, totalEstimatedCost: number, basedOnSampleCount: number, isUsingFallback: boolean, fallbackReason?: string | null, estimateConfidence: string, knownExclusions: Array<string>, existingTemperatures: Array<number>, defaultTemperature?: number | null, temperatureWarning?: string | null, models: Array<{ __typename?: 'DomainEvaluationEstimateModel', modelId: string, label: string, isDefault: boolean, supportsTemperature: boolean, estimatedCost: number, basedOnSampleCount: number, isUsingFallback: boolean }>, definitions: Array<{ __typename?: 'DomainEvaluationEstimateDefinition', definitionId: string, definitionName: string, definitionVersion: number, signature: string, scenarioCount: number, estimatedCost: number, basedOnSampleCount: number, isUsingFallback: boolean }> } };
+cloud/apps/web/src/generated/graphql.ts:4142:  signature?: InputMaybe<Scalars['String']['input']>;
+cloud/apps/web/src/generated/graphql.ts:4148:export type ModelsConsistencyQueryVariables = Exact<{
+cloud/apps/web/src/generated/graphql.ts:4152:  signature: Scalars['String']['input'];
+cloud/apps/web/src/generated/graphql.ts:4156:export type ModelsConsistencyQuery = { __typename?: 'Query', modelsConsistency: { __typename?: 'ModelsConsistencyResult', models: Array<{ __typename?: 'ModelConsistency', modelId: string, label: string, providerName: string, repeatability: { __typename?: 'Repeatability', value: number, ciLow: number, ciHigh: number, withinScenarioSd: number, betweenScenarioSd: number, scenariosMeasured: number, perDomain: Array<{ __typename?: 'ConsistencyPerDomain', domainId: string, domainName: string, value: number, ciLow: number, ciHigh: number, scenariosMeasured: number }>, perScenario: Array<{ __typename?: 'ConsistencyPerScenario', scenarioId: string, matches: number, trials: number, p: number, ciLow: number, ciHigh: number }> }, coherence: { __typename?: 'Coherence', value: number, coherentPairs: number, determinatePairs: number, indeterminatePairs: number, perPair: Array<{ __typename?: 'ConsistencyPerPair', domainId: string, valueKey: string, rho?: number | null, pValue?: number | null, coherent: boolean, determinate: boolean, targetAnalysisRunId?: string | null, targetCompanionRunId?: string | null, primaryConditionIds: Array<string>, companionConditionIds: Array<string>, perCondition: Array<{ __typename?: 'ConsistencyPerCondition', scenarioId: string, netPressureRank: number, winRate: number, matches: number, trials: number }> }> }, orderEffect: { __typename?: 'OrderEffect', samePct: number, flippedPct: number, noisyPct: number, notApplicable: boolean } }>, insufficient: Array<{ __typename?: 'InsufficientModel', modelId: string, label: string, providerName: string, reason: string }> } };
+cloud/apps/web/src/generated/graphql.ts:4857:      signature
+cloud/apps/web/src/generated/graphql.ts:4858:      signatureBreakdown {
+cloud/apps/web/src/generated/graphql.ts:4859:        signature
+cloud/apps/web/src/generated/graphql.ts:4904:      signature
+cloud/apps/web/src/generated/graphql.ts:4905:      signatureBreakdown {
+cloud/apps/web/src/generated/graphql.ts:4906:        signature
+cloud/apps/web/src/generated/graphql.ts:5201:    query DomainAnalysis($domainId: ID!, $scoreMethod: String, $signature: String) {
+cloud/apps/web/src/generated/graphql.ts:5205:    signature: $signature
+cloud/apps/web/src/generated/graphql.ts:5284:    mutation RefreshDomainAnalysis($domainId: ID!, $signature: String) {
+cloud/apps/web/src/generated/graphql.ts:5285:  refreshDomainAnalysis(domainId: $domainId, signature: $signature) {
+cloud/apps/web/src/generated/graphql.ts:5330:    query DomainAnalysisValueDetail($domainId: ID!, $modelId: String!, $valueKey: String!, $scoreMethod: String, $signature: String) {
+cloud/apps/web/src/generated/graphql.ts:5336:    signature: $signature
+cloud/apps/web/src/generated/graphql.ts:5387:    query DomainAnalysisConditionTranscripts($domainId: ID!, $modelId: String!, $valueKey: String!, $definitionId: ID!, $scenarioId: ID, $limit: Int, $signature: String) {
+cloud/apps/web/src/generated/graphql.ts:5395:    signature: $signature
+cloud/apps/web/src/generated/graphql.ts:5418:    signature
+cloud/apps/web/src/generated/graphql.ts:5451:    query DomainValueCoverage($domainId: ID!, $modelIds: [String!], $signature: String) {
+cloud/apps/web/src/generated/graphql.ts:5455:    signature: $signature
+cloud/apps/web/src/generated/graphql.ts:5786:      signature
+cloud/apps/web/src/generated/graphql.ts:5847:      signature
+cloud/apps/web/src/generated/graphql.ts:6297:    query ModelsAnalysis($domainId: ID, $signature: String) {
+cloud/apps/web/src/generated/graphql.ts:6298:  modelsAnalysis(domainId: $domainId, signature: $signature) {
+cloud/apps/web/src/generated/graphql.ts:6322:export const ModelsConsistencyDocument = gql`
+cloud/apps/web/src/generated/graphql.ts:6323:    query ModelsConsistency($domainId: ID, $providerId: ID, $minScenarios: Int, $signature: String!) {
+cloud/apps/web/src/generated/graphql.ts:6328:    signature: $signature
+cloud/apps/web/src/generated/graphql.ts:6400:export function useModelsConsistencyQuery(options: Omit<Urql.UseQueryArgs<ModelsConsistencyQueryVariables>, 'query'>) {
+cloud/apps/web/src/generated/graphql.ts:6401:  return Urql.useQuery<ModelsConsistencyQuery, ModelsConsistencyQueryVariables>({ query: ModelsConsistencyDocument, ...options });
+cloud/apps/web/src/components/analysis-v2/analysisSemantics.reliability.ts:295:      isEligibleAggregate: aggregateMetadata?.aggregateEligibility === 'eligible_same_signature_baseline',
+cloud/apps/web/src/hooks/useAnalysisTranscriptsData.ts:115:  const selectedAggregateSignature = aggregateRuns.find((candidate) => candidate.id === run?.id)?.signature
+cloud/apps/api/src/graphql/queries/domain/planning-estimate.ts:3:import { formatTrialSignature } from '@valuerank/shared/trial-signature';
+cloud/apps/api/src/graphql/queries/domain/planning-estimate.ts:41:      signature: string;
+cloud/apps/api/src/graphql/queries/domain/planning-estimate.ts:274:        signature: formatTrialSignature(definition.version, temperature),
+cloud/apps/api/src/graphql/queries/domain/planning-estimate.ts:323:          signature: formatTrialSignature(definition.version, temperature),
+cloud/apps/web/src/api/operations/modelsAnalysis.ts:33:  signature?: string | null;
+cloud/apps/web/src/api/operations/modelsAnalysis.ts:37:  query ModelsAnalysis($domainId: ID, $signature: String) {
+cloud/apps/web/src/api/operations/modelsAnalysis.ts:38:    modelsAnalysis(domainId: $domainId, signature: $signature) {
+cloud/apps/web/src/api/operations/domainCoverage.graphql:1:query DomainValueCoverage($domainId: ID!, $modelIds: [String!], $signature: String) {
+cloud/apps/web/src/api/operations/domainCoverage.graphql:2:  domainValueCoverage(domainId: $domainId, modelIds: $modelIds, signature: $signature) {
+cloud/apps/web/src/api/operations/modelsConsistency.graphql:1:query ModelsConsistency(
+cloud/apps/web/src/api/operations/modelsConsistency.graphql:5:  $signature: String!
+cloud/apps/web/src/api/operations/modelsConsistency.graphql:11:    signature: $signature
+cloud/apps/web/src/utils/analysisTranscriptParams.ts:5:import { formatTrialSignature } from '@valuerank/shared/trial-signature';
+cloud/apps/web/src/utils/analysisTranscriptParams.ts:23:  signature: string;
+cloud/apps/web/src/utils/analysisTranscriptParams.ts:46:      return { id: candidate.id, signature: formatTrialSignature(version, temp) };
+cloud/apps/web/src/utils/analysisTranscriptParams.ts:49:      const existing = acc.find((item) => item.signature === candidate.signature);
+cloud/apps/web/src/utils/analysisTranscriptParams.ts:62:export function getDisplaySignature(signature: string | null | undefined): string {
+cloud/apps/web/src/utils/analysisTranscriptParams.ts:63:  return signature && signature !== 'v?td' ? signature : 'Unknown Signature';
+cloud/apps/web/src/api/operations/modelsAnalysis.graphql:1:query ModelsAnalysis($domainId: ID, $signature: String) {
+cloud/apps/web/src/api/operations/modelsAnalysis.graphql:2:  modelsAnalysis(domainId: $domainId, signature: $signature) {
+cloud/apps/web/src/api/operations/domainAnalysis.ts:221:  signature: string;
+cloud/apps/api/src/graphql/queries/domain/planning-utils.ts:1:import { formatTrialSignature, formatVnewLabel, formatVnewSignature, isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
+cloud/apps/api/src/graphql/queries/domain/planning-utils.ts:6:  signature: string;
+cloud/apps/api/src/graphql/queries/domain/planning-utils.ts:113:export function runMatchesSignature(runConfig: unknown, signature: string): boolean {
+cloud/apps/api/src/graphql/queries/domain/planning-utils.ts:114:  if (isVnewSignature(signature)) {
+cloud/apps/api/src/graphql/queries/domain/planning-utils.ts:115:    return parseTemperature((runConfig as { temperature?: unknown } | null)?.temperature) === parseVnewTemperature(signature);
+cloud/apps/api/src/graphql/queries/domain/planning-utils.ts:117:  return formatRunSignature(runConfig) === signature;
+cloud/apps/api/src/graphql/queries/domain/planning-utils.ts:149:    signature: formatVnewSignature(entry.temperature),
+cloud/apps/api/src/graphql/queries/domain/planning-utils.ts:156:    .map((signature) => ({
+cloud/apps/api/src/graphql/queries/domain/planning-utils.ts:157:      signature,
+cloud/apps/api/src/graphql/queries/domain/planning-utils.ts:158:      label: signature,
+cloud/apps/web/src/utils/runDefinitionContent.ts:1:import { formatTrialSignature } from '@valuerank/shared/trial-signature';
+cloud/apps/web/src/utils/runDefinitionContent.ts:65: * Derive the trial signature (definition version + temperature) for a run.
+cloud/apps/web/src/api/operations/analysis.ts:148:    | 'eligible_same_signature_baseline'
+cloud/apps/web/src/api/operations/analysis.ts:149:    | 'ineligible_mixed_signature'
+cloud/apps/web/src/components/analysis/AnalysisCard.tsx:9:import { formatTrialSignature } from '@valuerank/shared/trial-signature';
+cloud/apps/web/src/components/analysis/AnalysisCard.tsx:66:  // Extract trial signature
+cloud/apps/web/src/api/operations/domains.graphql:222:      signature
+cloud/apps/web/src/api/operations/domains.graphql:286:      signature
+cloud/apps/web/src/api/operations/modelsConsistency.ts:2:  ModelsConsistencyQuery as GeneratedModelsConsistencyQuery,
+cloud/apps/web/src/api/operations/modelsConsistency.ts:3:  ModelsConsistencyQueryVariables as GeneratedModelsConsistencyQueryVariables,
+cloud/apps/web/src/api/operations/modelsConsistency.ts:10:export { ModelsConsistencyDocument as MODELS_CONSISTENCY_QUERY } from '../../generated/graphql';
+cloud/apps/web/src/api/operations/modelsConsistency.ts:16:export type ModelsConsistencyQueryResult = GeneratedModelsConsistencyQuery;
+cloud/apps/web/src/api/operations/modelsConsistency.ts:17:export type ModelsConsistencyQueryVariables = GeneratedModelsConsistencyQueryVariables;
+cloud/apps/web/src/api/operations/modelsConsistency.ts:19:export type ModelsConsistencyResult = GeneratedModelsConsistencyQuery['modelsConsistency'];
+cloud/apps/web/src/api/operations/modelsConsistency.ts:20:export type ModelsConsistencyModel = ModelsConsistencyResult['models'][number];
+cloud/apps/web/src/api/operations/modelsConsistency.ts:21:export type ModelsConsistencyInsufficient = ModelsConsistencyResult['insufficient'][number];
+cloud/apps/web/src/api/operations/modelsConsistency.ts:23:export type ModelsConsistencyRepeatability = ModelsConsistencyModel['repeatability'];
+cloud/apps/web/src/api/operations/modelsConsistency.ts:24:export type ModelsConsistencyPerDomain = ModelsConsistencyRepeatability['perDomain'][number];
+cloud/apps/web/src/api/operations/modelsConsistency.ts:25:export type ModelsConsistencyPerScenario = ModelsConsistencyRepeatability['perScenario'][number];
+cloud/apps/web/src/api/operations/modelsConsistency.ts:27:export type ModelsConsistencyCoherence = ModelsConsistencyModel['coherence'];
+cloud/apps/web/src/api/operations/modelsConsistency.ts:28:export type ModelsConsistencyPerPair = ModelsConsistencyCoherence['perPair'][number];
+cloud/apps/web/src/api/operations/modelsConsistency.ts:29:export type ModelsConsistencyPerCondition = ModelsConsistencyPerPair['perCondition'][number];
+cloud/apps/web/src/api/operations/modelsConsistency.ts:31:export type ModelsConsistencyOrderEffect = ModelsConsistencyModel['orderEffect'];
+cloud/apps/web/src/api/operations/definitions.graphql:39:      signature
+cloud/apps/web/src/api/operations/definitions.graphql:40:      signatureBreakdown {
+cloud/apps/web/src/api/operations/definitions.graphql:41:        signature
+cloud/apps/web/src/api/operations/definitions.graphql:81:      signature
+cloud/apps/web/src/api/operations/definitions.graphql:82:      signatureBreakdown {
+cloud/apps/web/src/api/operations/definitions.graphql:83:        signature
+cloud/apps/api/src/graphql/queries/domain/types.ts:251:    signature: t.exposeString('signature'),
+cloud/apps/api/src/graphql/queries/domain/types.ts:272:    signature: t.exposeString('signature'),
+cloud/apps/api/src/graphql/queries/domain/types.ts:329:    signature: t.exposeString('signature'),
+cloud/apps/web/src/components/runs/RunCard.tsx:8:import { formatTrialSignature } from '@valuerank/shared/trial-signature';
+cloud/apps/web/src/components/runs/RunCard.tsx:73:function getDisplaySignature(signature: string): string {
+cloud/apps/web/src/components/runs/RunCard.tsx:74:  return signature !== 'v?td' ? signature : 'Unknown Signature';
+cloud/apps/api/src/graphql/queries/domain/shared.ts:2:import { formatVnewLabel, formatVnewSignature } from '@valuerank/shared/trial-signature';
+cloud/apps/api/src/graphql/queries/domain/shared.ts:110:  signature: string;
+cloud/apps/api/src/graphql/queries/domain/shared.ts:127:  signature: string;
+cloud/apps/api/src/graphql/queries/domain/shared.ts:154:  signature: string;
+cloud/apps/api/src/graphql/queries/domain/shared.ts:244:      return 'Completed runs exist, but none matched the selected signature.';
+cloud/apps/api/src/graphql/queries/domain/shared.ts:246:      return 'Matching runs exist, but no analyzed transcripts were found for this signature.';
+cloud/apps/api/src/graphql/queries/models-analysis.ts:72:      signature: t.arg.string({
+cloud/apps/api/src/graphql/queries/models-analysis.ts:74:        description: 'Optional batch signature to filter snapshots (e.g. vnewtd, vnewt0)',
+cloud/apps/api/src/graphql/queries/models-analysis.ts:79:      const signature = args.signature != null ? String(args.signature) : null;
+cloud/apps/api/src/graphql/queries/models-analysis.ts:93:          ...(signature != null ? { configSignature: signature } : {}),
+cloud/apps/web/src/components/models/ConsistencyScatter.tsx:10:import type { ModelsConsistencyModel } from '../../api/operations/modelsConsistency';
+cloud/apps/web/src/components/models/ConsistencyScatter.tsx:13:  models: ModelsConsistencyModel[];
+cloud/apps/web/src/components/models/ConsistencyScatter.tsx:18:type ScatterPoint = ModelsConsistencyModel & {
+cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts:13:} from '@valuerank/shared/trial-signature';
+cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts:123:export function runMatchesSignature(runConfig: unknown, signature: string): boolean {
+cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts:124:  if (isVnewSignature(signature)) {
+cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts:127:      parseVnewTemperature(signature)
+cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts:130:  return formatRunSignature(runConfig) === signature;
+cloud/apps/web/src/components/models/InsufficientCoverageFooter.tsx:1:import type { ModelsConsistencyInsufficient } from '../../api/operations/modelsConsistency';
+cloud/apps/web/src/components/models/InsufficientCoverageFooter.tsx:4:  insufficient: ModelsConsistencyInsufficient[];
+cloud/apps/web/src/components/models/InsufficientCoverageFooter.tsx:24:  const grouped = insufficient.reduce<Record<string, ModelsConsistencyInsufficient[]>>((acc, row) => {
+cloud/apps/web/src/components/models/ConsistencyTable.tsx:5:import type { ModelsConsistencyModel } from '../../api/operations/modelsConsistency';
+cloud/apps/web/src/components/models/ConsistencyTable.tsx:11:  models: ModelsConsistencyModel[];
+cloud/apps/web/src/components/models/ConsistencyTable.tsx:20:function sortValue(model: ModelsConsistencyModel, key: SortKey): number | string {
+cloud/apps/web/src/utils/domainAnalysisUtils.ts:1:import { isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
+cloud/apps/web/src/utils/domainAnalysisUtils.ts:4:export function parseTemperatureFromSignature(signature: string): number | null {
+cloud/apps/web/src/utils/domainAnalysisUtils.ts:5:  if (signature.trim() === '') return null;
+cloud/apps/web/src/utils/domainAnalysisUtils.ts:6:  if (isVnewSignature(signature)) {
+cloud/apps/web/src/utils/domainAnalysisUtils.ts:8:      return parseVnewTemperature(signature);
+cloud/apps/web/src/utils/domainAnalysisUtils.ts:13:  const match = signature.match(/t(.+)$/);
+cloud/apps/web/src/utils/domainAnalysisUtils.ts:24:  if (option.signature === 'vnewtd') return 0;
+cloud/apps/web/src/utils/domainAnalysisUtils.ts:25:  if (!option.isVirtual && /td$/i.test(option.signature)) return 1;
+cloud/apps/web/src/utils/domainAnalysisUtils.ts:32:  const defaultMatch = option.signature.match(/^v(\d+)td$/i);
+cloud/apps/web/src/utils/domainAnalysisUtils.ts:34:  const tempMatch = option.signature.match(/^v(\d+)t(.+)$/i);
+cloud/apps/api/src/graphql/types/models-consistency.ts:85:export type ModelsConsistencyShape = {
+cloud/apps/api/src/graphql/types/models-consistency.ts:100:export const ModelsConsistencyResultRef = builder.objectRef<ModelsConsistencyShape>('ModelsConsistencyResult');
+cloud/apps/api/src/graphql/types/models-consistency.ts:202:builder.objectType(ModelsConsistencyResultRef, {
+cloud/apps/api/src/graphql/queries/domain/analysis/condition-transcripts.ts:24:      signature: t.arg.string({ required: false }),
+cloud/apps/api/src/graphql/queries/domain/analysis/condition-transcripts.ts:37:      const requestedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
+cloud/apps/api/src/graphql/queries/domain/analysis/condition-transcripts.ts:38:        ? args.signature.trim()
+cloud/apps/api/src/graphql/queries/domain/analysis/condition-transcripts.ts:41:        ctx.log.warn({ domainId, definitionId, modelId, valueKey }, 'domainAnalysisConditionTranscripts called without signature; defaulting to first vnew signature');
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:55:      signature: t.arg.string({
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:57:        description: 'If provided, only count completed runs matching this trial signature',
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:63:      const selectedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:64:        ? args.signature.trim()
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:127:      // Count completed runs per definition, optionally filtered by signature and model
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:136:      const signatureScopedRunsByDefinitionId = new Map<string, Array<{
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:170:        const signatureScopedRuns = selectedSignature === null
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:174:        for (const run of signatureScopedRuns) {
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:175:          const existingRuns = signatureScopedRunsByDefinitionId.get(run.definitionId) ?? [];
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:177:          signatureScopedRunsByDefinitionId.set(run.definitionId, existingRuns);
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:249:      for (const runs of signatureScopedRunsByDefinitionId.values()) {
+cloud/apps/web/src/utils/decisionLabels.ts:364:  // We treat each scenario key-set as a signature and select the most frequent one.
+cloud/apps/web/src/utils/decisionLabels.ts:368:  const signatureCounts = new Map<string, number>();
+cloud/apps/web/src/utils/decisionLabels.ts:374:    const signature = keys.join('||');
+cloud/apps/web/src/utils/decisionLabels.ts:375:    keysBySignature.set(signature, keys);
+cloud/apps/web/src/utils/decisionLabels.ts:376:    signatureCounts.set(signature, (signatureCounts.get(signature) ?? 0) + 1);
+cloud/apps/web/src/utils/decisionLabels.ts:379:  if (signatureCounts.size === 0) return [];
+cloud/apps/web/src/utils/decisionLabels.ts:381:  const sorted = [...signatureCounts.entries()].sort((a, b) => {
+cloud/apps/web/src/utils/decisionLabels.ts:415:   * 2) Otherwise, select one scenario signature from scenarioDimensions.
+cloud/apps/web/src/utils/decisionLabels.ts:418:   *    - Rank signatures by:
+cloud/apps/web/src/utils/decisionLabels.ts:420:   *      b) signature frequency/count (desc)
+cloud/apps/web/src/utils/decisionLabels.ts:421:   *      c) signature string (asc) for deterministic tie-breaking.
+cloud/apps/web/src/utils/decisionLabels.ts:422:   * 3) Build final pair from the chosen signature.
+cloud/apps/web/src/utils/decisionLabels.ts:426:  // 2) If vignette attributes are unavailable, use scored scenario signatures.
+cloud/apps/web/src/utils/decisionLabels.ts:427:  // 3) Fall back to dominant scenario signature.
+cloud/apps/web/src/utils/decisionLabels.ts:446:  const signatureCounts = new Map<string, number>();
+cloud/apps/web/src/utils/decisionLabels.ts:454:    const signature = keys.join('||');
+cloud/apps/web/src/utils/decisionLabels.ts:455:    keysBySignature.set(signature, keys);
+cloud/apps/web/src/utils/decisionLabels.ts:456:    signatureCounts.set(signature, (signatureCounts.get(signature) ?? 0) + 1);
+cloud/apps/web/src/utils/decisionLabels.ts:459:  if (signatureCounts.size === 0) return preferredAttributes.length > 0 ? preferredAttributes : [];
+cloud/apps/web/src/utils/decisionLabels.ts:461:  const ranked = [...signatureCounts.entries()]
+cloud/apps/web/src/utils/decisionLabels.ts:462:    .map(([signature, count]) => {
+cloud/apps/web/src/utils/decisionLabels.ts:463:      const keys = keysBySignature.get(signature) ?? [];
+cloud/apps/web/src/utils/decisionLabels.ts:468:      return { signature, keys, count, overlap };
+cloud/apps/web/src/utils/decisionLabels.ts:473:      return a.signature.localeCompare(b.signature);
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:4:import { formatTrialSignature } from '@valuerank/shared/trial-signature';
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:13:  signature: string | null;
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:14:  signatureBreakdown: TrialSignatureBreakdown[];
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:20:  signature: string;
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:47:      signature: null,
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:48:      signatureBreakdown: [],
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:96:          signatures: Set<string>;
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:97:          signatureBreakdownByKey: Map<string, TrialSignatureBreakdown>;
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:109:          signatures: new Set<string>(),
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:110:          signatureBreakdownByKey: new Map<string, TrialSignatureBreakdown>(),
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:127:        const signature = formatTrialSignature(definitionVersion, temperature);
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:128:        const breakdownKey = `${signature}::${encodeNullableNumber(definitionVersion)}::${encodeNullableNumber(temperature)}`;
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:129:        const existingBreakdown = aggregate.signatureBreakdownByKey.get(breakdownKey);
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:133:          aggregate.signatureBreakdownByKey.set(breakdownKey, {
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:134:            signature,
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:143:        aggregate.signatures.add(signature);
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:151:        const signatureBreakdown = Array.from(aggregate.signatureBreakdownByKey.values())
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:154:            return left.signature.localeCompare(right.signature);
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:157:        const isConsistent = aggregate.signatures.size <= 1;
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:171:              signature: null,
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:172:              signatureBreakdown,
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:186:            signature: formatTrialSignature(definitionVersion, temperature),
+cloud/apps/api/src/graphql/dataloaders/definition-trial-summary.ts:187:            signatureBreakdown,
+cloud/apps/web/src/components/models/ConsistencyFilters.tsx:8:  signature: string;
+cloud/apps/web/src/components/models/ConsistencyFilters.tsx:12:  signatureOptions: Option[];
+cloud/apps/web/src/components/models/ConsistencyFilters.tsx:22:  signature,
+cloud/apps/web/src/components/models/ConsistencyFilters.tsx:26:  signatureOptions,
+cloud/apps/web/src/components/models/ConsistencyFilters.tsx:46:            value={signature}
+cloud/apps/web/src/components/models/ConsistencyFilters.tsx:48:            options={signatureOptions}
+cloud/apps/api/src/graphql/queries/domain/analysis/domain-analysis.ts:16:      signature: t.arg.string({ required: false }),
+cloud/apps/api/src/graphql/queries/domain/analysis/domain-analysis.ts:21:      const requestedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
+cloud/apps/api/src/graphql/queries/domain/analysis/domain-analysis.ts:22:        ? args.signature.trim()
+cloud/apps/api/src/graphql/queries/domain/analysis/domain-analysis.ts:25:        ctx.log.warn({ domainId }, 'domainAnalysis called without signature; defaulting to first vnew signature');
+cloud/apps/api/src/graphql/queries/domain/analysis/value-detail.ts:37:      signature: t.arg.string({ required: false }),
+cloud/apps/api/src/graphql/queries/domain/analysis/value-detail.ts:44:      const requestedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
+cloud/apps/api/src/graphql/queries/domain/analysis/value-detail.ts:45:        ? args.signature.trim()
+cloud/apps/api/src/graphql/queries/domain/analysis/value-detail.ts:48:        ctx.log.warn({ domainId, modelId, valueKey: rawValueKey }, 'domainAnalysisValueDetail called without signature; defaulting to first vnew signature');
+cloud/apps/web/src/components/models/ConsistencyDrill.tsx:3:import type { ModelsConsistencyModel } from '../../api/operations/modelsConsistency';
+cloud/apps/web/src/components/models/ConsistencyDrill.tsx:6:  model: ModelsConsistencyModel;
+cloud/apps/web/src/components/models/ConsistencyDrill.tsx:8:  signature: string;
+cloud/apps/web/src/components/models/ConsistencyDrill.tsx:22:function conditionMatrixUrl(args: { domainId: string; modelId: string; valueKey: string; signature: string }): string {
+cloud/apps/web/src/components/models/ConsistencyDrill.tsx:27:    signature: args.signature,
+cloud/apps/web/src/components/models/ConsistencyDrill.tsx:33:type PerPair = ModelsConsistencyModel['coherence']['perPair'][number];
+cloud/apps/web/src/components/models/ConsistencyDrill.tsx:150:export function ConsistencyDrill({ model, domainId, signature }: Props) {
+cloud/apps/web/src/components/models/ConsistencyDrill.tsx:194:                      to={conditionMatrixUrl({ domainId: resolvedDomainId, modelId: model.modelId, valueKey: pair.valueKey, signature })}
+cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx:106:          This creates a launch and incurs model costs. Duplicate active launches with the same launch signature and sampling are blocked server-side.
+cloud/apps/web/src/components/domains/domainTrials/TrialGridTable.tsx:10:    signature?: string;
+cloud/apps/web/src/components/domains/domainTrials/TrialGridTable.tsx:59:                    <div className="text-xs text-gray-500">{vignette.signature ?? `v${vignette.definitionVersion}`}</div>
+cloud/apps/web/src/components/domains/ValuePrioritiesSection.tsx:148:      params.set('signature', selectedSignature);
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:32: * Accepts a domainId prop; manages its own signature and model state internally.
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:41:  const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:51:  const signatureOptions = useMemo<DomainAvailableSignature[]>(
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:52:    () => signatureData?.domainAvailableSignatures ?? [],
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:53:    [signatureData],
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:56:    () => selectPreferredSignature(signatureOptions),
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:57:    [signatureOptions],
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:60:    () => selectedSignature === '' || signatureOptions.some((option) => option.signature === selectedSignature),
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:61:    [selectedSignature, signatureOptions],
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:63:  const signatureSelectionReady = domainId !== ''
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:64:    && !signaturesLoading
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:66:    && (selectedSignature !== '' || allowAllSignatures || signatureOptions.length === 0);
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:76:    if (signaturesLoading) return;
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:77:    if (signatureOptions.length === 0) {
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:81:    if (selectedSignature !== '' && signatureOptions.some((option) => option.signature === selectedSignature)) return;
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:84:  }, [allowAllSignatures, preferredSignature, selectedSignature, signatureOptions, signaturesLoading]);
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:93:      signature: selectedSignature === '' ? undefined : selectedSignature,
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:95:    pause: domainId === '' || !signatureSelectionReady || useLegacyQuery,
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:101:    Omit<DomainValueCoverageQueryVariables, 'signature'>
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:107:    pause: domainId === '' || !signatureSelectionReady || !useLegacyQuery,
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:113:    const isUnknownArgumentError = message.includes('Unknown argument "signature"');
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:179:      {(signaturesError || error) && (
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:181:          message={`Failed to load coverage data: ${(signaturesError ?? error)?.message ?? 'Unknown error'}`}
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:185:        <ErrorMessage message="Coverage API does not yet support signature filtering in this environment. Showing all signatures." />
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:203:            disabled={signaturesLoading}
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:205:            <option value="">All signatures</option>
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:206:            {signatureOptions.map((signatureOption) => (
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:207:              <option key={signatureOption.signature} value={signatureOption.signature}>
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:208:                {signatureOption.label}
+cloud/apps/web/src/components/domains/CoverageMatrix.tsx:216:      {(signaturesLoading || (fetching && canonicalValues.length === 0)) ? (
+cloud/apps/api/src/graphql/types/definition.ts:62:    signature: t.string({
+cloud/apps/api/src/graphql/types/definition.ts:64:      description: 'Human-readable trial signature combining version and temperature (e.g. v3td, v2t0.7)',
+cloud/apps/api/src/graphql/types/definition.ts:65:      resolve: (summary) => summary.signature,
+cloud/apps/api/src/graphql/types/definition.ts:67:    signatureBreakdown: t.field({
+cloud/apps/api/src/graphql/types/definition.ts:69:      description: 'Per-signature breakdown of trial counts for this definition',
+cloud/apps/api/src/graphql/types/definition.ts:70:      resolve: (summary) => summary.signatureBreakdown,
+cloud/apps/api/src/graphql/types/definition.ts:83:  description: 'Trial count grouped by signature/version/temperature for a definition',
+cloud/apps/api/src/graphql/types/definition.ts:85:    signature: t.exposeString('signature'),
+cloud/apps/api/src/graphql/mutations/domain/analysis.ts:14:      signature: t.arg.string({ required: false }),
+cloud/apps/api/src/graphql/mutations/domain/analysis.ts:22:      const signature = typeof args.signature === 'string' && args.signature.trim() !== ''
+cloud/apps/api/src/graphql/mutations/domain/analysis.ts:23:        ? args.signature.trim()
+cloud/apps/api/src/graphql/mutations/domain/analysis.ts:28:        signature,
+cloud/apps/api/src/graphql/mutations/domain/analysis.ts:40:      await refreshDomainAnalysisSnapshot(domainId, signature);
+cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx:165:                            for the current launch signature.
+cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts:3:export function parseSignatureVersion(signature: string): number | null {
+cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts:4:  const match = signature.match(/^v(\d+)/i);
+cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts:11:  // Virtual signatures ("Latest @ X") always beat exact versioned ones.
+cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts:13:  const virtualDefault = options.find((o) => o.isVirtual && o.signature === 'vnewtd');
+cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts:14:  if (virtualDefault) return virtualDefault.signature;
+cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts:15:  const virtualT0 = options.find((o) => o.isVirtual && o.signature === 'vnewt0');
+cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts:16:  if (virtualT0) return virtualT0.signature;
+cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts:18:  if (anyVirtual) return anyVirtual.signature;
+cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts:20:  // Fall back to highest-version exact signature
+cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts:22:    const leftVersion = parseSignatureVersion(left.signature) ?? -1;
+cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts:23:    const rightVersion = parseSignatureVersion(right.signature) ?? -1;
+cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts:25:    return right.signature.localeCompare(left.signature);
+cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts:27:  return sorted[0]?.signature ?? '';
+cloud/apps/api/src/graphql/types/analysis.ts:104:  description: 'Eligibility and coverage metadata for same-signature aggregate analysis support',
+
+codex
+I found an existing Models consistency page and it already has signature selection logic. I’m reading that path now because it’s the closest implementation pattern the new report would need to match or deliberately diverge from.
+exec
+/bin/zsh -lc "sed -n '1,280p' cloud/apps/api/src/graphql/queries/models-consistency.ts" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/web/src/pages/ModelsConsistency.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+import { db } from '@valuerank/db';
+import { builder } from '../builder.js';
+import { runMatchesSignature } from './domain-coverage-gql-types.js';
+import { resolveTranscriptDecisionModel } from './domain/shared.js';
+import { ModelsConsistencyResultRef, type ModelsConsistencyShape } from '../types/models-consistency.js';
+import { computeOrderEffect, type OrderEffectTranscript } from '../../services/consistency/orderEffectPairing.js';
+import {
+  computeRepeatability,
+  parsePairList,
+  parseScenarioList,
+  readConsistencySummary,
+  type ConsistencyParsedPair,
+  type ConsistencyParsedScenario,
+} from '../../services/consistency/modelsConsistencyData.js';
+
+type ModelRow = {
+  modelId: string;
+  displayName: string;
+  providerId: string;
+  provider: { id: string; name: string; displayName: string | null };
+};
+
+type RunRow = {
+  id: string;
+  config: unknown;
+  definition: { domainId: string | null; domain: { name: string } | null } | null;
+  analysisResults: Array<{
+    analysisType: string;
+    status: string;
+    output: unknown;
+  }>;
+};
+
+type ParsedModelData = {
+  scenarios: ConsistencyParsedScenario[];
+  pairs: ConsistencyParsedPair[];
+  invalidShape: boolean;
+};
+
+function toString(value: unknown): string {
+  return String(value);
+}
+
+function getCompanionRunId(config: unknown): string | null {
+  if (config === null || typeof config !== 'object') return null;
+  const companionRunId = (config as { companionRunId?: unknown }).companionRunId;
+  return typeof companionRunId === 'string' && companionRunId.trim() !== '' ? companionRunId : null;
+}
+
+function buildParsedModelData(runs: RunRow[], modelId: string): ParsedModelData {
+  const scenarios: ConsistencyParsedScenario[] = [];
+  const pairs: ConsistencyParsedPair[] = [];
+  let invalidShape = false;
+
+  for (const run of runs) {
+    for (const analysis of run.analysisResults) {
+      if (analysis.analysisType !== 'AGGREGATE' || analysis.status !== 'CURRENT') continue;
+      const rawSummary = readConsistencySummary(analysis.output);
+      const rawModel = rawSummary?.perModel;
+      const rawEntry = rawModel != null && typeof rawModel === 'object' && !Array.isArray(rawModel)
+        ? (rawModel as Record<string, unknown>)[modelId] ?? null
+        : null;
+      if (rawEntry == null || typeof rawEntry !== 'object') {
+        continue;
+      }
+
+      // A missing perScenario key means "no repeat coverage for this model in
+      // this run" — single-sample runs legitimately omit it. Only flag the row
+      // as invalid-summary-shape when the key is present but parses to zero
+      // entries (i.e. malformed data the pipeline produced).
+      const rawPerScenario = (rawEntry as { perScenario?: unknown }).perScenario;
+      if (rawPerScenario == null) {
+        continue;
+      }
+      const perScenario = parseScenarioList(rawPerScenario);
+      if (perScenario.length === 0) {
+        invalidShape = true;
+        continue;
+      }
+
+      scenarios.push(
+        ...perScenario.map((scenario) => ({
+          ...scenario,
+          domainId: run.definition?.domainId ?? scenario.domainId,
+          domainName: run.definition?.domain?.name ?? scenario.domainName,
+        })),
+      );
+
+      pairs.push(...parsePairList((rawEntry as { perPair?: unknown }).perPair));
+    }
+  }
+
+  return { scenarios, pairs, invalidShape };
+}
+
+function buildRepeatabilitySummary(scenarios: ConsistencyParsedScenario[]): ModelsConsistencyShape['models'][number]['repeatability'] {
+  const repeatability = computeRepeatability(scenarios);
+  const perDomainMap = new Map<string, ConsistencyParsedScenario[]>();
+  for (const scenario of scenarios) {
+    const key = `${scenario.domainId}::${scenario.domainName}`;
+    const list = perDomainMap.get(key) ?? [];
+    list.push(scenario);
+    perDomainMap.set(key, list);
+  }
+
+  return {
+    ...repeatability,
+    perDomain: [...perDomainMap.entries()]
+      .map(([key, rows]) => {
+        const [rawDomainId, rawDomainName] = key.split('::');
+        const pooled = computeRepeatability(rows);
+        return {
+          domainId: rawDomainId ?? 'unknown',
+          domainName: rawDomainName ?? 'Unknown domain',
+          value: pooled.value,
+          ciLow: pooled.ciLow,
+          ciHigh: pooled.ciHigh,
+          scenariosMeasured: rows.length,
+        };
+      })
+      .sort((left, right) => right.scenariosMeasured - left.scenariosMeasured || left.domainName.localeCompare(right.domainName)),
+  };
+}
+
+function buildCoherenceSummary(pairs: ConsistencyParsedPair[]): ModelsConsistencyShape['models'][number]['coherence'] {
+  const perPair = pairs.map((pair) => ({
+    domainId: pair.domainId,
+    valueKey: pair.valueKey,
+    rho: pair.rho,
+    pValue: pair.pValue,
+    coherent: pair.coherent ?? false,
+    determinate: pair.determinate ?? false,
+    targetAnalysisRunId: pair.targetAnalysisRunId,
+    targetCompanionRunId: pair.targetCompanionRunId,
+    primaryConditionIds: pair.primaryConditionIds,
+    companionConditionIds: pair.companionConditionIds,
+    perCondition: pair.perCondition.map((condition) => ({
+      netPressureRank: condition.netPressureRank,
+      winRate: condition.winRate,
+      matches: condition.matches,
+      trials: condition.trials,
+      scenarioId: condition.scenarioId,
+    })),
+  }));
+
+  const determinatePairs = perPair.filter((pair) => pair.determinate).length;
+  const coherentPairs = perPair.filter((pair) => pair.determinate && pair.coherent).length;
+  const indeterminatePairs = perPair.filter((pair) => !pair.determinate).length;
+
+  return {
+    value: determinatePairs === 0 ? 0 : coherentPairs / determinatePairs,
+    coherentPairs,
+    determinatePairs,
+    indeterminatePairs,
+    perPair,
+  };
+}
+
+type OrderEffectTranscriptRow = {
+  runId: string;
+  scenarioId: string | null;
+  modelId: string;
+  decisionMetadata: unknown;
+  definitionSnapshot: unknown;
+  scenario: { orientationFlipped: boolean } | null;
+};
+
+function toOrderEffectTranscript(row: OrderEffectTranscriptRow): OrderEffectTranscript {
+  const decisionModelV2 = resolveTranscriptDecisionModel({
+    decisionCode: null,
+    decisionMetadata: row.decisionMetadata,
+    definitionSnapshot: row.definitionSnapshot,
+    orientationFlipped: row.scenario?.orientationFlipped ?? null,
+  });
+
+  return {
+    scenarioId: row.scenarioId,
+    decisionModelV2: { canonical: decisionModelV2.canonical },
+  };
+}
+
+builder.queryField('modelsConsistency', (t) =>
+  t.field({
+    type: ModelsConsistencyResultRef,
+    args: {
+      domainId: t.arg.id({ required: false }),
+      providerId: t.arg.id({ required: false }),
+      minScenarios: t.arg.int({ required: false }),
+      signature: t.arg.string({ required: true }),
+    },
+    resolve: async (_root, args) => {
+      const domainId = args.domainId != null ? toString(args.domainId) : null;
+      const providerId = args.providerId != null ? toString(args.providerId) : null;
+      const minScenarios = args.minScenarios ?? 1;
+      const signature = toString(args.signature);
+
+      const activeModels = await db.llmModel.findMany({
+        where: { status: 'ACTIVE' },
+        include: { provider: true },
+      });
+      // The UI currently builds the provider filter from `providerName` values
+      // (see ConsistencyFilters), so accept either a provider UUID or a
+      // provider display name / slug. This keeps the filter working until the
+      // client exposes `providerId` on its filter options.
+      const models = providerId == null
+        ? activeModels
+        : activeModels.filter((model) =>
+            model.providerId === providerId
+            || model.provider.id === providerId
+            || model.provider.name === providerId
+            || model.provider.displayName === providerId,
+          );
+
+      const runs = await db.run.findMany({
+        where: {
+          status: 'COMPLETED',
+          deletedAt: null,
+          tags: { some: { tag: { name: 'Aggregate' } } },
+          ...(domainId != null ? { definition: { domainId } } : {}),
+        },
+        include: {
+          definition: {
+            select: {
+              domainId: true,
+              domain: { select: { name: true } },
+            },
+          },
+          analysisResults: {
+            where: { status: 'CURRENT' },
+            select: { analysisType: true, status: true, output: true },
+          },
+        },
+      }) as RunRow[];
+
+      const scopedRuns = runs.filter((run) => runMatchesSignature(run.config, signature));
+      const runMap = new Map(scopedRuns.map((run) => [run.id, run] as const));
+      const pairedRunPairs: Array<{ primaryRunId: string; companionRunId: string }> = [];
+      const seenPairKeys = new Set<string>();
+      for (const run of scopedRuns) {
+        const companionRunId = getCompanionRunId(run.config);
+        if (companionRunId == null || !runMap.has(companionRunId)) continue;
+        const pairKey = [run.id, companionRunId].sort().join('::');
+        if (seenPairKeys.has(pairKey)) continue;
+        seenPairKeys.add(pairKey);
+        pairedRunPairs.push({ primaryRunId: run.id, companionRunId });
+      }
+
+      const pairedRunIds = [...new Set(pairedRunPairs.flatMap((pair) => [pair.primaryRunId, pair.companionRunId]))];
+      const orderEffectRows = pairedRunIds.length === 0
+        ? []
+        : await db.transcript.findMany({
+            where: {
+              runId: { in: pairedRunIds },
+              deletedAt: null,
+            },
+            orderBy: { createdAt: 'asc' },
+            select: {
+              runId: true,
+              scenarioId: true,
+              modelId: true,
+              decisionMetadata: true,
+              definitionSnapshot: true,
+              scenario: {
+                select: {
+                  orientationFlipped: true,
+                },
+              },
+            },
+          }) as OrderEffectTranscriptRow[];
+
+      const orderEffectRowsByRun = new Map<string, OrderEffectTranscriptRow[]>();
+      for (const row of orderEffectRows) {
+        const list = orderEffectRowsByRun.get(row.runId) ?? [];
+        list.push(row);
+        orderEffectRowsByRun.set(row.runId, list);
+      }
+
+      const insufficient: ModelsConsistencyShape['insufficient'] = [];
+      const outputModels: ModelsConsistencyShape['models'] = [];
+
+
+ succeeded in 0ms:
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from 'urql';
+import { useSearchParams } from 'react-router-dom';
+import { ErrorMessage } from '../components/ui/ErrorMessage';
+import { Loading } from '../components/ui/Loading';
+import { useDomains } from '../hooks/useDomains';
+import {
+  DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+  type DomainAvailableSignaturesQueryResult,
+} from '../api/operations/domainAnalysis';
+import { formatSignatureOptionLabel } from '../utils/domainAnalysisUtils';
+import {
+  MODELS_CONSISTENCY_QUERY,
+  type ModelsConsistencyQueryResult,
+  type ModelsConsistencyQueryVariables,
+} from '../api/operations/modelsConsistency';
+import { ConsistencyFilters } from '../components/models/ConsistencyFilters';
+import { ConsistencyScatter } from '../components/models/ConsistencyScatter';
+import { ConsistencyTable } from '../components/models/ConsistencyTable';
+import { ConsistencyDrill } from '../components/models/ConsistencyDrill';
+import { InsufficientCoverageFooter } from '../components/models/InsufficientCoverageFooter';
+
+const DEFAULT_SIGNATURE = 'vnewtd';
+
+function buildDomainOptions(domains: Array<{ id: string; name: string }>) {
+  return domains.map((domain) => ({ value: domain.id, label: domain.name }));
+}
+
+export function ModelsConsistency() {
+  const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const domainParam = searchParams.get('domainId');
+  const signatureParam = searchParams.get('signature');
+  const hasDomainParam = searchParams.has('domainId');
+  const domainFilter = domainParam === 'all' ? null : domainParam;
+  const [providerId, setProviderId] = useState<string | null>(null);
+  const [minScenarios, setMinScenarios] = useState(5);
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+
+  const defaultDomainId = domains[0]?.id ?? null;
+  const urlDomainId = hasDomainParam ? domainFilter : defaultDomainId;
+  const hasExplicitDomain = hasDomainParam && domainParam !== 'all';
+
+  const [{ data: signatureData, error: signatureError }] = useQuery<DomainAvailableSignaturesQueryResult, { domainId: string }>({
+    query: DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+    variables: { domainId: hasExplicitDomain && urlDomainId != null ? urlDomainId : (defaultDomainId ?? '') },
+    pause: !hasExplicitDomain && defaultDomainId == null,
+    requestPolicy: 'cache-and-network',
+  });
+
+  const availableSignatures = useMemo(
+    () => signatureData?.domainAvailableSignatures ?? [],
+    [signatureData],
+  );
+
+  const signatureOptions = useMemo(
+    () => availableSignatures.map((option) => ({
+      value: option.signature,
+      label: formatSignatureOptionLabel(option),
+    })),
+    [availableSignatures],
+  );
+
+  // Default picker: honor ?signature URL param first. Otherwise prefer the
+  // canonical "vnewest @ default temperature" signature if it is actually
+  // offered for this domain; fall back to the first available signature;
+  // fall back to DEFAULT_SIGNATURE constant only when nothing is loaded yet.
+  const signatureChoice = (() => {
+    if (signatureParam != null) return signatureParam;
+    if (hasDomainParam && domainParam === 'all') return DEFAULT_SIGNATURE;
+    if (signatureError != null) return DEFAULT_SIGNATURE;
+    if (signatureData == null) return null;
+    if (availableSignatures.some((option) => option.signature === DEFAULT_SIGNATURE)) {
+      return DEFAULT_SIGNATURE;
+    }
+    return availableSignatures[0]?.signature ?? DEFAULT_SIGNATURE;
+  })();
+  const selectedSignature = signatureChoice ?? DEFAULT_SIGNATURE;
+
+  useEffect(() => {
+    if (signatureParam != null || signatureChoice == null) {
+      return;
+    }
+    if (hasDomainParam && domainParam === 'all') {
+      setSearchParams({ domainId: 'all', signature: signatureChoice }, { replace: true });
+      return;
+    }
+    if (urlDomainId != null) {
+      setSearchParams({ domainId: urlDomainId, signature: signatureChoice }, { replace: true });
+    }
+  }, [domainParam, hasDomainParam, setSearchParams, signatureChoice, signatureParam, urlDomainId]);
+
+  const queryVariables = useMemo<ModelsConsistencyQueryVariables>(() => ({
+    ...(urlDomainId != null ? { domainId: urlDomainId } : {}),
+    ...(providerId != null ? { providerId } : {}),
+    minScenarios,
+    signature: selectedSignature,
+  }), [minScenarios, providerId, selectedSignature, urlDomainId]);
+
+  const [{ data, fetching, error }] = useQuery<ModelsConsistencyQueryResult, ModelsConsistencyQueryVariables>({
+    query: MODELS_CONSISTENCY_QUERY,
+    variables: queryVariables,
+    pause: (!hasDomainParam && urlDomainId == null) || signatureChoice == null,
+    requestPolicy: 'cache-and-network',
+  });
+
+  const models = data?.modelsConsistency.models ?? [];
+  const insufficient = data?.modelsConsistency.insufficient ?? [];
+  const providerOptions = useMemo(() => {
+    const unique = new Map<string, string>();
+    for (const model of models) {
+      unique.set(model.providerName, model.providerName);
+    }
+    for (const row of insufficient) {
+      unique.set(row.providerName, row.providerName);
+    }
+    return [...unique.values()].map((value) => ({ value, label: value }));
+  }, [insufficient, models]);
+
+  useEffect(() => {
+    if (selectedModelId == null && models.length > 0) {
+      setSelectedModelId(models[0]!.modelId);
+      return;
+    }
+    if (selectedModelId != null && !models.some((model) => model.modelId === selectedModelId)) {
+      setSelectedModelId(models[0]?.modelId ?? null);
+    }
+  }, [models, selectedModelId]);
+
+  const selectedModel = selectedModelId != null
+    ? models.find((model) => model.modelId === selectedModelId) ?? null
+    : models[0] ?? null;
+
+  const loading = (domainsLoading && domains.length === 0) || (signatureChoice == null) || (fetching && data == null);
+  const emptyState = models.length === 0;
+
+  const handleDomainChange = (value: string | null) => {
+    const next = new URLSearchParams(searchParams);
+    if (value == null) {
+      next.set('domainId', 'all');
+      next.set('signature', signatureParam ?? DEFAULT_SIGNATURE);
+    } else {
+      next.set('domainId', value);
+      next.delete('signature');
+    }
+    setSearchParams(next, { replace: true });
+  };
+
+  const handleProviderChange = (value: string | null) => {
+    setProviderId(value);
+  };
+
+  const handleMinScenariosChange = (value: number) => {
+    setMinScenarios(value);
+  };
+
+  const handleSignatureChange = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('signature', value);
+    setSearchParams(next, { replace: true });
+  };
+
+  // Order matters: surface errors and empty-domain state BEFORE the loading
+  // spinner so a failed useDomains() or an empty domain list does not leave
+  // the page stuck on an infinite loading state.
+  if (domainsError != null || error != null) {
+    return <ErrorMessage message={`Failed to load consistency report: ${(domainsError ?? error)?.message ?? 'Unknown error'}`} />;
+  }
+
+  if (!domainsLoading && domains.length === 0 && !hasDomainParam) {
+    return <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">No domains are available yet. Populate domains first, then reopen this report.</div>;
+  }
+
+  if (loading) {
+    return <Loading text="Loading consistency report..." />;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Models / Consistency</h1>
+        <p className="text-sm text-gray-600">Repeatability shows same-answer behavior. Coherence shows whether answers follow pressure.</p>
+      </div>
+
+      <ConsistencyFilters
+        domainId={urlDomainId}
+        providerId={providerId}
+        signature={selectedSignature}
+        minScenarios={minScenarios}
+        domainOptions={buildDomainOptions(domains)}
+        providerOptions={providerOptions}
+        signatureOptions={signatureOptions}
+        onDomainChange={handleDomainChange}
+        onProviderChange={handleProviderChange}
+        onSignatureChange={handleSignatureChange}
+        onMinScenariosChange={handleMinScenariosChange}
+      />
+
+      {emptyState ? (
+        <section className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
+          <p className="font-medium text-gray-900">No models have sufficient coverage yet.</p>
+          <p className="mt-1">This report depends on the aggregate analysis pipeline. Once the pipeline has populated repeat coverage, the scatter and table will appear here.</p>
+        </section>
+      ) : (
+        <>
+          <ConsistencyScatter models={models} selectedModelId={selectedModel?.modelId ?? null} onSelectModel={setSelectedModelId} />
+          <ConsistencyTable models={models} onSelectModel={setSelectedModelId} selectedModelId={selectedModel?.modelId ?? null} />
+          {selectedModel && <ConsistencyDrill model={selectedModel} domainId={urlDomainId} signature={selectedSignature} />}
+        </>
+      )}
+
+      <InsufficientCoverageFooter insufficient={insufficient} />
+    </div>
+  );
+}
+
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/web/src/components/models/ConsistencyFilters.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+import { Select } from '../ui/Select';
+
+type Option = { value: string; label: string };
+
+type ConsistencyFiltersProps = {
+  domainId: string | null;
+  providerId: string | null;
+  signature: string;
+  minScenarios: number;
+  domainOptions: Option[];
+  providerOptions: Option[];
+  signatureOptions: Option[];
+  onDomainChange: (value: string | null) => void;
+  onProviderChange: (value: string | null) => void;
+  onSignatureChange: (value: string) => void;
+  onMinScenariosChange: (value: number) => void;
+};
+
+export function ConsistencyFilters({
+  domainId,
+  providerId,
+  signature,
+  minScenarios,
+  domainOptions,
+  providerOptions,
+  signatureOptions,
+  onDomainChange,
+  onProviderChange,
+  onSignatureChange,
+  onMinScenariosChange,
+}: ConsistencyFiltersProps) {
+  return (
+    <section className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className="flex flex-wrap gap-4">
+        <div className="min-w-[220px] flex-1">
+          <Select
+            label="Domain"
+            value={domainId ?? 'all'}
+            onChange={(value) => onDomainChange(value === 'all' ? null : value)}
+            options={[{ value: 'all', label: 'All domains' }, ...domainOptions]}
+          />
+        </div>
+        <div className="min-w-[220px] flex-1">
+          <Select
+            label="Signature"
+            value={signature}
+            onChange={(value) => onSignatureChange(value)}
+            options={signatureOptions}
+          />
+        </div>
+        <div className="min-w-[220px] flex-1">
+          <Select
+            label="Provider"
+            value={providerId ?? 'all'}
+            onChange={(value) => onProviderChange(value === 'all' ? null : value)}
+            options={[{ value: 'all', label: 'All providers' }, ...providerOptions]}
+          />
+        </div>
+        <label className="min-w-[120px] flex-1">
+          <span className="mb-1 block text-sm font-medium text-gray-700">Min n</span>
+          <input
+            type="number"
+            min={1}
+            step={1}
+            value={minScenarios}
+            onChange={(event) => {
+              // GraphQL $minScenarios is Int; coerce to a positive integer so
+              // fractional input (e.g. 5.5) does not produce a validation error.
+              const parsed = Number.parseInt(event.target.value, 10);
+              onMinScenariosChange(Number.isFinite(parsed) && parsed >= 1 ? parsed : 1);
+            }}
+            className="h-11 w-full rounded-lg border border-gray-300 px-3 text-sm text-gray-900 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+          />
+        </label>
+      </div>
+    </section>
+  );
+}
+
+codex
+I’ve got the main consistency pattern now. I’m checking the base `/models` page because the new report lives under the same tab and any mismatch in filter or selection behavior is likely to show up there first.
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/web/src/pages/Models.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from 'urql';
+import { ErrorMessage } from '../components/ui/ErrorMessage';
+import { Loading } from '../components/ui/Loading';
+import { Button } from '../components/ui/Button';
+import { Select } from '../components/ui/Select';
+import { useDomains } from '../hooks/useDomains';
+import {
+  MODELS_ANALYSIS_QUERY,
+  type ModelsAnalysisQueryResult,
+  type ModelsAnalysisQueryVariables,
+  type ModelsAnalysisValueResult,
+} from '../api/operations/modelsAnalysis';
+import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
+import { ModelValueDetailDrawer } from '../components/models/ModelValueDetailDrawer';
+import { ModelsMatrix } from '../components/models/ModelsMatrix';
+import {
+  DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+  type DomainAvailableSignaturesQueryResult,
+} from '../api/operations/domainAnalysis';
+import { formatSignatureOptionLabel } from '../utils/domainAnalysisUtils';
+
+const DEFAULT_SIGNATURE = 'vnewtd';
+
+export function Models() {
+  const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
+
+  const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
+  const [selectedSignature, setSelectedSignature] = useState<string>(DEFAULT_SIGNATURE);
+
+  const [{ data: signatureData }] = useQuery<DomainAvailableSignaturesQueryResult, { domainId: string }>({
+    query: DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+    variables: { domainId: selectedDomainId ?? '' },
+    pause: selectedDomainId == null,
+    requestPolicy: 'cache-and-network',
+  });
+
+  const signatureOptions = useMemo(
+    () => signatureData?.domainAvailableSignatures ?? [],
+    [signatureData],
+  );
+
+  // Reset to default when domain changes; keep valid selection if it exists in new options.
+  useEffect(() => {
+    setSelectedSignature(DEFAULT_SIGNATURE);
+  }, [selectedDomainId]);
+
+  // Memoized to keep the object reference stable across renders.
+  // If new query inputs are added, update the dependency array here too.
+  const queryVariables = useMemo(
+    () => ({
+      ...(selectedDomainId != null ? { domainId: selectedDomainId } : {}),
+      signature: selectedSignature,
+    }),
+    [selectedDomainId, selectedSignature],
+  );
+  const [{ data, fetching, error }] = useQuery<ModelsAnalysisQueryResult, ModelsAnalysisQueryVariables>({
+    query: MODELS_ANALYSIS_QUERY,
+    variables: queryVariables,
+    requestPolicy: 'cache-and-network',
+  });
+  const [{ data: llmModelsData }] = useQuery<LlmModelsQueryResult>({
+    query: LLM_MODELS_QUERY,
+    variables: { status: 'ACTIVE' },
+    requestPolicy: 'cache-and-network',
+  });
+  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
+  const [selectedCell, setSelectedCell] = useState<{ modelId: string; valueKey: string } | null>(null);
+  const initializedModelSelection = useRef(false);
+
+  const models = useMemo(() => data?.modelsAnalysis.models ?? [], [data]);
+  const defaultModelIds = useMemo(
+    () => new Set((llmModelsData?.llmModels ?? []).filter((m) => m.isDefault).map((m) => m.modelId)),
+    [llmModelsData],
+  );
+  const selectedDomain = selectedDomainId != null ? domains.find((domain) => domain.id === selectedDomainId) ?? null : null;
+  const singleDomainActive = selectedDomainId != null;
+
+  useEffect(() => {
+    if (selectedDomainId == null) return;
+    if (domains.some((domain) => domain.id === selectedDomainId)) return;
+    setSelectedDomainId(null);
+  }, [domains, selectedDomainId]);
+
+  useEffect(() => {
+    if (initializedModelSelection.current) return;
+    if (models.length === 0) return;
+    if (llmModelsData == null) return;
+    const availableIds = models.map((model) => model.modelId);
+    const defaultSelection = availableIds.filter((id) => defaultModelIds.has(id));
+    // Fall back to all models if no defaults are configured or none match the current result set
+    setSelectedModelIds(defaultSelection.length > 0 ? defaultSelection : availableIds);
+    initializedModelSelection.current = true;
+  }, [models, llmModelsData, defaultModelIds]);
+
+  useEffect(() => {
+    if (!initializedModelSelection.current) return;
+    setSelectedModelIds((current) => {
+      if (current.length === 0) return current;
+      const validIds = new Set(models.map((model) => model.modelId));
+      const next = current.filter((modelId) => validIds.has(modelId));
+      return next.length === current.length ? current : next;
+    });
+  }, [models]);
+
+  // Close the drawer when its model is no longer visible (filtered out or cleared)
+  useEffect(() => {
+    if (selectedCell == null) return;
+    if (!selectedModelIds.includes(selectedCell.modelId)) {
+      setSelectedCell(null);
+    }
+  }, [selectedModelIds, selectedCell]);
+
+  const modelOptions = useMemo(() => models.map((model) => ({
+    value: model.modelId,
+    label: model.label,
+  })), [models]);
+
+  const domainOptions = useMemo(() => [
+    { value: 'all', label: 'All domains' },
+    ...domains.map((domain) => ({
+      value: domain.id,
+      label: `${domain.name}`,
+    })),
+  ], [domains]);
+
+  const selectedModel = selectedCell != null
+    ? models.find((model) => model.modelId === selectedCell.modelId) ?? null
+    : null;
+  const selectedValue: ModelsAnalysisValueResult | null = useMemo(() => {
+    if (selectedCell == null || selectedModel == null) return null;
+    return selectedModel.values.find((value) => value.valueKey === selectedCell.valueKey) ?? null;
+  }, [selectedCell, selectedModel]);
+
+  const defaultSelection = useMemo(() => {
+    const availableIds = models.map((model) => model.modelId);
+    const defaults = availableIds.filter((id) => defaultModelIds.has(id));
+    return defaults.length > 0 ? defaults : availableIds;
+  }, [models, defaultModelIds]);
+
+  const isDefaultSelection = useMemo(() => {
+    if (selectedModelIds.length !== defaultSelection.length) return false;
+    const defaultSet = new Set(defaultSelection);
+    return selectedModelIds.every((id) => defaultSet.has(id));
+  }, [selectedModelIds, defaultSelection]);
+
+  const loading = (domainsLoading && domains.length === 0) || (fetching && data == null);
+  const selectedModelCount = selectedModelIds.length;
+
+  const toggleModelId = (modelId: string) => {
+    setSelectedModelIds((current) => (
+      current.includes(modelId)
+        ? current.filter((id) => id !== modelId)
+        : [...current, modelId]
+    ));
+  };
+
+  const selectAllModels = () => {
+    setSelectedModelIds(models.map((model) => model.modelId));
+  };
+
+  const clearModels = () => {
+    setSelectedModelIds([]);
+  };
+
+  const handleCellClick = (modelId: string, valueKey: string) => {
+    setSelectedCell({ modelId, valueKey });
+  };
+
+  const modelSetSummary = loading
+    ? 'Loading...'
+    : modelOptions.length === 0
+      ? 'No models available'
+      : isDefaultSelection
+        ? `Default — ${selectedModelCount} models selected`
+        : selectedModelCount === modelOptions.length
+          ? 'All selected'
+          : `${selectedModelCount} of ${modelOptions.length} selected`;
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Models</h1>
+        <p className="text-sm text-gray-600">
+          Compare model preferences by value and scan whether each pattern stays steady across domains.
+        </p>
+      </div>
+
+      {(domainsError != null || error != null) && (
+        <ErrorMessage message={`Failed to load models analysis: ${(domainsError ?? error)?.message ?? 'Unknown error'}`} />
+      )}
+
+      <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
+        <div className="flex flex-wrap items-start gap-4">
+          <div className="w-48 flex-shrink-0">
+            <Select
+              label="Domain scope"
+              options={domainOptions}
+              value={selectedDomainId ?? 'all'}
+              onChange={(value) => setSelectedDomainId(value === 'all' ? null : value)}
+              placeholder="All domains"
+            />
+          </div>
+          {selectedDomainId != null && signatureOptions.length > 0 && (
+            <div className="w-48 flex-shrink-0">
+              <Select
+                label="Batch"
+                options={signatureOptions.map((o) => ({ value: o.signature, label: formatSignatureOptionLabel(o) }))}
+                value={selectedSignature}
+                onChange={(value) => setSelectedSignature(value)}
+              />
+            </div>
+          )}
+          <details className="flex-1 min-w-[220px]">
+            <summary className="cursor-pointer list-none">
+              <p className="text-sm font-medium text-gray-700 mb-1">Model set</p>
+              <div className="inline-flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm hover:border-gray-400 min-h-[44px] sm:min-h-0">
+                <span className={modelOptions.length === 0 && !loading ? 'text-gray-400' : ''}>
+                  {modelSetSummary}
+                </span>
+                <span className="ml-2 text-gray-400">▾</span>
+              </div>
+            </summary>
+            <div className="mt-2 space-y-3 rounded-lg border border-gray-200 bg-white p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-gray-600">All visible models are selected by default.</p>
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="secondary" size="sm" onClick={selectAllModels} disabled={loading}>
+                    Select all
+                  </Button>
+                  <Button type="button" variant="secondary" size="sm" onClick={clearModels} disabled={loading}>
+                    Clear
+                  </Button>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {modelOptions.map((model) => {
+                  const isSelected = selectedModelIds.includes(model.value);
+                  return (
+                    <Button
+                      key={model.value}
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toggleModelId(model.value)}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors min-h-0 ${
+                        isSelected
+                          ? 'border-teal-600 bg-teal-600 text-white hover:bg-teal-700'
+                          : 'border-gray-300 bg-white text-gray-700 hover:border-teal-400 hover:text-teal-700 hover:bg-white'
+                      }`}
+                      title={model.label}
+                    >
+                      {model.label}
+                    </Button>
+                  );
+                })}
+                {modelOptions.length === 0 && !loading && (
+                  <span className="text-sm text-gray-500">No active models are available.</span>
+                )}
+              </div>
+
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/api/src/graphql/queries/models-analysis.ts" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+import { db } from '@valuerank/db';
+import { getModelsFromDatabase } from '../../config/models.js';
+import { buildAssumptionKey, parseSnapshotOutput } from '../../services/analysis/domain-analysis-snapshot-builder.js';
+import { DOMAIN_ANALYSIS_SNAPSHOT_TYPE } from '../../services/analysis/domain-analysis-cache-types.js';
+import { DOMAIN_ANALYSIS_VALUE_KEYS, type DomainAnalysisValueKey } from './domain-analysis-values.js';
+import { builder } from '../builder.js';
+import {
+  ModelsAnalysisResultRef,
+  type ModelsAnalysisDomainBreakdownShape,
+  type ModelsAnalysisModelResultShape,
+  type ModelsAnalysisValueResultShape,
+} from '../types/models-analysis.js';
+
+type DomainContribution = ModelsAnalysisDomainBreakdownShape;
+
+// Honest denominator: includes neutral outcomes so win rate is consistent with
+// the rest of the product (matches aggregate-logic.ts). Excluding neutrals would
+// inflate win rates and make evidence weights inconsistent with scenario counts.
+function computeDomainWinRate(prioritized: number, deprioritized: number, neutral: number): number | null {
+  const evidenceWeight = prioritized + deprioritized + neutral;
+  if (evidenceWeight <= 0) return null;
+  return (prioritized / evidenceWeight) * 100;
+}
+
+// Equal-weight pooled win rate: each domain counts once regardless of vignette count.
+function computePooledWinRate(domains: DomainContribution[]): number | null {
+  if (domains.length === 0) return null;
+  const sum = domains.reduce((acc, d) => acc + d.winRate, 0);
+  return sum / domains.length;
+}
+
+// Unweighted MAD stability score: each domain counts equally.
+function computeStabilityScore(domains: DomainContribution[]): number | null {
+  if (domains.length < 2) return null;
+  const mean = computePooledWinRate(domains);
+  if (mean === null) return null;
+  const mad = domains.reduce((acc, d) => acc + Math.abs(d.winRate - mean), 0) / domains.length;
+  return Math.max(0, 100 * (1 - mad / 50));
+}
+
+function buildEmptyValueResult(valueKey: DomainAnalysisValueKey): ModelsAnalysisValueResultShape {
+  return {
+    valueKey,
+    pooledWinRate: null,
+    stabilityScore: null,
+    eligibleDomainCount: 0,
+    domains: [],
+  };
+}
+
+function buildValueResult(valueKey: DomainAnalysisValueKey, domains: DomainContribution[]): ModelsAnalysisValueResultShape {
+  // Null evidenceWeight means the snapshot predates the vignetteCount field (pre-v1.2.0) but the
+  // win rate is still valid — include those domains in the pool. Exclude only genuine zero-evidence entries.
+  const eligibleDomains = domains.filter((domain) => domain.evidenceWeight == null || domain.evidenceWeight > 0);
+  return {
+    valueKey,
+    pooledWinRate: computePooledWinRate(eligibleDomains),
+    stabilityScore: computeStabilityScore(eligibleDomains),
+    eligibleDomainCount: eligibleDomains.length,
+    domains: eligibleDomains,
+  };
+}
+
+builder.queryField('modelsAnalysis', (t) =>
+  t.field({
+    type: ModelsAnalysisResultRef,
+    args: {
+      domainId: t.arg.id({
+        required: false,
+        description: 'Optional domain ID to scope the matrix to a single domain',
+      }),
+      signature: t.arg.string({
+        required: false,
+        description: 'Optional batch signature to filter snapshots (e.g. vnewtd, vnewt0)',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      const domainId = args.domainId != null ? String(args.domainId) : null;
+      const signature = args.signature != null ? String(args.signature) : null;
+      const activeModels = await getModelsFromDatabase({
+        activeOnly: true,
+        availableOnly: false,
+      });
+
+      const snapshots = await db.assumptionAnalysisSnapshot.findMany({
+        where: {
+          assumptionKey: domainId != null
+            ? buildAssumptionKey(domainId)
+            : {
+                startsWith: buildAssumptionKey(''),
+              },
+          analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
+          ...(signature != null ? { configSignature: signature } : {}),
+          status: 'CURRENT',
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          assumptionKey: true,
+          output: true,
+        },
+        orderBy: [
+          { createdAt: 'desc' },
+          { id: 'desc' },
+        ],
+      });
+
+      const latestSnapshotByAssumptionKey = new Map<string, typeof snapshots[number]>();
+      for (const snapshot of snapshots) {
+        if (!latestSnapshotByAssumptionKey.has(snapshot.assumptionKey)) {
+          latestSnapshotByAssumptionKey.set(snapshot.assumptionKey, snapshot);
+        }
+      }
+
+      const activeModelById = new Map(activeModels.map((model) => [model.modelId, model.displayName] as const));
+      const contributionsByModel = new Map<string, Map<DomainAnalysisValueKey, DomainContribution[]>>();
+
+      for (const model of activeModels) {
+        const valueMap = new Map<DomainAnalysisValueKey, DomainContribution[]>();
+        for (const valueKey of DOMAIN_ANALYSIS_VALUE_KEYS) {
+          valueMap.set(valueKey, []);
+        }
+        contributionsByModel.set(model.modelId, valueMap);
+      }
+
+      for (const snapshot of latestSnapshotByAssumptionKey.values()) {
+        const parsed = parseSnapshotOutput(snapshot.output);
+        if (parsed == null) {
+          ctx.log.warn({ assumptionKey: snapshot.assumptionKey, snapshotId: snapshot.id }, 'Skipping unparsable models analysis snapshot');
+          continue;
+        }
+
+        const domainMatch = snapshot.assumptionKey.startsWith('domain-analysis:')
+          ? snapshot.assumptionKey.slice('domain-analysis:'.length)
+          : null;
+
+        for (const model of parsed.models) {
+          if (!activeModelById.has(model.model)) continue;
+          const valueMap = contributionsByModel.get(model.model);
+          if (valueMap == null) continue;
+
+          for (const valueKey of DOMAIN_ANALYSIS_VALUE_KEYS) {
+            const contributions = valueMap.get(valueKey);
+            if (contributions == null) continue;
+
+            // Prefer pre-computed equal-weight fields from snapshots v1.2.0+.
+            // Fall back to raw counts for older snapshots (before the version bump).
+            const vigCount = model.vignetteCount?.[valueKey] ?? 0;
+            const precomputedWinRate = model.valueWinRates?.[valueKey];
+
+            if (vigCount > 0 && precomputedWinRate != null) {
+              contributions.push({
+                domainId: domainMatch ?? parsed.domainId,
+                domainName: parsed.domainName,
+                evidenceWeight: vigCount,
+                winRate: precomputedWinRate,
+              });
+            } else {
+              // Fallback: snapshot predates vignetteCount (pre-v1.2.0). Compute win rate from
+              // accumulated counts but do NOT use the raw count total as evidenceWeight — that
+              // number is total scenario outcomes (not vignette count) and would be misleading.
+              // Set evidenceWeight to null so the UI can show "—" until the snapshot rebuilds.
+              const counts = model.counts[valueKey] ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
+              const rawTotal = counts.prioritized + counts.deprioritized + counts.neutral;
+              if (rawTotal <= 0) continue;
+              const winRate = computeDomainWinRate(counts.prioritized, counts.deprioritized, counts.neutral);
+              if (winRate == null) continue;
+              contributions.push({
+                domainId: domainMatch ?? parsed.domainId,
+                domainName: parsed.domainName,
+                evidenceWeight: null,
+                winRate,
+              });
+            }
+          }
+        }
+      }
+
+      const models: ModelsAnalysisModelResultShape[] = activeModels.map((model) => {
+        const valueMap = contributionsByModel.get(model.modelId) ?? new Map<DomainAnalysisValueKey, DomainContribution[]>();
+        return {
+          modelId: model.modelId,
+          label: model.displayName,
+          values: DOMAIN_ANALYSIS_VALUE_KEYS.map((valueKey) => {
+            const domains = valueMap.get(valueKey) ?? [];
+            return domains.length === 0
+              ? buildEmptyValueResult(valueKey)
+              : buildValueResult(valueKey, domains);
+          }),
+        };
+      });
+
+      return {
+        models,
+      };
+    },
+  }),
+);
+
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/web/src/api/operations/modelsConsistency.ts" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+import type {
+  ModelsConsistencyQuery as GeneratedModelsConsistencyQuery,
+  ModelsConsistencyQueryVariables as GeneratedModelsConsistencyQueryVariables,
+} from '../../generated/graphql';
+
+// ============================================================================
+// QUERY DOCUMENT
+// ============================================================================
+
+export { ModelsConsistencyDocument as MODELS_CONSISTENCY_QUERY } from '../../generated/graphql';
+
+// ============================================================================
+// TYPES — all derived from the codegen-generated query shape
+// ============================================================================
+
+export type ModelsConsistencyQueryResult = GeneratedModelsConsistencyQuery;
+export type ModelsConsistencyQueryVariables = GeneratedModelsConsistencyQueryVariables;
+
+export type ModelsConsistencyResult = GeneratedModelsConsistencyQuery['modelsConsistency'];
+export type ModelsConsistencyModel = ModelsConsistencyResult['models'][number];
+export type ModelsConsistencyInsufficient = ModelsConsistencyResult['insufficient'][number];
+
+export type ModelsConsistencyRepeatability = ModelsConsistencyModel['repeatability'];
+export type ModelsConsistencyPerDomain = ModelsConsistencyRepeatability['perDomain'][number];
+export type ModelsConsistencyPerScenario = ModelsConsistencyRepeatability['perScenario'][number];
+
+export type ModelsConsistencyCoherence = ModelsConsistencyModel['coherence'];
+export type ModelsConsistencyPerPair = ModelsConsistencyCoherence['perPair'][number];
+export type ModelsConsistencyPerCondition = ModelsConsistencyPerPair['perCondition'][number];
+
+export type ModelsConsistencyOrderEffect = ModelsConsistencyModel['orderEffect'];
+
+codex
+I’ve confirmed the current models pages already handle multi-model selection and URL-backed signature state. That means the remaining review surface is mostly where the plan invents new query behavior or assumes the data is cleaner than the current codebase proves.
+exec
+/bin/zsh -lc "sed -n '1,120p' cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+import type { DomainAvailableSignature } from '../../api/operations/domainAnalysis';
+
+export function parseSignatureVersion(signature: string): number | null {
+  const match = signature.match(/^v(\d+)/i);
+  if (!match) return null;
+  const version = Number.parseInt(match[1] ?? '', 10);
+  return Number.isFinite(version) ? version : null;
+}
+
+export function selectPreferredSignature(options: DomainAvailableSignature[]): string {
+  // Virtual signatures ("Latest @ X") always beat exact versioned ones.
+  // Among virtuals, prefer default temperature (vnewtd) then temp-zero (vnewt0).
+  const virtualDefault = options.find((o) => o.isVirtual && o.signature === 'vnewtd');
+  if (virtualDefault) return virtualDefault.signature;
+  const virtualT0 = options.find((o) => o.isVirtual && o.signature === 'vnewt0');
+  if (virtualT0) return virtualT0.signature;
+  const anyVirtual = options.find((o) => o.isVirtual);
+  if (anyVirtual) return anyVirtual.signature;
+
+  // Fall back to highest-version exact signature
+  const sorted = [...options].sort((left, right) => {
+    const leftVersion = parseSignatureVersion(left.signature) ?? -1;
+    const rightVersion = parseSignatureVersion(right.signature) ?? -1;
+    if (leftVersion !== rightVersion) return rightVersion - leftVersion;
+    return right.signature.localeCompare(left.signature);
+  });
+  return sorted[0]?.signature ?? '';
+}
+
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/web/src/components/models/ModelsMatrix.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+import { useMemo, useState } from 'react';
+import { type ModelsAnalysisModelResult, type ModelsAnalysisValueResult } from '../../api/operations/modelsAnalysis';
+import { VALUE_LABELS, VALUES, type ValueKey } from '../../data/domainAnalysisData';
+import { ModelsMatrixCell } from './ModelsMatrixCell';
+import { Button } from '../ui/Button';
+
+export type ModelsMatrixSortKey = 'model' | ValueKey;
+
+type ModelsMatrixProps = {
+  models: ModelsAnalysisModelResult[];
+  selectedModelIds: string[];
+  singleDomainActive: boolean;
+  selectedCellKey: string | null;
+  onCellClick: (modelId: string, valueKey: string) => void;
+};
+
+function getSortableCell(
+  model: ModelsAnalysisModelResult,
+  sortKey: ModelsMatrixSortKey,
+): ModelsAnalysisValueResult | null {
+  if (sortKey === 'model') return null;
+  const value = model.values.find((entry) => entry.valueKey === sortKey) ?? null;
+  if (value == null || value.pooledWinRate == null) return null;
+  return value;
+}
+
+function getEmptyStateMessage(params: {
+  selectedModelCount: number;
+  visibleCellCount: number;
+  singleDomainActive: boolean;
+}): string {
+  if (params.selectedModelCount === 0) {
+    return 'No models are selected. Re-enable one or more models in the Model set filter.';
+  }
+
+  if (params.visibleCellCount === 0) {
+    if (params.singleDomainActive) {
+      return 'The selected domain has no scored comparisons for the current model set. Try All domains or a broader domain filter.';
+    }
+    return 'No scored comparisons are available for the current model set. Widen the domain filter or include more models.';
+  }
+
+  return '';
+}
+
+function sortModels(
+  models: ModelsAnalysisModelResult[],
+  sortKey: ModelsMatrixSortKey,
+  sortDirection: 'asc' | 'desc',
+): ModelsAnalysisModelResult[] {
+  const next = [...models];
+  next.sort((left, right) => {
+    if (sortKey === 'model') {
+      const cmp = left.label.localeCompare(right.label);
+      return sortDirection === 'asc' ? cmp : -cmp;
+    }
+
+    const leftCell = getSortableCell(left, sortKey);
+    const rightCell = getSortableCell(right, sortKey);
+
+    const leftRate = leftCell?.pooledWinRate ?? null;
+    const rightRate = rightCell?.pooledWinRate ?? null;
+
+    if (leftRate == null && rightRate == null) return left.label.localeCompare(right.label);
+    if (leftRate == null) return 1;
+    if (rightRate == null) return -1;
+
+    const diff = sortDirection === 'desc' ? rightRate - leftRate : leftRate - rightRate;
+    if (diff !== 0) return diff;
+
+    return left.label.localeCompare(right.label);
+  });
+  return next;
+}
+
+export function ModelsMatrix({
+  models,
+  selectedModelIds,
+  singleDomainActive,
+  selectedCellKey,
+  onCellClick,
+}: ModelsMatrixProps) {
+  const [sortKey, setSortKey] = useState<ModelsMatrixSortKey>('model');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const updateSort = (key: ModelsMatrixSortKey) => {
+    if (key === sortKey) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDirection(key === 'model' ? 'asc' : 'desc');
+    }
+  };
+
+  const visibleModels = useMemo(() => {
+    const selected = new Set(selectedModelIds);
+    const filtered = models.filter((model) => selected.has(model.modelId));
+    return sortModels(filtered, sortKey, sortDirection);
+  }, [models, selectedModelIds, sortKey, sortDirection]);
+
+  const visibleCellCount = useMemo(() => {
+    let count = 0;
+    for (const model of visibleModels) {
+      for (const value of model.values) {
+        if (value.pooledWinRate != null) {
+          count += 1;
+        }
+      }
+    }
+    return count;
+  }, [visibleModels]);
+
+  const emptyStateMessage = getEmptyStateMessage({
+    selectedModelCount: selectedModelIds.length,
+    visibleCellCount,
+    singleDomainActive,
+  });
+
+  if (models.length === 0) {
+    return (
+      <section className="rounded-xl border border-gray-200 bg-white p-6">
+        <p className="text-sm text-gray-600">No active models are available.</p>
+      </section>
+    );
+  }
+
+  if (emptyStateMessage !== '' || visibleModels.length === 0) {
+    return (
+      <section className="rounded-xl border border-gray-200 bg-white p-6">
+        <p className="text-sm text-gray-600">{emptyStateMessage !== '' ? emptyStateMessage : 'No active models are available.'}</p>
+      </section>
+    );
+  }
+
+  const headers = VALUES.map((valueKey) => ({
+    valueKey,
+    label: VALUE_LABELS[valueKey],
+  }));
+
+  return (
+    <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
+      <div className="overflow-x-auto">
+        <table className="min-w-[1200px] border-separate border-spacing-0 text-sm">
+          <thead>
+            <tr>
+              <th
+                className="sticky left-0 top-0 z-20 border-b border-gray-200 bg-white px-3 py-3 text-left"
+                aria-sort={sortKey === 'model' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+              >
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto min-h-0 !p-0 text-xs font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-900"
+                  onClick={() => updateSort('model')}
+                >
+                  Model {sortKey === 'model' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+                </Button>
+              </th>
+              {headers.map((value) => (
+                <th
+                  key={value.valueKey}
+                  className="sticky top-0 z-10 border-b border-gray-200 bg-white px-2 py-3 text-center"
+                  aria-sort={sortKey === value.valueKey ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                >
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto min-h-0 !p-0 text-xs font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-900"
+                    onClick={() => updateSort(value.valueKey)}
+                  >
+                    {value.label} {sortKey === value.valueKey ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+                  </Button>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {visibleModels.map((model) => {
+              const selectedModelKey = selectedCellKey != null ? selectedCellKey.split(':')[0] : null;
+              const selectedRow = selectedModelKey === model.modelId;
+              return (
+                <tr key={model.modelId}>
+                  <th
+                    className={`sticky left-0 z-10 border-b border-gray-100 px-3 py-2 text-left align-middle ${
+                      selectedRow ? 'bg-teal-50' : 'bg-white'
+                    }`}
+                    title={model.label}
+                  >
+                    <div className="max-w-[180px] truncate font-medium text-gray-900">{model.label}</div>
+                    <div className="text-xs text-gray-500">{model.modelId}</div>
+                  </th>
+                  {headers.map((value) => {
+                    const cell = model.values.find((entry) => entry.valueKey === value.valueKey) ?? null;
+                    if (cell == null) {
+                      return (
+                        <td key={value.valueKey} className="border-b border-gray-100 px-1 py-1 text-center">
+                          <span className="text-sm text-gray-400">n/a</span>
+                        </td>
+                      );
+                    }
+
+                    const selected = selectedCellKey === `${model.modelId}:${value.valueKey}`;
+
+                    return (
+                      <td key={value.valueKey} className="border-b border-gray-100 px-1 py-1 align-middle">
+                        <ModelsMatrixCell
+                          modelLabel={model.label}
+                          valueLabel={value.label}
+                          pooledWinRate={cell.pooledWinRate}
+                          stabilityScore={cell.stabilityScore}
+                          eligibleDomainCount={cell.eligibleDomainCount}
+                          domains={cell.domains}
+                          singleDomainActive={singleDomainActive}
+                          selected={selected}
+                          onClick={() => onCellClick(model.modelId, value.valueKey)}
+                        />
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-3 text-xs text-gray-500">
+        Click a column heading to sort.
+      </div>
+    </section>
+  );
+}
+
+exec
+/bin/zsh -lc "rg -n \"@valuerank/shared\" cloud/packages cloud/apps -g 'package.json' -g '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+cloud/packages/db/package.json:30:    "@valuerank/shared": "*"
+cloud/apps/api/package.json:28:    "@valuerank/shared": "*",
+cloud/packages/shared/package.json:2:  "name": "@valuerank/shared",
+cloud/apps/web/package.json:24:    "@valuerank/shared": "*",
+
+exec
+/bin/zsh -lc "sed -n '280,420p' cloud/apps/api/src/graphql/queries/models-consistency.ts" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+
+      for (const model of models as ModelRow[]) {
+        const { scenarios, pairs, invalidShape } = buildParsedModelData(scopedRuns, model.modelId);
+
+        if (invalidShape) {
+          insufficient.push({
+            modelId: model.modelId,
+            label: model.displayName,
+            providerName: model.provider.displayName ?? model.provider.name,
+            reason: 'invalid-summary-shape',
+          });
+          continue;
+        }
+
+        if (scenarios.length === 0) {
+          insufficient.push({
+            modelId: model.modelId,
+            label: model.displayName,
+            providerName: model.provider.displayName ?? model.provider.name,
+            reason: 'no-repeat-coverage',
+          });
+          continue;
+        }
+
+        if (scenarios.length < minScenarios) {
+          insufficient.push({
+            modelId: model.modelId,
+            label: model.displayName,
+            providerName: model.provider.displayName ?? model.provider.name,
+            reason: 'below-min-scenarios',
+          });
+          continue;
+        }
+
+        const repeatability = buildRepeatabilitySummary(scenarios);
+        const coherence = buildCoherenceSummary(pairs);
+        const primaryTranscripts = pairedRunPairs.flatMap((pair) =>
+          (orderEffectRowsByRun.get(pair.primaryRunId) ?? [])
+            .filter((row) => row.modelId === model.modelId)
+            .map(toOrderEffectTranscript),
+        );
+        const companionTranscripts = pairedRunPairs.flatMap((pair) =>
+          (orderEffectRowsByRun.get(pair.companionRunId) ?? [])
+            .filter((row) => row.modelId === model.modelId)
+            .map(toOrderEffectTranscript),
+        );
+        const orderEffect = computeOrderEffect(primaryTranscripts, companionTranscripts);
+
+        outputModels.push({
+          modelId: model.modelId,
+          label: model.displayName,
+          providerName: model.provider.displayName ?? model.provider.name,
+          repeatability,
+          coherence,
+          orderEffect,
+        });
+      }
+
+      return { models: outputModels, insufficient };
+    },
+  }),
+);
+
+exec
+/bin/zsh -lc "rg -n '\"d3-scale\"|d3-scale' cloud/apps/web/package.json cloud/packages -g 'package.json'" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ exited 1 in 0ms:
+exec
+/bin/zsh -lc "rg -n 'd3-scale' cloud -g '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+ succeeded in 0ms:
+cloud/package-lock.json:5457:    "node_modules/@types/d3-scale": {
+cloud/package-lock.json:5459:      "resolved": "https://registry.npmjs.org/@types/d3-scale/-/d3-scale-4.0.9.tgz",
+cloud/package-lock.json:8094:    "node_modules/d3-scale": {
+cloud/package-lock.json:8096:      "resolved": "https://registry.npmjs.org/d3-scale/-/d3-scale-4.0.2.tgz",
+cloud/package-lock.json:17034:        "@types/d3-scale": "^4.0.2",
+cloud/package-lock.json:17041:        "d3-scale": "^4.0.2",
+
+codex
+## Findings
+- HIGH: The API plan drops the same freshness and signature gates that the current Models analysis path depends on. Existing code only reads consistency data from `COMPLETED`, non-deleted aggregate runs and filters them with `runMatchesSignature(run.config, signature)` before any transcript-level work ([`models-consistency.ts`](/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/models-consistency.ts), [`domain-coverage-gql-types.ts`](/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts)). The plan’s direct `Transcript` aggregation never says it will preserve those gates, so stale, deleted, or mis-scoped rows can leak into the circumplex stats. [CODE-CONFIRMED]
+
+- MEDIUM: The signature-default rule is underspecified and does not match the repo’s existing selection logic. Current UI helpers explicitly prefer `vnewtd`, then `vnewt0`, then any virtual signature, and only then fall back to the highest-version exact signature ([`coverageMatrixHelpers.ts`](/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/components/domains/coverageMatrixHelpers.ts), [`ModelsConsistency.tsx`](/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/ModelsConsistency.tsx)). The plan’s “most recent otherwise” fallback can pick a different batch than the rest of the Models UI, which makes the report’s baseline unstable and inconsistent. [CODE-CONFIRMED]
+
+- LOW: The plan never defines the first-load model selection state for `/models/circumplex`. Current model-report pages do not leave the user staring at an empty view: `Models.tsx` bootstraps a selection from loaded data, and `ModelsConsistency.tsx` auto-selects a visible model when possible ([`Models.tsx`](/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/Models.tsx), [`ModelsConsistency.tsx`](/Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d/cloud/apps/web/src/pages/ModelsConsistency.tsx)). If the implementation follows the plan literally, the new page can open blank until the user manually chooses models. [UNVERIFIED]
+
+## Residual Risks
+- The transcript schema and its relationship to run/config data were not provided, so the exact join/filter shape for the new resolver is still ambiguous.
+- The plan still leaves the empty-state and default-selection UX underspecified, so first-load behavior may need a follow-up decision even if the data path is fixed correctly.
+tokens used
+51,515

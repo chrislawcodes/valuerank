@@ -1,0 +1,75 @@
+Reading additional input from stdin...
+OpenAI Codex v0.122.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dad75-72bd-7871-b8c6-ba105a8761f9
+--------
+user
+Review this diff artifact using a correctness-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts b/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts
+index c7ffc819..9032bbd9 100644
+--- a/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts
++++ b/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts
+@@ -181,7 +181,29 @@ builder.queryField('circumplexAnalysis', (t) =>
+         });
+ 
+         if (eligibility.status === 'eligible') {
+-          eligible.push(buildResult(modelId, model, signature, pairwise));
++          // Two-tier check: the first-pass eligibility (classifyEligibility) only
++          // asks "does this model have enough total trials per value?" — the stricter
++          // pair-level test (computeExcludedIndices inside buildResult) asks "does
++          // every value have enough determinate + high-trial pair cells?". A model
++          // can pass the first test but still have too many values excluded by the
++          // second, producing an "insufficient_data" verdict in the models array.
++          // That's confusing; demote such models to the insufficient list.
++          const result = buildResult(modelId, model, signature, pairwise);
++          const tooManyExcluded = result.excludedValues.length > SCHWARTZ_CIRCULAR_ORDER.length / 2;
++          if (result.verdictBand === 'insufficient_data' || tooManyExcluded) {
++            insufficient.push({
++              modelId,
++              modelLabel,
++              providerName,
++              reason: 'below_threshold',
++              trialsPerValue: eligibility.trialsPerValue.map((entry) => ({
++                valueKey: entry.valueKey,
++                trials: entry.trials,
++              })),
++            });
++          } else {
++            eligible.push(result);
++          }
+         } else {
+           insufficient.push({
+             modelId,
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+- **[UNVERIFIED] Medium** - The new `tooManyExcluded` gate (`result.excludedValues.length > SCHWARTZ_CIRCULAR_ORDER.length / 2`) adds a hard cutoff that is not justified by the diff itself. If `excludedValues` is just a descriptive output from `buildResult` rather than the actual validity rule, this will misclassify otherwise eligible models as `insufficient` and remove them from the main results array.
+- **[UNVERIFIED] Medium** - Models demoted by the new branch are all recorded with `reason: 'below_threshold'`, even when the real failure is pairwise exclusion or `verdictBand === 'insufficient_data'`. That collapses distinct failure modes into one code path and can surface the wrong remediation signal to any caller or UI that relies on `reason`.
+
+## Residual Risks
+- The diff assumes `buildResult().excludedValues` and `buildResult().verdictBand` are stable, authoritative signals for the same underlying failure. That equivalence is not verifiable from the artifact alone.
+- The review cannot confirm whether downstream consumers treat `reason` as informational only or as part of control flow, so the impact of the reason collapse may be larger or smaller than it appears here.
+tokens used
+5,352

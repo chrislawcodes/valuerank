@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/src/App.tsx",
+  "source_artifact_sha256": "a8d84ed6a15397e5280e09677204dca80c8e5471dc487185b1f97e690bbc5e56",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/circumplex-report/reviews/plan.gemini.testability-adversarial.review.context2.narrowed.txt",
+  "narrowed_artifact_sha256": "f8cbbb7379f3420a41713f52885c366eeecb22f275391dd6729fbd86310a3075",
+  "strategy": "head-tail-numbered-lines"
+}

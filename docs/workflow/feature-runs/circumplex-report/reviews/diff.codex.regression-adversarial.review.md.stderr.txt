@@ -1,0 +1,75 @@
+Reading additional input from stdin...
+OpenAI Codex v0.122.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/gifted-euclid-294e5d
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dad75-d0aa-7c22-8d88-01f15bd6eea1
+--------
+user
+Review this diff artifact using a regression-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts b/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts
+index c7ffc819..9032bbd9 100644
+--- a/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts
++++ b/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts
+@@ -181,7 +181,29 @@ builder.queryField('circumplexAnalysis', (t) =>
+         });
+ 
+         if (eligibility.status === 'eligible') {
+-          eligible.push(buildResult(modelId, model, signature, pairwise));
++          // Two-tier check: the first-pass eligibility (classifyEligibility) only
++          // asks "does this model have enough total trials per value?" — the stricter
++          // pair-level test (computeExcludedIndices inside buildResult) asks "does
++          // every value have enough determinate + high-trial pair cells?". A model
++          // can pass the first test but still have too many values excluded by the
++          // second, producing an "insufficient_data" verdict in the models array.
++          // That's confusing; demote such models to the insufficient list.
++          const result = buildResult(modelId, model, signature, pairwise);
++          const tooManyExcluded = result.excludedValues.length > SCHWARTZ_CIRCULAR_ORDER.length / 2;
++          if (result.verdictBand === 'insufficient_data' || tooManyExcluded) {
++            insufficient.push({
++              modelId,
++              modelLabel,
++              providerName,
++              reason: 'below_threshold',
++              trialsPerValue: eligibility.trialsPerValue.map((entry) => ({
++                valueKey: entry.valueKey,
++                trials: entry.trials,
++              })),
++            });
++          } else {
++            eligible.push(result);
++          }
+         } else {
+           insufficient.push({
+             modelId,
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+- [UNVERIFIED] Medium: `tooManyExcluded` makes eligibility depend on `result.excludedValues.length > SCHWARTZ_CIRCULAR_ORDER.length / 2`, which is only a proxy for the actual pair-level verdict. If `buildResult()` can still produce a valid model with more than half the values excluded, this new gate will create false negatives and move a valid model out of `eligible`.
+- [UNVERIFIED] Medium: The new demotion path always stores `reason: 'below_threshold'`, even when the model was moved because of the pair-level exclusion heuristic. Any downstream UI, alerting, or retry logic that keys off `reason` will now see the wrong failure cause and may suggest the wrong fix.
+
+## Residual Risks
+- [UNVERIFIED] I could not verify whether `excludedValues` is deduplicated or whether the `SCHWARTZ_CIRCULAR_ORDER.length / 2` cutoff matches the intended analysis rule everywhere else.
+- [UNVERIFIED] I could not verify whether any consumer depends on the previous split where first-pass eligible models always stayed in `eligible`, even if the deeper check would have marked them `insufficient_data`.
+tokens used
+26,515

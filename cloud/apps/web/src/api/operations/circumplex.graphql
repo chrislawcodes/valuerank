@@ -1,0 +1,41 @@
+query CircumplexAnalysis($modelIds: [String!]!, $signature: String!, $minTrialsPerValue: Int) {
+  circumplexAnalysis(modelIds: $modelIds, signature: $signature, minTrialsPerValue: $minTrialsPerValue) {
+    signature
+    eligibilityThreshold
+    insufficient {
+      modelId
+      modelLabel
+      providerName
+      reason
+      trialsPerValue {
+        valueKey
+        trials
+      }
+    }
+    models {
+      modelId
+      modelLabel
+      providerName
+      signature
+      valueOrder
+      profileCorrelationMatrix
+      pairTrialCounts
+      excludedValues
+      spearmanRho
+      spearmanP
+      verdictBand
+      mds2d {
+        valueKey
+        x
+        y
+        theoreticalAngleDeg
+      }
+      mdsStress
+      mdsWarning
+      trialsPerValue {
+        valueKey
+        trials
+      }
+    }
+  }
+}

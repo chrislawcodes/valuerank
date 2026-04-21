@@ -18,6 +18,7 @@ import { DomainCoverage } from './pages/DomainCoverage';
 import { DomainAnalysisValueDetail } from './pages/DomainAnalysisValueDetail';
 import { Models } from './pages/Models';
 import { ModelsConsistency } from './pages/ModelsConsistency';
+import { ModelsCircumplex } from './pages/ModelsCircumplex';
 import { DefinitionDetail } from './pages/DefinitionDetail';
 import { StartPairedBatchPage } from './pages/DefinitionDetail/StartPairedBatchPage';
 import { Runs } from './pages/Runs';
@@ -175,6 +176,14 @@ function App() {
               element={
                 <ProtectedLayout>
                   <ModelsConsistency />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/models/circumplex"
+              element={
+                <ProtectedLayout>
+                  <ModelsCircumplex />
                 </ProtectedLayout>
               }
             />

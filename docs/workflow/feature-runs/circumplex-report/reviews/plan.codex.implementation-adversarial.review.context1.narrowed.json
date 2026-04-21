@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/src/components/layout/NavTabs.tsx",
+  "source_artifact_sha256": "8bbef4ae76ed1e222ca2d527d215770759eef24f0b6a01aebb84374872ee5c9f",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/circumplex-report/reviews/plan.codex.implementation-adversarial.review.context1.narrowed.txt",
+  "narrowed_artifact_sha256": "e55c8479d3ec9125646b289c13e33acf5aa25d26b4e39ab41cd274f809cf36ab",
+  "strategy": "head-tail-numbered-lines"
+}

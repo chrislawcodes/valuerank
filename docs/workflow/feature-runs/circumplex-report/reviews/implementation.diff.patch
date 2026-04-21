@@ -1,0 +1,35 @@
+diff --git a/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts b/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts
+index c7ffc819..9032bbd9 100644
+--- a/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts
++++ b/cloud/apps/api/src/graphql/queries/circumplex-analysis.ts
+@@ -181,7 +181,29 @@ builder.queryField('circumplexAnalysis', (t) =>
+         });
+ 
+         if (eligibility.status === 'eligible') {
+-          eligible.push(buildResult(modelId, model, signature, pairwise));
++          // Two-tier check: the first-pass eligibility (classifyEligibility) only
++          // asks "does this model have enough total trials per value?" — the stricter
++          // pair-level test (computeExcludedIndices inside buildResult) asks "does
++          // every value have enough determinate + high-trial pair cells?". A model
++          // can pass the first test but still have too many values excluded by the
++          // second, producing an "insufficient_data" verdict in the models array.
++          // That's confusing; demote such models to the insufficient list.
++          const result = buildResult(modelId, model, signature, pairwise);
++          const tooManyExcluded = result.excludedValues.length > SCHWARTZ_CIRCULAR_ORDER.length / 2;
++          if (result.verdictBand === 'insufficient_data' || tooManyExcluded) {
++            insufficient.push({
++              modelId,
++              modelLabel,
++              providerName,
++              reason: 'below_threshold',
++              trialsPerValue: eligibility.trialsPerValue.map((entry) => ({
++                valueKey: entry.valueKey,
++                trials: entry.trials,
++              })),
++            });
++          } else {
++            eligible.push(result);
++          }
+         } else {
+           insufficient.push({
+             modelId,

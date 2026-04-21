@@ -1,0 +1,196 @@
+00001: import { type FocusEvent, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
+00002: import { NavLink, useLocation } from 'react-router-dom';
+00003: import { Activity, Archive, ChevronDown, ChevronRight, Cpu, FolderTree, Library, Settings } from 'lucide-react';
+00004: import { Button } from '../ui/Button';
+00005: import { useClickOutside } from '../../hooks/useClickOutside';
+00006: 
+00007: const utilityTabs: { name: string; path: string; icon: React.ComponentType<{ className?: string }>; aliases?: string[] }[] = [
+00008:   { name: 'Status', path: '/status', icon: Activity, aliases: ['/domains/status'] },
+00009: ];
+00010: 
+00011: type MenuLinkItem = {
+00012:   name: string;
+00013:   path: string;
+00014:   aliases?: string[];
+00015: };
+00016: 
+00017: type MenuGroupItem = {
+00018:   name: string;
+00019:   children: MenuLinkItem[];
+00020: };
+00021: 
+00022: type MenuItem = MenuLinkItem | MenuGroupItem;
+00023: 
+00024: const vignettesMenuItems: MenuItem[] = [
+00025:   { name: 'Vignette Library', path: '/definitions' },
+00026:   { name: 'Runs', path: '/runs' },
+00027:   { name: 'Analysis', path: '/analysis' },
+00028: ];
+00029: 
+00030: const domainMenuItems: MenuItem[] = [
+00031:   { name: 'Overview', path: '/domains' },
+00032:   { name: 'Domain Analysis', path: '/domains/analysis' },
+00033:   { name: 'Manage Domains', path: '/domains/manage' },
+00034: ];
+00035: 
+00036: const modelsMenuItems: MenuItem[] = [
+00037:   { name: 'Matrix', path: '/models' },
+00038:   { name: 'Consistency', path: '/models/consistency' },
+00039: ];
+00040: 
+00041: const archiveMenuItems: MenuItem[] = [
+00042:   { name: 'Overview', path: '/archive', aliases: [] as string[] },
+00043:   { name: 'Legacy Survey Work', path: '/archive/surveys' },
+00044:   { name: 'Legacy Survey Results', path: '/archive/survey-results' },
+00045: ];
+00046: 
+00047: const settingsMenuItems: MenuItem[] = [
+00048:   {
+00049:     name: 'Research Setup',
+00050:     children: [
+00051:       { name: 'Preambles', path: '/preambles' },
+00052:       { name: 'Level Presets', path: '/level-presets' },
+00053:     ],
+00054:   },
+00055:   { name: 'Account', path: '/settings/account' },
+00056:   { name: 'System Health', path: '/settings/system-health' },
+00057:   { name: 'LLM Models', path: '/settings/models' },
+00058:   { name: 'Infrastructure', path: '/settings/infrastructure' },
+00059:   { name: 'API Keys', path: '/settings/api-keys' },
+00060: ];
+00061: 
+00062: function isMenuGroupItem(item: MenuItem): item is MenuGroupItem {
+00063:   return 'children' in item;
+00064: }
+00065: 
+00066: export function NavTabs() {
+00067:   const location = useLocation();
+00068:   const [isVignettesMenuOpen, setIsVignettesMenuOpen] = useState(false);
+00069:   const [isDomainsMenuOpen, setIsDomainsMenuOpen] = useState(false);
+00070:   const [isModelsMenuOpen, setIsModelsMenuOpen] = useState(false);
+00071:   const [isArchiveMenuOpen, setIsArchiveMenuOpen] = useState(false);
+00072:   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
+00073:   const vignettesMenuRef = useRef<HTMLDivElement>(null);
+00074:   const domainMenuRef = useRef<HTMLDivElement>(null);
+00075:   const modelsMenuRef = useRef<HTMLDivElement>(null);
+00076:   const archiveMenuRef = useRef<HTMLDivElement>(null);
+00077:   const settingsMenuRef = useRef<HTMLDivElement>(null);
+00078: 
+00079:   const isPathActive = useCallback((path: string) => (
+00080:     location.pathname === path || location.pathname.startsWith(`${path}/`)
+00081:   ), [location.pathname]);
+00082: 
+00083:   const isTabActive = useCallback((tabPath: string, aliases: string[] = []) => (
+00084:     isPathActive(tabPath) || aliases.some((alias) => isPathActive(alias))
+00085:   ), [isPathActive]);
+00086: 
+00087:   const isMenuItemActive = useCallback((item: MenuItem) => (
+00088:     isMenuGroupItem(item)
+00089:       ? item.children.some((child) => isTabActive(child.path, child.aliases ?? []))
+00090:       : isTabActive(item.path, item.aliases ?? [])
+00091:   ), [isTabActive]);
+00092: 
+00093:   const isVignettesActive = vignettesMenuItems.some((item) => isMenuItemActive(item));
+00094:   const isDomainsActive = domainMenuItems.some((item) => isMenuItemActive(item));
+00095:   const isModelsActive = modelsMenuItems.some((item) => isMenuItemActive(item));
+00096:   const isArchiveActive = archiveMenuItems.some((item) => isMenuItemActive(item));
+00097:   const isSettingsActive = settingsMenuItems.some((item) => isMenuItemActive(item));
+00098: 
+00099:   useEffect(() => {
+00100:     setIsVignettesMenuOpen(false);
+00101:     setIsDomainsMenuOpen(false);
+00102:     setIsModelsMenuOpen(false);
+00103:     setIsArchiveMenuOpen(false);
+00104:     setIsSettingsMenuOpen(false);
+00105:   }, [location.pathname, isMenuItemActive]);
+00106: 
+00107:   useClickOutside(vignettesMenuRef, () => {
+00108:     if (isVignettesMenuOpen) setIsVignettesMenuOpen(false);
+00109:   }, isVignettesMenuOpen);
+00110:   useClickOutside(domainMenuRef, () => {
+00111:     if
+
+... [narrowed review slice: middle omitted] ...
+
+/Button>
+00179:         </div>
+00180:         <div className={`absolute left-0 top-full z-50 min-w-[200px] pt-1 transition-all duration-150 ${isOpen ? 'opacity-100 visible pointer-events-auto' : 'opacity-0 invisible pointer-events-none'}`}>
+00181:           <div className="rounded-md border border-gray-700 bg-[#1A1A1A] shadow-lg py-1">
+00182:             {items.map((item) => {
+00183:               if (isMenuGroupItem(item)) {
+00184:                 return (
+00185:                   <div key={item.name} className="relative border-t border-gray-800/80 mt-1 pt-1 group/submenu">
+00186:                     <div
+00187:                       className={`flex w-full items-center justify-between px-3 py-2 text-sm cursor-default select-none ${isMenuItemActive(item) ? 'bg-teal-600/20 text-teal-300' : 'text-white/80 group-hover/submenu:bg-gray-800 group-hover/submenu:text-white'}`}
+00188:                     >
+00189:                       <span>{item.name}</span>
+00190:                       <ChevronRight className="w-4 h-4" />
+00191:                     </div>
+00192:                     <div className="absolute left-full top-0 z-50 min-w-[180px] pl-1 opacity-0 invisible pointer-events-none group-hover/submenu:opacity-100 group-hover/submenu:visible group-hover/submenu:pointer-events-auto transition-all duration-150">
+00193:                       <div className="rounded-md border border-gray-700 bg-[#1A1A1A] shadow-lg py-1">
+00194:                         {item.children.map((child) => {
+00195:                           const childActive = isTabActive(child.path, child.aliases ?? []);
+00196:                           return (
+00197:                             <NavLink
+00198:                               key={child.path}
+00199:                               to={child.path}
+00200:                               className={`block px-3 py-2 text-sm ${childActive ? 'bg-teal-600/20 text-teal-300' : 'text-white/70 hover:bg-gray-800 hover:text-white'}`}
+00201:                             >
+00202:                               {child.name}
+00203:                             </NavLink>
+00204:                           );
+00205:                         })}
+00206:                       </div>
+00207:                     </div>
+00208:                   </div>
+00209:                 );
+00210:               }
+00211: 
+00212:               const itemActive = isTabActive(item.path, item.aliases ?? []);
+00213:               return (
+00214:                 <NavLink
+00215:                   key={item.path}
+00216:                   to={item.path}
+00217:                   className={`block px-3 py-2 text-sm ${itemActive ? 'bg-teal-600/20 text-teal-300' : 'text-white/80 hover:bg-gray-800 hover:text-white'}`}
+00218:                 >
+00219:                   {item.name}
+00220:                 </NavLink>
+00221:               );
+00222:             })}
+00223:           </div>
+00224:         </div>
+00225:       </div>
+00226:     );
+00227:   };
+00228: 
+00229:   return (
+00230:     <nav className="hidden sm:block bg-[#1A1A1A] border-t border-gray-800 sticky top-14 z-10">
+00231:       <div className="max-w-7xl mx-auto px-4">
+00232:         <div className="flex gap-1">
+00233:           {renderMenu(modelsMenuRef, 'Models', '/models', Cpu, modelsMenuItems, isModelsActive, isModelsMenuOpen, setIsModelsMenuOpen)}
+00234:           {renderMenu(domainMenuRef, 'Domains', '/domains', FolderTree, domainMenuItems, isDomainsActive, isDomainsMenuOpen, setIsDomainsMenuOpen)}
+00235:           {renderMenu(vignettesMenuRef, 'Vignettes', '/definitions', Library, vignettesMenuItems, isVignettesActive, isVignettesMenuOpen, setIsVignettesMenuOpen)}
+00236:           {renderMenu(archiveMenuRef, 'Archive', '/archive', Archive, archiveMenuItems, isArchiveActive, isArchiveMenuOpen, setIsArchiveMenuOpen)}
+00237:           {renderMenu(settingsMenuRef, 'Settings', '/settings/account', Settings, settingsMenuItems, isSettingsActive, isSettingsMenuOpen, setIsSettingsMenuOpen)}
+00238: 
+00239:           {utilityTabs.map((tab) => {
+00240:             const Icon = tab.icon;
+00241:             const isActive = isTabActive(tab.path) ||
+00242:               (tab.aliases?.some((alias) => location.pathname.includes(alias)) ?? false);
+00243: 
+00244:             return (
+00245:               <NavLink
+00246:                 key={tab.path}
+00247:                 to={tab.path}
+00248:                 className={`flex items-center gap-2 px-3 py-3 min-h-[44px] text-sm font-medium transition-colors border-b-2 ${isActive
+00249:                   ? 'text-white border-teal-500'
+00250:                   : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
+00251:                 }`}
+00252:               >
+00253:                 <Icon className="w-4 h-4" />
+00254:                 <span className="hidden sm:inline">{tab.name}</span>
+00255:               </NavLink>
+00256:             );
+00257:           })}
+00258:         </div>
+00259: 

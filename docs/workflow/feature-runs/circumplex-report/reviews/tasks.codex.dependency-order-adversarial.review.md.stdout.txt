@@ -1,0 +1,10 @@
+## Findings
+- **HIGH:** `A8` defines `CircumplexResult.profileCorrelationMatrix` as `[[Float]!]!`, but `A4` and `C1` both require null cells for excluded or insufficient comparisons. The schema cannot represent the matrix shape the API and UI are built around, so the resolver will either violate the SDL or silently discard needed nulls.
+- **MEDIUM:** `B3` only spells out a data fetch when the URL has no `models` param. There is no explicit query path for direct deep links with `models` already set, so a user can land on `/models/circumplex?models=...` and never trigger the analysis request that populates the page.
+- **MEDIUM:** `A4` requires `circumplexFit` to return `spearmanP`, but the tasks never define how that p-value is computed from Spearman rho, or what fallback to use when the correlation collapses. That leaves a core output under-specified and risks inconsistent implementations.
+- **MEDIUM:** `A6` accepts `modelIds`, but the aggregation flow never says to filter transcripts or returned buckets to that roster. Without an explicit filter, the resolver can spend time on unrelated models and later stages may see matrices that do not match the requested selection.
+
+## Residual Risks
+- The plan still depends on several existing helpers and DB shapes being discoverable in the codebase (`resolveTranscriptDecisionModel`, `runMatchesSignature`, `formatTrialSignature`). Those are only audited here, not pinned by path or signature, so a follow-up edit may still be needed.
+- `A2` documents the default-signature chain, but the listed tests do not exercise the `v*` fallback or the highest-preamble / lowest-temperature branch. That leaves one important path lightly covered.
+- `A4` and `A9` rely on the exact FR-012 / FR-018 interpretation matching the task text. If the underlying product spec uses slightly different cutoffs or null-handling rules, the implementation may need adjustment.
