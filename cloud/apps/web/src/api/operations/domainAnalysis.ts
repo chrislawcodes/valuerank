@@ -111,6 +111,18 @@ export type ClusterAnalysis = {
 export type DomainAnalysisResult = {
   domainId: string;
   domainName: string;
+  contributionSummary: Array<{
+    domainId: string;
+    domainName: string;
+    rawTrialCount: number;
+    share: number;
+  }>;
+  excludedDataSummary: Array<{
+    domainId: string;
+    domainName: string;
+    reasonCode: string;
+    count: number;
+  }>;
   totalDefinitions: number;
   targetedDefinitions: number;
   coveredDefinitions: number;

@@ -1,7 +1,7 @@
 import { db } from '@valuerank/db';
 import { getModelsFromDatabase } from '../../config/models.js';
 import { buildAssumptionKey, parseSnapshotOutput } from '../../services/analysis/domain-analysis-snapshot-builder.js';
-import { DOMAIN_ANALYSIS_SNAPSHOT_TYPE } from '../../services/analysis/domain-analysis-cache-types.js';
+import { DOMAIN_ANALYSIS_ASSUMPTION_PREFIX, DOMAIN_ANALYSIS_SNAPSHOT_TYPE } from '../../services/analysis/domain-analysis-cache-types.js';
 import { DOMAIN_ANALYSIS_VALUE_KEYS, type DomainAnalysisValueKey } from './domain-analysis-values.js';
 import { builder } from '../builder.js';
 import {
@@ -85,9 +85,9 @@ builder.queryField('modelsAnalysis', (t) =>
       const snapshots = await db.assumptionAnalysisSnapshot.findMany({
         where: {
           assumptionKey: domainId != null
-            ? buildAssumptionKey(domainId)
+            ? buildAssumptionKey('DOMAIN', domainId)
             : {
-                startsWith: buildAssumptionKey(''),
+                startsWith: `${DOMAIN_ANALYSIS_ASSUMPTION_PREFIX}:`,
               },
           analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
           ...(signature != null ? { configSignature: signature } : {}),

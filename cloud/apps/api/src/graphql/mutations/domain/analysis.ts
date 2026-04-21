@@ -24,6 +24,7 @@ builder.mutationField('refreshDomainAnalysis', (t) =>
         : null;
 
       const queued = await queueDomainAnalysisRefresh({
+        scope: 'DOMAIN',
         domainId,
         signature,
         reason: 'manual-refresh',
@@ -37,7 +38,11 @@ builder.mutationField('refreshDomainAnalysis', (t) =>
         };
       }
 
-      await refreshDomainAnalysisSnapshot(domainId, signature);
+      await refreshDomainAnalysisSnapshot({
+        scope: 'DOMAIN',
+        domainId,
+        requestedSignature: signature,
+      });
       return {
         success: true,
         mode: 'REFRESHED' as const,

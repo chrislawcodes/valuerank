@@ -1,12 +1,5 @@
 import { db } from '@valuerank/db';
-import { NotFoundError } from '@valuerank/shared';
-import {
-  getMissingReasonLabel,
-  hydrateDefinitionAncestors,
-  resolveSignatureRuns,
-  resolveValuePairsInChunks,
-  selectLatestDefinitionPerLineage,
-} from '../../graphql/queries/domain/shared.js';
+import { getMissingReasonLabel, resolveSignatureRuns, resolveValuePairsInChunks } from '../../graphql/queries/domain/shared.js';
 import { computeAggregateFingerprint } from './aggregate/aggregate-helpers.js';
 import {
   DOMAIN_ANALYSIS_ASSUMPTION_PREFIX,
@@ -20,9 +13,16 @@ import {
   type SnapshotClient,
 } from './domain-analysis-cache-types.js';
 import { aggregateAnalysisRows } from './domain-analysis-snapshot-aggregator.js';
+import { type DomainAnalysisScope } from './domain-analysis-scope.js';
+import {
+  buildContributionAndExcludedSummary,
+  resolveDomainAnalysisScopeDefinitions,
+} from './domain-analysis-scope-loader.js';
 
-export function buildAssumptionKey(domainId: string): string {
-  return `${DOMAIN_ANALYSIS_ASSUMPTION_PREFIX}:${domainId}`;
+export function buildAssumptionKey(scope: DomainAnalysisScope, domainId: string): string {
+  return scope === 'ALL_DOMAINS'
+    ? `${DOMAIN_ANALYSIS_ASSUMPTION_PREFIX}:all-domains`
+    : `${DOMAIN_ANALYSIS_ASSUMPTION_PREFIX}:${domainId}`;
 }
 
 export function normalizeSignature(signature: string | null): string {
@@ -48,14 +48,16 @@ export function parseSnapshotOutput(raw: unknown): DomainAnalysisSnapshotOutput 
 }
 
 export function computeInputHash(params: {
-  domainId: string;
+  scope: DomainAnalysisScope;
+  domainIds: string[];
   signature: string;
   latestDefinitions: Array<{ id: string; updatedAt: Date }>;
   fingerprints: AnalysisFingerprintRow[];
 }): string {
   return computeAggregateFingerprint({
     codeVersion: DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION,
-    domainId: params.domainId,
+    scope: params.scope,
+    domainIds: params.domainIds.slice().sort(),
     signature: params.signature,
     definitions: params.latestDefinitions.map((definition) => ({
       id: definition.id,
@@ -68,69 +70,53 @@ export function computeInputHash(params: {
   }).slice(0, 16);
 }
 
-export async function prepareDomainAnalysisState(
-  domainId: string,
-  requestedSignature: string | null,
-): Promise<DomainAnalysisPreparedState> {
-  const domain = await db.domain.findUnique({
-    where: { id: domainId },
-    select: { id: true, name: true, defaultModelIds: true },
-  });
-  if (!domain) {
-    throw new NotFoundError('Domain', domainId);
-  }
-
-  const definitions = await db.definition.findMany({
-    where: { domainId, deletedAt: null },
-    select: {
-      id: true,
-      name: true,
-      parentId: true,
-      version: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+export async function prepareDomainAnalysisState(params: {
+  scope: DomainAnalysisScope;
+  domainId: string;
+  requestedSignature: string | null;
+}): Promise<DomainAnalysisPreparedState> {
+  const scopeData = await resolveDomainAnalysisScopeDefinitions({
+    scope: params.scope,
+    domainId: params.domainId,
   });
 
-  const definitionsById = await hydrateDefinitionAncestors(definitions);
-  const latestDefinitions = selectLatestDefinitionPerLineage(definitions, definitionsById);
-  const latestDefinitionIds = latestDefinitions.map((definition) => definition.id);
-  const definitionNameById = new Map<string, string>(
-    definitions.map((definition) => [definition.id, definition.name ?? definition.id]),
-  );
-
-  const resolvedSignatureRuns = await resolveSignatureRuns(latestDefinitionIds, requestedSignature, domain.defaultModelIds);
+  const defaultModelIds = scopeData.scope === 'ALL_DOMAINS' ? [] : scopeData.domain.defaultModelIds;
+  const resolvedSignatureRuns = await resolveSignatureRuns(scopeData.latestDefinitionIds, params.requestedSignature, defaultModelIds);
   const selectedSignature = resolvedSignatureRuns.selectedSignature;
   const configSignature = normalizeSignature(selectedSignature);
 
   const fingerprintRows = resolvedSignatureRuns.filteredSourceRunIds.length === 0
     ? []
     : await db.analysisResult.findMany({
-      where: {
-        runId: { in: resolvedSignatureRuns.filteredSourceRunIds },
-        analysisType: 'basic',
-        status: 'CURRENT',
-        deletedAt: null,
-      },
-      select: {
-        runId: true,
-        inputHash: true,
-      },
-    });
+        where: {
+          runId: { in: resolvedSignatureRuns.filteredSourceRunIds },
+          analysisType: 'basic',
+          status: 'CURRENT',
+          deletedAt: null,
+        },
+        select: {
+          runId: true,
+          inputHash: true,
+        },
+      });
 
   const inputHash = computeInputHash({
-    domainId,
+    scope: scopeData.scope,
+    domainIds: scopeData.domains.map((domain) => domain.id),
     signature: configSignature,
-    latestDefinitions,
+    latestDefinitions: scopeData.latestDefinitions,
     fingerprints: fingerprintRows,
   });
 
   return {
-    domain,
-    definitions,
-    latestDefinitions,
-    latestDefinitionIds,
-    definitionNameById,
+    scope: scopeData.scope,
+    domain: scopeData.domain,
+    domains: scopeData.domains,
+    definitions: scopeData.definitions,
+    latestDefinitions: scopeData.latestDefinitions,
+    latestDefinitionIds: scopeData.latestDefinitionIds,
+    definitionNameById: scopeData.definitionNameById,
+    definitionDomainIdById: scopeData.definitionDomainIdById,
     resolvedSignatureRuns,
     selectedSignature,
     configSignature,
@@ -146,22 +132,31 @@ export async function buildSnapshotOutput(
   const analysisRows: AnalysisOutputRow[] = state.resolvedSignatureRuns.filteredSourceRunIds.length === 0
     ? []
     : await db.analysisResult.findMany({
-      where: {
-        runId: { in: state.resolvedSignatureRuns.filteredSourceRunIds },
-        analysisType: 'basic',
-        status: 'CURRENT',
-        deletedAt: null,
-      },
-      select: {
-        runId: true,
-        inputHash: true,
-        output: true,
-      },
-    });
+        where: {
+          runId: { in: state.resolvedSignatureRuns.filteredSourceRunIds },
+          analysisType: 'basic',
+          status: 'CURRENT',
+          deletedAt: null,
+        },
+        select: {
+          runId: true,
+          inputHash: true,
+          output: true,
+        },
+      });
 
   const { models, analyzedDefinitionIds } = aggregateAnalysisRows({
     analysisRows,
     valuePairByDefinition,
+    filteredSourceRunDefinitionById: state.resolvedSignatureRuns.filteredSourceRunDefinitionById,
+  });
+
+  const domainNameById = new Map(state.domains.map((domain) => [domain.id, domain.name]));
+  const { contributionSummary, excludedDataSummary } = buildContributionAndExcludedSummary({
+    domainNameById,
+    definitionDomainIdById: state.definitionDomainIdById,
+    valuePairByDefinition,
+    analysisRows,
     filteredSourceRunDefinitionById: state.resolvedSignatureRuns.filteredSourceRunDefinitionById,
   });
 
@@ -189,57 +184,35 @@ export async function buildSnapshotOutput(
   return {
     domainId: state.domain.id,
     domainName: state.domain.name,
+    scope: state.scope,
     totalDefinitions: state.definitions.length,
     targetedDefinitions: state.latestDefinitions.length,
     coveredDefinitions: state.resolvedSignatureRuns.coveredDefinitionIds.size,
     definitionsWithAnalysis: analyzedDefinitionIds.size,
     missingDefinitions,
     models,
+    contributionSummary,
+    excludedDataSummary,
   };
 }
 
-export async function writeSnapshot(params: {
+export function writeSnapshot(params: {
   client: SnapshotClient;
+  scope: DomainAnalysisScope;
   domainId: string;
   configSignature: string;
   inputHash: string;
   output: DomainAnalysisSnapshotOutput;
 }) {
-  const current = await params.client.assumptionAnalysisSnapshot.findFirst({
-    where: {
-      assumptionKey: buildAssumptionKey(params.domainId),
-      analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
-      configSignature: params.configSignature,
-      status: 'CURRENT',
-      deletedAt: null,
-    },
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-  });
-  if (current != null && current.inputHash === params.inputHash) {
-    return current;
-  }
-
-  await params.client.assumptionAnalysisSnapshot.updateMany({
-    where: {
-      assumptionKey: buildAssumptionKey(params.domainId),
-      analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
-      configSignature: params.configSignature,
-      status: 'CURRENT',
-      deletedAt: null,
-    },
-    data: {
-      status: 'SUPERSEDED',
-    },
-  });
-
   return params.client.assumptionAnalysisSnapshot.create({
     data: {
-      assumptionKey: buildAssumptionKey(params.domainId),
+      assumptionKey: buildAssumptionKey(params.scope, params.domainId),
       analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
       inputHash: params.inputHash,
       codeVersion: DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION,
       configSignature: params.configSignature,
       config: {
+        scope: params.scope,
         domainId: params.domainId,
         signature: params.configSignature,
       },

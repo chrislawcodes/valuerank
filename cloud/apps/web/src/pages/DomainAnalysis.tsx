@@ -20,6 +20,7 @@ import {
 import { ModelGroupsSection } from '../components/domains/ModelGroupsSection';
 import { DominanceSection } from '../components/domains/DominanceSection';
 import { SimilaritySection } from '../components/domains/SimilaritySection';
+import { DomainAnalysisScopeSummary } from '../components/domains/DomainAnalysisScopeSummary';
 import { ValuePrioritiesSection } from '../components/domains/ValuePrioritiesSection';
 import {
   VALUES,
@@ -36,10 +37,15 @@ import {
   parseTemperatureFromSignature,
 } from '../utils/domainAnalysisUtils';
 
+const ALL_DOMAINS_SCOPE = 'all-domains';
+
 export function DomainAnalysis() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
+  const [selectedScope, setSelectedScope] = useState<'DOMAIN' | 'ALL_DOMAINS'>(
+    searchParams.get('scope') === ALL_DOMAINS_SCOPE ? 'ALL_DOMAINS' : 'DOMAIN',
+  );
   const [selectedDomainId, setSelectedDomainId] = useState<string>(searchParams.get('domainId') ?? '');
   const [selectedSignature, setSelectedSignature] = useState<string>(searchParams.get('signature') ?? '');
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
@@ -52,7 +58,10 @@ export function DomainAnalysis() {
     DomainAvailableSignaturesQueryResult, DomainAvailableSignaturesQueryVariables
   >({
     query: DOMAIN_AVAILABLE_SIGNATURES_QUERY,
-    variables: { domainId: selectedDomainId },
+    variables: {
+      domainId: selectedDomainId === '' ? domains[0]?.id ?? '' : selectedDomainId,
+      scope: selectedScope === 'ALL_DOMAINS' ? ALL_DOMAINS_SCOPE : undefined,
+    },
     pause: selectedDomainId === '',
     requestPolicy: 'cache-and-network',
   });
@@ -88,29 +97,44 @@ export function DomainAnalysis() {
   }, [selectedDomainId, selectedSignature]);
 
   useEffect(() => {
-    if (selectedDomainId === '') return;
-    if (searchParams.get('domainId') === selectedDomainId && (searchParams.get('signature') ?? '') === selectedSignature) return;
+    const currentScope = searchParams.get('scope') === ALL_DOMAINS_SCOPE ? 'ALL_DOMAINS' : 'DOMAIN';
+    const nextDomainId = selectedDomainId !== '' ? selectedDomainId : (domains[0]?.id ?? '');
+    if (nextDomainId === '' && selectedScope === 'DOMAIN') return;
+    if (
+      searchParams.get('domainId') === nextDomainId
+      && (searchParams.get('signature') ?? '') === selectedSignature
+      && currentScope === selectedScope
+    ) return;
     const next = new URLSearchParams(searchParams);
-    next.set('domainId', selectedDomainId);
+    if (nextDomainId !== '') next.set('domainId', nextDomainId);
+    else next.delete('domainId');
     next.set('scoreMethod', 'FULL_BT');
+    if (selectedScope === 'ALL_DOMAINS') next.set('scope', ALL_DOMAINS_SCOPE);
+    else next.delete('scope');
     if (selectedSignature === '') next.delete('signature');
     else next.set('signature', selectedSignature);
     setSearchParams(next, { replace: true });
-  }, [searchParams, selectedDomainId, selectedSignature, setSearchParams]);
+  }, [domains, searchParams, selectedDomainId, selectedSignature, selectedScope, setSearchParams]);
 
+  const activeUseLegacyQuery = useLegacyQuery && selectedScope !== 'ALL_DOMAINS';
   const [
     { data: scoredData, fetching: scoredFetching, error: scoredError },
     reexecuteScoredQuery,
   ] = useQuery<DomainAnalysisQueryResult, DomainAnalysisQueryVariables>({
     query: DOMAIN_ANALYSIS_QUERY,
-    variables: { domainId: selectedDomainId, scoreMethod: 'FULL_BT', signature: selectedSignature === '' ? undefined : selectedSignature },
-    pause: selectedDomainId === '' || useLegacyQuery,
+    variables: {
+      domainId: selectedDomainId === '' ? domains[0]?.id ?? '' : selectedDomainId,
+      scope: selectedScope === 'ALL_DOMAINS' ? ALL_DOMAINS_SCOPE : undefined,
+      scoreMethod: 'FULL_BT',
+      signature: selectedSignature === '' ? undefined : selectedSignature,
+    },
+    pause: selectedDomainId === '' || activeUseLegacyQuery,
     requestPolicy: 'cache-and-network',
   });
   const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<DomainAnalysisQueryResult, { domainId: string }>({
     query: DOMAIN_ANALYSIS_QUERY_LEGACY,
     variables: { domainId: selectedDomainId },
-    pause: selectedDomainId === '' || !useLegacyQuery,
+    pause: selectedDomainId === '' || !activeUseLegacyQuery,
     requestPolicy: 'cache-and-network',
   });
   const [{ fetching: refreshFetching }, refreshDomainAnalysis] = useMutation<
@@ -124,17 +148,18 @@ export function DomainAnalysis() {
       || message.includes('Unknown argument "signature"')
       || message.includes('Cannot query field')
       || message.includes('Unknown field');
-    if (isFieldError && !useLegacyQuery) setUseLegacyQuery(true);
-  }, [scoredError, useLegacyQuery]);
+    if (isFieldError && !useLegacyQuery && selectedScope !== 'ALL_DOMAINS') setUseLegacyQuery(true);
+  }, [scoredError, selectedScope, useLegacyQuery]);
 
-  const data = useLegacyQuery ? legacyData : scoredData;
-  const fetching = useLegacyQuery ? legacyFetching : scoredFetching;
-  const error = useLegacyQuery ? legacyError : scoredError;
+  const data = activeUseLegacyQuery ? legacyData : scoredData;
+  const fetching = activeUseLegacyQuery ? legacyFetching : scoredFetching;
+  const error = activeUseLegacyQuery ? legacyError : scoredError;
   const cacheStatusCopy = useMemo(
     () => getCacheStatusCopy(data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt),
     [data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt],
   );
   const showPageLoader = domainsLoading || (selectedDomainId !== '' && data?.domainAnalysis == null && fetching);
+  const isAllDomains = selectedScope === 'ALL_DOMAINS';
 
   const models = useMemo<ModelEntry[]>(() => {
     const sourceModels = data?.domainAnalysis.models ?? [];
@@ -173,7 +198,7 @@ export function DomainAnalysis() {
   );
 
   const handleExport = async () => {
-    if (selectedDomainId === '') return;
+    if (selectedDomainId === '' || isAllDomains) return;
     setExportLoading(true);
     setExportError(null);
     try {
@@ -186,7 +211,7 @@ export function DomainAnalysis() {
   };
 
   const handleRefreshAnalysis = async () => {
-    if (selectedDomainId === '') return;
+    if (selectedDomainId === '' || isAllDomains) return;
     setRefreshNotice(null);
     setRefreshError(null);
 
@@ -205,7 +230,7 @@ export function DomainAnalysis() {
   };
 
   const handleRunMissingVignettes = () => {
-    if (selectedDomainId === '' || allMissingDefinitionIds.length === 0) return;
+    if (selectedDomainId === '' || allMissingDefinitionIds.length === 0 || isAllDomains) return;
     const query = new URLSearchParams();
     query.set('definitionIds', allMissingDefinitionIds.join(','));
     if (selectedSignature !== '') {
@@ -230,7 +255,7 @@ export function DomainAnalysis() {
                 {cacheStatusCopy.badgeLabel}
               </span>
               <span>{cacheStatusCopy.detail}</span>
-              {!useLegacyQuery && (
+              {!activeUseLegacyQuery && !isAllDomains && (
                 <Button
                   type="button"
                   variant="secondary"
@@ -257,16 +282,28 @@ export function DomainAnalysis() {
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-sm font-semibold text-gray-900">Domain Selection</h2>
-            <p className="text-xs text-gray-600">Analysis is shown from the latest saved snapshot for this domain.</p>
+            <p className="text-xs text-gray-600">
+              {isAllDomains
+                ? 'Cross-domain analysis is read-only and pools every visible domain that matches the selected signature.'
+                : 'Analysis is shown from the latest saved snapshot for this domain.'}
+            </p>
           </div>
           <div className="flex flex-col gap-2 md:flex-row md:items-center">
             <select
               className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800"
-              value={selectedDomainId}
-              onChange={(e) => setSelectedDomainId(e.target.value)}
-              disabled={domainsLoading || domains.length === 0}
+              value={isAllDomains ? ALL_DOMAINS_SCOPE : selectedDomainId}
+              onChange={(e) => {
+                if (e.target.value === ALL_DOMAINS_SCOPE) {
+                  setSelectedScope('ALL_DOMAINS');
+                  return;
+                }
+                setSelectedScope('DOMAIN');
+                setSelectedDomainId(e.target.value);
+              }}
+              disabled={domainsLoading || (domains.length === 0 && !isAllDomains)}
             >
-              {domains.length === 0 && <option value="">No domains available</option>}
+              <option value={ALL_DOMAINS_SCOPE}>All domains</option>
+              {domains.length === 0 && !domainsLoading && <option value="">No domains available</option>}
               {domains.map((domain) => (
                 <option key={domain.id} value={domain.id}>{domain.name}</option>
               ))}
@@ -282,42 +319,57 @@ export function DomainAnalysis() {
                 <option key={opt.signature} value={opt.signature}>{formatSignatureOptionLabel(opt)}</option>
               ))}
             </select>
-            <Button type="button" variant="secondary" size="sm" onClick={handleExport} disabled={selectedDomainId === '' || exportLoading}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={handleExport}
+              disabled={selectedDomainId === '' || exportLoading || isAllDomains}
+              title={isAllDomains ? 'CSV export is unavailable in All domains mode' : undefined}
+            >
               {exportLoading ? 'Exporting\u2026' : 'Export CSV'}
             </Button>
           </div>
           {exportError !== null && <p className="mt-1 text-xs text-amber-700">{exportError}</p>}
         </div>
-        {data?.domainAnalysis != null && missingDefinitionCount > 0 && (
+        {isAllDomains && data?.domainAnalysis != null && (
+          <DomainAnalysisScopeSummary
+            contributionSummary={data.domainAnalysis.contributionSummary}
+            excludedDataSummary={data.domainAnalysis.excludedDataSummary}
+          />
+        )}
+        {data?.domainAnalysis != null && missingDefinitionCount > 0 && !isAllDomains && (
           <div className="mt-2 space-y-1 text-xs text-gray-500">
-            {missingDefinitionCount > 0 && (
-              <>
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-amber-700">Analysis filter excluded {missingDefinitionCount} vignette{missingDefinitionCount === 1 ? '' : 's'}.</p>
-                  <Button type="button" variant="secondary" size="sm" onClick={handleRunMissingVignettes} disabled={allMissingDefinitionIds.length === 0}>
-                    Run Missing Vignettes
-                  </Button>
-                </div>
-                <ul className="list-disc space-y-1 pl-5 text-amber-800">
-                  {(data.domainAnalysis.missingDefinitions ?? []).map((m) => (
-                    <li key={m.definitionId}>
-                      {m.definitionName} ({m.definitionId}) - {m.reasonLabel} - AIs: {m.missingAllModels ? 'All AIs' : m.missingModelLabels.join(', ')}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-amber-700">Analysis filter excluded {missingDefinitionCount} vignette{missingDefinitionCount === 1 ? '' : 's'}.</p>
+                <Button type="button" variant="secondary" size="sm" onClick={handleRunMissingVignettes} disabled={allMissingDefinitionIds.length === 0}>
+                  Run Missing Vignettes
+                </Button>
+              </div>
+              <ul className="list-disc space-y-1 pl-5 text-amber-800">
+                {(data.domainAnalysis.missingDefinitions ?? []).map((m) => (
+                  <li key={m.definitionId}>
+                    {m.definitionName} ({m.definitionId}) - {m.reasonLabel} - AIs: {m.missingAllModels ? 'All AIs' : m.missingModelLabels.join(', ')}
+                  </li>
+                ))}
+              </ul>
+            </>
           </div>
         )}
       </section>
-
 
       {showPageLoader ? (
         <Loading size="lg" text="Loading domain analysis..." />
       ) : (
         <>
           <ModelGroupsSection clusterAnalysis={data?.domainAnalysis.clusterAnalysis} />
-          <ValuePrioritiesSection models={models} selectedDomainId={selectedDomainId} selectedSignature={selectedSignature === '' ? null : selectedSignature} />
+          <ValuePrioritiesSection
+            models={models}
+            selectedDomainId={selectedDomainId}
+            selectedSignature={selectedSignature === '' ? null : selectedSignature}
+            isReadOnly={isAllDomains}
+          />
           <DominanceSection models={models} unavailableModels={unavailableModels} />
           <SimilaritySection models={models} clusterAnalysis={data?.domainAnalysis.clusterAnalysis} />
         </>

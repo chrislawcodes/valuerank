@@ -5,6 +5,7 @@ import type {
   DomainAnalysisValueCounts,
   resolveSignatureRuns,
 } from '../../graphql/queries/domain/shared.js';
+import type { DomainAnalysisScope } from './domain-analysis-scope.js';
 
 export const DOMAIN_ANALYSIS_CACHE_STATUS = {
   FRESH: 'FRESH',
@@ -16,7 +17,7 @@ export type DomainAnalysisCacheStatus =
   (typeof DOMAIN_ANALYSIS_CACHE_STATUS)[keyof typeof DOMAIN_ANALYSIS_CACHE_STATUS];
 
 export const DOMAIN_ANALYSIS_SNAPSHOT_TYPE = 'domain_overview';
-export const DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.3.0';
+export const DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.4.0';
 export const DOMAIN_ANALYSIS_ASSUMPTION_PREFIX = 'domain-analysis';
 export const DOMAIN_ANALYSIS_NONE_SIGNATURE = '__none__';
 
@@ -32,15 +33,32 @@ export type DomainAnalysisSnapshotModel = {
   vignetteCount?: Record<string, number>;
 };
 
+export type DomainAnalysisContributionSummary = {
+  domainId: string;
+  domainName: string;
+  rawTrialCount: number;
+  share: number;
+};
+
+export type DomainAnalysisExcludedDataSummary = {
+  domainId: string;
+  domainName: string;
+  reasonCode: 'SCHEMA_INCOMPATIBLE' | 'NO_ANALYSIS';
+  count: number;
+};
+
 export type DomainAnalysisSnapshotOutput = {
   domainId: string;
   domainName: string;
+  scope: DomainAnalysisScope;
   totalDefinitions: number;
   targetedDefinitions: number;
   coveredDefinitions: number;
   definitionsWithAnalysis: number;
   missingDefinitions: DomainAnalysisMissingDefinition[];
   models: DomainAnalysisSnapshotModel[];
+  contributionSummary: DomainAnalysisContributionSummary[];
+  excludedDataSummary: DomainAnalysisExcludedDataSummary[];
 };
 
 export type AnalysisFingerprintRow = {
@@ -55,11 +73,14 @@ export type AnalysisOutputRow = {
 };
 
 export type DomainAnalysisPreparedState = {
+  scope: DomainAnalysisScope;
   domain: { id: string; name: string; defaultModelIds: string[] };
+  domains: Array<{ id: string; name: string; defaultModelIds: string[] }>;
   definitions: DefinitionRow[];
   latestDefinitions: DefinitionRow[];
   latestDefinitionIds: string[];
   definitionNameById: Map<string, string>;
+  definitionDomainIdById: Map<string, string>;
   resolvedSignatureRuns: Awaited<ReturnType<typeof resolveSignatureRuns>>;
   selectedSignature: string | null;
   configSignature: string;

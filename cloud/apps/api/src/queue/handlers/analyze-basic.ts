@@ -264,11 +264,13 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
               const exactSignature = formatTrialSignature(requestedExactVersion, temperature);
               await Promise.all([
                 queueDomainAnalysisRefresh({
+                  scope: 'DOMAIN',
                   domainId,
                   signature: formatVnewSignature(temperature),
                   reason: 'analysis-complete',
                 }),
                 queueDomainAnalysisRefresh({
+                  scope: 'DOMAIN',
                   domainId,
                   signature: exactSignature,
                   reason: 'analysis-complete',

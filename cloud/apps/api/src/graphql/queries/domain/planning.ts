@@ -1,5 +1,5 @@
 import { db, Prisma } from '@valuerank/db';
-import { AuthenticationError, NotFoundError } from '@valuerank/shared';
+import { AuthenticationError } from '@valuerank/shared';
 import { builder } from '../../builder.js';
 import {
   DomainEvaluationCostEstimateRef,
@@ -8,15 +8,13 @@ import {
   DomainTrialRunStatusRef,
 } from './types.js';
 import {
-  hydrateDefinitionAncestors,
-  selectLatestDefinitionPerLineage,
-} from './shared.js';
-import {
   buildAvailableSignatureOptions,
   buildTrialRunStatusRows,
 } from './planning-utils.js';
 import { resolveRunAnalysisStatuses } from '../../../services/run/analysis-status.js';
 import { buildDomainEstimate } from './planning-estimate.js';
+import { parseDomainAnalysisScope } from '../../../services/analysis/domain-analysis-scope.js';
+import { resolveDomainAnalysisScopeDefinitions } from '../../../services/analysis/domain-analysis-scope-loader.js';
 
 builder.queryField('domainTrialsPlan', (t) =>
   t.field({
@@ -207,35 +205,20 @@ builder.queryField('domainAvailableSignatures', (t) =>
     type: [DomainAvailableSignatureRef],
     args: {
       domainId: t.arg.id({ required: true }),
+      scope: t.arg.string({ required: false }),
     },
     resolve: async (_root, args, ctx) => {
       if (!ctx.user) {
         throw new AuthenticationError('Authentication required');
       }
       const domainId = String(args.domainId);
-      const domain = await db.domain.findUnique({ where: { id: domainId } });
-      if (!domain) throw new NotFoundError('Domain', domainId);
-
-      const definitions = await db.definition.findMany({
-        where: { domainId, deletedAt: null },
-        select: {
-          id: true,
-          name: true,
-          parentId: true,
-          version: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-      if (definitions.length === 0) return [];
-
-      const definitionsById = await hydrateDefinitionAncestors(definitions);
-      const latestDefinitions = selectLatestDefinitionPerLineage(definitions, definitionsById);
-      const latestDefinitionIds = latestDefinitions.map((definition) => definition.id);
+      const scope = parseDomainAnalysisScope(args.scope);
+      const scopeData = await resolveDomainAnalysisScopeDefinitions({ scope, domainId });
+      if (scopeData.latestDefinitionIds.length === 0) return [];
 
       const runs = await db.run.findMany({
         where: {
-          definitionId: { in: latestDefinitionIds },
+          definitionId: { in: scopeData.latestDefinitionIds },
           status: 'COMPLETED',
           deletedAt: null,
         },

@@ -42,6 +42,10 @@ const defaultDomainAnalysis = {
   domainAnalysis: {
     domainId: 'domain-a',
     domainName: 'Domain A',
+    contributionSummary: [
+      { domainId: 'domain-a', domainName: 'Domain A', rawTrialCount: 12, share: 1 },
+    ],
+    excludedDataSummary: [],
     totalDefinitions: 2,
     targetedDefinitions: 2,
     coveredDefinitions: 2,
@@ -237,5 +241,27 @@ describe('DomainAnalysis', () => {
         }),
       );
     });
+  });
+
+  it('preserves the all-domains scope and disables domain-only actions', async () => {
+    render(
+      <MemoryRouter initialEntries={['/domains/analysis?scope=all-domains&signature=vnewtd']}>
+        <DomainAnalysis />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(useQueryMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variables: expect.objectContaining({
+            scope: 'all-domains',
+          }),
+        }),
+      );
+    });
+
+    expect(await screen.findByText(/cross-domain summary/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /export csv/i })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /run missing vignettes/i })).not.toBeInTheDocument();
   });
 });

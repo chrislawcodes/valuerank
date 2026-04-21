@@ -66,6 +66,7 @@ export type AggregateAnalysisJobData = {
 };
 
 export type RefreshDomainAnalysisSnapshotJobData = {
+  scope: 'DOMAIN' | 'ALL_DOMAINS';
   domainId: string;
   signature: string | null;
   reason: string;
