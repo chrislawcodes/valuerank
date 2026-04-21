@@ -35,11 +35,15 @@ describe('CircumplexModelPicker', () => {
         onToggle={() => {}}
         onSelectAll={() => {}}
         onClear={() => {}}
+        signatureOptions={[{ value: 'vnewtd', label: 'vnewtd' }]}
+        selectedSignature="vnewtd"
+        onSignatureChange={() => {}}
       />,
     );
 
     expect(screen.getByText('Model A')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /select all/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Signature')).not.toBeInTheDocument();
 
     await act(async () => {
       await user.click(screen.getByRole('button', { name: /model details/i }));
@@ -48,6 +52,9 @@ describe('CircumplexModelPicker', () => {
     expect(screen.getByRole('button', { name: /select all/i })).toBeInTheDocument();
     expect(screen.getByText(/hidden from selection/i)).toBeInTheDocument();
     expect(screen.getByText('Model C')).toBeInTheDocument();
+
+    expect(screen.getByText('Signature')).toBeInTheDocument();
+    expect(screen.getByText(/analysis is shown for signature/i)).toBeInTheDocument();
   });
 
   it('keeps the existing toggle callback for eligible model buttons', async () => {
@@ -62,6 +69,9 @@ describe('CircumplexModelPicker', () => {
         onToggle={handleToggle}
         onSelectAll={() => {}}
         onClear={() => {}}
+        signatureOptions={[{ value: 'vnewtd', label: 'vnewtd' }]}
+        selectedSignature="vnewtd"
+        onSignatureChange={() => {}}
       />,
     );
 

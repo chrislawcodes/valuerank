@@ -114,11 +114,11 @@ describe('ModelsCircumplex', () => {
     );
 
     const methodologyLabel = screen.getByText('How this is computed');
-    const signatureLabel = screen.getByText('Signature');
     const thresholdLabel = screen.getByText('Minimum trials per value');
+    const pickerMock = screen.getByText('Mock circumplex model picker');
 
-    expect(signatureLabel.closest('section')).toBe(thresholdLabel.closest('section'));
     expect(thresholdLabel.closest('section')).toBe(methodologyLabel.closest('section'));
+    expect(pickerMock.closest('section')).toBe(thresholdLabel.closest('section'));
 
     const stack = screen.getByTestId('circumplex-model-card-stack');
     expect(stack).toHaveClass('space-y-4');
@@ -126,6 +126,8 @@ describe('ModelsCircumplex', () => {
     expect(screen.getByTestId('circumplex-overlay-chart')).toBeInTheDocument();
     expect(screen.getAllByText('Model A').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Model B').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Values below the threshold/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Eligible models must have at least/i)).not.toBeInTheDocument();
   });
 
   it('shows estimated progress while circumplex data is loading', () => {
