@@ -131,76 +131,83 @@ export async function aggregatePairwiseWinRates(args: {
     return output;
   }
 
-  const transcripts = (await db.transcript.findMany({
-    where: {
-      runId: { in: scopedRunIds },
-      modelId: { in: args.modelIds },
-      deletedAt: null,
-    },
-    select: {
-      runId: true,
-      modelId: true,
-      decisionMetadata: true,
-      definitionSnapshot: true,
-      deletedAt: true,
-      scenario: {
-        select: {
-          orientationFlipped: true,
-          deletedAt: true,
+  // Query transcripts per-model instead of one big IN clause. Each transcript
+  // row carries a large JSON blob (definitionSnapshot + decisionMetadata), so
+  // fetching 20+ models × thousands of trials in one shot blows past Prisma's
+  // napi-to-rust string buffer limit and crashes. Per-model keeps each query's
+  // result set bounded.
+  for (const modelId of args.modelIds) {
+    const transcripts = (await db.transcript.findMany({
+      where: {
+        runId: { in: scopedRunIds },
+        modelId,
+        deletedAt: null,
+      },
+      select: {
+        runId: true,
+        modelId: true,
+        decisionMetadata: true,
+        definitionSnapshot: true,
+        deletedAt: true,
+        scenario: {
+          select: {
+            orientationFlipped: true,
+            deletedAt: true,
+          },
         },
       },
-    },
-  })) as TranscriptRow[];
+    })) as TranscriptRow[];
 
-  for (const transcript of transcripts) {
-    if (!scopedRunIdSet.has(transcript.runId)) continue;
-    if (!modelIdSet.has(transcript.modelId)) continue;
-    if (transcript.deletedAt != null || transcript.scenario?.deletedAt != null) continue;
+    for (const transcript of transcripts) {
+      if (!scopedRunIdSet.has(transcript.runId)) continue;
+      if (!modelIdSet.has(transcript.modelId)) continue;
+      if (transcript.deletedAt != null || transcript.scenario?.deletedAt != null) continue;
 
-    const pair = extractValuePair(transcript.definitionSnapshot);
-    if (pair == null) continue;
+      const pair = extractValuePair(transcript.definitionSnapshot);
+      if (pair == null) continue;
 
-    const resolved = resolveTranscriptDecisionModel({
-      decisionMetadata: transcript.decisionMetadata,
-      definitionSnapshot: transcript.definitionSnapshot,
-      orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
-      pairOverride: pair,
-    });
+      const resolved = resolveTranscriptDecisionModel({
+        decisionMetadata: transcript.decisionMetadata,
+        definitionSnapshot: transcript.definitionSnapshot,
+        orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+        pairOverride: pair,
+      });
 
-    if (resolved.canonical.direction === 'unknown') {
-      continue;
+      if (resolved.canonical.direction === 'unknown') {
+        continue;
+      }
+
+      const statsMap = statsByModel.get(transcript.modelId);
+      if (statsMap == null) continue;
+
+      // Canonicalize the pair orientation so prioritizedA always refers to the
+      // lexicographically-smaller value, regardless of which orientation the
+      // transcript's definitionSnapshot used. Without this, transcripts from
+      // different orientation conventions merge their counts incorrectly.
+      const canonicalPair: DomainAnalysisValuePair = pair.valueA < pair.valueB
+        ? pair
+        : { valueA: pair.valueB, valueB: pair.valueA };
+
+      const key = pairKey(canonicalPair);
+      const stats = statsMap.get(key) ?? {
+        pair: canonicalPair,
+        prioritizedA: 0,
+        prioritizedB: 0,
+        neutrals: 0,
+      };
+
+      if (resolved.canonical.direction === 'neutral') {
+        stats.neutrals += 1;
+      } else if (resolved.canonical.favoredValueKey === canonicalPair.valueA) {
+        stats.prioritizedA += 1;
+      } else if (resolved.canonical.favoredValueKey === canonicalPair.valueB) {
+        stats.prioritizedB += 1;
+      } else {
+        continue;
+      }
+
+      statsMap.set(key, stats);
     }
-
-    const statsMap = statsByModel.get(transcript.modelId);
-    if (statsMap == null) continue;
-
-    // Canonicalize the pair orientation so prioritizedA always refers to the
-    // lexicographically-smaller value, regardless of which orientation the
-    // transcript's definitionSnapshot used. Without this, transcripts from
-    // different orientation conventions merge their counts incorrectly.
-    const canonicalPair: DomainAnalysisValuePair = pair.valueA < pair.valueB
-      ? pair
-      : { valueA: pair.valueB, valueB: pair.valueA };
-
-    const key = pairKey(canonicalPair);
-    const stats = statsMap.get(key) ?? {
-      pair: canonicalPair,
-      prioritizedA: 0,
-      prioritizedB: 0,
-      neutrals: 0,
-    };
-
-    if (resolved.canonical.direction === 'neutral') {
-      stats.neutrals += 1;
-    } else if (resolved.canonical.favoredValueKey === canonicalPair.valueA) {
-      stats.prioritizedA += 1;
-    } else if (resolved.canonical.favoredValueKey === canonicalPair.valueB) {
-      stats.prioritizedB += 1;
-    } else {
-      continue;
-    }
-
-    statsMap.set(key, stats);
   }
 
   for (const [modelId, statsMap] of statsByModel.entries()) {
