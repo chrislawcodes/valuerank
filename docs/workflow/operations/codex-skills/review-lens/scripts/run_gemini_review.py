@@ -21,6 +21,7 @@ if str(FEATURE_FACTORY_SCRIPTS) not in sys.path:
 from workflow_utils import normalized_artifact_text, repo_relative_path
 from factory_state import load_workflow_state
 from factory_telemetry import record_ai_call
+from review_attempts import append_review_attempt, review_attempt_record
 
 
 BASE_REF_CANDIDATES = ["origin/main", "origin/master", "main", "master"]
@@ -468,6 +469,7 @@ def prompt_for(stage: str, lens: str, artifact_label: str, artifact_text: str, e
 
 
 def main() -> int:
+    started_at = time.monotonic()
     parser = argparse.ArgumentParser()
     parser.add_argument("--artifact", required=True)
     parser.add_argument("--lens", required=True)
@@ -569,12 +571,42 @@ def main() -> int:
         total_context_chars += len(text)
         extra_context.append((ctx_path.name, text))
 
+    def log_attempt(result_name: str, exit_code: int, error_summary: str = "") -> None:
+        try:
+            append_review_attempt(
+                review_attempt_record(
+                    repo_root=repo_root,
+                    reviewer="gemini",
+                    model=args.model,
+                    stage=args.stage,
+                    lens=args.lens,
+                    artifact_chars=len(source_artifact_text),
+                    context_chars=total_context_chars,
+                    total_chars=len(source_artifact_text) + total_context_chars,
+                    max_artifact_chars=args.max_artifact_chars,
+                    max_context_chars=args.max_context_chars,
+                    max_total_chars=args.max_total_chars,
+                    coverage_status=metadata.get("coverage_status", ""),
+                    coverage_note=metadata.get("coverage_note", ""),
+                    result=result_name,
+                    exit_code=exit_code,
+                    duration_seconds=time.monotonic() - started_at,
+                    artifact_sha256=source_artifact_hash,
+                    review_path=output_path,
+                    error_summary=error_summary,
+                ),
+                repo_root,
+            )
+        except Exception as exc:
+            print(f"warning: failed to log review attempt metadata: {exc}", file=sys.stderr)
+
     if len(artifact_text) + total_context_chars > args.max_total_chars:
         write_failure(
             output_path,
             metadata,
             f"Combined prompt content still exceeds max_total_chars ({len(artifact_text) + total_context_chars} > {args.max_total_chars}) after narrowing.",
         )
+        log_attempt("failed", 2, "combined prompt content exceeds max_total_chars")
         return 2
 
     prompt = prompt_for(args.stage, args.lens, artifact_label, artifact_text, extra_context)
@@ -646,6 +678,7 @@ def main() -> int:
             metadata,
             str(exc),
         )
+        log_attempt("timeout", 3, str(exc))
         return 3
     finally:
         if lock_path and owner_pid is not None:
@@ -661,6 +694,7 @@ def main() -> int:
             stdout_path,
             stderr_path,
         )
+        log_attempt("failed", 3, f"Gemini review failed after {args.retries + 1} attempt(s)")
         return 3
 
     stdout_path.write_text(result.stdout, encoding="utf-8")
@@ -676,6 +710,7 @@ def main() -> int:
             stdout_path,
             stderr_path,
         )
+        log_attempt("malformed", 4, f"Gemini output could not be parsed as JSON: {exc}")
         return 4
 
     response = payload.get("response", "").strip()
@@ -689,6 +724,7 @@ def main() -> int:
             stdout_path,
             stderr_path,
         )
+        log_attempt("malformed", 5, f"Gemini output did not match the required review format: {exc}")
         return 5
     stats = payload.get("stats", {})
     raw_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -717,6 +753,7 @@ def main() -> int:
     )
     write_report(output_path, metadata, body)
     print(str(output_path))
+    log_attempt("partial" if metadata.get("coverage_status") == "partial" else "passed", 0)
     return 0
 
 

@@ -4,6 +4,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from run_gemini_review import (
@@ -31,9 +32,11 @@ if str(FEATURE_FACTORY_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(FEATURE_FACTORY_SCRIPTS))
 
 from factory_telemetry import record_ai_call
+from review_attempts import append_review_attempt, review_attempt_record
 
 
 def main() -> int:
+    started_at = time.monotonic()
     parser = argparse.ArgumentParser()
     parser.add_argument("--artifact", required=True)
     parser.add_argument("--lens", required=True)
@@ -127,12 +130,42 @@ def main() -> int:
         total_context_chars += len(text)
         extra_context.append((ctx_path.name, text))
 
+    def log_attempt(result_name: str, exit_code: int, error_summary: str = "") -> None:
+        try:
+            append_review_attempt(
+                review_attempt_record(
+                    repo_root=repo_root,
+                    reviewer="codex",
+                    model=args.model,
+                    stage=args.stage,
+                    lens=args.lens,
+                    artifact_chars=len(source_artifact_text),
+                    context_chars=total_context_chars,
+                    total_chars=len(source_artifact_text) + total_context_chars,
+                    max_artifact_chars=args.max_artifact_chars,
+                    max_context_chars=args.max_context_chars,
+                    max_total_chars=args.max_total_chars,
+                    coverage_status=metadata.get("coverage_status", ""),
+                    coverage_note=metadata.get("coverage_note", ""),
+                    result=result_name,
+                    exit_code=exit_code,
+                    duration_seconds=time.monotonic() - started_at,
+                    artifact_sha256=source_artifact_hash,
+                    review_path=output_path,
+                    error_summary=error_summary,
+                ),
+                repo_root,
+            )
+        except Exception as exc:
+            print(f"warning: failed to log review attempt metadata: {exc}", file=sys.stderr)
+
     if len(artifact_text) + total_context_chars > args.max_total_chars:
         write_failure(
             output_path,
             metadata,
             f"Combined prompt content still exceeds max_total_chars ({len(artifact_text) + total_context_chars} > {args.max_total_chars}) after narrowing.",
         )
+        log_attempt("failed", 2, "combined prompt content exceeds max_total_chars")
         return 2
 
     prompt = "\n".join(
@@ -205,6 +238,7 @@ def main() -> int:
             stdout_path,
             stderr_path,
         )
+        log_attempt("timeout", 3, "Codex review timed out")
         return 3
     if result.returncode != 0:
         last_message_path.unlink(missing_ok=True)
@@ -215,6 +249,7 @@ def main() -> int:
             stdout_path,
             stderr_path,
         )
+        log_attempt("failed", 4, "Codex review failed")
         return 4
 
     try:
@@ -229,6 +264,7 @@ def main() -> int:
             stdout_path,
             stderr_path,
         )
+        log_attempt("malformed", 5, f"Codex output did not match the required review format: {exc}")
         return 5
 
     raw_path.write_text(response, encoding="utf-8")
@@ -256,6 +292,7 @@ def main() -> int:
     write_report(output_path, metadata, body)
     last_message_path.unlink(missing_ok=True)
     print(str(output_path))
+    log_attempt("partial" if metadata.get("coverage_status") == "partial" else "passed", 0)
     return 0
 
 
