@@ -1,7 +1,19 @@
-query DomainAnalysis($domainId: ID!, $scoreMethod: String, $signature: String) {
-  domainAnalysis(domainId: $domainId, scoreMethod: $scoreMethod, signature: $signature) {
+query DomainAnalysis($domainId: ID!, $scope: String, $scoreMethod: String, $signature: String) {
+  domainAnalysis(domainId: $domainId, scope: $scope, scoreMethod: $scoreMethod, signature: $signature) {
     domainId
     domainName
+    contributionSummary {
+      domainId
+      domainName
+      rawTrialCount
+      share
+    }
+    excludedDataSummary {
+      domainId
+      domainName
+      reasonCode
+      count
+    }
     totalDefinitions
     targetedDefinitions
     coveredDefinitions
@@ -185,8 +197,8 @@ query DomainAnalysisConditionTranscripts(
   }
 }
 
-query DomainAvailableSignatures($domainId: ID!) {
-  domainAvailableSignatures(domainId: $domainId) {
+query DomainAvailableSignatures($domainId: ID!, $scope: String) {
+  domainAvailableSignatures(domainId: $domainId, scope: $scope) {
     signature
     label
     isVirtual

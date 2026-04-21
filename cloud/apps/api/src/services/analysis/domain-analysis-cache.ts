@@ -32,17 +32,20 @@ import {
   buildSnapshotOutput,
   writeSnapshot,
 } from './domain-analysis-snapshot-builder.js';
+import type { DomainAnalysisScope } from './domain-analysis-scope.js';
+import { DOMAIN_ANALYSIS_ALL_DOMAINS_SCOPE } from './domain-analysis-scope.js';
 
 const log = createLogger('analysis:domain-cache');
 
 async function getCurrentSnapshot(
   client: SnapshotClient,
+  scope: DomainAnalysisScope,
   domainId: string,
   configSignature: string,
 ) {
   return client.assumptionAnalysisSnapshot.findFirst({
     where: {
-      assumptionKey: buildAssumptionKey(domainId),
+      assumptionKey: buildAssumptionKey(scope, domainId),
       analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
       configSignature,
       status: 'CURRENT',
@@ -79,9 +82,6 @@ function buildDomainAnalysisResultFromSnapshot(params: {
       const score = params.scoreMethod === 'FULL_BT'
         ? (btScores?.get(valueKey) ?? 0)
         : computeSmoothedLogOddsScore(wins, losses);
-      // Counts may be fractional after run-count normalisation (equal-weight per vignette).
-      // Fractional values (e.g. 10.5) signal that a vignette was run multiple times with
-      // mixed results — preserve the decimal so the UI can surface that inconsistency.
       return {
         valueKey,
         score,
@@ -127,7 +127,7 @@ function buildDomainAnalysisResultFromSnapshot(params: {
     .map((model) => ({
       model: model.modelId,
       label: model.displayName,
-      reason: 'No aggregate analysis data available for selected domain.',
+      reason: 'No aggregate analysis data available for selected scope.',
     }));
 
   const missingDefinitions = params.snapshot.missingDefinitions.map((missing) => ({
@@ -151,16 +151,19 @@ function buildDomainAnalysisResultFromSnapshot(params: {
     rankingShapeBenchmarks: benchmarks,
     clusterAnalysis,
     cacheStatus: params.cacheStatus,
+    contributionSummary: params.snapshot.contributionSummary ?? [],
+    excludedDataSummary: params.snapshot.excludedDataSummary ?? [],
   };
 }
 
 export async function queueDomainAnalysisRefresh(params: {
+  scope: DomainAnalysisScope;
   domainId: string;
   signature: string | null;
   reason: string;
 }): Promise<boolean> {
   if (!isBossRunning()) {
-    log.warn({ domainId: params.domainId, signature: params.signature, reason: params.reason }, 'Domain analysis refresh skipped because queue is unavailable');
+    log.warn({ scope: params.scope, domainId: params.domainId, signature: params.signature, reason: params.reason }, 'Domain analysis refresh skipped because queue is unavailable');
     return false;
   }
 
@@ -169,24 +172,34 @@ export async function queueDomainAnalysisRefresh(params: {
   await boss.send(
     'refresh_domain_analysis_snapshot',
     {
+      scope: params.scope,
       domainId: params.domainId,
       signature: params.signature,
       reason: params.reason,
     },
     {
       ...DEFAULT_JOB_OPTIONS.refresh_domain_analysis_snapshot,
-      singletonKey: `domain-analysis:${params.domainId}:${normalizedSignature}`,
+      singletonKey: `domain-analysis:${params.scope}:${params.scope === 'ALL_DOMAINS' ? DOMAIN_ANALYSIS_ALL_DOMAINS_SCOPE : params.domainId}:${normalizedSignature}`,
     },
   );
   return true;
 }
 
-export async function refreshDomainAnalysisSnapshot(domainId: string, requestedSignature: string | null) {
-  const state = await prepareDomainAnalysisState(domainId, requestedSignature);
+export async function refreshDomainAnalysisSnapshot(params: {
+  scope: DomainAnalysisScope;
+  domainId: string;
+  requestedSignature: string | null;
+}) {
+  const state = await prepareDomainAnalysisState({
+    scope: params.scope,
+    domainId: params.domainId,
+    requestedSignature: params.requestedSignature,
+  });
   const output = await buildSnapshotOutput(state);
   const snapshot = await db.$transaction((tx) => writeSnapshot({
     client: tx,
-    domainId,
+    scope: state.scope,
+    domainId: state.domain.id,
     configSignature: state.configSignature,
     inputHash: state.inputHash,
     output,
@@ -199,11 +212,16 @@ export async function refreshDomainAnalysisSnapshot(domainId: string, requestedS
 }
 
 export async function getDomainAnalysisResult(params: {
+  scope: DomainAnalysisScope;
   domainId: string;
   requestedSignature: string | null;
   scoreMethod: DomainAnalysisScoreMethod;
 }): Promise<DomainAnalysisResult> {
-  const state = await prepareDomainAnalysisState(params.domainId, params.requestedSignature);
+  const state = await prepareDomainAnalysisState({
+    scope: params.scope,
+    domainId: params.domainId,
+    requestedSignature: params.requestedSignature,
+  });
   const activeModels = await db.llmModel.findMany({
     where: { status: 'ACTIVE' },
     select: { modelId: true, displayName: true },
@@ -223,16 +241,18 @@ export async function getDomainAnalysisResult(params: {
       unavailableModels: activeModels.map((model) => ({
         model: model.modelId,
         label: model.displayName,
-        reason: 'No analyzed vignettes found in this domain.',
+        reason: 'No analyzed vignettes found in this scope.',
       })),
       generatedAt: new Date(),
       rankingShapeBenchmarks: { domainMeanTopGap: 0, domainStdTopGap: null, medianSpread: 0 },
-      clusterAnalysis: { clusters: [], faultLinesByPair: {}, defaultPair: null, skipped: true, skipReason: 'No vignettes found in this domain.' },
+      clusterAnalysis: { clusters: [], faultLinesByPair: {}, defaultPair: null, skipped: true, skipReason: 'No vignettes found in this scope.' },
       cacheStatus: DOMAIN_ANALYSIS_CACHE_STATUS.FRESH,
+      contributionSummary: [],
+      excludedDataSummary: [],
     };
   }
 
-  const currentSnapshot = await getCurrentSnapshot(db, params.domainId, state.configSignature);
+  const currentSnapshot = await getCurrentSnapshot(db, state.scope, state.domain.id, state.configSignature);
   const parsedCurrent = currentSnapshot != null ? parseSnapshotOutput(currentSnapshot.output) : null;
 
   if (currentSnapshot != null && parsedCurrent != null && currentSnapshot.inputHash === state.inputHash) {
@@ -247,7 +267,8 @@ export async function getDomainAnalysisResult(params: {
 
   if (currentSnapshot != null && parsedCurrent != null) {
     const queued = await queueDomainAnalysisRefresh({
-      domainId: params.domainId,
+      scope: state.scope,
+      domainId: state.domain.id,
       signature: state.selectedSignature,
       reason: 'page-load-stale',
     });
@@ -260,7 +281,11 @@ export async function getDomainAnalysisResult(params: {
     });
   }
 
-  const refreshed = await refreshDomainAnalysisSnapshot(params.domainId, state.selectedSignature);
+  const refreshed = await refreshDomainAnalysisSnapshot({
+    scope: state.scope,
+    domainId: state.domain.id,
+    requestedSignature: state.selectedSignature,
+  });
   const parsedFresh = parseSnapshotOutput(refreshed.snapshot.output);
   if (parsedFresh == null) {
     throw new ValidationError('Domain analysis snapshot could not be parsed after refresh');

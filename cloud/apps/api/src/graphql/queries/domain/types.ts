@@ -25,6 +25,10 @@ import type {
   DomainEvaluationEstimateModel,
   DomainTrialRunStatus,
 } from './shared.js';
+import type {
+  DomainAnalysisContributionSummary,
+  DomainAnalysisExcludedDataSummary,
+} from '../../../services/analysis/domain-analysis-cache-types.js';
 
 export {
   DomainAnalysisConditionDetailRef,
@@ -45,6 +49,8 @@ export type DomainAnalysisCacheStatus = 'FRESH' | 'UPDATING' | 'OUT_OF_DATE';
 export type DomainAnalysisResult = {
   domainId: string;
   domainName: string;
+  contributionSummary: DomainAnalysisContributionSummary[];
+  excludedDataSummary: DomainAnalysisExcludedDataSummary[];
   totalDefinitions: number;
   targetedDefinitions: number;
   coveredDefinitions: number;
@@ -70,6 +76,8 @@ export const DomainAnalysisValueScoreRef = builder.objectRef<DomainAnalysisValue
 export const DomainAnalysisModelRef = builder.objectRef<DomainAnalysisModel>('DomainAnalysisModel');
 export const DomainAnalysisUnavailableModelRef = builder.objectRef<DomainAnalysisUnavailableModel>('DomainAnalysisUnavailableModel');
 export const DomainAnalysisMissingDefinitionRef = builder.objectRef<DomainAnalysisMissingDefinition>('DomainAnalysisMissingDefinition');
+export const DomainAnalysisContributionSummaryRef = builder.objectRef<DomainAnalysisContributionSummary>('DomainAnalysisContributionSummary');
+export const DomainAnalysisExcludedDataSummaryRef = builder.objectRef<DomainAnalysisExcludedDataSummary>('DomainAnalysisExcludedDataSummary');
 export const DomainAnalysisResultRef = builder.objectRef<DomainAnalysisResult>('DomainAnalysisResult');
 export const DomainAvailableSignatureRef = builder.objectRef<DomainAvailableSignature>('DomainAvailableSignature');
 export const DomainTrialPlanModelRef = builder.objectRef<DomainTrialPlanModel>('DomainTrialPlanModel');
@@ -81,6 +89,8 @@ export const DomainEvaluationEstimateDefinitionRef = builder.objectRef<DomainEva
 export const DomainEvaluationCostEstimateRef = builder.objectRef<DomainEvaluationCostEstimate>('DomainEvaluationCostEstimate');
 export const DomainTrialModelStatusRef = builder.objectRef<DomainTrialModelStatus>('DomainTrialModelStatus');
 export const DomainTrialRunStatusRef = builder.objectRef<DomainTrialRunStatus>('DomainTrialRunStatus');
+const resolveContributionSummary = (parent: DomainAnalysisResult): DomainAnalysisContributionSummary[] => parent.contributionSummary;
+const resolveExcludedDataSummary = (parent: DomainAnalysisResult): DomainAnalysisExcludedDataSummary[] => parent.excludedDataSummary;
 
 builder.objectType(RankingShapeRef, {
   fields: (t) => ({
@@ -209,10 +219,36 @@ builder.objectType(DomainAnalysisMissingDefinitionRef, {
   }),
 });
 
+builder.objectType(DomainAnalysisContributionSummaryRef, {
+  fields: (t) => ({
+    domainId: t.exposeString('domainId'),
+    domainName: t.exposeString('domainName'),
+    rawTrialCount: t.exposeFloat('rawTrialCount'),
+    share: t.exposeFloat('share'),
+  }),
+});
+
+builder.objectType(DomainAnalysisExcludedDataSummaryRef, {
+  fields: (t) => ({
+    domainId: t.exposeString('domainId'),
+    domainName: t.exposeString('domainName'),
+    reasonCode: t.exposeString('reasonCode'),
+    count: t.exposeFloat('count'),
+  }),
+});
+
 builder.objectType(DomainAnalysisResultRef, {
   fields: (t) => ({
     domainId: t.exposeID('domainId'),
     domainName: t.exposeString('domainName'),
+    contributionSummary: t.field({
+      type: [DomainAnalysisContributionSummaryRef],
+      resolve: resolveContributionSummary,
+    }),
+    excludedDataSummary: t.field({
+      type: [DomainAnalysisExcludedDataSummaryRef],
+      resolve: resolveExcludedDataSummary,
+    }),
     totalDefinitions: t.exposeInt('totalDefinitions'),
     targetedDefinitions: t.exposeInt('targetedDefinitions'),
     coveredDefinitions: t.exposeInt('coveredDefinitions'),

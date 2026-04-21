@@ -45,6 +45,7 @@ export type DomainAnalysisScoreMethod = 'LOG_ODDS' | 'FULL_BT';
 
 export type DefinitionRow = {
   id: string;
+  domainId: string | null;
   name?: string;
   parentId: string | null;
   version: number;

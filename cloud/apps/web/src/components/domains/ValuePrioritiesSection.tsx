@@ -51,12 +51,14 @@ type ValuePrioritiesSectionProps = {
   models: ModelEntry[];
   selectedDomainId: string;
   selectedSignature: string | null;
+  isReadOnly?: boolean;
 };
 
 export function ValuePrioritiesSection({
   models,
   selectedDomainId,
   selectedSignature,
+  isReadOnly = false,
 }: ValuePrioritiesSectionProps) {
   const navigate = useNavigate();
   const detailedTableRef = useRef<HTMLDivElement>(null);
@@ -137,7 +139,7 @@ export function ValuePrioritiesSection({
   }, [scoreMode, models.length]);
 
   const handleValueCellClick = (modelId: string, valueKey: ValueKey) => {
-    if (selectedDomainId === '') return;
+    if (isReadOnly || selectedDomainId === '') return;
     const params = new URLSearchParams({
       domainId: selectedDomainId,
       modelId,
@@ -338,7 +340,8 @@ export function ValuePrioritiesSection({
                           size="sm"
                           className="relative block h-full min-h-[34px] w-full rounded-none border border-transparent px-2 py-2 text-right text-xs text-gray-800 hover:border-sky-300 hover:bg-white/25 hover:underline focus-visible:!ring-1 focus-visible:!ring-sky-400"
                           onClick={() => handleValueCellClick(model.model, value)}
-                          disabled={selectedDomainId === ''}
+                          disabled={selectedDomainId === '' || isReadOnly}
+                          title={isReadOnly ? 'Value drill-down is unavailable in All domains mode' : undefined}
                       >
                           <span>
                             {(() => {
