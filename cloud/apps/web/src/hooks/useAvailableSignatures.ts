@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
 import { useQuery } from 'urql';
 import { AVAILABLE_SIGNATURES_QUERY, type AvailableSignature, type AvailableSignaturesQueryResult } from '../api/operations/available-signatures';
-import { preferDefaultSignature, type AvailableSignature as SharedAvailableSignature } from '@valuerank/shared/signature-preference';
 import { isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
 import { parseTemperatureFromSignature } from '../utils/domainAnalysisUtils';
+import { preferDefaultSignature, type PreferredSignatureOption } from '../utils/signaturePreference';
 
-function toSharedOption(signature: AvailableSignature): SharedAvailableSignature {
+function toPreferredOption(signature: AvailableSignature): PreferredSignatureOption {
   const isVirtual = isVnewSignature(signature.signature);
   const temperature = isVirtual ? parseVnewTemperature(signature.signature) : parseTemperatureFromSignature(signature.signature);
   return {
@@ -29,7 +29,7 @@ export function useAvailableSignatures(): {
 
   const signatures = useMemo(() => data?.availableSignatures.map((entry) => entry.signature) ?? [], [data]);
   const defaultSignature = useMemo(
-    () => preferDefaultSignature((data?.availableSignatures ?? []).map(toSharedOption)),
+    () => preferDefaultSignature((data?.availableSignatures ?? []).map(toPreferredOption)),
     [data],
   );
 
