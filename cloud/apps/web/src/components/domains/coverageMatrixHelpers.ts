@@ -1,7 +1,5 @@
 import type { DomainAvailableSignature } from '../../api/operations/domainAnalysis';
-import { preferDefaultSignature } from '@valuerank/shared/signature-preference';
-
-export { preferDefaultSignature } from '@valuerank/shared/signature-preference';
+import { preferDefaultSignature } from '../../utils/signaturePreference';
 
 export function parseSignatureVersion(signature: string): number | null {
   const match = signature.match(/^v(\d+)/i);

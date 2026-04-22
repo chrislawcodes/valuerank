@@ -1,12 +1,11 @@
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
 import { Info, X } from 'lucide-react';
 import { type ModelsAnalysisModelResult, type ModelsAnalysisValueResult } from '../../api/operations/modelsAnalysis';
 import { VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
 import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
-import { computeDots, computeSimpleMad, computeSimpleMean, formatStabilityTooltip } from './stabilityDots';
+import { computeDots, computeSimpleMad, formatStabilityTooltip } from './stabilityDots';
 
 type ModelValueDetailDrawerProps = {
   open: boolean;
@@ -134,9 +133,6 @@ export function ModelValueDetailDrawer({
     </div>
   );
 
-  // --- Cross-domain stability tooltip data ---
-  const simpleMean = computeSimpleMean(domains);
-
   const crossDomainStabilityTooltip = (
     <div className="space-y-2">
       <p>
@@ -145,62 +141,8 @@ export function ModelValueDetailDrawer({
         A low score means the results vary a lot by domain.
       </p>
       <p>
-        <strong>How the score is built:</strong>
+        <strong>How the score is built:</strong> we compare each domain&apos;s win rate, measure how far those rates spread from the mean, and convert that spread into a score from 0 to 100.
       </p>
-      <ol className="list-decimal pl-4 space-y-0.5">
-        <li>Find each domain&apos;s win rate (table below).</li>
-        <li>Measure how far each domain&apos;s win rate is from the mean — the &quot;spread.&quot;</li>
-        <li>
-          Take a simple average of those distances.
-          This is called the <strong>MAD</strong> (Mean Absolute Deviation).
-          Every domain counts equally — a domain with more vignettes does not pull the average harder.
-        </li>
-        <li>
-          Convert to a score: <strong>score = 100 × (1 − MAD ÷ 50)</strong>.
-          A MAD of 0 → score 100 (all domains identical).
-          A MAD of 50 → score 0 (maximum disagreement possible).
-        </li>
-      </ol>
-      {!singleDomainActive && value.eligibleDomainCount >= 2 && simpleMean != null && domains.length > 0 && (
-        <div className="border-t border-gray-200 pt-2">
-          <p className="font-semibold mb-1">
-            Calculation for this cell <span className="font-normal text-gray-500">(mean: {formatPercent(simpleMean)})</span>:
-          </p>
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="border-b border-gray-200 text-gray-500">
-                <th className="text-left pb-1 pr-3 font-medium">Domain</th>
-                <th className="text-right pb-1 px-2 font-medium">Win rate</th>
-                <th className="text-right pb-1 pl-2 font-medium">Distance from mean</th>
-              </tr>
-            </thead>
-            <tbody>
-              {domains.map((d) => (
-                <tr key={d.domainId} className="border-b border-gray-100">
-                  <td className="py-0.5 pr-3">{d.domainName}</td>
-                  <td className="text-right py-0.5 px-2">{formatPercent(d.winRate)}</td>
-                  <td className="text-right py-0.5 pl-2">{Math.round(Math.abs(d.winRate - simpleMean))} pts</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t border-gray-300 font-semibold">
-                <td className="pt-1 pr-3" colSpan={2}>MAD</td>
-                <td className="text-right pt-1 pl-2">{mad != null ? `${Math.round(mad)} pts` : 'n/a'}</td>
-              </tr>
-              <tr className="font-semibold">
-                <td className="pt-0.5 pr-3 font-normal text-gray-500" colSpan={2}>
-                  {mad != null ? `100 × (1 − MAD ${Math.round(mad)} ÷ 50) =` : 'Score'}
-                </td>
-                <td className="text-right pt-0.5 pl-2">
-                  {value.stabilityScore != null ? `${Math.round(value.stabilityScore)}/100` : 'n/a'}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-          <p className="mt-1.5 text-gray-500">Score guide: 75–100 very consistent · 50–74 some variation · 0–49 changes a lot by domain.</p>
-        </div>
-      )}
       {singleDomainActive && (
         <p className="text-amber-700 border-t border-gray-200 pt-2">
           Not available when a single domain is selected — you need at least 2 domains to compare consistency.
@@ -211,24 +153,6 @@ export function ModelValueDetailDrawer({
           Needs at least 2 eligible domains. Currently: {value.eligibleDomainCount}.
         </p>
       )}
-    </div>
-  );
-
-  // --- Vignette count tooltip ---
-  const vignetteCountTooltip = (
-    <div className="space-y-2">
-      <p>
-        <strong>What it means:</strong> The number of distinct vignettes in this domain that test this value.
-        A vignette is a head-to-head scenario set where two values are compared.
-      </p>
-      <p>
-        Multiple runs of the same vignette are pooled into a single win rate before counting,
-        so this number reflects distinct vignettes, not total scenarios or runs.
-      </p>
-      <p>
-        Every vignette counts equally when computing the domain win rate —
-        a domain with 5 vignettes does not pull the average harder than one with 1.
-      </p>
     </div>
   );
 
@@ -297,65 +221,6 @@ export function ModelValueDetailDrawer({
             </div>
           </section>
 
-          <section className="rounded-xl border border-gray-200 bg-white">
-            <div className="border-b border-gray-200 px-4 py-3">
-              <h3 className="text-sm font-semibold text-gray-900">Contributing domains</h3>
-              <p className="text-xs text-gray-600">
-                Each row shows the eligible domains that contributed to this cell. The link opens the existing domain value detail page.
-              </p>
-            </div>
-            {domains.length === 0 ? (
-              <div className="px-4 py-4 text-sm text-gray-500">
-                No eligible domains contributed to this cell yet.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse text-sm">
-                  <thead>
-                    <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
-                      <th className="border-b border-gray-200 px-4 py-3">Domain</th>
-                      <th className="border-b border-gray-200 px-4 py-3">Win rate</th>
-                      <th className="border-b border-gray-200 px-4 py-3">
-                        <div className="flex items-center gap-1">
-                          <span>Vignette count</span>
-                          <Tooltip
-                            content={vignetteCountTooltip}
-                            position="bottom"
-                            variant="light"
-                            className="w-72 px-3 py-3 text-xs leading-relaxed normal-case tracking-normal font-normal"
-                          >
-                            <Button type="button" variant="ghost" size="icon" className="cursor-help p-0 min-w-0 min-h-0 h-4 w-4 text-gray-400 hover:text-gray-600 hover:bg-transparent" aria-label="What vignette count means">
-                              <InfoIcon />
-                            </Button>
-                          </Tooltip>
-                        </div>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {domains.map((domain) => (
-                      <tr key={domain.domainId} className="hover:bg-gray-50">
-                        <td className="border-b border-gray-100 px-4 py-3">
-                          <Link
-                            to={`/domains/analysis/value-detail?domainId=${encodeURIComponent(domain.domainId)}&modelId=${encodeURIComponent(model.modelId)}&valueKey=${encodeURIComponent(value.valueKey)}`}
-                            className="font-medium text-teal-700 hover:text-teal-900 hover:underline"
-                          >
-                            {domain.domainName}
-                          </Link>
-                        </td>
-                        <td className="border-b border-gray-100 px-4 py-3 font-mono text-gray-900">
-                          {formatPercent(domain.winRate)}
-                        </td>
-                        <td className="border-b border-gray-100 px-4 py-3 font-mono text-gray-900">
-                          {domain.evidenceWeight ?? '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
         </div>
       </aside>
     </div>,
