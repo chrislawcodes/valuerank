@@ -261,6 +261,8 @@ describe('DomainAnalysis', () => {
     });
 
     expect(await screen.findByText(/cross-domain summary/i)).toBeInTheDocument();
+    expect(screen.getByText(/each domain counts equally in the all-domains aggregate/i)).toBeInTheDocument();
+    expect(screen.queryByText(/raw trials/i)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /export csv/i })).toBeDisabled();
     expect(screen.queryByRole('button', { name: /run missing vignettes/i })).not.toBeInTheDocument();
   });
