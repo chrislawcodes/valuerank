@@ -20,7 +20,6 @@ import {
 import { ModelGroupsSection } from '../components/domains/ModelGroupsSection';
 import { DominanceSection } from '../components/domains/DominanceSection';
 import { SimilaritySection } from '../components/domains/SimilaritySection';
-import { DomainAnalysisScopeSummary } from '../components/domains/DomainAnalysisScopeSummary';
 import { ValuePrioritiesSection } from '../components/domains/ValuePrioritiesSection';
 import {
   VALUES,
@@ -332,12 +331,6 @@ export function DomainAnalysis() {
           </div>
           {exportError !== null && <p className="mt-1 text-xs text-amber-700">{exportError}</p>}
         </div>
-        {isAllDomains && data?.domainAnalysis != null && (
-          <DomainAnalysisScopeSummary
-            contributionSummary={data.domainAnalysis.contributionSummary}
-            excludedDataSummary={data.domainAnalysis.excludedDataSummary}
-          />
-        )}
         {data?.domainAnalysis != null && missingDefinitionCount > 0 && !isAllDomains && (
           <div className="mt-2 space-y-1 text-xs text-gray-500">
             <>
