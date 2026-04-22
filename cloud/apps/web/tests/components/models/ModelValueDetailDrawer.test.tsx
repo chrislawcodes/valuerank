@@ -4,41 +4,48 @@ import { describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { render, screen } from '@testing-library/react';
 import { ModelValueDetailDrawer } from '../../../src/components/models/ModelValueDetailDrawer';
+import { type ModelsAnalysisModelResult, type ModelsAnalysisValueResult } from '../../../src/api/operations/modelsAnalysis';
 
 const model = {
-  modelId: 'model-1',
-  label: 'Claude',
-  values: [],
-};
+  modelId: 'claude-sonnet-4-5',
+  label: 'Claude Sonnet 4.5',
+} as unknown as ModelsAnalysisModelResult;
 
 const value = {
-  valueKey: 'Achievement',
-  pooledWinRate: 62,
-  stabilityScore: 74,
-  eligibleDomainCount: 3,
+  valueKey: 'Benevolence_Dependability',
+  eligibleDomainCount: 2,
+  pooledWinRate: 68,
   domains: [
-    { domainId: 'domain-a', domainName: 'Domain A', evidenceWeight: 5, winRate: 60 },
-    { domainId: 'domain-b', domainName: 'Domain B', evidenceWeight: 4, winRate: 64 },
-    { domainId: 'domain-c', domainName: 'Domain C', evidenceWeight: 3, winRate: 62 },
+    {
+      domainId: 'domain-1',
+      domainName: 'Health',
+      winRate: 70,
+      evidenceWeight: 8,
+    },
+    {
+      domainId: 'domain-2',
+      domainName: 'Education',
+      winRate: 66,
+      evidenceWeight: 6,
+    },
   ],
-};
+} as unknown as ModelsAnalysisValueResult;
 
 describe('ModelValueDetailDrawer', () => {
-  it('keeps the top-line cross-domain score but removes the domain-by-domain summary', () => {
+  it('shows the pooled win rate card and no cross-domain stability card', () => {
     render(
       <MemoryRouter>
         <ModelValueDetailDrawer
           open
           model={model}
           value={value}
-          singleDomainActive={false}
           onClose={vi.fn()}
         />
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('Cross-domain stability', { selector: 'span' })).toBeInTheDocument();
-    expect(screen.queryByText(/contributing domains/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/vignette count/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Pooled win rate/i)).toBeDefined();
+    expect(screen.getByText(/68%/)).toBeDefined();
+    expect(screen.queryByText(/Cross-domain stability/i)).toBeNull();
   });
 });
