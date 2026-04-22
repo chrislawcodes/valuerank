@@ -291,7 +291,6 @@ export function Models() {
         open={selectedCell != null}
         model={selectedModel}
         value={selectedValue}
-        singleDomainActive={singleDomainActive}
         onClose={() => setSelectedCell(null)}
       />
     </div>

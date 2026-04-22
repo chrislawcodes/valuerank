@@ -1,17 +1,16 @@
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { Link } from 'react-router-dom';
 import { Info, X } from 'lucide-react';
 import { type ModelsAnalysisModelResult, type ModelsAnalysisValueResult } from '../../api/operations/modelsAnalysis';
 import { VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
 import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
-import { computeDots, computeSimpleMad, formatStabilityTooltip } from './stabilityDots';
 
 type ModelValueDetailDrawerProps = {
   open: boolean;
   model: ModelsAnalysisModelResult | null;
   value: ModelsAnalysisValueResult | null;
-  singleDomainActive: boolean;
   onClose: () => void;
 };
 
@@ -24,40 +23,10 @@ function InfoIcon() {
   return <Info className="h-3.5 w-3.5" />;
 }
 
-function Dots({ score }: { score: number | null }) {
-  const states = computeDots(score);
-  return (
-    <span className="inline-flex items-center gap-0.5" aria-hidden="true">
-      {states.map((state, i) => {
-        if (state === 'full') {
-          return <span key={i} className="inline-block w-3 h-3 rounded-full flex-shrink-0 bg-current" />;
-        }
-        if (state === 'half') {
-          return (
-            <span
-              key={i}
-              className="inline-block w-3 h-3 rounded-full flex-shrink-0"
-              style={{
-                background: 'linear-gradient(to right, currentColor 50%, transparent 50%)',
-                boxShadow: '0 0 0 1px currentColor',
-              }}
-            />
-          );
-        }
-        if (state === 'muted') {
-          return <span key={i} className="inline-block w-3 h-3 rounded-full flex-shrink-0 border border-current opacity-30" />;
-        }
-        return <span key={i} className="inline-block w-3 h-3 rounded-full flex-shrink-0 border border-current" />;
-      })}
-    </span>
-  );
-}
-
 export function ModelValueDetailDrawer({
   open,
   model,
   value,
-  singleDomainActive,
   onClose,
 }: ModelValueDetailDrawerProps) {
   useEffect(() => {
@@ -81,19 +50,16 @@ export function ModelValueDetailDrawer({
 
   const valueKey = value.valueKey as ValueKey;
   const valueLabel = VALUE_LABELS[valueKey] ?? value.valueKey;
-  const mad = computeSimpleMad(value.domains);
-  const stabilityCardText = formatStabilityTooltip(value.stabilityScore, value.eligibleDomainCount, mad, singleDomainActive);
   const domains = [...value.domains].sort((left, right) => {
     const diff = (right.evidenceWeight ?? 0) - (left.evidenceWeight ?? 0);
     return diff !== 0 ? diff : left.domainName.localeCompare(right.domainName);
   });
 
-  // --- Pooled win rate tooltip data ---
   const pooledWinRateTooltip = (
     <div className="space-y-2">
       <p>
         <strong>What it means:</strong> A simple average of win rates across eligible domains.
-        Each domain counts equally — a domain with more vignettes does not pull the average harder.
+        Each domain counts equally - a domain with more vignettes does not pull the average harder.
         Win rate per domain = prioritized ÷ (prioritized + deprioritized + neutral) across all its vignettes for this value.
       </p>
       <p>
@@ -133,26 +99,20 @@ export function ModelValueDetailDrawer({
     </div>
   );
 
-  const crossDomainStabilityTooltip = (
+  const vignetteCountTooltip = (
     <div className="space-y-2">
       <p>
-        <strong>What it means:</strong> How consistently this model wins across different domains.
-        A high score means the model behaves the same way no matter which domain it&apos;s tested in.
-        A low score means the results vary a lot by domain.
+        <strong>What it means:</strong> The number of distinct vignettes in this domain that test this value.
+        A vignette is a head-to-head scenario set where two values are compared.
       </p>
       <p>
-        <strong>How the score is built:</strong> we compare each domain&apos;s win rate, measure how far those rates spread from the mean, and convert that spread into a score from 0 to 100.
+        Multiple runs of the same vignette are pooled into a single win rate before counting,
+        so this number reflects distinct vignettes, not total scenarios or runs.
       </p>
-      {singleDomainActive && (
-        <p className="text-amber-700 border-t border-gray-200 pt-2">
-          Not available when a single domain is selected — you need at least 2 domains to compare consistency.
-        </p>
-      )}
-      {!singleDomainActive && value.eligibleDomainCount < 2 && (
-        <p className="text-amber-700 border-t border-gray-200 pt-2">
-          Needs at least 2 eligible domains. Currently: {value.eligibleDomainCount}.
-        </p>
-      )}
+      <p>
+        Every vignette counts equally when computing the domain win rate -
+        a domain with 5 vignettes does not pull the average harder than one with 1.
+      </p>
     </div>
   );
 
@@ -196,31 +156,70 @@ export function ModelValueDetailDrawer({
                 {formatPercent(value.pooledWinRate)}
               </div>
               <p className="mt-2 text-sm text-gray-600">
-                Simple mean across the eligible domains shown below — each domain counts equally.
+                Simple mean across the eligible domains shown below - each domain counts equally.
               </p>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                <span>Cross-domain stability</span>
-                <Tooltip
-                  content={crossDomainStabilityTooltip}
-                  position="bottom"
-                  variant="light"
-                  className="w-96 px-3 py-3 text-xs leading-relaxed normal-case tracking-normal font-normal"
-                >
-                  <Button type="button" variant="ghost" size="icon" className="cursor-help p-0 min-w-0 min-h-0 h-4 w-4 text-gray-400 hover:text-gray-600 hover:bg-transparent" aria-label="How cross-domain stability is calculated">
-                    <InfoIcon />
-                  </Button>
-                </Tooltip>
-              </div>
-              <div className="mt-2 flex items-center gap-2 text-lg text-gray-900">
-                <Dots score={value.stabilityScore} />
-                <span className="font-mono">{value.stabilityScore == null ? 'n/a' : `${Math.round(value.stabilityScore)}/100`}</span>
-              </div>
-              <p className="mt-2 text-sm text-gray-600">{stabilityCardText}</p>
             </div>
           </section>
 
+          <section className="rounded-xl border border-gray-200 bg-white">
+            <div className="border-b border-gray-200 px-4 py-3">
+              <h3 className="text-sm font-semibold text-gray-900">Contributing domains</h3>
+              <p className="text-xs text-gray-600">
+                Each row shows the eligible domains that contributed to this cell. The link opens the existing domain value detail page.
+              </p>
+            </div>
+            {domains.length === 0 ? (
+              <div className="px-4 py-4 text-sm text-gray-500">
+                No eligible domains contributed to this cell yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
+                      <th className="border-b border-gray-200 px-4 py-3">Domain</th>
+                      <th className="border-b border-gray-200 px-4 py-3">Win rate</th>
+                      <th className="border-b border-gray-200 px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <span>Vignette count</span>
+                          <Tooltip
+                            content={vignetteCountTooltip}
+                            position="bottom"
+                            variant="light"
+                            className="w-72 px-3 py-3 text-xs leading-relaxed normal-case tracking-normal font-normal"
+                          >
+                            <Button type="button" variant="ghost" size="icon" className="cursor-help p-0 min-w-0 min-h-0 h-4 w-4 text-gray-400 hover:text-gray-600 hover:bg-transparent" aria-label="What vignette count means">
+                              <InfoIcon />
+                            </Button>
+                          </Tooltip>
+                        </div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {domains.map((domain) => (
+                      <tr key={domain.domainId} className="hover:bg-gray-50">
+                        <td className="border-b border-gray-100 px-4 py-3">
+                          <Link
+                            to={`/domains/analysis/value-detail?domainId=${encodeURIComponent(domain.domainId)}&modelId=${encodeURIComponent(model.modelId)}&valueKey=${encodeURIComponent(value.valueKey)}`}
+                            className="font-medium text-teal-700 hover:text-teal-900 hover:underline"
+                          >
+                            {domain.domainName}
+                          </Link>
+                        </td>
+                        <td className="border-b border-gray-100 px-4 py-3 font-mono text-gray-900">
+                          {formatPercent(domain.winRate)}
+                        </td>
+                        <td className="border-b border-gray-100 px-4 py-3 font-mono text-gray-900">
+                          {domain.evidenceWeight ?? '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
         </div>
       </aside>
     </div>,
