@@ -1,0 +1,7 @@
+## Findings
+- [UNVERIFIED] MEDIUM: `authMiddleware` treats any JWT without a `role` claim as `ADMIN` (`payload.role ?? 'ADMIN'`). That is an unsafe fallback. Any legacy token or any token minted by a path that omits `role` gets full admin access instead of being denied or treated as least-privilege.
+- [UNVERIFIED] MEDIUM: Role and password-reset state are trusted only from the JWT and are not rechecked against the database on request. After a user is downgraded to `VISITOR` or marked `mustChangePassword`, any already-issued token still carries the old claims until it expires. That makes the new admin/user-management controls effective only after re-login, not immediately.
+
+## Residual Risks
+- I did not verify whether token lifetimes are short or whether there is any server-side revocation mechanism elsewhere. If there is not, the stale-token problem above is the main authorization gap.
+- I did not inspect every token-issuing path in the codebase. If any other path still emits JWTs without `role` or `mustChangePassword`, it inherits the same privilege-escalation risk from the fallback.

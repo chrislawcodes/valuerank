@@ -1,0 +1,7 @@
+## Findings
+1. High: `cloud/apps/api/src/auth/middleware.ts` now treats any JWT missing a `role` claim as `ADMIN`, and `cloud/apps/api/src/auth/services.ts` also defaults missing roles to `ADMIN` when minting tokens. Every still-valid token issued before this change lacks `role`, so existing users will be promoted to admin until those tokens expire. That is a privilege-escalation bug.
+2. Medium [UNVERIFIED]: The patch makes `ADMIN` the fallback in both the Prisma schema (`role @default(ADMIN)`) and token signing (`payload.role ?? 'ADMIN'`). If any existing or future user-creation/token-issuance path forgets to set `role` explicitly, it will silently create an admin account or admin token. I cannot confirm those extra paths exist without code context, but the change is fail-open.
+
+## Residual Risks
+1. [UNVERIFIED] The new global GraphQL mutation guard may break any pre-existing non-admin mutations that were not part of this patch.
+2. [UNVERIFIED] I could not verify that the database migration/backfill for `role` and `must_change_password` is complete, so the runtime behavior of pre-existing user rows may still differ from the intended model.

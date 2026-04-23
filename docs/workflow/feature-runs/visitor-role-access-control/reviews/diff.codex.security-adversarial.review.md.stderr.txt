@@ -1,0 +1,1361 @@
+Reading additional input from stdin...
+OpenAI Codex v0.123.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019db82b-f2b0-7002-85a1-4e65352564b0
+--------
+user
+Review this diff artifact using a security-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/apps/api/src/auth/index.ts b/cloud/apps/api/src/auth/index.ts
+index e7eac95c..4775745e 100644
+--- a/cloud/apps/api/src/auth/index.ts
++++ b/cloud/apps/api/src/auth/index.ts
+@@ -41,3 +41,8 @@ export {
+   graphqlAuthMiddleware,
+   isIntrospectionQuery,
+ } from './middleware.js';
++
++export {
++  requireAdmin,
++  requireAdminRest,
++} from './require-admin.js';
+diff --git a/cloud/apps/api/src/auth/middleware.ts b/cloud/apps/api/src/auth/middleware.ts
+index 63c3af71..ce981646 100644
+--- a/cloud/apps/api/src/auth/middleware.ts
++++ b/cloud/apps/api/src/auth/middleware.ts
+@@ -173,6 +173,8 @@ export async function authMiddleware(
+       req.user = {
+         id: payload.sub,
+         email: payload.email,
++        role: payload.role ?? 'ADMIN',
++        mustChangePassword: payload.mustChangePassword ?? false,
+       };
+       req.authMethod = 'jwt';
+ 
+@@ -240,7 +242,16 @@ async function validateApiKey(key: string): Promise<AuthUser | null> {
+   // Find the API key record
+   const apiKeyRecord = await db.apiKey.findUnique({
+     where: { keyHash },
+-    include: { user: true },
++    include: {
++      user: {
++        select: {
++          id: true,
++          email: true,
++          role: true,
++          mustChangePassword: true,
++        },
++      },
++    },
+   });
+ 
+   if (!apiKeyRecord) {
+@@ -272,6 +283,8 @@ async function validateApiKey(key: string): Promise<AuthUser | null> {
+   return {
+     id: apiKeyRecord.user.id,
+     email: apiKeyRecord.user.email,
++    role: apiKeyRecord.user.role,
++    mustChangePassword: apiKeyRecord.user.mustChangePassword,
+   };
+ }
+ 
+diff --git a/cloud/apps/api/src/auth/require-admin.ts b/cloud/apps/api/src/auth/require-admin.ts
+new file mode 100644
+index 00000000..462be67b
+--- /dev/null
++++ b/cloud/apps/api/src/auth/require-admin.ts
+@@ -0,0 +1,26 @@
++import type { Request, Response, NextFunction } from 'express';
++import { createGraphQLError } from 'graphql-yoga';
++
++import type { Context } from '../graphql/context.js';
++
++export function requireAdmin(ctx: Context): void {
++  if (ctx.user === null || ctx.user === undefined || ctx.user.role !== 'ADMIN') {
++    throw createGraphQLError('Admin access required', {
++      extensions: {
++        code: 'FORBIDDEN',
++        http: {
++          status: 403,
++        },
++      },
++    });
++  }
++}
++
++export function requireAdminRest(req: Request, res: Response, next: NextFunction): void {
++  if (req.user === null || req.user === undefined || req.user.role !== 'ADMIN') {
++    res.status(403).json({ error: 'FORBIDDEN', message: 'Admin access required' });
++    return;
++  }
++
++  next();
++}
+diff --git a/cloud/apps/api/src/auth/services.ts b/cloud/apps/api/src/auth/services.ts
+index d162df1f..2ef69d31 100644
+--- a/cloud/apps/api/src/auth/services.ts
++++ b/cloud/apps/api/src/auth/services.ts
+@@ -20,6 +20,8 @@ const BCRYPT_COST_FACTOR = 12;
+ /** Clock skew tolerance in seconds for JWT validation */
+ const CLOCK_SKEW_SECONDS = 30;
+ 
++type TokenUser = Pick<AuthUser, 'id' | 'email'> & Partial<Pick<AuthUser, 'role' | 'mustChangePassword'>>;
++
+ /**
+  * Hash a password using bcrypt
+  *
+@@ -48,14 +50,21 @@ export async function verifyPassword(
+  * Sign a JWT token for a user
+  *
+  * @param user - User to create token for
++ * @param issuedAtSeconds - Optional issued-at override for special flows
+  * @returns Signed JWT token
+  */
+-export function signToken(user: AuthUser): string {
+-  const payload = {
++export function signToken(user: TokenUser, issuedAtSeconds?: number): string {
++  const payload: Record<string, unknown> = {
+     sub: user.id,
+     email: user.email,
++    role: user.role ?? 'ADMIN',
++    mustChangePassword: user.mustChangePassword ?? false,
+   };
+ 
++  if (issuedAtSeconds !== undefined) {
++    payload.iat = issuedAtSeconds;
++  }
++
+   return jwt.sign(payload, config.JWT_SECRET, {
+     expiresIn: config.JWT_EXPIRES_IN,
+   });
+diff --git a/cloud/apps/api/src/auth/types.ts b/cloud/apps/api/src/auth/types.ts
+index 7fa592f9..47c14efc 100644
+--- a/cloud/apps/api/src/auth/types.ts
++++ b/cloud/apps/api/src/auth/types.ts
+@@ -4,6 +4,8 @@
+  * JWT payload structure, auth context, and request/response types
+  */
+ 
++export type UserRole = 'ADMIN' | 'VISITOR';
++
+ /**
+  * JWT token payload structure
+  * Stored in the token and available after validation
+@@ -13,6 +15,10 @@ export type JWTPayload = {
+   sub: string;
+   /** User email */
+   email: string;
++  /** User role */
++  role?: UserRole;
++  /** Whether the user must change their password */
++  mustChangePassword?: boolean;
+   /** Issued at (Unix timestamp) */
+   iat: number;
+   /** Expiry (Unix timestamp) */
+@@ -25,6 +31,8 @@ export type JWTPayload = {
+ export type AuthUser = {
+   id: string;
+   email: string;
++  role: UserRole;
++  mustChangePassword: boolean;
+ };
+ 
+ /**
+@@ -57,6 +65,10 @@ export type LoginResponse = {
+     id: string;
+     email: string;
+     name: string | null;
++    role: UserRole;
++    mustChangePassword: boolean;
++    createdAt: Date;
++    lastLoginAt: Date | null;
+   };
+ };
+ 
+diff --git a/cloud/apps/api/src/graphql/index.ts b/cloud/apps/api/src/graphql/index.ts
+index fe283212..22b6dd40 100644
+--- a/cloud/apps/api/src/graphql/index.ts
++++ b/cloud/apps/api/src/graphql/index.ts
+@@ -92,6 +92,33 @@ function useQueryLogging(): Plugin {
+   };
+ }
+ 
++function useMutationAuthorization(): Plugin {
++  return {
++    onExecute({ args }) {
++      const { document, contextValue } = args as { document: DocumentNode; contextValue: unknown };
++      const operation = getOperationAST(document);
++
++      if (operation?.operation !== 'mutation') {
++        return undefined;
++      }
++
++      const ctx = (contextValue as Partial<Context> | undefined) ?? {};
++      if (ctx.user?.role !== 'ADMIN') {
++        throw createGraphQLError('Admin access required', {
++          extensions: {
++            code: 'FORBIDDEN',
++            http: {
++              status: 403,
++            },
++          },
++        });
++      }
++
++      return undefined;
++    },
++  };
++}
++
+ function getOriginalError(value: unknown): unknown {
+   if (value === null || typeof value !== 'object') {
+     return null;
+@@ -135,7 +162,7 @@ export const yoga = createYoga<{
+   schema,
+   context: ({ req }) => createContext(req),
+   graphiql: process.env.NODE_ENV !== 'production',
+-  plugins: [useQueryLogging()],
++  plugins: [useMutationAuthorization(), useQueryLogging()],
+   logging: {
+     debug: (...args) => log.debug(args, 'GraphQL debug'),
+     info: (...args) => log.info(args, 'GraphQL info'),
+diff --git a/cloud/apps/api/src/graphql/mutations/user.ts b/cloud/apps/api/src/graphql/mutations/user.ts
+new file mode 100644
+index 00000000..f7ffda16
+--- /dev/null
++++ b/cloud/apps/api/src/graphql/mutations/user.ts
+@@ -0,0 +1,207 @@
++import { db, Prisma } from '@valuerank/db';
++import { NotFoundError, ValidationError } from '@valuerank/shared';
++
++import { builder } from '../builder.js';
++import { UserRef } from '../types/user.js';
++import { hashPassword } from '../../auth/index.js';
++import { requireAdmin } from '../../auth/require-admin.js';
++
++const MIN_PASSWORD_LENGTH = 12;
++const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
++
++const CreateUserInput = builder.inputType('CreateUserInput', {
++  fields: (t) => ({
++    email: t.string({
++      required: true,
++      validate: {
++        minLength: [1, { message: 'Email is required' }],
++      },
++    }),
++    name: t.string({
++      required: true,
++      validate: {
++        minLength: [1, { message: 'Name is required' }],
++      },
++    }),
++    password: t.string({
++      required: true,
++      validate: {
++        minLength: [MIN_PASSWORD_LENGTH, { message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }],
++      },
++    }),
++    role: t.field({
++      type: 'UserRole',
++      required: true,
++    }),
++  }),
++});
++
++const UpdateUserRoleInput = builder.inputType('UpdateUserRoleInput', {
++  fields: (t) => ({
++    userId: t.id({
++      required: true,
++      validate: {
++        minLength: [1, { message: 'User ID is required' }],
++      },
++    }),
++    role: t.field({
++      type: 'UserRole',
++      required: true,
++    }),
++  }),
++});
++
++function normalizeEmail(email: string): string {
++  return email.trim().toLowerCase();
++}
++
++function validateEmail(email: string): void {
++  if (!EMAIL_REGEX.test(email)) {
++    throw new ValidationError('Invalid email format');
++  }
++}
++
++function toUserSummary(user: {
++  id: string;
++  email: string;
++  name: string | null;
++  role: 'ADMIN' | 'VISITOR';
++  mustChangePassword: boolean;
++  lastLoginAt: Date | null;
++  createdAt: Date;
++}) {
++  return user;
++}
++
++builder.mutationField('createUser', (t) =>
++  t.field({
++    type: UserRef,
++    description: 'Create a new user account. Admin only.',
++    args: {
++      input: t.arg({ type: CreateUserInput, required: true }),
++    },
++    resolve: async (_root, args, ctx) => {
++      requireAdmin(ctx);
++
++      const email = normalizeEmail(args.input.email);
++      const name = args.input.name.trim();
++      const password = args.input.password;
++      const role = args.input.role;
++
++      validateEmail(email);
++
++      if (name.length === 0) {
++        throw new ValidationError('Name is required');
++      }
++
++      if (password.length < MIN_PASSWORD_LENGTH) {
++        throw new ValidationError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
++      }
++
++      const passwordHash = await hashPassword(password);
++
++      try {
++        const user = await db.user.create({
++          data: {
++            email,
++            name,
++            passwordHash,
++            role,
++            mustChangePassword: true,
++          },
++          select: {
++            id: true,
++            email: true,
++            name: true,
++            role: true,
++            mustChangePassword: true,
++            lastLoginAt: true,
++            createdAt: true,
++          },
++        });
++
++        return toUserSummary(user);
++      } catch (error) {
++        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
++          throw new ValidationError(`User with email "${email}" already exists`);
++        }
++        throw error;
++      }
++    },
++  })
++);
++
++builder.mutationField('updateUserRole', (t) =>
++  t.field({
++    type: UserRef,
++    description: 'Update a user role. Admin only.',
++    args: {
++      input: t.arg({ type: UpdateUserRoleInput, required: true }),
++    },
++    resolve: async (_root, args, ctx) => {
++      requireAdmin(ctx);
++
++      const userId = String(args.input.userId);
++      const nextRole = args.input.role;
++
++      const updatedUser = await db.$transaction(async (tx) => {
++        const existing = await tx.user.findUnique({
++          where: { id: userId },
++          select: {
++            id: true,
++            role: true,
++          },
++        });
++
++        if (!existing) {
++          throw new NotFoundError('User', userId);
++        }
++
++        if (existing.role === nextRole) {
++          return tx.user.findUniqueOrThrow({
++            where: { id: userId },
++            select: {
++              id: true,
++              email: true,
++              name: true,
++              role: true,
++              mustChangePassword: true,
++              lastLoginAt: true,
++              createdAt: true,
++            },
++          });
++        }
++
++        if (existing.role === 'ADMIN' && nextRole === 'VISITOR') {
++          const adminCount = await tx.user.count({
++            where: { role: 'ADMIN' },
++          });
++
++          if (adminCount <= 1) {
++            throw new ValidationError('At least one admin must remain');
++          }
++        }
++
++        return tx.user.update({
++          where: { id: userId },
++          data: {
++            role: nextRole,
++          },
++          select: {
++            id: true,
++            email: true,
++            name: true,
++            role: true,
++            mustChangePassword: true,
++            lastLoginAt: true,
++            createdAt: true,
++          },
++        });
++      }, {
++        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
++      });
++
++      return toUserSummary(updatedUser);
++    },
++  })
++);
+diff --git a/cloud/apps/api/src/graphql/queries/user.ts b/cloud/apps/api/src/graphql/queries/user.ts
+index a54030c6..f38338af 100644
+--- a/cloud/apps/api/src/graphql/queries/user.ts
++++ b/cloud/apps/api/src/graphql/queries/user.ts
+@@ -9,6 +9,7 @@ import { db } from '@valuerank/db';
+ import { AuthenticationError } from '@valuerank/shared';
+ import { UserRef } from '../types/user.js';
+ import { ApiKeyRef } from '../types/api-key.js';
++import { requireAdmin } from '../../auth/require-admin.js';
+ 
+ const MAX_LIMIT = 100;
+ const DEFAULT_LIMIT = 50;
+@@ -39,6 +40,8 @@ builder.queryField('me', (t) =>
+         id: user.id,
+         email: user.email,
+         name: user.name,
++        role: user.role,
++        mustChangePassword: user.mustChangePassword,
+         lastLoginAt: user.lastLoginAt,
+         createdAt: user.createdAt,
+       };
+@@ -46,6 +49,31 @@ builder.queryField('me', (t) =>
+   })
+ );
+ 
++builder.queryField('listUsers', (t) =>
++  t.field({
++    type: [UserRef],
++    description: 'List all users. Admin only.',
++    resolve: async (_root, _args, ctx) => {
++      requireAdmin(ctx);
++
++      const users = await db.user.findMany({
++        orderBy: { createdAt: 'desc' },
++        select: {
++          id: true,
++          email: true,
++          name: true,
++          role: true,
++          mustChangePassword: true,
++          lastLoginAt: true,
++          createdAt: true,
++        },
++      });
++
++      return users;
++    },
++  })
++);
++
+ // Query: apiKeys - list current user's API keys
+ builder.queryField('apiKeys', (t) =>
+   t.field({
+diff --git a/cloud/apps/api/src/graphql/types/enums.ts b/cloud/apps/api/src/graphql/types/enums.ts
+index c2320af9..8eb67d74 100644
+--- a/cloud/apps/api/src/graphql/types/enums.ts
++++ b/cloud/apps/api/src/graphql/types/enums.ts
+@@ -26,3 +26,9 @@ builder.enumType('LlmModelStatus', {
+   values: ['ACTIVE', 'DEPRECATED'] as const,
+   description: 'Lifecycle status of an LLM model',
+ });
++
++// UserRole enum - mirrors Prisma UserRole
++builder.enumType('UserRole', {
++  values: ['ADMIN', 'VISITOR'] as const,
++  description: 'Role assigned to a user account',
++});
+diff --git a/cloud/apps/api/src/graphql/types/index.ts b/cloud/apps/api/src/graphql/types/index.ts
+index 9ab050cb..c761f0fb 100644
+--- a/cloud/apps/api/src/graphql/types/index.ts
++++ b/cloud/apps/api/src/graphql/types/index.ts
+@@ -16,6 +16,7 @@ import './transcript.js';
+ import './experiment.js';
+ import './tag.js';
+ import './domain.js';
++import './user.js';
+ 
+ // Queue-related types
+ import './queue-status.js';
+diff --git a/cloud/apps/api/src/graphql/types/user.ts b/cloud/apps/api/src/graphql/types/user.ts
+index d2e06cf0..90fd273d 100644
+--- a/cloud/apps/api/src/graphql/types/user.ts
++++ b/cloud/apps/api/src/graphql/types/user.ts
+@@ -11,6 +11,8 @@ export const UserRef = builder.objectRef<{
+   id: string;
+   email: string;
+   name: string | null;
++  role: 'ADMIN' | 'VISITOR';
++  mustChangePassword: boolean;
+   lastLoginAt: Date | null;
+   createdAt: Date;
+ }>('User');
+@@ -25,6 +27,14 @@ builder.objectType(UserRef, {
+       nullable: true,
+       description: 'User display name',
+     }),
++    role: t.expose('role', {
++      type: 'UserRole',
++      description: 'User role',
++    }),
++    mustChangePassword: t.expose('mustChangePassword', {
++      type: 'Boolean',
++      description: 'Whether the user must change their password on next login',
++    }),
+     lastLoginAt: t.expose('lastLoginAt', {
+       type: 'DateTime',
+       nullable: true,
+diff --git a/cloud/apps/api/src/routes/auth.ts b/cloud/apps/api/src/routes/auth.ts
+index 6cae3c09..92a7d43d 100644
+--- a/cloud/apps/api/src/routes/auth.ts
++++ b/cloud/apps/api/src/routes/auth.ts
+@@ -73,7 +73,12 @@ authRouter.post(
+       });
+ 
+       // Generate JWT token
+-      const token = signToken({ id: user.id, email: user.email });
++      const token = signToken({
++        id: user.id,
++        email: user.email,
++        role: user.role,
++        mustChangePassword: user.mustChangePassword,
++      });
+ 
+       log.info({ userId: user.id }, 'Login successful');
+ 
+@@ -83,6 +88,10 @@ authRouter.post(
+           id: user.id,
+           email: user.email,
+           name: user.name,
++          role: user.role,
++          mustChangePassword: user.mustChangePassword,
++          createdAt: user.createdAt,
++          lastLoginAt: user.lastLoginAt,
+         },
+       };
+ 
+@@ -121,6 +130,8 @@ authRouter.get(
+         id: user.id,
+         email: user.email,
+         name: user.name,
++        role: user.role,
++        mustChangePassword: user.mustChangePassword,
+         createdAt: user.createdAt,
+         lastLoginAt: user.lastLoginAt,
+       });
+@@ -182,13 +193,22 @@ authRouter.patch(
+       });
+ 
+       // Issue a fresh token if email changed (since it's in the payload)
+-      const token = updateData.email !== undefined ? signToken({ id: user.id, email: user.email }) : undefined;
++      const token = updateData.email !== undefined
++        ? signToken({
++            id: user.id,
++            email: user.email,
++            role: user.role,
++            mustChangePassword: user.mustChangePassword,
++          })
++        : undefined;
+ 
+       res.json({
+         user: {
+           id: user.id,
+           email: user.email,
+           name: user.name,
++          role: user.role,
++          mustChangePassword: user.mustChangePassword,
+           createdAt: user.createdAt,
+           lastLoginAt: user.lastLoginAt,
+         },
+@@ -220,8 +240,8 @@ authRouter.put(
+         throw new ValidationError('Current password and new password are required');
+       }
+ 
+-      if (newPassword.length < 8) {
+-        throw new ValidationError('New password must be at least 8 characters long');
++      if (newPassword.length < 12) {
++        throw new ValidationError('New password must be at least 12 characters long');
+       }
+ 
+       const user = await db.user.findUnique({
+@@ -240,14 +260,49 @@ authRouter.put(
+       // Hash new password using the local auth implementation.
+       const passwordHash = await hashPassword(newPassword);
+ 
+-      await db.user.update({
++      const updatedUser = await db.user.update({
+         where: { id: req.user.id },
+-        data: { passwordHash, passwordChangedAt: new Date() },
++        data: {
++          passwordHash,
++          passwordChangedAt: new Date(),
++          ...(user.mustChangePassword ? { mustChangePassword: false } : {}),
++        },
+       });
+ 
+       log.info({ userId: req.user.id }, 'User changed password successfully');
+       invalidatePasswordChangedAtCache(req.user.id);
+ 
++      if (user.mustChangePassword) {
++        const passwordChangedAtSeconds = Math.floor(
++          (updatedUser.passwordChangedAt?.getTime() ?? Date.now()) / 1000
++        ) + 1;
++
++        const token = signToken(
++          {
++            id: updatedUser.id,
++            email: updatedUser.email,
++            role: updatedUser.role,
++            mustChangePassword: updatedUser.mustChangePassword,
++          },
++          passwordChangedAtSeconds
++        );
++
++        res.json({
++          success: true,
++          token,
++          user: {
++            id: updatedUser.id,
++            email: updatedUser.email,
++            name: updatedUser.name,
++            role: updatedUser.role,
++            mustChangePassword: updatedUser.mustChangePassword,
++            createdAt: updatedUser.createdAt,
++            lastLoginAt: updatedUser.lastLoginAt,
++          },
++        });
++        return;
++      }
++
+       res.json({ success: true });
+     } catch (err) {
+       next(err);
+diff --git a/cloud/apps/api/src/routes/import.ts b/cloud/apps/api/src/routes/import.ts
+index 5429a09c..bb85526a 100644
+--- a/cloud/apps/api/src/routes/import.ts
++++ b/cloud/apps/api/src/routes/import.ts
+@@ -11,8 +11,9 @@ import type { Request, Response, NextFunction } from 'express';
+ 
+ import { db } from '@valuerank/db';
+ import type { DefinitionContent } from '@valuerank/db';
+-import { createLogger, AuthenticationError, ValidationError } from '@valuerank/shared';
++import { createLogger, ValidationError } from '@valuerank/shared';
+ 
++import { requireAdminRest } from '../auth/require-admin.js';
+ import { parseMdToDefinition, isValidMdFormat } from '../services/import/md.js';
+ import { validateImport } from '../services/import/validation.js';
+ 
+@@ -50,13 +51,9 @@ type ImportDefinitionBody = {
+  */
+ importRouter.post(
+   '/definition',
++  requireAdminRest,
+   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+     try {
+-      // Check authentication
+-      if (!req.user) {
+-        throw new AuthenticationError('Authentication required');
+-      }
+-
+       const body = req.body as ImportDefinitionBody;
+ 
+       // Validate required fields
+diff --git a/cloud/apps/web/src/App.tsx b/cloud/apps/web/src/App.tsx
+index 03a7cf9f..61d7a3d6 100644
+--- a/cloud/apps/web/src/App.tsx
++++ b/cloud/apps/web/src/App.tsx
+@@ -1,5 +1,6 @@
+ // NOTE: The term "Vignette" is used throughout the UI for user-friendliness.
+ // However, the underlying codebase, API, and database still use the term "Definition".
++import type { ReactNode } from 'react';
+ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+ import { Provider } from 'urql';
+ import { AuthProvider } from './auth/context';
+@@ -34,6 +35,7 @@ import { SettingsSystemHealth } from './pages/SettingsSystemHealth';
+ import { SettingsModels } from './pages/SettingsModels';
+ import { SettingsInfrastructure } from './pages/SettingsInfrastructure';
+ import { SettingsApiKeys } from './pages/SettingsApiKeys';
++import { SettingsUsers } from './pages/SettingsUsers';
+ import { Preambles } from './pages/Preambles';
+ import { LevelPresets } from './pages/LevelPresets';
+ import { DomainContexts } from './pages/DomainContexts';
+@@ -46,9 +48,17 @@ import { client } from './api/client';
+ import { useHorizontalScrollOnWheel } from './hooks/useHorizontalScrollOnWheel';
+ 
+ // Protected layout wrapper
+-function ProtectedLayout({ children, fullWidth = false }: { children: React.ReactNode; fullWidth?: boolean }) {
++function ProtectedLayout({
++  children,
++  fullWidth = false,
++  requiredRole,
++}: {
++  children: ReactNode;
++  fullWidth?: boolean;
++  requiredRole?: 'ADMIN';
++}) {
+   return (
+-    <ProtectedRoute>
++    <ProtectedRoute requiredRole={requiredRole}>
+       <Layout fullWidth={fullWidth}>{children}</Layout>
+     </ProtectedRoute>
+   );
+@@ -102,7 +112,7 @@ function App() {
+             <Route
+               path="/domains/manage"
+               element={
+-                <ProtectedLayout>
++                <ProtectedLayout requiredRole="ADMIN">
+                   <DomainsManage />
+                 </ProtectedLayout>
+               }
+@@ -110,7 +120,7 @@ function App() {
+             <Route
+               path="/archive"
+               element={
+-                <ProtectedLayout>
++                <ProtectedLayout requiredRole="ADMIN">
+                   <ArchiveHome />
+                 </ProtectedLayout>
+               }
+@@ -118,7 +128,7 @@ function App() {
+             <Route
+               path="/domains/start/:domainId"
+               element={
+-                <ProtectedLayout>
++                <ProtectedLayout requiredRole="ADMIN">
+                   <DomainStartBatches />
+                 </ProtectedLayout>
+               }
+@@ -126,7 +136,7 @@ function App() {
+             <Route
+               path="/domains/start"
+               element={
+-                <ProtectedLayout>
++                <ProtectedLayout requiredRole="ADMIN">
+                   <StartRedirect />
+                 </ProtectedLayout>
+               }
+@@ -262,7 +272,7 @@ function App() {
+             <Route
+               path="/archive/surveys"
+               element={
+-                <ProtectedLayout>
++                <ProtectedLayout requiredRole="ADMIN">
+                   <Survey />
+                 </ProtectedLayout>
+               }
+@@ -270,7 +280,7 @@ function App() {
+             <Route
+               path="/archive/survey-results"
+               element={
+-                <ProtectedLayout>
++                <ProtectedLayout requiredRole="ADMIN">
+                   <SurveyResults />
+                 </ProtectedLayout>
+               }
+@@ -287,7 +297,7 @@ function App() {
+             <Route
+               path="/settings/system-health"
+               element={
+-                <ProtectedLayout>
++                <ProtectedLayout requiredRole="ADMIN">
+                   <SettingsSystemHealth />
+                 </ProtectedLayout>
+               }
+@@ -295,7 +305,7 @@ function App() {
+             <Route
+               path="/settings/models"
+               element={
+-                <ProtectedLayout>
++                <ProtectedLayout requiredRole="ADMIN">
+                   <SettingsModels />
+                 </ProtectedLayout>
+               }
+@@ -303,7 +313,7 @@ function App() {
+             <Route
+               path="/settings/infrastructure"
+               element={
+-                <ProtectedLayout>
++                <ProtectedLayout requiredRole="ADMIN">
+                   <SettingsInfrastructure />
+                 </ProtectedLayout>
+               }
+@@ -311,15 +321,23 @@ function App() {
+             <Route
+               path="/settings/api-keys"
+               element={
+-                <ProtectedLayout>
++                <ProtectedLayout requiredRole="ADMIN">
+                   <SettingsApiKeys />
+                 </ProtectedLayout>
+               }
+             />
++            <Route
++              path="/settings/users"
++              element={
++                <ProtectedLayout requiredRole="ADMIN">
++                  <SettingsUsers />
++                </ProtectedLayout>
++              }
++            />
+             <Route
+               path="/preambles"
+               element={
+-                <ProtectedLayout>
++                <ProtectedLayout requiredRole="ADMIN">
+                   <Preambles />
+                 </ProtectedLayout>
+               }
+@@ -327,7 +345,7 @@ function App() {
+             <Route
+               path="/level-presets"
+               element={
+-                <ProtectedLayout>
++                <ProtectedLayout requiredRole="ADMIN">
+                   <LevelPresets />
+                 </ProtectedLayout>
+               }
+@@ -335,7 +353,7 @@ function App() {
+             <Route
+               path="/domain-contexts"
+               element={
+-                <ProtectedLayout>
++                <ProtectedLayout requiredRole="ADMIN">
+                   <DomainContexts />
+                 </ProtectedLayout>
+               }
+@@ -343,13 +361,13 @@ function App() {
+             <Route
+               path="/value-statements"
+               element={
+-                <ProtectedLayout>
++                <ProtectedLayout requiredRole="ADMIN">
+                   <ValueStatements />
+                 </ProtectedLayout>
+               }
+             />
+-            {['/paired/new', '/paired/:id/edit'].map((path) => (
+-              <Route key={path} path={path} element={<ProtectedLayout><PairedVignetteNew /></ProtectedLayout>} />
++            {['/paired/new', '/paired/:id/edit', '/definitions/:id/start-paired-batch'].map((path) => (
++              <Route key={path} path={path} element={<ProtectedLayout requiredRole="ADMIN"><PairedVignetteNew /></ProtectedLayout>} />
+             ))}
+             <Route path="*" element={<ProtectedLayout><NotFound /></ProtectedLayout>} />
+           </Routes>
+diff --git a/cloud/apps/web/src/components/layout/MobileNav.tsx b/cloud/apps/web/src/components/layout/MobileNav.tsx
+index ce3ab239..968a3003 100644
+--- a/cloud/apps/web/src/components/layout/MobileNav.tsx
++++ b/cloud/apps/web/src/components/layout/MobileNav.tsx
+@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
+ import { type LucideIcon, Archive, BarChart2, Cpu, FileText, FolderTree, Home, Library, Menu, Settings, X } from 'lucide-react';
+ import { Button } from '../ui/Button';
+ import { cn } from '../../lib/utils';
++import { useAuth } from '../../auth/hooks';
+ 
+ type NavItem = {
+   name: string;
+@@ -57,6 +58,7 @@ const navItems: NavItem[] = [
+       { name: 'LLM Models', path: '/settings/models', icon: Settings },
+       { name: 'Infrastructure', path: '/settings/infrastructure', icon: Settings },
+       { name: 'API Keys', path: '/settings/api-keys', icon: Settings },
++      { name: 'User Management', path: '/settings/users', icon: Settings },
+     ],
+   },
+ ];
+@@ -82,9 +84,44 @@ type MobileNavProps = {
+ };
+ 
+ export function MobileNav({ className }: MobileNavProps) {
++  const { user } = useAuth();
+   const [isOpen, setIsOpen] = useState(false);
+   const menuRef = useRef<HTMLDivElement>(null);
+   const location = useLocation();
++  const isAdmin = user?.role === 'ADMIN';
++  const visibleNavItems = navItems.filter((item) => {
++    if (item.path === '/archive') {
++      return isAdmin;
++    }
++
++    if (item.path === '/settings/account') {
++      return isAdmin;
++    }
++
++    if (item.path === '/domains') {
++      return true;
++    }
++
++    return true;
++  }).map((item) => {
++    if (item.path === '/domains' && item.children) {
++      return {
++        ...item,
++        children: isAdmin
++          ? item.children
++          : item.children.filter((child) => child.path !== '/domains/manage'),
++      };
++    }
++
++    if (item.path === '/settings/account' && item.children) {
++      return {
++        ...item,
++        children: isAdmin ? item.children : [],
++      };
++    }
++
++    return item;
++  });
+ 
+   useEffect(() => {
+     setIsOpen(false);
+@@ -227,7 +264,7 @@ export function MobileNav({ className }: MobileNavProps) {
+         </div>
+ 
+         <div className="py-4">
+-          {renderNavItems(navItems)}
++          {renderNavItems(visibleNavItems)}
+         </div>
+       </nav>
+     </div>
+diff --git a/cloud/apps/web/src/components/layout/NavTabs.tsx b/cloud/apps/web/src/components/layout/NavTabs.tsx
+index ac03ace2..a5bdf373 100644
+--- a/cloud/apps/web/src/components/layout/NavTabs.tsx
++++ b/cloud/apps/web/src/components/layout/NavTabs.tsx
+@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
+ import { Activity, Archive, ChevronDown, ChevronRight, Cpu, FolderTree, Library, Settings } from 'lucide-react';
+ import { Button } from '../ui/Button';
+ import { useClickOutside } from '../../hooks/useClickOutside';
++import { useAuth } from '../../auth/hooks';
+ 
+ const utilityTabs: { name: string; path: string; icon: React.ComponentType<{ className?: string }>; aliases?: string[] }[] = [
+   { name: 'Status', path: '/status', icon: Activity, aliases: ['/domains/status'] },
+@@ -45,7 +46,7 @@ const archiveMenuItems: MenuItem[] = [
+   { name: 'Legacy Survey Results', path: '/archive/survey-results' },
+ ];
+ 
+-const settingsMenuItems: MenuItem[] = [
++const adminSettingsMenuItems: MenuItem[] = [
+   {
+     name: 'Research Setup',
+     children: [
+@@ -58,6 +59,7 @@ const settingsMenuItems: MenuItem[] = [
+   { name: 'LLM Models', path: '/settings/models' },
+   { name: 'Infrastructure', path: '/settings/infrastructure' },
+   { name: 'API Keys', path: '/settings/api-keys' },
++  { name: 'User Management', path: '/settings/users' },
+ ];
+ 
+ function isMenuGroupItem(item: MenuItem): item is MenuGroupItem {
+@@ -65,7 +67,9 @@ function isMenuGroupItem(item: MenuItem): item is MenuGroupItem {
+ }
+ 
+ export function NavTabs() {
++  const { user } = useAuth();
+   const location = useLocation();
++  const isAdmin = user?.role === 'ADMIN';
+   const [isVignettesMenuOpen, setIsVignettesMenuOpen] = useState(false);
+   const [isDomainsMenuOpen, setIsDomainsMenuOpen] = useState(false);
+   const [isModelsMenuOpen, setIsModelsMenuOpen] = useState(false);
+@@ -92,10 +96,14 @@ export function NavTabs() {
+   ), [isTabActive]);
+ 
+   const isVignettesActive = vignettesMenuItems.some((item) => isMenuItemActive(item));
+-  const isDomainsActive = domainMenuItems.some((item) => isMenuItemActive(item));
++  const visibleDomainMenuItems = isAdmin
++    ? domainMenuItems
++    : domainMenuItems.filter((item) => !isMenuGroupItem(item) && item.path !== '/domains/manage');
++  const isDomainsActive = visibleDomainMenuItems.some((item) => isMenuItemActive(item));
+   const isModelsActive = modelsMenuItems.some((item) => isMenuItemActive(item));
+-  const isArchiveActive = archiveMenuItems.some((item) => isMenuItemActive(item));
+-  const isSettingsActive = settingsMenuItems.some((item) => isMenuItemActive(item));
++  const isArchiveActive = isAdmin && archiveMenuItems.some((item) => isMenuItemActive(item));
++  const visibleSettingsMenuItems = isAdmin ? adminSettingsMenuItems : [];
++  const isSettingsActive = visibleSettingsMenuItems.some((item) => isMenuItemActive(item));
+ 
+   useEffect(() => {
+     setIsVignettesMenuOpen(false);
+@@ -232,10 +240,10 @@ export function NavTabs() {
+       <div className="max-w-7xl mx-auto px-4">
+         <div className="flex gap-1">
+           {renderMenu(modelsMenuRef, 'Models', '/models', Cpu, modelsMenuItems, isModelsActive, isModelsMenuOpen, setIsModelsMenuOpen)}
+-          {renderMenu(domainMenuRef, 'Domains', '/domains', FolderTree, domainMenuItems, isDomainsActive, isDomainsMenuOpen, setIsDomainsMenuOpen)}
++          {renderMenu(domainMenuRef, 'Domains', '/domains', FolderTree, visibleDomainMenuItems, isDomainsActive, isDomainsMenuOpen, setIsDomainsMenuOpen)}
+           {renderMenu(vignettesMenuRef, 'Vignettes', '/definitions', Library, vignettesMenuItems, isVignettesActive, isVignettesMenuOpen, setIsVignettesMenuOpen)}
+-          {renderMenu(archiveMenuRef, 'Archive', '/archive', Archive, archiveMenuItems, isArchiveActive, isArchiveMenuOpen, setIsArchiveMenuOpen)}
+-          {renderMenu(settingsMenuRef, 'Settings', '/settings/account', Settings, settingsMenuItems, isSettingsActive, isSettingsMenuOpen, setIsSettingsMenuOpen)}
++          {isAdmin ? renderMenu(archiveMenuRef, 'Archive', '/archive', Archive, archiveMenuItems, isArchiveActive, isArchiveMenuOpen, setIsArchiveMenuOpen) : null}
++          {isAdmin ? renderMenu(settingsMenuRef, 'Settings', '/settings/account', Settings, visibleSettingsMenuItems, isSettingsActive, isSettingsMenuOpen, setIsSettingsMenuOpen) : null}
+ 
+           {utilityTabs.map((tab) => {
+             const Icon = tab.icon;
+diff --git a/cloud/apps/web/src/pages/SettingsUsers.tsx b/cloud/apps/web/src/pages/SettingsUsers.tsx
+new file mode 100644
+index 00000000..3cdfebee
+--- /dev/null
++++ b/cloud/apps/web/src/pages/SettingsUsers.tsx
+@@ -0,0 +1,273 @@
++import { useState, type FormEvent } from 'react';
++import { useMutation, useQuery } from 'urql';
++import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
++
++import { Button } from '../components/ui/Button';
++import { Card, CardContent, CardHeader } from '../components/ui/Card';
++import { Input } from '../components/ui/Input';
++import {
++  CREATE_USER_MUTATION,
++  LIST_USERS_QUERY,
++  UPDATE_USER_ROLE_MUTATION,
++  type CreateUserMutationResult,
++  type CreateUserMutationVariables,
++  type ListUsersQueryResult,
++  type UpdateUserRoleMutationResult,
++  type UpdateUserRoleMutationVariables,
++  type UserRole,
++} from '../api/operations/user';
++
++type FormState = {
++  name: string;
++  email: string;
++  password: string;
++  role: UserRole;
++};
++
++function getGraphQLErrorMessage(error: unknown, fallback: string): string {
++  if (error && typeof error === 'object' && 'graphQLErrors' in error) {
++    const graphQLErrors = (error as { graphQLErrors?: Array<{ message?: string }> }).graphQLErrors;
++    if (graphQLErrors && graphQLErrors.length > 0 && graphQLErrors[0]?.message) {
++      return graphQLErrors[0].message;
++    }
++  }
++
++  if (error instanceof Error && error.message.trim() !== '') {
++    return error.message;
++  }
++
++  return fallback;
++}
++
++function formatDate(value: string | null): string {
++  if (!value) return 'Never';
++  const date = new Date(value);
++  return Number.isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleString();
++}
++
++export function SettingsUsers() {
++  const [{ data, fetching, error }, reexecuteQuery] = useQuery<ListUsersQueryResult>({
++    query: LIST_USERS_QUERY,
++    requestPolicy: 'network-only',
++  });
++  const [, createUser] = useMutation<CreateUserMutationResult, CreateUserMutationVariables>(CREATE_USER_MUTATION);
++  const [, updateUserRole] = useMutation<UpdateUserRoleMutationResult, UpdateUserRoleMutationVariables>(UPDATE_USER_ROLE_MUTATION);
++
++  const [form, setForm] = useState<FormState>({
++    name: '',
++    email: '',
++    password: '',
++    role: 'VISITOR',
++  });
++  const [isCreating, setIsCreating] = useState(false);
++  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
++  const [banner, setBanner] = useState<string | null>(null);
++  const [actionError, setActionError] = useState<string | null>(null);
++
++  const users = data?.listUsers ?? [];
++
++  const refreshUsers = async () => {
++    await reexecuteQuery({ requestPolicy: 'network-only' });
++  };
++
++  const handleCreateUser = async (event: FormEvent<HTMLFormElement>) => {
++    event.preventDefault();
++    setActionError(null);
++    setBanner(null);
++    setIsCreating(true);
++
++    try {
++      const result = await createUser({
++        input: {
++          name: form.name.trim(),
++          email: form.email.trim(),
++          password: form.password,
++          role: form.role,
++        },
++      });
++
++      if (result.error) {
++        throw result.error;
++      }
++
++      setForm({
++        name: '',
++        email: '',
++        password: '',
++        role: 'VISITOR',
++      });
++      setBanner('User created successfully.');
++      await refreshUsers();
++    } catch (err) {
++      setActionError(getGraphQLErrorMessage(err, 'Failed to create user'));
++    } finally {
++      setIsCreating(false);
++    }
++  };
++
++  const handleRoleChange = async (userId: string, role: UserRole) => {
++    setActionError(null);
++    setBanner(null);
++    setUpdatingUserId(userId);
++
++    try {
++      const result = await updateUserRole({
++        input: {
++          userId,
++          role,
++        },
++      });
++
++      if (result.error) {
++        throw result.error;
++      }
++
++      setBanner('Role changes take effect on the user\'s next login.');
++      await refreshUsers();
++    } catch (err) {
++      setActionError(getGraphQLErrorMessage(err, 'Failed to update role'));
++    } finally {
++      setUpdatingUserId(null);
++    }
++  };
++
++  return (
++    <div className="space-y-6">
++      <div>
++        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">User Management</h1>
++        <p className="mt-1 text-sm text-gray-600">
++          Create accounts and assign roles. Visitors can only read data and change their own password.
++        </p>
++      </div>
++
++      {banner && (
++        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 flex items-start gap-2">
++          <CheckCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
++          <span>{banner}</span>
++        </div>
++      )}
++
++      {actionError && (
++        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 flex items-start gap-2">
++          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
++          <span>{actionError}</span>
++        </div>
++      )}
++
++      <Card>
++        <CardHeader>
++          <h2 className="text-lg font-medium text-[#1A1A1A]">Create User</h2>
++          <p className="text-sm text-gray-500">Admins create accounts directly and set the initial password.</p>
++        </CardHeader>
++        <CardContent>
++          <form className="grid gap-4 md:grid-cols-2" onSubmit={handleCreateUser}>
++            <Input
++              label="Name"
++              value={form.name}
++              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
++              required
++            />
++            <Input
++              label="Email"
++              type="email"
++              value={form.email}
++              onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
++              required
++            />
++            <Input
++              label="Password"
++              type="password"
++              value={form.password}
++              onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
++              required
++              minLength={12}
++            />
++            <label className="space-y-2">
++              <span className="block text-sm font-medium text-gray-700">Role</span>
++              <select
++                value={form.role}
++                onChange={(event) => setForm((current) => ({ ...current, role: event.target.value as UserRole }))}
++                className="h-11 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
++              >
++                <option value="ADMIN">Admin</option>
++                <option value="VISITOR">Visitor</option>
++              </select>
++            </label>
++            <div className="md:col-span-2 flex justify-end">
++              <Button type="submit" disabled={isCreating || form.name.trim() === '' || form.email.trim() === '' || form.password.length < 12}>
++                {isCreating ? (
++                  <>
++                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
++                    Creating...
++                  </>
++                ) : (
++                  'Create User'
++                )}
++              </Button>
++            </div>
++          </form>
++        </CardContent>
++      </Card>
++
++      <Card>
++        <CardHeader>
++          <h2 className="text-lg font-medium text-[#1A1A1A]">All Users</h2>
++          <p className="text-sm text-gray-500">Role changes take effect on the user&apos;s next login.</p>
++        </CardHeader>
++        <CardContent>
++          {fetching && !data ? (
++            <div className="flex items-center gap-2 py-8 text-sm text-gray-500">
++              <Loader2 className="h-4 w-4 animate-spin" />
++              Loading users...
++            </div>
++          ) : error ? (
++            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
++              {error.message}
++            </div>
++          ) : users.length === 0 ? (
++            <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-600">
++              No users exist yet.
++            </div>
++          ) : (
++            <div className="overflow-x-auto">
++              <table className="min-w-full divide-y divide-gray-200 text-sm">
++                <thead>
++                  <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
++                    <th className="py-3 pr-4">Name</th>
++                    <th className="py-3 pr-4">Email</th>
++                    <th className="py-3 pr-4">Role</th>
++                    <th className="py-3 pr-4">Last Login</th>
++                    <th className="py-3 pr-4">Created</th>
++                  </tr>
++                </thead>
++                <tbody className="divide-y divide-gray-100">
++                  {users.map((user) => (
++                    <tr key={user.id} className="align-top">
++                      <td className="py-3 pr-4 font-medium text-gray-900">{user.name ?? 'Unnamed user'}</td>
++                      <td className="py-3 pr-4 text-gray-700">{user.email}</td>
++                      <td className="py-3 pr-4">
++                        <label className="sr-only" htmlFor={`role-${user.id}`}>Role for {user.email}</label>
++                        <select
++                          id={`role-${user.id}`}
++                          value={user.role}
++                          onChange={(event) => void handleRoleChange(user.id, event.target.value as UserRole)}
++                          disabled={updatingUserId === user.id}
++                          className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 disabled:cursor-wait disabled:bg-gray-100"
++                        >
++                          <option value="ADMIN">Admin</option>
++                          <option value="VISITOR">Visitor</option>
++                        </select>
++                      </td>
++                      <td className="py-3 pr-4 text-gray-700">{formatDate(user.lastLoginAt)}</td>
++                      <td className="py-3 pr-4 text-gray-700">{formatDate(user.createdAt)}</td>
++                    </tr>
++                  ))}
++                </tbody>
++              </table>
++            </div>
++          )}
++        </CardContent>
++      </Card>
++    </div>
++  );
++}
+diff --git a/cloud/packages/db/prisma/schema.prisma b/cloud/packages/db/prisma/schema.prisma
+index bcabaef7..c1b1a193 100644
+--- a/cloud/packages/db/prisma/schema.prisma
++++ b/cloud/packages/db/prisma/schema.prisma
+@@ -14,12 +14,19 @@ datasource db {
+ // AUTHENTICATION
+ // ============================================================================
+ 
++enum UserRole {
++  ADMIN
++  VISITOR
++}
++
+ model User {
+   id           String    @id @default(cuid())
+   email        String    @unique
+   passwordHash String    @map("password_hash")
+-  name              String?
+-  lastLoginAt       DateTime? @map("last_login_at")
++  name         String?
++  role         UserRole  @default(ADMIN)
++  mustChangePassword Boolean @default(false) @map("must_change_password")
++  lastLoginAt  DateTime? @map("last_login_at")
+   passwordChangedAt DateTime? @map("password_changed_at")
+   createdAt         DateTime  @default(now()) @map("created_at")
+   updatedAt    DateTime  @updatedAt @map("updated_at")
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m reviewing this as an attacker would: looking for privilege-escalation paths, authorization gaps, and places where new defaults weaken old protections. I’m checking each auth change for whether it can be bypassed or silently broaden access.
+codex
+## Findings
+- [UNVERIFIED] MEDIUM: `authMiddleware` treats any JWT without a `role` claim as `ADMIN` (`payload.role ?? 'ADMIN'`). That is an unsafe fallback. Any legacy token or any token minted by a path that omits `role` gets full admin access instead of being denied or treated as least-privilege.
+- [UNVERIFIED] MEDIUM: Role and password-reset state are trusted only from the JWT and are not rechecked against the database on request. After a user is downgraded to `VISITOR` or marked `mustChangePassword`, any already-issued token still carries the old claims until it expires. That makes the new admin/user-management controls effective only after re-login, not immediately.
+
+## Residual Risks
+- I did not verify whether token lifetimes are short or whether there is any server-side revocation mechanism elsewhere. If there is not, the stale-token problem above is the main authorization gap.
+- I did not inspect every token-issuing path in the codebase. If any other path still emits JWTs without `role` or `mustChangePassword`, it inherits the same privilege-escalation risk from the fallback.
+tokens used
+18,100
