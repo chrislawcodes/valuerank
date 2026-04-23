@@ -1,8 +1,8 @@
 {
   "repo_root": ".",
-  "git_head_sha": "a965286992db64e934629417118b4dbc3c765e83",
+  "git_head_sha": "53ac9cf342776673978ff2948a4fad23c510e1bb",
   "git_base_ref": "origin/main",
-  "git_base_sha": "e1ccb3b9b7fd4393d2c3f4a2d8d7fab1477e1f1d",
+  "git_base_sha": "dad8d079e504382e926300071f03251c43172eae",
   "paths": [
     "cloud/apps/api/src/auth",
     "cloud/apps/api/src/graphql",
