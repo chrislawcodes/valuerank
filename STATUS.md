@@ -31,6 +31,7 @@
 | **transcript-resummarization-backfill** | — | 🟡 Ready | Script written (`cloud/scripts/backfill-resummarize-existing-transcripts.ts`) but no PR yet — needs review and merge |
 | **provider-budget migration** | — | 🟡 Pending prod apply | PR #483 merged. Migration SQL not yet applied to prod. Run: `psql $DIRECT_URL -f cloud/packages/db/prisma/migrations/20260331000000_add_provider_budget_tracking/migration.sql` then `npx prisma@5 migrate resolve --applied 20260331000000_add_provider_budget_tracking` |
 | **domain-evaluation-model-backfill** | `codex/domain-evaluation-backfill-attach` | 🟡 In review | Adds a supported way to backfill missing model coverage into existing Domain Level Batches so reruns stay attached to the original evaluation instead of becoming orphan batches |
+| **domain-evaluation-soft-delete-reporting** | `codex/domain-evaluation-soft-delete-reporting` | 🟡 In review | Soft-deleted domain evaluations were still leaking into evaluation history, status, summary, and findings-eligibility reporting because the query layer ignored `deletedAt`. Local API fix now excludes deleted evaluations from those reporting queries and adds a regression test for deleted evaluation lookups. |
 
 ### Recently Completed
 

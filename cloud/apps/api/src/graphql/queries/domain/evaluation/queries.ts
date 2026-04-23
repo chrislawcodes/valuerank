@@ -43,6 +43,7 @@ builder.queryField('domainEvaluations', (t) =>
       const evaluations = await db.domainEvaluation.findMany({
         where: {
           domainId: String(args.domainId),
+          deletedAt: null,
           ...(scopeCategory ? { scopeCategory } : {}),
         },
         include: evaluationInclude,
@@ -71,8 +72,11 @@ builder.queryField('domainEvaluation', (t) =>
         throw new AuthenticationError('Authentication required');
       }
 
-      const evaluation = await db.domainEvaluation.findUnique({
-        where: { id: String(args.id) },
+      const evaluation = await db.domainEvaluation.findFirst({
+        where: {
+          id: String(args.id),
+          deletedAt: null,
+        },
         include: evaluationInclude,
       });
 
@@ -92,8 +96,11 @@ builder.queryField('domainEvaluationMembers', (t) =>
         throw new AuthenticationError('Authentication required');
       }
 
-      const evaluation = await db.domainEvaluation.findUnique({
-        where: { id: String(args.id) },
+      const evaluation = await db.domainEvaluation.findFirst({
+        where: {
+          id: String(args.id),
+          deletedAt: null,
+        },
         include: evaluationInclude,
       });
 
@@ -114,8 +121,11 @@ builder.queryField('domainEvaluationStatus', (t) =>
         throw new AuthenticationError('Authentication required');
       }
 
-      const evaluation = await db.domainEvaluation.findUnique({
-        where: { id: String(args.id) },
+      const evaluation = await db.domainEvaluation.findFirst({
+        where: {
+          id: String(args.id),
+          deletedAt: null,
+        },
         include: evaluationInclude,
       });
       if (!evaluation) return null;
@@ -145,6 +155,7 @@ builder.queryField('domainRunSummary', (t) =>
       const evaluations = await db.domainEvaluation.findMany({
         where: {
           domainId,
+          deletedAt: null,
           ...(scopeCategory ? { scopeCategory } : {}),
         },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -265,6 +276,7 @@ builder.queryField('domainFindingsEligibility', (t) =>
       const evaluations = await db.domainEvaluation.findMany({
         where: {
           domainId,
+          deletedAt: null,
           scopeCategory: { in: consideredScopeCategories },
         },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
