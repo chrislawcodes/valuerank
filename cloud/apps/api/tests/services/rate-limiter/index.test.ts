@@ -18,6 +18,7 @@ import {
 
 // Mock the parallelism module
 vi.mock('../../../src/services/parallelism/index.js', () => ({
+  getProviderQueueName: vi.fn((providerName: string) => `probe_${providerName}`),
   loadProviderLimits: vi.fn(),
 }));
 
