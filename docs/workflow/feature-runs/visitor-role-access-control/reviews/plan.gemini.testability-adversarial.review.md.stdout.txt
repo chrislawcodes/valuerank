@@ -1,0 +1,57 @@
+{
+  "session_id": "06e4ee8f-df20-4634-842a-924fa07ad908",
+  "response": "## Findings\n\n| Severity | Finding | Recommendation |\n| --- | --- | --- |\n| **HIGH** | **Wave 5 (Web UI) relies exclusively on manual verification.** | Implement an E2E test suite (e.g., using Cypress or Playwright) to replace all manual checks. Automated tests should cover every point in the verification list: Visitor logins, Admin logins, redirects for protected routes, conditional UI element rendering, and the forced password change flow. This is critical for preventing regressions in the client-side security UX. |\n| **HIGH** | **GraphQL mutation coverage is verified by a fragile `grep` command.** | Instead of a text-based search, which can easily miss cases or become outdated, create a programmatic, schema-aware integration test. This test should fetch the GraphQL schema, iterate through all defined mutations, and attempt to execute each one as a `VISITOR`. Assert that all mutations fail with a `FORBIDDEN` error, except for an explicit, small allowlist (`changePassword` if it were GraphQL, etc.). This provides durable, automated assurance that new mutations are secure by default. |\n| **MEDIUM** | **The test for the \"last admin\" race condition is not well-defined.** | The plan states \"Unit test: `updateUserRole` SERIALIZABLE transaction — concurrent downgrade of last Admin is rejected\". Testing concurrency in a unit test is difficult and often unreliable. An integration test that spawns two parallel requests attempting to demote the last admin is required to truly verify the `SERIALIZABLE` isolation level prevents this critical race condition. |\n| **MEDIUM** | **[UNVERIFIED] Password change JWT issuance has an untested race condition.** | The `PUT /api/auth/password` endpoint issues a new JWT after a forced password change. A test case is needed for the scenario where a user's role is changed by an admin *during* the user's password change session. The newly issued JWT must reflect the most current role from the database at the moment of issuance, not the role present when the flow began. |\n| **MEDIUM** | **[UNVERIFIED] Accepted risk of read-only endpoint access is not continuously verified.** | The plan accepts that Visitors can access read-only Admin configuration endpoints (e.g., `llmModels`). The verification is a one-time manual check for secrets. This is insufficient. An automated integration test should run as a `VISITOR`, call these endpoints, and use snapshot testing to ensure the data structure and content do not leak sensitive information. This protects against future changes accidentally exposing secrets in these objects. |\n| **MEDIUM** | **[UNVERIFIED] The plan assumes the existence of test helpers for creating JWTs.** | Wave 2 verification relies on creating test JWTs with specific payloads (no role, visitor role, etc.). The plan does not account for the effort to create a secure, reliable test helper for signing arbitrary JWT payloads if one does not already exist. The test plan should explicitly include the creation of this helper. |\n| **LOW** | **Database migration verification is manual.** | Wave 1 verification requires a human to run `prisma migrate` and visually inspect the database. This should be an automated integration test that: 1. Seeds data with the old schema. 2. Runs the migration. 3. Asserts that the migrated data is correct (e.g., existing users now have `role: 'ADMIN'`). |\n| **LOW** | **No explicit test for data leakage in the new `listUsers` query.** | The plan for Wave 4 verifies that `listUsers` is admin-only, but does not verify the contents of the response. A test should be added to call `listUsers` as an `ADMIN` and assert that the response objects contain *only* the specified safe fields and do not leak sensitive data like the `passwordHash`. |\n\n## Residual Risks\n\nThe review of the plan identified the following risks which are not fully mitigated by the proposed testing strategy.\n\n| Risk | Analysis |\n| --- | --- |\n| **Stale Role via JWT** | The plan correctly identifies that a demoted admin retains their privileges until their JWT expires (up to 24h). This is accepted as a V1 limitation. However, the proposed verification is manual. **This should be an automated integration test** that confirms a user with a recently-demoted role (but a valid, old JWT) can still access an admin-only mutation. This codifies the accepted behavior and prevents it from being flagged as a bug in the future. |\n| **API Key Role Resolution** | The plan states that for API keys, the user's role is fetched from the DB on every request. This is a different code path from the JWT role. While Wave 2 includes a unit test, it introduces a potential performance bottleneck (DB call per API request) and a consistency challenge (API key auth is real-time, JWT is delayed). The test plan should include a specific integration test that confirms a role change is reflected *immediately* for an API key user, contrasting with the delayed update for a JWT user. |\n| **PgBouncer Configuration Mismatch** | The plan correctly identifies that `SERIALIZABLE` isolation may fail if PgBouncer is in transaction-pooling mode. The verification is a manual check of the `DATABASE_URL`. This is a significant environmental dependency. If the test environment's PgBouncer configuration doesn't match production, the tests for the \"last admin\" race condition could provide a false sense of security. This risk cannot be fully mitigated without ensuring environment parity. |",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 43871
+        },
+        "tokens": {
+          "input": 10413,
+          "prompt": 24241,
+          "candidates": 1177,
+          "total": 27597,
+          "cached": 13828,
+          "thoughts": 2179,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 43871,
+            "tokens": {
+              "input": 10413,
+              "prompt": 24241,
+              "candidates": 1177,
+              "total": 27597,
+              "cached": 13828,
+              "thoughts": 2179,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

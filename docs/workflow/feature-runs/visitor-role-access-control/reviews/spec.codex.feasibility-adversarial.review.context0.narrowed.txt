@@ -1,0 +1,284 @@
+00001: /**
+00002:  * Authentication middleware
+00003:  *
+00004:  * Validates JWT tokens and API keys, populates req.user with user info.
+00005:  * Supports both Bearer token (JWT) and X-API-Key header authentication.
+00006:  */
+00007: 
+00008: import type { Request, Response, NextFunction } from 'express';
+00009: 
+00010: import { createLogger, AuthenticationError } from '@valuerank/shared';
+00011: import { db } from '@valuerank/db';
+00012: 
+00013: import { verifyToken, extractBearerToken } from './services.js';
+00014: import { hashApiKey, isValidApiKeyFormat } from './api-keys.js';
+00015: import type { AuthUser, AuthMethod } from './types.js';
+00016: 
+00017: const log = createLogger('auth:middleware');
+00018: 
+00019: const PASSWORD_CHANGED_CACHE_TTL_MS = 5000;
+00020: const PASSWORD_CHANGED_CACHE_MAX_ENTRIES = 10000;
+00021: type PasswordChangedCacheEntry = {
+00022:   fetchedAtMs: number;
+00023:   passwordChangedAtMs: number | null;
+00024: };
+00025: const passwordChangedAtCache = new Map<string, PasswordChangedCacheEntry>();
+00026: 
+00027: async function getPasswordChangedAtMs(userId: string): Promise<number | null> {
+00028:   const now = Date.now();
+00029:   const cached = passwordChangedAtCache.get(userId);
+00030:   if (cached !== undefined && now - cached.fetchedAtMs < PASSWORD_CHANGED_CACHE_TTL_MS) {
+00031:     return cached.passwordChangedAtMs;
+00032:   }
+00033: 
+00034:   const user = await db.user.findUnique({
+00035:     where: { id: userId },
+00036:     select: { passwordChangedAt: true },
+00037:   });
+00038: 
+00039:   const passwordChangedAtMs = user?.passwordChangedAt?.getTime() ?? null;
+00040:   passwordChangedAtCache.set(userId, { fetchedAtMs: now, passwordChangedAtMs });
+00041: 
+00042:   if (passwordChangedAtCache.size > PASSWORD_CHANGED_CACHE_MAX_ENTRIES) {
+00043:     const oldestKey = passwordChangedAtCache.keys().next().value;
+00044:     if (oldestKey !== undefined) {
+00045:       passwordChangedAtCache.delete(oldestKey);
+00046:     }
+00047:   }
+00048: 
+00049:   return passwordChangedAtMs;
+00050: }
+00051: 
+00052: // Test hook: clears shared auth cache between integration tests.
+00053: export function clearPasswordChangedAtCacheForTests(): void {
+00054:   if (process.env.NODE_ENV === 'test') {
+00055:     passwordChangedAtCache.clear();
+00056:   }
+00057: }
+00058: 
+00059: /**
+00060:  * Evict a user's passwordChangedAt cache entry after a password change
+00061:  * so the next JWT check hits the DB immediately.
+00062:  */
+00063: export function invalidatePasswordChangedAtCache(userId: string): void {
+00064:   passwordChangedAtCache.delete(userId);
+00065: }
+00066: 
+00067: // Extend Express Request to include auth info
+00068: declare global {
+00069:   // eslint-disable-next-line @typescript-eslint/no-namespace
+00070:   namespace Express {
+00071:     interface Request {
+00072:       user: AuthUser | null;
+00073:       authMethod: AuthMethod | null;
+00074:     }
+00075:   }
+00076: }
+00077: 
+00078: /**
+00079:  * Extract and validate authentication from request headers
+00080:  *
+00081:  * Supports two authentication methods:
+00082:  * 1. JWT via Authorization header (Bearer token)
+00083:  * 2. API key via X-API-Key header
+00084:  *
+00085:  * Sets req.user and req.authMethod on success
+00086:  * Sets both to null if no auth provided (allows unauthenticated requests through)
+00087:  */
+00088: export async function authMiddleware(
+00089:   req: Request,
+00090:   _res: Response,
+00091:   next: NextFunction
+00092: ): Promise<void> {
+00093:   // Initialize auth state
+00094:   req.user = null;
+00095:   req.authMethod = null;
+00096: 
+00097:   // Try Bearer token or Basic auth (Authorization header)
+00098:   const authHeader = req.headers.authorization;
+00099: 
+00100:   // Check for Basic auth (for Excel OData connector)
+00101:   // Format: "Basic base64(username:password)" where password is the API key
+00102:   if (authHeader !== undefined && authHeader.startsWith('Basic ')) {
+00103:     const base64Credentials = authHeader.slice(6);
+00104:     try {
+00105:       const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
+00106:       const colonIndex = credentials.indexOf(':');
+00107:       if (colonIndex > -1) {
+00108:         const password = credentials.slice(colonIndex + 1);
+00109: 
+00110:         // Use password as API key
+00111:         if (password.startsWith('vr_')) {
+00112:           const user = await validateApiKey(password);
+00113:           if (user !== null) {
+00114:             req.user = user;
+00115:             req.authMethod = 'api_key';
+00116:             log.debug({ userId: user.id }, 'Basic auth (API key) successful');
+00117:             next();
+00118:             return;
+00119:           }
+00120:         }
+00121:       }
+00122:     } catch {
+00123:       // Invalid base64, continue to try other methods
+00124:     }
+00125:   }
+00126: 
+00127:   const token = extractBearerToken(authHeader);
+00128: 
+00129:   if (token !== null && token !== undefined && token !== '') {
+00130:
+
+... [narrowed review slice: middle omitted] ...
+
+00188:         next(new AuthenticationError('Invalid token'));
+00189:       }
+00190:       return;
+00191:     }
+00192:   }
+00193: 
+00194:   // Try API key (X-API-Key header or apiKey query param)
+00195:   const headerKey = req.headers['x-api-key'];
+00196:   const queryKey = req.query.apiKey;
+00197:   const apiKey = (typeof headerKey === 'string' ? headerKey : typeof queryKey === 'string' ? queryKey : '');
+00198: 
+00199:   if (apiKey.length > 0) {
+00200:     try {
+00201:       const user = await validateApiKey(apiKey);
+00202:       if (user !== null) {
+00203:         req.user = user;
+00204:         req.authMethod = 'api_key';
+00205:         log.debug({ userId: user.id }, 'API key authentication successful');
+00206:       }
+00207:     } catch (err) {
+00208:       if (err instanceof AuthenticationError) {
+00209:         next(err);
+00210:         return;
+00211:       }
+00212:       log.error({ err }, 'Unexpected error during API key validation');
+00213:       next(new AuthenticationError('Invalid API key'));
+00214:       return;
+00215:     }
+00216:   }
+00217: 
+00218:   // No auth provided - allow through as unauthenticated
+00219:   // Individual routes/resolvers can require auth if needed
+00220:   next();
+00221: }
+00222: 
+00223: /**
+00224:  * Validate an API key and return the associated user
+00225:  *
+00226:  * @param key - The API key from the X-API-Key header
+00227:  * @returns User info if valid, null if invalid
+00228:  * @throws AuthenticationError if key is expired
+00229:  */
+00230: async function validateApiKey(key: string): Promise<AuthUser | null> {
+00231:   // Validate format first
+00232:   if (!isValidApiKeyFormat(key)) {
+00233:     log.debug('Invalid API key format');
+00234:     return null;
+00235:   }
+00236: 
+00237:   // Hash the key for lookup
+00238:   const keyHash = hashApiKey(key);
+00239: 
+00240:   // Find the API key record
+00241:   const apiKeyRecord = await db.apiKey.findUnique({
+00242:     where: { keyHash },
+00243:     include: { user: true },
+00244:   });
+00245: 
+00246:   if (!apiKeyRecord) {
+00247:     log.debug('API key not found');
+00248:     return null;
+00249:   }
+00250: 
+00251:   // Check expiry
+00252:   if (apiKeyRecord.expiresAt && apiKeyRecord.expiresAt < new Date()) {
+00253:     log.debug({ keyId: apiKeyRecord.id }, 'API key expired');
+00254:     throw new AuthenticationError('API key expired');
+00255:   }
+00256: 
+00257:   // Update last_used timestamp (fire and forget)
+00258:   db.apiKey
+00259:     .update({
+00260:       where: { id: apiKeyRecord.id },
+00261:       data: { lastUsed: new Date() },
+00262:     })
+00263:     .catch((err: unknown) => {
+00264:       log.warn({ err, keyId: apiKeyRecord.id }, 'Failed to update last_used');
+00265:     });
+00266: 
+00267:   log.debug(
+00268:     { keyId: apiKeyRecord.id, userId: apiKeyRecord.userId },
+00269:     'API key validated'
+00270:   );
+00271: 
+00272:   return {
+00273:     id: apiKeyRecord.user.id,
+00274:     email: apiKeyRecord.user.email,
+00275:   };
+00276: }
+00277: 
+00278: /**
+00279:  * Require authentication middleware
+00280:  *
+00281:  * Use after authMiddleware to require valid auth
+00282:  * Returns 401 if not authenticated
+00283:  */
+00284: export function requireAuth(
+00285:   req: Request,
+00286:   _res: Response,
+00287:   next: NextFunction
+00288: ): void {
+00289:   if (req.user === null || req.user === undefined) {
+00290:     next(new AuthenticationError('Authentication required'));
+00291:     return;
+00292:   }
+00293:   next();
+00294: }
+00295: 
+00296: /**
+00297:  * Check if request is a GraphQL introspection query
+00298:  *
+00299:  * Introspection queries should be allowed without auth
+00300:  */
+00301: export function isIntrospectionQuery(req: Request): boolean {
+00302:   const body = req.body as { query?: string } | undefined;
+00303: 
+00304:   if (body === undefined || body === null || body.query === undefined || body.query === null || body.query === '') {
+00305:     return false;
+00306:   }
+00307: 
+00308:   // Check for introspection query patterns
+00309:   const query = body.query;
+00310:   return (
+00311:     query.includes('__schema') ||
+00312:     query.includes('__type') ||
+00313:     query.includes('IntrospectionQuery')
+00314:   );
+00315: }
+00316: 
+00317: /**
+00318:  * GraphQL auth middleware
+00319:  *
+00320:  * Applies auth check to GraphQL requests, but allows:
+00321:  * - Introspection queries (for schema discovery)
+00322:  * - Requests with valid authentication
+00323:  */
+00324: export function graphqlAuthMiddleware(
+00325:   req: Request,
+00326:   res: Response,
+00327:   next: NextFunction
+00328: ): void {
+00329:   // Always allow introspection queries
+00330:   if (isIntrospectionQuery(req)) {
+00331:     next();
+00332:     return;
+00333:   }
+00334: 
+00335:   // Require authentication for all other GraphQL operations
+00336:   if (req.user === null || req.user === undefined) {
+00337:     next(new AuthenticationError('Authentication required'));
+00338:     ret

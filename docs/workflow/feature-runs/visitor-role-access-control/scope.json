@@ -1,0 +1,21 @@
+{
+  "paths": [
+    "cloud/apps/api/src/auth",
+    "cloud/apps/api/src/graphql",
+    "cloud/apps/api/src/routes",
+    "cloud/apps/web/src/App.tsx",
+    "cloud/apps/web/src/components/layout",
+    "cloud/apps/web/src/pages",
+    "cloud/packages/db/prisma/schema.prisma"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/auth",
+    "cloud/apps/api/src/graphql",
+    "cloud/apps/api/src/routes",
+    "cloud/apps/web/src/App.tsx",
+    "cloud/apps/web/src/components/layout",
+    "cloud/apps/web/src/pages",
+    "cloud/packages/db/prisma/schema.prisma",
+    "docs/workflow/feature-runs/visitor-role-access-control"
+  ]
+}

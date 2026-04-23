@@ -1,0 +1,2260 @@
+Reading additional input from stdin...
+OpenAI Codex v0.122.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019db227-d78f-7590-acee-a73a47d10269
+--------
+user
+You are an adversarial reviewer. Your job is to find blockers — things that would cause a competent implementer to ship a bug, make a wrong decision, or get stuck mid-implementation.
+
+Read the plan below. Attack it hard. Focus ONLY on:
+1. Contradictions between waves (Wave N assumes something Wave M does not deliver)
+2. Ambiguities where an implementer would have to guess and could guess wrong
+3. Missing load-bearing decisions that the plan defers without saying what to do
+4. Integration gaps: two waves that touch the same interface in incompatible ways
+5. Anything that looks like a solved problem but would actually cause a runtime bug
+
+DO NOT raise: style issues, test coverage preferences (except where a missing test would mask a real bug), things explicitly marked as residual risks, or general best-practice suggestions.
+
+For each finding, state:
+- Rating: BLOCKER (implementation will ship a bug without resolving this) or CONCERN (could go wrong)
+- The exact quote from the plan that is wrong or ambiguous
+- What an implementer would do wrong as a result
+
+If you find nothing blocking, say so clearly.
+
+---
+
+# Plan: Visitor Role — Read-Only Access Control with Admin User Management
+
+**Slug:** visitor-role-access-control
+**Created:** 2026-04-21
+**Status:** draft
+**Spec:** docs/workflow/feature-runs/visitor-role-access-control/spec.md
+
+---
+
+## Review Reconciliation
+
+- review: reviews/spec.codex.risk-adversarial.review.md | status: accepted | note: MEDIUM admin read endpoints: accepted by design — writes are restricted server-side, reads for admin config pages are protected by client-side route guards only. The data (LLM model configs, infra settings) is not sensitive credentials. MEDIUM FR-006 conflict with FR-005c: clarified in FR-006 — mutations call requireAdmin() EXCEPT those in FR-005c. MEDIUM nested route matching: addressed in FR-019 — now specifies wildcard prefix matching for all restricted sections. MEDIUM email uniqueness: addressed in FR-014 — lowercase canonicalization + DB unique constraint. MEDIUM REST write audit: addressed in FR-014a — /api/import is the only write endpoint; default-deny rule documented for future routes.
+- review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
+- review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
+- review: reviews/plan.codex.implementation-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
+- review: reviews/plan.codex.risk-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
+- review: reviews/plan.gemini.testability-adversarial.review.md | status: accepted | note: HIGH Wave 5 manual testing: deferred — full E2E framework (Playwright/Cypress) is out of scope for V1; manual verification documented. Flagged as post-ship tech debt. HIGH grep mutation audit: upgraded to a schema-aware integration test in Risk 1 — enumerates all mutations via introspection and asserts FORBIDDEN for Visitor on each; provides durable CI gate. MEDIUM last-admin race test: accepted; added controlled parallel integration test approach using Promise.all + note on test-mode delay. MEDIUM password change JWT race: handled naturally — JWT is signed from fresh DB read at signing time so current role is always in the new token. MEDIUM read endpoint snapshot: deferred as out of scope for V1; the one-time manual verification before ship is sufficient given this is configuration metadata not credentials. MEDIUM JWT test helpers: added Risk 2b to plan — check for existing helper, create if absent. LOW migration test: handled by existing integration test suite via test DB setup. LOW listUsers passwordHash: added explicit integration test to Wave 4 verification.
+- review: final adversarial review (Codex, 2026-04-21) | status: accepted | note: S1 US2 test scenario: fixed — independent test now accounts for forced password change before Visitor restrictions are visible. S2 read-side auth gap: resolved — added FR-005d (reads default-allow; only listUsers is admin-gated in V1) and updated US1 acceptance scenario 3. S3 mustChangePassword API bypass: accepted as V1 limitation — added to spec Non-Goals and Edge Cases. S4 button behavior contradiction: fixed — US4 acceptance scenario now says "hidden" to match FR-021. P1 MCP write tools: added FR-014b to spec and MCP enforcement section to Wave 4. P2 JWT timestamp race: fixed — Wave 3 now specifies iat = passwordChangedAt + 1s. P3 web auth layer: fixed — Wave 5 explicitly lists context.tsx and types/index.ts; notes /api/auth/me response must include new fields. P4 AccountPanel logout: fixed — Wave 5 explicitly calls out current logout behavior and required change. P5 import inline check: fixed — updated to use requireAdminRest middleware defined in require-admin.ts.
+
+## Architecture Overview
+
+This feature adds a two-tier role system to ValueRank. The enforcement stack has four independent layers. Each layer is independently testable and independently deployable:
+
+| Layer | Where | What it enforces |
+|-------|-------|-----------------|
+| **Database** | `schema.prisma` + migration | Role and `mustChangePassword` fields exist |
+| **Auth middleware** | `auth/middleware.ts`, JWT signing | Role flows from DB → JWT → `req.user` |
+| **API** | GraphQL resolvers, REST routes, MCP write tools | `requireAdmin()` blocks Visitor writes |
+| **Web** | Route guards + NavTabs | Restricted pages hidden/redirected |
+
+All layers are required. The web layer is not the security boundary — the API layer is. The web layer provides UX; the API layer enforces access.
+
+---
+
+## Architecture Decisions
+
+### Decision 1: Role in JWT vs. per-request DB lookup
+
+**Choice:** Role in JWT payload.
+
+**Rationale:** Existing JWT infrastructure already carries `id` and `email`. Adding `role` is a non-breaking extension. A per-request DB lookup for every GraphQL call would add latency and DB load. The 24h TTL bounds the stale-role window to an acceptable exposure.
+
+**Trade-off:** Role changes don't take effect until the next login. Documented in spec as a known V1 limitation; UI shows a notice. If real-time revocation is needed in the future, introduce a JWT blocklist or shorter TTL.
+
+### Decision 2: Default-deny for write mutations
+
+**Choice:** `requireAdmin()` call at the top of every write resolver, with explicit Visitor exceptions listed.
+
+**Rationale:** An allowlist approach (block specific mutations, leave the rest) means new mutations are open by default. Default-deny means new mutations are closed by default. The cost is one extra call per mutation; the benefit is no accidental bypass.
+
+**Implementation note:** A single `requireAdmin()` helper function in `cloud/apps/api/src/auth/require-admin.ts` is the only way to enforce this. Inline checks would scatter the policy.
+
+### Decision 3: changePassword is a REST route, not a GraphQL mutation
+
+**Context:** `PUT /api/auth/password` already exists in `cloud/apps/api/src/routes/auth.ts`. It is auth-guarded via `requireAuth` middleware. Since it's REST (not GraphQL), the `requireAdmin()` GraphQL helper doesn't apply — it is a Visitor-permitted route by virtue of not being in the FR-006 mutation list.
+
+**Action needed:** The REST route must:
+- Increase the minimum password length from 8 to 12 (per FR-009a)
+- Clear `mustChangePassword` in the DB when it was `true`
+- Return a fresh JWT in the response when `mustChangePassword` was cleared (to break the route-guard redirect loop per FR-009b)
+
+### Decision 4: `mustChangePassword` flag in JWT
+
+**Choice:** Include `mustChangePassword: boolean` in the JWT payload (alongside `id`, `email`, `role`).
+
+**Rationale:** The web route guard reads the flag from the JWT without a DB round-trip. When the flag is cleared on password change, a fresh JWT is issued and stored by the web app, updating the route guard state in the same session.
+
+**Alternative considered:** Read the flag from a `GET /api/auth/me` call on each navigation. Rejected because it adds latency and a network call to every protected route render.
+
+### Decision 5: `updateUserRole` uses SERIALIZABLE isolation
+
+**Choice:** Prisma `$transaction` with `isolation: 'Serializable'`.
+
+**Rationale:** The last-admin check must be atomic. Prisma's default READ COMMITTED does not prevent two concurrent transactions from both seeing "there is one admin" and both downgrading that admin. SERIALIZABLE makes one of them retry or fail.
+
+---
+
+## Wave Breakdown
+
+### Wave 1: Database Schema + Migration
+**~40 lines changed**
+
+**Files:**
+- `cloud/packages/db/prisma/schema.prisma`
+- New migration file (auto-generated by `prisma migrate dev`)
+
+**Changes:**
+1. Add `UserRole` enum:
+   ```prisma
+   enum UserRole {
+     ADMIN
+     VISITOR
+   }
+   ```
+2. Add fields to `User` model:
+   ```prisma
+   role               UserRole @default(ADMIN) @map("role")
+   mustChangePassword Boolean  @default(false)  @map("must_change_password")
+   ```
+3. Migration SQL must include a backfill: all existing rows get `role = 'ADMIN'`.
+4. Update `@@map("users")` remains unchanged.
+
+**Verification:**
+- Run `prisma migrate dev --name add_user_role` locally against the test DB
+- Confirm all existing user rows have `role = 'ADMIN'` after migration
+- Confirm `mustChangePassword` defaults to `false` for new rows
+
+---
+
+### Wave 2: Auth Layer
+**~120 lines changed**
+
+**Files:**
+- `cloud/apps/api/src/auth/types.ts`
+- `cloud/apps/api/src/auth/middleware.ts`
+- New: `cloud/apps/api/src/auth/require-admin.ts`
+- `cloud/apps/api/src/graphql/context.ts`
+
+**Changes:**
+
+**`auth/types.ts`:** Add `role` and `mustChangePassword` to `AuthUser`:
+```typescript
+export type AuthUser = {
+  id: string;
+  email: string;
+  role: 'ADMIN' | 'VISITOR';
+  mustChangePassword: boolean;
+};
+```
+
+**`auth/middleware.ts`:**
+- JWT signing: add `role` and `mustChangePassword` to the JWT payload when issuing tokens (login + password change).
+- JWT verification: decode `role` from the payload. If `role` is missing (pre-migration token), default to `'ADMIN'` — all pre-migration users are ADMIN.
+- API key auth branch: after resolving the user from the API key, fetch `user.role` and `user.mustChangePassword` from the DB and attach to `req.user`. This is the only place that requires a DB lookup; JWT auth does not.
+
+**`auth/require-admin.ts`** (new file):
+```typescript
+import { type Request, type Response, type NextFunction } from 'express';
+import { type Context } from '../graphql/context.js';
+import { ForbiddenError } from '@valuerank/shared';
+
+// For GraphQL resolvers
+export function requireAdmin(ctx: Context): void {
+  if (ctx.user === null || ctx.user === undefined) throw new ForbiddenError('Authentication required');
+  if (ctx.user.role !== 'ADMIN') throw new ForbiddenError('Admin access required');
+}
+
+// For REST routes (Express middleware)
+export function requireAdminRest(req: Request, res: Response, next: NextFunction): void {
+  if (!req.user || req.user.role !== 'ADMIN') {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+  next();
+}
+```
+
+**`graphql/context.ts`:** `Context` already has `user: AuthUser | null`. Since `AuthUser` gains `role`, no interface change needed — but verify `ForbiddenError` is exported from `@valuerank/shared`.
+
+**Verification:**
+- Unit test: JWT with no `role` claim → `req.user.role === 'ADMIN'`
+- Unit test: JWT with `role: 'VISITOR'` → `req.user.role === 'VISITOR'`
+- Unit test: API key auth → DB is queried for role; result attached to `req.user`
+- Unit test: `requireAdmin()` throws `ForbiddenError` for VISITOR users and passes for ADMIN users
+
+---
+
+### Wave 3: Password Service Updates
+**~60 lines changed**
+
+**Files:**
+- `cloud/apps/api/src/routes/auth.ts` — existing `PUT /api/auth/password`
+- `cloud/apps/api/src/cli/create-user.ts` — existing CLI script
+
+**Changes:**
+
+**`routes/auth.ts` — `PUT /api/auth/password`:**
+1. Increase minimum password length from 8 to 12.
+2. After updating `passwordHash`, check if `mustChangePassword` was `true` for this user.
+3. If yes: set `mustChangePassword: false` in the DB update, then issue and return a fresh JWT with `mustChangePassword: false` in the response body (alongside `{ success: true }`).
+4. If no: existing behavior unchanged (return `{ success: true }`).
+
+The fresh JWT must be constructed via the same `signJwt` / `issueToken` function used at login so it carries all current user fields (`role`, `mustChangePassword: false`, etc.).
+
+**JWT timestamp note:** The existing auth middleware rejects JWTs where `iat <= passwordChangedAtSeconds`. To prevent the fresh JWT from being rejected in the same second the password changes, set the JWT's `iat` to `Math.floor(passwordChangedAt.getTime() / 1000) + 1` (one second after the DB write). Read `passwordChangedAt` from the DB update result to get the exact timestamp written.
+
+**`cli/create-user.ts`:**
+1. Add `--role` CLI argument, defaulting to `ADMIN`.
+2. Update DB write to include `role` in the `create` call.
+3. Update `MIN_PASSWORD_LENGTH` to 12 (consolidating with the 12-char policy from FR-009a). Note: existing test users created with 8-char passwords are unaffected.
+
+**Verification:**
+- Integration test: `PUT /api/auth/password` with a user where `mustChangePassword: true` → response includes a new JWT, DB has `mustChangePassword: false`
+- Integration test: `PUT /api/auth/password` with a user where `mustChangePassword: false` → response is `{ success: true }`, no JWT returned
+- Integration test: password shorter than 12 chars → 400 validation error
+- CLI: `create-user --role VISITOR` → user created with VISITOR role
+
+---
+
+### Wave 4: GraphQL Mutation Enforcement
+**~200 lines changed across many files**
+
+**Files (add `requireAdmin(ctx)` as the first call in each resolver):**
+
+```
+cloud/apps/api/src/graphql/mutations/api-key.ts           (createApiKey, deleteApiKey)
+cloud/apps/api/src/graphql/mutations/run/lifecycle.ts     (startRun, pauseRun, resumeRun, cancelRun, deleteRun)
+cloud/apps/api/src/graphql/mutations/run/summarization.ts (cancelSummarization, restartSummarization)
+cloud/apps/api/src/graphql/mutations/run/maintenance.ts   (any maintenance mutations)
+cloud/apps/api/src/graphql/mutations/run/recovery.ts      (recoverRun, triggerRecovery)
+cloud/apps/api/src/graphql/mutations/analysis.ts          (any analysis mutations)
+cloud/apps/api/src/graphql/mutations/domain/evaluation.ts (runTrialsForDomain, startDomainEvaluation)
+cloud/apps/api/src/graphql/mutations/queue.ts             (any queue mutations)
+cloud/apps/api/src/graphql/mutations/definition.ts        (createDefinition, updateDefinition, deleteDefinition, forkDefinition)
+cloud/apps/api/src/graphql/mutations/definition-tags.ts   (addTagsToDefinitions, removeTagsFromDefinitions)
+cloud/apps/api/src/graphql/mutations/llm.ts               (createLlmModel, updateLlmModel, deprecateLlmModel, reactivateLlmModel, setDefaultLlmModel, setInfraModel, setSummarizationParallelism)
+cloud/apps/api/src/graphql/mutations/preamble.ts          (createPreamble, updatePreamble, deletePreamble)
+cloud/apps/api/src/graphql/mutations/level-preset.ts      (createLevelPreset, updateLevelPreset, deleteLevelPreset)
+cloud/apps/api/src/graphql/mutations/tag.ts               (createTag, updateTag, deleteTag)
+cloud/apps/api/src/graphql/mutations/value-statement.ts   (createValueStatement, updateValueStatement)
+cloud/apps/api/src/graphql/mutations/domain.ts (if exists) (createDomain, updateDomain)
+```
+
+**New file:** `cloud/apps/api/src/graphql/mutations/user.ts`
+- `createUser` mutation: validate role, normalize email to lowercase, validate password (12+), hash password, create user with `mustChangePassword: true`.
+- `updateUserRole` mutation: check current user is ADMIN, run SERIALIZABLE transaction to count remaining admins after proposed change, reject if result would be 0, apply update.
+- `listUsers` query (can go in `cloud/apps/api/src/graphql/queries/` instead): returns all users with `id, email, name, role, lastLoginAt, createdAt, mustChangePassword`. Admin-only.
+
+**`cloud/apps/api/src/routes/import.ts`:**
+- Apply the `requireAdminRest` Express middleware (defined in `auth/require-admin.ts` — Wave 2) to the import route. Do not add an inline check; use the shared middleware to maintain the single enforcement path from Decision 2.
+
+**MCP Write Tool Enforcement:**
+- Before implementation, read `cloud/apps/api/src/mcp/` (server setup + middleware) to determine how the calling user's identity and role are resolved in MCP tool handlers.
+- All MCP write tools MUST call `requireAdmin()` (GraphQL variant) or throw a FORBIDDEN error if the resolved user's role is not ADMIN. The write tools to update are:
+  - `cloud/apps/api/src/mcp/tools/create-definition.ts`
+  - `cloud/apps/api/src/mcp/tools/update-llm-model.ts`
+  - `cloud/apps/api/src/mcp/tools/reactivate-llm-model.ts`
+  - `cloud/apps/api/src/mcp/tools/set-summarization-parallelism.ts`
+  - `cloud/apps/api/src/mcp/tools/trigger-recovery.ts`
+  - `cloud/apps/api/src/mcp/tools/add-tags-to-definitions.ts`
+  - Any other tool that writes to the database (scan `cloud/apps/api/src/mcp/tools/` for `db.` calls with create/update/delete)
+- Read-only tools (`get-run-summary`, `get-transcript`, `get-run-results`, `graphql-query`, `get-llm-model`, `get-value-pairs`) do not need changes.
+- If the MCP auth context does not yet carry user role, update the MCP middleware to fetch it from the DB at auth time (same pattern as the API key auth branch in Wave 2).
+
+**Verification:**
+- Integration test: VISITOR JWT calling `startRun` → GraphQL error `FORBIDDEN`
+- Integration test: ADMIN JWT calling `startRun` → succeeds (no regression)
+- Integration test: VISITOR JWT calling `POST /api/import` → HTTP 403
+- Integration test: `createUser` → user created with `mustChangePassword: true`
+- Integration test: `updateUserRole` on last Admin → validation error
+- Integration test: `listUsers` from VISITOR → GraphQL error `FORBIDDEN`
+- Integration test: `listUsers` from ADMIN → response objects contain ONLY `id, email, name, role, lastLoginAt, createdAt, mustChangePassword`; NO `passwordHash` present (regression guard against field leakage)
+- Manual verification: call each MCP write tool as a VISITOR (or verify the MCP auth context rejects Visitor role); all write tools return FORBIDDEN
+- Integration test (concurrent last-admin): launch two parallel `updateUserRole` calls both attempting to demote the last admin; verify exactly one succeeds and one returns a validation error. Note: true parallel DB races are hard to guarantee in tests — use a controlled approach: run them in Promise.all with a transaction-level delay injected in test mode, or use a DB lock test pattern.
+- Schema-aware integration test: enumerate all GraphQL mutations via introspection; call each as a VISITOR; assert FORBIDDEN for all (empty allowlist for GraphQL Visitor mutations — `changePassword` is REST)
+
+---
+
+### Wave 5: Web — Role-Aware UI
+**~250 lines changed**
+
+**Files:**
+- `cloud/apps/web/src/auth/context.tsx` — update `AuthProvider` and the stored user shape to include `role` and `mustChangePassword`; if `AuthProvider` builds the user object from `GET /api/auth/me`, update that route's response type to include the new fields
+- `cloud/apps/web/src/types/index.ts` — update the shared `User` type to include `role: 'ADMIN' | 'VISITOR'` and `mustChangePassword: boolean`
+- `cloud/apps/web/src/hooks/useAuth.ts` (or equivalent auth hook) — expose `role` and `mustChangePassword` from the auth context (populated by the changes above)
+- `cloud/apps/web/src/components/ProtectedRoute.tsx` — add `requiredRole` prop + redirect logic
+- `cloud/apps/web/src/App.tsx` — wrap restricted routes with `<ProtectedRoute requiredRole="ADMIN">`; add `mustChangePassword` top-level guard
+- `cloud/apps/web/src/components/layout/NavTabs.tsx` — hide Archive tab, Settings tab (non-account items), Manage Domains item for VISITOR
+- New: `cloud/apps/web/src/pages/SettingsUsers.tsx` — User Management page
+- New: `cloud/apps/web/src/api/operations/user.ts` — `listUsers`, `createUser`, `updateUserRole` GQL operations
+
+**Changes:**
+
+**`useAuth.ts`:** Read `role` and `mustChangePassword` from the decoded JWT. Expose as part of the auth context. When a fresh JWT is returned from `PUT /api/auth/password`, store it and re-read the updated flags.
+
+**`ProtectedRoute.tsx`:** Add optional `requiredRole: 'ADMIN' | 'VISITOR'` prop. If `requiredRole === 'ADMIN'` and `user.role !== 'ADMIN'`, redirect to `/`. Existing `isAuthenticated` check remains as the outer gate.
+
+**`App.tsx`:**
+- Wrap these routes with `<ProtectedRoute requiredRole="ADMIN">`:
+  - `/archive` and all child routes
+  - `/settings/system-health`, `/settings/models`, `/settings/infrastructure`, `/settings/api-keys`, `/settings/users`
+  - `/preambles`, `/level-presets`
+  - `/domains/manage`
+- Add a top-level redirect: if `user.mustChangePassword === true` and the current path is not `/settings/account`, redirect to `/settings/account`.
+
+**`NavTabs.tsx`:**
+- Import `useAuth` hook.
+- Filter `settingsMenuItems` to show only `Account` for VISITOR users.
+- Hide the entire Archive tab for VISITOR users.
+- Hide the "Manage Domains" item from `domainMenuItems` for VISITOR users.
+- Add "User Management" item to `settingsMenuItems` for ADMIN users only (path: `/settings/users`).
+
+**`SettingsUsers.tsx`** (new page):
+- Admin-only (wrapped in `ProtectedRoute requiredRole="ADMIN"` in App.tsx).
+- Fetches `listUsers` on mount.
+- Table columns: Name, Email, Role (inline dropdown), Last Login, Created.
+- "Create User" section: form with Name, Email, Password, Role fields.
+- On role change: calls `updateUserRole`, shows "Role changes take effect on the user's next login" notice.
+- Error handling: email conflict, last-admin protection error.
+
+**`AccountPanel.tsx`** (update):
+- **IMPORTANT:** The current `AccountPanel.tsx` likely logs the user out or clears auth state after a successful password change. This behavior MUST change when `mustChangePassword` was true: instead of logging out, (1) check if the response includes a fresh JWT, (2) if yes, store the new JWT in the auth context via the token-update mechanism (confirm this exists — see Risk 5), (3) re-decode the new JWT to refresh user state, (4) redirect to `/` — the user is now fully set up with their own password and no redirect loop.
+- Show a banner "Your password was set by an administrator. Please set a new password." when `mustChangePassword` is true.
+- The token update mechanism must be confirmed before implementation (see Risk 5). If it does not exist, add `setToken` / `updateUser` to the auth context in `context.tsx` as part of this wave.
+
+**Verification (manual UI check):**
+- Log in as VISITOR: Archive tab absent, Settings tab shows only Account, Domains nav has no "Manage"
+- Navigate to `/archive` as VISITOR: redirected to `/`
+- Navigate to `/settings/models` as VISITOR: redirected to `/`
+- Navigate to `/settings/account` as VISITOR: page loads, password change works
+- Log in as new user (admin-created, `mustChangePassword: true`): immediately redirected to `/settings/account` before any other navigation; after changing password, can navigate normally
+- Log in as ADMIN: all tabs and routes visible; User Management page accessible and functional
+
+---
+
+## File Inventory
+
+| File | Action | Wave |
+|------|--------|------|
+| `cloud/packages/db/prisma/schema.prisma` | Edit: add `UserRole` enum + `role` + `mustChangePassword` fields | 1 |
+| New prisma migration | Create | 1 |
+| `cloud/apps/api/src/auth/types.ts` | Edit: add `role`, `mustChangePassword` to `AuthUser` | 2 |
+| `cloud/apps/api/src/auth/middleware.ts` | Edit: JWT encode/decode role; API key role fetch | 2 |
+| `cloud/apps/api/src/auth/require-admin.ts` | Create: `requireAdmin()` helper | 2 |
+| `cloud/apps/api/src/graphql/context.ts` | Verify: `ForbiddenError` import available | 2 |
+| `cloud/apps/api/src/routes/auth.ts` | Edit: 12-char min; mustChangePassword clear + fresh JWT | 3 |
+| `cloud/apps/api/src/cli/create-user.ts` | Edit: `--role` arg; 12-char min | 3 |
+| `cloud/apps/api/src/graphql/mutations/api-key.ts` | Edit: add `requireAdmin(ctx)` | 4 |
+| `cloud/apps/api/src/graphql/mutations/run/lifecycle.ts` | Edit: add `requireAdmin(ctx)` | 4 |
+| `cloud/apps/api/src/graphql/mutations/run/summarization.ts` | Edit: add `requireAdmin(ctx)` | 4 |
+| `cloud/apps/api/src/graphql/mutations/run/maintenance.ts` | Edit: add `requireAdmin(ctx)` | 4 |
+| `cloud/apps/api/src/graphql/mutations/run/recovery.ts` | Edit: add `requireAdmin(ctx)` | 4 |
+| `cloud/apps/api/src/graphql/mutations/analysis.ts` | Edit: add `requireAdmin(ctx)` | 4 |
+| `cloud/apps/api/src/graphql/mutations/domain/evaluation.ts` | Edit: add `requireAdmin(ctx)` | 4 |
+| `cloud/apps/api/src/graphql/mutations/queue.ts` | Edit: add `requireAdmin(ctx)` | 4 |
+| `cloud/apps/api/src/graphql/mutations/definition.ts` | Edit: add `requireAdmin(ctx)` | 4 |
+| `cloud/apps/api/src/graphql/mutations/definition-tags.ts` | Edit: add `requireAdmin(ctx)` | 4 |
+| `cloud/apps/api/src/graphql/mutations/llm.ts` | Edit: add `requireAdmin(ctx)` | 4 |
+| `cloud/apps/api/src/graphql/mutations/preamble.ts` | Edit: add `requireAdmin(ctx)` | 4 |
+| `cloud/apps/api/src/graphql/mutations/level-preset.ts` | Edit: add `requireAdmin(ctx)` | 4 |
+| `cloud/apps/api/src/graphql/mutations/tag.ts` | Edit: add `requireAdmin(ctx)` | 4 |
+| `cloud/apps/api/src/graphql/mutations/value-statement.ts` | Edit: add `requireAdmin(ctx)` | 4 |
+| `cloud/apps/api/src/graphql/mutations/user.ts` | Create: `createUser`, `updateUserRole`, `listUsers` | 4 |
+| `cloud/apps/api/src/routes/import.ts` | Edit: apply `requireAdminRest` middleware | 4 |
+| `cloud/apps/api/src/mcp/tools/create-definition.ts` | Edit: add role check → FORBIDDEN for VISITOR | 4 |
+| `cloud/apps/api/src/mcp/tools/update-llm-model.ts` | Edit: add role check → FORBIDDEN for VISITOR | 4 |
+| `cloud/apps/api/src/mcp/tools/reactivate-llm-model.ts` | Edit: add role check → FORBIDDEN for VISITOR | 4 |
+| `cloud/apps/api/src/mcp/tools/set-summarization-parallelism.ts` | Edit: add role check → FORBIDDEN for VISITOR | 4 |
+| `cloud/apps/api/src/mcp/tools/trigger-recovery.ts` | Edit: add role check → FORBIDDEN for VISITOR | 4 |
+| `cloud/apps/api/src/mcp/tools/add-tags-to-definitions.ts` | Edit: add role check → FORBIDDEN for VISITOR | 4 |
+| `cloud/apps/web/src/auth/context.tsx` | Edit: update AuthProvider + user shape; add token-update mechanism | 5 |
+| `cloud/apps/web/src/types/index.ts` | Edit: add `role`, `mustChangePassword` to User type | 5 |
+| `cloud/apps/web/src/hooks/useAuth.ts` | Edit: expose `role`, `mustChangePassword` from auth context | 5 |
+| `cloud/apps/web/src/components/ProtectedRoute.tsx` | Edit: add `requiredRole` prop | 5 |
+| `cloud/apps/web/src/App.tsx` | Edit: admin-only route wrappers; mustChangePassword guard | 5 |
+| `cloud/apps/web/src/components/layout/NavTabs.tsx` | Edit: role-conditional nav items | 5 |
+| `cloud/apps/web/src/pages/SettingsUsers.tsx` | Create: User Management page | 5 |
+| `cloud/apps/web/src/api/operations/user.ts` | Create: `listUsers`, `createUser`, `updateUserRole` GQL ops | 5 |
+| `cloud/apps/web/src/components/settings/AccountPanel.tsx` | Edit: handle fresh JWT on password change; mustChangePassword banner | 5 |
+
+---
+
+## Checkpoint Boundaries
+
+The waves are the natural checkpoint boundaries. Each wave is independently committable:
+
+```
+[CHECKPOINT] Wave 1: DB schema + migration
+[CHECKPOINT] Wave 2: Auth layer
+[CHECKPOINT] Wave 3: Password service
+[CHECKPOINT] Wave 4: GraphQL enforcement + new operations
+[CHECKPOINT] Wave 5: Web UI
+```
+
+Wave 4 is the largest and could be split further: Wave 4a (add `requireAdmin` to existing mutations) and Wave 4b (new `user.ts` mutations + import route). The boundary is the stable `requireAdmin()` function from Wave 2.
+
+---
+
+## Parallelization Opportunities
+
+| Parallel work | Files | Safe? |
+|--------------|-------|-------|
+| Wave 4a (add requireAdmin to existing mutations) | Mutations directory | Yes — each file is independent |
+| Wave 5 UI | Web files | Yes — no overlap with API |
+| Wave 4a and Wave 5 | API mutations + Web | Yes IF `requireAdmin()` (Wave 2) is committed first |
+
+Do **not** parallelize:
+- Wave 1 and Wave 2 (Wave 2 depends on the new schema types)
+- Wave 4b and Wave 5 (Wave 5 GraphQL operations depend on Wave 4b schema)
+
+---
+
+## Risk Callouts
+
+### Risk 1: Missing mutations from the enforcement list
+**Probability:** Medium. The mutation inventory was compiled from a manual scan. A new mutation added after the scan could be missed.
+**Mitigation (grep):** After Wave 4, run `grep -rn "Mutation" cloud/apps/api/src/graphql/mutations/ | grep -v requireAdmin` — result should be empty.
+**Mitigation (schema-aware integration test):** Write an integration test in Wave 4 that uses GraphQL introspection to enumerate all mutations in the schema, then calls each one as a VISITOR and asserts a FORBIDDEN error. This test runs on every CI pass, making any future unprotected mutation visible immediately. The explicit allowlist in the test is `[]` (no Visitor-callable GraphQL mutations — `changePassword` is REST, not GraphQL). This test is the durable security gate; the grep check is a belt-and-suspenders check for the initial implementation.
+**Verification:** Run the schema-aware integration test in the Wave 4 diff review.
+
+### Risk 2: JWT format change breaks existing sessions
+**Probability:** Low. The JWT payload is being extended (not changed). The decoder must handle tokens without `role` (default to ADMIN). Risk is if the decoder is strict about unknown fields.
+**Verification:** Decode a pre-migration JWT (captured from a test session before Wave 2 is deployed) through the updated middleware and verify `req.user.role === 'ADMIN'`. This can be done in the auth middleware unit tests by creating a JWT with the old payload shape.
+
+### Risk 2b: JWT test helper may not exist
+**Probability:** Unknown. The auth unit tests in Wave 2 need to sign JWTs with specific payloads (no role, visitor role, pre-migration shape). Check `cloud/apps/api/src/auth/__tests__/` for an existing helper.
+**Mitigation:** If no JWT-signing helper exists for tests, create one in Wave 2 as part of the auth unit test setup. It's a thin wrapper around the same `jsonwebtoken.sign` function used in middleware — no external dependency.
+**Verification:** Auth unit tests pass in the Wave 2 diff review.
+
+### Risk 3: `ForbiddenError` is not in `@valuerank/shared`
+**Probability:** Low. The codebase uses `AppError`, `NotFoundError`, `ValidationError` from shared. `ForbiddenError` may not exist yet.
+**Mitigation:** Check `cloud/packages/shared/src/` before Wave 2. If absent, add it — it's a one-liner extending `AppError`. Do not use a generic `Error`.
+**Verification:** Run `grep -r "ForbiddenError" cloud/packages/shared/src/` before starting Wave 2. If not found, add it.
+
+### Risk 4: `updateUserRole` SERIALIZABLE isolation support
+**Probability:** Low. Prisma supports `$transaction` with isolation levels in PostgreSQL. PgBouncer with `pgbouncer=true` in `DATABASE_URL` may prevent SERIALIZABLE transactions if it uses transaction mode.
+**Verification:** Check `DATABASE_URL` environment: if `?pgbouncer=true` is set, confirm PgBouncer is in session pooling mode (not transaction mode) before using SERIALIZABLE. If transaction mode is used, fall back to an optimistic lock pattern (re-read and compare after write). Verify by testing `$transaction({ isolationLevel: 'Serializable' })` in the integration test suite.
+
+### Risk 5: AccountPanel stores JWT token correctly
+**Probability:** Medium. The web app currently doesn't need to update the JWT mid-session. The auth context may store the JWT in state or localStorage, but the mechanism for updating it is untested.
+**Verification:** Before writing Wave 5, read `cloud/apps/web/src/hooks/useAuth.ts` to confirm how the JWT is stored and find the token update mechanism. If no such mechanism exists, plan to add one in Wave 5 (e.g., a `setToken` callback on the auth context).
+
+---
+
+## Residual Risks
+
+- **Stale JWT role (24h window):** Accepted V1 limitation. A demoted Admin retains write access for up to 24 hours. Bounded by JWT TTL. The admin UI shows a notice on role change. **Verification:** Manually test that a demoted-user's old JWT still works for one write mutation (expected behavior); verify they cannot after re-login. This confirms the system is working as designed, not as a bug.
+
+- **Admin read endpoints not role-gated:** The GraphQL read queries for settings data (LLM models, infrastructure) are not role-restricted on the server. A Visitor with API access can read this configuration data. Accepted by design — this data is configuration metadata, not credentials. **Verification:** Confirm the data returned by `llmModels` and `systemSettings` queries contains no secrets (API keys, tokens, passwords) before shipping. Run `graphql_query` against the prod API to sample the response.
+
+- **PgBouncer transaction mode may block SERIALIZABLE:** Documented in Risk 4 above. **Verification:** see Risk 4.
+codex
+I’m checking the repo shape against the plan so I can call out only the parts that would actually block an implementation. I’ll verify the auth, GraphQL, and web seams where the plan might assume behavior that the code does not deliver.
+exec
+/bin/zsh -lc "rg -n \"mcp/tools|db\\.\\w+\\(|FORBIDDEN|ForbiddenError|requireAdmin\" cloud/apps/api/src/mcp cloud/packages/shared/src cloud/apps/api/src/graphql/mutations -g '"'!**/dist/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ exited 1 in 0ms:
+exec
+/bin/zsh -lc "rg -n \"passwordChangedAt|issueToken|signJwt|mustChangePassword|role\" cloud/apps/api/src/auth cloud/apps/api/src/routes cloud/apps/api/src/graphql cloud/apps/web/src -g '"'!**/dist/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+cloud/apps/api/src/routes/auth.ts:245:        data: { passwordHash, passwordChangedAt: new Date() },
+cloud/apps/api/src/auth/middleware.ts:23:  passwordChangedAtMs: number | null;
+cloud/apps/api/src/auth/middleware.ts:25:const passwordChangedAtCache = new Map<string, PasswordChangedCacheEntry>();
+cloud/apps/api/src/auth/middleware.ts:29:  const cached = passwordChangedAtCache.get(userId);
+cloud/apps/api/src/auth/middleware.ts:31:    return cached.passwordChangedAtMs;
+cloud/apps/api/src/auth/middleware.ts:36:    select: { passwordChangedAt: true },
+cloud/apps/api/src/auth/middleware.ts:39:  const passwordChangedAtMs = user?.passwordChangedAt?.getTime() ?? null;
+cloud/apps/api/src/auth/middleware.ts:40:  passwordChangedAtCache.set(userId, { fetchedAtMs: now, passwordChangedAtMs });
+cloud/apps/api/src/auth/middleware.ts:42:  if (passwordChangedAtCache.size > PASSWORD_CHANGED_CACHE_MAX_ENTRIES) {
+cloud/apps/api/src/auth/middleware.ts:43:    const oldestKey = passwordChangedAtCache.keys().next().value;
+cloud/apps/api/src/auth/middleware.ts:45:      passwordChangedAtCache.delete(oldestKey);
+cloud/apps/api/src/auth/middleware.ts:49:  return passwordChangedAtMs;
+cloud/apps/api/src/auth/middleware.ts:55:    passwordChangedAtCache.clear();
+cloud/apps/api/src/auth/middleware.ts:60: * Evict a user's passwordChangedAt cache entry after a password change
+cloud/apps/api/src/auth/middleware.ts:64:  passwordChangedAtCache.delete(userId);
+cloud/apps/api/src/auth/middleware.ts:162:      const passwordChangedAtMs = await getPasswordChangedAtMs(payload.sub);
+cloud/apps/api/src/auth/middleware.ts:163:      if (passwordChangedAtMs != null && payload.iat != null) {
+cloud/apps/api/src/auth/middleware.ts:164:        const changedAtSeconds = Math.floor(passwordChangedAtMs / 1000);
+cloud/apps/web/src/pages/SurveyResults.tsx:558:      <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900" role="alert" aria-live="polite">
+cloud/apps/web/src/components/analysis/ContestedScenariosList.tsx:106:            role={onScenarioClick ? 'button' : undefined}
+cloud/apps/web/src/components/analysis/ModelConsistencyChart.tsx:250:          role="img"
+cloud/apps/web/src/components/ui/Input.tsx:62:          <p id={`${inputId}-error`} className="text-sm text-red-600" role="alert">
+cloud/apps/web/src/components/analysis/ModelFilter.tsx:133:          role="group"
+cloud/apps/web/src/components/ui/Select.tsx:221:          role="listbox"
+cloud/apps/web/src/components/ui/Select.tsx:232:                role="option"
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:30:  role: 'user' | 'assistant';
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:42: * Handles both standard role/content format and worker schema (probePrompt/targetResponse).
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:57:      // Handle standard role/content format
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:58:      if ('role' in turnObj && 'content' in turnObj) {
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:60:          role: turnObj.role as 'user' | 'assistant',
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:69:            role: 'user',
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:75:            role: 'assistant',
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:350:                  className={`flex gap-3 ${turn.role === 'user' ? '' : ''
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:354:                    className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${turn.role === 'user'
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:359:                    {turn.role === 'user' ? (
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:367:                      {turn.role === 'user' ? 'User' : 'Assistant'}
+cloud/apps/web/src/components/ui/Card.tsx:54:        role={onClick || variant === 'interactive' ? 'button' : undefined}
+cloud/apps/web/src/components/ui/Modal.tsx:148:      role="dialog"
+cloud/apps/web/src/components/ui/Avatar.tsx:66:      role="img"
+cloud/apps/web/src/components/runs/TranscriptRow.tsx:241:      role="button"
+cloud/apps/web/src/components/ui/Tooltip.tsx:155:            role="tooltip"
+cloud/apps/web/src/components/ui/Table.tsx:308:            role={onRowClick ? 'button' : undefined}
+cloud/apps/web/src/components/ui/Tabs.tsx:58:        role="tablist"
+cloud/apps/web/src/components/ui/Tabs.tsx:74:              role="tab"
+cloud/apps/web/src/components/ui/Tabs.tsx:108:      role="tabpanel"
+cloud/apps/web/src/components/models/CircumplexLoadingProgress.tsx:70:            role="progressbar"
+cloud/apps/web/src/components/domains/ModelGroupsSection.tsx:42:    tendency = 'Recommend high-upside roles where visible outcomes and momentum matter more than comfort.';
+cloud/apps/web/src/components/domains/ModelGroupsSection.tsx:45:    tendency = 'Recommend autonomous roles with decision latitude and execution authority over comfort or conformity.';
+cloud/apps/web/src/components/definitions/TagChips.tsx:59:            role={onTagClick ? 'button' : undefined}
+cloud/apps/web/src/components/domains/DominanceSectionChart.tsx:175:        role="img"
+cloud/apps/web/src/components/definitions/DimensionEditor.tsx:173:            <span className="text-xs text-gray-500" role="columnheader">Level</span>
+cloud/apps/web/src/components/definitions/DimensionEditor.tsx:174:            <span className="text-xs text-gray-500" role="columnheader">Text</span>
+cloud/apps/web/src/components/definitions/DimensionEditor.tsx:175:            <span role="columnheader"><span className="sr-only">Actions</span></span>
+cloud/apps/web/src/components/domains/DomainSettingsPanel.tsx:302:                      role="button"
+cloud/apps/web/src/components/models/CircumplexMdsScatter.tsx:76:          role="img"
+cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx:53:        role="dialog"
+
+exec
+/bin/zsh -lc "rg -n \"ProtectedRoute|useAuth|AuthProvider|GET /api/auth/me|api/auth/me|logout|setToken|updateUser\" cloud/apps/web/src -g '"'!**/dist/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+cloud/apps/web/src/pages/Login.tsx:4:import { useAuth } from '../auth/hooks';
+cloud/apps/web/src/pages/Login.tsx:12:  const { login, isAuthenticated } = useAuth();
+cloud/apps/web/src/auth/hooks.ts:5:export function useAuth(): AuthContextValue {
+cloud/apps/web/src/auth/hooks.ts:9:    throw new Error('useAuth must be used within an AuthProvider');
+cloud/apps/web/src/auth/context.tsx:13:type AuthProviderProps = {
+cloud/apps/web/src/auth/context.tsx:17:export function AuthProvider({ children }: AuthProviderProps) {
+cloud/apps/web/src/auth/context.tsx:19:  const [token, setToken] = useState<string | null>(null);
+cloud/apps/web/src/auth/context.tsx:24:      const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+cloud/apps/web/src/auth/context.tsx:33:        setToken(tokenToValidate);
+cloud/apps/web/src/auth/context.tsx:37:        setToken(null);
+cloud/apps/web/src/auth/context.tsx:70:      setToken(storedToken);
+cloud/apps/web/src/auth/context.tsx:96:    setToken(data.token);
+cloud/apps/web/src/auth/context.tsx:100:  const logout = useCallback(() => {
+cloud/apps/web/src/auth/context.tsx:102:    setToken(null);
+cloud/apps/web/src/auth/context.tsx:108:    setToken(newToken);
+cloud/apps/web/src/auth/context.tsx:118:    logout,
+cloud/apps/web/src/auth/types.ts:22:  logout: () => void;
+cloud/apps/web/src/App.tsx:5:import { AuthProvider } from './auth/context';
+cloud/apps/web/src/App.tsx:6:import { ProtectedRoute } from './components/ProtectedRoute';
+cloud/apps/web/src/App.tsx:51:    <ProtectedRoute>
+cloud/apps/web/src/App.tsx:53:    </ProtectedRoute>
+cloud/apps/web/src/App.tsx:64:        <AuthProvider>
+cloud/apps/web/src/App.tsx:356:        </AuthProvider>
+cloud/apps/web/src/components/layout/Header.tsx:2:import { useAuth } from '../../auth/hooks';
+cloud/apps/web/src/components/layout/Header.tsx:7:  const { user, logout } = useAuth();
+cloud/apps/web/src/components/layout/Header.tsx:73:                  logout();
+cloud/apps/web/src/components/settings/AccountPanel.tsx:2:import { useAuth } from '../../auth/hooks';
+cloud/apps/web/src/components/settings/AccountPanel.tsx:10:    const { user, token, logout, updateToken } = useAuth();
+cloud/apps/web/src/components/settings/AccountPanel.tsx:51:            const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+cloud/apps/web/src/components/settings/AccountPanel.tsx:119:            setTimeout(() => logout(), 1500);
+cloud/apps/web/src/components/ProtectedRoute.tsx:3:import { useAuth } from '../auth/hooks';
+cloud/apps/web/src/components/ProtectedRoute.tsx:5:type ProtectedRouteProps = {
+cloud/apps/web/src/components/ProtectedRoute.tsx:9:export function ProtectedRoute({ children }: ProtectedRouteProps) {
+cloud/apps/web/src/components/ProtectedRoute.tsx:10:  const { isAuthenticated, isLoading } = useAuth();
+
+codex
+I’ve confirmed there is already token update support in the web auth context, and the API middleware already enforces password-change timestamps. Next I’m reading the exact code paths where the plan may contradict that behavior, especially around JWT refresh and route gating.
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/api/src/auth/middleware.ts" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+/**
+ * Authentication middleware
+ *
+ * Validates JWT tokens and API keys, populates req.user with user info.
+ * Supports both Bearer token (JWT) and X-API-Key header authentication.
+ */
+
+import type { Request, Response, NextFunction } from 'express';
+
+import { createLogger, AuthenticationError } from '@valuerank/shared';
+import { db } from '@valuerank/db';
+
+import { verifyToken, extractBearerToken } from './services.js';
+import { hashApiKey, isValidApiKeyFormat } from './api-keys.js';
+import type { AuthUser, AuthMethod } from './types.js';
+
+const log = createLogger('auth:middleware');
+
+const PASSWORD_CHANGED_CACHE_TTL_MS = 5000;
+const PASSWORD_CHANGED_CACHE_MAX_ENTRIES = 10000;
+type PasswordChangedCacheEntry = {
+  fetchedAtMs: number;
+  passwordChangedAtMs: number | null;
+};
+const passwordChangedAtCache = new Map<string, PasswordChangedCacheEntry>();
+
+async function getPasswordChangedAtMs(userId: string): Promise<number | null> {
+  const now = Date.now();
+  const cached = passwordChangedAtCache.get(userId);
+  if (cached !== undefined && now - cached.fetchedAtMs < PASSWORD_CHANGED_CACHE_TTL_MS) {
+    return cached.passwordChangedAtMs;
+  }
+
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { passwordChangedAt: true },
+  });
+
+  const passwordChangedAtMs = user?.passwordChangedAt?.getTime() ?? null;
+  passwordChangedAtCache.set(userId, { fetchedAtMs: now, passwordChangedAtMs });
+
+  if (passwordChangedAtCache.size > PASSWORD_CHANGED_CACHE_MAX_ENTRIES) {
+    const oldestKey = passwordChangedAtCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      passwordChangedAtCache.delete(oldestKey);
+    }
+  }
+
+  return passwordChangedAtMs;
+}
+
+// Test hook: clears shared auth cache between integration tests.
+export function clearPasswordChangedAtCacheForTests(): void {
+  if (process.env.NODE_ENV === 'test') {
+    passwordChangedAtCache.clear();
+  }
+}
+
+/**
+ * Evict a user's passwordChangedAt cache entry after a password change
+ * so the next JWT check hits the DB immediately.
+ */
+export function invalidatePasswordChangedAtCache(userId: string): void {
+  passwordChangedAtCache.delete(userId);
+}
+
+// Extend Express Request to include auth info
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      user: AuthUser | null;
+      authMethod: AuthMethod | null;
+    }
+  }
+}
+
+/**
+ * Extract and validate authentication from request headers
+ *
+ * Supports two authentication methods:
+ * 1. JWT via Authorization header (Bearer token)
+ * 2. API key via X-API-Key header
+ *
+ * Sets req.user and req.authMethod on success
+ * Sets both to null if no auth provided (allows unauthenticated requests through)
+ */
+export async function authMiddleware(
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): Promise<void> {
+  // Initialize auth state
+  req.user = null;
+  req.authMethod = null;
+
+  // Try Bearer token or Basic auth (Authorization header)
+  const authHeader = req.headers.authorization;
+
+  // Check for Basic auth (for Excel OData connector)
+  // Format: "Basic base64(username:password)" where password is the API key
+  if (authHeader !== undefined && authHeader.startsWith('Basic ')) {
+    const base64Credentials = authHeader.slice(6);
+    try {
+      const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
+      const colonIndex = credentials.indexOf(':');
+      if (colonIndex > -1) {
+        const password = credentials.slice(colonIndex + 1);
+
+        // Use password as API key
+        if (password.startsWith('vr_')) {
+          const user = await validateApiKey(password);
+          if (user !== null) {
+            req.user = user;
+            req.authMethod = 'api_key';
+            log.debug({ userId: user.id }, 'Basic auth (API key) successful');
+            next();
+            return;
+          }
+        }
+      }
+    } catch {
+      // Invalid base64, continue to try other methods
+    }
+  }
+
+  const token = extractBearerToken(authHeader);
+
+  if (token !== null && token !== undefined && token !== '') {
+    // Check if Bearer token is actually an API key (for LeChat compatibility)
+    if (token.startsWith('vr_')) {
+      try {
+        const user = await validateApiKey(token);
+        if (user !== null) {
+          req.user = user;
+          req.authMethod = 'api_key';
+          log.debug({ userId: user.id }, 'API key (Bearer) authentication successful');
+          next();
+          return;
+        }
+        // Invalid API key format or not found - continue without auth
+        // (individual routes can require auth if needed)
+        next();
+        return;
+      } catch (err) {
+        if (err instanceof AuthenticationError) {
+          next(err);
+          return;
+        }
+        log.error({ err }, 'Unexpected error during API key validation');
+        next(new AuthenticationError('Invalid API key'));
+        return;
+      }
+    }
+
+    // Try as JWT
+    try {
+      // Verify JWT (includes 30-second clock skew tolerance)
+      const payload = verifyToken(token);
+
+      // Check if password was changed after this token was issued.
+      const passwordChangedAtMs = await getPasswordChangedAtMs(payload.sub);
+      if (passwordChangedAtMs != null && payload.iat != null) {
+        const changedAtSeconds = Math.floor(passwordChangedAtMs / 1000);
+        if (payload.iat <= changedAtSeconds) {
+          log.warn({ userId: payload.sub }, 'Token issued before password change, rejecting');
+          next(new AuthenticationError('Token invalidated by password change'));
+          return;
+        }
+      }
+
+      // Populate request with user info
+      req.user = {
+        id: payload.sub,
+        email: payload.email,
+      };
+      req.authMethod = 'jwt';
+
+      log.debug({ userId: req.user.id }, 'JWT authentication successful');
+      next();
+      return;
+    } catch (err) {
+      // Token is invalid - pass error to error handler
+      if (err instanceof AuthenticationError) {
+        next(err);
+      } else {
+        log.error({ err }, 'Unexpected error during JWT validation');
+        next(new AuthenticationError('Invalid token'));
+      }
+      return;
+    }
+  }
+
+  // Try API key (X-API-Key header or apiKey query param)
+  const headerKey = req.headers['x-api-key'];
+  const queryKey = req.query.apiKey;
+  const apiKey = (typeof headerKey === 'string' ? headerKey : typeof queryKey === 'string' ? queryKey : '');
+
+  if (apiKey.length > 0) {
+    try {
+      const user = await validateApiKey(apiKey);
+      if (user !== null) {
+        req.user = user;
+        req.authMethod = 'api_key';
+        log.debug({ userId: user.id }, 'API key authentication successful');
+      }
+    } catch (err) {
+      if (err instanceof AuthenticationError) {
+        next(err);
+        return;
+      }
+      log.error({ err }, 'Unexpected error during API key validation');
+      next(new AuthenticationError('Invalid API key'));
+      return;
+    }
+  }
+
+  // No auth provided - allow through as unauthenticated
+  // Individual routes/resolvers can require auth if needed
+  next();
+}
+
+/**
+ * Validate an API key and return the associated user
+ *
+ * @param key - The API key from the X-API-Key header
+ * @returns User info if valid, null if invalid
+ * @throws AuthenticationError if key is expired
+ */
+async function validateApiKey(key: string): Promise<AuthUser | null> {
+  // Validate format first
+  if (!isValidApiKeyFormat(key)) {
+    log.debug('Invalid API key format');
+    return null;
+  }
+
+  // Hash the key for lookup
+  const keyHash = hashApiKey(key);
+
+  // Find the API key record
+  const apiKeyRecord = await db.apiKey.findUnique({
+    where: { keyHash },
+    include: { user: true },
+  });
+
+  if (!apiKeyRecord) {
+    log.debug('API key not found');
+    return null;
+  }
+
+  // Check expiry
+  if (apiKeyRecord.expiresAt && apiKeyRecord.expiresAt < new Date()) {
+    log.debug({ keyId: apiKeyRecord.id }, 'API key expired');
+    throw new AuthenticationError('API key expired');
+  }
+
+  // Update last_used timestamp (fire and forget)
+  db.apiKey
+    .update({
+      where: { id: apiKeyRecord.id },
+
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/web/src/auth/context.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+import type { ReactNode } from 'react';
+import { createContext, useState, useEffect, useCallback } from 'react';
+import type { User } from '../types';
+import type { AuthContextValue, LoginResponse } from './types';
+
+const TOKEN_KEY = 'valuerank_token';
+
+// API base URL - empty string means same origin (dev), full URL for production
+export const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || '';
+
+export const AuthContext = createContext<AuthContextValue | null>(null);
+
+type AuthProviderProps = {
+  children: ReactNode;
+};
+
+export function AuthProvider({ children }: AuthProviderProps) {
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const validateToken = useCallback(async (tokenToValidate: string, retryCount = 0) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${tokenToValidate}`,
+        },
+      });
+
+      if (response.ok) {
+        const userData = (await response.json()) as User;
+        setUser(userData);
+        setToken(tokenToValidate);
+      } else if (response.status === 401 || response.status === 403) {
+        // Token is invalid/expired, clear it
+        localStorage.removeItem(TOKEN_KEY);
+        setToken(null);
+        setUser(null);
+      } else {
+        // Server error (5xx), keep token and retry
+        if (retryCount < 3) {
+          setTimeout(() => { void validateToken(tokenToValidate, retryCount + 1); }, 1000);
+          return; // Don't set isLoading to false yet
+        }
+        // After 3 retries, keep the token but set user to null
+        // User will see loading state clear but can retry manually
+        setUser(null);
+        setIsLoading(false);
+        return;
+      }
+    } catch {
+      // Network error (server down) - retry a few times before giving up
+      // Don't clear token on network errors - server might just be restarting
+      if (retryCount < 3) {
+        setTimeout(() => { void validateToken(tokenToValidate, retryCount + 1); }, 1000);
+        return; // Don't set isLoading to false yet
+      }
+      // After retries, keep the token - user can refresh when server is back
+      setUser(null);
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(false);
+  }, []);
+
+  // Restore token from localStorage on mount
+  useEffect(() => {
+    const storedToken = localStorage.getItem(TOKEN_KEY);
+    if (storedToken) {
+      setToken(storedToken);
+      // Validate token and fetch user info
+      void validateToken(storedToken);
+    } else {
+      setIsLoading(false);
+    }
+  }, [validateToken]);
+
+  const login = useCallback(async (email: string, password: string) => {
+    const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!response.ok) {
+      const error = (await response.json().catch(() => ({ message: 'Login failed' }))) as { message?: string };
+      throw new Error(error.message ?? 'Invalid credentials');
+    }
+
+    const data = (await response.json()) as LoginResponse;
+
+    // Store token
+    localStorage.setItem(TOKEN_KEY, data.token);
+    setToken(data.token);
+    setUser(data.user);
+  }, []);
+
+  const logout = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY);
+    setToken(null);
+    setUser(null);
+  }, []);
+
+  const updateToken = useCallback((newToken: string, updatedUser: User) => {
+    localStorage.setItem(TOKEN_KEY, newToken);
+    setToken(newToken);
+    setUser(updatedUser);
+  }, []);
+
+  const value: AuthContextValue = {
+    user,
+    token,
+    isLoading,
+    isAuthenticated: !!token && !!user,
+    login,
+    logout,
+    updateToken,
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+// Export token getter for urql client
+export function getStoredToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+// Export token clearer for 401 handling
+export function clearStoredToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/web/src/components/settings/AccountPanel.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+import { useState, useEffect } from 'react';
+import { useAuth } from '../../auth/hooks';
+import { API_BASE_URL } from '../../auth/context';
+import { Button } from '../ui/Button';
+import { Card, CardHeader, CardContent } from '../ui/Card';
+import { Input } from '../ui/Input';
+import { AlertCircle, CheckCircle } from 'lucide-react';
+
+export function AccountPanel() {
+    const { user, token, logout, updateToken } = useAuth();
+
+    const [profileName, setProfileName] = useState(user?.name ?? '');
+    const [profileEmail, setProfileEmail] = useState(user?.email ?? '');
+
+    const [profileSaving, setProfileSaving] = useState(false);
+    const [profileMessage, setProfileMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+
+    const [passwordSaving, setPasswordSaving] = useState(false);
+    const [passwordMessage, setPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+    useEffect(() => {
+        if (user) {
+            setProfileName(user.name ?? '');
+            setProfileEmail(user.email ?? '');
+        }
+    }, [user]);
+
+    if (!user) return null;
+
+    const handleProfileSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setProfileMessage(null);
+
+        if (profileName.trim() === '' && profileEmail.trim() === '') return;
+
+        setProfileSaving(true);
+        try {
+            const body: { name?: string; email?: string } = {};
+            if (profileName !== (user.name ?? '')) body.name = profileName;
+            if (profileEmail !== user.email) body.email = profileEmail;
+
+            if (Object.keys(body).length === 0) {
+                setProfileSaving(false);
+                return;
+            }
+
+            const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(body)
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.message || 'Failed to update profile');
+            }
+
+            if (data.token && data.user) {
+                updateToken(data.token, data.user);
+                setProfileMessage({ type: 'success', text: 'Profile updated successfully.' });
+            } else {
+                if (data.user && token) {
+                    updateToken(token, data.user);
+                }
+                setProfileMessage({ type: 'success', text: 'Profile updated successfully.' });
+            }
+
+        } catch (err) {
+            setProfileMessage({ type: 'error', text: err instanceof Error ? err.message : 'An error occurred' });
+        } finally {
+            setProfileSaving(false);
+        }
+    };
+
+    const handlePasswordSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setPasswordMessage(null);
+
+        if (newPassword !== confirmPassword) {
+            setPasswordMessage({ type: 'error', text: 'New passwords do not match' });
+            return;
+        }
+
+        if (newPassword.length < 8) {
+            setPasswordMessage({ type: 'error', text: 'New password must be at least 8 characters long' });
+            return;
+        }
+
+        setPasswordSaving(true);
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/auth/password`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ currentPassword, newPassword })
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.message || 'Failed to change password');
+            }
+
+            setPasswordMessage({ type: 'success', text: 'Password changed successfully. Please log in again.' });
+            setCurrentPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+
+            setTimeout(() => logout(), 1500);
+
+        } catch (err) {
+            setPasswordMessage({ type: 'error', text: err instanceof Error ? err.message : 'An error occurred' });
+        } finally {
+            setPasswordSaving(false);
+        }
+    };
+
+    return (
+        <div className="space-y-6">
+            <Card>
+                <CardHeader>
+                    <h3 className="text-lg font-medium leading-6 text-gray-900">Profile</h3>
+                    <p className="mt-1 text-sm text-gray-500">Update your personal information.</p>
+                </CardHeader>
+                <CardContent>
+                    <form className="space-y-4" onSubmit={handleProfileSubmit}>
+                        {profileMessage && (
+                            <div className={`p-4 rounded-md flex gap-3 ${profileMessage.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700 border border-green-500'}`}>
+                                {profileMessage.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5 text-green-600" />}
+                                <p className="text-sm">{profileMessage.text}</p>
+                            </div>
+                        )}
+
+                        <div className="space-y-2">
+                            <label htmlFor="name" className="block text-sm font-medium text-gray-700">Name</label>
+                            <Input
+                                id="name"
+                                value={profileName}
+                                onChange={(e) => setProfileName(e.target.value)}
+                                placeholder="Your name"
+                                required
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email address</label>
+                            <Input
+                                id="email"
+                                type="email"
+                                value={profileEmail}
+                                onChange={(e) => setProfileEmail(e.target.value)}
+                                required
+                            />
+                        </div>
+
+                        <Button type="submit" disabled={profileSaving || profileName.trim() === '' || (profileName === (user.name ?? '') && profileEmail === user.email)}>
+                            {profileSaving ? 'Saving...' : 'Save Changes'}
+                        </Button>
+                    </form>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <h3 className="text-lg font-medium leading-6 text-gray-900">Security</h3>
+                    <p className="mt-1 text-sm text-gray-500">Update your password. You will be logged out after changing your password.</p>
+                </CardHeader>
+                <CardContent>
+                    <form className="space-y-4" onSubmit={handlePasswordSubmit}>
+                        {passwordMessage && (
+                            <div className={`p-4 rounded-md flex gap-3 ${passwordMessage.type === 'error' ? 'bg-red-50 text-red-700 border border-red-500' : 'bg-green-50 text-green-700 border border-green-500'}`}>
+                                {passwordMessage.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5 text-green-600" />}
+                                <p className="text-sm">{passwordMessage.text}</p>
+                            </div>
+                        )}
+
+                        <div className="space-y-2">
+                            <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700">Current Password</label>
+                            <Input
+                                id="currentPassword"
+                                type="password"
+                                value={currentPassword}
+                                onChange={(e) => setCurrentPassword(e.target.value)}
+                                required
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700">New Password</label>
+                            <Input
+                                id="newPassword"
+                                type="password"
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                required
+                                minLength={8}
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">Confirm New Password</label>
+                            <Input
+                                id="confirmPassword"
+                                type="password"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                required
+                                minLength={8}
+                            />
+                        </div>
+
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/web/src/components/ProtectedRoute.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+import type { ReactNode } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../auth/hooks';
+
+type ProtectedRouteProps = {
+  children: ReactNode;
+};
+
+export function ProtectedRoute({ children }: ProtectedRouteProps) {
+  const { isAuthenticated, isLoading } = useAuth();
+  const location = useLocation();
+
+  // Show loading state while checking auth
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#FDFBF7] flex items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-4 border-teal-600 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  // Redirect to login if not authenticated
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+  }
+
+  return <>{children}</>;
+}
+
+exec
+/bin/zsh -lc "sed -n '220,360p' cloud/apps/web/src/components/settings/AccountPanel.tsx" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+                        </div>
+
+                        <Button type="submit" variant="secondary" disabled={passwordSaving || !currentPassword || !newPassword || !confirmPassword}>
+                            {passwordSaving ? 'Updating...' : 'Change Password'}
+                        </Button>
+                    </form>
+                </CardContent>
+            </Card>
+        </div>
+    );
+}
+
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/web/src/auth/types.ts" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+import type { User } from '../types';
+
+// Login request to REST endpoint
+export type LoginRequest = {
+  email: string;
+  password: string;
+};
+
+// Login response from REST endpoint
+export type LoginResponse = {
+  token: string;
+  user: User;
+};
+
+// Auth context value exposed to components
+export type AuthContextValue = {
+  user: User | null;
+  token: string | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => void;
+  updateToken: (newToken: string, user: User) => void;
+};
+
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/web/src/hooks/useAuth.ts" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ exited 1 in 0ms:
+sed: cloud/apps/web/src/hooks/useAuth.ts: No such file or directory
+
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/api/src/routes/auth.ts" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+/**
+ * Authentication routes
+ *
+ * POST /api/auth/login - Authenticate with email/password, returns JWT
+ * GET /api/auth/me - Get current user info (requires auth)
+ */
+
+import { Router } from 'express';
+import type { Request, Response, NextFunction } from 'express';
+
+import { db } from '@valuerank/db';
+import {
+  createLogger,
+  AuthenticationError,
+  ValidationError,
+} from '@valuerank/shared';
+
+import { verifyPassword, signToken, hashPassword } from '../auth/index.js';
+import { loginRateLimiter } from '../auth/rate-limit.js';
+import { invalidatePasswordChangedAtCache } from '../auth/middleware.js';
+import type { LoginRequest, LoginResponse } from '../auth/index.js';
+
+const log = createLogger('auth');
+
+export const authRouter = Router();
+
+/**
+ * POST /api/auth/login
+ *
+ * Authenticate user with email and password
+ * Returns JWT token on success
+ *
+ * Rate limited: 10 attempts per 15 minutes per IP
+ */
+authRouter.post(
+  '/login',
+  loginRateLimiter,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { email, password } = req.body as LoginRequest;
+
+      // Validate required fields
+      if (email === undefined || email === '' || password === undefined || password === '') {
+        throw new ValidationError('Email and password are required');
+      }
+
+      // Normalize email to lowercase for case-insensitive lookup
+      const normalizedEmail = email.toLowerCase();
+
+      // Find user by email
+      const user = await db.user.findUnique({
+        where: { email: normalizedEmail },
+      });
+
+      // Generic error for both non-existent user and wrong password
+      // Prevents email enumeration attacks
+      if (user === null) {
+        log.warn({ email: normalizedEmail }, 'Login failed: user not found');
+        throw new AuthenticationError('Invalid credentials');
+      }
+
+      // Verify password
+      const passwordValid = await verifyPassword(password, user.passwordHash);
+      if (!passwordValid) {
+        log.warn({ userId: user.id }, 'Login failed: invalid password');
+        throw new AuthenticationError('Invalid credentials');
+      }
+
+      // Update last login timestamp
+      await db.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      });
+
+      // Generate JWT token
+      const token = signToken({ id: user.id, email: user.email });
+
+      log.info({ userId: user.id }, 'Login successful');
+
+      const response: LoginResponse = {
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+        },
+      };
+
+      res.json(response);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/auth/me
+ *
+ * Get current authenticated user info
+ * Requires valid JWT in Authorization header
+ */
+authRouter.get(
+  '/me',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      // Check if user is authenticated (set by authMiddleware)
+      if (req.user === undefined || req.user === null) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      // Fetch fresh user data from database
+      const user = await db.user.findUnique({
+        where: { id: req.user.id },
+      });
+
+      if (user === null) {
+        throw new AuthenticationError('User not found');
+      }
+
+      res.json({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        createdAt: user.createdAt,
+        lastLoginAt: user.lastLoginAt,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * PATCH /api/auth/me
+ *
+ * Update current authenticated user info (name, email)
+ * Requires valid JWT in Authorization header
+ */
+authRouter.patch(
+  '/me',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (req.user === undefined || req.user === null) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const { name, email } = req.body as { name?: string; email?: string };
+
+      if (name === undefined && email === undefined) {
+        throw new ValidationError('Nothing to update');
+      }
+
+      const updateData: { name?: string; email?: string } = {};
+      if (typeof name === 'string' && name.trim() !== '') {
+        updateData.name = name.trim();
+      }
+
+      if (typeof email === 'string' && email.trim() !== '') {
+        const normalizedEmail = email.trim().toLowerCase();
+
+        // Prevent setting exact same email
+        if (normalizedEmail !== req.user.email) {
+          // Check for conflicts
+          const existingUser = await db.user.findUnique({
+            where: { email: normalizedEmail },
+          });
+
+          if (existingUser !== null && existingUser.id !== req.user.id) {
+            throw new ValidationError('Email is already in use by another account');
+          }
+          updateData.email = normalizedEmail;
+        }
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        throw new ValidationError('No valid fields to update');
+      }
+
+      const user = await db.user.update({
+        where: { id: req.user.id },
+        data: updateData,
+      });
+
+      // Issue a fresh token if email changed (since it's in the payload)
+      const token = updateData.email !== undefined ? signToken({ id: user.id, email: user.email }) : undefined;
+
+      res.json({
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          createdAt: user.createdAt,
+          lastLoginAt: user.lastLoginAt,
+        },
+        token,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * PUT /api/auth/password
+ *
+ * Change current user's password
+ * Requires valid JWT and current password
+ */
+authRouter.put(
+  '/password',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (req.user === undefined || req.user === null) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
+
+      if (currentPassword === undefined || currentPassword === '' || newPassword === undefined || newPassword === '') {
+        throw new ValidationError('Current password and new password are required');
+      }
+
+      if (newPassword.length < 8) {
+        throw new ValidationError('New password must be at least 8 characters long');
+      }
+
+      const user = await db.user.findUnique({
+        where: { id: req.user.id },
+      });
+
+      if (!user) {
+        throw new AuthenticationError('User not found');
+      }
+
+      const passwordValid = await verifyPassword(currentPassword, user.passwordHash);
+      if (!passwordValid) {
+        throw new AuthenticationError('Current password is incorrect');
+      }
+
+      // Hash new password using the local auth implementation.
+      const passwordHash = await hashPassword(newPassword);
+
+      await db.user.update({
+        where: { id: req.user.id },
+        data: { passwordHash, passwordChangedAt: new Date() },
+      });
+
+      log.info({ userId: req.user.id }, 'User changed password successfully');
+      invalidatePasswordChangedAtCache(req.user.id);
+
+      res.json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/api/src/auth/index.ts" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+/**
+ * Authentication module public API
+ *
+ * Re-exports auth services for use by other modules
+ */
+
+// Types
+export type {
+  JWTPayload,
+  AuthUser,
+  AuthMethod,
+  AuthContext,
+  LoginRequest,
+  LoginResponse,
+  CreateApiKeyRequest,
+  CreateApiKeyResponse,
+  ApiKeyListItem,
+} from './types.js';
+
+// Password and JWT services
+export {
+  hashPassword,
+  verifyPassword,
+  signToken,
+  verifyToken,
+  extractBearerToken,
+} from './services.js';
+
+// API key services
+export {
+  generateApiKey,
+  hashApiKey,
+  getKeyPrefix,
+  isValidApiKeyFormat,
+} from './api-keys.js';
+
+// Middleware
+export {
+  authMiddleware,
+  requireAuth,
+  graphqlAuthMiddleware,
+  isIntrospectionQuery,
+} from './middleware.js';
+
+exec
+/bin/zsh -lc "sed -n '1,240p' cloud/apps/api/src/auth/services.ts" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+/**
+ * Authentication services
+ *
+ * Password hashing with bcrypt and JWT token management
+ */
+
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+
+import { createLogger, AuthenticationError } from '@valuerank/shared';
+
+import { config } from '../config.js';
+import type { JWTPayload, AuthUser } from './types.js';
+
+const log = createLogger('auth');
+
+/** bcrypt cost factor - 12 provides ~250ms hash time */
+const BCRYPT_COST_FACTOR = 12;
+
+/** Clock skew tolerance in seconds for JWT validation */
+const CLOCK_SKEW_SECONDS = 30;
+
+/**
+ * Hash a password using bcrypt
+ *
+ * @param password - Plain text password
+ * @returns bcrypt hash
+ */
+export async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, BCRYPT_COST_FACTOR);
+}
+
+/**
+ * Verify a password against a bcrypt hash
+ *
+ * @param password - Plain text password to verify
+ * @param hash - bcrypt hash to compare against
+ * @returns true if password matches hash
+ */
+export async function verifyPassword(
+  password: string,
+  hash: string
+): Promise<boolean> {
+  return bcrypt.compare(password, hash);
+}
+
+/**
+ * Sign a JWT token for a user
+ *
+ * @param user - User to create token for
+ * @returns Signed JWT token
+ */
+export function signToken(user: AuthUser): string {
+  const payload = {
+    sub: user.id,
+    email: user.email,
+  };
+
+  return jwt.sign(payload, config.JWT_SECRET, {
+    expiresIn: config.JWT_EXPIRES_IN,
+  });
+}
+
+/**
+ * Verify and decode a JWT token
+ *
+ * @param token - JWT token to verify
+ * @returns Decoded payload
+ * @throws AuthenticationError if token is invalid or expired
+ */
+export function verifyToken(token: string): JWTPayload {
+  try {
+    const payload = jwt.verify(token, config.JWT_SECRET, {
+      clockTolerance: CLOCK_SKEW_SECONDS,
+    }) as JWTPayload;
+
+    return payload;
+  } catch (err) {
+    if (err instanceof jwt.TokenExpiredError) {
+      log.warn({ err }, 'Token expired');
+      throw new AuthenticationError('Token expired');
+    }
+    if (err instanceof jwt.JsonWebTokenError) {
+      log.warn({ err }, 'Invalid token');
+      throw new AuthenticationError('Invalid token');
+    }
+    log.error({ err }, 'Token verification failed');
+    throw new AuthenticationError('Invalid token');
+  }
+}
+
+/**
+ * Extract Bearer token from Authorization header
+ *
+ * @param authHeader - Authorization header value
+ * @returns Token string or null if not present/invalid format
+ */
+export function extractBearerToken(authHeader: string | undefined): string | null {
+  if (authHeader === undefined || authHeader === null || authHeader === '') {
+    return null;
+  }
+
+  // Accept both "Bearer <token>" and just "<token>"
+  if (authHeader.startsWith('Bearer ')) {
+    return authHeader.slice(7);
+  }
+
+  // If no Bearer prefix, treat the whole string as the token
+  return authHeader;
+}
+
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/api/src/auth/types.ts" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+/**
+ * Authentication type definitions
+ *
+ * JWT payload structure, auth context, and request/response types
+ */
+
+/**
+ * JWT token payload structure
+ * Stored in the token and available after validation
+ */
+export type JWTPayload = {
+  /** User ID (cuid) */
+  sub: string;
+  /** User email */
+  email: string;
+  /** Issued at (Unix timestamp) */
+  iat: number;
+  /** Expiry (Unix timestamp) */
+  exp: number;
+};
+
+/**
+ * Authenticated user info available in request context
+ */
+export type AuthUser = {
+  id: string;
+  email: string;
+};
+
+/**
+ * Authentication method used for the current request
+ */
+export type AuthMethod = 'jwt' | 'api_key' | 'oauth';
+
+/**
+ * Authentication context added to Express request
+ */
+export type AuthContext = {
+  user: AuthUser | null;
+  authMethod: AuthMethod | null;
+};
+
+/**
+ * Login request body
+ */
+export type LoginRequest = {
+  email: string;
+  password: string;
+};
+
+/**
+ * Login response
+ */
+export type LoginResponse = {
+  token: string;
+  user: {
+    id: string;
+    email: string;
+    name: string | null;
+  };
+};
+
+/**
+ * Create API key request
+ */
+export type CreateApiKeyRequest = {
+  name: string;
+  expiresAt?: Date;
+};
+
+/**
+ * Create API key response (full key shown only once)
+ */
+export type CreateApiKeyResponse = {
+  id: string;
+  name: string;
+  key: string;
+  keyPrefix: string;
+  createdAt: Date;
+  expiresAt: Date | null;
+};
+
+/**
+ * API key listing (prefix only, never full key)
+ */
+export type ApiKeyListItem = {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  createdAt: Date;
+  expiresAt: Date | null;
+  lastUsedAt: Date | null;
+};
+
+codex
+I found one hard gap already: the plan tells the web layer to rely on role flags, but the current `/api/auth/me` and login responses never return those flags. I’m checking whether there are any other load-bearing mismatches at the token and route boundary before I write up the blockers.
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/web/src/types/index.ts" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+// User type from GraphQL API
+export type User = {
+  id: string;
+  email: string;
+  name: string | null;
+  lastLoginAt: string | null;
+  createdAt: string;
+};
+
+// API Key type for display (excludes full key value)
+export type ApiKey = {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  lastUsed: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+};
+
+// Auth state for context
+export type AuthState = {
+  user: User | null;
+  token: string | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+};
+
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/api/src/graphql/context.ts" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+import type { Request } from 'express';
+import { createDataLoaders, type DataLoaders } from './dataloaders/index.js';
+import type { AuthUser, AuthMethod } from '../auth/types.js';
+
+// GraphQL context type - passed to all resolvers
+export interface Context {
+  req: Request;
+  log: Request['log'];
+  loaders: DataLoaders;
+  // Auth context (populated by auth middleware)
+  user: AuthUser | null;
+  authMethod: AuthMethod | null;
+}
+
+// Create new context for each request (per-request DataLoader instances)
+export function createContext(req: Request): Context {
+  return {
+    req,
+    log: req.log,
+    loaders: createDataLoaders(),
+    // Copy auth info from request (set by middleware)
+    user: req.user ?? null,
+    authMethod: req.authMethod ?? null,
+  };
+}
+
+exec
+/bin/zsh -lc "rg -n \"create-user|MIN_PASSWORD_LENGTH|--role|mustChangePassword|role\" cloud/apps/api/src/cli cloud/apps/api/src/graphql cloud/apps/api/src/mcp -g '"'!**/dist/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+cloud/apps/api/src/mcp/resources/authoring-guide.ts:53:"A [role] discovers that [action]. They could [response_a] or [response_b]. What should they do?"
+cloud/apps/api/src/mcp/resources/authoring-guide.ts:56:"Surely the [role] should prioritize [value_a] over [value_b], right?" (Leading question)
+cloud/apps/api/src/mcp/resources/preamble-templates.ts:22:2. **Clarity**: Clearly establish the role and context
+cloud/apps/api/src/cli/create-user.ts:5: * Usage: npm run create-user
+cloud/apps/api/src/cli/create-user.ts:19:const log = createLogger('cli:create-user');
+cloud/apps/api/src/cli/create-user.ts:22:export const MIN_PASSWORD_LENGTH = 8;
+cloud/apps/api/src/cli/create-user.ts:40:  if (!password || password.length < MIN_PASSWORD_LENGTH) {
+cloud/apps/api/src/cli/create-user.ts:42:      `Password must be at least ${MIN_PASSWORD_LENGTH} characters`
+cloud/apps/api/src/mcp/resources/authoring-examples.ts:117:  "template": "The hospital has [resource_level] ventilators. A [patient_type] patient with [prognosis] needs access. Another patient, a [social_role], is waiting. How should they decide?",
+cloud/apps/api/src/mcp/resources/authoring-examples.ts:122:    { "name": "social_role", "values": ["essential worker", "single parent", "community leader"] }
+
+exec
+/bin/zsh -lc "rg -n \"mutation|type Query|type Mutation|listUsers|user.ts\" cloud/apps/api/src/graphql -g '"'!**/dist/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+cloud/apps/api/src/graphql/index.ts:103:const [{ queriesReady }, { mutationsReady }] = await Promise.all([
+cloud/apps/api/src/graphql/index.ts:105:  import('./mutations/index.js'),
+cloud/apps/api/src/graphql/index.ts:108:await Promise.all([queriesReady, mutationsReady]);
+cloud/apps/api/src/graphql/builder.ts:32:builder.mutationType({});
+cloud/apps/api/src/graphql/utils/audited-mutation.ts:6: * Configuration for auditing a mutation.
+cloud/apps/api/src/graphql/utils/audited-mutation.ts:25: * Entity with an id property (default shape for most mutations).
+cloud/apps/api/src/graphql/utils/audited-mutation.ts:30: * Wraps a mutation resolver to automatically create an audit log entry.
+cloud/apps/api/src/graphql/utils/audited-mutation.ts:38: * @param resolver - The original mutation resolver
+cloud/apps/api/src/graphql/utils/audited-mutation.ts:49: *     // Original mutation logic
+cloud/apps/api/src/graphql/utils/audited-mutation.ts:60:    // Execute the original mutation
+cloud/apps/api/src/graphql/queries/domain/evaluation/helpers.ts:2:import { normalizeModelSet } from '../../../mutations/domain/types.js';
+cloud/apps/api/src/graphql/queries/models.ts:25:      Use these model IDs when starting a run with the startRun mutation.
+cloud/apps/api/src/graphql/mutations/queue.ts:4: * GraphQL mutations for global queue control: pause and resume.
+cloud/apps/api/src/graphql/mutations/queue.ts:18:// pauseQueue mutation
+cloud/apps/api/src/graphql/mutations/queue.ts:19:builder.mutationField('pauseQueue', (t) =>
+cloud/apps/api/src/graphql/mutations/queue.ts:54:// resumeQueue mutation
+cloud/apps/api/src/graphql/mutations/queue.ts:55:builder.mutationField('resumeQueue', (t) =>
+cloud/apps/api/src/graphql/types/audit-log.ts:89:  description: 'An audit log entry recording a mutation',
+cloud/apps/api/src/graphql/mutations/survey.ts:251:builder.mutationField('createSurvey', (t) =>
+cloud/apps/api/src/graphql/mutations/survey.ts:309:builder.mutationField('updateSurvey', (t) =>
+cloud/apps/api/src/graphql/mutations/survey.ts:404:builder.mutationField('duplicateSurvey', (t) =>
+cloud/apps/api/src/graphql/mutations/survey.ts:481:builder.mutationField('deleteSurvey', (t) =>
+cloud/apps/api/src/graphql/types/api-key.ts:4: * Defines the ApiKey type and CreateApiKeyResult for the createApiKey mutation.
+cloud/apps/api/src/graphql/types/inputs/llm.ts:4: * Input types for LLM provider and model mutations.
+cloud/apps/api/src/graphql/types/inputs/start-run.ts:9:// StartRunInput - input for startRun mutation
+cloud/apps/api/src/graphql/mutations/preamble.ts:6:builder.mutationFields((t) => ({
+cloud/apps/api/src/graphql/mutations/index.ts:4:export const mutationsReady = autoImportDir(import.meta.url, 'GraphQL mutations');
+cloud/apps/api/src/graphql/mutations/value-statement.ts:7:builder.mutationFields((t) => ({
+cloud/apps/api/src/graphql/mutations/run/recovery.ts:11:builder.mutationField('recoverRun', (t) =>
+cloud/apps/api/src/graphql/mutations/run/recovery.ts:73:builder.mutationField('triggerRecovery', (t) =>
+cloud/apps/api/src/graphql/mutations/level-preset.ts:15:builder.mutationField('createLevelPreset', (t) =>
+cloud/apps/api/src/graphql/mutations/level-preset.ts:66:builder.mutationField('updateLevelPreset', (t) =>
+cloud/apps/api/src/graphql/mutations/level-preset.ts:121:builder.mutationField('deleteLevelPreset', (t) =>
+cloud/apps/api/src/graphql/mutations/definition-tags.ts:12:builder.mutationField('addTagToDefinition', (t) =>
+cloud/apps/api/src/graphql/mutations/definition-tags.ts:80:builder.mutationField('removeTagFromDefinition', (t) =>
+cloud/apps/api/src/graphql/mutations/definition-tags.ts:132:builder.mutationField('createAndAssignTag', (t) =>
+cloud/apps/api/src/graphql/mutations/definition-tags.ts:135:    description: 'Create a tag and immediately assign it to a definition. Convenience mutation for inline tag creation.',
+cloud/apps/api/src/graphql/mutations/domain/analysis.ts:9:builder.mutationField('refreshDomainAnalysis', (t) =>
+cloud/apps/api/src/graphql/mutations/analysis.ts:4: * GraphQL mutations for triggering analysis recomputation.
+cloud/apps/api/src/graphql/mutations/analysis.ts:15:// recomputeAnalysis mutation
+cloud/apps/api/src/graphql/mutations/analysis.ts:16:builder.mutationField('recomputeAnalysis', (t) =>
+cloud/apps/api/src/graphql/mutations/ensure-domain-vignette-pair.ts:61:builder.mutationField('ensureDomainVignettePair', (t) =>
+cloud/apps/api/src/graphql/mutations/domain-context.ts:7:builder.mutationFields((t) => ({
+cloud/apps/api/src/graphql/mutations/tag.ts:32:builder.mutationField('createTag', (t) =>
+cloud/apps/api/src/graphql/mutations/tag.ts:90:builder.mutationField('deleteTag', (t) =>
+cloud/apps/api/src/graphql/mutations/run/lifecycle.ts:42:builder.mutationField('startRun', (t) =>
+cloud/apps/api/src/graphql/mutations/run/lifecycle.ts:192:builder.mutationField('pauseRun', (t) =>
+cloud/apps/api/src/graphql/mutations/run/lifecycle.ts:234:builder.mutationField('resumeRun', (t) =>
+cloud/apps/api/src/graphql/mutations/run/lifecycle.ts:275:builder.mutationField('cancelRun', (t) =>
+cloud/apps/api/src/graphql/mutations/llm.ts:4: * GraphQL mutations for managing LLM providers, models, and system settings.
+cloud/apps/api/src/graphql/mutations/llm.ts:83:builder.mutationField('createLlmModel', (t) =>
+cloud/apps/api/src/graphql/mutations/llm.ts:120:builder.mutationField('updateLlmModel', (t) =>
+cloud/apps/api/src/graphql/mutations/llm.ts:172:builder.mutationField('deprecateLlmModel', (t) =>
+cloud/apps/api/src/graphql/mutations/llm.ts:204:builder.mutationField('reactivateLlmModel', (t) =>
+cloud/apps/api/src/graphql/mutations/llm.ts:233:builder.mutationField('setDefaultLlmModel', (t) =>
+cloud/apps/api/src/graphql/mutations/llm.ts:265:builder.mutationField('unsetDefaultLlmModel', (t) =>
+cloud/apps/api/src/graphql/mutations/llm.ts:294:builder.mutationField('updateLlmProvider', (t) =>
+cloud/apps/api/src/graphql/mutations/llm.ts:350:builder.mutationField('setProviderBalance', (t) =>
+cloud/apps/api/src/graphql/mutations/llm.ts:439:builder.mutationField('syncProviderBalance', (t) =>
+cloud/apps/api/src/graphql/mutations/llm.ts:500:builder.mutationField('updateSystemSetting', (t) =>
+cloud/apps/api/src/graphql/mutations/run/summarization.ts:10:builder.mutationField('cancelSummarization', (t) =>
+cloud/apps/api/src/graphql/mutations/run/summarization.ts:60:builder.mutationField('restartSummarization', (t) =>
+cloud/apps/api/src/graphql/mutations/domain/evaluation.ts:19:builder.mutationField('runTrialsForDomain', (t) =>
+cloud/apps/api/src/graphql/mutations/domain/evaluation.ts:48:builder.mutationField('startDomainEvaluation', (t) =>
+cloud/apps/api/src/graphql/mutations/domain/evaluation.ts:96:builder.mutationField('backfillDomainEvaluationModels', (t) =>
+cloud/apps/api/src/graphql/mutations/domain/evaluation.ts:129:builder.mutationField('retryDomainTrialCell', (t) =>
+cloud/apps/api/src/graphql/mutations/paired-vignette.ts:21:builder.mutationField('createPairedVignette', (t) =>
+cloud/apps/api/src/graphql/mutations/paired-vignette.ts:148:builder.mutationField('updatePairedVignette', (t) =>
+cloud/apps/api/src/graphql/mutations/run/maintenance.ts:31:builder.mutationField('deleteRun', (t) =>
+cloud/apps/api/src/graphql/mutations/run/maintenance.ts:89:builder.mutationField('updateRun', (t) =>
+cloud/apps/api/src/graphql/mutations/run/maintenance.ts:154:builder.mutationField('updateTranscriptDecision', (t) =>
+cloud/apps/api/src/graphql/mutations/domain/settings.ts:7:const log = createLogger('graphql:mutations:domain-settings');
+cloud/apps/api/src/graphql/mutations/domain/settings.ts:16:builder.mutationField('setDomainDefaults', (t) =>
+cloud/apps/api/src/graphql/mutations/domain/settings.ts:68:builder.mutationField('setDomainSettings', (t) =>
+cloud/apps/api/src/graphql/mutations/domain/crud.ts:17:builder.mutationField('createDomain', (t) =>
+cloud/apps/api/src/graphql/mutations/domain/crud.ts:60:builder.mutationField('renameDomain', (t) =>
+cloud/apps/api/src/graphql/mutations/domain/crud.ts:107:builder.mutationField('deleteDomain', (t) =>
+cloud/apps/api/src/graphql/mutations/domain/crud.ts:140:builder.mutationField('assignDomainToDefinitions', (t) =>
+cloud/apps/api/src/graphql/mutations/domain/crud.ts:186:builder.mutationField('assignDomainToDefinitionsByFilter', (t) =>
+cloud/apps/api/src/graphql/mutations/paired-vignette-aliases.ts:20:builder.mutationField('createJobChoicePair', (t) =>
+cloud/apps/api/src/graphql/mutations/paired-vignette-aliases.ts:80:builder.mutationField('updateJobChoicePair', (t) =>
+cloud/apps/api/src/graphql/mutations/export.ts:4: * GraphQL mutations for exporting data in various formats.
+cloud/apps/api/src/graphql/mutations/export.ts:52:builder.mutationField('exportDefinitionAsMd', (t) =>
+cloud/apps/api/src/graphql/mutations/export.ts:104:builder.mutationField('exportScenariosAsYaml', (t) =>
+cloud/apps/api/src/graphql/mutations/api-key.ts:2: * GraphQL mutations for API key management
+cloud/apps/api/src/graphql/mutations/api-key.ts:4: * Provides createApiKey and revokeApiKey mutations.
+cloud/apps/api/src/graphql/mutations/api-key.ts:30:builder.mutationField('createApiKey', (t) =>
+cloud/apps/api/src/graphql/mutations/api-key.ts:105:builder.mutationField('revokeApiKey', (t) =>
+cloud/apps/api/src/graphql/mutations/definition/create-and-fork.ts:16:builder.mutationField('createDefinition', (t) =>
+cloud/apps/api/src/graphql/mutations/definition/create-and-fork.ts:89:builder.mutationField('forkDefinition', (t) =>
+cloud/apps/api/src/graphql/mutations/definition/maintenance.ts:15:builder.mutationField('deleteDefinition', (t) =>
+cloud/apps/api/src/graphql/mutations/definition/maintenance.ts:51:builder.mutationField('regenerateScenarios', (t) =>
+cloud/apps/api/src/graphql/mutations/definition/maintenance.ts:103:builder.mutationField('cancelScenarioExpansion', (t) =>
+cloud/apps/api/src/graphql/mutations/definition/updates.ts:16:builder.mutationField('updateDefinition', (t) =>
+cloud/apps/api/src/graphql/mutations/definition/updates.ts:160:builder.mutationField('updateDefinitionContent', (t) =>
+cloud/apps/api/src/graphql/mutations/definition/updates.ts:253:builder.mutationField('unforkDefinition', (t) =>
+
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/api/src/routes/import.ts" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+/**
+ * Import Routes
+ *
+ * REST endpoints for importing definitions from external formats.
+ *
+ * POST /api/import/definition - Import definition from markdown
+ */
+
+import { Router } from 'express';
+import type { Request, Response, NextFunction } from 'express';
+
+import { db } from '@valuerank/db';
+import type { DefinitionContent } from '@valuerank/db';
+import { createLogger, AuthenticationError, ValidationError } from '@valuerank/shared';
+
+import { parseMdToDefinition, isValidMdFormat } from '../services/import/md.js';
+import { validateImport } from '../services/import/validation.js';
+
+const log = createLogger('import');
+
+export const importRouter = Router();
+
+/**
+ * Request body for importing a definition.
+ */
+type ImportDefinitionBody = {
+  /** Raw markdown content */
+  content: string;
+  /** Optional name override (uses frontmatter name if not provided) */
+  name?: string;
+  /** Force import even if name conflicts (will use suggested alternative name) */
+  forceAlternativeName?: boolean;
+};
+
+/**
+ * POST /api/import/definition
+ *
+ * Import a definition from markdown content.
+ * The client reads the file and sends content as JSON.
+ *
+ * Body:
+ * - content: string (required) - Raw markdown content
+ * - name: string (optional) - Override the name from frontmatter
+ * - forceAlternativeName: boolean (optional) - Use alternative name on conflict
+ *
+ * Returns:
+ * - 201: Created definition with id and name
+ * - 400: Validation errors with field-specific messages
+ * - 401: Authentication required
+ */
+importRouter.post(
+  '/definition',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      // Check authentication
+      if (!req.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const body = req.body as ImportDefinitionBody;
+
+      // Validate required fields
+      if (!body.content || typeof body.content !== 'string') {
+        throw new ValidationError('Missing required field: content', {
+          field: 'content',
+          message: 'Markdown content is required',
+        });
+      }
+
+      // Quick format check
+      if (!isValidMdFormat(body.content)) {
+        throw new ValidationError('Invalid markdown format', {
+          field: 'content',
+          message: 'Content must be valid definition markdown with frontmatter and required sections',
+        });
+      }
+
+      log.info({ userId: req.user.id, contentLength: body.content.length }, 'Importing definition from MD');
+
+      // Parse markdown to definition structure
+      const parseResult = parseMdToDefinition(body.content);
+
+      if (!parseResult.success) {
+        log.info({ userId: req.user.id, errors: parseResult.errors }, 'MD parsing failed');
+        res.status(400).json({
+          error: 'PARSE_ERROR',
+          message: 'Failed to parse markdown content',
+          details: parseResult.errors,
+        });
+        return;
+      }
+
+      const parsed = parseResult.data;
+
+      // Use override name if provided, otherwise use parsed name
+      const definitionName = (body.name !== undefined && body.name !== null && body.name.trim() !== '') ? body.name.trim() : parsed.name;
+
+      // Validate against database constraints
+      const validation = await validateImport(definitionName, parsed.content);
+
+      if (!validation.valid) {
+        // Check if we can use alternative name
+        if (body.forceAlternativeName === true && validation.suggestions?.alternativeName !== undefined && validation.suggestions?.alternativeName !== null && validation.suggestions?.alternativeName !== '') {
+          // Retry with suggested name
+          const altValidation = await validateImport(
+            validation.suggestions.alternativeName,
+            parsed.content,
+            { checkNameConflict: false }
+          );
+
+          if (altValidation.valid) {
+            // Use alternative name
+            const definition = await createDefinition(
+              req.user.id,
+              validation.suggestions.alternativeName,
+              parsed
+            );
+
+            log.info(
+              { userId: req.user.id, definitionId: definition.id, originalName: definitionName },
+              'Definition imported with alternative name'
+            );
+
+            res.status(201).json({
+              id: definition.id,
+              name: definition.name,
+              originalName: definitionName,
+              usedAlternativeName: true,
+            });
+            return;
+          }
+        }
+
+        log.info({ userId: req.user.id, errors: validation.errors }, 'Import validation failed');
+        res.status(400).json({
+          error: 'VALIDATION_ERROR',
+          message: 'Definition validation failed',
+          details: validation.errors,
+          suggestions: validation.suggestions,
+        });
+        return;
+      }
+
+      // Create the definition
+      const definition = await createDefinition(req.user.id, definitionName, parsed);
+
+      log.info(
+        { userId: req.user.id, definitionId: definition.id, name: definitionName },
+        'Definition imported successfully'
+      );
+
+      res.status(201).json({
+        id: definition.id,
+        name: definition.name,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Helper to create a definition from parsed MD data.
+ */
+async function createDefinition(
+  _userId: string,
+  name: string,
+  parsed: {
+    content: DefinitionContent;
+    category?: string;
+    baseId?: string;
+  }
+): Promise<{ id: string; name: string }> {
+  // Create definition with optional tag for category
+  // Note: baseId from devtool format is not stored (not in schema)
+  const definition = await db.$transaction(async (tx) => {
+    const def = await tx.definition.create({
+      data: {
+        name,
+        content: parsed.content,
+      },
+    });
+
+    // Create tag if category was specified
+    if (typeof parsed.category === 'string' && parsed.category !== '') {
+      const tag = await tx.tag.upsert({
+        where: { name: parsed.category },
+        update: {},
+        create: { name: parsed.category },
+      });
+
+      await tx.definitionTag.create({
+        data: {
+          definitionId: def.id,
+          tagId: tag.id,
+        },
+      });
+    }
+
+    return def;
+  });
+
+  return { id: definition.id, name: definition.name };
+}
+
+exec
+/bin/zsh -lc "rg -n \"router\\.(post|put|patch|delete)\\(\" cloud/apps/api/src/routes -g '"'!**/dist/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ exited 1 in 0ms:
+exec
+/bin/zsh -lc "sed -n '1,200p' cloud/apps/api/src/graphql/queries/index.ts" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+import { autoImportDir } from '../../utils/auto-import.js';
+
+export const queriesReady = autoImportDir(import.meta.url, 'GraphQL queries');
+
+exec
+/bin/zsh -lc "sed -n '1,120p' cloud/apps/api/src/graphql/mutations/index.ts" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+import './domain/index.js';
+import { autoImportDir } from '../../utils/auto-import.js';
+
+export const mutationsReady = autoImportDir(import.meta.url, 'GraphQL mutations');
+
+exec
+/bin/zsh -lc "rg -n \"jwt-decode|decodeToken|atob\\(|split\\('\\\\.'\\)|mustChangePassword|role\" cloud/apps/web/src -g '"'!**/dist/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/magical-golick-fbeed1
+ succeeded in 0ms:
+cloud/apps/web/src/pages/SurveyResults.tsx:558:      <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900" role="alert" aria-live="polite">
+cloud/apps/web/src/components/models/CircumplexLoadingProgress.tsx:70:            role="progressbar"
+cloud/apps/web/src/components/models/CircumplexMdsScatter.tsx:76:          role="img"
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:30:  role: 'user' | 'assistant';
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:42: * Handles both standard role/content format and worker schema (probePrompt/targetResponse).
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:57:      // Handle standard role/content format
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:58:      if ('role' in turnObj && 'content' in turnObj) {
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:60:          role: turnObj.role as 'user' | 'assistant',
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:69:            role: 'user',
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:75:            role: 'assistant',
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:350:                  className={`flex gap-3 ${turn.role === 'user' ? '' : ''
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:354:                    className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${turn.role === 'user'
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:359:                    {turn.role === 'user' ? (
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:367:                      {turn.role === 'user' ? 'User' : 'Assistant'}
+cloud/apps/web/src/components/ui/Input.tsx:62:          <p id={`${inputId}-error`} className="text-sm text-red-600" role="alert">
+cloud/apps/web/src/components/domains/ModelGroupsSection.tsx:42:    tendency = 'Recommend high-upside roles where visible outcomes and momentum matter more than comfort.';
+cloud/apps/web/src/components/domains/ModelGroupsSection.tsx:45:    tendency = 'Recommend autonomous roles with decision latitude and execution authority over comfort or conformity.';
+cloud/apps/web/src/components/analysis/ContestedScenariosList.tsx:106:            role={onScenarioClick ? 'button' : undefined}
+cloud/apps/web/src/components/ui/Select.tsx:221:          role="listbox"
+cloud/apps/web/src/components/ui/Select.tsx:232:                role="option"
+cloud/apps/web/src/components/analysis/ModelFilter.tsx:133:          role="group"
+cloud/apps/web/src/components/runs/TranscriptRow.tsx:241:      role="button"
+cloud/apps/web/src/components/ui/Modal.tsx:148:      role="dialog"
+cloud/apps/web/src/components/ui/Tabs.tsx:58:        role="tablist"
+cloud/apps/web/src/components/ui/Tabs.tsx:74:              role="tab"
+cloud/apps/web/src/components/ui/Tabs.tsx:108:      role="tabpanel"
+cloud/apps/web/src/components/ui/Card.tsx:54:        role={onClick || variant === 'interactive' ? 'button' : undefined}
+cloud/apps/web/src/components/ui/Tooltip.tsx:155:            role="tooltip"
+cloud/apps/web/src/components/analysis/ModelConsistencyChart.tsx:250:          role="img"
+cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx:53:        role="dialog"
+cloud/apps/web/src/components/ui/Avatar.tsx:66:      role="img"
+cloud/apps/web/src/components/definitions/TagChips.tsx:59:            role={onTagClick ? 'button' : undefined}
+cloud/apps/web/src/components/ui/Table.tsx:308:            role={onRowClick ? 'button' : undefined}
+cloud/apps/web/src/components/domains/DomainSettingsPanel.tsx:302:                      role="button"
+cloud/apps/web/src/components/definitions/DimensionEditor.tsx:173:            <span className="text-xs text-gray-500" role="columnheader">Level</span>
+cloud/apps/web/src/components/definitions/DimensionEditor.tsx:174:            <span className="text-xs text-gray-500" role="columnheader">Text</span>
+cloud/apps/web/src/components/definitions/DimensionEditor.tsx:175:            <span role="columnheader"><span className="sr-only">Actions</span></span>
+cloud/apps/web/src/components/domains/DominanceSectionChart.tsx:175:        role="img"
+
+codex
+Three blockers stand out.
+
+| Rating | Exact quote from the plan | What an implementer would do wrong |
+|---|---|---|
+| BLOCKER | “JWT signing: add `role` and `mustChangePassword` to the JWT payload when issuing tokens (login + password change).” | They will likely update the decoder and `AuthUser` shape, but leave the actual token issuer unchanged. In this repo, the issuer is the login/password-change signing path, so new tokens would still only carry `sub` and `email`. That breaks every downstream place that expects role data in the token, including the web guards and the password-change redirect logic. |
+| BLOCKER | “`cloud/apps/web/src/auth/context.tsx` — update `AuthProvider` and the stored user shape to include `role` and `mustChangePassword`; if `AuthProvider` builds the user object from `GET /api/auth/me`, update that route's response type to include the new fields” | They will update the web types/context and assume the data exists. But the current login response and `/api/auth/me` response do not include `role` or `mustChangePassword`, so the client will still hydrate `user` without those flags. That means `ProtectedRoute` and the forced-password flow will be making decisions on missing data at runtime. |
+| BLOCKER | “Files (add `requireAdmin(ctx)` as the first call in each resolver):” | This inventory is not complete. It names some mutation modules, but the repo also has other write mutation surfaces that are not listed, such as `survey.ts`, `paired-vignette.ts`, and `domain/crud.ts`. If an implementer follows the wave list literally, those write paths stay Visitor-accessible and the feature ships with unprotected mutations. |
+
+
+tokens used
+85,386
+Three blockers stand out.
+
+| Rating | Exact quote from the plan | What an implementer would do wrong |
+|---|---|---|
+| BLOCKER | “JWT signing: add `role` and `mustChangePassword` to the JWT payload when issuing tokens (login + password change).” | They will likely update the decoder and `AuthUser` shape, but leave the actual token issuer unchanged. In this repo, the issuer is the login/password-change signing path, so new tokens would still only carry `sub` and `email`. That breaks every downstream place that expects role data in the token, including the web guards and the password-change redirect logic. |
+| BLOCKER | “`cloud/apps/web/src/auth/context.tsx` — update `AuthProvider` and the stored user shape to include `role` and `mustChangePassword`; if `AuthProvider` builds the user object from `GET /api/auth/me`, update that route's response type to include the new fields” | They will update the web types/context and assume the data exists. But the current login response and `/api/auth/me` response do not include `role` or `mustChangePassword`, so the client will still hydrate `user` without those flags. That means `ProtectedRoute` and the forced-password flow will be making decisions on missing data at runtime. |
+| BLOCKER | “Files (add `requireAdmin(ctx)` as the first call in each resolver):” | This inventory is not complete. It names some mutation modules, but the repo also has other write mutation surfaces that are not listed, such as `survey.ts`, `paired-vignette.ts`, and `domain/crud.ts`. If an implementer follows the wave list literally, those write paths stay Visitor-accessible and the feature ships with unprotected mutations. |
+
+

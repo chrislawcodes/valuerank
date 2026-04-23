@@ -1,0 +1,40 @@
+{
+  "judge": "implementation-risk",
+  "model": "claude-sonnet-4-5",
+  "verdict": "block",
+  "confidence": 4,
+  "reasoning": "Four load-bearing ambiguities would cause an implementer to guess or ship a bug. (1) The changePassword mutation's new return type is never specified \u2014 the spec mandates a fresh JWT in the response but never defines the GraphQL return shape, leaving the implementer to invent a schema change and matching client code without guidance. (2) The spec mandates SERIALIZABLE isolation for the last-admin transaction but Railway commonly uses PgBouncer in transaction-pooling mode, where SET TRANSACTION ISOLATION LEVEL is silently dropped or errors \u2014 the spec does not acknowledge this and provides no fallback. (3) Two route guards produce conflicting redirects with no stated priority: mustChangePassword \u2192 /settings/account and VISITOR-on-restricted-path \u2192 /; a new VISITOR user with mustChangePassword=true hitting /archive would trigger both simultaneously with no defined winner, risking a redirect loop. (4) The spec states '24h (the JWT TTL)' as fact when describing the stale-role window, but never references the config value or env var that controls this \u2014 an implementer who sets a different TTL will ship subtly wrong documentation and possibly miscalibrated behavior.",
+  "evidence": [
+    {
+      "artifact": "spec",
+      "section": "FR-009b",
+      "quote": "the server MUST return a fresh JWT with `mustChangePassword: false` in the response \u2014 this is the only mechanism to clear the redirect loop without forcing logout"
+    },
+    {
+      "artifact": "spec",
+      "section": "Key Entities \u2014 New GraphQL operations (changePassword not listed)",
+      "quote": "FR-005c Visitor write exceptions \u2014 the following mutations are explicitly allowed for VISITOR users and MUST NOT call `requireAdmin()`: `changePassword` (own password only)"
+    },
+    {
+      "artifact": "spec",
+      "section": "Edge Cases \u2014 Last Admin protection",
+      "quote": "within a Prisma `$transaction` with `SERIALIZABLE` isolation level"
+    },
+    {
+      "artifact": "spec",
+      "section": "FR-009b",
+      "quote": "if `mustChangePassword` is true, redirect to `/settings/account` before any other navigation"
+    },
+    {
+      "artifact": "spec",
+      "section": "FR-020",
+      "quote": "The redirect target for unauthorized routes MUST be the home page (`/`)"
+    },
+    {
+      "artifact": "spec",
+      "section": "Edge Cases \u2014 JWT stale role",
+      "quote": "a demoted Admin retains write access for up to 24h (the JWT TTL)"
+    }
+  ],
+  "timestamp": "2026-04-21T00:00:00Z"
+}

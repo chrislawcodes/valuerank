@@ -1,0 +1,11 @@
+## Findings
+- Medium [UNVERIFIED]: The spec only enforces roles on write paths and client-side route guards. It never says which read queries or read REST endpoints for restricted areas are admin-only. That leaves a direct API bypass for data behind `/settings/models`, `/settings/infrastructure`, `/preambles`, `/level-presets`, and any other admin-only read surface if those APIs exist. Add explicit server-side authorization for all restricted reads, not just writes.
+- Medium: FR-006 says every GraphQL mutation must call `requireAdmin()`, but FR-005c and FR-009b carve out `changePassword` and other account flows. As written, this is easy to implement wrong and could accidentally block password changes or token-related mutations. Split the rule into an explicit admin-only mutation list plus an explicit visitor-safe exception list.
+- Medium: The guarded route list is underspecified for nested paths. You use `/archive/*` for one area but exact paths for others like `/settings/users` and `/domains/manage`. If those sections gain child routes, a visitor could slip past the guard by hitting a nested URL. Define prefix or wildcard matching for every restricted section.
+- Medium: Email uniqueness is only described as a validation check. That is not enough under concurrent requests, and it leaves case-normalization undefined. Enforce a DB unique constraint on a canonicalized email value and state whether `Alice@example.com` and `alice@example.com` are the same account.
+- Medium [UNVERIFIED]: The spec assumes `/api/import` is the only REST write endpoint that needs role gating. If any other REST write routes already exist, they are not explicitly covered and could remain visitor-accessible. Add a complete REST audit or a default-deny rule for all write handlers.
+
+## Residual Risks
+- Existing JWTs keep their old role until expiry, so a demoted admin can still perform admin actions for up to the token lifetime. The spec accepts this, but it is still a real exposure window.
+- The export scope is broad and only partially defined. If evaluation data contains embedded sensitive metadata, the export may still leak more than intended unless the payload is tightly constrained.
+- The spec does not require an audit trail for account creation or role changes. That makes incident review and abuse investigation harder if something goes wrong.

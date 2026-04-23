@@ -1,0 +1,11 @@
+## Findings
+1. **High** - `mustChangePassword` is only enforced in the web layer, so it is bypassable. The plan uses a client-side redirect to `/settings/account`, but it never says the API must reject other requests until the password is changed. A user with a valid token can keep calling GraphQL or REST endpoints directly and avoid the forced-reset flow. If the flag is meant to be mandatory, this is a security gap, not just a UX issue.
+
+2. **Medium [UNVERIFIED]** - The write-path coverage strategy is too weak to prove there are no remaining admin-bypass routes. The plan relies on a hand-picked file list plus a grep-based check, but that does not guarantee every resolver and every REST write endpoint is wrapped. A missed file would leave an unauthorised write path open.
+
+3. **Medium [UNVERIFIED]** - The plan leaves server-side read access largely open and depends on route hiding for admin pages. That means a Visitor with a valid token can still hit the underlying GraphQL read endpoints directly. If any of the listed reads return operational or account-sensitive data, the access-control model leaks it.
+
+## Residual Risks
+- Demoted Admins keep their old JWT permissions until the token expires. The plan accepts a 24-hour stale-access window, so revocation is not immediate.
+- `Serializable` transactions may behave differently under the actual database/proxy setup. If the deployment uses PgBouncer in transaction mode, `updateUserRole` may need a different concurrency guard.
+- The password-reset flow depends on the web app successfully replacing the stored JWT after `PUT /api/auth/password`. If that token update path is incomplete, the forced redirect can loop or leave stale auth state.
