@@ -1,5 +1,6 @@
 import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
+import { ACTIVE_PROBE_QUEUE_SQL } from '../queue/probe-queues.js';
 
 const log = createLogger('services:run:stall-detection');
 
@@ -9,7 +10,7 @@ export async function getModelsWithPendingJobs(runId: string): Promise<string[]>
   const result = await db.$queryRaw<Array<{ model_id: string }>>`
     SELECT DISTINCT data->>'modelId' as model_id
     FROM pgboss.job
-    WHERE (name = 'probe_scenario' OR (name LIKE 'probe_%' AND name != 'probe_dead_letter'))
+    WHERE ${ACTIVE_PROBE_QUEUE_SQL}
       AND state IN ('created', 'retry', 'active')
       AND data->>'runId' = ${runId}
   `;

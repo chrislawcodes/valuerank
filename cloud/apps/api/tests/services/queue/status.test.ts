@@ -10,11 +10,15 @@ import { getQueueStatus } from '../../../src/services/queue/status.js';
 import * as queueControl from '../../../src/services/queue/control.js';
 
 // Mock db.$queryRaw
-vi.mock('@valuerank/db', () => ({
-  db: {
-    $queryRaw: vi.fn(),
-  },
-}));
+vi.mock('@valuerank/db', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@valuerank/db')>();
+  return {
+    ...actual,
+    db: {
+      $queryRaw: vi.fn(),
+    },
+  };
+});
 
 // Mock queue control
 vi.mock('../../../src/services/queue/control.js', () => ({
@@ -39,7 +43,7 @@ describe('Queue Status Service', () => {
 
       expect(status.isRunning).toBe(true);
       expect(status.isPaused).toBe(false);
-      expect(status.jobTypes).toHaveLength(4);
+      expect(status.jobTypes).toHaveLength(5);
       expect(status.totals).toEqual({
         pending: 0,
         active: 0,
@@ -58,6 +62,21 @@ describe('Queue Status Service', () => {
       const probeType = status.jobTypes.find((jt) => jt.type === 'probe_scenario');
       expect(probeType?.pending).toBe(5);
       expect(status.totals.pending).toBe(5);
+    });
+
+    it('counts provider-specific probe queues as probe work', async () => {
+      vi.mocked(db.$queryRaw).mockResolvedValueOnce([
+        { name: 'probe_openai', state: 'created', count: BigInt(5) },
+        { name: 'probe_mistral', state: 'retry', count: BigInt(3) },
+        { name: 'probe_dead_letter', state: 'created', count: BigInt(7) },
+      ]);
+
+      const status = await getQueueStatus();
+
+      const probeType = status.jobTypes.find((jt) => jt.type === 'probe_scenario');
+      expect(probeType?.pending).toBe(8);
+      expect(status.totals.pending).toBe(8);
+      expect(status.jobTypes.find((jt) => jt.type === 'probe_dead_letter')).toBeUndefined();
     });
 
     it('counts pending jobs from retry state', async () => {
@@ -170,7 +189,7 @@ describe('Queue Status Service', () => {
 
       expect(status.isRunning).toBe(true);
       expect(status.isPaused).toBe(false);
-      expect(status.jobTypes).toHaveLength(4);
+      expect(status.jobTypes).toHaveLength(5);
       expect(status.totals).toEqual({
         pending: 0,
         active: 0,
