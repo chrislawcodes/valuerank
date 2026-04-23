@@ -1,13 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from 'urql';
-import {
-  MODELS_ANALYSIS_QUERY,
-  type ModelsAnalysisQueryResult,
-} from '../api/operations/modelsAnalysis';
-import {
-  AVAILABLE_SIGNATURES_QUERY,
-  type AvailableSignaturesQueryResult,
-} from '../api/operations/available-signatures';
+import { MODELS_ANALYSIS_QUERY, type ModelsAnalysisQueryResult } from '../api/operations/modelsAnalysis';
+import { AVAILABLE_SIGNATURES_QUERY, type AvailableSignaturesQueryResult } from '../api/operations/available-signatures';
+import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import { Button } from '../components/ui/Button';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
@@ -17,6 +12,7 @@ import {
   DEFAULT_DOMAIN_SHIFT_SORT,
   DEFAULT_DOMAIN_SHIFT_SIGNATURE,
   buildDomainShiftHeatmap,
+  buildDomainShiftModelOptions,
   buildDomainShiftSignatureOptions,
   formatEvidenceWeight,
   formatPercent,
@@ -33,15 +29,7 @@ import {
 
 const MAX_COLOR_SHIFT = 25;
 
-export {
-  buildDomainShiftHeatmap,
-  formatEvidenceWeight,
-  formatPercent,
-  formatPointShift,
-  getDefaultDomainShiftSignature,
-  getDefaultModelId,
-  sortHeatmapRows,
-} from './domainValueShiftHeatmapUtils';
+export { buildDomainShiftHeatmap, formatEvidenceWeight, formatPercent, formatPointShift, getDefaultDomainShiftSignature, getDefaultModelId, sortHeatmapRows } from './domainValueShiftHeatmapUtils';
 
 function getCellTone(shift: number): string {
   const clamped = Math.max(-MAX_COLOR_SHIFT, Math.min(MAX_COLOR_SHIFT, shift));
@@ -203,6 +191,11 @@ export function DomainValueShiftHeatmap() {
     requestPolicy: 'cache-and-network',
   });
   const [selectedSignature, setSelectedSignature] = useState<string>(DEFAULT_DOMAIN_SHIFT_SIGNATURE);
+  const [{ data: llmModelsData }] = useQuery<LlmModelsQueryResult>({
+    query: LLM_MODELS_QUERY,
+    variables: { status: 'ACTIVE' },
+    requestPolicy: 'cache-and-network',
+  });
   const [{ data, fetching, error }] = useQuery<ModelsAnalysisQueryResult>({
     query: MODELS_ANALYSIS_QUERY,
     variables: { signature: selectedSignature },
@@ -216,9 +209,10 @@ export function DomainValueShiftHeatmap() {
     () => buildDomainShiftSignatureOptions(availableSignatures),
     [availableSignatures],
   );
-  const models = useMemo(
-    () => [...(data?.modelsAnalysis.models ?? [])].sort((left, right) => left.label.localeCompare(right.label)),
-    [data],
+  const models = useMemo(() => data?.modelsAnalysis.models ?? [], [data]);
+  const defaultModelIds = useMemo(
+    () => new Set((llmModelsData?.llmModels ?? []).filter((model) => model.isDefault).map((model) => model.modelId)),
+    [llmModelsData],
   );
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [displayMode, setDisplayMode] = useState<DomainShiftDisplayMode>('shift');
@@ -232,11 +226,11 @@ export function DomainValueShiftHeatmap() {
   }, [availableSignatures, selectedSignature]);
 
   useEffect(() => {
-    const nextModelId = getDefaultModelId(models, selectedModelId);
+    const nextModelId = getDefaultModelId(models, selectedModelId, defaultModelIds);
     if (nextModelId !== selectedModelId) {
       setSelectedModelId(nextModelId);
     }
-  }, [models, selectedModelId]);
+  }, [defaultModelIds, models, selectedModelId]);
 
   const selectedModel = selectedModelId == null
     ? null
@@ -246,7 +240,10 @@ export function DomainValueShiftHeatmap() {
     () => sortHeatmapRows(heatmap.rows, sort, displayMode),
     [heatmap.rows, sort, displayMode],
   );
-  const modelOptions = models.map((model) => ({ value: model.modelId, label: model.label }));
+  const modelOptions = useMemo(
+    () => buildDomainShiftModelOptions(models, defaultModelIds),
+    [defaultModelIds, models],
+  );
   const loading = fetching && data == null;
 
   return (

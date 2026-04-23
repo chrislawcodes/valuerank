@@ -58,6 +58,14 @@ export type DomainShiftSignatureOption = {
   label: string;
 };
 
+export type DomainShiftModelOption = {
+  value: string;
+  label: string;
+  disabled?: boolean;
+};
+
+const NON_DEFAULT_MODELS_DIVIDER_VALUE = '__non-default-models__';
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
@@ -110,12 +118,36 @@ export function getDefaultDomainShiftSignature(signatures: string[], currentSign
   return DEFAULT_DOMAIN_SHIFT_SIGNATURE;
 }
 
-export function getDefaultModelId(models: ModelsAnalysisModelResult[], currentModelId: string | null): string | null {
-  const sorted = [...models].sort((left, right) => left.label.localeCompare(right.label));
+function sortModels(models: ModelsAnalysisModelResult[]): ModelsAnalysisModelResult[] {
+  return [...models].sort((left, right) => left.label.localeCompare(right.label));
+}
+
+export function buildDomainShiftModelOptions(
+  models: ModelsAnalysisModelResult[],
+  defaultModelIds: ReadonlySet<string>,
+): DomainShiftModelOption[] {
+  const sorted = sortModels(models);
+  const defaults = sorted.filter((model) => defaultModelIds.has(model.modelId));
+  const nonDefaults = sorted.filter((model) => !defaultModelIds.has(model.modelId));
+  return [
+    ...defaults.map((model) => ({ value: model.modelId, label: model.label })),
+    ...(defaults.length > 0 && nonDefaults.length > 0
+      ? [{ value: NON_DEFAULT_MODELS_DIVIDER_VALUE, label: '---', disabled: true }]
+      : []),
+    ...nonDefaults.map((model) => ({ value: model.modelId, label: model.label })),
+  ];
+}
+
+export function getDefaultModelId(
+  models: ModelsAnalysisModelResult[],
+  currentModelId: string | null,
+  defaultModelIds: ReadonlySet<string> = new Set<string>(),
+): string | null {
+  const sorted = sortModels(models);
   if (currentModelId != null && sorted.some((model) => model.modelId === currentModelId)) {
     return currentModelId;
   }
-  return sorted[0]?.modelId ?? null;
+  return sorted.find((model) => defaultModelIds.has(model.modelId))?.modelId ?? sorted[0]?.modelId ?? null;
 }
 
 function sortValueKeys(valueKeys: Set<string>): string[] {

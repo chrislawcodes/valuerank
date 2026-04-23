@@ -27,7 +27,7 @@
 |---------|--------|--------|--------------|
 | **domain-coverage-completeness-guard** | `030-remove-legacy-decision-code` | 🟡 In progress | Plan/tasks are green. Shared completeness plumbing, coverage-query helpers, UI helper splits, and the read-only audit script are in place; diff checkpoint and rebase are next. |
 | **domain-analysis-definition-snapshot-crash** | — | 🟡 Ready | Default-temperature domain analysis can crash in Prisma when transcripts contain unreadable `definitionSnapshot` data. Local API fix is ready: domain analysis now uses the pre-resolved value pair instead of reading transcript snapshots. Prod data cleanup still needs direct SQL access to find and null the bad snapshots. |
-| **domain-shifts-snapshot-selection** | `codex/domain-shift-na-fix` | 🟡 Local fix | Domain Shifts can show `n/a` for Job Choice when the models report picks the newest snapshot across signatures instead of the default-temperature domain snapshot. Production confirms Job Choice `vnewt0` has only 6 Claude Sonnet 4.5 value entries while `vnewtd` has all 10. Local fix adds a signature dropdown defaulting to `vnewtd` and excludes the synthetic all-domains snapshot from report columns. |
+| **domain-shifts-snapshot-selection** | `codex/domain-shift-na-fix` | 🟡 Local fix | Domain Shifts can show `n/a` for Job Choice when the models report picks the newest snapshot across signatures instead of the default-temperature domain snapshot. Production confirms Job Choice `vnewt0` has only 6 Claude Sonnet 4.5 value entries while `vnewtd` has all 10. Local fix adds a signature dropdown defaulting to `vnewtd` and excludes the synthetic all-domains snapshot from report columns. Follow-up prod finding on 2026-04-22: `National Priorities` has a CURRENT `vnewtd` snapshot, but it is empty and marks all 90 vignettes as `NO_COMPLETED_RUNS` despite 180 completed default-temperature runs, so that domain still will not appear in Domain Shifts until the snapshot data is rebuilt or the resolver bug is fixed. |
 | **transcript-resummarization-backfill** | — | 🟡 Ready | Script written (`cloud/scripts/backfill-resummarize-existing-transcripts.ts`) but no PR yet — needs review and merge |
 | **provider-budget migration** | — | 🟡 Pending prod apply | PR #483 merged. Migration SQL not yet applied to prod. Run: `psql $DIRECT_URL -f cloud/packages/db/prisma/migrations/20260331000000_add_provider_budget_tracking/migration.sql` then `npx prisma@5 migrate resolve --applied 20260331000000_add_provider_budget_tracking` |
 | **domain-evaluation-model-backfill** | `codex/domain-evaluation-backfill-attach` | 🟡 In review | Adds a supported way to backfill missing model coverage into existing Domain Level Batches so reruns stay attached to the original evaluation instead of becoming orphan batches |
@@ -79,6 +79,7 @@ Once the above are resolved:
 ### Analysis Reports
 - [x] Domain Shifts by Value heatmap implemented at `/models/domain-shifts`; focused tests and web preflight pass.
 - [x] Domain Shifts readability controls added locally: cells can toggle between shift and raw win rate, and table columns are sortable.
+- [x] Domain Shifts model picker now groups default models first and separates non-default models with `---` before alphabetical non-default options.
 
 ---
 
