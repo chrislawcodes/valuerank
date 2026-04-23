@@ -13,6 +13,7 @@ import {
 } from '../../src/pages/DomainValueShiftHeatmap';
 import { MODELS_ANALYSIS_QUERY, type ModelsAnalysisModelResult } from '../../src/api/operations/modelsAnalysis';
 import { AVAILABLE_SIGNATURES_QUERY } from '../../src/api/operations/available-signatures';
+import { LLM_MODELS_QUERY } from '../../src/api/operations/llm';
 
 const useQueryMock = vi.fn();
 
@@ -62,7 +63,11 @@ function makeModel(overrides: Partial<ModelsAnalysisModelResult> = {}): ModelsAn
   };
 }
 
-function installModels(models: ModelsAnalysisModelResult[], signatures: string[] = ['vnewtd', 'vnewt0']) {
+function installModels(
+  models: ModelsAnalysisModelResult[],
+  signatures: string[] = ['vnewtd', 'vnewt0'],
+  defaultModelIds: string[] = models.map((model) => model.modelId),
+) {
   useQueryMock.mockImplementation((args: { query: unknown }) => {
     if (args.query === AVAILABLE_SIGNATURES_QUERY) {
       return [{
@@ -70,6 +75,28 @@ function installModels(models: ModelsAnalysisModelResult[], signatures: string[]
           availableSignatures: signatures.map((signature) => ({
             signature,
             mostRecentRunAt: '2026-04-17T03:06:20.919Z',
+          })),
+        },
+        fetching: false,
+        error: undefined,
+      }];
+    }
+    if (args.query === LLM_MODELS_QUERY) {
+      return [{
+        data: {
+          llmModels: models.map((model) => ({
+            id: model.modelId,
+            providerId: 'provider',
+            modelId: model.modelId,
+            displayName: model.label,
+            costInputPerMillion: 0,
+            costOutputPerMillion: 0,
+            status: 'ACTIVE',
+            isDefault: defaultModelIds.includes(model.modelId),
+            isAvailable: true,
+            apiConfig: null,
+            createdAt: '2026-04-17T03:06:20.919Z',
+            updatedAt: '2026-04-17T03:06:20.919Z',
           })),
         },
         fetching: false,
@@ -197,6 +224,7 @@ describe('DomainValueShiftHeatmap helpers', () => {
     ];
 
     expect(getDefaultModelId(models, null)).toBe('model-a');
+    expect(getDefaultModelId(models, null, new Set(['model-b']))).toBe('model-b');
     expect(getDefaultModelId(models, 'model-b')).toBe('model-b');
     expect(getDefaultModelId(models, 'missing')).toBe('model-a');
     expect(getDefaultModelId([], 'missing')).toBeNull();
@@ -294,6 +322,23 @@ describe('DomainValueShiftHeatmap page', () => {
     await user.click(screen.getByRole('option', { name: 'Zulu' }));
 
     expect(screen.getByRole('heading', { name: 'Zulu' })).toBeInTheDocument();
+  });
+
+  it('groups default models ahead of non-default models with a divider', async () => {
+    const user = userEvent.setup({ delay: null });
+    installModels([
+      makeModel({ modelId: 'model-c', label: 'Charlie' }),
+      makeModel({ modelId: 'model-a', label: 'Alpha' }),
+      makeModel({ modelId: 'model-b', label: 'Bravo' }),
+    ], ['vnewtd', 'vnewt0'], ['model-c', 'model-a']);
+
+    renderPage();
+
+    await screen.findByRole('button', { name: /alpha/i });
+    await user.click(screen.getByRole('button', { name: /alpha/i }));
+
+    const options = screen.getAllByRole('option').map((option) => option.textContent?.trim());
+    expect(options).toEqual(['Alpha', 'Charlie', '---', 'Bravo']);
   });
 
   it('shows an empty state when fewer than two domains are eligible', async () => {
