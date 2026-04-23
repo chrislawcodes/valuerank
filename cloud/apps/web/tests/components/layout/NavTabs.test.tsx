@@ -1,8 +1,20 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { NavTabs } from '../../../src/components/layout/NavTabs';
+
+// Mock useAuth to provide an admin user so all nav items are visible
+vi.mock('../../../src/auth/hooks', () => ({
+  useAuth: () => ({
+    user: { id: '1', email: 'test@example.com', name: 'Test User', role: 'ADMIN', mustChangePassword: false },
+    token: 'mock-token',
+    isLoading: false,
+    isAuthenticated: true,
+    login: vi.fn(),
+    logout: vi.fn(),
+  }),
+}));
 
 const user = userEvent.setup({ delay: null });
 
