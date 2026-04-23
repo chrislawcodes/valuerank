@@ -1,4 +1,4 @@
-import { Prisma } from '@valuerank/db';
+import { Prisma } from '@prisma/client';
 
 export const PROBE_QUEUE_PREFIX = 'probe_' as const;
 export const LEGACY_PROBE_QUEUE_NAME = 'probe_scenario' as const;
