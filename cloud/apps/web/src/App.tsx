@@ -17,6 +17,7 @@ import { DomainAnalysis } from './pages/DomainAnalysis';
 import { DomainCoverage } from './pages/DomainCoverage';
 import { DomainAnalysisValueDetail } from './pages/DomainAnalysisValueDetail';
 import { Models } from './pages/Models';
+import { DomainValueShiftHeatmap } from './pages/DomainValueShiftHeatmap';
 import { ModelsConsistency } from './pages/ModelsConsistency';
 import { ModelsCircumplex } from './pages/ModelsCircumplex';
 import { DefinitionDetail } from './pages/DefinitionDetail';
@@ -168,6 +169,14 @@ function App() {
               element={
                 <ProtectedLayout>
                   <Models />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/models/domain-shifts"
+              element={
+                <ProtectedLayout>
+                  <DomainValueShiftHeatmap />
                 </ProtectedLayout>
               }
             />

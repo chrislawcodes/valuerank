@@ -75,6 +75,9 @@ Once the above are resolved:
 - [ ] Build deck
 - [ ] Review with Ari
 
+### Analysis Reports
+- [x] Domain Shifts by Value heatmap implemented at `/models/domain-shifts`; focused tests and web preflight pass.
+
 ---
 
 ## Goal: Feature Factory

@@ -24,8 +24,22 @@ describe('MobileNav Component', () => {
     expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
     expect(screen.getByRole('link', { name: 'Domains' })).toHaveAttribute('href', '/domains');
     expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/models');
+    expect(screen.getByRole('link', { name: 'Matrix' })).toHaveAttribute('href', '/models');
+    expect(screen.getByRole('link', { name: 'Domain Shifts' })).toHaveAttribute('href', '/models/domain-shifts');
+    expect(screen.getByRole('link', { name: 'Consistency' })).toHaveAttribute('href', '/models/consistency');
+    expect(screen.getByRole('link', { name: 'Circumplex' })).toHaveAttribute('href', '/models/circumplex');
     expect(screen.getByRole('link', { name: 'Archive' })).toHaveAttribute('href', '/archive');
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings/account');
+  });
+
+  it('highlights Models and Domain Shifts on the domain shifts route', async () => {
+    await renderMobileNav('/models/domain-shifts');
+
+    expect(screen.getByRole('link', { name: 'Models' }).className).toContain('border-teal-500');
+    expect(screen.getByRole('link', { name: 'Matrix' }).className).not.toContain('border-teal-500');
+    expect(screen.getByRole('link', { name: 'Domain Shifts' }).className).toContain('border-teal-500');
+    expect(screen.getByRole('link', { name: 'Consistency' }).className).not.toContain('border-teal-500');
+    expect(screen.getByRole('link', { name: 'Circumplex' }).className).not.toContain('border-teal-500');
   });
 
   it('keeps the domain compatibility links nested under Domains', async () => {
@@ -60,5 +74,13 @@ describe('MobileNav Component', () => {
 
     expect(screen.getByRole('link', { name: 'Settings' }).className).not.toContain('border-teal-500');
     expect(screen.getByRole('link', { name: 'LLM Models' }).className).toContain('border-teal-500');
+  });
+
+  it('keeps the mobile menu escape behavior after Models gains children', async () => {
+    await renderMobileNav('/models/domain-shifts');
+
+    expect(screen.getByRole('link', { name: 'Domain Shifts' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('button', { name: /open navigation menu/i })).toHaveAttribute('aria-expanded', 'false');
   });
 });
