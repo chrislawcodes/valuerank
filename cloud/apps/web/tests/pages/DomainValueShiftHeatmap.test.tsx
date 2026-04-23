@@ -7,10 +7,12 @@ import {
   buildDomainShiftHeatmap,
   formatEvidenceWeight,
   formatPointShift,
+  getDefaultDomainShiftSignature,
   getDefaultModelId,
   sortHeatmapRows,
 } from '../../src/pages/DomainValueShiftHeatmap';
 import { MODELS_ANALYSIS_QUERY, type ModelsAnalysisModelResult } from '../../src/api/operations/modelsAnalysis';
+import { AVAILABLE_SIGNATURES_QUERY } from '../../src/api/operations/available-signatures';
 
 const useQueryMock = vi.fn();
 
@@ -60,8 +62,20 @@ function makeModel(overrides: Partial<ModelsAnalysisModelResult> = {}): ModelsAn
   };
 }
 
-function installModels(models: ModelsAnalysisModelResult[]) {
+function installModels(models: ModelsAnalysisModelResult[], signatures: string[] = ['vnewtd', 'vnewt0']) {
   useQueryMock.mockImplementation((args: { query: unknown }) => {
+    if (args.query === AVAILABLE_SIGNATURES_QUERY) {
+      return [{
+        data: {
+          availableSignatures: signatures.map((signature) => ({
+            signature,
+            mostRecentRunAt: '2026-04-17T03:06:20.919Z',
+          })),
+        },
+        fetching: false,
+        error: undefined,
+      }];
+    }
     if (args.query === MODELS_ANALYSIS_QUERY) {
       return [{
         data: { modelsAnalysis: { models } },
@@ -187,6 +201,12 @@ describe('DomainValueShiftHeatmap helpers', () => {
     expect(getDefaultModelId(models, 'missing')).toBe('model-a');
     expect(getDefaultModelId([], 'missing')).toBeNull();
   });
+
+  it('defaults signature selection to latest default temperature', () => {
+    expect(getDefaultDomainShiftSignature(['vnewt0'], null)).toBe('vnewtd');
+    expect(getDefaultDomainShiftSignature(['vnewtd', 'vnewt0'], 'vnewt0')).toBe('vnewt0');
+    expect(getDefaultDomainShiftSignature(['vnewtd'], 'missing')).toBe('vnewtd');
+  });
 });
 
 describe('DomainValueShiftHeatmap page', () => {
@@ -203,11 +223,33 @@ describe('DomainValueShiftHeatmap page', () => {
       expect(screen.getByRole('heading', { name: 'Domain Shifts by Value' })).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: /model a/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Latest @ default/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/Achievement in City Planning: raw win rate 80%; shift \+20 pts/i)).toHaveAccessibleName(
       /average 60%; evidence vignettes —/i,
     );
     expect(screen.getByText('Metric:')).toBeInTheDocument();
     expect(screen.getByText(/percentage-point shift, not percent change/i)).toBeInTheDocument();
+  });
+
+  it('passes the selected signature to the models analysis query', async () => {
+    const user = userEvent.setup({ delay: null });
+    installModels([makeModel()]);
+
+    renderPage();
+
+    await screen.findByRole('button', { name: /Latest @ default/i });
+    const initialModelsCalls = useQueryMock.mock.calls.filter(([args]: [{ query: unknown }]) => args.query === MODELS_ANALYSIS_QUERY);
+    expect(initialModelsCalls.at(-1)?.[0]).toEqual(expect.objectContaining({
+      variables: { signature: 'vnewtd' },
+    }));
+
+    await user.click(screen.getByRole('button', { name: /Latest @ default/i }));
+    await user.click(screen.getByRole('option', { name: 'Latest @ t=0' }));
+
+    const updatedModelsCalls = useQueryMock.mock.calls.filter(([args]: [{ query: unknown }]) => args.query === MODELS_ANALYSIS_QUERY);
+    expect(updatedModelsCalls.at(-1)?.[0]).toEqual(expect.objectContaining({
+      variables: { signature: 'vnewt0' },
+    }));
   });
 
   it('toggles cells from shifts to raw win rates', async () => {

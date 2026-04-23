@@ -4,6 +4,10 @@ import {
   MODELS_ANALYSIS_QUERY,
   type ModelsAnalysisQueryResult,
 } from '../api/operations/modelsAnalysis';
+import {
+  AVAILABLE_SIGNATURES_QUERY,
+  type AvailableSignaturesQueryResult,
+} from '../api/operations/available-signatures';
 import { Button } from '../components/ui/Button';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
@@ -11,10 +15,13 @@ import { Select } from '../components/ui/Select';
 import { cn } from '../lib/utils';
 import {
   DEFAULT_DOMAIN_SHIFT_SORT,
+  DEFAULT_DOMAIN_SHIFT_SIGNATURE,
   buildDomainShiftHeatmap,
+  buildDomainShiftSignatureOptions,
   formatEvidenceWeight,
   formatPercent,
   formatPointShift,
+  getDefaultDomainShiftSignature,
   getDefaultModelId,
   getNextDomainShiftSort,
   sortHeatmapRows,
@@ -31,6 +38,7 @@ export {
   formatEvidenceWeight,
   formatPercent,
   formatPointShift,
+  getDefaultDomainShiftSignature,
   getDefaultModelId,
   sortHeatmapRows,
 } from './domainValueShiftHeatmapUtils';
@@ -189,11 +197,25 @@ function Cell({
 }
 
 export function DomainValueShiftHeatmap() {
-  const [{ data, fetching, error }] = useQuery<ModelsAnalysisQueryResult>({
-    query: MODELS_ANALYSIS_QUERY,
+  const [{ data: signatureData, fetching: fetchingSignatures, error: signatureError }] = useQuery<AvailableSignaturesQueryResult>({
+    query: AVAILABLE_SIGNATURES_QUERY,
     variables: {},
     requestPolicy: 'cache-and-network',
   });
+  const [selectedSignature, setSelectedSignature] = useState<string>(DEFAULT_DOMAIN_SHIFT_SIGNATURE);
+  const [{ data, fetching, error }] = useQuery<ModelsAnalysisQueryResult>({
+    query: MODELS_ANALYSIS_QUERY,
+    variables: { signature: selectedSignature },
+    requestPolicy: 'cache-and-network',
+  });
+  const availableSignatures = useMemo(
+    () => signatureData?.availableSignatures.map((entry) => entry.signature) ?? [],
+    [signatureData],
+  );
+  const signatureOptions = useMemo(
+    () => buildDomainShiftSignatureOptions(availableSignatures),
+    [availableSignatures],
+  );
   const models = useMemo(
     () => [...(data?.modelsAnalysis.models ?? [])].sort((left, right) => left.label.localeCompare(right.label)),
     [data],
@@ -201,6 +223,13 @@ export function DomainValueShiftHeatmap() {
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [displayMode, setDisplayMode] = useState<DomainShiftDisplayMode>('shift');
   const [sort, setSort] = useState<DomainShiftSort>(DEFAULT_DOMAIN_SHIFT_SORT);
+
+  useEffect(() => {
+    const nextSignature = getDefaultDomainShiftSignature(availableSignatures, selectedSignature);
+    if (nextSignature !== selectedSignature) {
+      setSelectedSignature(nextSignature);
+    }
+  }, [availableSignatures, selectedSignature]);
 
   useEffect(() => {
     const nextModelId = getDefaultModelId(models, selectedModelId);
@@ -234,6 +263,9 @@ export function DomainValueShiftHeatmap() {
       {error != null && (
         <ErrorMessage message={`Failed to load domain shifts: ${error.message}`} />
       )}
+      {signatureError != null && (
+        <ErrorMessage message={`Failed to load signature options: ${signatureError.message}`} />
+      )}
 
       <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
         <div className="flex flex-wrap items-end gap-5">
@@ -245,6 +277,16 @@ export function DomainValueShiftHeatmap() {
               onChange={setSelectedModelId}
               placeholder={loading ? 'Loading models...' : 'Select a model'}
               disabled={loading || modelOptions.length === 0}
+            />
+          </div>
+          <div className="min-w-[240px] max-w-xs flex-1">
+            <Select
+              label="Signature"
+              options={signatureOptions}
+              value={selectedSignature}
+              onChange={setSelectedSignature}
+              placeholder={fetchingSignatures && signatureData == null ? 'Loading signatures...' : 'Select a signature'}
+              disabled={fetchingSignatures && signatureData == null}
             />
           </div>
           <DisplayModeToggle displayMode={displayMode} onChange={setDisplayMode} />
@@ -277,7 +319,7 @@ export function DomainValueShiftHeatmap() {
               <h2 className="text-lg font-semibold text-gray-900">{selectedModel.label}</h2>
               <p className="text-sm text-gray-600">
                 Values are rows. Domains are columns. Click any column header to sort. Evidence counts are shown
-                in each cell detail.
+                in each cell detail. Signature: {selectedSignature}.
               </p>
             </div>
             <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
