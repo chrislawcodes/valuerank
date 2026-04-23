@@ -7,6 +7,7 @@ import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import { getBoss } from '../../queue/boss.js';
 import { DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
+import { ACTIVE_PROBE_QUEUE_SQL } from '../queue/probe-queues.js';
 import { getQueueNameForModel } from '../parallelism/index.js';
 import type { TranscriptKey } from './coverage-completeness.js';
 
@@ -20,7 +21,7 @@ export async function countJobsForRun(runId: string): Promise<{ pending: number;
   const result = await db.$queryRaw<Array<{ state: string; count: bigint }>>`
     SELECT state, COUNT(*) as count
     FROM pgboss.job
-    WHERE (name = 'probe_scenario' OR (name LIKE 'probe_%' AND name != 'probe_dead_letter'))
+    WHERE ${ACTIVE_PROBE_QUEUE_SQL}
       AND state IN ('created', 'retry', 'active')
       AND data->>'runId' = ${runId}
     GROUP BY state

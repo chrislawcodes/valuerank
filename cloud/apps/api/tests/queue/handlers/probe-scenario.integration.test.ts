@@ -26,6 +26,7 @@ vi.mock('../../../src/queue/boss.js', () => ({
 
 // Mock parallelism service to avoid DB dependencies and enforce fast rate limits
 vi.mock('../../../src/services/parallelism/index.js', () => ({
+  getProviderQueueName: vi.fn((providerName: string) => `probe_${providerName}`),
   loadProviderLimits: vi.fn(),
   getProviderForModel: vi.fn(),
 }));

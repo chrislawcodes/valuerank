@@ -6,6 +6,7 @@
 
 import { db } from '@valuerank/db';
 import { createLogger, NotFoundError, RunStateError } from '@valuerank/shared';
+import { ACTIVE_PROBE_QUEUE_SQL } from '../queue/probe-queues.js';
 
 const log = createLogger('services:run:control');
 
@@ -132,7 +133,7 @@ export async function cancelRun(runId: string): Promise<{
     const result = await db.$executeRaw`
       UPDATE pgboss.job
       SET state = 'cancelled'
-      WHERE (name = 'probe_scenario' OR (name LIKE 'probe_%' AND name != 'probe_dead_letter'))
+      WHERE ${ACTIVE_PROBE_QUEUE_SQL}
         AND state IN ('created', 'retry')
         AND data->>'runId' = ${runId}
     `;

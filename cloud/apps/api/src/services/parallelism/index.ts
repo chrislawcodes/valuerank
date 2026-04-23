@@ -5,7 +5,7 @@
  * Uses provider-specific queues with PgBoss batchSize for concurrency control.
  *
  * Architecture:
- * - Each provider gets its own queue: `probe:openai`, `probe:anthropic`, etc.
+ * - Each provider gets its own queue: `probe_openai`, `probe_anthropic`, etc.
  * - Queue batchSize is set from provider's `maxParallelRequests` setting
  * - Jobs are routed to provider queues based on modelId
  * - Workers process jobs in batches limited by maxParallelRequests
@@ -14,6 +14,10 @@
 import { createLogger } from '@valuerank/shared';
 import { db, getAllProvidersWithModels } from '@valuerank/db';
 import type { PgBoss, QueueResult } from 'pg-boss';
+import {
+  LEGACY_PROBE_QUEUE_NAME,
+  PROBE_QUEUE_PREFIX,
+} from '../queue/probe-queues.js';
 
 const log = createLogger('services:parallelism');
 
@@ -34,7 +38,7 @@ const CACHE_TTL_MS = 60000; // 1 minute
  * Uses underscores as PgBoss only allows alphanumeric, underscores, hyphens, or periods.
  */
 export function getProviderQueueName(providerName: string): string {
-  return `probe_${providerName}`;
+  return `${PROBE_QUEUE_PREFIX}${providerName}`;
 }
 
 /**
@@ -131,7 +135,7 @@ export async function getQueueNameForModel(modelId: string): Promise<string> {
 
   if (providerName === null) {
     log.warn({ modelId }, 'Unknown model, using default queue');
-    return 'probe_scenario'; // Fall back to default queue
+    return LEGACY_PROBE_QUEUE_NAME; // Fall back to default queue
   }
 
   return getProviderQueueName(providerName);

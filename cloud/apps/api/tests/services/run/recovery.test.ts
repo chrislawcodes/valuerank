@@ -28,6 +28,7 @@ vi.mock('../../../src/queue/boss.js', () => ({
 
 // Mock getQueueNameForModel
 vi.mock('../../../src/services/parallelism/index.js', () => ({
+  getProviderQueueName: vi.fn((providerName: string) => `probe_${providerName}`),
   getQueueNameForModel: vi.fn().mockResolvedValue('probe_scenario_openai'),
 }));
 

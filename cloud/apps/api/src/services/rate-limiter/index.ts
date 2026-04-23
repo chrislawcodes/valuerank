@@ -9,7 +9,7 @@
 
 import Bottleneck from 'bottleneck';
 import { createLogger } from '@valuerank/shared';
-import { loadProviderLimits, type ProviderLimits } from '../parallelism/index.js';
+import { getProviderQueueName, loadProviderLimits, type ProviderLimits } from '../parallelism/index.js';
 
 const log = createLogger('services:rate-limiter');
 
@@ -119,7 +119,7 @@ async function getOrCreateLimiter(
     const defaultLimiter = createLimiter(limiterKey, {
       maxParallelRequests: effectiveConcurrency,
       requestsPerMinute: 30,
-      queueName: `probe_${providerName}`,
+      queueName: getProviderQueueName(providerName),
     });
     providerLimiters.set(limiterKey, defaultLimiter);
     return defaultLimiter;

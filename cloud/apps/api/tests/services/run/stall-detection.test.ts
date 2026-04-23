@@ -22,9 +22,13 @@ const dbMock = vi.hoisted(() => ({
   $queryRaw: vi.fn(),
 }));
 
-vi.mock('@valuerank/db', () => ({
-  db: dbMock,
-}));
+vi.mock('@valuerank/db', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@valuerank/db')>();
+  return {
+    ...actual,
+    db: dbMock,
+  };
+});
 
 vi.mock('@valuerank/shared', () => ({
   createLogger: vi.fn(() => logger),
@@ -36,6 +40,7 @@ import {
   detectAndUpdateStalledRuns,
   detectProgressStalls,
   detectStalledModels,
+  getModelsWithPendingJobs,
   updateRunStalledModels,
 } from '../../../src/services/run/stall-detection.js';
 

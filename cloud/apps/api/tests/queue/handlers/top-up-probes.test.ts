@@ -33,6 +33,7 @@ vi.mock('../../../src/queue/boss.js', () => ({
 }));
 
 vi.mock('../../../src/services/parallelism/index.js', () => ({
+  getProviderQueueName: vi.fn((providerName: string) => `probe_${providerName}`),
   getQueueNameForModel: vi.fn(),
 }));
 

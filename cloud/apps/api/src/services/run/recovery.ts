@@ -13,6 +13,7 @@
 import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import { findMissingProbes } from './coverage-completeness.js';
+import { ACTIVE_PROBE_QUEUE_SQL } from '../queue/probe-queues.js';
 import {
   countJobsForRun,
   requeueMissingProbes,
@@ -314,7 +315,7 @@ export async function detectAndRecoverStuckJobs(): Promise<{ recovered: number; 
     FROM pgboss.job
     WHERE state = 'active'
       AND started_on < NOW() - (${ZOMBIE_THRESHOLD_MINUTES} || ' minutes')::interval
-      AND (name = 'probe_scenario' OR (name LIKE 'probe_%' AND name != 'probe_dead_letter'))
+      AND ${ACTIVE_PROBE_QUEUE_SQL}
   `;
 
   if (stuckJobs.length === 0) {

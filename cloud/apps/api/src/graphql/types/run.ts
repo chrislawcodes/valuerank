@@ -6,6 +6,7 @@ import { RunProgress, TaskResult } from './run-progress.js';
 import { ExecutionMetrics } from './execution-metrics.js';
 import { ProbeResultRef, ProbeResultModelSummary } from './probe-result.js';
 import { calculatePercentComplete } from '../../services/run/index.js';
+import { ACTIVE_PROBE_QUEUE_SQL } from '../../services/queue/probe-queues.js';
 import { AnalysisResultRef } from './analysis.js';
 import { CostEstimateRef, type CostEstimateShape } from './cost-estimate.js';
 import { getAllMetrics, getTotals } from '../../services/rate-limiter/index.js';
@@ -380,7 +381,7 @@ builder.objectType(RunRef, {
           }>>`
             SELECT id, data, state, completed_on, output
             FROM pgboss.job
-            WHERE name = 'probe_scenario'
+            WHERE ${ACTIVE_PROBE_QUEUE_SQL}
               AND data->>'runId' = ${run.id}
               AND state IN ('completed', 'failed')
             ORDER BY completed_on DESC NULLS LAST

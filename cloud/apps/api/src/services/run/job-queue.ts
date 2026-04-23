@@ -7,6 +7,7 @@
 
 import { db } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
+import { ACTIVE_PROBE_QUEUE_SQL, LEGACY_PROBE_QUEUE_NAME, normalizeProbeQueueName } from '../queue/probe-queues.js';
 import type { JobQueueStatus, JobQueueStatusOptions, JobFailure } from './types.js';
 
 const log = createLogger('services:run:job-queue');
@@ -18,7 +19,7 @@ const COMPLETED_STATES = ['completed'];
 const FAILED_STATES = ['failed'];
 
 // Job types we track
-const JOB_TYPES = ['probe_scenario', 'summarize_transcript', 'analyze_basic'] as const;
+const JOB_TYPES = [LEGACY_PROBE_QUEUE_NAME, 'summarize_transcript', 'analyze_basic'] as const;
 
 /**
  * Raw job count row from PgBoss query
@@ -79,30 +80,13 @@ export async function getJobQueueStatus(
 
   try {
     // Query job counts from PgBoss
-    // Note: probe_scenario jobs may have model-specific queue names like probe_scenario_openai
     const jobCounts = await db.$queryRaw<JobCountRow[]>`
-      SELECT
-        CASE
-          WHEN name = 'probe_scenario' OR (name LIKE 'probe_%' AND name != 'probe_dead_letter') THEN 'probe_scenario'
-          ELSE name
-        END as name,
-        state,
-        COUNT(*) as count
+      SELECT name, state, COUNT(*) as count
       FROM pgboss.job
-      WHERE (
-        name = 'probe_scenario'
-        OR (name LIKE 'probe_%' AND name != 'probe_dead_letter')
-        OR name = 'summarize_transcript'
-        OR name = 'analyze_basic'
-      )
+      WHERE (${ACTIVE_PROBE_QUEUE_SQL} OR name = 'summarize_transcript' OR name = 'analyze_basic')
         AND data->>'runId' = ${runId}
         AND state IN ('created', 'retry', 'active', 'completed', 'failed')
-      GROUP BY
-        CASE
-          WHEN name = 'probe_scenario' OR (name LIKE 'probe_%' AND name != 'probe_dead_letter') THEN 'probe_scenario'
-          ELSE name
-        END,
-        state
+      GROUP BY name, state
     `;
 
     // Process results into typed structure
@@ -110,7 +94,7 @@ export async function getJobQueueStatus(
     const countsByType: Record<string, MutableJobTypeCounts> = {};
 
     for (const row of jobCounts) {
-      const jobType = row.name;
+      const jobType = normalizeProbeQueueName(row.name);
       const state = row.state;
       const count = Number(row.count);
 
@@ -173,12 +157,7 @@ async function getRecentFailures(runId: string, limit: number): Promise<JobFailu
         output,
         completed_on
       FROM pgboss.job
-      WHERE (
-        name = 'probe_scenario'
-        OR (name LIKE 'probe_%' AND name != 'probe_dead_letter')
-        OR name = 'summarize_transcript'
-        OR name = 'analyze_basic'
-      )
+      WHERE (${ACTIVE_PROBE_QUEUE_SQL} OR name = 'summarize_transcript' OR name = 'analyze_basic')
         AND data->>'runId' = ${runId}
         AND state = 'failed'
       ORDER BY completed_on DESC NULLS LAST
@@ -190,9 +169,7 @@ async function getRecentFailures(runId: string, limit: number): Promise<JobFailu
       const output = job.output;
 
       // Normalize job type name
-      const jobType = job.name === 'probe_scenario' || (job.name.startsWith('probe_') && job.name !== 'probe_dead_letter')
-        ? 'probe_scenario'
-        : job.name;
+      const jobType = normalizeProbeQueueName(job.name);
 
       // Extract error from output
       let error = 'Unknown error';
