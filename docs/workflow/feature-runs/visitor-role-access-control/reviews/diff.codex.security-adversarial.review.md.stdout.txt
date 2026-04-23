@@ -1,7 +1,8 @@
 ## Findings
-- [UNVERIFIED] MEDIUM: `authMiddleware` treats any JWT without a `role` claim as `ADMIN` (`payload.role ?? 'ADMIN'`). That is an unsafe fallback. Any legacy token or any token minted by a path that omits `role` gets full admin access instead of being denied or treated as least-privilege.
-- [UNVERIFIED] MEDIUM: Role and password-reset state are trusted only from the JWT and are not rechecked against the database on request. After a user is downgraded to `VISITOR` or marked `mustChangePassword`, any already-issued token still carries the old claims until it expires. That makes the new admin/user-management controls effective only after re-login, not immediately.
+- **Medium [UNVERIFIED]** `signToken()` and `authMiddleware()` both treat a missing `role` claim as `ADMIN`, and `mustChangePassword` as `false`. That is a dangerous default for an auth boundary: any legacy token format, alternate signer, or incomplete call site that omits these fields is silently elevated instead of being rejected.
+- **Medium [UNVERIFIED]** Role changes are not tied to token/session revocation. If an admin is demoted, any already-issued JWTs or API-key-backed sessions remain valid until they expire, so the removed privilege still works for a window after the change.
+- **Medium [UNVERIFIED]** The new `mustChangePassword` flag is added to the DB model, token payload, and request user object, but there is no server-side enforcement in the shown auth path. If the intent is to force first-login rotation, a user can still keep using the issued password and reach privileged APIs until some other layer blocks them.
 
 ## Residual Risks
-- I did not verify whether token lifetimes are short or whether there is any server-side revocation mechanism elsewhere. If there is not, the stale-token problem above is the main authorization gap.
-- I did not inspect every token-issuing path in the codebase. If any other path still emits JWTs without `role` or `mustChangePassword`, it inherits the same privilege-escalation risk from the fallback.
+- I could not verify whether every token-issuing path populates `role` and `mustChangePassword`, whether there is any token revocation mechanism, or whether other non-admin GraphQL mutations exist elsewhere in the codebase. Those unknowns affect the real impact of the findings above.
+- If older tokens or API keys are already expired everywhere, the first two issues shrink materially; if not, they are a live privilege-retention risk.
