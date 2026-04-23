@@ -125,11 +125,11 @@ export async function mcpAuthMiddleware(
  * MCP Auth Middleware that allows unauthenticated requests
  * Used for HEAD requests to check MCP-Protocol-Version
  */
-export function mcpAuthOptional(
+export async function mcpAuthOptional(
   req: Request,
   res: Response,
   next: NextFunction
-): void {
+): Promise<void> {
   // For HEAD requests, allow through without auth (metadata check)
   if (req.method === 'HEAD') {
     next();
@@ -137,5 +137,5 @@ export function mcpAuthOptional(
   }
 
   // For all other requests, require auth
-  mcpAuthMiddleware(req, res, next);
+  await mcpAuthMiddleware(req, res, next);
 }

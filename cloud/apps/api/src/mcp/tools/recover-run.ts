@@ -12,7 +12,7 @@ import { db } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
 import { recoverOrphanedRun } from '../../services/run/recovery.js';
 import { logAuditEvent } from '../../services/mcp/index.js';
-import { formatError, formatSuccess, createOperationsAudit, getMcpUserId } from './helpers.js';
+import { formatError, formatSuccess, createOperationsAudit, requireMcpAdmin } from './helpers.js';
 import { addToolRegistrar } from './registry.js';
 
 const log = createLogger('mcp:tools:recover-run');
@@ -57,7 +57,7 @@ function registerRecoverRunTool(server: McpServer): void {
     async (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
       const mcpUser = requireMcpAdmin();
-      if ('isError' in mcpUser) {
+      if ('content' in mcpUser) {
         return mcpUser;
       }
       const userId = mcpUser.id;

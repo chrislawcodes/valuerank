@@ -5,6 +5,7 @@
  */
 
 import { builder } from '../builder.js';
+import { UserRoleEnum } from './enums.js';
 
 // User type representing the current authenticated user
 export const UserRef = builder.objectRef<{
@@ -28,7 +29,7 @@ builder.objectType(UserRef, {
       description: 'User display name',
     }),
     role: t.expose('role', {
-      type: 'UserRole',
+      type: UserRoleEnum,
       description: 'User role',
     }),
     mustChangePassword: t.expose('mustChangePassword', {

@@ -87,7 +87,7 @@ Limited to 10KB token budget.`,
         const contextValue: Partial<Context> = {
           log: mcpLog,
           loaders: createDataLoaders(),
-          user: { id: 'mcp-query', email: 'mcp@valuerank.ai' },
+          user: { id: 'mcp-query', email: 'mcp@valuerank.ai', role: 'ADMIN' as const, mustChangePassword: false },
           authMethod: 'api_key',
         };
 

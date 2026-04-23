@@ -90,7 +90,7 @@ function registerRestartSummarizationTool(server: McpServer): void {
     async (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
       const mcpUser = requireMcpAdmin();
-      if ('isError' in mcpUser) {
+      if ('content' in mcpUser) {
         return mcpUser;
       }
       const userId = mcpUser.id;

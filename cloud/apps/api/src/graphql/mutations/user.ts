@@ -3,6 +3,7 @@ import { NotFoundError, ValidationError } from '@valuerank/shared';
 
 import { builder } from '../builder.js';
 import { UserRef } from '../types/user.js';
+import { UserRoleEnum } from '../types/enums.js';
 import { hashPassword } from '../../auth/index.js';
 import { requireAdmin } from '../../auth/require-admin.js';
 
@@ -30,7 +31,7 @@ const CreateUserInput = builder.inputType('CreateUserInput', {
       },
     }),
     role: t.field({
-      type: 'UserRole',
+      type: UserRoleEnum,
       required: true,
     }),
   }),
@@ -45,7 +46,7 @@ const UpdateUserRoleInput = builder.inputType('UpdateUserRoleInput', {
       },
     }),
     role: t.field({
-      type: 'UserRole',
+      type: UserRoleEnum,
       required: true,
     }),
   }),

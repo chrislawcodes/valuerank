@@ -9,10 +9,10 @@ import {
   CREATE_USER_MUTATION,
   LIST_USERS_QUERY,
   UPDATE_USER_ROLE_MUTATION,
-  type CreateUserMutationResult,
+  type CreateUserMutation,
   type CreateUserMutationVariables,
-  type ListUsersQueryResult,
-  type UpdateUserRoleMutationResult,
+  type ListUsersQuery,
+  type UpdateUserRoleMutation,
   type UpdateUserRoleMutationVariables,
   type UserRole,
 } from '../api/operations/user';
@@ -39,19 +39,19 @@ function getGraphQLErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return 'Never';
+function formatDate(value: string | null | undefined): string {
+  if (value == null || value === '') return 'Never';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleString();
 }
 
 export function SettingsUsers() {
-  const [{ data, fetching, error }, reexecuteQuery] = useQuery<ListUsersQueryResult>({
+  const [{ data, fetching, error }, reexecuteQuery] = useQuery<ListUsersQuery>({
     query: LIST_USERS_QUERY,
     requestPolicy: 'network-only',
   });
-  const [, createUser] = useMutation<CreateUserMutationResult, CreateUserMutationVariables>(CREATE_USER_MUTATION);
-  const [, updateUserRole] = useMutation<UpdateUserRoleMutationResult, UpdateUserRoleMutationVariables>(UPDATE_USER_ROLE_MUTATION);
+  const [, createUser] = useMutation<CreateUserMutation, CreateUserMutationVariables>(CREATE_USER_MUTATION);
+  const [, updateUserRole] = useMutation<UpdateUserRoleMutation, UpdateUserRoleMutationVariables>(UPDATE_USER_ROLE_MUTATION);
 
   const [form, setForm] = useState<FormState>({
     name: '',

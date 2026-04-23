@@ -1,0 +1,35 @@
+query ListUsers {
+  listUsers {
+    id
+    email
+    name
+    role
+    mustChangePassword
+    lastLoginAt
+    createdAt
+  }
+}
+
+mutation CreateUser($input: CreateUserInput!) {
+  createUser(input: $input) {
+    id
+    email
+    name
+    role
+    mustChangePassword
+    lastLoginAt
+    createdAt
+  }
+}
+
+mutation UpdateUserRole($input: UpdateUserRoleInput!) {
+  updateUserRole(input: $input) {
+    id
+    email
+    name
+    role
+    mustChangePassword
+    lastLoginAt
+    createdAt
+  }
+}

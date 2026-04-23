@@ -54,6 +54,11 @@ importRouter.post(
   requireAdminRest,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      // requireAdminRest already verified user is authenticated and ADMIN
+      if (req.user === null || req.user === undefined) {
+        throw new Error('Authentication required');
+      }
+
       const body = req.body as ImportDefinitionBody;
 
       // Validate required fields

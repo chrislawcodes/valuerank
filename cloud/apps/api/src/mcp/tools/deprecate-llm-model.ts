@@ -84,7 +84,7 @@ Returns the deprecated model and the new default (if one was promoted).`,
     async (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
       const mcpUser = requireMcpAdmin();
-      if ('isError' in mcpUser) {
+      if ('content' in mcpUser) {
         return mcpUser;
       }
       const userId = mcpUser.id;

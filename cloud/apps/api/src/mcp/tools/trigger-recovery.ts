@@ -11,7 +11,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createLogger } from '@valuerank/shared';
 import { recoverOrphanedRuns } from '../../services/run/recovery.js';
 import { logAuditEvent } from '../../services/mcp/index.js';
-import { formatError, formatSuccess, createOperationsAudit, getMcpUserId } from './helpers.js';
+import { formatError, formatSuccess, createOperationsAudit, requireMcpAdmin } from './helpers.js';
 import { addToolRegistrar } from './registry.js';
 
 const log = createLogger('mcp:tools:trigger-recovery');
@@ -62,7 +62,7 @@ function registerTriggerRecoveryTool(server: McpServer): void {
     async (_args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
       const mcpUser = requireMcpAdmin();
-      if ('isError' in mcpUser) {
+      if ('content' in mcpUser) {
         return mcpUser;
       }
       const userId = mcpUser.id;

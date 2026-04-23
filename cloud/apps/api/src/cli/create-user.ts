@@ -116,9 +116,11 @@ async function main(): Promise<void> {
 
   try {
     const roleArgIndex = process.argv.findIndex((arg) => arg === '--role' || arg.startsWith('--role='));
+    const roleArgValue = roleArgIndex >= 0 ? process.argv[roleArgIndex] : undefined;
+    const roleNextArgValue = roleArgIndex >= 0 ? process.argv[roleArgIndex + 1] : undefined;
     const role = parseRole(
-      roleArgIndex >= 0
-        ? (process.argv[roleArgIndex].includes('=') ? process.argv[roleArgIndex].split('=')[1] : process.argv[roleArgIndex + 1])
+      roleArgValue !== undefined
+        ? (roleArgValue.includes('=') ? roleArgValue.split('=')[1] : roleNextArgValue)
         : undefined
     );
 
