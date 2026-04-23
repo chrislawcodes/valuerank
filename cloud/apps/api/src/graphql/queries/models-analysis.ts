@@ -3,6 +3,7 @@ import { getModelsFromDatabase } from '../../config/models.js';
 import { buildAssumptionKey, parseSnapshotOutput } from '../../services/analysis/domain-analysis-snapshot-builder.js';
 import { DOMAIN_ANALYSIS_ASSUMPTION_PREFIX, DOMAIN_ANALYSIS_SNAPSHOT_TYPE } from '../../services/analysis/domain-analysis-cache-types.js';
 import { DOMAIN_ANALYSIS_VALUE_KEYS, type DomainAnalysisValueKey } from './domain-analysis-values.js';
+import { selectModelsAnalysisSnapshots } from './models-analysis-snapshot-selection.js';
 import { builder } from '../builder.js';
 import {
   ModelsAnalysisResultRef,
@@ -12,6 +13,12 @@ import {
 } from '../types/models-analysis.js';
 
 type DomainContribution = ModelsAnalysisDomainBreakdownShape;
+type ModelsAnalysisSnapshotRow = {
+  id: string;
+  assumptionKey: string;
+  configSignature: string;
+  output: unknown;
+};
 
 // Honest denominator: includes neutral outcomes so win rate is consistent with
 // the rest of the product (matches aggregate-logic.ts). Excluding neutrals would
@@ -97,6 +104,7 @@ builder.queryField('modelsAnalysis', (t) =>
         select: {
           id: true,
           assumptionKey: true,
+          configSignature: true,
           output: true,
         },
         orderBy: [
@@ -105,12 +113,10 @@ builder.queryField('modelsAnalysis', (t) =>
         ],
       });
 
-      const latestSnapshotByAssumptionKey = new Map<string, typeof snapshots[number]>();
-      for (const snapshot of snapshots) {
-        if (!latestSnapshotByAssumptionKey.has(snapshot.assumptionKey)) {
-          latestSnapshotByAssumptionKey.set(snapshot.assumptionKey, snapshot);
-        }
-      }
+      const selectedSnapshots = selectModelsAnalysisSnapshots(
+        snapshots as ModelsAnalysisSnapshotRow[],
+        signature,
+      );
 
       const activeModelById = new Map(activeModels.map((model) => [model.modelId, model.displayName] as const));
       const contributionsByModel = new Map<string, Map<DomainAnalysisValueKey, DomainContribution[]>>();
@@ -123,7 +129,7 @@ builder.queryField('modelsAnalysis', (t) =>
         contributionsByModel.set(model.modelId, valueMap);
       }
 
-      for (const snapshot of latestSnapshotByAssumptionKey.values()) {
+      for (const snapshot of selectedSnapshots) {
         const parsed = parseSnapshotOutput(snapshot.output);
         if (parsed == null) {
           ctx.log.warn({ assumptionKey: snapshot.assumptionKey, snapshotId: snapshot.id }, 'Skipping unparsable models analysis snapshot');

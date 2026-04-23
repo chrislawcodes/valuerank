@@ -1,3 +1,4 @@
+import { formatVnewLabel, isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
 import {
   type ModelsAnalysisDomainBreakdown,
   type ModelsAnalysisModelResult,
@@ -6,6 +7,7 @@ import {
 import { VALUE_LABELS, VALUES, type ValueKey } from '../data/domainAnalysisData';
 
 const AVERAGE_PARITY_TOLERANCE = 0.05;
+export const DEFAULT_DOMAIN_SHIFT_SIGNATURE = 'vnewtd';
 
 export type DomainShiftDisplayMode = 'shift' | 'winRate';
 export type DomainShiftSortDirection = 'asc' | 'desc';
@@ -51,6 +53,11 @@ export type DomainShiftHeatmap = {
   eligibleDomainCount: number;
 };
 
+export type DomainShiftSignatureOption = {
+  value: string;
+  label: string;
+};
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
@@ -78,6 +85,29 @@ export function formatPercent(value: number | null): string {
 export function formatEvidenceWeight(value: number | null): string {
   if (value == null || !Number.isFinite(value) || value <= 0) return '—';
   return `${Math.round(value)}`;
+}
+
+export function formatDomainShiftSignatureLabel(signature: string): string {
+  if (!isVnewSignature(signature)) return signature;
+  try {
+    return formatVnewLabel(parseVnewTemperature(signature));
+  } catch {
+    return signature;
+  }
+}
+
+export function buildDomainShiftSignatureOptions(signatures: string[]): DomainShiftSignatureOption[] {
+  const signatureSet = new Set([DEFAULT_DOMAIN_SHIFT_SIGNATURE, ...signatures]);
+  return [...signatureSet].map((signature) => ({
+    value: signature,
+    label: formatDomainShiftSignatureLabel(signature),
+  }));
+}
+
+export function getDefaultDomainShiftSignature(signatures: string[], currentSignature: string | null): string {
+  const optionValues = new Set(buildDomainShiftSignatureOptions(signatures).map((option) => option.value));
+  if (currentSignature != null && optionValues.has(currentSignature)) return currentSignature;
+  return DEFAULT_DOMAIN_SHIFT_SIGNATURE;
 }
 
 export function getDefaultModelId(models: ModelsAnalysisModelResult[], currentModelId: string | null): string | null {
