@@ -107,6 +107,7 @@ Once the above are resolved:
 ### Priority 3: Speed Up Implementation
 - [x] **Add `implement` command with parallel Codex dispatch** — PR #458, merged 2026-03-30. `run_factory.py implement --slug <slug>` reads the next `[CHECKPOINT]` slice from tasks.md, detects `[P: file]`-annotated tasks, and dispatches parallel Codex workers in isolated git worktrees for non-overlapping tasks. Cherry-picks back in task-index order. Serial fallback for overlap or unannotated tasks.
 - [x] **Run reviews in parallel** — Validated 2026-03-30. Codex runs fully parallel with Gemini. Gemini reviews stagger 30s apart (no file lock). Zero 429s across parallel-implement-command checkpoints. `GEMINI_STAGGER_SECONDS = 30` is now permanent default in `factory_review.py`.
+- [x] **visitor-role-access-control** — PR #737. ADMIN/VISITOR two-tier role system with JWT enforcement, MCP write tool gating, user management UI, and forced password-change flow for new accounts. All 3 diff adversarial reviews rejected (intentional design decisions). Factory workflow: spec → plan → tasks → Codex implementation → diff checkpoint → reconcile → deliver.
 
 ### Priority 4: Integrate Best-of-Breed Tools
 - [ ] **Evaluate [Composio Agent Orchestrator](https://github.com/ComposioHQ/agent-orchestrator)** — Handles parallel agent spawning, CI failure auto-fix, and review comment routing. Could replace the implementation half of the runner.
