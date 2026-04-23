@@ -196,7 +196,7 @@ export async function buildSnapshotOutput(
   };
 }
 
-export function writeSnapshot(params: {
+export async function writeSnapshot(params: {
   client: SnapshotClient;
   scope: DomainAnalysisScope;
   domainId: string;
@@ -204,9 +204,27 @@ export function writeSnapshot(params: {
   inputHash: string;
   output: DomainAnalysisSnapshotOutput;
 }) {
+  const assumptionKey = buildAssumptionKey(params.scope, params.domainId);
+
+  await params.client.assumptionAnalysisSnapshot.updateMany({
+    where: {
+      assumptionKey,
+      analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
+      status: 'CURRENT',
+      deletedAt: null,
+      OR: [
+        { configSignature: params.configSignature },
+        { inputHash: params.inputHash },
+      ],
+    },
+    data: {
+      status: 'SUPERSEDED',
+    },
+  });
+
   return params.client.assumptionAnalysisSnapshot.create({
     data: {
-      assumptionKey: buildAssumptionKey(params.scope, params.domainId),
+      assumptionKey,
       analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
       inputHash: params.inputHash,
       codeVersion: DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION,
