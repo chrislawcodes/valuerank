@@ -4,10 +4,11 @@ import { useAuth } from '../auth/hooks';
 
 type ProtectedRouteProps = {
   children: ReactNode;
+  requiredRole?: 'ADMIN';
 };
 
-export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { isAuthenticated, isLoading } = useAuth();
+export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
+  const { isAuthenticated, isLoading, user } = useAuth();
   const location = useLocation();
 
   // Show loading state while checking auth
@@ -22,6 +23,14 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   // Redirect to login if not authenticated
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+  }
+
+  if (user?.mustChangePassword === true && location.pathname !== '/settings/account') {
+    return <Navigate to="/settings/account" replace />;
+  }
+
+  if (requiredRole === 'ADMIN' && user?.role !== 'ADMIN') {
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;

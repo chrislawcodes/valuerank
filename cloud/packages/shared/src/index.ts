@@ -5,6 +5,7 @@ export {
   NotFoundError,
   ValidationError,
   AuthenticationError,
+  ForbiddenError,
   QueueError,
   JobValidationError,
   RunStateError,

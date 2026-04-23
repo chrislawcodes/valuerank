@@ -5,6 +5,8 @@ export type User = {
   name: string | null;
   lastLoginAt: string | null;
   createdAt: string;
+  role: 'ADMIN' | 'VISITOR';
+  mustChangePassword: boolean;
 };
 
 // API Key type for display (excludes full key value)

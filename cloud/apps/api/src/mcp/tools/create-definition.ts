@@ -18,7 +18,7 @@ import {
 } from '../../services/mcp/index.js';
 import { queueScenarioExpansion } from '../../services/scenario/index.js';
 import { addToolRegistrar } from './registry.js';
-import { getMcpUserId } from './helpers.js';
+import { requireMcpAdmin } from './helpers.js';
 
 const log = createLogger('mcp:tools:create-definition');
 
@@ -170,7 +170,11 @@ Each dimension must have:
     },
     async (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
-      const userId = getMcpUserId();
+      const mcpUser = requireMcpAdmin();
+      if ('isError' in mcpUser) {
+        return mcpUser;
+      }
+      const userId = mcpUser.id;
 
       // Log dimension details for debugging
       const dimensionSummary = args.content.dimensions?.map((d: Record<string, unknown>) => ({

@@ -173,6 +173,8 @@ export async function authMiddleware(
       req.user = {
         id: payload.sub,
         email: payload.email,
+        role: payload.role ?? 'ADMIN',
+        mustChangePassword: payload.mustChangePassword ?? false,
       };
       req.authMethod = 'jwt';
 
@@ -240,7 +242,16 @@ async function validateApiKey(key: string): Promise<AuthUser | null> {
   // Find the API key record
   const apiKeyRecord = await db.apiKey.findUnique({
     where: { keyHash },
-    include: { user: true },
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          mustChangePassword: true,
+        },
+      },
+    },
   });
 
   if (!apiKeyRecord) {
@@ -272,6 +283,8 @@ async function validateApiKey(key: string): Promise<AuthUser | null> {
   return {
     id: apiKeyRecord.user.id,
     email: apiKeyRecord.user.email,
+    role: apiKeyRecord.user.role,
+    mustChangePassword: apiKeyRecord.user.mustChangePassword,
   };
 }
 

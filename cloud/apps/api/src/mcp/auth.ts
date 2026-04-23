@@ -9,6 +9,7 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import { createLogger, AuthenticationError } from '@valuerank/shared';
+import { db } from '@valuerank/db';
 import { validateAccessToken, buildWwwAuthenticateHeader, getBaseUrl } from './oauth/index.js';
 
 const log = createLogger('mcp:auth');
@@ -32,11 +33,11 @@ function looksLikeApiKey(token: string): boolean {
  * - 401 with WWW-Authenticate if no valid credentials
  * - Continues if valid authentication
  */
-export function mcpAuthMiddleware(
+export async function mcpAuthMiddleware(
   req: Request,
   res: Response,
   next: NextFunction
-): void {
+): Promise<void> {
   // Try OAuth Bearer token first
   const authHeader = req.headers.authorization;
   if (authHeader !== undefined && authHeader.startsWith('Bearer ')) {
@@ -66,8 +67,24 @@ export function mcpAuthMiddleware(
 
     const payload = validateAccessToken(token, resourceUri);
     if (payload) {
-      // Set user info from token
-      req.user = { id: payload.sub, email: '' }; // Email not in token, but ID is sufficient
+      const user = await db.user.findUnique({
+        where: { id: payload.sub },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          mustChangePassword: true,
+        },
+      });
+
+      if (user === null) {
+        log.debug({ path: req.path, userId: payload.sub }, 'OAuth user not found');
+        res.setHeader('WWW-Authenticate', buildWwwAuthenticateHeader(req, 'invalid_token', 'Token is invalid or expired'));
+        next(new AuthenticationError('Invalid or expired access token'));
+        return;
+      }
+
+      req.user = user;
       req.authMethod = 'oauth';
       log.debug({ userId: payload.sub, clientId: payload.client_id, path: req.path }, 'MCP OAuth authenticated');
       next();

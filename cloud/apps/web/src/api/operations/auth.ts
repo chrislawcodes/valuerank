@@ -9,5 +9,7 @@ export type MeQueryResult = {
     name: string | null;
     lastLoginAt: string | null;
     createdAt: string;
+    role: 'ADMIN' | 'VISITOR';
+    mustChangePassword: boolean;
   } | null;
 };

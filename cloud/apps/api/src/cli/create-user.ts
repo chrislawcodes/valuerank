@@ -15,11 +15,12 @@ import { createLogger, ValidationError } from '@valuerank/shared';
 
 import { hashPassword } from '../auth/index.js';
 import { promptHidden, promptLine } from './shared/prompt.js';
+import type { UserRole } from '../auth/types.js';
 
 const log = createLogger('cli:create-user');
 
 /** Minimum password length */
-export const MIN_PASSWORD_LENGTH = 8;
+export const MIN_PASSWORD_LENGTH = 12;
 
 /** Email format regex */
 export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -44,6 +45,15 @@ export function validatePassword(password: string): void {
   }
 }
 
+export function parseRole(role: string | undefined): UserRole {
+  const normalizedRole = (role ?? 'ADMIN').trim().toUpperCase();
+  if (normalizedRole === 'ADMIN' || normalizedRole === 'VISITOR') {
+    return normalizedRole;
+  }
+
+  throw new ValidationError('Role must be ADMIN or VISITOR');
+}
+
 /**
  * Check if email already exists in database
  */
@@ -63,7 +73,8 @@ export async function checkDuplicateEmail(email: string): Promise<void> {
 export async function createUser(
   email: string,
   password: string,
-  name?: string
+  name?: string,
+  role: UserRole = 'ADMIN'
 ): Promise<{ id: string; email: string }> {
   // Normalize email to lowercase
   const normalizedEmail = email.toLowerCase();
@@ -84,6 +95,7 @@ export async function createUser(
       email: normalizedEmail,
       passwordHash,
       name: (name !== undefined && name !== '') ? name : undefined,
+      role,
     },
     select: {
       id: true,
@@ -103,6 +115,13 @@ async function main(): Promise<void> {
   log.info('Create user');
 
   try {
+    const roleArgIndex = process.argv.findIndex((arg) => arg === '--role' || arg.startsWith('--role='));
+    const role = parseRole(
+      roleArgIndex >= 0
+        ? (process.argv[roleArgIndex].includes('=') ? process.argv[roleArgIndex].split('=')[1] : process.argv[roleArgIndex + 1])
+        : undefined
+    );
+
     // Collect inputs
     const email = await promptLine('Email: ');
     const password = await promptHidden('Password: ');
@@ -110,7 +129,7 @@ async function main(): Promise<void> {
 
     log.info('Creating user');
 
-    const user = await createUser(email, password, name || undefined);
+    const user = await createUser(email, password, name || undefined, role);
 
     log.info({ userId: user.id, email: user.email }, 'User created successfully');
   } catch (err) {

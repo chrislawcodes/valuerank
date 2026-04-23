@@ -10,6 +10,8 @@ import { AsyncLocalStorage } from 'async_hooks';
 export type McpUser = {
   id: string;
   email: string;
+  role: 'ADMIN' | 'VISITOR';
+  mustChangePassword: boolean;
 };
 
 type McpRequestContext = {

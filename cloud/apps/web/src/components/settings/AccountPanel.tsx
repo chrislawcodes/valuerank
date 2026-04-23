@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/hooks';
 import { API_BASE_URL } from '../../auth/context';
 import { Button } from '../ui/Button';
@@ -7,6 +8,7 @@ import { Input } from '../ui/Input';
 import { AlertCircle, CheckCircle } from 'lucide-react';
 
 export function AccountPanel() {
+    const navigate = useNavigate();
     const { user, token, logout, updateToken } = useAuth();
 
     const [profileName, setProfileName] = useState(user?.name ?? '');
@@ -31,7 +33,7 @@ export function AccountPanel() {
 
     if (!user) return null;
 
-    const handleProfileSubmit = async (e: React.FormEvent) => {
+    const handleProfileSubmit = async (e: FormEvent) => {
         e.preventDefault();
         setProfileMessage(null);
 
@@ -80,7 +82,7 @@ export function AccountPanel() {
         }
     };
 
-    const handlePasswordSubmit = async (e: React.FormEvent) => {
+    const handlePasswordSubmit = async (e: FormEvent) => {
         e.preventDefault();
         setPasswordMessage(null);
 
@@ -89,8 +91,8 @@ export function AccountPanel() {
             return;
         }
 
-        if (newPassword.length < 8) {
-            setPasswordMessage({ type: 'error', text: 'New password must be at least 8 characters long' });
+        if (newPassword.length < 12) {
+            setPasswordMessage({ type: 'error', text: 'New password must be at least 12 characters long' });
             return;
         }
 
@@ -111,6 +113,17 @@ export function AccountPanel() {
                 throw new Error(data.message || 'Failed to change password');
             }
 
+            const freshToken = data.token as string | undefined;
+            if (freshToken && data.user) {
+                updateToken(freshToken, data.user);
+                setPasswordMessage({ type: 'success', text: 'Password updated successfully.' });
+                setCurrentPassword('');
+                setNewPassword('');
+                setConfirmPassword('');
+                navigate('/', { replace: true });
+                return;
+            }
+
             setPasswordMessage({ type: 'success', text: 'Password changed successfully. Please log in again.' });
             setCurrentPassword('');
             setNewPassword('');
@@ -127,6 +140,12 @@ export function AccountPanel() {
 
     return (
         <div className="space-y-6">
+            {user.mustChangePassword && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    Your password was set by an administrator. Please set a new password.
+                </div>
+            )}
+
             <Card>
                 <CardHeader>
                     <h3 className="text-lg font-medium leading-6 text-gray-900">Profile</h3>
@@ -173,7 +192,11 @@ export function AccountPanel() {
             <Card>
                 <CardHeader>
                     <h3 className="text-lg font-medium leading-6 text-gray-900">Security</h3>
-                    <p className="mt-1 text-sm text-gray-500">Update your password. You will be logged out after changing your password.</p>
+                    <p className="mt-1 text-sm text-gray-500">
+                        {user.mustChangePassword
+                            ? 'Set a new password to continue. Your session will update in place.'
+                            : 'Update your password. Your session will stay signed in after changing your password.'}
+                    </p>
                 </CardHeader>
                 <CardContent>
                     <form className="space-y-4" onSubmit={handlePasswordSubmit}>
@@ -203,7 +226,7 @@ export function AccountPanel() {
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
                                 required
-                                minLength={8}
+                                minLength={12}
                             />
                         </div>
 
@@ -215,7 +238,7 @@ export function AccountPanel() {
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                 required
-                                minLength={8}
+                                minLength={12}
                             />
                         </div>
 

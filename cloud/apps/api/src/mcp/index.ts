@@ -62,7 +62,9 @@ export function createMcpRouter(): Router {
 
   // Apply rate limiting and auth middleware for all other requests
   router.use(mcpRateLimiter);
-  router.use(mcpAuthMiddleware);
+  router.use((req, res, next) => {
+    void mcpAuthMiddleware(req, res, next).catch(next);
+  });
 
   // Track active transports by session ID
   const transports = new Map<string, StreamableHTTPServerTransport>();

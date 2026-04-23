@@ -73,7 +73,12 @@ authRouter.post(
       });
 
       // Generate JWT token
-      const token = signToken({ id: user.id, email: user.email });
+      const token = signToken({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        mustChangePassword: user.mustChangePassword,
+      });
 
       log.info({ userId: user.id }, 'Login successful');
 
@@ -83,6 +88,10 @@ authRouter.post(
           id: user.id,
           email: user.email,
           name: user.name,
+          role: user.role,
+          mustChangePassword: user.mustChangePassword,
+          createdAt: user.createdAt,
+          lastLoginAt: user.lastLoginAt,
         },
       };
 
@@ -121,6 +130,8 @@ authRouter.get(
         id: user.id,
         email: user.email,
         name: user.name,
+        role: user.role,
+        mustChangePassword: user.mustChangePassword,
         createdAt: user.createdAt,
         lastLoginAt: user.lastLoginAt,
       });
@@ -182,13 +193,22 @@ authRouter.patch(
       });
 
       // Issue a fresh token if email changed (since it's in the payload)
-      const token = updateData.email !== undefined ? signToken({ id: user.id, email: user.email }) : undefined;
+      const token = updateData.email !== undefined
+        ? signToken({
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            mustChangePassword: user.mustChangePassword,
+          })
+        : undefined;
 
       res.json({
         user: {
           id: user.id,
           email: user.email,
           name: user.name,
+          role: user.role,
+          mustChangePassword: user.mustChangePassword,
           createdAt: user.createdAt,
           lastLoginAt: user.lastLoginAt,
         },
@@ -220,8 +240,8 @@ authRouter.put(
         throw new ValidationError('Current password and new password are required');
       }
 
-      if (newPassword.length < 8) {
-        throw new ValidationError('New password must be at least 8 characters long');
+      if (newPassword.length < 12) {
+        throw new ValidationError('New password must be at least 12 characters long');
       }
 
       const user = await db.user.findUnique({
@@ -240,13 +260,48 @@ authRouter.put(
       // Hash new password using the local auth implementation.
       const passwordHash = await hashPassword(newPassword);
 
-      await db.user.update({
+      const updatedUser = await db.user.update({
         where: { id: req.user.id },
-        data: { passwordHash, passwordChangedAt: new Date() },
+        data: {
+          passwordHash,
+          passwordChangedAt: new Date(),
+          ...(user.mustChangePassword ? { mustChangePassword: false } : {}),
+        },
       });
 
       log.info({ userId: req.user.id }, 'User changed password successfully');
       invalidatePasswordChangedAtCache(req.user.id);
+
+      if (user.mustChangePassword) {
+        const passwordChangedAtSeconds = Math.floor(
+          (updatedUser.passwordChangedAt?.getTime() ?? Date.now()) / 1000
+        ) + 1;
+
+        const token = signToken(
+          {
+            id: updatedUser.id,
+            email: updatedUser.email,
+            role: updatedUser.role,
+            mustChangePassword: updatedUser.mustChangePassword,
+          },
+          passwordChangedAtSeconds
+        );
+
+        res.json({
+          success: true,
+          token,
+          user: {
+            id: updatedUser.id,
+            email: updatedUser.email,
+            name: updatedUser.name,
+            role: updatedUser.role,
+            mustChangePassword: updatedUser.mustChangePassword,
+            createdAt: updatedUser.createdAt,
+            lastLoginAt: updatedUser.lastLoginAt,
+          },
+        });
+        return;
+      }
 
       res.json({ success: true });
     } catch (err) {

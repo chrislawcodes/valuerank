@@ -15,7 +15,7 @@ import {
   createSummarizationAudit,
 } from '../../services/mcp/index.js';
 import { addToolRegistrar } from './registry.js';
-import { getMcpUserId } from './helpers.js';
+import { requireMcpAdmin } from './helpers.js';
 
 const log = createLogger('mcp:tools:cancel-summarization');
 
@@ -84,7 +84,11 @@ function registerCancelSummarizationTool(server: McpServer): void {
     },
     async (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
-      const userId = getMcpUserId();
+      const mcpUser = requireMcpAdmin();
+      if ('isError' in mcpUser) {
+        return mcpUser;
+      }
+      const userId = mcpUser.id;
 
       log.debug({
         runId: args.run_id,

@@ -11,6 +11,8 @@ export const UserRef = builder.objectRef<{
   id: string;
   email: string;
   name: string | null;
+  role: 'ADMIN' | 'VISITOR';
+  mustChangePassword: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;
 }>('User');
@@ -24,6 +26,14 @@ builder.objectType(UserRef, {
       type: 'String',
       nullable: true,
       description: 'User display name',
+    }),
+    role: t.expose('role', {
+      type: 'UserRole',
+      description: 'User role',
+    }),
+    mustChangePassword: t.expose('mustChangePassword', {
+      type: 'Boolean',
+      description: 'Whether the user must change their password on next login',
     }),
     lastLoginAt: t.expose('lastLoginAt', {
       type: 'DateTime',

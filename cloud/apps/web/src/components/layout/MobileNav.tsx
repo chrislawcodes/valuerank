@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { type LucideIcon, Archive, BarChart2, Cpu, FileText, FolderTree, Home, Library, Menu, Settings, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
+import { useAuth } from '../../auth/hooks';
 
 type NavItem = {
   name: string;
@@ -70,6 +71,7 @@ const navItems: NavItem[] = [
       { name: 'LLM Models', path: '/settings/models', icon: Settings },
       { name: 'Infrastructure', path: '/settings/infrastructure', icon: Settings },
       { name: 'API Keys', path: '/settings/api-keys', icon: Settings },
+      { name: 'User Management', path: '/settings/users', icon: Settings },
     ],
   },
 ];
@@ -95,9 +97,44 @@ type MobileNavProps = {
 };
 
 export function MobileNav({ className }: MobileNavProps) {
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
+  const isAdmin = user?.role === 'ADMIN';
+  const visibleNavItems = navItems.filter((item) => {
+    if (item.path === '/archive') {
+      return isAdmin;
+    }
+
+    if (item.path === '/settings/account') {
+      return isAdmin;
+    }
+
+    if (item.path === '/domains') {
+      return true;
+    }
+
+    return true;
+  }).map((item) => {
+    if (item.path === '/domains' && item.children) {
+      return {
+        ...item,
+        children: isAdmin
+          ? item.children
+          : item.children.filter((child) => child.path !== '/domains/manage'),
+      };
+    }
+
+    if (item.path === '/settings/account' && item.children) {
+      return {
+        ...item,
+        children: isAdmin ? item.children : [],
+      };
+    }
+
+    return item;
+  });
 
   useEffect(() => {
     setIsOpen(false);
@@ -241,7 +278,7 @@ export function MobileNav({ className }: MobileNavProps) {
         </div>
 
         <div className="py-4">
-          {renderNavItems(navItems)}
+          {renderNavItems(visibleNavItems)}
         </div>
       </nav>
     </div>

@@ -11,7 +11,7 @@ import { upsertSetting, getModelByIdentifier, getSettingByKey } from '@valuerank
 import { createLogger } from '@valuerank/shared';
 import { logAuditEvent, createLlmAudit } from '../../services/mcp/index.js';
 import { addToolRegistrar } from './registry.js';
-import { getMcpUserId } from './helpers.js';
+import { requireMcpAdmin } from './helpers.js';
 
 const log = createLogger('mcp:tools:set-infra-model');
 
@@ -101,7 +101,11 @@ function registerSetInfraModelTool(server: McpServer): void {
     },
     async (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
-      const userId = getMcpUserId();
+      const mcpUser = requireMcpAdmin();
+      if ('isError' in mcpUser) {
+        return mcpUser;
+      }
+      const userId = mcpUser.id;
       const purpose = args.purpose as InfraPurpose;
 
       log.debug(

@@ -26,3 +26,9 @@ builder.enumType('LlmModelStatus', {
   values: ['ACTIVE', 'DEPRECATED'] as const,
   description: 'Lifecycle status of an LLM model',
 });
+
+// UserRole enum - mirrors Prisma UserRole
+builder.enumType('UserRole', {
+  values: ['ADMIN', 'VISITOR'] as const,
+  description: 'Role assigned to a user account',
+});
