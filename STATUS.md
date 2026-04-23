@@ -77,6 +77,7 @@ Once the above are resolved:
 
 ### Analysis Reports
 - [x] Domain Shifts by Value heatmap implemented at `/models/domain-shifts`; focused tests and web preflight pass.
+- [x] Domain Shifts readability controls added locally: cells can toggle between shift and raw win rate, and table columns are sortable.
 
 ---
 
